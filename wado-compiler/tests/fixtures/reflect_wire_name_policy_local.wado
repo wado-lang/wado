@@ -1,0 +1,16 @@
+// A struct declared in a function body keeps its `#[wire(name_policy)]`, as
+// one at module level does.
+use { to_string } from "core:json";
+
+test "a local struct's name_policy reaches the wire" {
+    #[wire(name_policy = "camelCase")]
+    struct Local {
+        user_id: i32,
+    }
+
+    assert Reflect::<Local>::wire_name_policy() == CaseStyle::Camel;
+    assert to_string(&Local { user_id: 1 }) matches { Ok(t) && t == `\{"userId":1\}` };
+}
+
+__DATA__
+{"test": {}}

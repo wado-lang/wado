@@ -1,9 +1,13 @@
-//! Greets whoever the page's input names, through the browser's own DOM.
+//! Greets whoever the page's input names, through the browser's own DOM, and
+//! greets again as the name is typed.
 
-use { Dom, HtmlInputElement, SurfaceDom } from "wado-lang:web";
+use { Dom, Event, HtmlInputElement, SurfaceDom } from "wado-lang:web";
 
 export fn run() with Dom {
     greet();
+    if let Some(input) = Dom::document().get_element_by_id("name") {
+        input.add_event_listener("input", |_: Event| greet(), null);
+    }
 }
 
 pub fn greet() with Dom {
@@ -12,10 +16,16 @@ pub fn greet() with Dom {
         Some(input: HtmlInputElement) => input.value(),
         _ => "stranger",
     };
-    let greeting = doc.create_element("p", null);
-    greeting.set_id("greeting");
+    let greeting = match doc.get_element_by_id("greeting") {
+        Some(greeting) => greeting,
+        None => {
+            let greeting = doc.create_element("p", null);
+            greeting.set_id("greeting");
+            doc.body().unwrap().append_child(greeting);
+            greeting;
+        },
+    };
     greeting.set_text_content(Option::Some(`Hello, ${name}!`));
-    doc.body().unwrap().append_child(greeting);
 }
 
 test "the greeting names the input's value" {
@@ -40,5 +50,22 @@ test "without the input, the greeting names a stranger" {
         greet();
         let greeting = Dom::document().get_element_by_id("greeting").unwrap();
         assert greeting.text_content() == Option::Some("Hello, stranger!");
+    };
+}
+
+test "typing a name greets again" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let input = doc.create_element("input", null);
+        input.set_id("name");
+        doc.body().unwrap().append_child(input);
+        run();
+        if let input: HtmlInputElement = input {
+            input.set_value("Ada");
+        }
+        input.dispatch_event(Event::new("input"));
+        let greeting = doc.get_element_by_id("greeting").unwrap();
+        assert greeting.text_content() == Option::Some("Hello, Ada!");
     };
 }

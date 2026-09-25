@@ -1,0 +1,20 @@
+[package]
+name = "grog"
+description = "Grog — Protocol Buffers for Wado: .proto schemas as declarations core:protobuf encodes"
+repository-directory = "package-grog"
+lib = "src/lib.wado"
+# version / repository / namespace / license / authors inherited from [workspace.package]
+
+[world]
+"core:kiln/generator" = "src/generator.wado"
+
+[build-dependencies]
+"lib:gale" = { path = "../package-gale", package = "wado-lang:gale", version = "^0.0.28" }
+
+[dependencies]
+"lib:wadopoet" = { path = "../package-wadopoet", package = "wado-lang:wadopoet", version = "^0.0.28" }
+
+[test]
+# Kiln intermediates are not standalone source files. Keep this exclusion
+# when the package is used outside the repository's `.gitignore` coverage.
+exclude = ["build/**"]

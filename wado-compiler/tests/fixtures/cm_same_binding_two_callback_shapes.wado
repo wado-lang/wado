@@ -1,0 +1,16 @@
+// Two callbacks crossing as `u32` keys still differ in the arguments the host
+// calls them back with.
+
+use { Dom as ADom } from "./sub/cm_same_binding_callback_a.wado";
+use { Dom as BDom } from "./sub/cm_same_binding_callback_shape_b.wado";
+
+export fn run() with (ADom, BDom) {
+    ADom::f(|| {});
+    BDom::f(|_: f64| {});
+}
+
+__DATA__
+{
+  "compile_error": "two `Dom::f` bind `web:a/global#f` with different signatures: make them agree",
+  "compile_error_codes": ["DUPLICATE_DEFINITION"]
+}

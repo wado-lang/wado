@@ -1056,9 +1056,7 @@ impl<'a> DceWalker<'a> {
                 // actually defined on the inner type (e.g., i32^Ord::cmp, not
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
-                let boxed = def.decl().is_some_and(|d| {
-                    self.type_table.compiler_item_def(CompilerItem::Box) == Some(d)
-                });
+                let boxed = self.type_table.is_compiler_struct(*def, CompilerItem::Box);
                 if boxed && let Some(info) = func.method_info.clone() {
                     let original_method_id = FunctionId::Method(MethodName::new(
                         func.module_source.clone(),
@@ -1374,7 +1372,6 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             ));
             analysis.callees.insert(method_id);
         }
-        ResolvedType::Struct { def, .. } if type_table.struct_head_name(*def) == "String" => {}
         _ => {}
     }
 }

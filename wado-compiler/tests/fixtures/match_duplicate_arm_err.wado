@@ -1,0 +1,18 @@
+// An arm an earlier one already takes is reported once, as unreachable.
+fn number(n: i32) -> i32 {
+    return match n { 1 => 1, 1 => 2, _ => 3 };
+}
+
+fn boolean(b: bool) -> i32 {
+    return match b { true => 1, true => 2, _ => 3 };
+}
+
+export fn run() {
+    let _ = number(1) + boolean(true);
+}
+
+__DATA__
+{
+  "compile_error": ":3:30: analysis error: invalid pattern: unreachable arm: the arms before it take every value it matches",
+  "compile_errors_not_contains": ["overlapping"]
+}

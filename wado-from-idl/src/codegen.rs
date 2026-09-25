@@ -373,7 +373,7 @@ impl WadoCodeGenerator {
         params
             .iter()
             .map(|p| {
-                if p.name == "self" {
+                if p.wit_name == "self" {
                     match &p.ty {
                         WadoType::Borrow(_) => "&self".to_string(),
                         _ => "self".to_string(),
@@ -388,20 +388,20 @@ impl WadoCodeGenerator {
 
     fn format_type(ty: &WadoType) -> String {
         match ty {
-            WadoType::Bool => "bool".to_string(),
-            WadoType::Char => "char".to_string(),
-            WadoType::I8 => "i8".to_string(),
-            WadoType::I16 => "i16".to_string(),
-            WadoType::I32 => "i32".to_string(),
-            WadoType::I64 => "i64".to_string(),
-            WadoType::I128 => "i128".to_string(),
-            WadoType::U8 => "u8".to_string(),
-            WadoType::U16 => "u16".to_string(),
-            WadoType::U32 => "u32".to_string(),
-            WadoType::U64 => "u64".to_string(),
-            WadoType::U128 => "u128".to_string(),
-            WadoType::F32 => "f32".to_string(),
-            WadoType::F64 => "f64".to_string(),
+            WadoType::Bool
+            | WadoType::Char
+            | WadoType::I8
+            | WadoType::I16
+            | WadoType::I32
+            | WadoType::I64
+            | WadoType::I128
+            | WadoType::U8
+            | WadoType::U16
+            | WadoType::U32
+            | WadoType::U64
+            | WadoType::U128
+            | WadoType::F32
+            | WadoType::F64 => ty.primitive_name().unwrap().to_string(),
             WadoType::String => "String".to_string(),
             WadoType::Option(inner) => format!("Option<{}>", Self::format_type(inner)),
             WadoType::Result { ok, err } => {
@@ -435,6 +435,17 @@ impl WadoCodeGenerator {
             WadoType::Future(inner) => format!("Future<{}>", Self::format_type(inner)),
             WadoType::Named(name) => name.clone(),
             WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
+            WadoType::Callback { params, effect } => {
+                let params = params
+                    .iter()
+                    .map(Self::format_type)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let effect = effect
+                    .as_ref()
+                    .map_or_else(String::new, |e| format!(" with {e}"));
+                format!("fn mut({params}){effect}")
+            }
         }
     }
 

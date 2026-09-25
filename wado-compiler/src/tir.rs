@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -1419,13 +1419,10 @@ impl TypeTable {
     /// instance or as the monomorphized struct its declaration heads.
     #[must_use]
     pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
-        let Some(head) = self.compiler_item_def(item) else {
-            return false;
-        };
         match self.get(ty) {
-            ResolvedType::GenericInstance { def, .. } => *def == head,
+            ResolvedType::GenericInstance { def, .. } => self.is_compiler_item(*def, item),
             ResolvedType::Struct { def, type_args } => {
-                !type_args.is_empty() && def.decl() == Some(head)
+                !type_args.is_empty() && self.is_compiler_struct(*def, item)
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -1687,6 +1684,19 @@ impl TypeTable {
         self.compiler_items
             .decl(item)
             .and_then(|ast| self.defs.of_ast_id(ast))
+    }
+
+    /// Whether `def` is the declaration `item` names.
+    #[must_use]
+    pub fn is_compiler_item(&self, def: DefId, item: CompilerItem) -> bool {
+        self.compiler_item_def(item) == Some(def)
+    }
+
+    /// Whether `head` is the struct `item` names.
+    #[must_use]
+    pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {
+        head.decl()
+            .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
     /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
@@ -2354,7 +2364,7 @@ impl TypeTable {
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "AsyncCall"
+            && self.is_compiler_item(*def, CompilerItem::AsyncCall)
             && type_args.len() == 1
         {
             return Some(type_args[0]);
@@ -4001,6 +4011,23 @@ impl TypeTable {
         self.representation_head(a) == self.representation_head(b)
     }
 
+    /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
+    /// a byte-string literal coerces to.
+    pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
+        self.list_element(self.representation_head(id)) == Some(TypeTable::U8)
+    }
+
+    /// Whether `id` is a `List` whose element is still open, which a
+    /// byte-string literal settles as `u8`.
+    pub fn is_list_of_open_element(&self, id: TypeId) -> bool {
+        self.list_element(id).is_some_and(|element| {
+            matches!(
+                self.get(element),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
+            )
+        })
+    }
+
     /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
     /// newtype over either) reads from little-endian data; `None` for the rest.
     pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
@@ -4021,13 +4048,19 @@ impl TypeTable {
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
+            _ => self.list_element(id),
+        }
+    }
+
+    /// The element type of `id` when it is a `List` itself, not a reference to one.
+    pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if self.def_name(*def) == "List" && type_args.len() == 1 =>
+                if self.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
             {
                 Some(type_args[0])
             }
-            // Unwrap references and check the inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
             _ => None,
         }
     }
@@ -6873,6 +6906,12 @@ impl TirFunction {
         self.method_info.is_some()
     }
 
+    /// Whether the first parameter is the `self` receiver.
+    #[inline]
+    pub fn takes_self(&self) -> bool {
+        self.params.first().is_some_and(TirParam::is_self)
+    }
+
     /// Returns true if this is a trait method (implements a trait)
     #[inline]
     pub fn is_trait_method(&self) -> bool {
@@ -6972,6 +7011,14 @@ pub struct TirParam {
     pub span: Span,
 }
 
+impl TirParam {
+    /// Whether this is the `self` receiver.
+    #[must_use]
+    pub fn is_self(&self) -> bool {
+        self.name == "self"
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirStruct {
     /// The struct type this reifies, as its head plus what it was
@@ -6990,7 +7037,7 @@ pub struct TirStruct {
     pub fields: Vec<TirField>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 #[derive(Debug, Clone)]
@@ -7015,9 +7062,37 @@ pub struct TirField {
     /// instead of the name. A struct numbers every field or none, so this is
     /// `Some` for all of a struct's fields or for none of them.
     pub serde_number: Option<u32>,
+    /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
+    pub serde_encoding: WireEncoding,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
+}
+
+impl TirField {
+    /// A field the compiler adds itself: no attributes and no default.
+    pub fn plain(
+        name: String,
+        visibility: Visibility,
+        type_id: TypeId,
+        index: u32,
+        span: Span,
+    ) -> Self {
+        Self {
+            name,
+            visibility,
+            type_id,
+            index,
+            span,
+            is_secret: false,
+            wire_name_override: None,
+            serde_default: false,
+            serde_positional: false,
+            serde_number: None,
+            serde_encoding: WireEncoding::Plain,
+            default_expr: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -7034,7 +7109,7 @@ pub struct TirEnum {
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a TIR enum.
@@ -7046,6 +7121,9 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    /// `#[wire(number = N)]` — the discriminant a format writes for this case.
+    /// An enum numbers every case or none.
+    pub wire_number: Option<i32>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -7062,7 +7140,7 @@ pub struct TirFlags {
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A member of a flags type
@@ -7090,7 +7168,7 @@ pub struct TirVariantDecl {
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a variant declaration
@@ -7128,7 +7206,7 @@ pub struct TirNewtype {
     /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
     /// to rename, so this spells the *type's* name on the wire — what a schema
     /// keys its `$defs` entry by.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
     pub span: Span,
 }
 

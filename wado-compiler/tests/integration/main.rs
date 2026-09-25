@@ -14,6 +14,7 @@ mod box_local_unwrap;
 mod closure_confinement;
 mod closure_frame_moves;
 mod cm_async_value_import;
+mod cm_callback_export;
 mod cm_catalog;
 mod cm_decls_across_modules;
 mod cm_donut_canary;

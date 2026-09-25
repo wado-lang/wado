@@ -1,0 +1,21 @@
+// Two arms whose ranges share a value overlap, wherever they sit in the match;
+// ranges within one arm may.
+fn grade(n: i32) -> i32 {
+    return match n {
+        0..=9 | 5..=6 => 1,
+        30..=39 => 2,
+        10..=19 => 3,
+        35..=45 => 4,
+        _ => 0,
+    };
+}
+
+export fn run() {
+    let _ = grade(1);
+}
+
+__DATA__
+{
+  "compile_error": "overlapping range patterns in match arms",
+  "compile_error_count": 1
+}

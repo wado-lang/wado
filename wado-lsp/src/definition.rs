@@ -9,7 +9,7 @@
 //! 5. Translate the resulting `AstId` into a [`DefinitionResult`].
 
 use serde::{Deserialize, Serialize};
-use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module};
+use wado_compiler::ast::{self, AstVisitor, Item, Literal, Module, UseItem};
 use wado_compiler::name::resolve_import_with_entry;
 use wado_compiler::token::Span;
 
@@ -103,13 +103,14 @@ fn file_path_definition(ctx: &QueryContext, line: usize, col: usize) -> Option<D
     })
 }
 
-/// Walk the module AST looking for a file-path node whose span covers
-/// `(line, col)`. Currently recognises `use ... from "source"` string literals
-/// and `#include_str` / `#include_bytes` path arguments.
+/// The file path at `(line, col)`: a `use` source string or namespace name,
+/// or an `#include_str` / `#include_bytes` argument.
 fn find_file_path_at_cursor(module: &Module, line: usize, col: usize) -> Option<String> {
     for item in &module.items {
-        if let Item::Use(use_decl) = item
-            && span_contains(&use_decl.source_span, line, col)
+        let Item::Use(use_decl) = item else { continue };
+        let names_module = |item: &UseItem| matches!(item, UseItem::Namespace { name_span, .. } if span_contains(name_span, line, col));
+        if span_contains(&use_decl.source_span, line, col)
+            || use_decl.items.iter().any(names_module)
         {
             return Some(use_decl.source.clone());
         }

@@ -146,7 +146,6 @@ pub fn build_component(
     // type can reference the record's index. Shares `lib_type_gen` with
     // `emit_world_exports`, so the export-signature record and the canonical
     // record are one and the same.
-    prebuild_resource_payload_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
     prebuild_value_named_types(
         &mut builder,
         &mut ctx,
@@ -1452,9 +1451,9 @@ fn payload_type_to_cm_key(
                 .map(|t| payload_type_to_cm_key(t, ctx, project))
                 .collect(),
         ),
-        CmPayloadType::Named(decl) => CmTypeKey::Leaf(payload_decl_type_idx(ctx, project, decl)),
+        CmPayloadType::Named(decl) => CmTypeKey::Leaf(canonical_decl_type_idx(ctx, project, decl)),
         CmPayloadType::Resource(decl) => {
-            CmTypeKey::own_of(payload_decl_type_idx(ctx, project, decl))
+            CmTypeKey::own_of(canonical_decl_type_idx(ctx, project, decl))
         }
     }
 }
@@ -1479,7 +1478,11 @@ fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
 
 /// The outer type index a canonical's declaration is bound to, or the alias its
 /// declaring interface exports where nothing bound one.
-fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl: &CmDecl) -> u32 {
+fn canonical_decl_type_idx(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    decl: &CmDecl,
+) -> u32 {
     ctx.decl_type_idx(decl.def())
         .or_else(|| {
             let fq = project
@@ -1487,52 +1490,20 @@ fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl
                 .interface_declaring_cm_name(decl.module(), decl.cm_name())?;
             export_alias_idx(ctx, fq, decl.cm_name())
         })
-        .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
+        .unwrap_or_else(|| unaliased(&format!("the canonical's type `{}`", decl.name_suffix())))
 }
 
-/// The distinct declarations the canonicals' payloads reach as `kind`.
-fn payload_decls(
-    canonical_intrinsics: &[CanonicalIntrinsic],
-    kind: CmDeclKind,
-) -> IndexMap<DefId, CmDecl> {
-    let mut out: IndexMap<DefId, CmDecl> = IndexMap::default();
-    let mut keep = |decl: &CmDecl, at: CmDeclKind| {
-        if at == kind {
-            out.entry(decl.def()).or_insert_with(|| decl.clone());
-        }
-    };
+/// The distinct declarations the canonicals reach as a value.
+fn canonical_value_decls(canonical_intrinsics: &[CanonicalIntrinsic]) -> IndexSet<DefId> {
+    let mut out = IndexSet::default();
     for intrinsic in canonical_intrinsics {
-        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
-            p.for_each_decl(&mut keep);
-        }
-        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
-            p.for_each_decl(&mut keep);
-        }
+        intrinsic.for_each_decl(&mut |decl: &CmDecl, at: CmDeclKind| {
+            if at == CmDeclKind::Value {
+                out.insert(decl.def());
+            }
+        });
     }
     out
-}
-
-/// Import the interface defining every resource a payload names, so `own<r>`
-/// has a type to point at. Nothing else does for a guest-created future.
-fn prebuild_resource_payload_types(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    project: &NirPackage,
-    canonical_intrinsics: &[CanonicalIntrinsic],
-) {
-    for (def, decl) in payload_decls(canonical_intrinsics, CmDeclKind::Resource) {
-        if ctx.has_decl_type(def) {
-            continue;
-        }
-        let Some(source) = project
-            .cm_interface_registry
-            .interface_declaring_cm_name(decl.module(), decl.cm_name())
-            .map(str::to_string)
-        else {
-            continue;
-        };
-        import_resource_source(builder, ctx, project, &source);
-    }
 }
 
 /// Define the named types a `Value(Named)` payload references, before the
@@ -1549,7 +1520,7 @@ fn prebuild_value_named_types(
         return;
     };
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for (def, _) in payload_decls(canonical_intrinsics, CmDeclKind::Value) {
+    for def in canonical_value_decls(canonical_intrinsics) {
         if ctx.has_decl_type(def) {
             continue;
         }
@@ -1820,7 +1791,7 @@ fn emit_canonical_intrinsics(
                 builder.error_context_drop();
             }
             CanonicalIntrinsic::ResourceDrop(decl) => {
-                builder.resource_drop(payload_decl_type_idx(ctx, project, decl));
+                builder.resource_drop(canonical_decl_type_idx(ctx, project, decl));
             }
         }
     }
@@ -1923,7 +1894,11 @@ fn resolve_task_return_valtype(
             }
         }
     }
-    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type)
+    let result = export
+        .cm_result
+        .as_ref()
+        .expect("only a synchronous export returns nothing");
+    cm_export_type_to_valtype(ctx, project, result, result_unit_type)
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
@@ -2164,12 +2139,14 @@ fn emit_world_exports(
                     .iter()
                     .map(|(n, val)| (n.as_str(), *val))
                     .collect();
-                let result_val =
-                    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type);
+                let result_val = export
+                    .cm_result
+                    .as_ref()
+                    .map(|ty| cm_export_type_to_valtype(ctx, project, ty, result_unit_type));
                 enc.function()
                     .async_(export.is_async)
                     .params(param_refs)
-                    .result(Some(result_val));
+                    .result(result_val);
             }
             func_type
         };
@@ -3677,32 +3654,12 @@ fn import_interfaces_with_resources(
         .filter(|info| info.resource_type.is_some())
         .collect();
 
-    // Phase 1: Import resource-defining source interfaces the plan calls for.
-    // Iterate the getter interfaces (for a stable import order) and import each
-    // referenced source via the shared `import_resource_source` helper, which is
-    // idempotent and also handles the outer resource / error-code aliases.
-    // Membership is the plan's: a source is imported iff listed as
-    // `ResourceSource`.
-    for interface_info in &interfaces_with_resources {
-        let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
-            continue;
-        };
-        let Some(source_path) = project
-            .cm_interface_registry
-            .resource_source_in(Some(&interface_info.path), resource_wado_name)
-        else {
-            continue;
-        };
-        if source_path == interface_info.path {
-            continue;
+    // Phase 1: every resource-defining interface the plan lists. The helper is
+    // idempotent and also emits the outer resource and error-code aliases.
+    for entry in import_plan {
+        if entry.kind == ImportKind::ResourceSource {
+            import_resource_source(builder, ctx, project, &entry.fq);
         }
-        if !import_plan
-            .iter()
-            .any(|e| e.fq == source_path && e.kind == ImportKind::ResourceSource)
-        {
-            continue;
-        }
-        import_resource_source(builder, ctx, project, source_path);
     }
 
     // Phase 2: Import the resource-getter interfaces the plan lists
@@ -4445,10 +4402,14 @@ fn append_interface_instance_exports(
             // its owner's, and re-exporting it here fails a WIT decode.
             let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
-                for (_, cm_ty) in &export.cm_params {
+                for cm_ty in export
+                    .cm_params
+                    .iter()
+                    .map(|(_, ty)| ty)
+                    .chain(&export.cm_result)
+                {
                     collect_type_items(cm_ty, ctx, project, &mut named);
                 }
-                collect_type_items(&export.cm_result, ctx, project, &mut named);
             }
             type_items.extend(
                 named

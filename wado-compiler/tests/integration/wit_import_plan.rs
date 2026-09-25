@@ -2,7 +2,7 @@
 //! `wep-2026-05-02-wit-interoperability.md` §"Faithful imports").
 //!
 //! For each program we compute the plan
-//! (`NirPackage::imported_cm_interfaces`, via `dump`) and the actual CM
+//! (`WirPackage::world_surface.imports`, via `dump`) and the actual CM
 //! interface imports of the compiled component (via `wasmprinter`), and assert
 //! they are equal. This proves the plan faithfully mirrors what codegen emits.
 
@@ -14,7 +14,7 @@ use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };
 
-/// The plan: `NirPackage::imported_cm_interfaces`, obtained from a dump.
+/// The plan: `WirPackage::world_surface.imports`, obtained from a dump.
 fn plan_imports(source: &str) -> BTreeSet<String> {
     let host = InMemoryHost::new();
     let dump = block_on(dump_with_host_and_world(
@@ -31,7 +31,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
     ))
     .expect("dump succeeds");
     let pkg = dump.wir_package.expect("wir package present after dump");
-    pkg.imported_cm_interfaces.iter().cloned().collect()
+    pkg.world_surface.imports.iter().cloned().collect()
 }
 
 /// The ground truth: CM interface FQs the compiled component actually imports,
@@ -149,7 +149,8 @@ fn plan_matches_component_for_http_service_with_resources() {
         .expect("dump succeeds");
         dump.wir_package
             .expect("wir package present")
-            .imported_cm_interfaces
+            .world_surface
+            .imports
             .iter()
             .cloned()
             .collect()
@@ -229,7 +230,8 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
         .expect("dump succeeds");
         dump.wir_package
             .expect("wir package present after dump")
-            .imported_cm_interfaces
+            .world_surface
+            .imports
             .iter()
             .cloned()
             .collect()

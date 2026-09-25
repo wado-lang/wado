@@ -1,0 +1,12 @@
+// An enum numbers every case or none, as a struct does its fields: a case
+// without a number has nothing for a numbered format to write.
+
+enum Corpus {
+    #[wire(number = 3)] Web,
+    Local,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`Local` carries no `#[wire(number = …)]` and `Web` does: an enum numbers every case or none", "compile_error_codes": ["WIRE_NUMBER"]}

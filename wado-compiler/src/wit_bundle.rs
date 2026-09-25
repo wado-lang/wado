@@ -11,6 +11,7 @@ use wit_component::StringEncoding;
 
 use crate::semantics::Semantics;
 use crate::wit_emit::{self, WitEmitError, WitEmitInput, WitEmitOptions, WitScope};
+use crate::world_registry::WorldSurface;
 
 /// Append a `component-type` custom section to `component_bytes`, derived from
 /// the WIT text [`wit_emit::emit_wit_text`] renders for `sem`. The section is
@@ -20,9 +21,9 @@ use crate::wit_emit::{self, WitEmitError, WitEmitInput, WitEmitOptions, WitScope
 pub fn embed_component_type(
     component_bytes: &[u8],
     sem: &Semantics,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<Vec<u8>, WitEmitError> {
-    let payload = encode_component_type(sem, world_imports)?;
+    let payload = encode_component_type(sem, surface)?;
     Ok(append_component_type_section(component_bytes, &payload))
 }
 
@@ -31,9 +32,9 @@ pub fn embed_component_type(
 pub fn embed_component_type_from(
     component_bytes: &[u8],
     input: WitEmitInput<'_>,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<Vec<u8>, WitEmitError> {
-    let payload = encode_component_type_from(input, world_imports)?;
+    let payload = encode_component_type_from(input, surface)?;
     Ok(append_component_type_section(component_bytes, &payload))
 }
 
@@ -58,22 +59,22 @@ pub fn append_component_type_section(component_bytes: &[u8], payload: &[u8]) -> 
 /// a standalone WIT package.
 pub fn encode_component_type(
     sem: &Semantics,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<Vec<u8>, WitEmitError> {
-    encode_component_type_from(sem.wit_emit_input(), world_imports)
+    encode_component_type_from(sem.wit_emit_input(), surface)
 }
 
 /// Like [`encode_component_type`], but from a detached [`WitEmitInput`] view (issue #1654).
 pub fn encode_component_type_from(
     input: WitEmitInput<'_>,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<Vec<u8>, WitEmitError> {
     // Force full scope: the section must be a self-contained WIT package so
     // `metadata::encode` can type the world without an external registry.
     let opts = WitEmitOptions {
         scope: WitScope::Full,
     };
-    let text = wit_emit::emit_wit_text_from(input, &opts, world_imports)?;
+    let text = wit_emit::emit_wit_text_from(input, &opts, surface)?;
 
     let mut resolve = wit_parser::Resolve::new();
     let pkg = resolve

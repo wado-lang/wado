@@ -546,7 +546,6 @@ fn representative(
     tuple: Option<DefId>,
     key: &DeclKey,
 ) -> Option<ResolvedType> {
-    use crate::defs::DefKind;
     match key {
         // The tuple declaration registers no type of its own; an instance of
         // it is what a tuple type is.
@@ -612,7 +611,8 @@ fn newtype_decls<'a>(
     table: &'a TypeTable,
 ) -> impl Iterator<Item = (DefId, TypeId)> + 'a {
     tysys
-        .all_newtypes
+        .data
+        .newtypes
         .iter()
         .filter_map(|(&def, &id)| match table.get(id) {
             ResolvedType::Newtype { base_type, .. } => Some((def, *base_type)),
@@ -761,14 +761,15 @@ impl SolverBridge {
     /// lookup never collects it. A trait the compiler derives without a blanket
     /// (`Eq`, `Ord`) stays unnamed.
     fn name_derived_impls(tysys: &TypeSystem, lowering: &mut Lowering, program: &Program) {
+        let data = &tysys.data;
         let kind_of = |def: DefId| {
-            if tysys.all_struct_fields.contains_key(&def) {
+            if data.struct_fields.contains_key(&def) {
                 CompilerItem::ReflectStruct
-            } else if tysys.all_variant_cases.contains_key(&def) {
+            } else if data.variant_cases.contains_key(&def) {
                 CompilerItem::ReflectVariant
-            } else if tysys.all_enum_cases.contains_key(&def) {
+            } else if data.enum_cases.contains_key(&def) {
                 CompilerItem::ReflectEnum
-            } else if tysys.all_flags_cases.contains_key(&def) {
+            } else if data.flags_cases.contains_key(&def) {
                 CompilerItem::ReflectFlags
             } else {
                 CompilerItem::ReflectNewtype
@@ -793,22 +794,27 @@ impl SolverBridge {
     /// Intern every declaration and module up front, so a query lowers without
     /// interning and a shape nothing lowered is unknown to it.
     fn intern_declarations(tysys: &TypeSystem, lowering: &mut Lowering) {
-        for def in tysys
-            .all_struct_fields
-            .keys()
-            .chain(tysys.all_variant_cases.keys())
-            .chain(tysys.all_enum_cases.keys())
-            .chain(tysys.all_flags_cases.keys())
-            .chain(tysys.all_newtypes.keys())
-            .chain(tysys.all_generic_newtypes.keys())
-            .chain(tysys.all_resource_types.keys())
-        {
-            lowering.type_decl(*def);
+        for def in tysys.data.declarations() {
+            lowering.type_decl(def);
         }
         let anonymous = lowering.anonymous_struct();
         lowering.opaque_heads.insert(anonymous);
         let template = lowering.template_shape();
         lowering.opaque_heads.insert(template);
+        // `type_id` spells a resolved type under these heads whether or not an
+        // impl header named one.
+        for name in [
+            fn_shape_name(false),
+            fn_shape_name(true),
+            TypeTable::ARRAY_TYPE_NAME,
+            TypeTable::UNIT_TYPE_NAME,
+            "!",
+        ]
+        .into_iter()
+        .chain(PrimitiveType::all_primitive_names())
+        {
+            lowering.builtin(name);
+        }
         // A struct declared in a body has its identity here and its fields
         // only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
@@ -990,7 +996,7 @@ impl SolverBridge {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
-        for (&def, info) in tysys.all_generic_newtypes.iter() {
+        for (&def, info) in &tysys.data.generic_newtypes {
             let param = |name: &str| -> Option<ParamKind> {
                 info.type_params
                     .iter()
@@ -1003,7 +1009,7 @@ impl SolverBridge {
                 newtype_base(lowering.declared_type(def), base);
             }
         }
-        for &def in tysys.all_flags_cases.keys() {
+        for &def in tysys.data.flags_cases.keys() {
             newtype_base(lowering.declared_type(def), u32_.clone());
         }
     }
@@ -1067,7 +1073,7 @@ impl SolverBridge {
                     program.facts.insert((head, trait_), Fact { visible_from });
                 }
             };
-        for (&def, info) in tysys.all_struct_fields.iter() {
+        for (&def, info) in &tysys.data.struct_fields {
             if !eligible(def) {
                 continue;
             }
@@ -1094,26 +1100,16 @@ impl SolverBridge {
             None,
         );
         let of = |kind| move |def: &DefId| (*def, kind);
-        let memberless = tysys
-            .all_variant_cases
+        let data = &tysys.data;
+        let memberless = data
+            .variant_cases
             .keys()
             .map(of(OnBoundTrait::ReflectVariant))
-            .chain(
-                tysys
-                    .all_enum_cases
-                    .keys()
-                    .map(of(OnBoundTrait::ReflectEnum)),
-            )
-            .chain(
-                tysys
-                    .all_flags_cases
-                    .keys()
-                    .map(of(OnBoundTrait::ReflectFlags)),
-            )
+            .chain(data.enum_cases.keys().map(of(OnBoundTrait::ReflectEnum)))
+            .chain(data.flags_cases.keys().map(of(OnBoundTrait::ReflectFlags)))
             .chain(newtype_decls(tysys, table).map(|(def, _)| (def, OnBoundTrait::ReflectNewtype)))
             .chain(
-                tysys
-                    .all_generic_newtypes
+                data.generic_newtypes
                     .keys()
                     .map(of(OnBoundTrait::ReflectNewtype)),
             );
@@ -1155,7 +1151,7 @@ impl SolverBridge {
 
         // A plain `enum` derives `Display` over the bare case name, so the
         // bound holds before `synthesize_traits` emits the body.
-        for &def in tysys.all_enum_cases.keys() {
+        for &def in tysys.data.enum_cases.keys() {
             fact(declared(def), display);
         }
 
@@ -1164,7 +1160,7 @@ impl SolverBridge {
         // with no member's own `Default` asked for. A generic one does not:
         // a default is elaborated against the declaration, not an instance.
         let default = trait_of(CompilerItem::Default);
-        for (&def, info) in tysys.all_struct_fields.iter() {
+        for (&def, info) in &tysys.data.struct_fields {
             if info.auto_derives_default() {
                 fact(declared(def), default);
             }
@@ -1175,7 +1171,7 @@ impl SolverBridge {
         // type standing for it, so the two paths share the one predicate; a
         // head standing for no type (a trait, a head whose type is minted
         // later) states nothing.
-        let is_variant = |def: DefId| tysys.all_variant_cases.contains_key(&def);
+        let is_variant = |def: DefId| tysys.data.variant_cases.contains_key(&def);
         for (key, &id) in &lowering.decls {
             let (is_ref, is_ref_mut) = match key {
                 DeclKey::Def(_) | DeclKey::Builtin(_) => {
@@ -1225,8 +1221,9 @@ impl SolverBridge {
                 module: lowering.declared_module(module),
             })
         };
+        let data = &tysys.data;
         let mut out = Vec::new();
-        for (&def, info) in tysys.all_struct_fields.iter() {
+        for (&def, info) in &data.struct_fields {
             out.extend(lowered(
                 def,
                 info.type_param_type_ids.len(),
@@ -1234,13 +1231,12 @@ impl SolverBridge {
                 &info.module_source,
             ));
         }
-        let memberless = tysys
-            .all_enum_cases
+        let memberless = data
+            .enum_cases
             .iter()
             .map(|(&def, info)| (def, &info.module_source))
             .chain(
-                tysys
-                    .all_flags_cases
+                data.flags_cases
                     .iter()
                     .map(|(&def, info)| (def, &info.module_source)),
             );
@@ -1248,20 +1244,20 @@ impl SolverBridge {
             out.extend(lowered(def, 0, &mut std::iter::empty(), module));
         }
         let mut variants = Vec::new();
-        for (&def, info) in tysys.all_variant_cases.iter() {
+        for (&def, info) in &data.variant_cases {
             variants.extend(lowered(
                 def,
                 info.type_param_type_ids.len(),
                 &mut info
                     .cases
                     .iter()
-                    .filter(|c| c.payload != TypeTable::UNIT)
+                    .filter(|c| c.has_payload(table))
                     .map(|c| c.payload),
                 &info.module_source,
             ));
         }
-        let handles = tysys
-            .all_resource_types
+        let handles = data
+            .resource_types
             .iter()
             .filter(|&(&def, _)| table.is_unrestricted_resource(def))
             .filter_map(|(&def, info)| {

@@ -3,7 +3,8 @@
 
 use crate::ast::{
     AstVisitor, AttrArg, Attribute, Expr, Function, GenericParam, InnerAttribute, Item, Module,
-    Stmt, WorldExport, walk_expr, walk_function, walk_generic_params, walk_item, walk_stmt,
+    NamePolicy, Stmt, WorldExport, walk_expr, walk_function, walk_generic_params, walk_item,
+    walk_stmt,
 };
 use crate::token::Span;
 
@@ -248,9 +249,49 @@ const WIRE_TARGET: &[AttrTarget] = &[
     AttrTarget::Variant,
     AttrTarget::VariantCase,
     AttrTarget::Flags,
-    AttrTarget::FlagsVariant,
     AttrTarget::Newtype,
 ];
+
+/// The `#[wire(…)]` keys a declaration reads.
+fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
+    match target {
+        AttrTarget::StructField => &["name", "number", "encoding", "positional", "default"],
+        AttrTarget::EnumCase => &["name", "number"],
+        AttrTarget::VariantCase => &["name"],
+        AttrTarget::Struct
+        | AttrTarget::Enum
+        | AttrTarget::Variant
+        | AttrTarget::Flags
+        | AttrTarget::Newtype => &["name_policy"],
+        AttrTarget::Module
+        | AttrTarget::Function
+        | AttrTarget::Param
+        | AttrTarget::GenericParam
+        | AttrTarget::Global
+        | AttrTarget::Let
+        | AttrTarget::Test
+        | AttrTarget::FlagsVariant
+        | AttrTarget::TupleType
+        | AttrTarget::BuiltinType
+        | AttrTarget::Trait
+        | AttrTarget::Interface
+        | AttrTarget::Resource
+        | AttrTarget::World
+        | AttrTarget::Impl
+        | AttrTarget::AssociatedConst
+        | AttrTarget::AssociatedType
+        | AttrTarget::Use => unreachable!("`wire` on {} is misplaced", target.describe()),
+    }
+}
+
+/// Whether a `#[wire(…)]` argument is written in the form its key takes.
+fn wire_form_fits(arg: &AttrArg) -> bool {
+    match arg.name() {
+        "number" => matches!(arg, AttrArg::KeyNumber(..)),
+        "positional" | "default" => matches!(arg, AttrArg::Ident(_)),
+        _ => matches!(arg, AttrArg::KeyValue(..)),
+    }
+}
 
 const FUNCTION_TARGET: &[AttrTarget] = &[AttrTarget::Function];
 const TEST_TARGET: &[AttrTarget] = &[AttrTarget::Test];
@@ -487,7 +528,8 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
         name: WIRE,
         targets: WIRE_TARGET,
         args: AttrArgs::Read(
-            "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `positional`, or `default`",
+            "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `encoding = \"…\"`, \
+             `positional`, or `default`",
         ),
         summary: "how serialization spells this declaration",
         bodyless: None,
@@ -525,6 +567,12 @@ pub enum AttributeFault {
     },
     /// The wrong number of arguments, or the wrong kind.
     Arguments { schema: &'static AttributeSchema },
+    /// A key this declaration does not read.
+    Key { key: String, target: AttrTarget },
+    /// A key one declaration's attributes already set.
+    Repeated { key: String },
+    /// A `name_policy` naming no policy.
+    NamePolicy { value: String },
 }
 
 impl AttributeFault {
@@ -554,6 +602,21 @@ impl AttributeFault {
             Self::Arguments { schema } => {
                 format!("`{name}` takes {}", schema.args.describe())
             }
+            Self::Key { key, target } => format!(
+                "`{name}` takes no `{key}` on {}; there it takes `{}`",
+                target.describe(),
+                wire_keys(*target).join("`, `")
+            ),
+            Self::Repeated { key } => {
+                format!("`{name}({key})` is written twice on one declaration")
+            }
+            Self::NamePolicy { value } => {
+                let known: Vec<&str> = NamePolicy::WRITTEN.iter().map(|(n, _)| *n).collect();
+                format!(
+                    "`{name}(name_policy = \"{value}\")` names no policy; one is `{}`",
+                    known.join("`, `")
+                )
+            }
         }
     }
 }
@@ -577,10 +640,13 @@ fn list_targets(targets: &[AttrTarget]) -> String {
     out
 }
 
-/// What is wrong with an attribute named `name` carrying `args` at `target`,
-/// where a central rule decides. `None` means the schema admits it.
+/// What is wrong with an attribute as written, where a central rule decides.
+/// `None` means the schema admits it.
 #[must_use]
-pub fn check(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<AttributeFault> {
+pub fn check(written: &WrittenAttribute<'_>) -> Option<AttributeFault> {
+    let WrittenAttribute {
+        name, args, target, ..
+    } = *written;
     let Some(schema) = lookup(name) else {
         return Some(AttributeFault::Unknown);
     };
@@ -598,10 +664,52 @@ pub fn check(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<Attribu
         };
         return Some(fault);
     }
-    if schema.args.admits(args) {
-        return None;
+    if !schema.args.admits(args) {
+        return Some(AttributeFault::Arguments { schema });
     }
-    Some(AttributeFault::Arguments { schema })
+    if name == WIRE {
+        return wire_fault(written, schema);
+    }
+    None
+}
+
+fn wire_fault(
+    written: &WrittenAttribute<'_>,
+    schema: &'static AttributeSchema,
+) -> Option<AttributeFault> {
+    let admitted = wire_keys(written.target);
+    for (index, arg) in written.args.iter().enumerate() {
+        let key = arg.name();
+        if !admitted.contains(&key) {
+            return Some(AttributeFault::Key {
+                key: key.to_string(),
+                target: written.target,
+            });
+        }
+        if !wire_form_fits(arg) {
+            return Some(AttributeFault::Arguments { schema });
+        }
+        if let AttrArg::KeyValue(_, value) = arg
+            && key == "name_policy"
+            && NamePolicy::parse(value).is_none()
+        {
+            return Some(AttributeFault::NamePolicy {
+                value: value.clone(),
+            });
+        }
+        let mut before = written
+            .earlier
+            .iter()
+            .filter(|attr| attr.name == WIRE)
+            .flat_map(|attr| &attr.args)
+            .chain(&written.args[..index]);
+        if before.any(|seen| seen.name() == key) {
+            return Some(AttributeFault::Repeated {
+                key: key.to_string(),
+            });
+        }
+    }
+    None
 }
 
 /// One attribute as written, whatever position it sits in.
@@ -611,15 +719,19 @@ pub struct WrittenAttribute<'a> {
     pub args: &'a [AttrArg],
     pub target: AttrTarget,
     pub span: Span,
+    /// The attributes written before this one on the same declaration.
+    pub earlier: &'a [Attribute],
 }
 
 impl<'a> WrittenAttribute<'a> {
-    fn outer(attr: &'a Attribute, target: AttrTarget) -> Self {
+    fn outer(attrs: &'a [Attribute], index: usize, target: AttrTarget) -> Self {
+        let attr = &attrs[index];
         Self {
             name: &attr.name,
             args: &attr.args,
             target,
             span: attr.span,
+            earlier: &attrs[..index],
         }
     }
 
@@ -629,6 +741,7 @@ impl<'a> WrittenAttribute<'a> {
             args: &attr.args,
             target: AttrTarget::Module,
             span: attr.span,
+            earlier: &[],
         }
     }
 }
@@ -650,8 +763,8 @@ struct AttributeWalk<'a, F: FnMut(WrittenAttribute<'_>)> {
 
 impl<F: FnMut(WrittenAttribute<'_>)> AttributeWalk<'_, F> {
     fn report(&mut self, attrs: &[Attribute], target: AttrTarget) {
-        for attr in attrs {
-            (self.report)(WrittenAttribute::outer(attr, target));
+        for index in 0..attrs.len() {
+            (self.report)(WrittenAttribute::outer(attrs, index, target));
         }
     }
 }
@@ -754,6 +867,23 @@ impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
 mod tests {
     use super::*;
 
+    fn check_args(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<AttributeFault> {
+        check(&WrittenAttribute {
+            name,
+            args,
+            target,
+            span: Span::default(),
+            earlier: &[],
+        })
+    }
+
+    #[test]
+    fn every_wire_target_reads_keys() {
+        for &target in WIRE_TARGET {
+            assert!(!wire_keys(target).is_empty(), "{}", target.describe());
+        }
+    }
+
     #[test]
     fn names_are_unique_and_sorted_case_insensitively() {
         let names: Vec<String> = ATTRIBUTES
@@ -779,7 +909,9 @@ mod tests {
             );
         }
         for target in [AttrTarget::Impl, AttrTarget::Use, AttrTarget::Module] {
-            assert!(check(ALLOW, &[AttrArg::Ident("dead_code".to_string())], target).is_none());
+            assert!(
+                check_args(ALLOW, &[AttrArg::Ident("dead_code".to_string())], target).is_none()
+            );
         }
     }
 
@@ -798,9 +930,9 @@ mod tests {
     /// the `attr_*.wado` fixtures, in the source they reject.
     #[test]
     fn a_read_shape_is_left_to_its_reader() {
-        assert!(check(PARAM, &[], AttrTarget::Global).is_none());
+        assert!(check_args(PARAM, &[], AttrTarget::Global).is_none());
         assert!(
-            check(
+            check_args(
                 PARAM,
                 &[AttrArg::KeyValue(
                     "from_env".to_string(),

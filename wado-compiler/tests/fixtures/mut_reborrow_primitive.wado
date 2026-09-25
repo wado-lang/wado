@@ -1,0 +1,19 @@
+// `&mut *r` over a `&mut i32` reborrows the storage `r` names, so a write
+// through the reborrow lands where `r` points.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) {
+    *x += 1;
+}
+
+export fn run() with Stdout {
+    let mut c = 0;
+    let rc = &mut c;
+    bump(&mut *rc);
+    bump(&mut *rc);
+    println(`c=${c}`);
+}
+
+__DATA__
+{"stdout": "c=2\n"}

@@ -39,7 +39,7 @@ fn effective_start_line(attrs: &[Attribute], span_line: usize) -> usize {
 /// one (a single `Namespace` item).
 fn use_namespace_name(u: &UseDecl) -> Option<&str> {
     match u.items.as_slice() {
-        [UseItem::Namespace { name }] => Some(name.as_str()),
+        [UseItem::Namespace { name, .. }] => Some(name.as_str()),
         _ => None,
     }
 }
@@ -630,6 +630,7 @@ impl<'a> Unparser<'a> {
             ["{", "}"],
             u.items_span.unwrap_or(u.span),
             &u.items,
+<<<<<<< HEAD
             |item| match item {
                 UseItem::Simple { id, name_span, .. } => (*name_span, Trailing::Of(*id)),
                 UseItem::InterfaceFunctions {
@@ -638,6 +639,27 @@ impl<'a> Unparser<'a> {
                 UseItem::Wildcard | UseItem::Namespace { .. } => {
                     unreachable!("`use _` and `use name` have no list to wrap")
                 }
+||||||| dc6a5079475
+            braces.start,
+            braces.end,
+            |item| {
+                let id = match item {
+                    UseItem::Simple { id, .. } => Some(*id),
+                    _ => None,
+                };
+                (item.start(), id)
+=======
+            braces.start,
+            braces.end,
+            |item| {
+                let id = match item {
+                    UseItem::Simple { id, .. } | UseItem::InterfaceFunctions { id, .. } => {
+                        Some(*id)
+                    }
+                    UseItem::Wildcard | UseItem::Namespace { .. } => None,
+                };
+                (item.start(), id)
+>>>>>>> origin/main
             },
             Unparser::unparse_use_item,
         );
@@ -695,7 +717,7 @@ impl<'a> Unparser<'a> {
             UseItem::Wildcard => {
                 self.output.push('_');
             }
-            UseItem::Namespace { name } => {
+            UseItem::Namespace { name, .. } => {
                 self.output.push_str(name);
             }
         }

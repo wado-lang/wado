@@ -146,10 +146,10 @@ fn "array_bounds_elim_oob_after_mutation.wado/$cm_export__run"() {
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let $sroa_arr_repr_37: ref Array<i32>;
-    $sroa_arr_repr_37 = array.new_fixed<i32>(10, 20, 30);
-    builtin::array_set<i32>($sroa_arr_repr_37, 0, 999);
-    $v1_1 = builtin::array_get_value<i32>($sroa_arr_repr_37, 0);
+    let $sroa_arr_repr_38: ref Array<i32>;
+    $sroa_arr_repr_38 = array.new_fixed<i32>(10, 20, 30);
+    builtin::array_set<i32>($sroa_arr_repr_38, 0, 999);
+    $v1_1 = builtin::array_get_value<i32>($sroa_arr_repr_38, 0);
     if @unlikely($v1_1 != 999) {
         cold_path;
         $local_3 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(146);
@@ -167,7 +167,7 @@ condition: arr[0] == 999
 "), used: 26 }, 26);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_6 + 26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr: "), used: 5 }, 5);
         $local_4_4 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_3);
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<i32>" { repr: $sroa_arr_repr_37, used: 3 }, $local_4_4);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<i32>" { repr: $sroa_arr_repr_38, used: 3 }, $local_4_4);
         $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_3, 9);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_3.repr, $fuse_at_7 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("arr[0]: "), used: 8 }, 8);
@@ -182,7 +182,7 @@ condition: arr[0] == 999
     cold_path;
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"(3);
     unreachable;
-    drop(builtin::array_get_value<i32>($sroa_arr_repr_37, 3));
+    drop(builtin::array_get_value<i32>($sroa_arr_repr_38, 3));
     "wasi/task-return"(0);
 }
 

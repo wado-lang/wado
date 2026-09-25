@@ -1,0 +1,10 @@
+// Closure identity stays inside the standard library.
+export fn run() {
+    let f = || {};
+    assert builtin::ref_eq(f, f);
+}
+
+__DATA__
+{
+  "compile_error": ":4:12: analysis error: symbol 'ref_eq' is `internal` to 'core:builtin'"
+}

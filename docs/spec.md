@@ -169,6 +169,11 @@ for let of of arr {
 }
 ```
 
+A variable, parameter, item, case or import may not be named `resume`. Only a
+field or a method, reached through `.`, may take the name. The reason is that
+`resume` begins an expression (`resume value`), so such a name could never be
+read.
+
 ### Statements and Expressions
 
 - `expr;` makes a statement.
@@ -951,6 +956,16 @@ match opt {
     Some(1) => "one",
     None => "none",
 }   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
+```
+
+An arm no value can reach is an error too: the guardless arms before it already
+take every value it matches.
+
+```wado
+match opt {
+    _ => 0,
+    Some(x) => x,   // Error: unreachable arm
+}
 ```
 
 #### Guard Expressions
@@ -2445,7 +2460,7 @@ Key points:
   - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
   - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
   - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
-- A function type cannot cross the Component Model boundary: an `export fn` whose signature names one is a compile error. See the closure WEP.
+- A function type crosses the Component Model boundary only as a `#[cm]` import's parameter, as a `u32` key the host calls back through. It takes scalars and handles and returns nothing. Anywhere else, an `export fn` included, it is a compile error. See [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
 
 ### Default Arguments
 
@@ -5680,7 +5695,7 @@ match node {
 }
 ```
 
-A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](#exhaustiveness) is.
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
@@ -5830,13 +5845,14 @@ test {
 }
 ```
 
-#### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(positional)]`
+#### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(encoding = "...")]` / `#[wire(positional)]`
 
-Controls serialization and deserialization of struct fields. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+Controls serialization and deserialization of struct fields and enum cases. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
 
-- `#[wire(name = "...")]` overrides the wire key of one field.
+- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
 - `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
-- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. See [WEP: Grog](./wep-2026-09-22-grog.md).
+- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. On an enum case, `N` is an `i32` and is the case's discriminant on every wire, in place of its position; an enum numbers every case or none. See [WEP: Grog](./wep-2026-09-22-grog.md).
+- `#[wire(encoding = "zigzag")]` and `#[wire(encoding = "fixed")]` choose how a number-keyed format writes an integer field: `"zigzag"` on `i32` / `i64`, `"fixed"` on any 32- or 64-bit integer, and on an `Option` or `List` of one.
 - `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
 
 A field is optional on deserialization when it has a default value (`f: T = expr`), and it falls back to that expression when absent. This is the only mechanism for optional fields.

@@ -24,6 +24,7 @@ use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
 use crate::{kiln_driver, manifest};
+use wado_compiler::world_registry::WorldSurface;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -149,8 +150,7 @@ pub struct CompileFlags {
     /// Forwarded to `CompilerOptions::lib_interface_export`.
     pub lib_interface_export: bool,
     /// Retain the WIR module in the result. `wado compile` sets it when
-    /// embedding WIT, to read the faithful import plan
-    /// (`imported_cm_interfaces`) without a second compile.
+    /// embedding WIT, to read the world surface without a second compile.
     pub retain_wir: bool,
     /// When `Some`, the compile retains the WIT subset
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
@@ -1005,19 +1005,19 @@ fn skip_embed(explicit: bool, wasm: Vec<u8>, msg: &str) -> Result<Vec<u8>, CliEx
 }
 
 /// Append the WIT `component-type` section to `wasm`, encoded from the retained
-/// WIT `snapshot` and `world_imports` (the faithful plan from the retained WIR).
+/// WIT `snapshot` and the world `surface` from the retained WIR.
 /// `explicit` is true for `--embed-wit`: it makes a failure fatal, where the
 /// default-on path only warns and yields the un-embedded component.
 fn embed_wit_section(
     snapshot: Option<wado_compiler::wit_emit::WitEmitSnapshot>,
     wasm: Vec<u8>,
-    world_imports: Vec<String>,
+    surface: WorldSurface,
     explicit: bool,
 ) -> Result<Vec<u8>, CliExit> {
     let Some(snapshot) = snapshot else {
         return skip_embed(explicit, wasm, "WIT analysis subset was not retained");
     };
-    match wit_bundle::embed_component_type_from(&wasm, snapshot.input(), &world_imports) {
+    match wit_bundle::embed_component_type_from(&wasm, snapshot.input(), &surface) {
         Ok(embedded) => Ok(embedded),
         Err(e) => skip_embed(explicit, wasm, &e.to_string()),
     }
@@ -1163,11 +1163,11 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
             // WIT first (if enabled), then the package metadata — both additive
             // custom sections on the component.
             let wasm = if let Some(explicit) = embed {
-                let world_imports = result
+                let surface = result
                     .wir_package
-                    .map(|p| p.imported_cm_interfaces)
+                    .map(|p| p.world_surface)
                     .unwrap_or_default();
-                embed_wit_section(result.wit_emit_snapshot, wasm, world_imports, explicit)?
+                embed_wit_section(result.wit_emit_snapshot, wasm, surface, explicit)?
             } else {
                 wasm
             };

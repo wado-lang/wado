@@ -24,13 +24,23 @@ use {
     upgraded,
 } from "./graph.wado";
 
+<<<<<<< HEAD
 /// `TensorShapeProto.Dimension`. Wado has no nested declaration, so the path
 /// is joined into the name, as Grog will join it.
+||||||| dc6a5079475
+/// Nesting flattens: `.proto` nests a message inside a message and Wado has
+/// no nested declaration, so the path is joined into the name. This is the
+/// rule Grog will apply; here it is applied by hand.
+=======
+/// Nesting flattens: `.proto` nests a message inside a message and Wado has
+/// no nested declaration, so the path is joined into the name: Grog's rule,
+/// applied by hand.
+>>>>>>> origin/main
 pub struct TensorShapeProtoDimension {
     #[wire(number = 1)]
-    pub dim_value: i64 = 0,
+    pub dim_value: Option<i64> = null,
     #[wire(number = 2)]
-    pub dim_param: String = "",
+    pub dim_param: Option<String> = null,
     #[wire(number = 3)]
     pub denotation: String = "",
 }
@@ -278,14 +288,12 @@ fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
 }
 
 fn read_dim(d: &TensorShapeProtoDimension, tensor: &String) -> Result<Dim, String> {
-    if d.dim_param != "" {
-        return Result::Ok(Dim::Symbol(d.dim_param));
+    if let Some(name) = &d.dim_param {
+        return Result::Ok(Dim::Symbol(*name));
     }
-    if d.dim_value != 0 {
-        return Result::Ok(Dim::Static(extent(d.dim_value, tensor)?));
+    if let Some(value) = d.dim_value {
+        return Result::Ok(Dim::Static(extent(value, tensor)?));
     }
-    // A `oneof`'s presence is on the wire, and `core:protobuf` has none, so an
-    // extent of zero is the absent field. See the Loam WEP's known gaps.
     return Result::Ok(Dim::Unknown);
 }
 

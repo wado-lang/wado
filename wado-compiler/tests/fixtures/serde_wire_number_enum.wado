@@ -1,0 +1,60 @@
+// `#[wire(number = N)]` on an enum case is the value a format writes for it,
+// since protobuf enum values are sparse, may be negative, and survive reordering.
+use { to_string, from_string } from "core:json";
+use json_nsd from "core:json_nsd";
+use protobuf from "core:protobuf";
+
+enum Corpus {
+    #[wire(number = 3)] Web,
+    #[wire(number = 0)] Unspecified,
+    #[wire(number = -1)] Legacy,
+}
+
+struct Query {
+    #[wire(number = 1)] corpus: Corpus,
+    #[wire(number = 2)] fallback: Corpus,
+}
+
+enum Plain {
+    A,
+    B,
+}
+
+test "the number is the case's wire discriminant" {
+    let mut out = "";
+    for let c of ReflectEnum::<Corpus>::members() {
+        out = `${out}${c.discriminant()}:${c.wire_discriminant()};`;
+    }
+    assert out == "0:3;1:0;2:-1;";
+}
+
+test "a case carrying no number keeps its declaration order" {
+    let mut out = "";
+    for let c of ReflectEnum::<Plain>::members() {
+        out = `${out}${c.wire_discriminant()};`;
+    }
+    assert out == "0;1;";
+}
+
+test "a name-based format still writes the case name" {
+    assert to_string(&Corpus::Legacy) matches { Ok(s) && s == `"Legacy"` };
+    assert from_string::<Corpus>(`"Web"`) matches { Ok(Web) };
+}
+
+test "a format keyed by discriminant writes the number" {
+    assert json_nsd::to_string(&Corpus::Web) matches { Ok(s) && s == "3" };
+    assert json_nsd::to_string(&Corpus::Legacy) matches { Ok(s) && s == "-1" };
+    assert json_nsd::from_string::<Corpus>("0") matches { Ok(Unspecified) };
+    assert json_nsd::from_string::<Corpus>("1") matches { Err(_) };
+}
+
+test "protobuf writes the number as the field's varint" {
+    let q = Query { corpus: Corpus::Web, fallback: Corpus::Legacy };
+    let bytes = protobuf::to_bytes(&q).unwrap();
+    // Field 1 varint 3; field 2 varint -1 as a sign-extended ten-byte varint.
+    let expected: List<u8> = [0x08, 0x03, 0x10, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01];
+    assert bytes as List<u8> == expected;
+    let back = protobuf::from_bytes::<Query>(&bytes).unwrap();
+    assert back.corpus matches { Web };
+    assert back.fallback matches { Legacy };
+}

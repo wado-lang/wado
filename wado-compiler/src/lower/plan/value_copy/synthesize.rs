@@ -405,12 +405,10 @@ fn build_copy_return_expr(
     // `StructLiteral` arm rejects with a hard panic. Falling through to identity
     // keeps a stray non-monomorphized template wrapper safe; the shapes that do
     // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
     if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table.borrow().def_name(*def) == list_name
+        && type_table
+            .borrow()
+            .is_compiler_item(*def, CompilerItem::List)
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -492,16 +490,10 @@ fn is_synth_safe_element(
             if TypeTable::is_tuple_type(name) {
                 return true;
             }
-            let (list_name, string_name, box_name) = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                (
-                    items.struct_name(CompilerItem::List).to_string(),
-                    items.struct_name(CompilerItem::String).to_string(),
-                    items.struct_name(CompilerItem::Box).to_string(),
-                )
-            };
-            if *name == list_name || *name == string_name || *name == box_name {
+            if [CompilerItem::List, CompilerItem::String, CompilerItem::Box]
+                .into_iter()
+                .any(|item| type_table.borrow().is_compiler_item(def, item))
+            {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest
@@ -531,32 +523,20 @@ fn build_list_wrapper_copy(
     span: Span,
 ) -> TirExpr {
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
-    let repr_field = TirField {
-        name: SeqField::Backing.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: raw_array_ty,
-        index: 0,
+    let repr_field = TirField::plain(
+        SeqField::Backing.field_name().to_string(),
+        Visibility::Private,
+        raw_array_ty,
+        0,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
-    let used_field = TirField {
-        name: SeqField::Len.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: TypeTable::I32,
-        index: 1,
+    );
+    let used_field = TirField::plain(
+        SeqField::Len.field_name().to_string(),
+        Visibility::Private,
+        TypeTable::I32,
+        1,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
+    );
     let fields = vec![
         TirStructField {
             name: SeqField::Backing.field_name().to_string(),
@@ -599,19 +579,13 @@ fn build_tuple_copy(
         .iter()
         .enumerate()
         .map(|(idx, elem_ty)| {
-            let field = TirField {
-                name: idx.to_string(),
-                visibility: Visibility::Public,
-                type_id: *elem_ty,
-                index: idx as u32,
+            let field = TirField::plain(
+                idx.to_string(),
+                Visibility::Public,
+                *elem_ty,
+                idx as u32,
                 span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                default_expr: None,
-            };
+            );
             TirStructField {
                 name: field.name.clone(),
                 value: make_field_copy(v_local.clone(), &field, type_table, span),

@@ -1,0 +1,46 @@
+//! Kiln generator entry for Grog. Reads a `.proto` schema and emits the Wado
+//! declarations `core:protobuf` encodes.
+
+use { Request, Response, Error, OutputFile, KilnHost, read_text } from "core:kiln";
+use { EmitError, emit } from "./emit.wado";
+use { read } from "./parse.wado";
+
+export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
+    let path = req.primary.path;
+    let source = match read_text(req.primary.content) {
+        Ok(text) => text,
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(`grog: '${path}' is not UTF-8: ${e}`));
+        },
+    };
+    let file = read(&source).map_err(|e| at(&path, EmitError::Invalid(e)))?;
+    let generated = emit(&file).map_err(|e| at(&path, e))?;
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: `${stem(&path)}.wado`,
+            content: generated,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}
+
+/// What the schema is wrong about, said against the file it was read from.
+fn at(path: &String, e: EmitError) -> Error {
+    return match e {
+        Invalid(m) => Error::InvalidSchema(`grog: '${path}':${m}`),
+        Unsupported(m) => Error::Unsupported(`grog: '${path}':${m}`),
+    };
+}
+
+/// `a/b/demo.proto` as `demo`.
+fn stem(path: &String) -> String {
+    let mut name = "";
+    for let part of path.split("/") {
+        name = part.to_string();
+    }
+    if name.ends_with(".proto") {
+        return name.as_str_slice().slice(0, name.len() - 6).to_string();
+    }
+    return name;
+}

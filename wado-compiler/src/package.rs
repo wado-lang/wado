@@ -16,7 +16,7 @@ use crate::synthesis::effect_dispatch;
 use crate::synthesis::effect_dispatch::{DispatchPlan, ResourceWrapperIndex};
 use crate::tir::TirModule;
 use crate::token::Span;
-use crate::world_registry::{self, WorldInfo, WorldRegistry};
+use crate::world_registry::{self, CallbackExport, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -83,6 +83,8 @@ pub struct Package {
     /// `export_binding_names`; absent for every other export, which gets no
     /// `post-return` canonical option.
     pub post_return_binding_names: IndexMap<String, String>,
+    /// One per closure signature an import takes. Populated by `synthesis::cm_binding`.
+    pub callback_exports: Vec<CallbackExport>,
 
     /// Wasm assets loaded by the loader from
     /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
@@ -178,6 +180,7 @@ impl Package {
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             post_return_binding_names: IndexMap::default(),
+            callback_exports: Vec::new(),
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
             // Effect-dispatch plans flow from pre-cm_binding to post-check

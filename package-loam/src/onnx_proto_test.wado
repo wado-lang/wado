@@ -114,8 +114,10 @@ test "a model round-trips through the declarations" {
                 elem_type: 1,
                 shape: Option::Some(TensorShapeProto {
                     dim: [
-                        TensorShapeProtoDimension { dim_param: "N" },
-                        TensorShapeProtoDimension { dim_value: 4 },
+                        TensorShapeProtoDimension { dim_param: Option::Some("N") },
+                        TensorShapeProtoDimension { dim_value: Option::Some(4) },
+                        TensorShapeProtoDimension { dim_value: Option::Some(0) },
+                        TensorShapeProtoDimension {},
                     ],
                 }),
             }),
@@ -149,6 +151,7 @@ test "a model round-trips through the declarations" {
     assert g.inputs[0].name == "X";
     assert g.inputs[0].dtype == "float";
     assert g.inputs[0].rank matches { Dims(d) && d[0] matches { Symbol("N") } && d[1] matches { Static(4) } };
+    assert g.inputs[0].rank matches { Dims(d) && d[2] matches { Static(0) } && d[3] matches { Unknown } };
     assert g.initializers.len() == 1;
     assert g.initializers[0].name == "W";
     assert g.initializers[0].rank matches { Dims(d) && d[0] matches { Static(4) } && d[1] matches { Static(2) } };

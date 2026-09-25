@@ -125,7 +125,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
 /// `0` otherwise. Used to convert a 0-based call-site argument index into
 /// the corresponding 0-based parameter / local index inside the callee.
 fn self_param_offset(callee: &TirFunction) -> u32 {
-    u32::from(callee.params.first().is_some_and(|p| p.name == "self"))
+    u32::from(callee.takes_self())
 }
 
 /// Build the canonical signature string for a closure, e.g.
@@ -615,18 +615,14 @@ impl ClosureLowerer {
                 .captures
                 .iter()
                 .enumerate()
-                .map(|(i, cap)| TirField {
-                    name: closure_capture_field(i as u32),
-                    visibility: Visibility::Private,
-                    type_id: cap.type_id,
-                    index: i as u32,
-                    span: collected.span,
-                    is_secret: false,
-                    wire_name_override: None,
-                    serde_default: false,
-                    serde_positional: false,
-                    serde_number: None,
-                    default_expr: None,
+                .map(|(i, cap)| {
+                    TirField::plain(
+                        closure_capture_field(i as u32),
+                        Visibility::Private,
+                        cap.type_id,
+                        i as u32,
+                        collected.span,
+                    )
                 })
                 .collect();
 

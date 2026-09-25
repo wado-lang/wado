@@ -1,0 +1,40 @@
+// A field's default is evaluated only where the wire leaves the field out, and
+// never by a format that has no use for it.
+use { from_string, to_string } from "core:json";
+use { from_bytes, to_bytes } from "core:protobuf";
+
+fn boom() -> i32 {
+    let xs: List<i32> = [];
+    return xs[builtin::black_box(3)];
+}
+
+struct Named {
+    first: i32 = boom(),
+    second: i32 = 7,
+}
+
+struct Numbered {
+    #[wire(number = 1)]
+    first: i32 = boom(),
+    #[wire(number = 2)]
+    second: i32 = 0,
+}
+
+test "decoding a missing field evaluates that field's default alone" {
+    let n = from_string::<Named>("{\"first\":1}").unwrap();
+    assert n.first == 1;
+    assert n.second == 7;
+}
+
+test "a name-keyed format writes a numbered struct without its defaults" {
+    assert to_string(&Numbered { first: 1, second: 2 }).unwrap() == "{\"first\":1,\"second\":2}";
+}
+
+test "protobuf reads a default only for a field holding the zero" {
+    let bytes = to_bytes(&Numbered { first: 1, second: 0 }).unwrap();
+    assert bytes.len() == 2;
+    assert from_bytes::<Numbered>(&bytes).unwrap().second == 0;
+}
+
+__DATA__
+{"test": {}}

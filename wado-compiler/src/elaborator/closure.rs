@@ -4,8 +4,6 @@
 //! the caller's typecheck, and records the
 //! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
 
-use crate::hashmap::IndexSet;
-
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
 use crate::name::capture_ref_name;
@@ -13,6 +11,7 @@ use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
+use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
@@ -91,24 +90,10 @@ pub(super) fn link_parent_captures(
         .collect()
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Whether `ty` is a bare rigid type parameter.
-    ///
-    /// A closure is not constrained by an expected return type of that shape:
-    /// the parameter belongs to the signature the call is instantiating, and
-    /// the closure's own body is what determines it. Seeding the body with it
-    /// would demand that the body produce an opaque type it cannot construct
-    /// — `fold(0, |acc, x| acc + x)` asked the closure to return `Acc`.
-    pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(ty),
-            ResolvedType::TypeParam { .. }
-        )
-    }
-
+impl TypeSystem {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
-        let tt = self.tysys.type_table.borrow();
+        let tt = self.type_table.borrow();
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
@@ -125,7 +110,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         }
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a closure parameter's type, defaulting unannotated params to
     /// the expected-type's positional param when one is available.
     fn closure_param_type(
@@ -145,9 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         TypeTable::UNKNOWN
     }
-}
 
-impl<H: CompilerHost> Elaborator<'_, H> {
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
@@ -169,29 +154,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         self.reject_closure_defaults(closure);
-        let expected_fn = self.extract_expected_fn(expected_type);
+        let expected_fn = self.tysys.extract_expected_fn(expected_type);
 
-        // Collect outer bindings the body assigns to.
-        let mut assigned_names: IndexSet<String> = IndexSet::default();
-        Self::collect_mutated_vars(closure, &mut assigned_names);
-
-        // For each assigned name that resolves to an outer `mut` local,
-        // record a `MutCapture` (so reify replays the `$ref_<var>`
-        // materialisation in the same order) and mark the outer local
-        // address-taken.
+        // Reify replays the `MutCapture`s in this order.
+        let writes = Self::collect_capture_writes(closure);
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
-        for var_name in &assigned_names {
+        for var_name in writes.assigned.union(&writes.borrowed) {
+            let written = writes.assigned.contains(var_name);
             let Some(local) = ctx.lookup(var_name) else {
                 // A binding `ctx` only reaches by capture is boxed where it is
                 // owned; writing through that box is still a mutating capture.
-                any_mutating_capture |= ctx.binding(var_name).is_some_and(|b| b.is_mut);
+                any_mutating_capture |= written && ctx.binding(var_name).is_some_and(|b| b.is_mut);
                 continue;
             };
             if local.is_mut {
-                any_mutating_capture = true;
+                any_mutating_capture |= written;
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
@@ -240,11 +220,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.reject_unresolved_annotation(ty);
         }
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        // A bare type parameter belongs to the signature the call instantiates,
+        // and the closure's body determines it: `fold(0, |acc, x| acc + x)`.
         let body_expected = declared_return.or_else(|| {
-            expected_fn
-                .as_ref()
-                .map(|ef| ef.return_type)
-                .filter(|&rt| !self.is_rigid_type_param(rt))
+            expected_fn.as_ref().map(|ef| ef.return_type).filter(|&rt| {
+                !matches!(
+                    self.tysys.type_table.borrow().get(rt),
+                    ResolvedType::TypeParam { .. }
+                )
+            })
         });
         // Seed the closure's return type before walking the body, so a `?`
         // operator in the body (which checks `ctx.return_type` for
@@ -255,6 +239,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             closure_ctx.return_type = rt;
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
+
+        // Only the walk knows which borrows reach a capture's own storage.
+        for var_name in std::mem::take(&mut closure_ctx.borrowed_captures) {
+            if closure_ctx.deref_overrides.contains_key(&var_name) {
+                any_mutating_capture = true;
+            } else if let Some(local) = ctx.lookup(&var_name) {
+                assert!(
+                    !local.is_mut,
+                    "a `mut` receiver `{var_name}` is boxed before the walk"
+                );
+            } else {
+                any_mutating_capture |= ctx.binding(&var_name).is_some_and(|b| b.is_mut);
+                ctx.borrowed_captures.insert(var_name);
+            }
+        }
 
         // The source each capture reads from belongs to this walk alone: reify
         // resolves it again against its own frame, so recording it would be a

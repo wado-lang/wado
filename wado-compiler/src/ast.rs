@@ -573,8 +573,20 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(u.id, u.span);
             v.visit_id(u.source_id, u.source_span);
             for it in &u.items {
-                if let UseItem::Simple { id, name_span, .. } = it {
-                    v.visit_id(*id, *name_span);
+                match it {
+                    UseItem::Simple { id, name_span, .. } => v.visit_id(*id, *name_span),
+                    UseItem::InterfaceFunctions {
+                        id,
+                        name_span,
+                        functions,
+                        ..
+                    } => {
+                        v.visit_id(*id, *name_span);
+                        for function in functions {
+                            v.visit_id(function.id, function.name_span);
+                        }
+                    }
+                    UseItem::Wildcard | UseItem::Namespace { .. } => {}
                 }
             }
         }
@@ -1540,6 +1552,65 @@ pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
         .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
+/// An enum case's `#[wire(number = N)]`, where it fits the `int32` a protobuf
+/// enum value is.
+#[must_use]
+pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
+    wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
+}
+
+/// `#[wire(encoding = "…")]`: how a numbered format writes an integer field,
+/// which protobuf's `sint*`, `fixed*` and `sfixed*` each need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WireEncoding {
+    Plain,
+    ZigZag,
+    Fixed,
+}
+
+/// `#[wire(name_policy = "…")]`: the casing a name-keyed format spells a
+/// declaration's members in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamePolicy {
+    Camel,
+    Snake,
+    ScreamingSnake,
+    Pascal,
+    Kebab,
+    ScreamingKebab,
+}
+
+impl NamePolicy {
+    pub const WRITTEN: [(&'static str, Self); 6] = [
+        ("camelCase", Self::Camel),
+        ("snake_case", Self::Snake),
+        ("SCREAMING_SNAKE_CASE", Self::ScreamingSnake),
+        ("PascalCase", Self::Pascal),
+        ("kebab-case", Self::Kebab),
+        ("SCREAMING-KEBAB-CASE", Self::ScreamingKebab),
+    ];
+
+    #[must_use]
+    pub fn parse(written: &str) -> Option<Self> {
+        Self::WRITTEN
+            .iter()
+            .find(|(name, _)| *name == written)
+            .map(|&(_, policy)| policy)
+    }
+}
+
+/// The `#[wire(encoding = "…")]` text these attributes carry, as written.
+#[must_use]
+pub fn wire_encoding_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_value("encoding")
+        } else {
+            None
+        }
+    })
+}
+
 /// One entry per field, in declaration order, as `StructInfo` holds them.
 #[must_use]
 pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
@@ -1997,9 +2068,13 @@ pub enum UseItem {
         /// Span of just the `name` identifier (narrower than the whole item).
         name_span: Span,
         alias: Option<String>,
+        /// Span of the name this import binds: the alias where one is written.
+        local_span: Span,
     },
     /// Effect with functions: `Effect::{func1, func2}`
     InterfaceFunctions {
+        /// `AstId` for the interface name, the site of its use→def edge.
+        id: AstId,
         interface_name: String,
         /// Span of the interface name identifier — where the item starts.
         name_span: Span,
@@ -2010,14 +2085,19 @@ pub enum UseItem {
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
-    Namespace { name: String },
+    Namespace { name: String, name_span: Span },
 }
 
 /// Simple use item (used within effect function imports)
 #[derive(Debug, Clone)]
 pub struct UseItemSimple {
+    /// `AstId` for the name, the site of its use→def edge.
+    pub id: AstId,
     pub name: String,
+    pub name_span: Span,
     pub alias: Option<String>,
+    /// Span of the name this import binds: the alias where one is written.
+    pub local_span: Span,
 }
 
 /// Generic attribute-value tree produced by `with { ... }` clauses.
@@ -2773,6 +2853,17 @@ pub struct RangeExpr {
 }
 
 impl Expr {
+    /// The binding a field and index chain roots at: `x` of `x.f[i]`. `None`
+    /// where it roots in a temporary.
+    pub fn place_root_ident(&self) -> Option<&IdentExpr> {
+        match self {
+            Expr::Ident(id) => Some(id),
+            Expr::FieldAccess(fa) => fa.expr.place_root_ident(),
+            Expr::Index(idx) => idx.expr.place_root_ident(),
+            _ => None,
+        }
+    }
+
     /// Returns the [`AstId`] for this expression.
     ///
     /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,

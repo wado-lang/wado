@@ -13,7 +13,7 @@ use crate::cm_abi;
 use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, cm_export_func_name, cm_post_return_func_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -46,11 +46,6 @@ use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
-
-/// Build the export binding function name for a world export.
-pub fn export_binding_func_name(export_name: &str) -> String {
-    format!("$cm_export__{export_name}")
-}
 
 /// Lower a Wado-typed value to flat CM ABI args (i32 / i64 / f32 / f64).
 ///
@@ -148,7 +143,10 @@ fn lower_to_flat_inner(
             }]
         }
         ResolvedType::Struct { def, .. }
-            if ctx.type_table.borrow().struct_head_name(*def) == names.string =>
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_struct(*def, CompilerItem::String) =>
         {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
@@ -175,7 +173,11 @@ fn lower_to_flat_inner(
         }
         ResolvedType::Unit => vec![],
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.array && type_args.len() == 1 =>
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::List)
+                && type_args.len() == 1 =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
@@ -357,7 +359,11 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.option && type_args.len() == 1 =>
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::Option)
+                && type_args.len() == 1 =>
         {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
@@ -483,7 +489,11 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::Result)
+                && type_args.len() == 2 =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
             // 1 = Err. The active arm's payload lowers into the shared joined
@@ -645,7 +655,10 @@ fn lower_to_flat_inner(
                 .collect()
         }
         ResolvedType::Struct { def, type_args }
-            if ctx.type_table.borrow().struct_head_name(*def) != names.string =>
+            if !ctx
+                .type_table
+                .borrow()
+                .is_compiler_struct(*def, CompilerItem::String) =>
         {
             let name = &ctx.type_table.borrow().struct_head_name(*def);
             // Struct: concatenation of field flat types
@@ -1557,7 +1570,7 @@ pub(super) fn synthesize_export_binding(
     env: &ExportBindingEnv<'_>,
     strategy: ExportReturnStrategy,
 ) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
+    let binding_name = cm_export_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut locals: Vec<TirLocal> = Vec::new();
     let lift_ctx = env.lift_ctx();
@@ -1785,12 +1798,6 @@ fn push_sync_return_epilogue(
     }
 }
 
-/// The core function named by a sync lift's `post-return` canonical option.
-/// Distinct from [`export_binding_func_name`] so the core module exports both.
-pub(super) fn post_return_func_name(export_name: &str) -> String {
-    format!("$cm_post_return__{export_name}")
-}
-
 /// Synthesize a sync-lifted export's `post-return`, or `None` when nothing was
 /// allocated to reclaim. The gate is the indirect return rather than memory
 /// ownership: a result wider than one core value comes back through a
@@ -1830,7 +1837,7 @@ pub(super) fn synthesize_post_return(
     )));
 
     Some(finalize_export_binding(
-        post_return_func_name(export_name),
+        cm_post_return_func_name(export_name),
         vec![TirParam {
             name: "$ret_ptr".to_string(),
             type_id: TypeTable::I32,

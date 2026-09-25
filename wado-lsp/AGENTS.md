@@ -296,14 +296,6 @@ Known gaps and quality debts in `src/definition.rs` / `src/location.rs` not tied
 to a specific LSP request kind. Each item identifies the symptom and the
 concrete code location involved.
 
-- [ ] **Jump-to-def for non-`Simple` `UseItem` variants.**
-      `Elaborator::record_use_specifier_references` (`wado-compiler/src/elaborator.rs`)
-      skips `UseItem::{EffectFunctions, Namespace}`. Give `UseItemSimple`
-      (effect functions) and `UseItem::Namespace` their own `AstId` + name
-      `Span` in `wado-compiler/src/ast.rs` so cursor-on-name works for:
-      - `use foo from "./foo.wado"` (namespace import)
-      - `use { Eff::{f, g} } from "..."` (effect function list — both the
-      effect name and the function names)
 - [ ] **Narrow `#include_str` / `#include_bytes` cursor match to the path
       literal.** `Literal::IncludeStr(String)` / `IncludeBytes(String)` store
       only the path text, so `IncludePathFinder` in `src/definition.rs`

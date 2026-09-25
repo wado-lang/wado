@@ -18,7 +18,12 @@ description: Locate and sync the reference specs and runtimes vendored under ven
 - `vendor/wasi-webgpu/` - the `wasi:webgpu` proposal
 - `vendor/protobuf-spec/` - protobuf.dev's source, which is the protobuf spec
   - Wire format: `vendor/protobuf-spec/content/programming-guides/encoding.md`
-  - The `.proto` grammar: `vendor/protobuf-spec/content/reference/protobuf/proto3-spec.md`
+  - The `.proto` grammar, one file per syntax and edition:
+    `vendor/protobuf-spec/content/reference/protobuf/{proto2,proto3,edition-2023,edition-2024}-spec.md`
+  - Edition features: `vendor/protobuf-spec/content/editions/features.md`
+- `vendor/protobuf/` - protocolbuffers/protobuf, for the `.proto` files the spec
+  does not carry: `src/google/protobuf/descriptor.proto`, the well-known types,
+  and the `unittest*.proto` / `test_messages_*.proto` Grog parses as a corpus
 
 `git submodule update --init --recommend-shallow` fetches them.
 
