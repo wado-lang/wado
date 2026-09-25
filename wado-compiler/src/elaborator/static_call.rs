@@ -725,9 +725,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// Whether the receiver declares a `variant` case, an `enum` case or a
-    /// `flags` member of this name — a constructor the spelling names, not a
-    /// call.
+    /// Whether the receiver declares a `variant` case, `enum` case or `flags`
+    /// member of this name, which the spelling constructs rather than calls.
     fn declares_case_named(&self, key: &ImplTargetKey, name: &str) -> bool {
         let ImplTargetKey::Decl(def) = key else {
             return false;
@@ -792,9 +791,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// What the argument is checked against for a body the block wrote: the
-    /// declaration's first parameter past any receiver, unless only the
-    /// argument can fill it.
+    /// What the arguments are checked against for a body the block wrote: its
+    /// parameters past any receiver, unless only the argument can fill one.
     pub(super) fn written_selector(&self, header: &ImplHeader, sig: &MethodSig) -> Selector {
         let first = sig.first_value_param().min(sig.decl.param_types.len());
         let params = &sig.decl.param_types[first..];
@@ -810,13 +808,8 @@ impl TypeSystem {
         Selector::Params(params.to_vec())
     }
 
-    /// What an `impl` block offers for `method_name`: the body it wrote, else
-    /// the trait default it leaves to answer. One walk, so the argument survey
-    /// and the rules cannot see different candidate sets.
-    ///
-    /// `None` where the block offers nothing — it declares another name, or the
-    /// trait left the method required, which is reported where the two are
-    /// compared.
+    /// What an `impl` block offers for `method_name`: the body it wrote, else the trait
+    /// default. One walk, so the argument survey and the rules see one candidate set.
     pub(super) fn impl_static_offer(
         &self,
         header: &ImplHeader,
@@ -841,13 +834,6 @@ impl TypeSystem {
     }
 
     /// The candidate for the trait's default body, where the block wrote none.
-    /// The trait's frame numbers `Self` as slot 0 and the trait's own parameters
-    /// after it, so the block's trait arguments follow the receiver: reading the
-    /// default at the receiver alone leaves them open, and every argument then
-    /// reaches every block.
-    ///
-    /// `None` where the trait left the method required, which is the block's own
-    /// error and reported where the two are compared.
     fn inherited_offer(
         &self,
         trait_decl: DefId,
@@ -859,6 +845,8 @@ impl TypeSystem {
         if !declared.is_inherited() {
             return None;
         }
+        // Without the trait arguments after `Self`, the default leaves them
+        // open and every argument reaches every block.
         let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
             .chain(self.trait_args_of_impl(impl_def))
             .collect();
@@ -892,9 +880,8 @@ impl TypeSystem {
         })
     }
 
-    /// The traits to name when several supply one name, in the order the blocks
-    /// were written. `None` where one trait answers, however many times it is
-    /// implemented: naming it as both alternatives is a remedy nobody can write.
+    /// The distinct traits to name when several supply one name, in the order the
+    /// blocks were written; one trait implemented twice is no remedy anyone can write.
     fn ambiguous_alternatives(&self, candidates: &[Candidate]) -> Option<Vec<String>> {
         let distinct: IndexSet<DefId> = candidates
             .iter()

@@ -28,8 +28,8 @@ use super::Elaborator;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
-    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo, StructFieldInfo,
-    TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
+    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
@@ -542,46 +542,46 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Resource(resource_decl) => {
                         let def = resolutions.defs().def_at(resource_decl.id);
-                            data.resource_types.insert(
+                        data.resource_types.insert(
+                            def,
+                            ResourceInfo {
+                                name: resource_decl.name.clone(),
+                                module_source: module_source.clone(),
+                                defined_at: resource_decl.id,
+                            },
+                        );
+                        if declares_unrestricted(&resource_decl.attrs) {
+                            type_table.borrow_mut().mark_unrestricted_resource(
                                 def,
-                                ResourceInfo {
-                                    name: resource_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: resource_decl.id,
-                                },
+                                declared_handle_classes(&resource_decl.attrs),
                             );
-                            if declares_unrestricted(&resource_decl.attrs) {
-                                type_table.borrow_mut().mark_unrestricted_resource(
-                                    def,
-                                    declared_handle_classes(&resource_decl.attrs),
-                                );
-                            }
-                            let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
-                            if is_generic {
-                                generic_resources.insert(def);
-                            }
-                            // A static is not inherited, so it shadows nothing.
-                            resource_method_names.insert(
-                                def,
-                                resource_decl
-                                    .methods
-                                    .iter()
-                                    .filter(|m| {
-                                        m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
-                                    })
-                                    .map(|m| (m.name.clone(), m.span))
-                                    .collect(),
-                            );
-                            if let Some(parent) = &resource_decl.parent {
-                                pending_extends.push(PendingExtends {
-                                    child: def,
-                                    child_name: resource_decl.name.clone(),
-                                    child_is_generic: is_generic,
-                                    parent: parent.clone(),
-                                    module: module_source.clone(),
-                                    span: resource_decl.span,
-                                });
-                            }
+                        }
+                        let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
+                        if is_generic {
+                            generic_resources.insert(def);
+                        }
+                        // A static is not inherited, so it shadows nothing.
+                        resource_method_names.insert(
+                            def,
+                            resource_decl
+                                .methods
+                                .iter()
+                                .filter(|m| {
+                                    m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                                })
+                                .map(|m| (m.name.clone(), m.span))
+                                .collect(),
+                        );
+                        if let Some(parent) = &resource_decl.parent {
+                            pending_extends.push(PendingExtends {
+                                child: def,
+                                child_name: resource_decl.name.clone(),
+                                child_is_generic: is_generic,
+                                parent: parent.clone(),
+                                module: module_source.clone(),
+                                span: resource_decl.span,
+                            });
+                        }
                         register_type_compiler_item(
                             &type_table,
                             CompilerItemKind::Resource,

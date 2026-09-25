@@ -1701,10 +1701,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Build the `FunctionRef` targeting a reflect subject's synthesized
-    /// `Base^Trait::method`. A generic instance carries the instantiation in
-    /// `monomorph_info` and in the mangled name, so monomorphization picks the
-    /// instance whose type args match; `type_args` is empty for a plain type.
+    /// The `FunctionRef` targeting a reflect subject's synthesized
+    /// `Base^Trait::method`, for the instantiation `type_args` names.
     fn reflect_func_ref(
         &self,
         self_ty: TypeId,
@@ -1743,8 +1741,7 @@ impl TypeSystem {
     }
 
     /// Substitute an instantiation's `type_args` into member types written
-    /// against the declaration's own parameters. A no-op for a plain type
-    /// (`type_args` empty), which carries no parameters to substitute.
+    /// against the declaration's own parameters.
     fn substitute_declared_params(
         &self,
         declared: &[TypeId],

@@ -1042,8 +1042,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. A variant constructor, a static path or an effect
-    /// operation names no function there and is left to the expected type.
+    /// reference site.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
         if ident.name.contains("::") {
             return None;
@@ -1051,11 +1050,8 @@ impl TypeSystem {
         Some(self.callee_of(self.free_function_at(ident.id)?))
     }
 
-    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a base name renders a function type's own parameters, so
-    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
-    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
-    /// `Holder<i32, String>`, which no `T` makes it.
+    /// Whether `param`'s slots can be filled to make it `arg`. Structural, since a
+    /// base name drops arguments: `Holder<T, T>` spells like `Holder<i32, String>`.
     fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
         let mut bindings = IndexMap::default();
         unify(&self.type_table, param, arg, &mut bindings);

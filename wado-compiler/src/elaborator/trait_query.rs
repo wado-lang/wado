@@ -2650,9 +2650,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// The header of `method_name` on the trait `key` names. The cheap form of
-    /// [`Elaborator::trait_method_of`], for counting candidates without cloning each
-    /// one's declaration.
+    /// The header of `method_name` on the trait `key` names: the cheap form of
+    /// [`Elaborator::trait_method_of`], cloning no declaration.
     fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
         self.trait_env
             .decl_header_of(key)?
@@ -2661,12 +2660,8 @@ impl TypeSystem {
             .find(|m| m.name == method_name)
     }
 
-    /// The recorded signature of an already-identified trait.
-    ///
-    /// Every by-name form funnels through this one. Flattening a key back to
-    /// its declared name and resolving that again is what broke an aliased
-    /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
-    /// second resolution found nothing.
+    /// The recorded signature of an already-identified trait, which every by-name
+    /// form funnels through: resolving a name twice misses an aliased import.
     pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
         if !self.trait_env.declares_trait(key) {
             return None;
@@ -3445,7 +3440,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_name: struct_name.to_string(),
                 impl_type_id: lookup_type_id,
             };
-            let mut resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, method_name);
+            let mut resolved =
+                ResolvedTraitMethod::of_operator_impl(&self.tysys, found, method_name);
             if let Some((_, return_type)) = auto_derive {
                 resolved.return_type = return_type;
             }
@@ -3585,9 +3581,8 @@ impl TypeSystem {
             .collect()
     }
 
-    /// `fq` with each argument that names no type taken from the slot the bound
-    /// fills: `Make<X::Item>` at `T: Constrained<Feed>` names what `Feed` binds
-    /// `Item` to.
+    /// `fq` with each argument that names no type taken from the slot the bound fills:
+    /// `Make<X::Item>` at `T: Constrained<Feed>` names what `Feed` binds `Item` to.
     fn trait_named_from_slots(
         &self,
         fq: FqTraitName,

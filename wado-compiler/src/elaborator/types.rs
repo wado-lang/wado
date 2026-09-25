@@ -3585,18 +3585,15 @@ pub(crate) struct TypeLookup<'a> {
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
     pub(crate) resolutions: &'a Resolutions,
-    /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
-    /// in type position is canonicalized to its `ns$Type` alias before any
-    /// registry lookup (`sem::imports::canonical_ns_ref`).
+    /// Namespace-import aliases (`use ns from "..."`), by which a `ns::Type`
+    /// reference canonicalizes to `ns$Type` (`sem::imports::canonical_ns_ref`).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
     pub(crate) program: &'a DataDecls,
     /// This walk's own additions, read ahead of `program`: its local data
     /// declarations, anonymous shapes and function-local items.
     pub(crate) walk: &'a ModuleDecls,
-    /// The declaration indexes — the frame derivation, for a caller holding a
-    /// rendered head rather than the site that wrote one. They hold what
-    /// modules *declare*, so no import alias can steer them, and they decline
-    /// when several modules declare the name.
+    /// The declaration indexes, for a caller holding a rendered head rather than
+    /// its site. No import alias steers them; a name several modules declare misses.
     pub(crate) decls: &'a TraitEnv,
 }
 

@@ -3107,11 +3107,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a C-style `for init; cond; update { B }` into
-    /// `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
-    /// with the `let pat = e` form guarding on a `match` instead. The outer block
-    /// is a fresh scope, and `B`'s label is what reify reroutes a naked
-    /// `continue` to, so control still falls through `update`.
+    /// Resolve a C-style `for` as `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
+    /// where a `continue` breaks `B`'s label so `update` still runs.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
         let body_label = for_body_label(ctx.fresh_serial());
@@ -3238,12 +3235,8 @@ impl TypeSystem {
         }
     }
 
-    /// Whether a struct pattern's qualifier names the scrutinee's own head.
-    ///
-    /// Declaration against declaration, never spelling against spelling. A
-    /// shape names no declaration, so no qualifier matches one; a qualifier the
-    /// walk could not place is left to the diagnostic its unresolved name earns
-    /// elsewhere.
+    /// Whether a struct pattern's qualifier declares the scrutinee's own head;
+    /// an unplaced qualifier is left to its unresolved-name diagnostic.
     fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
         let Some(written) = site.and_then(|site| self.resolutions.declared_if_walked(site)) else {
             return true;

@@ -3399,9 +3399,8 @@ impl TypeSystem {
             .unwrap_or(0)
     }
 
-    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
-    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
-    /// shared GC struct, so mutation through the payload lands.
+    /// Whether mutation through a `&mut` copy of `type_id` is lost: a primitive, enum, flags
+    /// or fn, or a newtype over one. Not a `variant`, whose payload is a shared GC struct.
     pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
         let replaces_on_assign = |ty: &ResolvedType| {

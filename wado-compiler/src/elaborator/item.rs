@@ -280,9 +280,7 @@ pub(super) fn register_enum_compiler_items<H: CompilerHost>(
 }
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
-///
-/// A single-method trait caches its method's name in the registry (see
-/// [`Resolved::Trait::method_name`]); a multi-method trait needs a method item.
+/// A single-method trait also caches its method's name (see [`Resolved::Trait::method_name`]).
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],

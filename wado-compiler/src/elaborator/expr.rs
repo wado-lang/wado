@@ -4946,11 +4946,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Canonical signature, defining module, and defining name for a
-    /// function-reference identifier (local or imported, possibly aliased).
-    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
-    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
-    /// key space.
+    /// Signature, defining module and defining name of the function an identifier
+    /// references; the defining name (`foo` under `use { foo as bar }`) is the mono key.
     fn lookup_func_sig_for_ref(
         &self,
         ident: &ast::IdentExpr,
@@ -4961,9 +4958,8 @@ impl TypeSystem {
         Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
     }
 
-    /// The branch that types a block the use site expects nothing from: the
-    /// first carrying a real value. A `never`, `unit` or unresolved branch
-    /// steps aside, and a block holding only those takes its first.
+    /// The branch type that types a block its use site expects nothing from:
+    /// the first that is not `never`, `unit` or unresolved, else the first.
     fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
         let tt = self.type_table.borrow();
         branch_types

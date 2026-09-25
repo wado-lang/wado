@@ -2786,18 +2786,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let table = self.tysys.type_table.borrow();
         let from_key = table.type_key(from_type);
-        self.tysys.trait_env.all_impl_keys(target).iter().any(|&impl_def| {
-            self.tysys.trait_env.impl_headers[&impl_def].is_synthesize_request
-                && self
-                    .tysys
-                    .signatures
-                    .impl_sig(impl_def)
-                    .is_some_and(|sig| {
+        self.tysys
+            .trait_env
+            .all_impl_keys(target)
+            .iter()
+            .any(|&impl_def| {
+                self.tysys.trait_env.impl_headers[&impl_def].is_synthesize_request
+                    && self.tysys.signatures.impl_sig(impl_def).is_some_and(|sig| {
                         sig.trait_decl == Some(from_trait)
                             && matches!(sig.trait_type_args.as_slice(),
                                 [arg] if table.type_key(*arg) == from_key)
                     })
-        })
+            })
     }
 
     /// Report why a static call's arguments matched no impl, when the
@@ -3368,8 +3368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// An impl header's target head as a declaration name, resolved through the
-    /// impl's own imports — unless its type parameters bind the spelling, which
-    /// shadows them.
+    /// impl's own imports unless one of its type parameters shadows the spelling.
     fn impl_head_decl_name(&self, header: &ImplHeader, impl_module: &ModuleSource) -> String {
         let head = get_type_name_static(&header.ty);
         if header.type_params.iter().any(|p| p.name == head) {
@@ -3378,17 +3377,8 @@ impl TypeSystem {
         self.import_original_name(&head, impl_module)
     }
 
-    /// The block a selection came from, where it is written for a single
-    /// instantiation: it hosts its own function, under its own head. `None` for
-    /// a generic block, whose instance monomorphization materialises in the
-    /// receiver's module and under the receiver's own name, and for a spelling
-    /// no trait impl answered.
-    ///
-    /// Read from the target's resolved arguments, not from the block's declared
-    /// parameters: `impl Default for List<T>` declares none and is still
-    /// generic in `T`, which the receiver fills. An argument that *contains* a
-    /// parameter leaves the block open too — `Holder<fn(T) -> i32>` is no one
-    /// instantiation.
+    /// The impl block a selection came from, when written for one instantiation.
+    /// Read off target arguments: `impl Default for List<T>` declares no parameters.
     fn concrete_impl_of(&self, selected: Option<&StaticMethodRef>) -> Option<DefId> {
         let impl_def = self
             .signatures
@@ -3409,10 +3399,8 @@ impl TypeSystem {
         Some(self.resolutions.defs().module(impl_def).clone())
     }
 
-    /// The head a concrete block wrote, arguments included: `impl … for
-    /// Cell<i32>` hosts its function under `Cell<i32>`, and a call spelling the
-    /// receiver `Cell` has to name that, not the bare declaration. `None` where
-    /// the block's target is not generic, which leaves the head as written.
+    /// The head a concrete block over a generic target wrote, arguments
+    /// included: `Cell<i32>` for `impl … for Cell<i32>`.
     pub(super) fn concrete_impl_head_of(
         &self,
         selected: Option<&StaticMethodRef>,
@@ -3475,18 +3463,15 @@ impl TypeSystem {
         (name, key)
     }
 
-    /// The blanket impl's own parameter. `impl<T> Trait for T` declares
-    /// exactly one, and the `DefId` this path is built on *is* its name, so
-    /// the binder is the declaration rather than a reconstruction of it.
+    /// The blanket impl's one type parameter, `T` in `impl<T> Trait for T`.
     fn blanket_param_slot(&self, blanket_param: &str) -> TypeId {
         self.type_table
             .borrow_mut()
             .make_type_param(blanket_param.to_string(), 0)
     }
 
-    /// The first row of a tuple `zip` whose layout differs from row zero's, so
-    /// nothing says the two are equally long. Two distinct packs never are,
-    /// which is why the variadic WEP §6 puts `zip` over them out of scope.
+    /// The first row of a tuple `zip` whose layout differs from row zero's.
+    /// Two distinct packs are never provably equal in length (variadic WEP §6).
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.type_table.borrow();
         let rows = table.as_tuple(tuple)?;
@@ -3525,9 +3510,8 @@ impl TypeSystem {
         )
     }
 
-    /// Whether only the argument can fill this parameter — a blanket, whose
-    /// unsubstituted spelling must not be mangled. Three things fill a slot and
-    /// the receiver and the method take the other two.
+    /// Whether this is an impl block parameter only the argument can fill, as
+    /// in a blanket impl, so its unsubstituted spelling must not be mangled.
     pub(super) fn param_filled_by_block(
         &self,
         header: &ImplHeader,

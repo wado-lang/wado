@@ -967,9 +967,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // Items with sub-declaration walks but no function bodies.
     // ─────────────────────────────────────────────────────────────────
 
-    /// Reify a `struct S { … }`. Field types come from
-    /// `tysys.data.struct_fields`; field-default expressions and
-    /// type-param defaults are read from `ModuleSemantics`.
+    /// Reify a `struct S { … }` declaration.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Single source of truth: `resolve_struct` recorded the per-field
         // resolved types (with the decl's type-param scope alive and
@@ -1060,13 +1058,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Field types and type-param bounds come from
-    /// `sem.decls.local.struct_fields` — the durable fact
-    /// `resolve_local_struct` recorded under this declaration's own identity.
-    /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
-    /// expressions are read straight from the AST here, exactly matching
-    /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
-    /// doesn't carry attributes, only `(name, type, visibility)`.
+    /// Reify a `struct` declared in a function body. Field attributes and defaults
+    /// come from the AST, as for a top-level struct: `StructFieldInfo` carries neither.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
         let def = self.tysys.def_at(struct_decl.id);
         let info = &self.sem.decls.local.struct_fields[&def];
@@ -1092,9 +1085,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local.newtypes` — the durable
-    /// fact `resolve_local_newtype` recorded under this declaration's own
-    /// identity.
+    /// Reify a newtype declared in a function body.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
         let def = self.tysys.def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
@@ -1114,9 +1105,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// Reify a `variant V<T> { … }` declaration. Cases' payload types
-    /// come from `tysys.data.variant_cases`; the type-param table is
-    /// projected from the AST.
+    /// Reify a `variant V<T> { … }` declaration.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
         let def = self.tysys.def_at(variant_decl.id);
         let case_info = &self.tysys.data.variant_cases[&def];
@@ -1126,14 +1115,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .zip(&case_info.cases)
             .enumerate()
-            .map(|(index, (case, data))| {
-                tir::TirVariantCase {
-                    name: case.name.clone(),
-                    index: index as u32,
-                    payload: data.payload,
-                    span: case.span,
-                    wire_name_override: wire_name_override_of(&case.attrs),
-                }
+            .map(|(index, (case, data))| tir::TirVariantCase {
+                name: case.name.clone(),
+                index: index as u32,
+                payload: data.payload,
+                span: case.span,
+                wire_name_override: wire_name_override_of(&case.attrs),
             })
             .collect();
 
@@ -1222,9 +1209,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.reify_callable(func, func.name.clone(), false)
     }
 
-    /// A function or method as its declaring walk resolved it, named for display
-    /// and not yet placed on an impl. Parameters are added in declaration order,
-    /// which pins the walk-order invariant.
+    /// A function or method as its declaring walk resolved it, not yet placed on
+    /// an impl. Parameters are added in declaration order, pinning the walk order.
     fn reify_callable(
         &mut self,
         func: &ast::Function,
@@ -3199,11 +3185,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a `while cond { body }` statement. Mirrors
-    /// `Elaborator::resolve_while`'s `Condition::Expr` arm
-    /// the loop lowers into
-    /// `Loop { if !cond { break; } body }`, which is the desugar
-    /// `DesugarKind::While` tags.
+    /// Reify a `while cond { body }` statement as `Loop { if !cond { break; } body }`,
+    /// the desugar `DesugarKind::While` tags.
     fn reify_while(&mut self, w: &ast::WhileStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         let span = w.span;
         let mut frame = ctx.enter_loop();
@@ -5406,12 +5389,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a named `StructLiteralExpr`. Field types come from
-    /// `tysys.data.struct_fields`; the instance type + `type_args` for
-    /// generic structs come from the
-    /// `sem.types.generic_instantiations[id]` record. Anonymous
-    /// struct literals (`{ x: 1, y: 2 }` with no leading type name)
-    /// flow through a different elaborator helper.
+    /// Reify a named struct literal `S { … }`.
     fn reify_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
@@ -6617,11 +6595,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         *settled_pack = Some(settled);
     }
 
-    /// Reify a tuple literal, handling spread elements. The tuple `TypeId` is
-    /// built bottom-up via `make_tuple` so a nested tuple's element type is the
-    /// same interned id as the inner literal's, which `nir/sroa` relies on. A
-    /// spread expands per `contains_type_pack`: a pack to `TypePackExpansion`, a
-    /// tuple containing one to `TupleSpread`, a concrete one to `FieldAccess`es.
+    /// Reify a tuple literal, spreads included. Its type is built bottom-up so a nested
+    /// tuple's element type is the inner literal's interned id, which `nir/sroa` relies on.
     fn reify_tuple_literal(
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
@@ -7144,14 +7119,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
-    /// synthesises the struct from the field shape, gives it a
-    /// deterministic `$anon_{x:i32,y:i32}`-style name, and registers
-    /// it on `tysys.type_table` + `sem.decls.local.struct_fields` +
-    /// `sem.decls.pending_anonymous_structs`. Reify reproduces the
-    /// same name from the reified field types and looks the struct
-    /// type up; the registration already happened during annotate so
-    /// reify is a pure read.
+    /// Reify an anonymous struct literal `{ x: 1, y: 2 }` as the struct annotate
+    /// registered under the name its field types derive.
     fn reify_anonymous_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
@@ -10303,9 +10272,8 @@ impl TypeSystem {
         self.apply_scrutinee_ref_kind(scrutinee_type, target)
     }
 
-    /// The type of the `*…` result a dispatched index read produces. Each site
-    /// supplies the type it recorded; one that is missing or unresolved is
-    /// re-derived by peeling the `&Output` the reference index traits return.
+    /// The type of the `*…` result a dispatched index read produces: the recorded
+    /// one when resolved, else the `&Output` the index trait returns, peeled.
     fn index_deref_type(&self, recorded: Option<TypeId>, dispatch: &OperatorDispatch) -> TypeId {
         if !dispatch.needs_deref {
             return dispatch.return_type;
@@ -10374,9 +10342,8 @@ impl TypeSystem {
             .and_then(FloatFormat::of)
     }
 
-    /// The concrete stand-in for an unresolved generic variant type: the
-    /// caller's expected type, when it names the same variant with its type
-    /// params filled in.
+    /// The expected type standing in for an unresolved generic variant type,
+    /// when it names the same variant with its type parameters filled.
     fn resolved_variant_type(&self, recorded: TypeId, expected: Option<TypeId>) -> Option<TypeId> {
         let expected = expected?;
         let table = self.type_table.borrow();

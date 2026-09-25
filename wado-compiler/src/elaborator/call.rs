@@ -2302,8 +2302,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(site) = site else {
             return walk(self);
         };
-        let (result, overlay) =
-            util::replaced(self, |elab| &mut elab.sem.types.body, BodyFacts::default(), walk);
+        let (result, overlay) = util::replaced(
+            self,
+            |elab| &mut elab.sem.types.body,
+            BodyFacts::default(),
+            walk,
+        );
         self.sem.types.default_overlays.insert(site, overlay);
         result
     }
@@ -3656,9 +3660,8 @@ impl TypeSystem {
             .unwrap_or(TypeTable::UNIT)
     }
 
-    /// Whether `ty` is a type argument nothing has determined yet — either a
-    /// slot the solver left as its own parameter, or an inference variable it
-    /// never solved. Both mean "no answer", so a default may still fill it.
+    /// Whether `ty` is a type argument nothing has determined yet: a slot left
+    /// as its own parameter, or an unsolved inference variable.
     pub(super) fn is_unbound_type_param(&self, ty: TypeId) -> bool {
         matches!(
             self.type_table.borrow().get(ty),

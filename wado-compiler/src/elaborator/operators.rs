@@ -15,9 +15,7 @@ use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
-use super::types::{
-    FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError,
-};
+use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::{Identity, TypeSystem};
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
@@ -1843,11 +1841,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.dispatch_trait_op_method(left, vec![right], &resolved, origin)
     }
 
-    /// Dispatch an operator to a trait method, unary and binary alike, over
-    /// already-resolved operand types matching `resolved.param_types` in order.
-    /// Sole authority for three things: type-checking each argument (a `&Self`
-    /// parameter expects the receiver's own type), deciding the `&`-wrapping,
-    /// and recording the dispatch. Reify builds the `Call` from that record.
+    /// Dispatch a unary or binary operator to a trait method: the sole place that
+    /// checks its arguments, decides their `&`-wrapping and records the dispatch.
     fn dispatch_trait_op_method(
         &mut self,
         receiver: TypeId,
