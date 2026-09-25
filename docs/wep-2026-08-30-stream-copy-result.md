@@ -131,7 +131,8 @@ would make the loop quadratic.
 pointer, so it would lower the view again on every copy. `core:rt` lowers it
 once and advances the pointer, each copy capped at the Canonical ABI's
 `2^28 - 1`. A file write is the case that needs it: wasmtime's filesystem
-stream takes 8 KiB per copy.
+stream takes 8 KiB per copy. Being a primitive, it is also what a handler for
+`StreamWritable<u8>` claims to capture `println`, rather than `write_raw`.
 
 `write_raw` and `write_raw_all` hand the backing array to the canonical as it
 stands, which lines up with the CM buffer only for bytes. A wider element is a
