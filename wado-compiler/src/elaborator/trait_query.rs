@@ -1548,6 +1548,31 @@ impl TypeSystem {
                 .any(|p| p.bounds.iter().any(ast::TraitBound::writes_self))
     }
 
+    /// Whether `type_id` implements `trait_` with an impl of its own, or else
+    /// through `underlying`, the type it wraps.
+    fn implements_itself_or_through(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: &FqTraitName,
+        underlying: TypeId,
+    ) -> bool {
+        let decl = trait_
+            .canonical()
+            .expect("the caller answered a binder-headed trait");
+        let receiver = self.type_table.borrow().impl_receiver_key(type_id);
+        self.find_trait_impl_for_subject(
+            ctx,
+            scope,
+            Some(type_id),
+            &receiver,
+            decl,
+            NewtypePeel::Follow,
+            trait_.args(),
+        ) || self.type_implements_trait(ctx, scope, underlying, trait_)
+    }
+
     fn type_implements_trait_inner(
         &self,
         ctx: &Scope,
@@ -1791,40 +1816,19 @@ impl TypeSystem {
                 });
             }
             ResolvedType::Newtype { base_type, .. } => {
-                // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
-                let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_subject(
-                    ctx,
-                    scope,
-                    Some(type_id),
-                    &receiver,
-                    decl,
-                    NewtypePeel::Follow,
-                    wanted,
-                ) {
-                    return true;
-                }
-                // Fall back to base type's trait implementation
-                let base_id = *base_type;
-                return self.type_implements_trait(ctx, scope, base_id, trait_);
+                return self.implements_itself_or_through(ctx, scope, type_id, trait_, *base_type);
             }
             // `()` names no declaring module, so an `impl Trait for ()` is
             // indexed under the builtin spelling the unit type mangles as.
             ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
-                let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_subject(
+                return self.implements_itself_or_through(
                     ctx,
                     scope,
-                    Some(type_id),
-                    &receiver,
-                    decl,
-                    NewtypePeel::Follow,
-                    wanted,
-                ) {
-                    return true;
-                }
-                return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_);
+                    type_id,
+                    trait_,
+                    TypeTable::U32,
+                );
             }
             _ => return false,
         };
@@ -3270,30 +3274,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            // Resolve and register each associated type in this substituted context
             let trait_ref = scope.impl_trait_ref(&info.trait_type, &info.target, info.trait_key);
-            for binding in &info.assoc_types {
-                let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(resolved_id)
-                {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_assoc_type_resolution(
-                            concrete_type_id,
-                            trait_ref.clone(),
-                            binding.name.clone(),
-                            resolved_id,
-                        );
-                }
-            }
-
-            drop(scope);
+            scope.register_assoc_types(concrete_type_id, &trait_ref, &info.assoc_types);
         }
 
         // Also check blanket impls: `impl<I: Trait> OtherTrait for I`.
@@ -3367,30 +3349,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 
-            // Resolve and register each associated type
-            let trait_key = info.trait_key;
-            for binding in &info.assoc_types {
-                let resolved_id = scope.resolve_type(&binding.ty);
-                if !scope
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(resolved_id)
-                {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_assoc_type_resolution(
-                            concrete_type_id,
-                            TraitRef::bare(trait_key),
-                            binding.name.clone(),
-                            resolved_id,
-                        );
-                }
-            }
+            scope.register_assoc_types(
+                concrete_type_id,
+                &TraitRef::bare(info.trait_key),
+                &info.assoc_types,
+            );
+        }
+    }
 
-            drop(scope);
+    /// Record each of `bindings` that resolves to a concrete type as `concrete`'s
+    /// associated type under `trait_ref`.
+    fn register_assoc_types(
+        &mut self,
+        concrete: TypeId,
+        trait_ref: &TraitRef,
+        bindings: &[ast::AssociatedTypeBinding],
+    ) {
+        for binding in bindings {
+            let resolved_id = self.resolve_type(&binding.ty);
+            let mut table = self.tysys.type_table.borrow_mut();
+            if !table.contains_type_param(resolved_id) {
+                table.register_assoc_type_resolution(
+                    concrete,
+                    trait_ref.clone(),
+                    binding.name.clone(),
+                    resolved_id,
+                );
+            }
         }
     }
 

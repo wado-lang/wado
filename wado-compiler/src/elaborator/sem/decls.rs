@@ -150,12 +150,8 @@ pub(crate) struct ModuleDecls {
     /// [`crate::tir::StructDef::Anon`] carries.
     pub(crate) anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
 
-    /// The local items in scope at the walk's position, by the name written in
-    /// source. Each block restores the enclosing table on leaving, and
-    /// `clear_fn_local_items` empties it per function body.
-    ///
-    /// It answers with an identity; a declaration's contents come from the
-    /// maps above.
+    /// The identities of the local items in scope at the walk's position, by the
+    /// name written in source. Their contents come from the maps above.
     pub(crate) fn_local_items: IndexMap<String, DefId>,
 }
 

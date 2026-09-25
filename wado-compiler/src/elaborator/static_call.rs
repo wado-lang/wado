@@ -752,22 +752,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Option<StaticLookup> {
-        // `None` falls through to the next rung rather than ending the walk: a
-        // declaration the signature table does not answer for is one this rung
-        // cannot resolve, not a spelling that names nothing.
+        // `None` falls through to the next rung: a declaration the signature table
+        // does not answer for is one this rung cannot resolve.
         let sig = self.tysys.signatures.method_sig(def).cloned()?;
         let mut params = CalleeParams::of_signature(Some(&sig));
         let mut return_type = sig.decl.return_type.unwrap_or(TypeTable::UNIT);
-        // The declaring slots are the receiver's *arguments* — `ByteList` fills
-        // `List<T>`'s `T` with `u8`. An `impl` block aligns them, since its head
-        // may reorder or fix some; a `resource` or `interface` numbers its own
-        // by position. Where the receiver brings none they stay as the
-        // declaration wrote them, and the call site checks past them.
-        //
-        // Never the receiver *type* itself: only a trait's frame leads with
-        // `Self`, and that frame is read in `callee_of_trait_declaration`.
-        // Binding slot zero to the receiver here made `Stream::<u8>::new()`
-        // return a `StreamWritable<Stream<u8>>`.
+        // The declaring slots take the receiver's arguments, never the receiver itself:
+        // only a trait's frame leads with `Self` (`Stream::<u8>::new()` once broke on it).
         if sig.declaring_slot_count > 0
             && let Some(args) = self
                 .tysys

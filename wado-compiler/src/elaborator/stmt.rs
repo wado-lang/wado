@@ -147,12 +147,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Bring a block's local items into scope ahead of its statements.
-    ///
-    /// Three passes, because a name resolves through its field info: the
-    /// structs take their identity and a fieldless entry, then the newtypes
-    /// resolve — to a fixpoint, so a base may name a later newtype — then the
-    /// struct fields are filled in.
+    /// Bring a block's local items into scope ahead of its statements: structs, then
+    /// newtypes to a fixpoint (a base may name a later one), then struct fields.
     fn hoist_local_items(&mut self, block: &Block) {
         let items: Vec<&ast::Item> = block
             .stmts
@@ -604,60 +600,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Reify rebuilds the `Let` / `LetDestructure`
-        // stmt from the AST + recorded facts (`let_annotated_types`,
-        // `local_types`, the binding symbols). This walk binds the pattern into
-        // `ctx`, records the local symbols, registers closure defaults, and
-        // ran the type-mismatch diagnostic above (the resolved `value_type`'s
-        // only consumer).
-        match &let_stmt.pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-                let mut closure_candidate = ast_value;
-                while let ast::Expr::Unary(u) = closure_candidate {
-                    closure_candidate = &u.expr;
+        let Some(name) = self.bind_let_ident(let_stmt, type_id, ctx) else {
+            match &let_stmt.pattern {
+                ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
+                    self.resolve_let_pattern(
+                        &let_stmt.pattern,
+                        type_id,
+                        let_stmt.is_mut,
+                        let_stmt.span,
+                        BindingSite::Let,
+                        ctx,
+                    );
                 }
-                if let ast::Expr::Closure(closure) = closure_candidate {
-                    let defaults: Vec<(String, Option<ast::Expr>)> = closure
-                        .params
-                        .iter()
-                        .map(|p| (p.name.clone(), p.default.clone()))
-                        .collect();
-                    if defaults.iter().any(|(_, d)| d.is_some()) {
-                        ctx.closure_defaults.insert(name.clone(), defaults);
-                    }
+                ast::Pattern::Wildcard => {}
+                _ => {
+                    self.check_irrefutable_pattern(
+                        &let_stmt.pattern,
+                        let_stmt.span,
+                        BindingSite::Let,
+                    );
                 }
             }
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                self.resolve_let_pattern(
-                    &let_stmt.pattern,
-                    type_id,
-                    let_stmt.is_mut,
-                    let_stmt.span,
-                    BindingSite::Let,
-                    ctx,
-                );
-            }
-            ast::Pattern::Wildcard => {
-                // `let _ = expr;` — value evaluated for side effects, result
-                // discarded; nothing to bind.
-            }
-            _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
+            return;
+        };
+        let mut closure_candidate = ast_value;
+        while let ast::Expr::Unary(u) = closure_candidate {
+            closure_candidate = &u.expr;
+        }
+        if let ast::Expr::Closure(closure) = closure_candidate {
+            let defaults: Vec<(String, Option<ast::Expr>)> = closure
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.default.clone()))
+                .collect();
+            if defaults.iter().any(|(_, d)| d.is_some()) {
+                ctx.closure_defaults.insert(name.clone(), defaults);
             }
         }
+    }
+
+    /// Bind a `let`'s single-name pattern into `ctx`, answering the name; `None`
+    /// for any other pattern, which is left unbound.
+    fn bind_let_ident<'s>(
+        &mut self,
+        let_stmt: &'s LetStmt,
+        type_id: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<&'s String> {
+        let (ast::Pattern::Ident {
+            id,
+            name,
+            span: name_span,
+        }
+        | ast::Pattern::MutIdent {
+            id,
+            name,
+            span: name_span,
+        }) = &let_stmt.pattern
+        else {
+            return None;
+        };
+        let is_mut = let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
+        self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
+        Some(name)
     }
 
     /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
@@ -725,43 +731,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an uninitialized let declaration: `let x: T;`
-    ///
-    /// Emits a `TirStmtKind::Let` with a unit placeholder value so that
-    /// the local is pre-allocated (Wasm zero-initializes locals) without
-    /// emitting a `LocalSet`.  The bind phase has already verified that the
-    /// variable is assigned before any use.
+    /// Report the fields a struct pattern without `..` leaves out.
+    fn check_struct_pattern_complete(
+        &self,
+        head: StructDef,
+        fields: &[ast::StructPatternField],
+        span: Span,
+    ) {
+        let Some(struct_info) = self.lookup_struct_fields_of(head) else {
+            return;
+        };
+        let missing: Vec<_> = struct_info
+            .fields
+            .iter()
+            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
+            .map(|(name, _, _)| name.clone())
+            .collect();
+        if !missing.is_empty() {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: format!(
+                    "all fields (missing: {}), or use `..` to ignore remaining fields",
+                    missing.join(", ")
+                ),
+                found: format!(
+                    "pattern with {} of {} fields",
+                    fields.len(),
+                    struct_info.fields.len()
+                ),
+                span,
+            });
+        }
+    }
+
+    /// Resolve an uninitialized let declaration, `let x: T;`, whose use before
+    /// assignment the bind phase has already ruled out.
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
-        // Type annotation is guaranteed by the parser when there is no initializer.
         let annotated_type = let_stmt
             .ty
             .as_ref()
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-
-        // Reify rebuilds the pre-declared `Let` (with
-        // its unit placeholder value) from the AST; this walk only binds the
-        // local and records its symbol.
-        match &let_stmt.pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-            }
-            _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
-            }
+        if self.bind_let_ident(let_stmt, type_id, ctx).is_none() {
+            self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
         }
     }
 
@@ -1261,37 +1273,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
-                // Exhaustiveness check: without `..`, all fields must be listed
-                if !has_rest
-                    && let Some(head) = struct_head
-                    && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                {
-                    let total_fields = struct_info.fields.len();
-                    if fields.len() != total_fields {
-                        let missing: Vec<_> = struct_info
-                            .fields
-                            .iter()
-                            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
-                            .map(|(name, _, _)| name.clone())
-                            .collect();
-                        if !missing.is_empty() {
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                        }
-                    }
+                if !has_rest && let Some(head) = struct_head {
+                    self.check_struct_pattern_complete(head, fields, *pat_span);
                 }
-
-                let _ = has_rest;
             }
             ast::Pattern::Typed {
                 id,
@@ -1653,7 +1637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Vec::new()
             }
-            Pattern::Tuple(patterns, has_rest) => {
+            Pattern::Tuple(patterns, _) => {
                 let (scrutinee_type, ref_binding) =
                     self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
@@ -1668,7 +1652,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
 
-                let _ = has_rest;
                 let mut bindings: PatBindings = Vec::new();
                 for (p, &ty) in patterns.iter().zip(
                     element_types
@@ -1983,44 +1966,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
-                // Exhaustiveness check
-                if !has_rest {
-                    let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    };
-                    if let Some(head) = struct_head
-                        && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                    {
-                        let total_fields = struct_info.fields.len();
-                        if fields.len() != total_fields {
-                            let missing: Vec<_> = struct_info
-                                .fields
-                                .iter()
-                                .filter(|(name, _, _)| {
-                                    !fields.iter().any(|f| f.field_name == *name)
-                                })
-                                .map(|(name, _, _)| name.clone())
-                                .collect();
-                            if !missing.is_empty() {
-                                let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                            }
-                        }
-                    }
+                let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                    ResolvedType::Struct { def, .. } => Some(*def),
+                    _ => None,
+                };
+                if !has_rest && let Some(head) = struct_head {
+                    self.check_struct_pattern_complete(head, fields, *pat_span);
                 }
-
-                let _ = has_rest;
                 field_bindings
             }
             Pattern::Or(alternatives) => {

@@ -609,9 +609,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// A [`TypeLookup`] from the current module, without annotate's use→def recording.
     fn type_lookup(&self) -> TypeLookup<'_> {
-        // A function-local item is reached through the walk's local data
-        // tables, keyed by declaration — not `fn_local_items`, which annotate
-        // clears and reify never repopulates.
+        // A function-local item is reached by declaration through the local data tables:
+        // annotate clears `fn_local_items`, and reify never refills it.
         self.tysys.type_lookup(
             &self.current_module_source,
             &self.sem.imports.namespace_imports,
@@ -3059,13 +3058,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::LabeledBlock(lb) => {
-                // Match `Elaborator::resolve_expr`'s `LabeledBlock` arm. The
-                // result type is the recorded `expression_types[lb.id]`;
-                // annotate already unified break types into it.
-                // Fall back to the block's unified result type when the use
-                // site supplies no expected type, so a `null` resolving only
-                // from a sibling break still coerces, as a `break label: null`
-                // or as the fall-through tail.
+                // Annotate unified the breaks into the recorded type, so a `null` that only a
+                // sibling break types still coerces where the use site expects nothing.
                 let branch_expected = expected_type.or(Some(recorded_type));
                 let tir_block = self.reify_block(
                     &lb.block,
@@ -3981,14 +3975,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut outer_stmts = vec![temp_let];
 
-        // Consume this for-of's overlays for the current instantiation.
-        // Annotate pushed one per-element overlay set per instantiation in
-        // walk order; the visit counter selects the matching one (a nested
-        // inner for-of is instantiated once per outer element). Each
-        // element's overlay is pushed onto `tuple_overlay_stack` while its
-        // binding and body are reified so the `ann_*` accessors see the
-        // right per-element facts instead of the truncated base maps.
-        // Borrowed, not copied: an overlay is 20 maps and reify only reads it.
+        // Annotate recorded one overlay set per instantiation in walk order, and a
+        // nested for-of is instantiated once per outer element, so a visit counter picks it.
         let instantiation: &'a [BodyFacts] = {
             let sem: &'a ModuleSemantics = self.sem;
             let for_of_key = for_of.id;
@@ -4945,44 +4933,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a binary expression. When the elaborator dispatched the
-    /// operator to a trait method, the
-    /// `sem.types.operator_dispatch[binary.id]` entry carries the
-    /// `(FunctionRef, self_kind, arg_ref_wraps, return_type)` reify
-    /// needs to emit the same method-call shape. Absence
-    /// of an entry means the elaborator emitted a native
-    /// `TirExprKind::Binary`; reify mirrors with the 1:1 op mapping.
+    /// Reify a binary expression, as the trait-method call annotate dispatched it
+    /// to or as the native operator.
     fn reify_binary(
         &mut self,
         binary: &ast::BinaryExpr,
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        // Mirror `resolve_binary_operands_with_coercion`:
-        // a numeric-literal operand is typed from the *other* operand (or,
-        // when both are literals, from the expression's recorded type). This
-        // matters for inlined associated-const bodies like
-        // `f32::INFINITY = 1.0 / 0.0`, whose literals carry no recorded type
-        // of their own — without the hint they default to `f64` and the
-        // surrounding arithmetic lowers to the wrong width / an integer op.
+        // A literal operand takes the other operand's type: an inlined
+        // `f32::INFINITY = 1.0 / 0.0` records none for its literals.
         let left_is_lit = is_numeric_literal_expr(&binary.left);
         let right_is_lit = is_numeric_literal_expr(&binary.right);
         let (left, right) = if left_is_lit && !right_is_lit {
             let right = self.reify_expr(&binary.right, ctx, None);
-            let coerce = if self.tysys.type_table.borrow().is_numeric(right.type_id) {
-                Some(right.type_id)
-            } else {
-                None
-            };
+            let coerce = self
+                .tysys
+                .type_table
+                .borrow()
+                .is_numeric(right.type_id)
+                .then_some(right.type_id);
             let left = self.reify_expr(&binary.left, ctx, coerce);
             (left, right)
         } else if right_is_lit && !left_is_lit {
             let left = self.reify_expr(&binary.left, ctx, None);
-            let coerce = if self.tysys.type_table.borrow().is_numeric(left.type_id) {
-                Some(left.type_id)
-            } else {
-                None
-            };
+            let coerce = self
+                .tysys
+                .type_table
+                .borrow()
+                .is_numeric(left.type_id)
+                .then_some(left.type_id);
             let right = self.reify_expr(&binary.right, ctx, coerce);
             (left, right)
         } else if left_is_lit && right_is_lit {
@@ -5520,9 +5500,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     if let Some(default_expr) = default {
                         let expected_field_ty = substitute(this, *raw_ty);
-                        // Reify a foreign default under its owning module's
-                        // perspective: the default's free identifiers and decl
-                        // lookups resolve in the struct module's scope.
+                        // A default's free names resolve in the struct's module.
                         let value = ctx.with_caller_bindings_hidden(|ctx| {
                             this.with_module_perspective(&struct_module, |this| {
                                 this.reify_expr(default_expr, ctx, Some(expected_field_ty))
@@ -5601,11 +5579,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Build the combined value `read OP rhs`, dispatching through the
-    /// operator trait method when annotate recorded one on the compound's
-    /// `AstId` (`u128 /= u128` → `Div::div`); a raw primitive `Binary` on
-    /// struct operands would lower to invalid Wasm. Mirrors the
-    /// `reify_binary` dispatch path (keyed on `binary.id`).
+    /// The combined value `read OP rhs`, through the operator's trait method
+    /// where annotate dispatched one (`u128 /= u128` → `Div::div`).
     fn build_compound_combined(
         &mut self,
         read: TirExpr,
@@ -5615,44 +5590,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         let combined_type = read.type_id;
         if let Some(dispatch) = self.ann_operator_dispatch(compound.id) {
-            let receiver = adjust_receiver_for_self_kind(
-                read,
-                dispatch.self_kind,
-                /* is_ref_impl */ false,
-                compound.span,
-                &self.tysys.type_table,
-            );
-            let call_args: Vec<CallArg> = std::iter::once(rhs)
-                .zip(dispatch.arg_ref_wraps.iter().copied())
-                .map(|(arg, wrap)| {
-                    let arg_expr = if wrap {
-                        let arg_ref_type = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .intern(ResolvedType::Ref(arg.type_id));
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::Ref,
-                                expr: Box::new(arg),
-                            },
-                            arg_ref_type,
-                            compound.span,
-                        )
-                    } else {
-                        arg
-                    };
-                    CallArg::new(arg_expr, false)
-                })
-                .collect();
-            build_tir_method_call(
-                receiver,
-                dispatch.function_ref,
-                vec![],
-                call_args,
-                dispatch.return_type,
-                compound.span,
-            )
+            self.binary_operator_call(dispatch, read, rhs, compound.span)
         } else {
             TirExpr::new(
                 TirExprKind::Binary {
@@ -7548,10 +7486,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 function_name: ctx.function_name.clone(),
             });
 
-        // A default expression otherwise resolves in the *callee's* lexical
-        // scope and may name items the caller cannot see, so swap the module
-        // triple to the callee around the walk. The caller's `ctx` stays, as
-        // the frame the walk's locals are allocated in.
+        // A default resolves in the callee's scope, which may name items the caller cannot
+        // see. The caller's `ctx` stays, as the frame the walk's locals live in.
         let named = slots_named_by_defaults(args.len(), func_params);
         let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
@@ -7564,10 +7500,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |this| {
                     this.with_module_perspective(callee_module, |this| {
                         ctx.with_caller_bindings_hidden(|ctx| {
-                            // Once any slot is bound, every argument is, so each still runs
-                            // ahead of what a default reads, in the order the call spells them.
-                            // A `&mut` place stays in the call for the callee's writes to reach
-                            // it, and a default borrows it again unless a closure would hold it.
+                            // Every argument binds ahead of the defaults, in call order. A `&mut`
+                            // place stays in the call, and a default re-borrows it unless captured.
                             if named.contains(&true) {
                                 for ((arg, (name, _)), named) in
                                     args.iter_mut().zip(func_params).zip(&named)
@@ -8588,18 +8522,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        // Canonicalize `ns::member` to its `ns$member` alias, matching
-        // `resolve_ident` at annotate time (expr.rs) so reify consults the
-        // same alias-keyed registries. The original `id` / `span` are kept.
         let canonical_ident;
-        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
+        let ident = if let Some(name) = self.sem.imports.canonical_ns_ref(&ident.name) {
             canonical_ident = ast::IdentExpr {
-                id: ident.id,
-                name: canon,
-                segments: ident.segments.clone(),
-                type_args: ident.type_args.clone(),
-                type_args_on_prefix: ident.type_args_on_prefix,
-                span: ident.span,
+                name,
+                ..ident.clone()
             };
             &canonical_ident
         } else {

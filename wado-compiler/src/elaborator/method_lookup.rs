@@ -3318,9 +3318,8 @@ impl TypeSystem {
             .find_map(|(step, current)| {
                 let args = if step == 0 { receiver_type_args } else { None };
                 let mut info = self.resource_method_info_on(current, method_name, args)?;
-                // An ancestor's method keeps its own name and module: one
-                // declaration, reached through the chain, so the call names the
-                // resource that declares it and the receiver passes through.
+                // An ancestor's method is one declaration reached through the chain, so the
+                // call names the resource that declares it and the receiver passes through.
                 if step > 0
                     && let Some(declaring) = self.type_table.borrow().find_resource_type(current)
                 {

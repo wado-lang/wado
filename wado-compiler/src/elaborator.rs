@@ -2385,9 +2385,8 @@ impl TypeSystem {
         if let Resolution::Binder(_) = answer {
             return FqTraitName::binder(written);
         }
-        // `written` is a bound's spelling, and a bound is a bare name: the
-        // parser reads `<...>` after one as associated-type bindings, so no
-        // type argument ever reaches here to be split back out.
+        // A bound is a bare name: the parser reads `<...>` after one as
+        // associated-type bindings, so `written` carries no type arguments.
         resolutions.declared(site).map_or_else(
             || FqTraitName::binder(written),
             |def| FqTraitName::declared(resolutions.defs(), def),

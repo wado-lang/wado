@@ -725,18 +725,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Canonicalize `ns::member` to its `ns$member` alias; the registries
-        // below are keyed by these aliases. The rewritten ident keeps the
-        // original `id` so use→def edges still resolve back to the user's text.
+        // The registries are keyed by the `ns$member` alias; the original `id`
+        // keeps use→def edges on the user's text.
         let canonical_ident;
-        let ident = if let Some(canon) = self.canonical_ns_ref_at(&ident.name, ident.id) {
+        let ident = if let Some(name) = self.canonical_ns_ref_at(&ident.name, ident.id) {
             canonical_ident = ast::IdentExpr {
-                id: ident.id,
-                name: canon,
-                segments: ident.segments.clone(),
-                type_args: ident.type_args.clone(),
-                type_args_on_prefix: ident.type_args_on_prefix,
-                span: ident.span,
+                name,
+                ..ident.clone()
             };
             &canonical_ident
         } else {

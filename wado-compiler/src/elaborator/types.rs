@@ -3027,21 +3027,31 @@ impl FunctionContext {
         self.replacing(|ctx| &mut ctx.for_continue_labels, Vec::new())
     }
 
+    /// A stretch where the field `field` selects also holds `items`.
+    fn extending<T: Default + Clone + Extend<I>, I>(
+        &mut self,
+        field: fn(&mut FunctionContext) -> &mut T,
+        items: impl IntoIterator<Item = I>,
+    ) -> FieldFrame<'_, T> {
+        let mut extended = field(self).clone();
+        extended.extend(items);
+        self.replacing(field, extended)
+    }
+
     /// A stretch where `subscripts` name `&mut` places rather than values read.
     pub(super) fn marking_mut_places(
         &mut self,
         subscripts: &[AstId],
     ) -> FieldFrame<'_, IndexSet<AstId>> {
-        let mut marked = self.mut_place_subscripts.clone();
-        marked.extend(subscripts.iter().copied());
-        self.replacing(|ctx| &mut ctx.mut_place_subscripts, marked)
+        self.extending(
+            |ctx| &mut ctx.mut_place_subscripts,
+            subscripts.iter().copied(),
+        )
     }
 
     /// A variadic loop's body, where `index` is a constant subscript.
     pub(super) fn enter_enumerate_body(&mut self, index: Option<u32>) -> FieldFrame<'_, Vec<u32>> {
-        let mut indices = self.variadic_enumerate_indices.clone();
-        indices.extend(index);
-        self.replacing(|ctx| &mut ctx.variadic_enumerate_indices, indices)
+        self.extending(|ctx| &mut ctx.variadic_enumerate_indices, index)
     }
 
     /// Enter a labeled block in either position, so a `break LABEL` inside
