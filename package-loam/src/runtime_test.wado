@@ -16,6 +16,7 @@ use {
     reshape,
     select,
     sigmoid_f32,
+    slice_axis,
     softmax,
     transpose2,
     widen,
@@ -229,6 +230,16 @@ test "select takes x where the condition holds, each operand stretched" {
     let r = select(&cond, &x, &y);
     assert r.extents == [2, 2] as List<i32>;
     assert r.data == [1.0, -1.0, 3.0, -1.0] as List<f32>;
+}
+
+test "slice_axis keeps one run of positions along the axis" {
+    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 3, 2], [
+        0.0, 1.0, 10.0, 11.0, 20.0, 21.0, 100.0, 101.0, 110.0, 111.0, 120.0, 121.0,
+    ]);
+
+    let r = slice_axis::<f32, [Batch], Row, Inner, [Col]>(&t, 1, 1, 2);
+    assert r.extents == [2, 2, 2] as List<i32>;
+    assert r.data == [10.0, 11.0, 20.0, 21.0, 110.0, 111.0, 120.0, 121.0] as List<f32>;
 }
 
 test "lift prepends extent-1 axes up to the rank" {

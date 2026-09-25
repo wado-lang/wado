@@ -378,6 +378,25 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
     assert out.contains("let Y = select(&C, &lift::<f32, [], [Batch, Key]>(&S, 2), X);");
 }
 
+test "Split cuts one run along the axis for each output" {
+    let source = `
+g (float[1, 4, 24] X) => (float[1, 4, 8] K)
+{
+    S = Constant<value_ints = [8, 8, 8]>()
+    Q, K, V = Split<axis = 2>(X, S)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Qkv"]),
+        rule("?", ["Batch", "Seq", "Embed"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8);");
+    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8);");
+    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8);");
+}
+
 test "Softmax lowers to the kernel along its axis" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)

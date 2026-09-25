@@ -78,8 +78,8 @@ pub struct AttributeConflict {
     pub reason: String,
 }
 
-/// Every operator Loam carries produces one value, so a node naming any other
-/// number of outputs has nowhere to put them.
+/// Every operator Loam carries but `Split` produces one value, so a node naming
+/// any other number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
     pub node: String,
     pub op: String,
@@ -233,7 +233,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         }
     }
     for let node of &graph.nodes {
-        if node.outputs.len() != 1 {
+        if node.outputs.len() != 1 && node.op != "Split" {
             builtin::cold_path();
             return Result::Err(InferError::OutputCount(OutputCountConflict {
                 node: node_name(node),
@@ -257,9 +257,17 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
                 materialize(&input, &known, &mut shapes, &mut primitives, schema)?;
             }
         }
-        shapes[node.outputs[0]] = infer_node(node, &shapes, &known, schema)?;
-        if let Some(p) = produced_primitive(node, &primitives)? {
-            primitives[node.outputs[0]] = p;
+        let produced = if node.op == "Split" {
+            split(node, &shapes, &known, schema)?;
+        } else {
+            [infer_node(node, &shapes, &known, schema)?] as List<Shape>;
+        };
+        let primitive = produced_primitive(node, &primitives)?;
+        for let [i, shape] of produced.into_iter().enumerate() {
+            shapes[node.outputs[i]] = shape;
+            if let Some(p) = primitive {
+                primitives[node.outputs[i]] = p;
+            }
         }
     }
     for let vi of &graph.outputs {
@@ -285,7 +293,11 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
 fn read_at_build_time(node: &Node, index: i32) -> bool {
     return index == 1
-        && (node.op == "Reshape" || node.op == "Unsqueeze" || node.op == "Squeeze" || is_reduction(&node.op));
+        && (node.op == "Reshape"
+            || node.op == "Unsqueeze"
+            || node.op == "Squeeze"
+            || node.op == "Split"
+            || is_reduction(&node.op));
 }
 
 /// The operators whose kernel moves elements without computing on them, so
@@ -296,7 +308,8 @@ fn is_layout(op: &String) -> bool {
         || *op == "Unsqueeze"
         || *op == "Squeeze"
         || *op == "Identity"
-        || *op == "Transpose";
+        || *op == "Transpose"
+        || *op == "Split";
 }
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
@@ -610,6 +623,80 @@ fn infer_node(
     return Result::Err(InferError::UnknownOperator(op));
 }
 
+/// `Split`'s outputs: the operand with the split axis cut to each part. A part
+/// narrower than the axis is a new axis, for its output's layout to name.
+fn split(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+) -> Result<List<Shape>, InferError> {
+    let x = operand_at(node, shapes, 0)?;
+    let parts = split_parts(node, known, &x)?;
+    let axis = split_axis(node, x.rank())?;
+    let whole = x.axes[axis].static_extent();
+    let mut produced: List<Shape> = [];
+    for let [i, part] of parts.into_iter().enumerate() {
+        let mut axes = x.axes;
+        if part != whole {
+            axes[axis] = output_layout_axis(
+                node,
+                &node.outputs[i],
+                schema,
+                axis,
+                x.rank(),
+                part,
+                "is a part of a split axis",
+            )?;
+        }
+        produced.push(Shape { axes });
+    }
+    return Result::Ok(produced);
+}
+
+pub fn split_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
+/// The extent of each part `Split` cuts its operand's axis into: the sizes it
+/// reads, or equal parts with the last taking what remains.
+pub fn split_parts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<i32>, InferError> {
+    let axis = split_axis(node, x.rank())?;
+    let Extent::Static(whole) = x.axes[axis].extent else {
+        return Result::Err(refusal(node, `axis ${axis} is ${x.axes[axis].extent}, and Split reads its extent`));
+    };
+    let count = node.outputs.len();
+    let mut parts: List<i32> = [];
+    match axes_of(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
+        Some(sizes) => {
+            if sizes.len() != count {
+                return Result::Err(refusal(node, `${sizes.len()} sizes are given for ${count} outputs`));
+            }
+            for let size of sizes {
+                parts.push(size as i32);
+            }
+        },
+        None => {
+            let chunk = (whole + count - 1) / count;
+            for let _ of 0..<count - 1 {
+                parts.push(chunk);
+            }
+            parts.push(whole - chunk * (count - 1));
+        },
+    }
+    let mut sum = 0;
+    for let part of parts {
+        if part < 0 {
+            return Result::Err(refusal(node, `a part is ${part}`));
+        }
+        sum += part;
+    }
+    if sum != whole {
+        return Result::Err(refusal(node, `the parts sum to ${sum}, and axis ${axis} is ${whole}`));
+    }
+    return Result::Ok(parts);
+}
+
 /// `Flatten` regroups the axes ahead of `axis` into one and the rest into
 /// another, either of which may be empty and so extent 1.
 fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
@@ -653,22 +740,34 @@ fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -
     return Result::Ok(Shape { axes });
 }
 
-/// Axis `index` of the node's output, which the operator left undetermined,
-/// under the name the output's layout gives it. `why` says what made it new.
+/// Axis `index` of the node's first output, which the operator left
+/// undetermined, under the name the output's layout gives it. `why` says what made it new.
 fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, why: String) -> Result<Axis, InferError> {
-    let output = node.outputs[0];
-    let Some(names) = schema.axes_for(&output) else {
+    return output_layout_axis(node, &node.outputs[0], schema, index, extents.len(), extents[index], why);
+}
+
+/// `layout_axis` for any of the node's outputs, of rank `rank`.
+fn output_layout_axis(
+    node: &Node,
+    output: &String,
+    schema: &Schema,
+    index: i32,
+    rank: i32,
+    extent: i32,
+    why: String,
+) -> Result<Axis, InferError> {
+    let Some(names) = schema.axes_for(output) else {
         return Result::Err(refusal(node, `axis ${index} ${why}, so a layout pattern must name ${output}'s`));
     };
-    if names.len() != extents.len() {
+    if names.len() != rank {
         builtin::cold_path();
         return Result::Err(InferError::AxisCount(AxisCountConflict {
-            tensor: output,
+            tensor: *output,
             named: names.len(),
-            dims: extents.len(),
+            dims: rank,
         }));
     }
-    return Result::Ok(Axis { name: names[index], extent: Extent::Static(extents[index]) });
+    return Result::Ok(Axis { name: names[index], extent: Extent::Static(extent) });
 }
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`

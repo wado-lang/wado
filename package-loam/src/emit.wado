@@ -13,6 +13,8 @@ use {
     is_reduction,
     reduced_axes,
     softmax_axis,
+    split_axis,
+    split_parts,
     transpose_perm,
     window_of,
 } from "./infer.wado";
@@ -180,8 +182,10 @@ impl Names {
             names.take(&mut taken, &vi.name)?;
         }
         for let node of &graph.nodes {
-            if !checked.known.contains_key(node.outputs[0]) {
-                names.take(&mut taken, &node.outputs[0])?;
+            for let output of node.outputs {
+                if !checked.known.contains_key(output) {
+                    names.take(&mut taken, &output)?;
+                }
             }
         }
         for let tensor of *literals {
@@ -445,9 +449,17 @@ fn emit_forward(
             }
             continue;
         }
-        let ident = names.get(&produced);
-        w.line(`let ${ident} = ${node_call(node, checked, &exprs)?};`);
-        exprs.values[produced] = ident;
+        let calls = if node.op == "Split" {
+            split_calls(node, checked, &exprs);
+        } else {
+            [node_call(node, checked, &exprs)?] as List<String>;
+        };
+        for let [i, call] of calls.into_iter().enumerate() {
+            let output = node.outputs[i];
+            let ident = names.get(&output);
+            w.line(`let ${ident} = ${call};`);
+            exprs.values[output] = ident;
+        }
     }
     let returned = if converted(checked, held, &result) {
         `narrow(${exprs.reference(&result)})`;
@@ -651,6 +663,32 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         unreachable();
     };
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+}
+
+/// A `Split` as one `slice_axis` per output, each cutting the next run.
+fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String> {
+    let shapes = &checked.shapes;
+    let x = shapes.get(node.inputs[0]).unwrap();
+    let Ok(parts) = split_parts(node, &checked.known, &x) else {
+        // Stage 0 read the same parts and stopped the build there.
+        unreachable();
+    };
+    let Ok(axis) = split_axis(node, x.rank()) else {
+        unreachable();
+    };
+    let element = checked.primitives.get(node.inputs[0]).unwrap();
+    let pre = axis_names_of(&x.axes[0..<axis].to_list()).join(", ");
+    let post = axis_names_of(&x.axes[axis + 1..<x.rank()].to_list()).join(", ");
+    let operand = exprs.reference(&node.inputs[0]);
+    let mut calls: List<String> = [];
+    let mut start = 0;
+    for let [i, part] of parts.into_iter().enumerate() {
+        let part_axis = shapes.get(node.outputs[i]).unwrap().axes[axis].name;
+        let turbofish = `::<${element}, [${pre}], ${x.axes[axis].name}, ${part_axis}, [${post}]>`;
+        calls.push(`slice_axis${turbofish}(${operand}, ${axis}, ${start}, ${part})`);
+        start += part;
+    }
+    return calls;
 }
 
 /// An operand as a tensor of `out`'s rank, for a kernel whose operands share
@@ -988,9 +1026,9 @@ fn axis_names(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
         push_axes(&mut names, &mut seen, shapes, &vi.name);
     }
     for let node of &graph.nodes {
-        // `infer` succeeded, and it refuses a node that names any other number.
-        assert node.outputs.len() == 1;
-        push_axes(&mut names, &mut seen, shapes, &node.outputs[0]);
+        for let output of node.outputs {
+            push_axes(&mut names, &mut seen, shapes, &output);
+        }
     }
     return names;
 }

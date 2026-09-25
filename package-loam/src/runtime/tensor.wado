@@ -183,6 +183,30 @@ pub fn select<E, Axes>(cond: &Tensor<bool, Axes>, x: &Tensor<E, Axes>, y: &Tenso
     return Tensor { data: out, extents };
 }
 
+/// The `length` positions from `start` along `axis`, which `Split` cuts each of
+/// its outputs as. The caller spells both packs.
+pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
+    t: &Tensor<E, [..Pre, In, ..Post]>,
+    axis: i32,
+    start: i32,
+    length: i32,
+) -> Tensor<E, [..Pre, Out, ..Post]> {
+    let extent = t.extents[axis];
+    assert 0 <= start && start + length <= extent;
+    let outer = element_count(&t.extents[0..<axis].to_list());
+    let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
+    let mut out = List::<E>::with_capacity(outer * length * inner);
+    for let o of 0..<outer {
+        let base = (o * extent + start) * inner;
+        for let k of 0..<length * inner {
+            out.push(t.data[base + k]);
+        }
+    }
+    let mut extents = t.extents;
+    extents[axis] = length;
+    return Tensor { data: out, extents };
+}
+
 /// The same elements under `rank` axes, the ones added leading at extent 1, so
 /// a lower-rank operand stretches as one of the output's rank does.
 pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
