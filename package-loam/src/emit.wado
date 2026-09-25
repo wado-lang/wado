@@ -5,7 +5,7 @@ use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
-use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
+use { constant_value, gemm_options, has_bias, transpose_perm, window_of } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -506,6 +506,9 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
             `reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, [${extents.join(", ")}])`,
         );
     }
+    if op == "MaxPool" || op == "Conv" {
+        return Result::Ok(window_call(node, shapes, exprs));
+    }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
         // The kernel's signature is `[..Bs, M, K]` against `[..Bs, K, N]`, so
@@ -614,6 +617,46 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
         return Result::Err(broadcast_error(node, &left, &right));
     };
     return Result::Ok(call);
+}
+
+/// A `MaxPool` or `Conv` as its kernel, over the window stage 0 read. Each
+/// spatial axis list is a pack, so the turbofish spells the output's.
+fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> String {
+    let x = shapes.get(node.inputs[0]).unwrap();
+    let y = shapes.get(node.outputs[0]).unwrap();
+    let Ok(window) = window_of(node, &x, shapes) else {
+        // Stage 0 read the same window and stopped the build there.
+        unreachable();
+    };
+    let geometry = `&Window { kernel: ${int_list(&window.kernel)}, strides: ${int_list(&window.strides)}, dilations: ${int_list(&window.dilations)}, pads: ${int_list(&window.pads)}, output: ${int_list(&window.output)} }`;
+    let input = exprs.reference(&node.inputs[0]);
+    if node.op == "MaxPool" {
+        return `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`;
+    }
+    let w = shapes.get(node.inputs[1]).unwrap();
+    let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(&w)}], [${spatial_axes(&y)}]>`;
+    let weight = exprs.reference(&node.inputs[1]);
+    if has_bias(node) {
+        return `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`;
+    }
+    return `conv${turbofish}(${input}, ${weight}, ${geometry})`;
+}
+
+/// The axes past a shape's first two, which a window slides over.
+fn spatial_axes(shape: &Shape) -> String {
+    let mut names: List<String> = [];
+    for let i of 2..<shape.rank() {
+        names.push(shape.axes[i].name);
+    }
+    return names.join(", ");
+}
+
+fn int_list(values: &List<i32>) -> String {
+    let mut spelled: List<String> = [];
+    for let v of *values {
+        spelled.push(`${v}`);
+    }
+    return `[${spelled.join(", ")}]`;
 }
 
 /// A constant as an expression the generated source spells. Wado has no

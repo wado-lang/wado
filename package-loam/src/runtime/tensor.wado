@@ -175,6 +175,131 @@ pub fn reshape<From, To>(t: &Tensor<f32, From>, extents: List<i32>) -> Tensor<f3
     return Tensor { data: t.data, extents };
 }
 
+/// Along each spatial axis: a window's extent, its step, the spacing of its
+/// taps, and the extents it produces. `pads` is in ONNX's order, every axis's
+/// leading pad and then every axis's trailing one.
+pub struct Window {
+    pub kernel: List<i32>,
+    pub strides: List<i32>,
+    pub dilations: List<i32>,
+    pub pads: List<i32>,
+    pub output: List<i32>,
+}
+
+pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Window) -> Tensor<f32, [N, C, ..Out]> {
+    let input = spatial_extents(&x.extents);
+    let planes = x.extents[0] * x.extents[1];
+    let in_size = element_count(&input);
+    let out_size = element_count(&window.output);
+    let mut out = List::<f32>::filled(planes * out_size, -f32::INFINITY);
+    for let at of 0..<out_size {
+        for let tap of 0..<element_count(&window.kernel) {
+            let offset = tap_offset(&input, window, at, tap);
+            if offset < 0 {
+                continue;
+            }
+            for let plane of 0..<planes {
+                out[plane * out_size + at] = f32::max(out[plane * out_size + at], x.data[plane * in_size + offset]);
+            }
+        }
+    }
+    return Tensor { data: out, extents: windowed_extents(x.extents[0], x.extents[1], window) };
+}
+
+pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Ci, ..K]>,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, List::<f32>::filled(w.extents[0], 0.0), window);
+}
+
+pub fn conv_bias<N, Ci, Co, ..In, ..K, ..Out>(
+    x: &Tensor<f32, [N, Ci, ..In]>,
+    w: &Tensor<f32, [Co, Ci, ..K]>,
+    b: &Tensor<f32, [Co]>,
+    window: &Window,
+) -> Tensor<f32, [N, Co, ..Out]> {
+    return convolve(x, w, b.data, window);
+}
+
+/// A convolution of one group. Each tap's input offset is found once per output
+/// position and reused across the batch and every channel pair.
+fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, window: &Window) -> Tensor<f32, Y> {
+    let batch = x.extents[0];
+    let inputs = x.extents[1];
+    let outputs = w.extents[0];
+    assert w.extents[1] == inputs && bias.len() == outputs;
+    let input = spatial_extents(&x.extents);
+    let in_size = element_count(&input);
+    let out_size = element_count(&window.output);
+    let taps = element_count(&window.kernel);
+    assert element_count(&spatial_extents(&w.extents)) == taps;
+    let mut out = List::<f32>::with_capacity(batch * outputs * out_size);
+    for let _ of 0..<batch {
+        for let oc of 0..<outputs {
+            for let _ of 0..<out_size {
+                out.push(bias[oc]);
+            }
+        }
+    }
+    for let at of 0..<out_size {
+        for let tap of 0..<taps {
+            let offset = tap_offset(&input, window, at, tap);
+            if offset < 0 {
+                continue;
+            }
+            for let n of 0..<batch {
+                for let oc of 0..<outputs {
+                    let mut sum: f32 = 0.0;
+                    for let ic of 0..<inputs {
+                        sum += x.data[(n * inputs + ic) * in_size + offset] * w.data[(oc * inputs + ic) * taps + tap];
+                    }
+                    out[(n * outputs + oc) * out_size + at] += sum;
+                }
+            }
+        }
+    }
+    return Tensor { data: out, extents: windowed_extents(batch, outputs, window) };
+}
+
+fn spatial_extents(extents: &List<i32>) -> List<i32> {
+    let mut spatial: List<i32> = [];
+    for let i of 2..<extents.len() {
+        spatial.push(extents[i]);
+    }
+    return spatial;
+}
+
+fn windowed_extents(batch: i32, channels: i32, window: &Window) -> List<i32> {
+    let mut extents = [batch, channels] as List<i32>;
+    extents.extend(&window.output);
+    return extents;
+}
+
+/// Where tap `tap` of the window at output position `at` reads one spatial
+/// plane of extents `input`, row-major, or `-1` where it lands in the padding.
+fn tap_offset(input: &List<i32>, window: &Window, at: i32, tap: i32) -> i32 {
+    let spatial = input.len();
+    let mut offset = 0;
+    let mut step = 1;
+    let mut rest_at = at;
+    let mut rest_tap = tap;
+    for let mut i = spatial - 1; i >= 0; i -= 1 {
+        let o = rest_at % window.output[i];
+        let k = rest_tap % window.kernel[i];
+        rest_at /= window.output[i];
+        rest_tap /= window.kernel[i];
+        let position = o * window.strides[i] - window.pads[i] + k * window.dilations[i];
+        if position < 0 || position >= input[i] {
+            return -1;
+        }
+        offset += position * step;
+        step *= input[i];
+    }
+    return offset;
+}
+
 pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
     assert t.extents.len() == 2;
     let rows = t.extents[0];

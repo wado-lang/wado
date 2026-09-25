@@ -6,6 +6,7 @@ use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { Schema } from "./schema.wado";
+use { Window, WindowError, ints, window } from "./window.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 does not fall back to a runtime check.
@@ -333,6 +334,31 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
         arity(node, 1)?;
         return flatten(node, &operand(node, shapes, 0)?, schema);
     }
+    if op == "MaxPool" {
+        arity(node, 1)?;
+        let x = operand(node, shapes, 0)?;
+        let window = window_of(node, &x, shapes)?;
+        return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
+    }
+    if op == "Conv" {
+        arity(node, 2)?;
+        let x = operand(node, shapes, 0)?;
+        let w = operand(node, shapes, 1)?;
+        let group = int_attr(node, "group", 1)?;
+        if group != 1 {
+            return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
+        }
+        let window = window_of(node, &x, shapes)?;
+        agree_at(node, &x.axes[1], &w.axes[1])?;
+        if has_bias(node) {
+            let b = operand(node, shapes, 2)?;
+            if b.rank() != 1 {
+                return Result::Err(operand_rank(node, 2, b.rank(), 1));
+            }
+            agree_at(node, &w.axes[0], &b.axes[0])?;
+        }
+        return windowed(node, [x.axes[0], w.axes[0]], &window, schema);
+    }
     if op == "MatMul" {
         let [a, b] = binary_operands(node, shapes)?;
         if a.rank() == 0 || b.rank() == 0 {
@@ -397,14 +423,13 @@ fn reshape(node: &Node, operand: &Shape, graph: &Graph, schema: &Schema) -> Resu
 /// another, either of which may be empty and so extent 1.
 fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
     let total = static_count(node, operand)?;
-    let written = match node.attr("axis") {
-        Some(a) => i32::from_str(&a.values[0]).unwrap_or(i32::MIN),
-        None => 1,
-    };
-    let axis = if written < 0 { written + operand.rank() } else { written };
-    if !(0 <= axis <= operand.rank()) {
-        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${operand.rank()}`));
+    let written = int_attr(node, "axis", 1)?;
+    let rank = operand.rank() as i64;
+    let resolved = if written < 0 { written + rank } else { written };
+    if !(0 <= resolved <= rank) {
+        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
     }
+    let axis = resolved as i32;
     let mut leading = 1;
     for let i of 0..<axis {
         leading *= operand.axes[i].static_extent();
@@ -415,44 +440,114 @@ fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, Infer
 /// The operand's element count, which a regrouping reads from static extents.
 fn static_count(node: &Node, operand: &Shape) -> Result<i64, InferError> {
     let mut total: i64 = 1;
-    for let axis of operand.axes {
-        let Static(e) = axis.extent else {
-            return Result::Err(refusal(
-                node,
-                `axis ${axis.name} is ${axis.extent}, and a regrouping reads static extents`,
-            ));
-        };
+    for let e of static_extents_of(node, operand)? {
         total *= e as i64;
     }
     return Result::Ok(total);
 }
 
+/// Every extent of an operand the operator reads as static.
+fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferError> {
+    let mut extents: List<i32> = [];
+    for let axis of operand.axes {
+        let Static(e) = axis.extent else {
+            return Result::Err(refusal(node, `axis ${axis.name} is ${axis.extent}, and ${node.op} reads static extents`));
+        };
+        extents.push(e);
+    }
+    return Result::Ok(extents);
+}
+
 /// The operand's axes regrouped onto `targets`. An axis no regrouping
 /// determines is the output layout's to name.
 fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema) -> Result<Shape, InferError> {
-    let output = node.outputs[0];
     let mut axes: List<Axis> = [];
     for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
-        if let Some(axis) = found {
-            axes.push(axis);
-            continue;
-        }
-        let Some(names) = schema.axes_for(&output) else {
-            return Result::Err(refusal(
-                node,
-                `axis ${i} regroups none of the operand's axes, so a layout pattern must name ${output}'s`,
-            ));
-        };
-        if names.len() != targets.len() {
-            return Result::Err(InferError::AxisCount(AxisCountConflict {
-                tensor: output,
-                named: names.len(),
-                dims: targets.len(),
-            }));
-        }
-        axes.push(Axis { name: names[i], extent: Extent::Static(targets[i]) });
+        axes.push(match found {
+            Some(axis) => axis,
+            None => layout_axis(node, schema, i, targets, "regroups none of the operand's axes")?,
+        });
     }
     return Result::Ok(Shape { axes });
+}
+
+/// A window's output: the two leading axes it carries through, and one axis
+/// per spatial position, which the output layout names.
+fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -> Result<Shape, InferError> {
+    let [batch, channels] = lead;
+    let mut extents = [batch.static_extent(), channels.static_extent()] as List<i32>;
+    extents.extend(&window.output);
+    let mut axes = [batch, channels] as List<Axis>;
+    for let i of 2..<extents.len() {
+        axes.push(layout_axis(node, schema, i, &extents, "is a window's output")?);
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// Axis `index` of the node's output, which the operator left undetermined,
+/// under the name the output's layout gives it. `why` says what made it new.
+fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, why: String) -> Result<Axis, InferError> {
+    let output = node.outputs[0];
+    let Some(names) = schema.axes_for(&output) else {
+        return Result::Err(refusal(node, `axis ${index} ${why}, so a layout pattern must name ${output}'s`));
+    };
+    if names.len() != extents.len() {
+        builtin::cold_path();
+        return Result::Err(InferError::AxisCount(AxisCountConflict {
+            tensor: output,
+            named: names.len(),
+            dims: extents.len(),
+        }));
+    }
+    return Result::Ok(Axis { name: names[index], extent: Extent::Static(extents[index]) });
+}
+
+/// The window a `Conv` or `MaxPool` slides over its first operand. `emit`
+/// reads it again to write the kernel's geometry, so this is where the
+/// attributes are understood rather than in either stage alone.
+pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Result<Window, InferError> {
+    if x.rank() < 3 {
+        return Result::Err(refusal(node, `the operand has rank ${x.rank()}, and a window slides over axes past the second`));
+    }
+    let spatial = spatial_extents(node, x)?;
+    let kernel = if node.op == "Conv" {
+        let w = operand(node, shapes, 1)?;
+        if w.rank() != x.rank() {
+            return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
+        }
+        spatial_extents(node, &w)?
+    } else {
+        if node.attr("kernel_shape") matches { None } {
+            return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
+        }
+        window_read(node, ints(node, "kernel_shape", spatial.len(), 1, 1))?
+    };
+    let ceil = int_attr(node, "ceil_mode", 0)? != 0;
+    return window_read(node, window(node, &spatial, kernel, ceil));
+}
+
+/// The extents past a shape's first two, which a window reads as static.
+fn spatial_extents(node: &Node, shape: &Shape) -> Result<List<i32>, InferError> {
+    let extents = static_extents_of(node, shape)?;
+    let mut spatial: List<i32> = [];
+    for let i of 2..<extents.len() {
+        spatial.push(extents[i]);
+    }
+    return Result::Ok(spatial);
+}
+
+fn window_read<T>(node: &Node, read: Result<T, WindowError>) -> Result<T, InferError> {
+    return match read {
+        Ok(v) => Result::Ok(v),
+        Err(e) => Result::Err(attribute_error(node, e.attr, e.reason)),
+    };
+}
+
+fn agree_at(node: &Node, left: &Axis, right: &Axis) -> Result<(), InferError> {
+    return match Shape::agree(left, right, &node.op) {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(InferError::Node(NodeConflict { node: node_name(node), error: e })),
+    };
 }
 
 /// The target shape's extents as ONNX reads them: `0` copies the operand's
@@ -518,9 +613,9 @@ pub fn constant_value(node: &Node) -> Result<f32, InferError> {
     return Result::Ok(tensor.data[0]);
 }
 
-/// Whether a `Gemm` was given its `C` operand. ONNX writes an absent optional
-/// operand as an empty name where a later one follows it, and omits it
-/// otherwise.
+/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
+/// writes an absent optional operand as an empty name where a later one
+/// follows it, and omits it otherwise.
 pub fn has_bias(node: &Node) -> bool {
     return node.inputs.len() >= 3 && node.inputs[2] != "";
 }

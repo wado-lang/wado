@@ -230,6 +230,32 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
     assert !emitted(&out).contains("pub S:");
 }
 
+test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
+    let source = `
+g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
+<float[8, 1, 5, 5] W, float[8] B>
+{
+    C = Conv <kernel_shape = [5, 5], auto_pad = "SAME_UPPER"> (X, W, B)
+    Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (C)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Chan", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("C", ["Batch", "Out", "Row", "Col"]),
+        rule("Y", ["Batch", "Out", "PRow", "PCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let C = conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] });",
+    );
+    assert out.contains(
+        "let Y = max_pool::<Batch, Out, [Row, Col], [PRow, PCol]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
+    );
+}
+
 test "Gemm lowers to a matmul under its transpose flags" {
     let source = `
 g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)

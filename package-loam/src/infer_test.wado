@@ -89,14 +89,14 @@ test "a pattern naming the wrong number of axes stops the build" {
 test "an operator with no shape rule stops the build naming it" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {
-            Y = Conv(X)
+            Y = LpNormalization(X)
         }`,
     ).unwrap();
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
     let e = infer(&graph, &schema).unwrap_err();
-    assert `${e}` == "Conv: no shape rule for this operator";
+    assert `${e}` == "LpNormalization: no shape rule for this operator";
 }
 
 test "a wildcard pattern reaches every tensor" {
@@ -476,7 +476,75 @@ test "a Reshape over a symbolic extent stops the build" {
         Y = Reshape(X, S)
     }`;
     let e = reshaped(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
-    assert e == "Y = Reshape: axis Batch is N, and a regrouping reads static extents";
+    assert e == "Y = Reshape: axis Batch is N, and Reshape reads static extents";
+}
+
+fn pooled() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("Y", ["Batch", "Chan", "PRow", "PCol"]),
+    ];
+}
+
+test "MaxPool names its window's output axes from the output's layout" {
+    let source = `g (float[1, 3, 7, 7] X) => (float[1, 3, 4, 4] Y) {
+        Y = MaxPool <kernel_shape = [3, 3], strides = [2, 2], pads = [1, 1, 1, 1]> (X)
+    }`;
+    assert reshaped(source, pooled()).unwrap() == "Batch=1,Chan=3,PRow=4,PCol=4";
+}
+
+test "MaxPool rounds its output extent up under ceil_mode" {
+    let source = `g (float[1, 1, 5, 5] X) => (float[1, 1, 3, 3] Y) {
+        Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], ceil_mode = 1> (X)
+    }`;
+    assert reshaped(source, pooled()).unwrap() == "Batch=1,Chan=1,PRow=3,PCol=3";
+}
+
+test "a window's output axis stops the build without a layout" {
+    let source = `g (float[1, 3, 7, 7] X) => (float[1, 3, 3, 3] Y) {
+        Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (X)
+    }`;
+    let e = reshaped(source, nchw()).unwrap_err();
+    assert e == "Y = MaxPool: axis 2 is a window's output, so a layout pattern must name Y's";
+}
+
+fn convolved() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Chan", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("Y", ["Batch", "Out", "Row", "Col"]),
+    ];
+}
+
+test "Conv under SAME_UPPER keeps the spatial extents" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 28, 28] Y) <float[8, 1, 5, 5] W> {
+        Y = Conv <kernel_shape = [5, 5], auto_pad = "SAME_UPPER"> (X, W)
+    }`;
+    assert reshaped(source, convolved()).unwrap() == "Batch=1,Out=8,Row=28,Col=28";
+}
+
+test "Conv reads its kernel off the weight and its bias checks against the output channels" {
+    let source = `g (float[2, 3, 7, 5] X) => (float[2, 4, 5, 4] Y) <float[4, 3, 3, 2] W, float[4] B> {
+        Y = Conv (X, W, B)
+    }`;
+    assert reshaped(source, convolved()).unwrap() == "Batch=2,Out=4,Row=5,Col=4";
+}
+
+test "Conv whose weight reads another channel count stops the build" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 24, 24] Y) <float[8, 2, 5, 5] W> {
+        Y = Conv (X, W)
+    }`;
+    let e = reshaped(source, convolved()).unwrap_err();
+    assert e == "Y = Conv: axis Chan is 1 on the left and 2 on the right";
+}
+
+test "Conv over several groups stops the build" {
+    let source = `g (float[1, 2, 8, 8] X) => (float[1, 2, 6, 6] Y) <float[2, 1, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    let e = reshaped(source, convolved()).unwrap_err();
+    assert e == "Y = Conv: attribute group is 2, and only a single group is read";
 }
 
 test "a node reading an undefined tensor stops the build" {

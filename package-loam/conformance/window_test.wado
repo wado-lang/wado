@@ -1,0 +1,93 @@
+//! The window operators against the outputs ONNX ships: `MaxPool` over one and
+//! two spatial axes, and `Conv` with its bias.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use pool2d from "../tests/onnx/pytorch-converted/test_MaxPool2d/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    { pattern: "0", axes: ["Batch", "Chan", "Row", "Col"] },
+                    { pattern: "1", axes: ["Batch", "Chan", "PRow", "PCol"] },
+                ],
+            },
+        },
+    };
+use pool1d from "../tests/onnx/pytorch-operator/test_operator_maxpool/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    { pattern: "0", axes: ["Batch", "Chan", "Len"] },
+                    { pattern: "1", axes: ["Batch", "Chan", "PLen"] },
+                ],
+            },
+        },
+    };
+use conv2d from "../tests/onnx/pytorch-converted/test_Conv2d/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    { pattern: "0", axes: ["Batch", "Chan", "Row", "Col"] },
+                    { pattern: "1", axes: ["Out", "Chan", "KRow", "KCol"] },
+                    { pattern: "2", axes: ["Out"] },
+                    { pattern: "3", axes: ["Batch", "Out", "CRow", "CCol"] },
+                ],
+            },
+        },
+    };
+
+test "MaxPool over two padded axes reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-converted/test_MaxPool2d/test_data_set_0/output_0.pb"),
+    );
+
+    let got = pool2d::forward(
+        &pool2d::Tensor::<f32, [pool2d::Batch, pool2d::Chan, pool2d::Row, pool2d::Col]> { data: x, extents: x_extents },
+        &pool2d::Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "MaxPool over one axis reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_maxpool/test_data_set_0/output_0.pb"),
+    );
+
+    let got = pool1d::forward(
+        &pool1d::Tensor::<f32, [pool1d::Batch, pool1d::Chan, pool1d::Len]> { data: x, extents: x_extents },
+        &pool1d::Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "Conv with a bias reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-converted/test_Conv2d/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-converted/test_Conv2d/test_data_set_0/output_0.pb"),
+    );
+
+    let got = conv2d::forward(
+        &conv2d::Tensor::<f32, [conv2d::Batch, conv2d::Chan, conv2d::Row, conv2d::Col]> { data: x, extents: x_extents },
+        &conv2d::Weights::embedded(),
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
