@@ -360,11 +360,7 @@ impl Emitter {
 
     /// The top-level Wado name for a nested declaration, joined from its path.
     fn claim(&mut self, path: &List<String>, line: i32) -> Result<String, EmitError> {
-        let mut name = path.join("");
-        if is_reserved(&name) || name == RUNTIME || name == "TreeMap" {
-            name.push_str("_");
-        }
-        return self.take(name, path.join("."), line);
+        return self.take(type_name_of(path.join("")), path.join("."), line);
     }
 
     fn take(&mut self, name: String, owner: String, line: i32) -> Result<String, EmitError> {
@@ -451,21 +447,22 @@ impl Emitter {
             numbered.push([n, field.name]);
             if let Some(oneof) = &field.oneof {
                 let wado_name = field_name_of(oneof);
-                if !oneofs.into_iter().any(|o| o.0 == wado_name) {
-                    field_names.push(field_name(oneof, &field_names, decl, field)?);
-                    let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
-                    let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
-                    out.default = Option::Some("null");
-                    spec.add_field_spec(out);
-                    oneofs.push([wado_name, sum, []]);
-                }
-                for let mut i = 0; i < oneofs.len(); i += 1 {
-                    if oneofs[i].0 == wado_name {
-                        let mut entry = oneofs[i];
-                        entry.2.push(self.plan_member(decl, field, &entry.2)?);
-                        oneofs[i] = entry;
-                    }
-                }
+                let at = match oneofs.into_iter().position(|o| o.0 == wado_name) {
+                    Some(at) => at,
+                    None => {
+                        field_names.push(field_name(oneof, &field_names, decl, field)?);
+                        let sum = type_name_of(`${name}${pascal(oneof)}`);
+                        let sum = self.take(sum, `${decl.path.join(".")}.${oneof}`, field.line)?;
+                        let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
+                        out.default = Option::Some("null");
+                        spec.add_field_spec(out);
+                        oneofs.push([wado_name, sum, []]);
+                        oneofs.len() - 1
+                    },
+                };
+                let mut entry = oneofs[at];
+                entry.2.push(self.plan_member(decl, field, &entry.2)?);
+                oneofs[at] = entry;
                 continue;
             }
             let wado_name = field_name(&field.name, &field_names, decl, field)?;
@@ -698,6 +695,14 @@ fn field_name(name: &String, taken: &List<String>, decl: &MessageDecl, field: &F
         ));
     }
     return Result::Ok(wado_name);
+}
+
+/// A generated type's name, suffixed where it would shadow what the module imports.
+fn type_name_of(name: String) -> String {
+    if is_reserved(&name) || name == RUNTIME || name == "TreeMap" {
+        return `${name}_`;
+    }
+    return name;
 }
 
 fn field_name_of(name: &String) -> String {

@@ -67,6 +67,12 @@ test "a keyword or prelude name is suffixed" {
     assert out.contains("    Fn,");
 }
 
+test "a oneof's variant named like a prelude type is suffixed" {
+    let out = generate("syntax = \"proto3\"; message Byte { oneof list { int32 a = 1; } }");
+    assert out.contains("pub variant ByteList_ {");
+    assert out.contains("pub unknown_fields: ByteList = b\"\",");
+}
+
 test "an alias is a constant" {
     let out = generate("syntax = \"proto3\"; enum E { option allow_alias = true; E_A = 0; E_B = 0; }");
     assert out.contains("impl E {
