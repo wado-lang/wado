@@ -89,15 +89,15 @@ impl Shape {
     pub fn static_extents(&self, reader: &String) -> Result<List<i32>, String> {
         let mut extents: List<i32> = [];
         for let axis of self.axes {
-            let Static(e) = axis.extent else {
-                return Result::Err(`axis ${axis.name} is ${axis.extent}, and ${*reader} reads static extents`);
-            };
-            for let part of axis.parts {
-                if part.extent matches { Symbol(_) } {
-                    return Result::Err(`axis ${part.name} is ${part.extent}, and ${*reader} reads static extents`);
+            // A regrouping reads a merged axis's parts as well.
+            let mut read = [axis] as List<Axis>;
+            read.extend(&axis.parts);
+            for let a of read {
+                if a.extent matches { Symbol(_) } {
+                    return Result::Err(`axis ${a.name} is ${a.extent}, and ${*reader} reads static extents`);
                 }
             }
-            extents.push(e);
+            extents.push(axis.static_extent());
         }
         return Result::Ok(extents);
     }

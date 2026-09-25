@@ -614,7 +614,7 @@ fn infer_node(
             if !reduced.contains(&i) {
                 axes.push(axis);
             } else if keep {
-                axes.push(Axis { name: axis.name, extent: Extent::Static(1) });
+                axes.push(Axis { ..axis, extent: Extent::Static(1) });
             }
         }
         return Result::Ok(Shape { axes });
