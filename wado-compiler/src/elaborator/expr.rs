@@ -11,13 +11,8 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{
-<<<<<<< HEAD
     DeclName, FqTypeName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
-||||||| 20edf112e
-use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-=======
-    FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
->>>>>>> origin/main
+    split_local_method,
 };
 use crate::tir::{
     FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
@@ -37,7 +32,7 @@ use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
@@ -795,8 +790,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        if let Some((decl, _)) = self.tysys.dispatched_operation(ident) {
-            let callable = if self.tysys.trait_env.effect_decl_index.contains(&decl) {
+        if let Some(op) = self.effect_operation_of(ident) {
+            let callable = if self.tysys.resolutions.defs().kind(op.decl) == DefKind::Effect {
                 CallableKind::Operation
             } else {
                 CallableKind::StaticFunction
@@ -916,7 +911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ident.owner_segment().is_some()
             && self
-                .lookup_function_signature(&ident.name, Some(ident.id))
+                .lookup_function_signature(&ident.name, None, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {
@@ -2968,8 +2963,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .is_unsigned_int(scrutinee_type);
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned)?;
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned)?;
+        let resolutions = &self.tysys.resolutions;
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions)?;
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions)?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
@@ -5067,59 +5063,7 @@ impl TypeSystem {
         if domain.is_some_and(|d| lo < d.min || hi > d.max) {
             return None;
         }
-<<<<<<< HEAD
-    }
-
-    fn exh_range(
-        &self,
-        start: &ast::Pattern,
-        end: &ast::Pattern,
-        kind: ast::RangeKind,
-        scrutinee_type: TypeId,
-    ) -> Pat {
-        // Bad or empty bounds were reported where the pattern was resolved.
-        let is_unsigned = self.type_table.borrow().is_unsigned_int(scrutinee_type);
-        let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned, &self.resolutions),
-            util::range_endpoint_to_i128(end, is_unsigned, &self.resolutions),
-        ) else {
-            return Pat::Wild;
-        };
-        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() || (!inclusive && order.is_ge()) {
-            return Pat::Wild;
-        }
-        let hi = if inclusive { end_val } else { end_val - 1 };
-        self.exh_int(start_val, hi, scrutinee_type)
-||||||| 20edf112e
-    }
-
-    fn exh_range(
-        &self,
-        start: &ast::Pattern,
-        end: &ast::Pattern,
-        kind: ast::RangeKind,
-        scrutinee_type: TypeId,
-    ) -> Pat {
-        // Bad or empty bounds were reported where the pattern was resolved.
-        let is_unsigned = self.type_table.borrow().is_unsigned_int(scrutinee_type);
-        let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned),
-            util::range_endpoint_to_i128(end, is_unsigned),
-        ) else {
-            return Pat::Wild;
-        };
-        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() || (!inclusive && order.is_ge()) {
-            return Pat::Wild;
-        }
-        let hi = if inclusive { end_val } else { end_val - 1 };
-        self.exh_int(start_val, hi, scrutinee_type)
-=======
         Some(Pat::Int { lo, hi, domain })
->>>>>>> origin/main
     }
 
     /// The pack a comprehension's iterable walks, as [`pack_of`] reads it.

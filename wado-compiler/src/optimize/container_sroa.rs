@@ -66,7 +66,7 @@ enum ListMethodKind {
 fn is_list_method(info: &LocalMethodName, type_table: &TypeTable) -> bool {
     info.receiver()
         .def()
-        .is_some_and(|def| type_table.is_compiler_item_def(def, CompilerItem::List))
+        .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::List))
 }
 
 /// Classify a `List` method into a [`ListMethodKind`] by signature shape, read

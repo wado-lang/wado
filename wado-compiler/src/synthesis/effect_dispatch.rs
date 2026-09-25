@@ -18,19 +18,9 @@ use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
-<<<<<<< HEAD
-    ResolvedType, StructDef, TemplateId, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind,
-    TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
-||||||| 20edf112e
-    ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
-    TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable, positional_substitution,
-=======
-    MonomorphInfo, ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture, TirEffectOp, TirExpr,
     TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern,
     TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
->>>>>>> origin/main
     positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -2225,37 +2215,17 @@ fn build_handler_op_closure(
     let template = FunctionRef {
         module_source: impl_info.impl_module.clone(),
         name: target.mangled_name.clone(),
+        template: target.template.clone(),
         monomorph_info: None,
         method_info: Some(target.method_info.clone()),
     };
     let method_ret = impl_method_return_type(op, &type_table.borrow());
-<<<<<<< HEAD
-    let method_call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: impl_info.impl_module.clone(),
-                name: target.mangled_name.clone(),
-                template: target.template.clone(),
-                monomorph_info: None,
-                method_info: Some(target.method_info.clone()),
-||||||| 20edf112e
-    let method_call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: impl_info.impl_module.clone(),
-                name: target.mangled_name.clone(),
-                monomorph_info: None,
-                method_info: Some(target.method_info.clone()),
-=======
     let call_kind = if target.takes_self {
         // `$h.<op>(<args>)`, which the monomorphizer instantiates from `$h`'s type.
         let receiver = TirExpr::new(
             TirExprKind::Capture {
                 index: 0,
                 name: h_name.to_string(),
->>>>>>> origin/main
             },
             handler_type,
             span,
@@ -2333,6 +2303,7 @@ fn static_handler_method_ref(
     FunctionRef {
         module_source: template.module_source,
         name: method_info.to_mangled_name(),
+        template: template.template,
         monomorph_info: Some(MonomorphInfo {
             generic_name: target.mangled_name.clone(),
             impl_type_args: type_args,
@@ -3184,12 +3155,8 @@ struct HandlerImplInfo {
 struct HandlerMethodTarget {
     mangled_name: String,
     method_info: LocalMethodName,
-<<<<<<< HEAD
     template: Option<TemplateId>,
-||||||| 20edf112e
-=======
     takes_self: bool,
->>>>>>> origin/main
 }
 
 /// Build the `HandlerImplKey -> HandlerImplInfo` map from every TIR function
@@ -3236,12 +3203,8 @@ fn build_handler_impl_index(
                 HandlerMethodTarget {
                     mangled_name: func.name.clone(),
                     method_info: method_info.clone(),
-<<<<<<< HEAD
                     template: func.template_id(),
-||||||| 20edf112e
-=======
                     takes_self: func.takes_self(),
->>>>>>> origin/main
                 },
             );
         }

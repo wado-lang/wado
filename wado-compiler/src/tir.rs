@@ -1726,12 +1726,6 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
     }
 
-    /// Whether `def` is the declaration the compiler item `item` names.
-    #[must_use]
-    pub fn is_compiler_item_def(&self, def: DefId, item: CompilerItem) -> bool {
-        self.compiler_item_def(item) == Some(def)
-    }
-
     /// The declaration a nominal type was written from, if it names one.
     ///
     /// This is identity: compare these, never the names below.
@@ -2240,7 +2234,7 @@ impl TypeTable {
             return false;
         };
         self.nominal_def(id)
-            .is_some_and(|def| self.is_compiler_item_def(def, item))
+            .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
     pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
@@ -2382,7 +2376,6 @@ impl TypeTable {
 
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
-<<<<<<< HEAD
         self.single_arg_of(type_id, CompilerItem::AsyncCall)
     }
 
@@ -2395,19 +2388,6 @@ impl TypeTable {
                 Some(type_args[0])
             }
             _ => None,
-||||||| 20edf112e
-        if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "AsyncCall"
-            && type_args.len() == 1
-        {
-            return Some(type_args[0]);
-=======
-        if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.is_compiler_item(*def, CompilerItem::AsyncCall)
-            && type_args.len() == 1
-        {
-            return Some(type_args[0]);
->>>>>>> origin/main
         }
     }
 
@@ -2459,7 +2439,7 @@ impl TypeTable {
 
     /// Whether `def` declares the built-in tuple family.
     pub fn is_tuple_def(&self, def: DefId) -> bool {
-        self.is_compiler_item_def(def, CompilerItem::Tuple)
+        self.is_compiler_item(def, CompilerItem::Tuple)
     }
 
     /// Whether a type is a built-in tuple.
@@ -4086,33 +4066,13 @@ impl TypeTable {
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
-<<<<<<< HEAD
-            _ => self.single_arg_of(id, CompilerItem::List),
-||||||| 20edf112e
-            ResolvedType::GenericInstance { def, type_args }
-                if self.def_name(*def) == "List" && type_args.len() == 1 =>
-            {
-                Some(type_args[0])
-            }
-            // Unwrap references and check the inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
-            _ => None,
-=======
             _ => self.list_element(id),
         }
     }
 
     /// The element type of `id` when it is a `List` itself, not a reference to one.
     pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
-        match self.get(id) {
-            ResolvedType::GenericInstance { def, type_args }
-                if self.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
-            {
-                Some(type_args[0])
-            }
-            _ => None,
->>>>>>> origin/main
-        }
+        self.single_arg_of(id, CompilerItem::List)
     }
 
     /// Check if a type contains UNKNOWN (undefined type that was not resolved).

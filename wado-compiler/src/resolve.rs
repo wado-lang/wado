@@ -12,7 +12,7 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias, split_local_method};
+use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::SymbolTable;
 use crate::tir::EffectRef;
 use crate::token::Span;
@@ -415,7 +415,6 @@ impl Resolutions {
         }
     }
 
-<<<<<<< HEAD
     /// The declaration a bound names: the referent a synthesised bound carries,
     /// else what its site names.
     #[must_use]
@@ -467,20 +466,6 @@ impl Resolutions {
             }
             None => unwalked(),
         }
-||||||| 20edf112e
-=======
-    /// The declaration an operation call names, with the operation: `E` of
-    /// `[ns::]E::op`, or of a bare `op` imported as `use { E::{op} }`.
-    #[must_use]
-    pub fn operation_at<'a>(&'a self, ident: &'a ast::IdentExpr) -> Option<(DefId, &'a str)> {
-        if let Some(owner) = ident.owner_segment() {
-            return Some((self.declared(owner.id)?, &ident.segments.last()?.name));
-        }
-        let member = self.declared_if_walked(ident.id)?;
-        let name = self.defs().name(member);
-        let operation = split_local_method(name).map_or(name, |(_, op)| op);
-        Some((self.defs().parent(member)?, operation))
->>>>>>> origin/main
     }
 
     /// The whole answer for a site the walk reached, `None` for a node it

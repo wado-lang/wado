@@ -406,34 +406,10 @@ fn build_copy_return_expr(
             right_size_backing,
         ));
     }
-<<<<<<< HEAD
     // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
     // rejects in a `StructLiteral`; only `List<T>` and tuples copy without one.
     if matches!(resolved, ResolvedType::GenericInstance { .. })
         && type_table.borrow().is_list(type_id)
-||||||| 20edf112e
-    // A `GenericInstance` whose monomorphized struct never reached
-    // `project.structs` resolves to `AbstractRef(Struct)`, which the WIR-build
-    // `StructLiteral` arm rejects with a hard panic. Falling through to identity
-    // keeps a stray non-monomorphized template wrapper safe; the shapes that do
-    // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
-    if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table.borrow().def_name(*def) == list_name
-=======
-    // A `GenericInstance` whose monomorphized struct never reached
-    // `project.structs` resolves to `AbstractRef(Struct)`, which the WIR-build
-    // `StructLiteral` arm rejects with a hard panic. Falling through to identity
-    // keeps a stray non-monomorphized template wrapper safe; the shapes that do
-    // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table
-            .borrow()
-            .is_compiler_item(*def, CompilerItem::List)
->>>>>>> origin/main
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -500,7 +476,6 @@ fn is_synth_safe_element(
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
-<<<<<<< HEAD
         ResolvedType::GenericInstance { def, type_args } => {
             let tt = type_table.borrow();
             // Any other instance needs a monomorphized struct for WIR to point at.
@@ -509,71 +484,6 @@ fn is_synth_safe_element(
                 || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
                 || project.variants.iter().any(|v| v.def == def)
                 || listed_struct(project, &tt, StructDef::Decl(def), &type_args).is_some()
-||||||| 20edf112e
-        ResolvedType::GenericInstance { def, .. } => {
-            let name = &type_table.borrow().def_name(def).to_string();
-            let module_source = &type_table.borrow().def_module(def).clone();
-            // Tuples / String / List<T> / known struct templates are
-            // safe; unknown generic-instance names whose template
-            // isn't a registered struct or variant are not.
-            if TypeTable::is_tuple_type(name) {
-                return true;
-            }
-            let (list_name, string_name, box_name) = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                (
-                    items.struct_name(CompilerItem::List).to_string(),
-                    items.struct_name(CompilerItem::String).to_string(),
-                    items.struct_name(CompilerItem::Box).to_string(),
-                )
-            };
-            if *name == list_name || *name == string_name || *name == box_name {
-                return true;
-            }
-            // A concrete monomorphised struct entry is the strongest
-            // signal — without it WIR has no `Ref` to point at. The struct
-            // list keys on the bare instantiation name, the one
-            // `struct_list_name` derives; a module-qualified head matches
-            // nothing, which would call every generic-instance element
-            // unsafe and copy the enclosing `List<T>` by identity.
-            let listed = type_table.borrow().struct_list_name(elem_type);
-            if listed
-                .is_some_and(|name| lookup_struct(project, &name, Some(module_source)).is_some())
-            {
-                return true;
-            }
-            project.find_variant(module_source, name).is_some()
-=======
-        ResolvedType::GenericInstance { def, .. } => {
-            let name = &type_table.borrow().def_name(def).to_string();
-            let module_source = &type_table.borrow().def_module(def).clone();
-            // Tuples / String / List<T> / known struct templates are
-            // safe; unknown generic-instance names whose template
-            // isn't a registered struct or variant are not.
-            if TypeTable::is_tuple_type(name) {
-                return true;
-            }
-            if [CompilerItem::List, CompilerItem::String, CompilerItem::Box]
-                .into_iter()
-                .any(|item| type_table.borrow().is_compiler_item(def, item))
-            {
-                return true;
-            }
-            // A concrete monomorphised struct entry is the strongest
-            // signal — without it WIR has no `Ref` to point at. The struct
-            // list keys on the bare instantiation name, the one
-            // `struct_list_name` derives; a module-qualified head matches
-            // nothing, which would call every generic-instance element
-            // unsafe and copy the enclosing `List<T>` by identity.
-            let listed = type_table.borrow().struct_list_name(elem_type);
-            if listed
-                .is_some_and(|name| lookup_struct(project, &name, Some(module_source)).is_some())
-            {
-                return true;
-            }
-            project.find_variant(module_source, name).is_some()
->>>>>>> origin/main
         }
         _ => true,
     }

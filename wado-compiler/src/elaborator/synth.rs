@@ -301,14 +301,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),
-<<<<<<< HEAD
-||||||| 20edf112e
-            ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
-=======
             ArgClass::BytesLit => {
                 tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)
             }
->>>>>>> origin/main
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }
@@ -670,7 +665,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.lookup_function_type_params(&callee).is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let return_type = self.lookup_function_return_type(&callee);
+        let return_type = self.lookup_function_return_type(&callee, None);
         self.class_of_type(return_type)
     }
 
@@ -1057,7 +1052,7 @@ impl TypeSystem {
     /// reference site. A variant constructor, a static path or an effect
     /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
+        if ident.name.contains("::") {
             return None;
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))

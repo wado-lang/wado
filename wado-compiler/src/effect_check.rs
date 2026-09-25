@@ -23,7 +23,6 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
-use crate::resolve::Resolutions;
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -466,18 +465,8 @@ struct OwnedEffectData {
     resources: IndexSet<EffectRef>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-<<<<<<< HEAD
     /// Each interface declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
-||||||| 20edf112e
-    effect_by_name: IndexMap<String, EffectRef>,
-    /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
-=======
-    effect_by_name: IndexMap<String, EffectRef>,
-    /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<DefId, Option<String>>,
->>>>>>> origin/main
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component, which
     /// discharge a reconstructed host-leaf import.
@@ -601,15 +590,7 @@ impl OwnedEffectData {
             }
         }
 
-<<<<<<< HEAD
         let mut interfaces: IndexMap<DefId, (EffectRef, Option<String>)> = IndexMap::default();
-||||||| 20edf112e
-        let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
-            IndexMap::default();
-=======
-        let defs = sem.resolutions().map(Resolutions::defs);
-        let mut interface_cm_fq: IndexMap<DefId, Option<String>> = IndexMap::default();
->>>>>>> origin/main
         // Restricted to closure keys, so a host-leaf import resolves to an
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
@@ -621,25 +602,9 @@ impl OwnedEffectData {
                 };
                 let def = defs.def_at(decl.id);
                 let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
-<<<<<<< HEAD
                 let key = resolutions
                     .effect_decl(def)
                     .expect("an interface is an effect");
-||||||| 20edf112e
-                interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
-                let key = EffectRef::Concrete {
-                    name: decl.name.clone(),
-                    module_source: src.clone(),
-                };
-=======
-                if let Some(def) = defs.and_then(|defs| defs.of_ast_id(decl.id)) {
-                    interface_cm_fq.insert(def, cm_fq.clone());
-                }
-                let key = EffectRef::Concrete {
-                    name: decl.name.clone(),
-                    module_source: src.clone(),
-                };
->>>>>>> origin/main
                 if closure.contains_key(&key)
                     && let Some(fq) = &cm_fq
                 {
@@ -714,77 +679,14 @@ struct EffectIndex<'a> {
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
-<<<<<<< HEAD
     /// Interface declaration → its effect and `#[cm]` FQ.
     interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
-||||||| 20edf112e
-    /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
-    effect_by_name: &'a IndexMap<String, EffectRef>,
-    /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
-    /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
-=======
-    /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
-    effect_by_name: &'a IndexMap<String, EffectRef>,
-    /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
-    /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<DefId, Option<String>>,
->>>>>>> origin/main
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
-<<<<<<< HEAD
     resolutions: &'a Resolutions,
-||||||| 20edf112e
-}
-
-/// The segment naming the interface in a dispatch path `[ns::]*E::op`: the one
-/// before the operation, so a namespace qualifier ahead of `E` does not stand in
-/// for it.
-fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
-    let Expr::Ident(ident) = callee else {
-        return None;
-    };
-    ident.owner_segment()
-}
-
-/// The `interface` the name at `site` declares, as its declaring module, its
-/// name, and its `#[cm]` FQ. `None` when the name declares anything else.
-fn interface_at<'a>(
-    sem: &Semantics,
-    index: &EffectIndex<'a>,
-    site: Option<AstId>,
-) -> Option<(ModuleSource, String, &'a Option<String>)> {
-    let resolutions = sem.resolutions()?;
-    let def = resolutions.declared(site?)?;
-    let defs = resolutions.defs();
-    let key = (defs.module(def).clone(), defs.name(def).to_string());
-    let cm_fq = index.interface_cm_fq.get(&key)?;
-    Some((key.0, key.1, cm_fq))
-=======
-}
-
-/// `Resolutions::operation_at` for a callee expression.
-fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a str)> {
-    let Expr::Ident(ident) = callee else {
-        return None;
-    };
-    sem.resolutions()?.operation_at(ident)
-}
-
-/// The `interface` `def` is, as its declaring module, its name, and its `#[cm]`
-/// FQ. `None` when `def` declares anything else.
-fn interface_at<'a>(
-    sem: &Semantics,
-    index: &EffectIndex<'a>,
-    def: DefId,
-) -> Option<(ModuleSource, String, &'a Option<String>)> {
-    let cm_fq = index.interface_cm_fq.get(&def)?;
-    let defs = sem.resolutions()?.defs();
-    Some((defs.module(def).clone(), defs.name(def).to_string(), cm_fq))
->>>>>>> origin/main
 }
 
 /// The effects `with E => h do` grants to its body.
@@ -830,40 +732,14 @@ fn binding_granted_effects(
         .collect()
 }
 
-<<<<<<< HEAD
 /// What a direct call of an operation `owner` declares demands of its caller.
 /// A user-defined effect demands nothing: an unhandled dispatch traps at runtime.
-||||||| 20edf112e
-/// What a direct `E::op()` call at `site` demands of its caller.
-///
-/// Empty where it demands nothing: the site names no interface, or `E` is a
-/// user-defined effect, whose operation an installed handler answers and whose
-/// dispatch with none traps — a runtime outcome, not a demand on the position.
-/// A purely computational component's operation demands nothing either.
-=======
-/// What a direct `E::op()` call through `interface` demands of its caller:
-/// nothing for a user-defined effect or a purely computational component.
->>>>>>> origin/main
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
-<<<<<<< HEAD
     owner: Option<DefId>,
-||||||| 20edf112e
-    site: Option<AstId>,
-=======
-    interface: DefId,
->>>>>>> origin/main
 ) -> Vec<EffectRef> {
-<<<<<<< HEAD
     let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
-||||||| 20edf112e
-    // The callee names its interface's declaration; the site says which one
-    // that is, so a same-named local `interface` cannot stand in for it.
-    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, site) else {
-=======
-    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, interface) else {
->>>>>>> origin/main
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
@@ -1348,16 +1224,10 @@ fn call_site_effects(
     }
     // Only a free function in this program dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
-<<<<<<< HEAD
     let owner = match callee {
         Expr::Ident(ident) => index.resolutions.operation_owner(ident),
         _ => None,
     };
-||||||| 20edf112e
-    let path_site = interface_segment(callee).map(|seg| seg.id);
-=======
-    let interface = operation_at(sem, callee).map(|(def, _)| def);
->>>>>>> origin/main
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1372,25 +1242,11 @@ fn call_site_effects(
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
-<<<<<<< HEAD
                 dispatched: if dispatches_through_path {
                     operation_requirements(sem, index, owner)
                 } else {
                     Vec::new()
                 },
-||||||| 20edf112e
-                dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, path_site)
-                } else {
-                    Vec::new()
-                },
-=======
-                dispatched: interface
-                    .filter(|_| dispatches_through_path)
-                    .map_or_else(Vec::new, |interface| {
-                        operation_requirements(sem, index, interface)
-                    }),
->>>>>>> origin/main
             }
         })
         .collect()
@@ -2006,27 +1862,12 @@ impl PurityWalker<'_> {
         }
     }
 
-<<<<<<< HEAD
     /// Flags a call of an operation whose owner demands a capability the
     /// position does not hold.
     fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
         let required = operation_requirements(self.sem, self.index, owner);
-||||||| 20edf112e
-    /// Flags `Site::op(…)` when the dispatch demands a capability the position
-    /// does not hold. An operation declares no `with` clause of its own, so
-    /// nothing but the site says so.
-    fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
-        // An operation declares no effect parameters, so there is nothing for
-        // the arguments to resolve.
-        let required = operation_requirements(self.sem, self.index, Some(site));
-=======
-    /// Flags a call of `interface`'s operation `op` when the dispatch demands a
-    /// capability the position does not hold. An operation declares no `with` clause.
-    fn flag_if_operation(&mut self, interface: DefId, op: &str, span: Span) {
-        let required = operation_requirements(self.sem, self.index, interface);
->>>>>>> origin/main
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -2058,22 +1899,11 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-<<<<<<< HEAD
                 if let Expr::Ident(ident) = &call.callee
                     && let Some(op) = ident.segments.last()
                 {
                     let owner = self.index.resolutions.operation_owner(ident);
                     self.flag_if_operation(owner, &op.name, call.span);
-||||||| 20edf112e
-                if let Some(interface) = interface_segment(&call.callee)
-                    && let Expr::Ident(ident) = &call.callee
-                    && let Some(op) = ident.segments.last()
-                {
-                    self.flag_if_operation(interface.id, &op.name, call.span);
-=======
-                if let Some((interface, op)) = operation_at(self.sem, &call.callee) {
-                    self.flag_if_operation(interface, op, call.span);
->>>>>>> origin/main
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);
             }
@@ -2096,20 +1926,9 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-<<<<<<< HEAD
                 if let ast::Type::Named(named) = &static_call.target_type {
                     let owner = self.index.resolutions.declared(named.id);
                     self.flag_if_operation(owner, &static_call.method, static_call.span);
-||||||| 20edf112e
-                if let ast::Type::Named(named) = &static_call.target_type {
-                    self.flag_if_operation(named.id, &static_call.method, static_call.span);
-=======
-                if let ast::Type::Named(named) = &static_call.target_type
-                    && let Some(interface) =
-                        self.sem.resolutions().and_then(|r| r.declared(named.id))
-                {
-                    self.flag_if_operation(interface, &static_call.method, static_call.span);
->>>>>>> origin/main
                 }
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);

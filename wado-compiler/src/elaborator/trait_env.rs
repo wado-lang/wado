@@ -2468,31 +2468,7 @@ fn check_all_orphan_rules(
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
-<<<<<<< HEAD
-
-    let owned = |def: &&DefId| is_user_local(defs.module(**def));
-    let local = LocalDecls {
-        types: type_decl_index.iter().filter(owned).copied().collect(),
-        traits: decl_index.iter().filter(owned).copied().collect(),
-        tuple: type_decl_index
-            .iter()
-            .filter(owned)
-            .any(|def| defs.name(*def) == name::TUPLE_TYPE_NAME),
-    };
-||||||| 20edf112e
-
-    let owned = |def: &&DefId| is_user_local(defs.module(**def));
-    let local = LocalDecls {
-        types: type_decl_index.iter().filter(owned).copied().collect(),
-        traits: decl_index.iter().filter(owned).copied().collect(),
-        tuple: type_decl_index
-            .iter()
-            .filter(owned)
-            .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
-    };
-=======
     let mut by_package: IndexMap<PackageId, LocalDecls> = IndexMap::default();
->>>>>>> origin/main
 
     for header in impl_headers.values() {
         if !is_user_local(&header.module) {
@@ -2510,7 +2486,7 @@ fn check_all_orphan_rules(
                 tuple: type_decl_index
                     .iter()
                     .filter(owned)
-                    .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
+                    .any(|def| defs.name(*def) == name::TUPLE_TYPE_NAME),
             }
         });
 

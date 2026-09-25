@@ -3,13 +3,7 @@
 use crate::ast::Pattern;
 use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::escape::{unescape_byte, unescape_char};
-<<<<<<< HEAD
-use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
-||||||| 20edf112e
-use crate::primitive::PrimitiveType;
-=======
->>>>>>> origin/main
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no

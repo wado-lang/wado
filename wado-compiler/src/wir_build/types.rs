@@ -511,7 +511,7 @@ fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
     s.monomorph_info.is_some()
         && s.def
             .decl()
-            .is_some_and(|def| type_table.is_compiler_item_def(def, CompilerItem::Box))
+            .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::Box))
 }
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {

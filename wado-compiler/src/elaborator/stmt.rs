@@ -22,6 +22,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
@@ -2306,9 +2307,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     variant_qualifier: Some(qualifier),
                     bindings,
                     ..
-                } if bindings.is_empty() => const_qualifier_name(qualifier).and_then(|ty| {
-                    let value = primitive_int_bound(ty, variant_name)?;
-                    let shown = format!("{ty}::{variant_name}");
+                } if bindings.is_empty() => primitive_assoc_const_to_i128(
+                    Some(qualifier),
+                    variant_name,
+                    &self.tysys.resolutions,
+                )
+                .and_then(|value| {
+                    let shown = format!("{}::{variant_name}", written_type_source(qualifier));
                     util::int_value_range_error(value, &shown, scrutinee_type, &tt)
                 }),
                 _ => None,
@@ -3533,54 +3538,8 @@ pub(super) fn primitive_assoc_const_to_i128(
     const_name: &str,
     resolutions: &Resolutions,
 ) -> Option<i128> {
-<<<<<<< HEAD
     let owner = assoc_const_owner(qualifier, resolutions)?;
     let (min, max) = resolutions.defs().primitive(owner)?.int_range()?;
-||||||| 20edf112e
-    let ty_name = match qualifier? {
-        Type::Named(named) => named.name.as_str(),
-        Type::Generic(generic) => generic.name.as_str(),
-        Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
-        Type::Function(_)
-        | Type::Tuple(_)
-        | Type::Reference(_)
-        | Type::MutReference(_)
-        | Type::TypePackSpread(_, _)
-        | Type::Infer(_)
-        | Type::Error(_) => return None,
-    };
-    primitive_int_bound(ty_name, const_name)
-}
-
-/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
-/// are written with. `None` for every other pair.
-pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
-    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
-=======
-    primitive_int_bound(const_qualifier_name(qualifier?)?, const_name)
-}
-
-/// The type name qualifying a constant path such as `u8::MAX`.
-fn const_qualifier_name(qualifier: &Type) -> Option<&str> {
-    match qualifier {
-        Type::Named(named) => Some(named.name.as_str()),
-        Type::Generic(generic) => Some(generic.name.as_str()),
-        Type::NamespacedGeneric(namespaced) => Some(namespaced.name.as_str()),
-        Type::Function(_)
-        | Type::Tuple(_)
-        | Type::Reference(_)
-        | Type::MutReference(_)
-        | Type::TypePackSpread(_, _)
-        | Type::Infer(_)
-        | Type::Error(_) => None,
-    }
-}
-
-/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
-/// are written with. `None` for every other pair.
-pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
-    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
->>>>>>> origin/main
     match const_name {
         "MIN" => Some(min),
         "MAX" => Some(max),

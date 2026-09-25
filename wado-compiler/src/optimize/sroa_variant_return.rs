@@ -1608,15 +1608,8 @@ impl<'t> Rebind<'t> {
             .iter()
             .filter_map(|&declared| match type_table.get(declared) {
                 ResolvedType::Struct { def, type_args }
-<<<<<<< HEAD
                     if type_args.len() == 1
                         && type_table.is_compiler_struct_instance(declared, CompilerItem::Box) =>
-||||||| 20edf112e
-                    if type_table.struct_head_name(*def) == box_name && type_args.len() == 1 =>
-=======
-                    if type_table.is_compiler_struct(*def, CompilerItem::Box)
-                        && type_args.len() == 1 =>
->>>>>>> origin/main
                 {
                     Some((
                         declared,

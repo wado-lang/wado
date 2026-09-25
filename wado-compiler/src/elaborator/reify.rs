@@ -5857,14 +5857,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-<<<<<<< HEAD
                     ResolvedType::GenericInstance { .. } if tt.is_result(inner_type)
-||||||| 20edf112e
-                    ResolvedType::GenericInstance { def, .. } if tt.def_name(*def) == "Result"
-=======
-                    ResolvedType::GenericInstance { def, .. }
-                        if tt.is_compiler_item(*def, CompilerItem::Result)
->>>>>>> origin/main
                 ),
             )
         };

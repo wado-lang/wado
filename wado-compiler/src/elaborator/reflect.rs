@@ -407,20 +407,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-<<<<<<< HEAD
-        let return_type = if method == methods.defaults || method == methods.empty_slots {
-            let Some(slots_ty) = self.struct_defaults_bound_ty(type_param_name) else {
-||||||| 20edf112e
-        let return_type = if method == methods.defaults || method == methods.empty_slots {
-            let Some(slots_ty) =
-                self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
-            else {
-=======
         let return_type = if method == methods.default_slot || method == methods.empty_slots {
-            let Some(slots_ty) =
-                self.struct_slots_bound_ty(type_param_name, reflect_trait_name.base_name())
-            else {
->>>>>>> origin/main
+            let Some(slots_ty) = self.struct_slots_bound_ty(type_param_name) else {
                 self.emit_missing_pack_bound(
                     reflect_trait_name.base_name(),
                     type_param_name,
@@ -777,72 +765,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-<<<<<<< HEAD
-    /// Resolve the args of a no-argument `ReflectStruct` metadata call and reject any
-    /// that were supplied. Returns whether the call is well-formed.
-    fn reject_reflect_metadata_args(
-        &mut self,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> bool {
-        for arg in &static_call.args {
-            self.resolve_expr(arg, ctx, None);
-        }
-        if static_call.args.is_empty() {
-            return true;
-        }
-        let _ = self.emit(TypeError::ArgumentCountMismatch {
-            expected: 0,
-            found: static_call.args.len(),
-            span: static_call.span,
-        });
-        false
-    }
-
     /// The resolver `Trait::method` routes to, the trait being what the head at
     /// `site` names; `None` unless `method` is a member of a reflection trait.
     pub(super) fn reflect_dispatch_of(&self, site: AstId, method: &str) -> Option<ReflectDispatch> {
         let trait_ = self
-||||||| 20edf112e
-    /// Resolve the args of a no-argument `ReflectStruct` metadata call and reject any
-    /// that were supplied. Returns whether the call is well-formed.
-    fn reject_reflect_metadata_args(
-        &mut self,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> bool {
-        for arg in &static_call.args {
-            self.resolve_expr(arg, ctx, None);
-        }
-        if static_call.args.is_empty() {
-            return true;
-        }
-        let _ = self.emit(TypeError::ArgumentCountMismatch {
-            expected: 0,
-            found: static_call.args.len(),
-            span: static_call.span,
-        });
-        false
-    }
-
-    /// Whether `prefix::method` names a `ReflectStruct` trait-qualified static call
-    /// (`ReflectStruct::<T>::type_name` / `members`). `prefix` must resolve to the
-    /// compiler's `ReflectStruct` trait *in this scope* — `classify_on_bound_trait`
-    /// applies the same module check `on_bound` dispatch uses, so a user type or
-    /// trait that happens to be named `ReflectStruct` is not hijacked. `method` is
-    /// matched through the compiler-item registry so a stdlib rename flows through.
-    fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-=======
-    /// Whether `prefix::method` names a `ReflectStruct` trait-qualified static call
-    /// (`ReflectStruct::<T>::type_name` / `members`). `prefix` must resolve to the
-    /// compiler's `ReflectStruct` trait *in this scope* — `classify_on_bound_trait`
-    /// applies the same module check `on_bound` dispatch uses, so a user type or
-    /// trait that happens to be named `ReflectStruct` is not hijacked. `method` is
-    /// matched through the compiler-item registry so a stdlib rename flows through.
-    fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
->>>>>>> origin/main
             .tysys
             .resolutions
             .declared(site)
@@ -1269,21 +1195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `T: ReflectStruct<FieldTypes = [..F]>` bound. Maps the field-type pack
     /// through `Option`, as [`Self::payload_member_pack_bound_ty`] maps it
     /// through the member constructor.
-<<<<<<< HEAD
-    fn struct_defaults_bound_ty(&mut self, type_param_name: &str) -> Option<TypeId> {
-||||||| 20edf112e
-    fn struct_defaults_bound_ty(
-        &mut self,
-        type_param_name: &str,
-        reflect_trait_name: &str,
-    ) -> Option<TypeId> {
-=======
-    fn struct_slots_bound_ty(
-        &mut self,
-        type_param_name: &str,
-        reflect_trait_name: &str,
-    ) -> Option<TypeId> {
->>>>>>> origin/main
+    fn struct_slots_bound_ty(&mut self, type_param_name: &str) -> Option<TypeId> {
         self.map_bound_pack(
             type_param_name,
             CompilerItem::ReflectStruct,

@@ -141,18 +141,8 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_elems,
             },
-<<<<<<< HEAD
         ) if type_table.borrow().is_list(expected)
             && type_table.borrow().is_tuple_def(*actual_def)
-||||||| 20edf112e
-        ) if type_table.borrow().def_name(*def) == list_name
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
-=======
-        ) if type_table
-            .borrow()
-            .is_compiler_item(*def, CompilerItem::List)
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
->>>>>>> origin/main
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

@@ -1496,22 +1496,17 @@ impl TypeError {
                 format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
-<<<<<<< HEAD
-            TypeError::UnknownType { name, span } => {
-                (Code::UnknownType, format!("unknown type '{name}'"), *span)
-            }
-            TypeError::UnknownEffect { name, span } => (
-                Code::UnknownType,
-                format!("no effect named '{name}' is in scope"),
-||||||| 20edf112e
-            TypeError::UnknownType { name, span } => {
-                (Code::UnknownType, format!("unknown type '{name}'"), *span)
-            }
-=======
             TypeError::UnknownType { name, span } => (
                 Code::UnknownType,
                 format!("unknown type '{}'", unalias_namespace_member(name)),
->>>>>>> origin/main
+                *span,
+            ),
+            TypeError::UnknownEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "no effect named '{}' is in scope",
+                    unalias_namespace_member(name)
+                ),
                 *span,
             ),
             TypeError::SelfInUnboundedBound { param, span } => (
@@ -2652,25 +2647,6 @@ impl TypeError {
                 ),
                 *span,
             ),
-<<<<<<< HEAD
-||||||| 20edf112e
-            TypeError::NotAnEffect { name, span } => (
-                Code::UnknownType,
-                format!(
-                    "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
-                ),
-                *span,
-            ),
-=======
-            TypeError::NotAnEffect { name, span } => (
-                Code::UnknownType,
-                format!(
-                    "'{}' is not an effect; only effect names are valid in `with E => h do` clauses",
-                    unalias_namespace_member(name)
-                ),
-                *span,
-            ),
->>>>>>> origin/main
             TypeError::GenericEffectParamNotInstallable { name, span } => (
                 Code::UnsupportedFeature,
                 format!(
