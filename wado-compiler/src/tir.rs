@@ -2392,6 +2392,19 @@ impl TypeTable {
             .then_some(inner)
     }
 
+    /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
+    /// [`Self::as_option`] is.
+    pub fn as_tree_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
+            return None;
+        };
+        let [key, value] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(type_id, CompilerItem::TreeMap)
+            .then_some((key, value))
+    }
+
     /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
     /// records rather than the spelling `Result` (WEP 2026-08-12). A newtype
     /// over one answers through its representation.

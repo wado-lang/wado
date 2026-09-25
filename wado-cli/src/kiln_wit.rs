@@ -115,6 +115,9 @@ fn options_type(resolve: &wit_parser::Resolve, ty: &Type) -> Result<OptionsType,
                 TypeDefKind::List(inner) => {
                     OptionsType::List(Box::new(options_type(resolve, inner)?))
                 }
+                TypeDefKind::Map(Type::String, value) => {
+                    OptionsType::Map(Box::new(options_type(resolve, value)?))
+                }
                 TypeDefKind::Enum(e) => OptionsType::Enum {
                     name: def.name.clone().unwrap_or_default(),
                     variants: e.cases.iter().map(|c| c.name.clone()).collect(),
@@ -228,6 +231,22 @@ interface i {
         assert_eq!(
             descriptor.fields[0].ty,
             OptionsType::List(Box::new(OptionsType::String))
+        );
+    }
+
+    #[test]
+    fn maps_string_keyed_map_field_to_map_type() {
+        let wit = "\
+package test:sizes;
+interface i {
+    record options { sizes: map<string, s32> }
+}
+";
+        let (resolve, ty) = record_type(wit, "options");
+        let descriptor = record_descriptor(&resolve, &ty).unwrap().unwrap();
+        assert_eq!(
+            descriptor.fields[0].ty,
+            OptionsType::Map(Box::new(OptionsType::I32))
         );
     }
 

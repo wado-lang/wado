@@ -24,7 +24,7 @@ mod kiln_embed_wit;
 mod kiln_multi_file;
 mod kiln_nested;
 mod kiln_no_generated_module;
-mod kiln_options_diagnostics;
+mod kiln_options;
 mod kiln_pipeline;
 mod kiln_probe;
 mod kiln_read_text;

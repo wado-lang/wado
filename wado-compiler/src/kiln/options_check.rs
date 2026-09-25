@@ -215,6 +215,24 @@ fn check_value(
             }
             ok.then_some(CanonicalValue::List(out))
         }
+        (OptionsType::Map(inner), AttrValue::Object(obj)) => {
+            let mut out = Vec::with_capacity(obj.len());
+            let mut ok = true;
+            for (key, entry) in obj {
+                let entry_path = format!("{}.{key}", site.path);
+                match check_value(
+                    inner,
+                    &entry.value,
+                    site.child(&entry_path, entry.key_span),
+                    diagnostics,
+                ) {
+                    Some(v) => out.push((key.clone(), v)),
+                    None => ok = false,
+                }
+            }
+            out.sort_by(|a, b| a.0.cmp(&b.0));
+            ok.then_some(CanonicalValue::Map(out))
+        }
         _ => {
             push_mismatch(diagnostics, site, ty, supplied);
             None
@@ -272,6 +290,9 @@ fn apply_default(
     }
     if matches!(field.ty, OptionsType::List(_)) {
         return Some(CanonicalValue::List(Vec::new()));
+    }
+    if matches!(field.ty, OptionsType::Map(_)) {
+        return Some(CanonicalValue::Map(Vec::new()));
     }
     diagnostics.push(site.error(format!(
         "kiln: required options field `{}` of type {} is missing",

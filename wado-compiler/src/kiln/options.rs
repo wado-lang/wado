@@ -57,6 +57,9 @@ pub enum OptionsType {
     /// `List<T>` — a homogeneous array; a missing field resolves to the empty
     /// list, so a `List` option is optional without an explicit default.
     List(Box<OptionsType>),
+    /// `TreeMap<String, V>` — an object whose keys are the author's own; a
+    /// missing field resolves to the empty map, as a `List` does.
+    Map(Box<OptionsType>),
     /// Enum with all-no-payload variants, by name.
     Enum {
         name: String,
@@ -86,6 +89,7 @@ impl OptionsType {
             OptionsType::String => "String".to_string(),
             OptionsType::Option(inner) => format!("Option<{}>", inner.describe()),
             OptionsType::List(inner) => format!("List<{}>", inner.describe()),
+            OptionsType::Map(inner) => format!("TreeMap<String, {}>", inner.describe()),
             OptionsType::Enum { name, .. } => name.clone(),
             OptionsType::Struct { name, .. } => name.clone(),
         }
@@ -111,6 +115,9 @@ pub enum CanonicalValue {
     Struct(Vec<(String, CanonicalValue)>),
     /// An array value; empty when a `List` field was omitted.
     List(Vec<CanonicalValue>),
+    /// A map value, sorted by key: the order it was written in is not part of
+    /// the value, so the generator and the cache key both see one order.
+    Map(Vec<(String, CanonicalValue)>),
 }
 
 /// Locate `pub struct Options` in the generator's entry module and describe it
@@ -229,6 +236,23 @@ fn lower_type(
     if let Some(elem_id) = types.as_list(type_id) {
         let inner = lower_type(elem_id, sem, module, field_name, visiting, diagnostics)?;
         return Some(OptionsType::List(Box::new(inner)));
+    }
+
+    if let Some((key_id, value_id)) = types.as_tree_map(type_id) {
+        if !types.is_string(key_id) {
+            push_unsupported(
+                diagnostics,
+                module,
+                field_name,
+                &format!(
+                    "a map option is keyed by `String`, not `{}`",
+                    types.type_name(key_id)
+                ),
+            );
+            return None;
+        }
+        let inner = lower_type(value_id, sem, module, field_name, visiting, diagnostics)?;
+        return Some(OptionsType::Map(Box::new(inner)));
     }
 
     match types.get(type_id) {

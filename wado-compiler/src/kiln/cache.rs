@@ -178,6 +178,18 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
                 encode_canonical_value(out, item);
             }
         }
+        CanonicalValue::Map(entries) => {
+            assert!(
+                entries.is_sorted_by(|a, b| a.0 < b.0),
+                "kiln: a validated map option is sorted by key"
+            );
+            out.push(8);
+            write_len(out, entries.len());
+            for (k, v) in entries {
+                write_str(out, k);
+                encode_canonical_value(out, v);
+            }
+        }
     }
 }
 
