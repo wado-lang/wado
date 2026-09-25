@@ -105,7 +105,7 @@ modules while tuples follow TypeScript.
   Worker, via jco.
 - `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
-- `package-grog` - A Protocol Buffers schema compiler in Wado: a `.proto` becomes the declarations `core:protobuf` encodes.
+- `package-grog` - A Protocol Buffers compiler in Wado: a `.proto` becomes Wado declarations, and the runtime library encodes them.
 - `package-jade` - A JSON Schema 2020-12 validator in Wado.
 - `package-marl` - A CommonMark subset in Wado.
 - `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
