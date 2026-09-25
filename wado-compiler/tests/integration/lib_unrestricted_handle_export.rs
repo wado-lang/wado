@@ -34,19 +34,20 @@ export fn echo(n: Option<Node>) -> Option<Node> {
 }
 "#;
 
-/// The same exports over a handle another module declares.
+/// The same exports over a handle another module declares, imported under an
+/// alias.
 const IMPORTED_SOURCE: &str = r#"
-use { Node } from "./sub/lib_unrestricted_handle_node.wado";
+use { Node as Handle } from "./sub/lib_unrestricted_handle_node.wado";
 
-export fn make(x: f64) -> Node {
-    return x as Node;
+export fn make(x: f64) -> Handle {
+    return x as Handle;
 }
 
-export fn take(n: Node) -> f64 {
+export fn take(n: Handle) -> f64 {
     return n as f64;
 }
 
-export fn echo(n: Option<Node>) -> Option<Node> {
+export fn echo(n: Option<Handle>) -> Option<Handle> {
     return n;
 }
 "#;

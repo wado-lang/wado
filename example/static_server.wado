@@ -15,7 +15,7 @@ use { Request, Response, ErrorCode, FieldName, FieldValue, Headers, Trailers, St
 use { log_stderr } from "core:cli";
 use { Preopens } from "core:fs";
 use fs from "core:fs";
-use { percent_decode } from "core:url";
+use { percent_decode, percent_encode } from "core:url";
 
 struct Reply {
     status: StatusCode,
@@ -70,7 +70,7 @@ fn serve(target: String, with_body: bool) -> Reply with Preopens {
             return Reply {
                 status: 301,
                 headers: [
-                    ["location", `/${path}/`],
+                    ["location", `${url_path(&path)}/`],
                 ],
                 body: [],
             };
@@ -127,6 +127,16 @@ fn file_path(target: String) -> Option<String> {
     return Option::Some(normalized);
 }
 
+/// `path` as the path of a URL: each segment percent-encoded, after a `/`.
+fn url_path(path: &String) -> String {
+    let mut url = "";
+    for let segment of path.split("/") {
+        url.push_str("/");
+        url.push_str(&percent_encode(segment));
+    }
+    return url;
+}
+
 fn content_type<S: AsStrSlice>(path: S) -> String {
     let Some(extension) = fs::extension(path) else {
         return "application/octet-stream";
@@ -174,6 +184,11 @@ test "a target that is not an absolute path names nothing" {
     assert file_path("?x") == null;
     assert file_path("é") == null;
     assert file_path("*") == null;
+}
+
+test "a redirect names the directory as a URL path" {
+    assert url_path(&"docs") == "/docs";
+    assert url_path(&"a#b/c d") == "/a%23b/c%20d";
 }
 
 test "a file's type comes from its extension, in any case" {

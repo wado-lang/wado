@@ -741,29 +741,27 @@ fn synthesize_lib_world_info(
 fn annotate_lib_export_sources(
     registry: &component_model::CmInterfaceRegistry,
     resolutions: &resolve::Resolutions,
-    world: &world_registry::WorldInfo,
+    world: &mut world_registry::WorldInfo,
     entry_module: Option<&ast::Module>,
     submodule_type_names: &hashmap::IndexSet<String>,
 ) {
-    let fq = world.fq_name.as_str();
     let mut local_type_names: hashmap::IndexSet<String> = entry_module
         .map(|module| module.items.iter().filter_map(lib_type_decl_name).collect())
         .unwrap_or_default();
     // Types defined in submodules but reached through the facade's exported
     // signatures are lib-local too (registered via `register_lib_local_items`).
     local_type_names.extend(submodule_type_names.iter().cloned());
-    for export in &world.exports {
-        for (_, ty) in &export.params {
-            annotate_lib_type_sources(registry, resolutions, ty, fq, &local_type_names);
-        }
-        if let Some(ty) = export.return_type.as_ref() {
-            annotate_lib_type_sources(registry, resolutions, ty, fq, &local_type_names);
+    for export in &mut world.exports {
+        let types = export.params.iter_mut().map(|(_, ty)| ty);
+        for ty in types.chain(export.return_type.as_mut()) {
+            annotate_lib_type_sources(registry, resolutions, ty, &world.fq_name, &local_type_names);
         }
     }
 }
 
-/// Answer the interface every user named type in `ty` names: `fq` for a
-/// library-local one, else the one its declaring module registers.
+/// Spell every user named type in `ty` by its declaration's name, which an
+/// aliased `use` renames locally, and answer the interface it names: `fq` for
+/// a library-local one, else the one its declaring module registers.
 ///
 /// The registry's answer table is first-writer-wins, so an already-resolved
 /// reference — a shared `core:kiln/types` record — keeps its own interface,
@@ -771,25 +769,27 @@ fn annotate_lib_export_sources(
 fn annotate_lib_type_sources(
     registry: &component_model::CmInterfaceRegistry,
     resolutions: &resolve::Resolutions,
-    ty: &ast::Type,
+    ty: &mut ast::Type,
     fq: &str,
     local_type_names: &hashmap::IndexSet<String>,
 ) {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
+            let Some(def) = resolutions.declared(named.id) else {
+                return;
+            };
+            let defs = resolutions.defs();
+            named.name = defs.name(def).to_string();
             if local_type_names.contains(&named.name) {
                 registry.set_source_interface(named.id, fq.to_string());
-            } else if let Some(def) = resolutions.declared(named.id) {
-                let defs = resolutions.defs();
-                if let Some(source) = registry.interface_declaring(defs.module(def), defs.name(def))
-                {
-                    registry.set_source_interface(named.id, source.to_string());
-                }
+            } else if let Some(source) = registry.interface_declaring(defs.module(def), &named.name)
+            {
+                registry.set_source_interface(named.id, source.to_string());
             }
         }
         Type::Generic(g) => {
-            for arg in &g.args {
+            for arg in &mut g.args {
                 annotate_lib_type_sources(registry, resolutions, arg, fq, local_type_names);
             }
         }
@@ -805,37 +805,30 @@ fn annotate_lib_type_sources(
     }
 }
 
-/// Tag the field / payload types of a lib-local type decl with the library's
-/// default-interface FQ, so a nested user type (e.g. `HeadingInfo` inside
+/// [`annotate_lib_type_sources`] over the field / payload types of a lib-local
+/// type decl, so a nested user type (e.g. `HeadingInfo` inside
 /// `RenderResult.headings: List<HeadingInfo>`) resolves against the same
-/// registration as the fields the CM lift/lower reads. Mirrors
-/// `annotate_lib_type_sources` for export signatures, but reaches inside the
-/// registered type's own fields.
+/// registration as the fields the CM lift/lower reads.
 fn tag_lib_local_decl_fields(
     registry: &component_model::CmInterfaceRegistry,
     resolutions: &resolve::Resolutions,
-    item: &ast::Item,
+    item: &mut ast::Item,
     fq: &str,
     local_type_names: &hashmap::IndexSet<String>,
 ) {
     use crate::ast::Item;
-    match item {
-        Item::Struct(d) => {
-            for field in &d.fields {
-                annotate_lib_type_sources(registry, resolutions, &field.ty, fq, local_type_names);
-            }
-        }
-        Item::Variant(d) => {
-            for case in &d.cases {
-                if let Some(payload) = case.payload.as_ref() {
-                    annotate_lib_type_sources(registry, resolutions, payload, fq, local_type_names);
-                }
-            }
-        }
-        Item::Newtype(d) => {
-            annotate_lib_type_sources(registry, resolutions, &d.ty, fq, local_type_names);
-        }
-        _ => {}
+    let types: Vec<&mut ast::Type> = match item {
+        Item::Struct(d) => d.fields.iter_mut().map(|field| &mut field.ty).collect(),
+        Item::Variant(d) => d
+            .cases
+            .iter_mut()
+            .filter_map(|case| case.payload.as_mut())
+            .collect(),
+        Item::Newtype(d) => vec![&mut d.ty],
+        _ => Vec::new(),
+    };
+    for ty in types {
+        annotate_lib_type_sources(registry, resolutions, ty, fq, local_type_names);
     }
 }
 
@@ -1292,7 +1285,7 @@ fn compile_after_load<H: CompilerHost>(
     // be registered into the CM interface registry. A kiln generator keeps only
     // the types: its world is `generate`, but that record's fields may name a
     // type the generator shares with its own library, in another module.
-    let lib_surface = match (options.lib_world.is_some(), is_kiln_generator) {
+    let mut lib_surface = match (options.lib_world.is_some(), is_kiln_generator) {
         (true, _) => collect_lib_surface(&sem.entry_module_source, &sem.modules),
         (false, true) => LibSurface {
             submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
@@ -1384,7 +1377,7 @@ fn compile_after_load<H: CompilerHost>(
     // `--lib` compile has one because annotate completed.
     let cm_registry = sem.cm_interface_registry().zip(sem.resolutions());
     if let (Some(fq), Some((registry, resolutions))) = (synth_world_fq.as_ref(), cm_registry) {
-        for (_, decl) in &lib_surface.submodule_type_decls {
+        for (_, decl) in &mut lib_surface.submodule_type_decls {
             tag_lib_local_decl_fields(registry, resolutions, decl, fq, &lib_type_names);
         }
     }
@@ -1395,13 +1388,19 @@ fn compile_after_load<H: CompilerHost>(
             .zip(cm_registry)
             .map(|(fq, (registry, resolutions))| {
                 let entry = sem.modules.get(&sem.entry_module_source);
-                let world = synthesize_lib_world_info(
+                let mut world = synthesize_lib_world_info(
                     fq,
                     entry,
                     &lib_surface.submodule_exports,
                     options.lib_interface_export,
                 );
-                annotate_lib_export_sources(registry, resolutions, &world, entry, &lib_type_names);
+                annotate_lib_export_sources(
+                    registry,
+                    resolutions,
+                    &mut world,
+                    entry,
+                    &lib_type_names,
+                );
                 world
             });
 
@@ -1438,16 +1437,8 @@ fn compile_after_load<H: CompilerHost>(
             // without a `source_interface`; stamp their real interface so the
             // CM lift/lower resolves their fields instead of a same-named type
             // elsewhere (`wasi:http`'s `Response`) or an i32 handle.
-            for (_, ty) in &export.params {
-                annotate_lib_type_sources(
-                    kiln_registry,
-                    resolutions,
-                    ty,
-                    kiln::import_check::KILN_TYPES_INTERFACE,
-                    &kiln_shared,
-                );
-            }
-            if let Some(ty) = export.return_type.as_ref() {
+            let types = export.params.iter_mut().map(|(_, ty)| ty);
+            for ty in types.chain(export.return_type.as_mut()) {
                 annotate_lib_type_sources(
                     kiln_registry,
                     resolutions,
@@ -1530,9 +1521,17 @@ fn compile_after_load<H: CompilerHost>(
 
     // Capture the entry module so its own named types can be registered into
     // the CM interface registry (cloned before `sem` is destructured below).
-    let lib_entry_module = synth_world_fq
-        .as_ref()
-        .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
+    let lib_entry_module =
+        synth_world_fq
+            .as_ref()
+            .zip(cm_registry)
+            .and_then(|(fq, (registry, resolutions))| {
+                let mut module = sem.modules.get(&sem.entry_module_source).cloned()?;
+                for item in &mut module.items {
+                    tag_lib_local_decl_fields(registry, resolutions, item, fq, &lib_type_names);
+                }
+                Some(module)
+            });
 
     let semantics::Semantics {
         entry_module_source,
