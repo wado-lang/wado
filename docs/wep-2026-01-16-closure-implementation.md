@@ -122,7 +122,7 @@ Wado has no borrow checker, so this rule is conceptual rather than safety-driven
 Closures auto-capture outer bindings. The reference kind is inferred from body usage:
 
 - Body only reads ⇒ `&T` capture, closure type is `fn`.
-- Body writes ⇒ `&mut T` capture, closure type is `fn mut`.
+- Body writes ⇒ `&mut T` capture, closure type is `fn mut`. A write assigns the binding or a place in it, calls a `&mut self` method on it, or takes `&mut` of it: `|v| seen.push(v)` is `fn mut`.
 
 ```wado
 let mut count = 0;
@@ -281,9 +281,7 @@ Escape analysis drives the choice. From the user's perspective both paths satisf
 
 ## Component Model Boundary
 
-Closures cannot cross the Component Model boundary (CM has no closure type). Compile error when attempting to export or import a function with a closure-typed parameter or return type, or with a closure-typed component carried through container types in the signature.
-
-Future: resource adapter — wrap closures as CM resources with a `call` method backed by a runtime handle table.
+The Component Model has no closure type. A closure crosses only as a `#[cm]` import's parameter: its `u32` key crosses, and the host calls it back through a synthesized export ([Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks)). Such a callback takes scalars and handles and returns nothing. A closure type anywhere else in an imported or exported signature is a compile error, a return type or a container included.
 
 ## Comparison with Rust
 
@@ -322,15 +320,15 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
    - Mitigation: `Iterator<Item = ...>` returns avoid the need to name them.
 4. `mut` binding rule is "ceremonial" without a borrow checker.
    - Mitigation: kept for conceptual consistency with `&mut self` calling convention.
-5. Closures cannot cross Component Model boundary (MVP).
-   - Mitigation: documented; resource adapter as future work.
+5. A closure crosses the Component Model boundary only as an import's callback parameter.
+   - Mitigation: that is the shape every DOM event API takes.
 
 ## Known gaps
 
 - A closure with no expected type (`let f = |x| x + 1;`) still needs annotations: nothing infers them from the body, or from a later call.
 - Two closures in one call that could only answer each other (`f(|a| g(a), |b| h(b))`) resolve in source order, and nothing revisits the first. A fixed point would need the body walk to be replayable, which it is not.
 - User-defined callable types (some syntax for implementing the closure trait on user structs): low priority.
-- Resource adapter for closures at the Component Model boundary.
+- A closure in an export's signature, in an import's result, or inside a container at the boundary.
 - `with ..` effect-polymorphism shorthand if `<effect E>` verbosity proves painful.
 - Inlining heuristics for closure parameters with small bodies.
 - Explicit `dyn`-like syntax for forced type erasure (codesize control), should a real use case emerge.

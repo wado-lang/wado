@@ -3033,14 +3033,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The outer bindings `closure` assigns to, its nested closures included. A
-    /// write names its target's root ident (`point.x`, `arr[i]` name the root).
-    pub(super) fn collect_mutated_vars(closure: &ast::ClosureExpr, result: &mut IndexSet<String>) {
-        MutatedVarsCollector {
-            result,
+    /// The outer bindings `closure` may write, its nested closures included. A
+    /// place names its root ident (`point.x`, `arr[i]` name the root).
+    pub(super) fn collect_capture_writes(closure: &ast::ClosureExpr) -> CaptureWrites {
+        let mut collector = CaptureWritesCollector {
+            writes: CaptureWrites::default(),
             shadowed: Vec::new(),
-        }
-        .closure_body(closure);
+        };
+        collector.closure_body(closure);
+        collector.writes
     }
 
     /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
@@ -3196,10 +3197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // General expression cast (not a literal)
             let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
-            // Check if source type is a numeric type we can convert from
-            if self.tysys.type_table.borrow().is_integer(source_type)
-                || self.tysys.type_table.borrow().is_float(source_type)
-            {
+            if self.tysys.type_table.borrow().is_numeric(source_type) {
                 // Reify emits the two-step form,
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 return target_type;
@@ -3211,6 +3209,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reaches a target wider than `i32` (`65 as i128`). It never lands on
         // `i32`, so the defaulted range check must not judge it.
         let source_type = match int_literal_cast_operand(&cast.expr) {
+            // A float has no bit pattern to write, so the literal converts by
+            // value, as `let x: f32 = N;` does.
+            Some(_) if self.tysys.type_table.borrow().is_float(target_type) => {
+                self.try_coerce_numeric_literal(&cast.expr, target_type)
+                    .expect("a float is a numeric literal target");
+                target_type
+            }
             Some((lit, repr, _)) => {
                 self.check_int_literal_parses(repr, lit.span);
                 self.record_expression_type(cast.expr.id(), TypeTable::I32);
@@ -4706,7 +4711,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                elem_types.push(resolved);
+                // A diverging element takes the type the tuple is expected to hold.
+                let diverges = self.tysys.type_table.borrow().is_never(resolved);
+                elem_types.push(elem_expected.filter(|_| diverges).unwrap_or(resolved));
             }
         }
 
@@ -5337,32 +5344,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Records the outer bindings a closure body assigns to, walking it under its
+/// The outer bindings a closure body may write, found before its walk so the
+/// frame owning each can box it for every closure between.
+#[derive(Default)]
+pub(super) struct CaptureWrites {
+    pub(super) assigned: IndexSet<String>,
+    /// Borrowed `&mut` or a method's receiver: a write only where the walk
+    /// finds a `&mut` borrow of this storage.
+    pub(super) borrowed: IndexSet<String>,
+}
+
+/// Records the outer bindings a closure body may write, walking it under its
 /// own binders. Unhandled syntax falls through to `AstVisitor`'s `walk_*`.
-struct MutatedVarsCollector<'a> {
-    result: &'a mut IndexSet<String>,
+struct CaptureWritesCollector {
+    writes: CaptureWrites,
     /// Names bound inside the closure and in scope at this point of the walk. A
     /// write to one names that binding, not the outer one it shadows.
     shadowed: Vec<String>,
 }
 
-impl MutatedVarsCollector<'_> {
-    /// Walk an l-value down to its root identifier so `point.x = ...`
-    /// and `arr[i] = ...` count as mutations of `point` / `arr`.
-    fn root_ident_of_lvalue(expr: &ast::Expr) -> Option<&str> {
-        match expr {
-            ast::Expr::Ident(id) => Some(&id.name),
-            ast::Expr::FieldAccess(fa) => Self::root_ident_of_lvalue(&fa.expr),
-            ast::Expr::Index(idx) => Self::root_ident_of_lvalue(&idx.expr),
-            _ => None,
-        }
+impl CaptureWritesCollector {
+    /// The outer binding `place` roots at, unless the closure binds that name.
+    fn outer_root<'e>(&self, place: &'e ast::Expr) -> Option<&'e str> {
+        place
+            .place_root_ident()
+            .map(|id| id.name.as_str())
+            .filter(|name| !self.shadowed.iter().any(|s| s == name))
     }
 
     fn record_target(&mut self, target: &ast::Expr) {
-        if let Some(name) = Self::root_ident_of_lvalue(target)
-            && !self.shadowed.iter().any(|s| s == name)
-        {
-            self.result.insert(name.to_string());
+        if let Some(name) = self.outer_root(target) {
+            self.writes.assigned.insert(name.to_string());
+        }
+    }
+
+    fn record_borrow(&mut self, place: &ast::Expr) {
+        if let Some(name) = self.outer_root(place) {
+            self.writes.borrowed.insert(name.to_string());
         }
     }
 
@@ -5395,7 +5413,7 @@ impl MutatedVarsCollector<'_> {
     }
 }
 
-impl AstVisitor for MutatedVarsCollector<'_> {
+impl AstVisitor for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {
@@ -5406,6 +5424,14 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             }
             ast::Expr::CompoundAssign(ca) => {
                 self.record_target(&ca.target);
+                ast::walk_expr(self, expr);
+            }
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::MutRef => {
+                self.record_borrow(&u.expr);
+                ast::walk_expr(self, expr);
+            }
+            ast::Expr::MethodCall(call) => {
+                self.record_borrow(&call.receiver);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Closure(c) => self.closure_body(c),

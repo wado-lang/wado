@@ -4,8 +4,23 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { axes_of, axis_index, fold, regrouped_extents, resolve_index } from "./fold.wado";
+use {
+    AttrError,
+    Dim,
+    Graph,
+    KERNEL_ELEMENT,
+    Known,
+    Node,
+    Rank,
+    ValueInfo,
+    dims_of,
+    element_of,
+    is_binary_elementwise,
+} from "./graph.wado";
+use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
+use { Window, ints, window_over } from "./window.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 does not fall back to a runtime check.
@@ -42,6 +57,13 @@ pub struct DeclaredConflict {
     pub produced: Extent,
 }
 
+/// A graph output declared as an element other than the one its node computes.
+pub struct DeclaredElementConflict {
+    pub tensor: String,
+    pub declared: String,
+    pub produced: String,
+}
+
 /// An operator was given fewer operands than it reads.
 pub struct OperandCountConflict {
     pub node: String,
@@ -68,16 +90,33 @@ pub struct AttributeConflict {
     pub reason: String,
 }
 
-/// Every operator Loam carries produces one value, so a node naming any other
-/// number of outputs has nowhere to put them.
+/// Every operator Loam carries but `Split` produces one value, so a node naming
+/// any other number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
     pub node: String,
     pub op: String,
     pub given: i32,
 }
 
+/// A node this Loam cannot act on, and why: stage 0's shape algebra, or the
+/// kernels emit writes.
+pub struct Refusal {
+    pub node: String,
+    pub op: String,
+    pub reason: String,
+}
+
+impl Refusal {
+    /// `node` refused for `reason`, named as every diagnostic names a node.
+    pub fn of(node: &Node, reason: String) -> Refusal {
+        builtin::cold_path();
+        return Refusal { node: node_name(node), op: node.op, reason };
+    }
+}
+
 pub variant InferError {
     Unnamed(UnnamedTensor),
+    Refused(Refusal),
     AxisCount(AxisCountConflict),
     UnknownOperator(String),
     UnrankedTensor(String),
@@ -89,6 +128,7 @@ pub variant InferError {
     OperandRank(OperandRankConflict),
     DeclaredRank(DeclaredRankConflict),
     Declared(DeclaredConflict),
+    DeclaredElement(DeclaredElementConflict),
     Node(NodeConflict),
 }
 
@@ -103,6 +143,12 @@ impl Display for AxisCountConflict {
         f.write_str(
             `${self.tensor}: the schema names ${self.named} axes and the graph gives ${self.dims} dimensions`,
         );
+    }
+}
+
+impl Display for Refusal {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: ${self.reason}`);
     }
 }
 
@@ -156,10 +202,17 @@ impl Display for DeclaredConflict {
     }
 }
 
+impl Display for DeclaredElementConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.tensor}: declared ${self.declared} and computed in ${self.produced}`);
+    }
+}
+
 impl Display for InferError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             Unnamed(e) => e.fmt(f),
+            Refused(e) => e.fmt(f),
             AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
@@ -171,23 +224,73 @@ impl Display for InferError {
             OperandRank(e) => e.fmt(f),
             DeclaredRank(e) => e.fmt(f),
             Declared(e) => e.fmt(f),
+            DeclaredElement(e) => e.fmt(f),
             Node(e) => e.fmt(f),
         }
     }
 }
 
-/// Every tensor's shape, keyed by name. Producing one is what discharges the
-/// graph's extent conditions, so a successful return is the proof.
-pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, InferError> {
+impl Error for UnnamedTensor {
+}
+
+impl Error for AxisCountConflict {
+}
+
+impl Error for Refusal {
+}
+
+impl Error for NodeConflict {
+}
+
+impl Error for OperandCountConflict {
+}
+
+impl Error for OutputCountConflict {
+}
+
+impl Error for OperandRankConflict {
+}
+
+impl Error for AttributeConflict {
+}
+
+impl Error for DeclaredRankConflict {
+}
+
+impl Error for DeclaredConflict {
+}
+
+impl Error for DeclaredElementConflict {
+}
+
+impl Error for InferError {
+}
+
+/// A checked graph: every shape a kernel reads and the primitive it holds,
+/// keyed by tensor name, and the elements of every tensor the build folded.
+pub struct Checked {
+    pub shapes: TreeMap<String, Shape>,
+    pub primitives: TreeMap<String, String>,
+    pub known: TreeMap<String, Known>,
+}
+
+/// Check a graph. Producing a shape for every tensor a kernel reads is what
+/// discharges the graph's extent conditions, so a successful return is the proof.
+pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     let mut shapes = TreeMap::<String, Shape>::new();
-    for let vi of &graph.inputs {
-        shapes[vi.name] = shape_of(vi, schema)?;
-    }
-    for let vi of &graph.initializers {
-        shapes[vi.name] = shape_of(vi, schema)?;
+    let mut primitives = TreeMap::<String, String>::new();
+    let mut known = graph.constants;
+    for let declared of [&graph.inputs, &graph.initializers] {
+        for let vi of *declared {
+            shapes[vi.name] = shape_of(&vi, schema)?;
+            // An element no kernel reaches is left out, for emit to name.
+            if let Some(element) = element_of(&vi.dtype) {
+                primitives[vi.name] = element.computed;
+            }
+        }
     }
     for let node of &graph.nodes {
-        if node.outputs.len() != 1 {
+        if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" {
             builtin::cold_path();
             return Result::Err(InferError::OutputCount(OutputCountConflict {
                 node: node_name(node),
@@ -195,21 +298,157 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
                 given: node.outputs.len(),
             }));
         }
-        shapes[node.outputs[0]] = infer_node(node, &shapes)?;
+        operands_given(node, &known, &shapes)?;
+        match fold(node, &known, &shapes) {
+            Ok(Some(k)) => {
+                known[node.outputs[0]] = k;
+                continue;
+            },
+            Ok(None) => {
+            },
+            Err(reason) => {
+                return Result::Err(refusal(node, reason));
+            },
+        }
+        for let [index, input] of node.inputs.into_iter().enumerate() {
+            if !read_at_build_time(node, index) {
+                materialize(&input, &known, &mut shapes, &mut primitives, schema)?;
+            }
+        }
+        let produced = if node.op == "Split" {
+            split(node, &shapes, &known, schema)?;
+        } else {
+            [infer_node(node, &shapes, &known, schema, graph.opset)?] as List<Shape>;
+        };
+        let primitive = produced_primitive(node, &primitives)?;
+        for let [i, shape] of produced.into_iter().enumerate() {
+            shapes[node.outputs[i]] = shape;
+            if let Some(p) = primitive {
+                primitives[node.outputs[i]] = p;
+            }
+        }
     }
     for let vi of &graph.outputs {
+        materialize(&vi.name, &known, &mut shapes, &mut primitives, schema)?;
         let Some(produced) = shapes.get(vi.name) else {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
         shapes[vi.name] = merge_declared(vi, &produced)?;
+        if let Some(element) = element_of(&vi.dtype) && let Some(computed) = primitives.get(vi.name) && element.computed != computed {
+            builtin::cold_path();
+            return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
+                tensor: vi.name,
+                declared: vi.dtype,
+                produced: computed,
+            }));
+        }
     }
-    return Result::Ok(shapes);
+    return Result::Ok(Checked { shapes, primitives, known });
 }
 
-/// Merge the graph's own output declaration into what the nodes produced, as
-/// ONNX's `mergeInDimensionInfo` does: only two static extents can conflict,
-/// and a declared static extent settles an axis the nodes left symbolic.
+/// Whether operand `index` is one the operator reads when the build runs, as
+/// `Reshape` reads its target, rather than a tensor its kernel computes on.
+fn read_at_build_time(node: &Node, index: i32) -> bool {
+    return index == 1
+        && (node.op == "Reshape"
+            || node.op == "Unsqueeze"
+            || node.op == "Squeeze"
+            || node.op == "Split"
+            || is_reduction(&node.op));
+}
+
+/// The operators whose kernel moves elements without computing on them, so
+/// they carry any primitive through.
+fn is_layout(op: &String) -> bool {
+    return *op == "Reshape"
+        || *op == "Flatten"
+        || *op == "Unsqueeze"
+        || *op == "Squeeze"
+        || *op == "Identity"
+        || *op == "Transpose"
+        || *op == "Split";
+}
+
+/// The primitive a node's kernel produces: its operand's for a layout kernel,
+/// `Cast`'s target, and f32 for every other; `None` for an element emit refuses.
+fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
+    let op = node.op;
+    if op == "Cast" {
+        return match int_attr(node, "to", 0)? {
+            1 => Result::Ok(Option::Some(KERNEL_ELEMENT)),
+            7 => Result::Ok(Option::Some("i64")),
+            9 => Result::Ok(Option::Some("bool")),
+            to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
+        };
+    }
+    if op == "Gather" {
+        let indices = node.inputs[1];
+        if let Some(p) = primitives.get(indices) && p != "i64" {
+            return Result::Err(refusal(node, `operand ${indices} is ${p}, and Gather indexes with i64`));
+        }
+        return Result::Ok(primitives.get(node.inputs[0]));
+    }
+    if is_layout(&op) {
+        return Result::Ok(primitives.get(node.inputs[0]));
+    }
+    if op == "Where" {
+        let [cond, x, y] = [node.inputs[0], node.inputs[1], node.inputs[2]];
+        if let Some(p) = primitives.get(cond) && p != "bool" {
+            return Result::Err(refusal(node, `operand ${cond} is ${p}, and Where selects with bool`));
+        }
+        let px = primitives.get(x);
+        let py = primitives.get(y);
+        if let Some(a) = px && let Some(b) = py && a != b {
+            return Result::Err(refusal(node, `operand ${x} is ${a} and ${y} is ${b}, and Where returns one of them`));
+        }
+        return Result::Ok(px);
+    }
+    for let [index, input] of node.inputs.into_iter().enumerate() {
+        if read_at_build_time(node, index) {
+            continue;
+        }
+        if let Some(p) = primitives.get(input) && p != KERNEL_ELEMENT {
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in ${KERNEL_ELEMENT}`));
+        }
+    }
+    return Result::Ok(Option::Some(KERNEL_ELEMENT));
+}
+
+/// The primitive a folded tensor is held in once a kernel reads it.
+fn known_primitive(k: &Known) -> String {
+    return match k.elements {
+        Ints(_) => "i64",
+        Floats(_) => KERNEL_ELEMENT,
+        Bools(_) => "bool",
+    };
+}
+
+/// Give a folded tensor a kernel reads the axes the layout names.
+fn materialize(
+    tensor: &String,
+    known: &TreeMap<String, Known>,
+    shapes: &mut TreeMap<String, Shape>,
+    primitives: &mut TreeMap<String, String>,
+    schema: &Schema,
+) -> Result<(), InferError> {
+    if shapes.contains_key(*tensor) {
+        return Result::Ok(());
+    }
+    let Some(k) = known.get(*tensor) else {
+        return Result::Ok(());
+    };
+    primitives[*tensor] = known_primitive(&k);
+    let mut dims: List<Dim> = [];
+    for let e of k.extents {
+        dims.push(Dim::Static(e));
+    }
+    shapes[*tensor] = shape_of(&ValueInfo { name: *tensor, dtype: "", rank: Rank::Dims(dims) }, schema)?;
+    return Result::Ok(());
+}
+
+/// The graph's output declaration merged into what the nodes produced, as ONNX's
+/// `mergeInDimensionInfo` does: a declared static extent settles a symbolic one.
 fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(*produced);
@@ -268,6 +507,10 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
         builtin::cold_path();
         return Result::Err(InferError::UnrankedTensor(vi.name));
     };
+    // A scalar has no axis for a pattern to name.
+    if dims.is_empty() {
+        return Result::Ok(Shape { axes: [] });
+    }
     let Some(names) = schema.axes_for(&vi.name) else {
         builtin::cold_path();
         return Result::Err(InferError::Unnamed(UnnamedTensor { tensor: vi.name }));
@@ -282,24 +525,13 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     }
     let mut axes: List<Axis> = [];
     for let mut i = 0; i < dims.len(); i += 1 {
-        axes.push(Axis { name: names[i], extent: extent_of(&dims[i], &names[i]) });
+        axes.push(Axis::named(&names[i], extent_of(&dims[i], &names[i])));
     }
     return Result::Ok(Shape { axes });
 }
 
-/// The dimensions a rank states, a scalar's being none. `None` is a tensor
-/// whose rank the graph leaves open, which states nothing to work from.
-fn dims_of(rank: &Rank) -> Option<List<Dim>> {
-    return match rank {
-        Dims(d) => Option::Some(*d),
-        Scalar => Option::Some([] as List<Dim>),
-        Unranked => null,
-    };
-}
-
-/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one.
-/// A `?` carries no symbol of its own, so the axis's name stands for it: two
-/// occurrences of one axis are the same length by the schema's account.
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one. A
+/// `?` has no symbol, so the axis's name stands for it, as one length.
 fn extent_of(dim: &Dim, axis: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
@@ -308,8 +540,56 @@ fn extent_of(dim: &Dim, axis: &String) -> Extent {
     };
 }
 
-fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, InferError> {
+fn infer_node(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+    opset: Option<i64>,
+) -> Result<Shape, InferError> {
     let op = node.op;
+    if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
+        let operand = operand_at(node, shapes, 0);
+        return match regrouped_extents(node, known, &static_extents_of(node, &operand)?) {
+            Ok(targets) => regrouped(node, &operand, &targets, schema),
+            Err(reason) => Result::Err(refusal(node, reason)),
+        };
+    }
+    if op == "Flatten" {
+        return flatten(node, &operand_at(node, shapes, 0), schema);
+    }
+    if op == "Gather" {
+        let data = operand_at(node, shapes, 0);
+        let indices = operand_at(node, shapes, 1);
+        let axis = gather_axis(node, data.rank())?;
+        let mut axes = data.axes[0..<axis].to_list();
+        axes.extend(&indices.axes);
+        axes.extend(&data.axes[axis + 1..<data.rank()].to_list());
+        return Result::Ok(Shape { axes });
+    }
+    if op == "MaxPool" {
+        let x = operand_at(node, shapes, 0);
+        let window = window_of(node, &x, shapes)?;
+        return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
+    }
+    if op == "Conv" {
+        let x = operand_at(node, shapes, 0);
+        let w = operand_at(node, shapes, 1);
+        let group = int_attr(node, "group", 1)?;
+        if group != 1 {
+            return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
+        }
+        let window = window_of(node, &x, shapes)?;
+        agree_at(node, &x.axes[1], &w.axes[1])?;
+        if has_bias(node) {
+            let b = operand_at(node, shapes, 2);
+            if b.rank() != 1 {
+                return Result::Err(operand_rank(node, 2, b.rank(), 1));
+            }
+            agree_at(node, &w.axes[0], &b.axes[0])?;
+        }
+        return windowed(node, [x.axes[0], w.axes[0]], &window, schema);
+    }
     if op == "MatMul" {
         let [a, b] = binary_operands(node, shapes)?;
         if a.rank() == 0 || b.rank() == 0 {
@@ -322,14 +602,7 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         let [a, b] = binary_operands(node, shapes)?;
         return at_node(node, a.elementwise(&b, op));
     }
-    if op == "Constant" {
-        constant_value(node)?;
-        // A one-element constant has no axis to name, so it broadcasts into
-        // whatever reads it and needs no layout rule of its own.
-        return Result::Ok(Shape { axes: [] });
-    }
     if op == "Gemm" {
-        arity(node, 2)?;
         let [_, _, trans_a, trans_b] = gemm_options(node)?;
         let a = gemm_matrix(node, shapes, 0, trans_a)?;
         let b = gemm_matrix(node, shapes, 1, trans_b)?;
@@ -339,59 +612,248 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         }
         // ONNX broadcasts `C` into the product, so a bias of higher rank is
         // refused rather than widening a `Gemm` past the two axes it has.
-        let c = operand(node, shapes, 2)?;
+        let c = operand_at(node, shapes, 2);
         if c.rank() > product.rank() {
             return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
         return at_node(node, product.elementwise(&c, op));
     }
     if op == "Transpose" {
-        arity(node, 1)?;
-        let shape = operand(node, shapes, 0)?;
+        let shape = operand_at(node, shapes, 0);
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
     }
     if is_unary_elementwise(&op) {
-        arity(node, 1)?;
-        return operand(node, shapes, 0);
+        return Result::Ok(operand_at(node, shapes, 0));
+    }
+    if op == "Where" {
+        let branches = at_node(node, operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op))?;
+        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op));
+    }
+    if op == "Softmax" {
+        let x = operand_at(node, shapes, 0);
+        softmax_axis(node, x.rank(), opset)?;
+        return Result::Ok(x);
+    }
+    if is_reduction(&op) {
+        let x = operand_at(node, shapes, 0);
+        let reduced = reduced_axes(node, known, x.rank())?;
+        let keep = int_attr(node, "keepdims", 1)? != 0;
+        let mut axes: List<Axis> = [];
+        for let [i, axis] of x.axes.into_iter().enumerate() {
+            if !reduced.contains(&i) {
+                axes.push(axis);
+            } else if keep {
+                axes.push(Axis { ..axis, extent: Extent::Static(1) });
+            }
+        }
+        return Result::Ok(Shape { axes });
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
 }
 
-/// A `Constant`'s single element. Loam reads the one-element case, which is
-/// how an exporter writes a scalar an operator combines with a whole tensor;
-/// a constant with more elements has axes nothing names, and stops the build.
-pub fn constant_value(node: &Node) -> Result<f32, InferError> {
-    let Some(attr) = node.attr("value") else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, "value", "is absent and the operator reads it"));
-    };
-    let Some(tensor) = &attr.tensor else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, "value", "is not a tensor this reader carries"));
-    };
-    if tensor.data.len() != 1 {
-        builtin::cold_path();
-        return Result::Err(attribute_error(
-            node,
-            "value",
-            `holds ${tensor.data.len()} elements and only a single one broadcasts`,
-        ));
+/// `Split`'s outputs: the operand with the split axis cut to each part. A part
+/// narrower than the axis is a new axis, for its output's layout to name.
+fn split(
+    node: &Node,
+    shapes: &TreeMap<String, Shape>,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+) -> Result<List<Shape>, InferError> {
+    let x = operand_at(node, shapes, 0);
+    let parts = split_parts(node, known, &x)?;
+    let axis = split_axis(node, x.rank())?;
+    let whole = x.axes[axis].static_extent();
+    let mut produced: List<Shape> = [];
+    for let [i, part] of parts.into_iter().enumerate() {
+        let mut axes = x.axes;
+        if part != whole {
+            axes[axis] = output_layout_axis(
+                node,
+                &node.outputs[i],
+                schema,
+                axis,
+                x.rank(),
+                part,
+                "is a part of a split axis",
+            )?;
+        }
+        produced.push(Shape { axes });
     }
-    return Result::Ok(tensor.data[0]);
+    return Result::Ok(produced);
 }
 
-/// Whether a `Gemm` was given its `C` operand. ONNX writes an absent optional
-/// operand as an empty name where a later one follows it, and omits it
-/// otherwise.
+pub fn split_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
+/// The extent of each part `Split` cuts its operand's axis into: the sizes it
+/// reads, or equal parts with the last taking what remains.
+pub fn split_parts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<i32>, InferError> {
+    let axis = split_axis(node, x.rank())?;
+    let Extent::Static(whole) = x.axes[axis].extent else {
+        return Result::Err(refusal(node, `axis ${axis} is ${x.axes[axis].extent}, and Split reads its extent`));
+    };
+    let count = node.outputs.len();
+    let mut parts: List<i32> = [];
+    match axes_of(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
+        Some(sizes) => {
+            if sizes.len() != count {
+                return Result::Err(refusal(node, `${sizes.len()} sizes are given for ${count} outputs`));
+            }
+            for let size of sizes {
+                parts.push(size as i32);
+            }
+        },
+        None => {
+            let chunk = (whole + count - 1) / count;
+            for let _ of 0..<count - 1 {
+                parts.push(chunk);
+            }
+            parts.push(whole - chunk * (count - 1));
+        },
+    }
+    let mut sum = 0;
+    for let part of parts {
+        if part < 0 {
+            return Result::Err(refusal(node, `a part is ${part}`));
+        }
+        sum += part;
+    }
+    if sum != whole {
+        return Result::Err(refusal(node, `the parts sum to ${sum}, and axis ${axis} is ${whole}`));
+    }
+    return Result::Ok(parts);
+}
+
+/// `Flatten` regroups the axes ahead of `axis` into one and the rest into
+/// another, either of which may be empty and so extent 1.
+fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
+    let extents = static_extents_of(node, operand)?;
+    let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
+    let leading = element_count(&extents[0..<axis].to_list());
+    let trailing = element_count(&extents[axis..<extents.len()].to_list());
+    return regrouped(node, operand, &[leading, trailing], schema);
+}
+
+/// Every extent of an operand the operator reads as static.
+fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferError> {
+    return operand.static_extents(&node.op).map_err(|reason| refusal(node, reason));
+}
+
+/// The operand's axes regrouped onto `targets`. An axis no regrouping
+/// determines is the output layout's to name.
+fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema) -> Result<Shape, InferError> {
+    let mut axes: List<Axis> = [];
+    for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
+        axes.push(match found {
+            Some(axis) => axis,
+            None => layout_axis(node, schema, i, targets, "regroups none of the operand's axes")?,
+        });
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// A window's output: the two leading axes it carries through, and one axis
+/// per spatial position, which the output layout names.
+fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -> Result<Shape, InferError> {
+    let [batch, channels] = lead;
+    let mut extents = [
+        batch.static_extent(),
+        channels.static_extent(),
+    ] as List<i32>;
+    extents.extend(&window.output);
+    let mut axes = [batch, channels] as List<Axis>;
+    for let i of 2..<extents.len() {
+        axes.push(layout_axis(node, schema, i, &extents, "is a window's output")?);
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// Axis `index` of the node's first output, which the operator left
+/// undetermined, under the name the output's layout gives it. `why` says what made it new.
+fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, why: String) -> Result<Axis, InferError> {
+    return output_layout_axis(node, &node.outputs[0], schema, index, extents.len(), extents[index], why);
+}
+
+/// `layout_axis` for any of the node's outputs, of rank `rank`.
+fn output_layout_axis(
+    node: &Node,
+    output: &String,
+    schema: &Schema,
+    index: i32,
+    rank: i32,
+    extent: i32,
+    why: String,
+) -> Result<Axis, InferError> {
+    let Some(names) = schema.axes_for(output) else {
+        return Result::Err(refusal(node, `axis ${index} ${why}, so a layout pattern must name ${output}'s`));
+    };
+    if names.len() != rank {
+        builtin::cold_path();
+        return Result::Err(InferError::AxisCount(AxisCountConflict {
+            tensor: *output,
+            named: names.len(),
+            dims: rank,
+        }));
+    }
+    return Result::Ok(Axis::named(&names[index], Extent::Static(extent)));
+}
+
+/// The window a `Conv` or `MaxPool` slides over its first operand. `emit`
+/// reads it again to write the kernel's geometry.
+pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Result<Window, InferError> {
+    if x.rank() < 3 {
+        return Result::Err(refusal(
+            node,
+            `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
+        ));
+    }
+    let spatial = spatial_extents(&static_extents_of(node, x)?);
+    let kernel = if node.op == "Conv" {
+        let w = operand_at(node, shapes, 1);
+        if w.rank() != x.rank() {
+            return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
+        }
+        spatial_extents(&static_extents_of(node, &w)?);
+    } else {
+        if node.attr("kernel_shape") matches { None } {
+            return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
+        }
+        attr_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
+    };
+    let ceil = int_attr(node, "ceil_mode", 0)? != 0;
+    return attr_read(node, window_over(node, &spatial, kernel, ceil));
+}
+
+/// An attribute read, its failure said at `node`.
+fn attr_read<T>(node: &Node, read: Result<T, AttrError>) -> Result<T, InferError> {
+    return match read {
+        Ok(v) => Result::Ok(v),
+        Err(e) => Result::Err(attribute_error(node, e.attr, e.reason)),
+    };
+}
+
+fn agree_at(node: &Node, left: &Axis, right: &Axis) -> Result<(), InferError> {
+    return match Shape::agree(left, right, &node.op) {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(InferError::Node(NodeConflict { node: node_name(node), error: e })),
+    };
+}
+
+fn refusal(node: &Node, reason: String) -> InferError {
+    return InferError::Refused(Refusal::of(node, reason));
+}
+
+/// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
+/// writes an absent optional operand as an empty name, or omits it.
 pub fn has_bias(node: &Node) -> bool {
     return node.inputs.len() >= 3 && node.inputs[2] != "";
 }
 
 /// `Gemm`'s `alpha`, `beta`, `transA` and `transB`, each defaulted as ONNX
-/// defaults it. `emit` reads them again to pick its kernels, so this is where
-/// they are understood rather than in either stage alone.
+/// defaults it. `emit` reads them again to pick its kernels.
 pub fn gemm_options(node: &Node) -> Result<[f32, f32, bool, bool], InferError> {
     return Result::Ok([
         float_attr(node, "alpha", 1.0)?,
@@ -415,7 +877,7 @@ fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
 /// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
 /// `Gemm` over two-dimensional operands only.
 fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
-    let shape = operand(node, shapes, index)?;
+    let shape = operand_at(node, shapes, index);
     if shape.rank() != 2 {
         return Result::Err(operand_rank(node, index, shape.rank(), 2));
     }
@@ -425,42 +887,72 @@ fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transpo
     return Result::Ok(shape);
 }
 
-fn single_attr(node: &Node, name: String) -> Result<Option<String>, InferError> {
-    let Some(attr) = node.attr(name) else {
-        return Result::Ok(null);
-    };
-    if attr.values.len() != 1 {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, "is a list and the operator reads one value"));
-    }
-    return Result::Ok(Option::Some(attr.values[0]));
-}
-
 fn float_attr(node: &Node, name: String, fallback: f32) -> Result<f32, InferError> {
-    let Some(text) = single_attr(node, name)? else {
-        return Result::Ok(fallback);
-    };
-    let Ok(value) = f32::from_str(&text) else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, `holds '${text}', which is not a number`));
-    };
-    return Result::Ok(value);
+    return attr_read(node, node.float_attr(name, fallback));
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError> {
-    let Some(text) = single_attr(node, name)? else {
-        return Result::Ok(fallback);
-    };
-    let Ok(value) = i64::from_str(&text) else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, `holds '${text}', which is not an integer`));
-    };
-    return Result::Ok(value);
+    return attr_read(node, node.int_attr(name, fallback));
 }
 
-/// `Transpose`'s `perm`: the axis order the output takes. ONNX defaults it to
-/// the reversed order, and `emit` reads it again to pick the kernel, so this
-/// is where the attribute is understood rather than in either stage alone.
+/// The operand axis `Gather` indexes along.
+pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
+/// The axis `Softmax` normalizes along. Before opset 13 it normalized every
+/// axis from `axis` on as one, which is a single axis only where `axis` is the last.
+pub fn softmax_axis(node: &Node, rank: i32, opset: Option<i64>) -> Result<i32, InferError> {
+    if let Some(version) = opset && version < 13 {
+        let axis = axis_attr(node, 1, rank, rank - 1)?;
+        if axis != rank - 1 {
+            return Result::Err(refusal(
+                node,
+                `opset ${version} normalizes axes ${axis} to ${rank - 1} as one, and Loam normalizes along one axis`,
+            ));
+        }
+        return Result::Ok(axis);
+    }
+    return axis_attr(node, -1, rank, rank - 1);
+}
+
+pub fn is_reduction(op: &String) -> bool {
+    return *op == "ReduceMean" || *op == "ReduceSum";
+}
+
+/// The axes a reduction folds, resolved against `rank`. Naming none folds every
+/// axis, unless `noop_with_empty_axes` makes it fold none.
+pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> Result<List<i32>, InferError> {
+    let written = axes_of(node, known, 1, "axes").map_err(|reason| refusal(node, reason))?;
+    let listed: List<i64> = written.unwrap_or([]);
+    let mut axes: List<i32> = [];
+    if listed.is_empty() {
+        if int_attr(node, "noop_with_empty_axes", 0)? == 0 {
+            for let i of 0..<rank {
+                axes.push(i);
+            }
+        }
+        return Result::Ok(axes);
+    }
+    for let a of listed {
+        axes.push(axis_index(a, rank).map_err(|reason| refusal(node, reason))?);
+    }
+    return Result::Ok(axes);
+}
+
+/// The `axis` attribute, where a negative one counts from `rank` and the
+/// operator reads at most `last`.
+fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
+    let written = int_attr(node, "axis", fallback)?;
+    let resolved = resolve_index(written, rank as i64);
+    if !(0 <= resolved <= last as i64) {
+        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
+    }
+    return Result::Ok(resolved as i32);
+}
+
+/// `Transpose`'s `perm`: the axis order the output takes, which ONNX defaults
+/// to the reversed order. `emit` reads it again to pick the kernel.
 pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
     let Some(attr) = node.attr("perm") else {
         let mut reversed: List<i32> = [];
@@ -504,31 +996,68 @@ fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
 }
 
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
-    arity(node, 2)?;
     return Result::Ok([
-        operand(node, shapes, 0)?,
-        operand(node, shapes, 1)?,
+        operand_at(node, shapes, 0),
+        operand_at(node, shapes, 1),
     ]);
 }
 
-/// A graph that reached Loam has run once already, so a short operand list is
-/// a hand-edited file rather than an exporter's output. It still reports.
-fn arity(node: &Node, needed: i32) -> Result<(), InferError> {
-    if node.inputs.len() >= needed {
-        return Result::Ok(());
+/// Every operand `node` names is defined, and none it needs is absent, so the
+/// rules after this read an operand by position. A hand-edited file breaks this.
+fn operands_given(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    shapes: &TreeMap<String, Shape>,
+) -> Result<(), InferError> {
+    if let Some(needed) = required_operands(&node.op) {
+        let mut given = 0;
+        while given < node.inputs.len() && node.inputs[given] != "" {
+            given += 1;
+        }
+        if given < needed {
+            builtin::cold_path();
+            return Result::Err(InferError::OperandCount(OperandCountConflict {
+                node: node_name(node),
+                op: node.op,
+                given,
+                needed,
+            }));
+        }
     }
-    builtin::cold_path();
-    return Result::Err(InferError::OperandCount(OperandCountConflict {
-        node: node_name(node),
-        op: node.op,
-        given: node.inputs.len(),
-        needed,
-    }));
+    for let input of node.inputs {
+        if input != "" && !known.contains_key(input) && !shapes.contains_key(input) {
+            builtin::cold_path();
+            return Result::Err(InferError::Undefined(input));
+        }
+    }
+    return Result::Ok(());
+}
+
+/// How many leading operands `op` cannot do without, or `None` for an operator
+/// Loam does not know. One an older opset wrote as an attribute is not counted.
+fn required_operands(op: &String) -> Option<i32> {
+    if is_unary_elementwise(op) || is_reduction(op) {
+        return Option::Some(1);
+    }
+    if is_binary_elementwise(op) {
+        return Option::Some(2);
+    }
+    return match op.as_str_slice() {
+        "Constant" => Option::Some(0),
+        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" => Option::Some(
+            1,
+        ),
+        "Gather" | "MatMul" | "Gemm" | "Conv" => Option::Some(2),
+        "Range" | "Where" => Option::Some(3),
+        _ => null,
+    };
 }
 
 /// The operators whose output shape is their input's.
 fn is_unary_elementwise(op: &String) -> bool {
-    return *op == "Relu"
+    return *op == "Identity"
+        || *op == "Cast"
+        || *op == "Relu"
         || *op == "Sigmoid"
         || *op == "Tanh"
         || *op == "Erf"
@@ -539,18 +1068,10 @@ fn is_unary_elementwise(op: &String) -> bool {
         || *op == "Abs";
 }
 
-/// The operators that broadcast two operands against each other.
-fn is_binary_elementwise(op: &String) -> bool {
-    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
-}
-
-fn operand(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
-    let name = node.inputs[index];
-    let Some(shape) = shapes.get(name) else {
-        builtin::cold_path();
-        return Result::Err(InferError::Undefined(name));
-    };
-    return Result::Ok(shape);
+/// Operand `index`'s shape. `operands_given` proved it defined, and a folded one
+/// is materialized before any rule reads it.
+fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Shape {
+    return shapes.get(node.inputs[index]).unwrap();
 }
 
 fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, InferError> {

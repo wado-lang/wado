@@ -129,7 +129,7 @@ hands the code back as `Io(Exist)`, which a caller matches like any other.
 
 `core:fs` declares `with Preopens` and introduces no effect of its own. An
 `interface FileSystem` that a test could install a handler for is not possible
-today: an operation may not carry a `with` clause (`docs/spec.md`, "Beyond a
+today: an operation may not carry a `with` clause (`docs/spec-effects.md`, "Beyond a
 name, parameters and a return type, an operation declares nothing else"), so its
 default implementation could never perform `Preopens`. When that changes, the
 functions here become the default implementations of such an interface without
@@ -417,7 +417,7 @@ cannot reach is unowned and sits below.
   its own opener for that reason: it searches every grant and names the ones it
   searched, which is what makes `wado run --dir` legible there.
 - No handler can stand in for the filesystem, so a test of a caller still needs
-  a real directory. An operation cannot declare an effect (`docs/spec.md`,
+  a real directory. An operation cannot declare an effect (`docs/spec-effects.md`,
   "Beyond a name, parameters and a return type, an operation declares nothing
   else"), which is what an `interface FileSystem` would rest on.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so

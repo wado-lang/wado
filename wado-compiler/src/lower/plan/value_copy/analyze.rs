@@ -8,7 +8,6 @@ use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
-use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -92,9 +91,7 @@ pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) 
 fn is_copy_value_call(expr: &TirExpr) -> bool {
     matches!(
         &expr.kind,
-        TirExprKind::Call { func, .. }
-            if func.module_source.is_core_builtin()
-                && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
+        TirExprKind::Call { func, .. } if func.is_builtin_named("copy_value")
     )
 }
 
@@ -108,8 +105,7 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
 /// [`translate`](crate::lower::translate) skips the copy at the operands, and
 /// [`is_owned_value`] is what moves it to the result.
 pub fn is_select(func: &FunctionRef) -> bool {
-    func.module_source.is_core_builtin()
-        && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "select")
+    func.is_builtin_named("select")
 }
 
 /// The operand positions [`is_select`] merges. Position 0 is the condition.

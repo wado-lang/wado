@@ -1,0 +1,44 @@
+// A diverging argument where an import takes a callback never reaches the call,
+// so it names no callback signature for the host to call back through.
+
+use { println, Stdout } from "core:cli";
+
+#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+resource Target {
+    #[cm("web:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(i32));
+}
+
+#[cm("web:demo/global")]
+interface Demo {
+    #[cm("web:demo/global#target")]
+    fn target() -> Target;
+}
+
+struct Mock {}
+
+impl Demo for Mock {
+    fn target(&mut self) -> Target {
+        resume 0.0 as Target;
+    }
+}
+
+impl Target for Mock {
+    fn listen(&mut self, this: &Target, listener: fn mut(i32)) {
+        resume ();
+    }
+}
+
+export fn run() with Stdout {
+    let mut mock = Mock {};
+    with &mut mock do {
+        if builtin::black_box(false) {
+            Demo::target().listen(panic("unset"));
+        }
+    };
+    println("done");
+}
+
+__DATA__
+{"stdout": "done\n"}

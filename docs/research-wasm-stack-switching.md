@@ -188,7 +188,9 @@ Canonical ABI is extended for GC. See [Non-Goals](#5-non-goals).
 
 ### 4.1 Effect Handlers (Primary Use Case)
 
-**Status in spec**: Designed but not implemented (spec.md § Handlers, marked TBD).
+Specification background: [Handlers](./spec-effects.md#handlers). The examples
+below are research material in an early handler syntax, not excerpts of the
+specification.
 
 Effect handlers require the ability to **suspend a computation at an effect operation
 and resume it** from the handler. This maps directly to stack switching:
@@ -196,7 +198,7 @@ and resume it** from the handler. This maps directly to stack switching:
 - `suspend` at the effect operation site (e.g., `Generator::yield(value)`)
 - `resume` from the handler after processing the effect
 
-#### Generator Pattern (from spec.md)
+#### Generator Pattern
 
 ```wado
 interface Generator<T> {
@@ -302,7 +304,9 @@ This enables **pure unit testing** of effectful code without WASI runtime involv
 
 ### 4.2 Structured Concurrency
 
-**Status in spec**: Syntax shown in spec.md § Concurrency Model (`join`), not implemented.
+Specification background: [Concurrency Model](./spec-components.md#concurrency-model).
+The `join` below is research syntax, not the specified `AsyncCall` `.join(&set)`
+form.
 
 ```wado
 fn load_data() -> Data with Http {

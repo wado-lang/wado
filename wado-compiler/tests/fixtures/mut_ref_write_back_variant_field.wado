@@ -121,15 +121,23 @@ fn mutate_payload(p: &mut Payload) {
     }
 }
 
-// A whole capture is the closure environment's own copy of the slot, so it is
-// no write-back point — detached_variant_capture_rejected guards that side.
-// Payload mutation through one still lands, since the capture copied the
-// reference and the payload object is shared.
+// `&mut p` in a closure body captures `p` by `&mut`, so both a payload write and
+// a whole-value write reach the enclosing local.
 #[inline("never")]
 fn payload_through_a_capture() -> Payload {
     let mut p = Payload::Text(`ab`);
-    let f = || {
+    let mut f = || {
         mutate_payload(&mut p);
+    };
+    f();
+    return p
+}
+
+#[inline("never")]
+fn replaces_through_a_capture() -> Payload {
+    let mut p = Payload::Text(`ab`);
+    let mut f = || {
+        replace(&mut p);
     };
     f();
     return p
@@ -220,6 +228,10 @@ test "an indirect callee held in a local is read before the place" {
 
 test "payload mutation through a whole capture lands" {
     assert payload_through_a_capture() matches { Text(t) && t == `zz` };
+}
+
+test "a whole-value write through a capture lands" {
+    assert replaces_through_a_capture() matches { Text(t) && t == `xyz` };
 }
 
 // `&mut *p` re-boxes what `p` points at, whatever `p` is, so a reborrow is as

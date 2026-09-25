@@ -41,10 +41,14 @@ pub fn resolve_import_plan(
 
     let mut export_referenced_interfaces: IndexSet<String> = IndexSet::default();
     for export in &project.component_plan.world_exports {
-        for (_, cm_ty) in &export.cm_params {
+        for cm_ty in export
+            .cm_params
+            .iter()
+            .map(|(_, ty)| ty)
+            .chain(&export.cm_result)
+        {
             collect_export_interface_fqs(cm_ty, &mut export_referenced_interfaces);
         }
-        collect_export_interface_fqs(&export.cm_result, &mut export_referenced_interfaces);
     }
 
     // No blanket "kiln forbids WASI" early-return: the kiln-generator world

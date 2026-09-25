@@ -31,7 +31,7 @@ be one a user could build for their own type, so nothing in the compiler knows
 the name `StrSlice`.
 
 A newtype is not the shape for it, since it cannot hold the UTF-8 boundary
-invariant. `docs/cheatsheet.md` and `docs/spec.md` say so where they introduce
+invariant. `docs/cheatsheet.md` and `docs/spec-types.md` say so where they introduce
 newtypes.
 
 `core:prelude` gains `StrSlice`, a view over a string's bytes whose ends are

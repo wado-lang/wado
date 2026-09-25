@@ -37,6 +37,16 @@ test("the program reads the input it narrows to", async () => {
   assert.equal(greeting.parentNode, document.body);
 });
 
+test("typing a name greets again, through the listener the program added", async () => {
+  install('<input id="name" value="Ada">');
+  const greeting = await runExample("typing");
+  const input = document.getElementById("name");
+  input.value = "Grace";
+  input.dispatchEvent(new Event("input"));
+  assert.equal(greeting.textContent, "Hello, Grace!");
+  assert.equal(document.querySelectorAll("#greeting").length, 1);
+});
+
 test("an element that is no input does not narrow to one", async () => {
   install('<p id="name">Ada</p>');
   const greeting = await runExample("paragraph");

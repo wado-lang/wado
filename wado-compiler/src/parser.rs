@@ -3,23 +3,24 @@
 
 use crate::ast::{
     AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
-    AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
-    BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
-    ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EFFECT_HOLE,
-    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
-    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
-    TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrItem, AttrObject, AttrValue,
+    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
+    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
+    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem,
+    ErrorStmt, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
+    FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralExpr,
+    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
+    NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
+    ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt, SelfKind,
+    StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
+    StructLiteralSpread, StructPatternField, TaggedTemplateExpr, TaskReturnStmt, TemplatePart,
+    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TryOpExpr,
+    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
+    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -1124,12 +1125,21 @@ impl Parser {
         };
 
         // `export` implies `pub` (a CM export is part of the public API).
+        let export_span = self.peek().span;
         let has_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
         } else {
             false
         };
+        if has_export && self.check(&TokenKind::Use) {
+            self.errors.push(ParseError {
+                message: "a re-export is not lowered at the component boundary, so a `use` \
+                    cannot be `export`; write `pub use`"
+                    .to_string(),
+                span: export_span,
+            });
+        }
 
         if has_internal && (has_pub || has_export) {
             return Err(ParseError {
@@ -1546,8 +1556,15 @@ impl Parser {
 
         // Check for wildcard import: `use _ from "..."`
         let mut items_span = None;
+        let modifier = visibility.keyword().trim_end();
         let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
-            self.advance(); // consume `_`
+            let span = self.advance().span;
+            if visibility.reaches_beyond_file() {
+                self.errors.push(ParseError {
+                    message: format!("a wildcard import cannot be re-exported; drop `{modifier}`"),
+                    span,
+                });
+            }
             vec![UseItem::Wildcard]
         }
         // Check for namespace import: `use name from "..."` (ident followed by `from`)
@@ -1556,6 +1573,15 @@ impl Parser {
         {
             let name_span = self.peek().span;
             let name = self.consume_ident()?;
+            if visibility.reaches_beyond_file() {
+                self.errors.push(ParseError {
+                    message: format!(
+                        "a namespace cannot be re-exported: `{name}`; drop `{modifier}`, or \
+                         re-export its members by name with `{modifier} use {{ ... }} from`"
+                    ),
+                    span: name_span,
+                });
+            }
             vec![UseItem::Namespace { name, name_span }]
         } else {
             // Parse items: `{...}`
@@ -1620,12 +1646,13 @@ impl Parser {
 
                 // Parse function list inside Effect::{...}
                 let functions = self.parse_use_item_simple_list()?;
-                self.expect(&TokenKind::RBrace)?;
+                let close = self.expect(&TokenKind::RBrace)?.span;
 
                 items.push(UseItem::InterfaceFunctions {
                     id: self.alloc_ast_id(),
                     interface_name: name,
                     name_span,
+                    span: name_span.merge(&close),
                     functions,
                 });
             } else {
@@ -1699,29 +1726,45 @@ impl Parser {
     /// top-level keys are accepted here and validated downstream (e.g. the
     /// Kiln inline-generator collector rejects non-`generator` siblings).
     fn parse_import_attributes(&mut self) -> ParseResult<ImportAttributes> {
+        let open = self.pos;
+        let entries = self.parse_attr_object()?;
+        Ok(ImportAttributes {
+            entries,
+            span: self.skipped_span(open),
+        })
+    }
+
+    /// Parse `{ key: value, ... }`, each entry keeping the spans of its key and
+    /// its value.
+    fn parse_attr_object(&mut self) -> ParseResult<AttrObject> {
         self.expect(&TokenKind::LBrace)?;
-
-        let mut attrs = ImportAttributes::default();
-
-        if !self.check(&TokenKind::RBrace) {
-            loop {
-                let (key, key_span) = self.consume_ident_with_span()?;
-                self.expect(&TokenKind::Colon)?;
-                let value = self.parse_attr_value()?;
-                attrs.entries.insert(key, AttrEntry { key_span, value });
-
-                if !self.check(&TokenKind::Comma) {
-                    break;
-                }
-                self.advance();
-                if self.check(&TokenKind::RBrace) {
-                    break;
-                }
-            }
-        }
-
+        let entries = self.parse_comma_separated(&TokenKind::RBrace, |p| {
+            let (key, key_span) = p.consume_ident_with_span()?;
+            p.expect(&TokenKind::Colon)?;
+            let AttrItem {
+                span: value_span,
+                value,
+            } = p.parse_attr_item()?;
+            Ok((
+                key,
+                AttrEntry {
+                    key_span,
+                    value_span,
+                    value,
+                },
+            ))
+        })?;
         self.expect(&TokenKind::RBrace)?;
-        Ok(attrs)
+        Ok(entries.into_iter().collect())
+    }
+
+    fn parse_attr_item(&mut self) -> ParseResult<AttrItem> {
+        let before = self.pos;
+        let value = self.parse_attr_value()?;
+        Ok(AttrItem {
+            span: self.skipped_span(before),
+            value,
+        })
     }
 
     /// Parse a single [`AttrValue`]: scalar, array, or nested object.
@@ -1777,19 +1820,8 @@ impl Parser {
                     });
                 }
                 self.advance();
-                let mut items = Vec::new();
-                if !self.check(&TokenKind::RBracket) {
-                    loop {
-                        items.push(self.parse_attr_value()?);
-                        if !self.check(&TokenKind::Comma) {
-                            break;
-                        }
-                        self.advance();
-                        if self.check(&TokenKind::RBracket) {
-                            break;
-                        }
-                    }
-                }
+                let items =
+                    self.parse_comma_separated(&TokenKind::RBracket, Self::parse_attr_item)?;
                 self.expect(&TokenKind::RBracket)?;
                 Ok(AttrValue::Array(items))
             }
@@ -1800,25 +1832,7 @@ impl Parser {
                         span,
                     });
                 }
-                self.advance();
-                let mut obj = AttrObject::default();
-                if !self.check(&TokenKind::RBrace) {
-                    loop {
-                        let (key, key_span) = self.consume_ident_with_span()?;
-                        self.expect(&TokenKind::Colon)?;
-                        let value = self.parse_attr_value()?;
-                        obj.insert(key, AttrEntry { key_span, value });
-                        if !self.check(&TokenKind::Comma) {
-                            break;
-                        }
-                        self.advance();
-                        if self.check(&TokenKind::RBrace) {
-                            break;
-                        }
-                    }
-                }
-                self.expect(&TokenKind::RBrace)?;
-                Ok(AttrValue::Object(obj))
+                Ok(AttrValue::Object(self.parse_attr_object()?))
             }
             other => Err(ParseError {
                 message: format!(
@@ -1829,7 +1843,6 @@ impl Parser {
         }
     }
 
-    /// Consume a string literal and return its raw text (escape sequences not interpreted).
     /// The raw text of the string literal at the cursor, escapes unresolved.
     /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {

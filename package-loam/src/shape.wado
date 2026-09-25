@@ -8,15 +8,61 @@ use { Extent } from "./extent.wado";
 pub struct Axis {
     pub name: String,
     pub extent: Extent,
+    /// The axes a merge put side by side, in order; empty for an axis of its own.
+    pub parts: List<Axis> = [],
+}
+
+impl Axis {
+    /// One axis standing for `parts`, named as the generated module spells it.
+    /// See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
+    pub fn merged(parts: List<Axis>, extent: Extent) -> Axis {
+        assert parts.len() >= 2;
+        let mut names: List<String> = [];
+        for let p of parts {
+            names.push(p.name);
+        }
+        return Axis {
+            name: `Merged<[${names.join(", ")}]>`,
+            extent,
+            parts,
+        };
+    }
+
+    /// The axis a layout names: a plain name, or `(A B)` for a merge of `A` and
+    /// `B`, whose parts' extents the layout does not say.
+    pub fn named(name: &String, extent: Extent) -> Axis {
+        if !(name.starts_with("(") && name.ends_with(")")) {
+            return Axis { name: *name, extent };
+        }
+        let inner = name.as_str_slice().slice(1, name.len() - 1);
+        let mut parts: List<Axis> = [];
+        for let part of inner.split_whitespace() {
+            parts.push(Axis {
+                name: part.to_string(),
+                extent: Extent::Symbol("?"),
+            });
+        }
+        if parts.len() == 1 {
+            return Axis { name: parts[0].name, extent };
+        }
+        return Axis::merged(parts, extent);
+    }
+
+    /// The extent of an axis the caller has already shown static.
+    pub fn static_extent(&self) -> i32 {
+        let Static(e) = self.extent else {
+            unreachable();
+        };
+        return e;
+    }
 }
 
 pub struct Shape {
     pub axes: List<Axis>,
 }
 
-/// Two axes that must be one length are not, at an operation that cannot
-/// proceed without them being one. Carries both, since a diagnostic that names
-/// only the expected one leaves the reader to find the other.
+/// Two axes an operation needs to be one length are not. Both extents are
+/// carried, so the diagnostic names each.
 pub struct ExtentConflict {
     pub op: String,
     pub axis: String,
@@ -32,14 +78,33 @@ impl Display for ExtentConflict {
     }
 }
 
+impl Error for ExtentConflict {
+}
+
 impl Shape {
     pub fn rank(&self) -> i32 {
         return self.axes.len();
     }
 
-    /// The same axes in the order `perm` names, which is what `Transpose`
-    /// does. `perm` is a permutation of this shape's rank, which its reader
-    /// has already established.
+    /// Every extent, for an operator that reads them as static. `Err` names
+    /// the first axis that is not, and `reader`.
+    pub fn static_extents(&self, reader: &String) -> Result<List<i32>, String> {
+        let mut extents: List<i32> = [];
+        for let axis of self.axes {
+            // A regrouping reads a merged axis's parts as well.
+            let mut read = [axis] as List<Axis>;
+            read.extend(&axis.parts);
+            for let a of read {
+                if a.extent matches { Symbol(_) } {
+                    return Result::Err(`axis ${a.name} is ${a.extent}, and ${*reader} reads static extents`);
+                }
+            }
+            extents.push(axis.static_extent());
+        }
+        return Result::Ok(extents);
+    }
+
+    /// The same axes in the order `perm` names, as `Transpose` does.
     pub fn permute(&self, perm: &List<i32>) -> Shape {
         assert perm.len() == self.rank();
         let mut axes: List<Axis> = [];
@@ -47,6 +112,57 @@ impl Shape {
             axes.push(self.axes[p]);
         }
         return Shape { axes };
+    }
+
+    /// `Reshape` onto static `targets`: each output axis is the run of parts it
+    /// spans, merged where several, or `None` where no regrouping determines it.
+    pub fn regroup(&self, targets: &List<i32>) -> List<Option<Axis>> {
+        let parts = self.parts();
+        let mut out: List<Option<Axis>> = [];
+        let mut next = 0;
+        let mut consumed: i64 = 1;
+        let mut produced: i64 = 1;
+        for let target of *targets {
+            let aligned = consumed == produced;
+            produced *= target as i64;
+            if target == 1 {
+                let takes_unit = aligned && next < parts.len() && parts[next].extent.is_one();
+                out.push(if takes_unit { Option::Some(parts[next]) } else { null });
+                if takes_unit {
+                    next += 1;
+                }
+                continue;
+            }
+            let mut run: List<Axis> = [];
+            while next < parts.len() && consumed < produced {
+                consumed *= parts[next].static_extent() as i64;
+                if !parts[next].extent.is_one() {
+                    run.push(parts[next]);
+                }
+                next += 1;
+            }
+            if !aligned || consumed != produced {
+                out.push(null);
+            } else if run.len() == 1 {
+                out.push(Option::Some(run[0]));
+            } else {
+                out.push(Option::Some(Axis::merged(run, Extent::Static(target))));
+            }
+        }
+        return out;
+    }
+
+    /// The axes with each merged one replaced by the parts it was made of.
+    fn parts(&self) -> List<Axis> {
+        let mut parts: List<Axis> = [];
+        for let axis of self.axes {
+            if axis.parts.is_empty() {
+                parts.push(axis);
+            } else {
+                parts.extend(&axis.parts);
+            }
+        }
+        return parts;
     }
 
     /// The axis `back` positions from the end, `0` being the last.
@@ -62,10 +178,8 @@ impl Shape {
         return Result::Ok(Shape { axes });
     }
 
-    /// `MatMul` as ONNX defines it, which is numpy's: the trailing axis of
-    /// `self` contracts with the leading matrix axis of `rhs`, the batch axes
-    /// ahead of them broadcast, and a rank-1 operand is a matrix whose missing
-    /// axis is dropped from the result.
+    /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
+    /// and a rank-1 operand is a matrix whose missing axis the result drops.
     pub fn matmul(&self, rhs: &Shape, op: String) -> Result<Shape, ExtentConflict> {
         assert self.rank() >= 1 && rhs.rank() >= 1;
 
@@ -104,9 +218,9 @@ impl Shape {
                 axes.push(right[ri]);
             } else if ri < 0 {
                 axes.push(left[li]);
-            } else if left[li].extent matches { Static(1) } {
+            } else if left[li].extent.is_one() {
                 axes.push(right[ri]);
-            } else if right[ri].extent matches { Static(1) } {
+            } else if right[ri].extent.is_one() {
                 axes.push(left[li]);
             } else {
                 Shape::agree(&left[li], &right[ri], op)?;
@@ -117,9 +231,8 @@ impl Shape {
     }
 
     /// Discharge the one condition an operation places on a pair of axes. What
-    /// stage 0 cannot prove is an error here, since there is no runtime tier
-    /// below it to re-check at.
-    fn agree(left: &Axis, right: &Axis, op: &String) -> Result<(), ExtentConflict> {
+    /// stage 0 cannot prove is an error, as no runtime tier re-checks it.
+    pub fn agree(left: &Axis, right: &Axis, op: &String) -> Result<(), ExtentConflict> {
         if left.extent.agrees(&right.extent) {
             return Result::Ok(());
         }

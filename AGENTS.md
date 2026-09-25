@@ -85,7 +85,8 @@ over. It stops short in a few places: a value never needs `.clone()`, `enum`,
 modules while tuples follow TypeScript.
 
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
-`docs/spec.md`, or the WEP for one feature at `docs/wep-*.md`.
+`docs/spec-*.md` (one file per area, indexed in `docs/README.md`), or the WEP
+that proposed a feature at `docs/wep-*.md`.
 
 ## Repository Map
 
@@ -99,7 +100,7 @@ modules while tuples follow TypeScript.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module.
 - `wado-bundled-icu/` - ICU binding for Wado (under development; not bundled yet)
-- `docs/` — the language spec (`docs/spec.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`).
+- `docs/` — the language spec (`docs/spec-*.md`), the compiler and formatter guides (`docs/compiler.md`, `docs/optimizer.md`, `docs/formatter.md`), stdlib docs, and the Wado Evolution Proposals (`docs/wep-*.md`).
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.

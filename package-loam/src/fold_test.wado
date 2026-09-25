@@ -1,0 +1,227 @@
+//! Stage 0's evaluation of what a graph computes from what the build knows.
+
+use { TreeMap } from "core:collections";
+use { Extent } from "./extent.wado";
+use { fold } from "./fold.wado";
+use { Attr, Elements, Known, Node } from "./graph.wado";
+use { Axis, Shape } from "./shape.wado";
+
+fn ints(extents: List<i32>, values: List<i64>) -> Known {
+    return Known { extents, elements: Elements::Ints(values) };
+}
+
+fn floats(extents: List<i32>, values: List<f32>) -> Known {
+    return Known { extents, elements: Elements::Floats(values) };
+}
+
+fn attr(name: String, values: List<String>) -> Attr {
+    return Attr { name, values, is_list: values.len() != 1 };
+}
+
+fn node(op: String, inputs: List<String>, attrs: List<Attr>) -> Node {
+    return Node {
+        op,
+        outputs: ["Y"],
+        inputs,
+        attrs,
+    };
+}
+
+fn knowns(entries: List<[String, Known]>) -> TreeMap<String, Known> {
+    let mut map = TreeMap::<String, Known>::new();
+    for let [name, known] of entries {
+        map[name] = known;
+    }
+    return map;
+}
+
+/// A runtime tensor `X` of the given extents, symbolic where negative.
+fn runtime(extents: List<i32>) -> TreeMap<String, Shape> {
+    let mut axes: List<Axis> = [];
+    for let [i, e] of extents.into_iter().enumerate() {
+        let extent = if e < 0 { Extent::Symbol("N") } else { Extent::Static(e) };
+        axes.push(Axis { name: `A${i}`, extent });
+    }
+    let mut shapes = TreeMap::<String, Shape>::new();
+    shapes["X"] = Shape { axes };
+    return shapes;
+}
+
+fn folded(n: Node, k: TreeMap<String, Known>) -> Known {
+    return fold(&n, &k, &runtime([2, 3, 4])).unwrap().unwrap();
+}
+
+test "Shape reads a runtime tensor's static extents" {
+    assert folded(node("Shape", ["X"], []), knowns([])) == ints([3], [2, 3, 4]);
+}
+
+test "Shape takes start and end" {
+    let n = node("Shape", ["X"], [
+        attr("start", ["-2"]),
+        attr("end", ["3"]),
+    ]);
+    assert folded(n, knowns([])) == ints([2], [3, 4]);
+}
+
+test "Shape of a symbolic extent is refused" {
+    let e = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap_err();
+    assert e == "axis A0 is N, and Shape reads static extents";
+}
+
+test "Gather with a scalar index drops the axis" {
+    let k = knowns([
+        ["S", ints([3], [2, 3, 4])],
+        ["I", ints([], [-2])],
+    ]);
+    assert folded(node("Gather", ["S", "I"], [attr("axis", ["0"])]), k) == ints([], [3]);
+}
+
+test "Gather along an inner axis keeps the index shape" {
+    let k = knowns([
+        ["D", ints([2, 3], [1, 2, 3, 4, 5, 6])],
+        ["I", ints([2], [2, 0])],
+    ]);
+    assert folded(node("Gather", ["D", "I"], [attr("axis", ["1"])]), k) == ints([2, 2], [3, 1, 6, 4]);
+}
+
+test "Gather reading a runtime tensor is left to the run" {
+    let k = knowns([
+        ["I", ints([1], [0])],
+    ]);
+    assert fold(&node("Gather", ["X", "I"], []), &k, &runtime([2, 3, 4])).unwrap() matches { None };
+}
+
+test "Unsqueeze and Squeeze move extent-1 axes" {
+    let k = knowns([
+        ["S", ints([], [7])],
+        ["A", ints([1], [0])],
+    ]);
+    let up = folded(node("Unsqueeze", ["S", "A"], []), k);
+    assert up == ints([1], [7]);
+    let k2 = knowns([
+        ["U", up],
+        ["A", ints([1], [-1])],
+    ]);
+    assert folded(node("Squeeze", ["U", "A"], []), k2) == ints([], [7]);
+}
+
+test "Unsqueeze reads axes from an attribute before opset 13" {
+    let k = knowns([
+        ["S", ints([2], [7, 8])],
+    ]);
+    assert folded(node("Unsqueeze", ["S"], [attr("axes", ["0", "2"])]), k) == ints([1, 2, 1], [7, 8]);
+}
+
+test "Concat joins along its axis" {
+    let k = knowns([
+        ["A", ints([1], [-1])],
+        ["B", ints([2], [4, 8])],
+    ]);
+    assert folded(node("Concat", ["A", "B"], [attr("axis", ["0"])]), k) == ints([3], [-1, 4, 8]);
+}
+
+test "Slice clamps an end past the axis" {
+    let k = knowns([
+        ["S", ints([3], [1, 4, 32])],
+        ["B", ints([1], [-1])],
+        ["E", ints([1], [i64::MAX])],
+        ["X0", ints([1], [0])],
+    ]);
+    assert folded(node("Slice", ["S", "B", "E", "X0"], []), k) == ints([1], [32]);
+}
+
+test "Slice steps backwards" {
+    let k = knowns([
+        ["S", ints([4], [1, 2, 3, 4])],
+        ["B", ints([1], [-1])],
+        ["E", ints([1], [i64::MIN])],
+        ["X0", ints([1], [0])],
+        ["St", ints([1], [-2])],
+    ]);
+    assert folded(node("Slice", ["S", "B", "E", "X0", "St"], []), k) == ints([2], [4, 2]);
+}
+
+test "Slice of a bool mask takes the corner the ends name" {
+    let mut mask: List<bool> = [];
+    for let r of 0..<4 {
+        for let c of 0..<4 {
+            mask.push(c <= r);
+        }
+    }
+    let k = knowns([
+        [
+            "M",
+            Known {
+                extents: [4, 4],
+                elements: Elements::Bools(mask),
+            },
+        ],
+        ["B", ints([2], [0, 0])],
+        ["E", ints([2], [2, 2])],
+    ]);
+    let want = Known {
+        extents: [2, 2],
+        elements: Elements::Bools([true, false, true, true]),
+    };
+    assert folded(node("Slice", ["M", "B", "E"], []), k) == want;
+}
+
+test "Cast turns an extent into a float the scale is computed in" {
+    let d = folded(node("Cast", ["D"], [attr("to", ["1"])]), knowns([
+        ["D", ints([], [8])],
+    ]));
+    assert d == floats([], [8.0]);
+    let k2 = knowns([
+        ["D", d],
+        ["H", floats([], [0.5])],
+    ]);
+    assert folded(node("Pow", ["D", "H"], []), k2) == floats([], [f32::sqrt(8.0)]);
+}
+
+test "integer arithmetic broadcasts" {
+    let k = knowns([
+        ["A", ints([2], [5, 7])],
+        ["B", ints([], [2])],
+    ]);
+    assert folded(node("Sub", ["A", "B"], []), k) == ints([2], [3, 5]);
+}
+
+test "Range counts from start to limit" {
+    let k = knowns([
+        ["S", ints([], [0])],
+        ["L", ints([], [4])],
+        ["D", ints([], [1])],
+    ]);
+    assert folded(node("Range", ["S", "L", "D"], []), k) == ints([4], [0, 1, 2, 3]);
+}
+
+test "Range with a zero float delta is refused" {
+    let k = knowns([
+        ["S", floats([], [0.0])],
+        ["L", floats([], [4.0])],
+        ["D", floats([], [0.0])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &k, &runtime([])).unwrap_err() == "delta is 0";
+}
+
+test "ConstantOfShape of an empty shape is a scalar" {
+    let k = knowns([
+        ["S", ints([0], [])],
+    ]);
+    assert folded(node("ConstantOfShape", ["S"], []), k) == floats([], [0.0]);
+}
+
+test "Reshape infers the one negative extent" {
+    let k = knowns([
+        ["D", ints([4], [0, 1, 2, 3])],
+        ["T", ints([2], [1, -1])],
+    ]);
+    assert folded(node("Reshape", ["D", "T"], []), k) == ints([1, 4], [0, 1, 2, 3]);
+}
+
+test "an operator the build does not evaluate is left to the run" {
+    let k = knowns([
+        ["A", floats([1], [1.0])],
+    ]);
+    assert fold(&node("Relu", ["A"], []), &k, &runtime([2])).unwrap() matches { None };
+}

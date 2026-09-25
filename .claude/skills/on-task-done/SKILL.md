@@ -12,7 +12,7 @@ First, review the branch:
 
 Then update docs if applicable:
 
-- docs/spec.md
+- docs/spec-*.md
 - docs/cheatsheet.md
 - docs/compiler.md and docs/optimizer.md, only when what they map changes: a
   phase, pass, or IR, or a rule that holds across phases. How one works belongs

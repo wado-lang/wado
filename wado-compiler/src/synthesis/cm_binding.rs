@@ -4,6 +4,7 @@
 //! bindings go through monomorphization, lowering and optimization like any
 //! other function. Design: `docs/wep-2026-02-15-cm-binding-synthesis.md`.
 
+mod callback_export;
 mod cm_free;
 mod export_adapter;
 mod import_adapter;
@@ -29,7 +30,10 @@ use crate::component_model::{
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
+use crate::name::{
+    DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
+    to_kebab,
+};
 use crate::package::{Package, test_selected};
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
@@ -39,12 +43,10 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
-pub use export_adapter::export_binding_func_name;
+use callback_export::{Callbacks, synthesize_callback_exports};
 use export_adapter::{
-    ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
-    synthesize_post_return,
+    ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding, synthesize_post_return,
 };
-pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
@@ -473,7 +475,8 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
-    generate_import_adapters(&mut project);
+    let callbacks = generate_import_adapters(&mut project);
+    synthesize_callback_exports(&mut project, &callbacks);
     synthesize_export_adapters(&mut project)?;
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
@@ -495,8 +498,8 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 
 /// Synthesize a binding function for each used WASI effect call and resource
 /// method call, add them to the entry module, and rewrite effect-like call
-/// sites to target them.
-fn generate_import_adapters(project: &mut Package) {
+/// sites to target them. Answers the closure types those calls pass.
+fn generate_import_adapters(project: &mut Package) -> Callbacks {
     let entry_source = project.entry_module_source.clone();
 
     let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
@@ -513,8 +516,9 @@ fn generate_import_adapters(project: &mut Package) {
             }
         }
     }
+    let mut callbacks = Callbacks::default();
     if seen_effects.is_empty() {
-        return;
+        return callbacks;
     }
 
     let entry_type_table = entry_type_table(project);
@@ -600,6 +604,7 @@ fn generate_import_adapters(project: &mut Package) {
                     &project.cm_interface_registry,
                     &entry_type_table,
                     &mut applied_returns,
+                    &mut callbacks,
                 );
             }
             // Sync locals with any Let stmts that were updated by the rewrite
@@ -615,6 +620,7 @@ fn generate_import_adapters(project: &mut Package) {
             }
         }
     }
+    callbacks
 }
 
 /// Synthesize an export binding for each world export (signature-driven) and
@@ -747,7 +753,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             );
             export_adapters.push((
                 export.name.clone(),
-                export_binding_func_name(&export.name),
+                cm_export_func_name(&export.name),
                 adapter,
             ));
 
@@ -758,7 +764,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             {
                 post_returns.push((
                     export.name.clone(),
-                    post_return_func_name(&export.name),
+                    cm_post_return_func_name(&export.name),
                     post_return,
                 ));
             }
@@ -1229,7 +1235,7 @@ fn generate_test_world_bindings(project: &mut Package) {
     let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs
         .into_iter()
         .map(|(test_name, user_func_rc)| {
-            let binding_name = export_binding_func_name(&test_name);
+            let binding_name = cm_export_func_name(&test_name);
             let adapter = synthesize_export_binding(
                 &test_name,
                 &user_func_rc,

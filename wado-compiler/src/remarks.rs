@@ -102,26 +102,16 @@ impl Collector<'_> {
         }
         // Lowered / demoted copies. `array_copy` is excluded on purpose: it is
         // bulk buffer movement inside stdlib helpers, not a value-semantic copy.
-        // `array_clone_shallow` is interned as a plain builtin (no
-        // `monomorph_info`, since a spine copy needs no element type), so classify
-        // by either the monomorphized- or the plain-builtin name.
-        let builtin = func
-            .monomorphized_builtin_name()
-            .or_else(|| func.builtin_name());
-        match builtin.as_deref() {
+        match func.intrinsic() {
             // `array_clone(&agg.repr)` copies a `List<T>` / `String` backing
             // array; recover the owning aggregate type from the argument.
-            Some(
-                "builtin::array_clone"
-                | "builtin::array_clone_prefix"
-                | "builtin::array_clone_shallow",
-            ) => args
+            Some("array_clone" | "array_clone_prefix" | "array_clone_shallow") => args
                 .first()
                 .and_then(|a| a.expr.as_expr())
                 .map(|e| clone_source_type(body, e)),
             // `copy_value(v)` deep-copies a value directly, so the call's result
             // type is the copied type.
-            Some("builtin::copy_value") => Some(node.type_id),
+            Some("copy_value") => Some(node.type_id),
             _ => None,
         }
     }

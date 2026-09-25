@@ -102,8 +102,9 @@ entering a top-level instance that is **on the current task's call chain**
 - A host import handler synchronously calling back into its caller's
   component traps — regardless of sync/async lifting.
 - A **detached task** (scheduled from the host event loop, not on the guest
-  task's chain) may enter the instance concurrently, provided the target
-  export is async-lifted so the instance admits concurrent tasks.
+  task's chain) may enter the instance concurrently. A synchronously lifted
+  export is enough: `cm_callback_export.rs` enters one while `run` waits on a
+  timer.
 
 ## Options
 

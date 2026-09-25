@@ -23,7 +23,7 @@ use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
-use crate::lower::plan::value_copy::array_clone_element_type_arg;
+use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
 use crate::{hashmap, tir};
 
@@ -93,7 +93,9 @@ struct Collector<'a> {
 
 impl TirRefVisitor for Collector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let Some(t) = copy_value_type_arg(expr) {
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(t) = copy_value_type_arg(func)
+        {
             self.out.insert(t);
         }
         // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
@@ -109,19 +111,6 @@ impl TirRefVisitor for Collector<'_> {
             self.out.insert(t);
         }
         self.walk_expr(expr);
-    }
-}
-
-fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
-    if let TirExprKind::Call { func, .. } = &expr.kind
-        && func.module_source.is_core_builtin()
-        && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
-    {
-        func.monomorph_info
-            .as_ref()
-            .and_then(|mi| mi.impl_type_args.first().copied())
-    } else {
-        None
     }
 }
 

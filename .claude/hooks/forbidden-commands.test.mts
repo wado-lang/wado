@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { commandNames, denialReason } from "./forbidden-commands.mts";
+import { denialReason } from "./forbidden-commands.mts";
+import { commandNames } from "./shell-commands.mts";
 
 const DENIED = [
   "sed -i 's/a/b/' f.rs",

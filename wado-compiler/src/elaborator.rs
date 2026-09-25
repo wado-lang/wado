@@ -1206,13 +1206,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
-        use crate::compiler_item::CompilerItem;
         let base = trait_type.head_base_name()?;
-        {
-            let tt = self.tysys.type_table.borrow();
-            if tt.compiler_items().trait_name_opt(CompilerItem::From) != Some(base) {
-                return None;
-            }
+        if !self.tysys.is_from_trait(&self.type_lookup(), base) {
+            return None;
         }
         if let ast::Type::Generic(generic) = trait_type
             && generic.args.len() == 1

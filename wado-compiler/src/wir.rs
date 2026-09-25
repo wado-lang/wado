@@ -15,6 +15,7 @@ use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::tir::EffectRef;
 use crate::token::Span;
+use crate::world_registry::WorldSurface;
 
 /// How a CM interface is imported, so codegen dispatches to the right encoding.
 /// The flat FQ list cannot drive codegen because each kind uses a distinct
@@ -107,11 +108,9 @@ pub struct WirPackage {
     /// Populated during WIR translation via `WirContext::ensure_canonical`.
     /// Used by the component codegen to determine which canonical imports to generate.
     pub needed_canonicals: IndexSet<CanonicalIntrinsic>,
-    /// The complete set of CM interface FQs this component imports — the flat
-    /// view of the import plan, read by the WIT producer and CM embedding for
-    /// the world's import refs. See WEP
-    /// `wep-2026-05-02-wit-interoperability.md` §"Faithful imports".
-    pub imported_cm_interfaces: Vec<String>,
+    /// The world's imports, the flat view of the import plan, and its callback
+    /// exports, read by the WIT producer and CM embedding.
+    pub world_surface: WorldSurface,
     /// The import plan with each FQ's category, in codegen emission order.
     /// Codegen iterates this to decide membership per phase rather than
     /// re-deriving it (the `codegen.rs` principle: codegen emits the plan).
@@ -324,7 +323,7 @@ impl WirPackage {
             dead_func_indices: IndexSet::default(),
             dead_global_indices: IndexSet::default(),
             needed_canonicals: IndexSet::default(),
-            imported_cm_interfaces: Vec::new(),
+            world_surface: WorldSurface::default(),
             import_plan: Vec::new(),
             defined_func_base: 0,
             trait_bound_violations: Vec::new(),

@@ -1,6 +1,8 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
+use { TreeMap } from "core:collections";
+
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
 pub variant Dim {
@@ -17,23 +19,27 @@ pub variant Rank {
     Dims(List<Dim>),
 }
 
+/// The dimensions a rank states, a scalar's being none. `None` is a tensor
+/// whose rank the graph leaves open.
+pub fn dims_of(rank: &Rank) -> Option<List<Dim>> {
+    return match rank {
+        Dims(d) => Option::Some(*d),
+        Scalar => Option::Some([] as List<Dim>),
+        Unranked => null,
+    };
+}
+
 /// Every extent `rank` states, or `None` where it leaves one open.
 pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
+    let Some(dims) = dims_of(rank) else {
+        return null;
+    };
     let mut extents: List<i32> = [];
-    match rank {
-        Scalar => {
-        },
-        Unranked => {
+    for let d of dims {
+        let Static(e) = d else {
             return null;
-        },
-        Dims(dims) => {
-            for let d of *dims {
-                let Static(e) = d else {
-                    return null;
-                };
-                extents.push(e);
-            }
-        },
+        };
+        extents.push(e);
     }
     return Option::Some(extents);
 }
@@ -46,24 +52,26 @@ pub struct ValueInfo {
     pub data: Option<ByteList> = null,
 }
 
-/// An element type a kernel reaches: the Wado primitive a tensor of it is held
-/// in, and the bytes one element takes in a payload.
+/// An element type a kernel reaches: the primitive a tensor is held in, its
+/// width in a payload, and the primitive the kernels compute it in.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
+    pub computed: String,
 }
 
-/// The one element type the kernels have arithmetic for. Everything a node
-/// produces is in it, and a boundary held in another is converted past it.
+/// The one element type the kernels have arithmetic for. A layout kernel moves
+/// an `i64` or `bool` tensor, and every other kernel reads and produces this.
 pub global KERNEL_ELEMENT: String = "f32";
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4 }),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2 }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2 }),
+        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64" }),
         _ => null,
     };
 }
@@ -103,18 +111,124 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
     return Result::Ok(());
 }
 
-/// A tensor an attribute carries, which `Constant` is the operator of. It has
-/// no shape: the one element a reader folds has no axis to put in one.
-pub struct ConstTensor {
-    pub data: List<f32>,
+/// A tensor whose elements the build reads: a `Constant`, an initializer no
+/// kernel computes in, or what stage 0 folds from them.
+pub struct Known {
+    pub extents: List<i32>,
+    pub elements: Elements,
 }
 
+<<<<<<< HEAD
 /// An attribute's values as the text they were written in, which the operator reads.
 /// A tensor payload has no text form and travels in `tensor`.
+||||||| 014361be8a2
+/// An attribute's values as written. ONNX types an attribute by the operator's
+/// schema rather than by the syntax, so the text is kept and the operator
+/// reads it. A tensor payload has no text form and travels in `tensor`.
+=======
+/// A known tensor's elements, in the type stage 0 computes them in. ONNX's
+/// integer types all fit `i64`, as its shape arithmetic does.
+pub variant Elements {
+    Ints(List<i64>),
+    Floats(List<f32>),
+    Bools(List<bool>),
+}
+
+impl Known {
+    pub fn len(&self) -> i32 {
+        return match &self.elements {
+            Ints(v) => v.len(),
+            Floats(v) => v.len(),
+            Bools(v) => v.len(),
+        };
+    }
+}
+
+/// An attribute's values as written, since ONNX types one by the operator
+/// rather than the syntax. A tensor has no text form and travels in `tensor`.
+>>>>>>> origin/main
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
+<<<<<<< HEAD
     pub tensor: Option<ConstTensor> = null,
+||||||| 014361be8a2
+    pub is_list: bool,
+    pub tensor: Option<ConstTensor> = null,
+=======
+    pub is_list: bool,
+    pub tensor: Option<Known> = null,
+}
+
+/// An attribute its operator cannot read as written, and why.
+pub struct AttrError {
+    pub attr: String,
+    pub reason: String,
+}
+
+impl Display for AttrError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`attribute ${self.attr} ${self.reason}`);
+    }
+}
+
+impl Error for AttrError {
+}
+
+impl Attr {
+    /// Every value read as an integer.
+    pub fn ints(&self) -> Result<List<i64>, AttrError> {
+        let mut values: List<i64> = [];
+        for let text of self.values {
+            values.push(int_of(&text).map_err(|reason| self.error(reason))?);
+        }
+        return Result::Ok(values);
+    }
+
+    /// `ints` for a float attribute.
+    pub fn floats(&self) -> Result<List<f32>, AttrError> {
+        let mut values: List<f32> = [];
+        for let text of self.values {
+            values.push(float_of(&text).map_err(|reason| self.error(reason))?);
+        }
+        return Result::Ok(values);
+    }
+
+    /// The one value an operator reads as an integer.
+    pub fn int(&self) -> Result<i64, AttrError> {
+        return int_of(&self.one_value()?).map_err(|reason| self.error(reason));
+    }
+
+    /// `int` for a float attribute.
+    pub fn float(&self) -> Result<f32, AttrError> {
+        return float_of(&self.one_value()?).map_err(|reason| self.error(reason));
+    }
+
+    fn one_value(&self) -> Result<String, AttrError> {
+        if self.values.len() != 1 {
+            return Result::Err(self.error("is a list and the operator reads one value"));
+        }
+        return Result::Ok(self.values[0]);
+    }
+
+    fn error(&self, reason: String) -> AttrError {
+        return AttrError { attr: self.name, reason };
+    }
+}
+
+fn int_of(text: &String) -> Result<i64, String> {
+    let Ok(v) = i64::from_str(text) else {
+        return Result::Err(`holds '${text}', which is not an integer`);
+    };
+    return Result::Ok(v);
+}
+
+fn float_of(text: &String) -> Result<f32, String> {
+    let Ok(v) = f32::from_str(text) else {
+        return Result::Err(`holds '${text}', which is not a number`);
+    };
+    return Result::Ok(v);
+>>>>>>> origin/main
 }
 
 pub struct Node {
@@ -133,6 +247,28 @@ impl Node {
         }
         return null;
     }
+
+    /// The one integer attribute `name` holds, or `fallback` where it is absent.
+    pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.int(),
+            None => Result::Ok(fallback),
+        };
+    }
+
+    /// `int_attr` for a float attribute.
+    pub fn float_attr<S: AsStrSlice>(&self, name: S, fallback: f32) -> Result<f32, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.float(),
+            None => Result::Ok(fallback),
+        };
+    }
+}
+
+/// Whether an initializer of `dtype` is read at build time, as `Reshape` reads
+/// its target shape. No kernel computes in these, so none is ever a weight.
+pub fn is_build_time(dtype: &String) -> bool {
+    return *dtype == "int64" || *dtype == "int32" || *dtype == "bool";
 }
 
 /// `inputs` holds the parameters `forward` takes, so it never names an
@@ -142,19 +278,90 @@ pub struct Graph {
     pub inputs: List<ValueInfo>,
     pub outputs: List<ValueInfo>,
     pub initializers: List<ValueInfo>,
+    pub constants: TreeMap<String, Known> = TreeMap::new(),
     pub nodes: List<Node>,
+    /// The default domain's opset, which fixes what an operator means. `None`
+    /// where the graph names none, read as the current one.
+    pub opset: Option<i64> = null,
+}
+
+/// The version a model imports the default domain at, from `(domain, version)`
+/// pairs: ONNX spells that domain `""` or `"ai.onnx"`.
+pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
+    for let [domain, version] of *imports {
+        if domain == "" || domain == "ai.onnx" {
+            return Option::Some(version);
+        }
+    }
+    return null;
+}
+
+/// `nodes` as the current opset defines them, read from `opset`'s definitions.
+/// A spelling whose older meaning no later opset has stops the read.
+pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
+    let Some(version) = opset else {
+        return Result::Ok(nodes);
+    };
+    let mut out: List<Node> = [];
+    for let node of nodes {
+        if version < 7 && is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
+            return Result::Err(
+                `${node.outputs.join(", ")} = ${node.op}: opset ${version} aligns the operands at attribute axis, which no later opset does`,
+            );
+        }
+        if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
+            let mut attrs = node.attrs;
+            attrs.push(Attr {
+                name: "axis",
+                values: ["1"],
+                is_list: false,
+            });
+            out.push(Node { ..node, attrs });
+            continue;
+        }
+        out.push(node);
+    }
+    return Result::Ok(out);
+}
+
+/// The operators that broadcast two operands against each other.
+pub fn is_binary_elementwise(op: &String) -> bool {
+    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+}
+
+/// A model neither reader can take, and why.
+pub struct ReadError {
+    pub reason: String,
+}
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for ReadError {
+}
+
+/// The message both readers give a build-time tensor written without values.
+pub fn constant_without_values(tensor: &String) -> String {
+    return `${tensor}: the build reads this tensor, so the graph must carry its values`;
 }
 
 /// The declared inputs that are parameters. An input an initializer also names
-/// is that weight's default, and Loam reads it from `Weights`.
-pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
-    let mut weights: List<String> = [];
+/// is that initializer's default, and Loam reads it from the graph.
+pub fn parameters(
+    inputs: List<ValueInfo>,
+    initializers: &List<ValueInfo>,
+    constants: &TreeMap<String, Known>,
+) -> List<ValueInfo> {
+    let mut named: List<String> = [];
     for let vi of *initializers {
-        weights.push(vi.name);
+        named.push(vi.name);
     }
     let mut kept: List<ValueInfo> = [];
     for let vi of inputs {
-        if !weights.contains_str(vi.name.as_str_slice()) {
+        if !named.contains_str(vi.name.as_str_slice()) && !constants.contains_key(vi.name) {
             kept.push(vi);
         }
     }

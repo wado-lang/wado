@@ -12,7 +12,7 @@ use crate::hashmap::IndexMap;
 use crate::name::resolve_module_path;
 use crate::path::is_cwd_relative;
 
-use super::cache::{encode_options_canonical, hex_digest};
+use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{DeclSite, GeneratorModule, GeneratorSpec, Invocation, InvocationPath};
 use super::options::OptionsDescriptor;
 use super::options_check::{CanonicalOptions, OptionsAnchor, validate};
@@ -264,7 +264,7 @@ fn lower_inline(
         Some(AttrValue::Array(items)) => items
             .iter()
             .enumerate()
-            .filter_map(|(i, v)| match v {
+            .filter_map(|(i, item)| match &item.value {
                 AttrValue::String(s) => Some(resolve_or_reject(
                     module_path,
                     s,
@@ -347,18 +347,9 @@ fn lower_inline(
     }
     let module = module.expect("module was validated above");
 
-    let synthetic_id = {
-        let mut h = Sha256::new();
-        h.update(module_key(&module).as_bytes());
-        h.update(from.as_str().as_bytes());
-        for p in &inputs {
-            h.update(p.as_str().as_bytes());
-            h.update([0u8]);
-        }
-        h.update(encode_options_canonical(&options));
-        let digest: [u8; 32] = h.finalize().into();
-        format!("kiln-{}", &hex_digest(&digest)[..16])
-    };
+    let written_options = encode_written_options(options_entry.map(|entry| &entry.value));
+    let digest = clause_digest(&module, from.as_str(), &inputs, None, &written_options);
+    let synthetic_id = format!("kiln-{}", &digest[..16]);
 
     let output_dir = output_dir_override.unwrap_or_else(|| {
         InvocationPath::normalize(&format!(
@@ -562,15 +553,30 @@ fn module_key(module: &GeneratorModule) -> String {
 }
 
 fn identity_key(inv: &Invocation) -> String {
+    let (module, from, inputs, output_dir, options) = inv.identity_tuple();
+    clause_digest(module, from, inputs, Some(output_dir), &options)
+}
+
+/// The hex SHA-256 of what a clause names. The synthetic id leaves out the
+/// output directory, since by default the directory is named for it.
+fn clause_digest(
+    module: &GeneratorModule,
+    from: &str,
+    inputs: &[InvocationPath],
+    output_dir: Option<&str>,
+    options: &[u8],
+) -> String {
     let mut h = Sha256::new();
-    h.update(module_key(&inv.module).as_bytes());
-    h.update(inv.from.as_str().as_bytes());
-    for p in &inv.inputs {
+    h.update(module_key(module).as_bytes());
+    h.update(from.as_bytes());
+    for p in inputs {
         h.update(p.as_str().as_bytes());
         h.update([0u8]);
     }
-    h.update(inv.output_dir.as_str().as_bytes());
-    h.update(inv.options_canonical());
+    if let Some(dir) = output_dir {
+        h.update(dir.as_bytes());
+    }
+    h.update(options);
     let digest: [u8; 32] = h.finalize().into();
     hex_digest(&digest)
 }
@@ -642,6 +648,7 @@ mod tests {
     fn entry(value: AttrValue) -> AttrEntry {
         AttrEntry {
             key_span: span(),
+            value_span: span(),
             value,
         }
     }
@@ -655,6 +662,7 @@ mod tests {
         entries_map.insert("generator".to_string(), entry(AttrValue::Object(gen_obj)));
         ImportAttributes {
             entries: entries_map,
+            span: span(),
         }
     }
 
@@ -828,6 +836,70 @@ mod tests {
             "",
         ));
         assert!(errs.iter().any(|d| d.message.contains("disagree")));
+    }
+
+    /// A clause importing `./model.onnx` through a local generator, whose options
+    /// descriptor the collect does not know.
+    fn with_option_n(n: i64) -> Module {
+        with_option_n_into(n, &[])
+    }
+
+    fn with_option_n_into(n: i64, extra: &[(&str, AttrValue)]) -> Module {
+        let mut options = AttrObject::default();
+        options.insert("n".to_string(), entry(AttrValue::Int(n)));
+        let mut generator = vec![
+            ("module", AttrValue::String("./gen.wado".to_string())),
+            ("options", AttrValue::Object(options)),
+        ];
+        generator.extend(extra.iter().cloned());
+        module_with_use("./model.onnx", attr_with_generator(&generator))
+    }
+
+    #[test]
+    fn options_as_written_give_an_invocation_its_own_output() {
+        let output_dir = |module: Module| {
+            let result = expect_ok(collect_inline_invocations(
+                [("src/a.wado", &module)],
+                &IndexMap::default(),
+                "",
+            ));
+            result[0].output_dir.clone()
+        };
+        assert_ne!(output_dir(with_option_n(4)), output_dir(with_option_n(32)));
+    }
+
+    #[test]
+    fn clauses_disagreeing_on_options_are_an_error() {
+        let shared_dir = [("output_dir", AttrValue::String("./gen".to_string()))];
+        for extra in [&[][..], &shared_dir[..]] {
+            let mut mods: IndexMap<String, Module> = IndexMap::default();
+            mods.insert("src/a.wado".to_string(), with_option_n_into(4, extra));
+            mods.insert("src/b.wado".to_string(), with_option_n_into(32, extra));
+
+            let errs = expect_errors(collect_inline_invocations(
+                mods.iter().map(|(k, v)| (k.as_str(), v)),
+                &IndexMap::default(),
+                "",
+            ));
+            assert!(errs.iter().any(|d| d.message.contains("disagree")));
+        }
+    }
+
+    #[test]
+    fn no_options_keep_the_empty_table_id() {
+        let module = module_with_use(
+            "./model.onnx",
+            attr_with_generator(&[("module", AttrValue::String("./gen.wado".to_string()))]),
+        );
+        let mut mods: IndexMap<String, Module> = IndexMap::default();
+        mods.insert("src/a.wado".to_string(), module);
+
+        let result = expect_ok(collect_inline_invocations(
+            mods.iter().map(|(k, v)| (k.as_str(), v)),
+            &IndexMap::default(),
+            "",
+        ));
+        assert_eq!(result[0].decl_site().synthetic_id, "kiln-96bda7baff150822");
     }
 
     /// A malformed clause costs its own invocation and no other, so an editor

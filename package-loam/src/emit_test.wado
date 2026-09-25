@@ -1,6 +1,6 @@
-use { EmitError, GRAPH_BANNER, emit } from "./emit.wado";
-use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
-use { infer } from "./infer.wado";
+use { EmitError, GRAPH_BANNER, NameCollision, UnimplementedBroadcast, UnmappedDtype, emit } from "./emit.wado";
+use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { Refusal, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
@@ -10,13 +10,11 @@ fn rule(pattern: String, axes: List<String>) -> LayoutRule {
 
 fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    let shapes = infer(&graph, &Schema { layout }).unwrap();
-    return emit(&graph, &shapes);
+    return emit(&graph, &infer(&graph, &Schema { layout }).unwrap());
 }
 
-/// The part of the module generated from the graph, with the inlined runtime
-/// cut away. Asserting that a kernel is *absent* has to say where, since the
-/// runtime names every kernel.
+/// The module below the inlined runtime, which names every kernel, so a test
+/// asserting a kernel is absent reads only the graph's own code.
 fn emitted(out: &String) -> String {
     let start = out.find(&GRAPH_BANNER).unwrap() + GRAPH_BANNER.len();
     return out.as_str_slice().slice(start, out.len()).to_string();
@@ -53,8 +51,6 @@ fn mlp_layout() -> List<LayoutRule> {
 test "a banner separates the inlined runtime from the graph's own code" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
-    // The runtime is above the banner and this graph's code below it, which is
-    // what lets a test say where a kernel call would have to appear.
     let body = emitted(&out);
     assert !body.contains("pub fn matmul");
     assert !body.contains("pub fn map");
@@ -163,7 +159,7 @@ g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
     assert `${e}` == "a/b and a.b both name `a_b`";
 }
 
-test "an operator with no kernel names itself" {
+test "Erf maps each element through the error function" {
     let source = `
 g (float[N, 2] X) => (float[N, 2] Y)
 <>
@@ -171,9 +167,9 @@ g (float[N, 2] X) => (float[N, 2] Y)
     Y = Erf(X)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert `${e}` == "Y = Erf: no kernel for this operator";
+    assert out.contains("map(X, |v| f32::erf(v))");
 }
 
 test "a broadcast no kernel covers names both operands" {
@@ -192,6 +188,86 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     let e = generate(source, layout).unwrap_err();
 
     assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
+}
+
+test "an extent-1 axis stretches under the name the other operand gives it" {
+    let source = `
+g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
+<float[8, 1, 1] B>
+{
+    Y = Add(X, B)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("B", ["Chan", "Row", "Col"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("zip_suffix::<[Batch], [Chan, Row, Col]>(X, &weights.B, |x, y| x + y)");
+}
+
+test "Reshape relabels the tensor under the merged axis" {
+    let source = `
+g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
+<int64[2] S = {1, 256}>
+{
+    Y = Reshape(X, S)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
+
+    assert out.contains(
+        "let Y = reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);",
+    );
+    assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> {");
+    // A merged axis is spelled with its parts' markers, never declared itself.
+    assert out.contains("pub struct Chan {}");
+    assert !emitted(&out).contains("pub struct Merged");
+    // The target shape is read at build time, so no weight carries it.
+    assert !emitted(&out).contains("pub S:");
+}
+
+test "a shape only the build reads is bound nowhere" {
+    let source = `
+g (float[1, 16, 4, 4] X, float[1, 256] Z) => (float[1, 256] Y)
+{
+    S = Shape(Z)
+    Y = Reshape(X, S)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("Z", ["Batch", "Flat"]),
+    ]).unwrap();
+
+    assert !emitted(&out).contains("let S =");
+}
+
+test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
+    let source = `
+g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)
+<float[8, 1, 5, 5] W, float[8] B>
+{
+    C = Conv <kernel_shape = [5, 5], auto_pad = "SAME_UPPER"> (X, W, B)
+    Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (C)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Chan", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("C", ["Batch", "Out", "Row", "Col"]),
+        rule("Y", ["Batch", "Out", "PRow", "PCol"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let C = conv_bias::<Batch, Chan, Out, [Row, Col], [KRow, KCol], [Row, Col]>(X, &weights.W, &weights.B, &Window { kernel: [5, 5], strides: [1, 1], dilations: [1, 1], pads: [2, 2, 2, 2], output: [28, 28] });",
+    );
+    assert out.contains(
+        "let Y = max_pool::<Batch, Out, [Row, Col], [PRow, PCol]>(&C, &Window { kernel: [2, 2], strides: [2, 2], dilations: [1, 1], pads: [0, 0, 0, 0], output: [14, 14] });",
+    );
 }
 
 test "Gemm lowers to a matmul under its transpose flags" {
@@ -246,7 +322,7 @@ g (float[2, 3] X) => (float[3, 2] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert out.contains("transpose2(");
+    assert out.contains("let Y = permute::<f32, [A, B], [B, A]>(X, [1, 0]);");
 }
 
 test "a Transpose that moves no axis is its operand" {
@@ -259,22 +335,157 @@ g (float[2, 3] X) => (float[2, 3] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert !emitted(&out).contains("transpose2(");
+    assert !emitted(&out).contains("permute");
     // Every node result is bound as a value, so the operand is read as one.
     assert out.contains("let Y = *X;");
 }
 
-test "a Transpose no kernel covers names itself" {
+test "Where lifts a lower-rank operand to the output's axes" {
     let source = `
-g (float[2, 3, 4] X) => (float[4, 3, 2] Y)
-<>
+g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
+<float S>
 {
-    Y = Transpose <perm = [2, 1, 0]> (X)
+    C = Cast<to = 9>(M)
+    Y = Where(C, X, S)
 }
 `;
-    let e = generate(source, [rule("*", ["A", "B", "C"])]).unwrap_err();
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Head", "Query", "Key"]),
+        rule("X", ["Batch", "Head", "Query", "Key"]),
+    ];
+    let out = generate(source, layout).unwrap();
 
-    assert `${e}` == "Y = Transpose: no kernel for this operator";
+    assert out.contains(
+        "let Y = select(&C, X, &lift::<f32, [], [Batch, Head, Query, Key]>(&weights.S, 4));",
+    );
+}
+
+test "a folded Where operand is lifted as its literal" {
+    let source = `
+g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
+{
+    C = Cast<to = 9>(M)
+    S = Constant<value_float = -1.0>()
+    Y = Where(C, S, X)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Key"])]).unwrap();
+
+    assert out.contains("let S = Tensor::<f32, []> { data: [(-1 as f32)], extents: [] };");
+    assert out.contains("let Y = select(&C, &lift::<f32, [], [Batch, Key]>(&S, 2), X);");
+}
+
+test "a merged axis the layout writes is spelled with its parts' markers" {
+    let source = `
+g (float[4, 2, 8] X) => (float[4, 6] Y)
+<float[16, 6] W, int64[2] S = {4, 16}>
+{
+    R = Reshape(X, S)
+    Y = MatMul(R, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq", "Head", "Dim"]),
+        rule("W", ["(Head Dim)", "Out"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
+    assert out.contains("let Y = matmul(&R, &weights.W);");
+}
+
+test "Split cuts one run along the axis for each output" {
+    let source = `
+g (float[1, 4, 24] X) => (float[1, 4, 8] K)
+{
+    S = Constant<value_ints = [8, 8, 8]>()
+    Q, K, V = Split<axis = 2>(X, S)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Qkv"]),
+        rule("?", ["Batch", "Seq", "Embed"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Q = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 0, 8);");
+    assert out.contains("let K = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 8, 8);");
+    assert out.contains("let V = slice_axis::<f32, [Batch, Seq], Qkv, Embed, []>(X, 2, 16, 8);");
+}
+
+test "Softmax lowers to the kernel along its axis" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    Y = Softmax <axis = -1> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let Y = softmax(X, 2);");
+}
+
+test "a layer norm's mean stretches back over the axis it reduced" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    M = ReduceMean <axes = [-1]> (X)
+    Y = Sub(X, M)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let M = reduce_mean(X, [2]);");
+    assert out.contains("let Y = zip(X, &M, |x, y| x - y);");
+}
+
+test "ReduceSum folds its axes through an add" {
+    let source = `
+g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
+{
+    Y = ReduceSum <axes = [0, 2]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let Y = reduce(X, [0, 2], 0.0, |x, y| x + y);");
+}
+
+test "a reduction that drops its axes names itself" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4] Y)
+{
+    Y = ReduceMean <axes = [-1], keepdims = 0> (X)
+}
+`;
+    let e = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap_err();
+
+    assert `${e}` == "Y = ReduceMean: no kernel drops a reduced axis";
+    assert e matches { Refused(Refusal { op: "ReduceMean", .. }) };
+}
+
+fn is_error<E: Error>() {
+}
+
+test "every error emit reports is an Error" {
+    is_error::<EmitError>();
+    is_error::<Refusal>();
+    is_error::<UnmappedDtype>();
+    is_error::<UnimplementedBroadcast>();
+    is_error::<NameCollision>();
+}
+
+test "a Transpose of any rank spells both axis orders" {
+    let source = `
+g (float[1, 4, 2, 3] X) => (float[1, 2, 3, 4] Y)
+<>
+{
+    Y = Transpose <perm = [0, 2, 3, 1]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Head", "Dim"])]).unwrap();
+
+    assert out.contains("let Y = permute::<f32, [Batch, Seq, Head, Dim], [Batch, Head, Dim, Seq]>(X, [0, 2, 3, 1]);");
 }
 
 test "a tensor named as the generated module names something is renamed" {
@@ -325,7 +536,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     assert `${t}` == "Held: an axis cannot be named as the generated module names something";
 }
 
-test "a broadcast that stretches an extent of one names both operands" {
+test "a stretch between operands of one rank lowers to zip" {
     let source = `
 g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
 <>
@@ -333,11 +544,26 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     Y = Add(X, Z)
 }
 `;
-    // One layout rule names both operands' axes, so stage 0 discharges the
-    // stretch and only the extents differ.
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, Unit] against [Batch, Unit]";
+    assert out.contains("zip(X, Z, |x, y| x + y)");
+}
+
+test "a MatMul against one matrix shares it across the batch" {
+    let source = `
+g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
+<float[8, 16] W>
+{
+    Y = MatMul(X, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("W", ["Embed", "Vocab"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Y = matmul_shared(X, &weights.W);");
 }
 
 test "a MatMul batch axis that stretches names both operands" {
@@ -365,8 +591,8 @@ g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
 }
 
 test "an element type the kernels cannot compute in names itself" {
-    assert refused_dtype("int32") == "X: the kernels compute in f32 and this tensor is int32";
-    assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
+    assert refused_dtype("int32") == "X: no kernel holds int32";
+    assert refused_dtype("uint8") == "X: no kernel holds uint8";
 }
 
 test "a half precision boundary states its own element type" {
@@ -378,8 +604,6 @@ test "a half precision boundary states its own element type" {
     assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
 }
 
-// The kernels compute in f32 and half precision has no arithmetic, so every
-// half operand is widened on the way in and the result narrowed on the way out.
 test "a half precision boundary is widened into the f32 the kernels compute in" {
     let out = generate(mlp("float16"), mlp_layout()).unwrap();
 
@@ -424,8 +648,19 @@ fn constant_graph(consumer: Node, produced: Rank, value: f32) -> Graph {
                     Attr {
                         name: "value",
                         values: [],
+<<<<<<< HEAD
                         tensor: Option::Some(ConstTensor {
                             data: [value],
+||||||| 014361be8a2
+                        is_list: false,
+                        tensor: Option::Some(ConstTensor {
+                            data: [value],
+=======
+                        is_list: false,
+                        tensor: Option::Some(Known {
+                            extents: [],
+                            elements: Elements::Floats([value]),
+>>>>>>> origin/main
                         }),
                     },
                 ],
@@ -445,10 +680,10 @@ fn node(op: String, output: String, inputs: List<String>) -> Node {
 }
 
 fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
-    let shapes = infer(graph, &Schema {
+    let checked = infer(graph, &Schema {
         layout: [rule("*", ["Batch", "Unit"])],
     }).unwrap();
-    return emit(graph, &shapes);
+    return emit(graph, &checked);
 }
 
 fn matrix_rank() -> Rank {
@@ -462,6 +697,90 @@ fn folded_add(value: f32) -> Result<String, EmitError> {
     return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
 }
 
+test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
+    let source = `g (int64[1, 4] M) => (float[1, 1, 4] Y) {
+        A = Constant<value_ints = [1]>()
+        U = Unsqueeze(M, A)
+        Y = Cast<to = 1>(U)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Key"]),
+        rule("U", ["Batch", "Head", "Key"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("M: &Tensor<i64, [Batch, Key]>");
+    assert !out.contains("widen");
+    assert out.contains("let U = reshape::<i64, [Batch, Key], [Batch, Head, Key]>(M, [1, 1, 4]);");
+    assert out.contains("let Y = map(&U, |v| v as f32);");
+}
+
+test "an embedding lookup is a row gather, and a folded index tensor is a literal" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W, float[4, 8] P, int64[1, 4] Q = {0, 1, 2, 3}> {
+        E = Gather(W, I)
+        F = Gather(P, Q)
+        Y = Add(E, F)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Batch", "Seq"]),
+        rule("Q", ["Batch", "Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+        rule("P", ["Seq", "Hidden"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let E = gather_rows(&weights.W, I);");
+    assert out.contains("let Q = Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] };");
+    assert out.contains("let F = gather_rows(&weights.P, &Q);");
+}
+
+test "Gather along any axis but the first stops the build" {
+    let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
+        Y = Gather<axis = 1>(W, I)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Pick"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    let e = generate(source, layout).unwrap_err();
+    assert `${e}` == "Y = Gather: no kernel gathers along axis 1";
+    assert e matches { Refused(Refusal { node: "Y", .. }) };
+}
+
+test "a Cast to the element a tensor already has computes nothing" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        C = Cast<to = 1>(X)
+        Y = Relu(C)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Feat"])]).unwrap());
+    assert !out.contains("let C");
+    assert out.contains("let Y = map(X, |v| f32::max(v, 0.0));");
+}
+
+test "Identity names its operand again and computes nothing" {
+    let source = `g (float[2] X) => (float[2] Y) <float[2] W = {1.0, 2.0}> {
+        V = Identity(W)
+        Y = Add(X, V)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Feat"])]).unwrap());
+    assert out.contains("let Y = zip(X, &weights.W, |x, y| x + y);");
+    assert !out.contains("let V");
+}
+
+test "a scale the graph computes from a shape folds to a literal" {
+    // Attention's `1 / sqrt(head_dim)`, as an exporter writes it.
+    let source = `g (float[2, 4] X) => (float[2, 4] Y) {
+        S = Shape(X)
+        I = Constant<value_int = 1>()
+        D = Gather(S, I)
+        F = Cast<to = 1>(D)
+        H = Constant<value_float = 0.5>()
+        R = Pow(F, H)
+        Y = Div(X, R)
+    }`;
+    let out = emitted(&generate(source, [rule("X", ["Batch", "Feat"])]).unwrap());
+    assert out.contains("let Y = map(X, |v| v / (2 as f32));");
+    assert !out.contains("let S");
+}
+
 test "a constant folds into the operator that reads it" {
     assert folded_add(0.5).unwrap().contains("let Y = map(X, |v| v + (0.5 as f32));");
 }
@@ -471,21 +790,54 @@ test "a constant no Wado literal spells is written as the prelude's constant" {
     assert folded_add(f32::NAN).unwrap().contains("v + f32::NAN");
 }
 
-test "a constant no operator can fold names the operator that reads it" {
-    let graph = constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5);
-    let e = emit_graph(&graph).unwrap_err();
+test "a constant with no closure to fold into is a rank-0 literal" {
+    let out = emitted(&emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap());
 
-    assert `${e}` == "Y = Relu: no kernel folds the constant C";
+    assert out.contains("let C = Tensor::<f32, []> { data: [(0.5 as f32)], extents: [] };");
+    assert out.contains("let Y = map(&C, |v| f32::max(v, 0.0));");
 }
 
-test "a constant is not a value a graph can return" {
+test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {
+    let source = `g (float[3] X) => (float[1, 3] Y) <int64[2] S = {1, 1}> {
+        C = ConstantOfShape(S)
+        Y = Add(X, C)
+    }`;
+    let out = emitted(&generate(source, [
+        rule("X", ["A"]),
+        rule("C", ["One", "A"]),
+    ]).unwrap());
+
+    assert out.contains("let C = Tensor::<f32, [One, A]> { data: [(0 as f32)], extents: [1, 1] };");
+    assert out.contains("let Y = zip_suffix_lhs::<[One], [A]>(X, &C, |x, y| x + y);");
+}
+
+test "a constant a closure folds is not bound as well" {
+    assert !folded_add(0.5).unwrap().contains("let C");
+}
+
+test "a folded scalar output is returned as its literal" {
     let graph = constant_graph(node("Relu", "Y", ["X"]), matrix_rank(), 0.5);
-    let e = emit_graph(&Graph {
+    let out = emitted(&emit_graph(&Graph {
         ..graph,
         outputs: [
             ValueInfo { name: "C", dtype: "float", rank: Rank::Scalar },
         ],
-    }).unwrap_err();
+    }).unwrap());
 
-    assert `${e}` == "C: a graph cannot return a constant";
+    assert out.contains("let C = Tensor::<f32, []> { data: [(0.5 as f32)], extents: [] };");
+    assert out.contains("return C;");
+}
+
+test "a folded output of several elements is returned as its literal" {
+    let source = `g (float[2, 3] X) => (int64[2] Y) {
+        Y = Shape(X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Dim"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+
+    assert out.contains("let Y = Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] };");
+    assert out.contains("return Y;");
 }

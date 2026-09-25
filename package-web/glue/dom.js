@@ -40,9 +40,36 @@ const $nullableHandle = $nullable($handle);
 const $someNumber = $some(Number);
 const $nullableBigInt = $nullable(BigInt);
 
+// The component's `wado:callback/callback` export, which calls a closure back.
+// The component hands it over once instantiated.
+let $callbackExport;
+
+export function $connect(callback) {
+  $callbackExport = callback;
+}
+
+// One function per closure key, so `removeEventListener` is handed the very
+// function `addEventListener` was.
+const $callbacks = new Map();
+
+function $callback(key, call) {
+  let f = $callbacks.get(key);
+  if (f === undefined) {
+    f = (...args) => call(key, ...args);
+    $callbacks.set(key, f);
+  }
+  return f;
+}
+
 export const eventTarget = {
   new() {
     return $handle(new globalThis.EventTarget());
+  },
+  addEventListener(self, type, callback, options) {
+    $object(self).addEventListener(type, $callback(callback, (key, a0) => $callbackExport.callHandle(key, $handle(a0))), options);
+  },
+  removeEventListener(self, type, callback, options) {
+    $object(self).removeEventListener(type, $callback(callback, (key, a0) => $callbackExport.callHandle(key, $handle(a0))), options);
   },
   dispatchEvent(self, event) {
     return $object(self).dispatchEvent($object(event));
@@ -1501,6 +1528,12 @@ export const window = {
   },
   clearInterval(self, id) {
     $object(self).clearInterval(id);
+  },
+  queueMicrotask(self, callback) {
+    $object(self).queueMicrotask($callback(callback, (key) => $callbackExport.call(key)));
+  },
+  requestAnimationFrame(self, callback) {
+    return $object(self).requestAnimationFrame($callback(callback, (key, a0) => $callbackExport.callF64(key, a0)));
   },
   cancelAnimationFrame(self, handle) {
     $object(self).cancelAnimationFrame(handle);

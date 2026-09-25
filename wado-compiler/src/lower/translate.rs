@@ -32,8 +32,8 @@ use crate::name::{
 };
 use crate::nir::{
     FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
-    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
-    NirVariantCase, NirVariantDecl, ParamAbi,
+    NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam, NirVariantCase,
+    NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -46,10 +46,9 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
     StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
-    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
-    TypeTable, receiver_value,
+    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
+    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -93,7 +92,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         variant_index,
         flags,
         globals,
-        imports,
         tests,
         wasm_module_sources,
         builtin_declarations,
@@ -182,7 +180,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             .iter()
             .map(|g| translator.convert_global(g))
             .collect(),
-        imports: imports.iter().map(convert_import).collect(),
+        imports: Vec::new(),
         tests: tests.iter().map(convert_test).collect(),
         string_literals: strings.string_literals,
         bytes_literals: strings.bytes_literals,
@@ -1924,9 +1922,7 @@ impl FunctionTranslator<'_, '_> {
                 has_receiver: false,
             };
         }
-        if func.module_source.is_core_builtin()
-            && let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args)
-        {
+        if let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args) {
             return rewritten;
         }
         let ordered = self.call_args_in_param_order(func, args);
@@ -2026,10 +2022,9 @@ impl FunctionTranslator<'_, '_> {
         type_args: &[tir::TypeId],
         args: &[CallArg],
     ) -> Option<ExprKind> {
-        use crate::tir::matches_builtin;
         let mi = func.monomorph_info.as_ref();
 
-        if matches_builtin(&func.name, mi, "variant_tag") && args.len() == 1 {
+        if func.is_builtin_named("variant_tag") && args.len() == 1 {
             // The `&V` receiver matches the marker's argument, so `discriminant`
             // is the single lowering for the tag read.
             let arg_ty = args[0].expr.type_id;
@@ -2075,7 +2070,7 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
-        if matches_builtin(&func.name, mi, "struct_field_get") {
+        if func.is_builtin_named("struct_field_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "struct_field_get");
             let name = {
                 let tt = self.base.type_table.borrow();
@@ -2089,7 +2084,7 @@ impl FunctionTranslator<'_, '_> {
 
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
         // the shape only.
-        if matches_builtin(&func.name, mi, "hole_get") {
+        if func.is_builtin_named("hole_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
                 let tt = self.base.type_table.borrow();
@@ -2100,7 +2095,7 @@ impl FunctionTranslator<'_, '_> {
             };
             return Some(self.bridge_call(ta[0], name, args, "hole_get"));
         }
-        if matches_builtin(&func.name, mi, "hole_fmt") {
+        if func.is_builtin_named("hole_fmt") {
             let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
             let name =
                 hole_fmt_helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
@@ -2108,9 +2103,9 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let helper_name_for: fn(&str, &str) -> String =
-            if matches_builtin(&func.name, mi, "variant_case_extract") {
+            if func.is_builtin_named("variant_case_extract") {
                 case_extract_helper_name
-            } else if matches_builtin(&func.name, mi, "variant_case_construct") {
+            } else if func.is_builtin_named("variant_case_construct") {
                 case_construct_helper_name
             } else {
                 return None;
@@ -2687,16 +2682,6 @@ fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
         type_params: v.type_params.iter().map(convert_type_param).collect(),
         cases: v.cases.iter().map(convert_variant_case).collect(),
         span: v.span,
-    }
-}
-
-fn convert_import(i: &TirImport) -> NirImport {
-    NirImport {
-        namespace: i.namespace.clone(),
-        canonical_name: i.canonical_name.clone(),
-        func_name: i.func_name.clone(),
-        params: i.params.clone(),
-        return_type: i.return_type,
     }
 }
 

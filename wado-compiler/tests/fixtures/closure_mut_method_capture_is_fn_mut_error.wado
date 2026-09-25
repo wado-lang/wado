@@ -1,0 +1,14 @@
+// A closure calling a `&mut self` method on a capture is a `fn mut`, so a
+// parameter taking a read-only `fn` refuses it.
+
+fn call(f: fn(i32)) {
+    f(1);
+}
+
+export fn run() {
+    let mut seen: List<i32> = [];
+    call(|v: i32| seen.push(v));
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'fn(i32) -> ()', found 'fn mut(i32) -> ()'"}

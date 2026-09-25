@@ -5,24 +5,36 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "lib:gale" },
     };
 
+use { TreeMap } from "core:collections";
 use {
     Attr,
     Dim,
+    Elements,
     Graph,
+    Known,
     Node,
     Rank,
+    ReadError,
     ValueInfo,
     bit_pattern,
     check_element_count,
+    constant_without_values,
+    default_opset,
     element_of,
+    is_build_time,
     parameters,
     push_element,
     static_extents,
+    upgraded,
 } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.
-pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
+pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, ReadError> {
+    return read_model(source).map_err(|reason| ReadError { reason });
+}
+
+fn read_model<S: AsStrSlice>(source: S) -> Result<Graph, String> {
     let result = onnx::parse(source);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -33,7 +45,38 @@ pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
     let Some(graph) = first_child_of_kind(s, 0, onnx::RK_GRAPH) else {
         return Result::Err("a model without a graph");
     };
-    return read_graph(s, toks, graph);
+    let opset = default_opset(&read_opset_imports(s, toks)?);
+    let written = read_graph(s, toks, graph)?;
+    return Result::Ok(Graph { ..written, nodes: upgraded(written.nodes, opset)?, opset });
+}
+
+/// The `(domain, version)` pairs the model's metadata lists under `opset_import`.
+fn read_opset_imports(s: &onnx::CstStore, toks: &onnx::TokenStream) -> Result<List<[String, i64]>, String> {
+    let mut imports: List<[String, i64]> = [];
+    let Some(metadata) = first_child_of_kind(s, 0, onnx::RK_METADATA) else {
+        return Result::Ok(imports);
+    };
+    for let entry of children_of_kind(s, metadata, onnx::RK_META_ENTRY) {
+        if first_token_text(s, toks, entry) != "opset_import" {
+            continue;
+        }
+        let value = first_child_of_kind(s, entry, onnx::RK_META_VALUE).unwrap();
+        let Some(list) = first_child_of_kind(s, value, onnx::RK_ATOM_LIST) else {
+            return Result::Err("opset_import is not a list");
+        };
+        for let pair of children_of_kind(s, list, onnx::RK_ATOM_PAIR) {
+            let atoms = children_of_kind(s, pair, onnx::RK_ATOM);
+            if atoms.len() != 2 {
+                return Result::Err("an opset_import entry is not `domain : version`");
+            }
+            let text = first_token_text(s, toks, atoms[1]);
+            let Ok(version) = i64::from_str(&text) else {
+                return Result::Err(`opset_import holds '${text}' where a version goes`);
+            };
+            imports.push([quotable_text(s, toks, atoms[0]), version]);
+        }
+    }
+    return Result::Ok(imports);
 }
 
 fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Result<Graph, String> {
@@ -43,6 +86,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     let mut inputs: List<ValueInfo> = [];
     let mut outputs: List<ValueInfo> = [];
     let mut initializers: List<ValueInfo> = [];
+    let mut constants = TreeMap::<String, Known>::new();
     let mut nodes: List<Node> = [];
     for let c of children(s, graph) {
         if !s.is_node(c) {
@@ -54,16 +98,24 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
         } else if kind == onnx::RK_OUTPUTS {
             outputs = read_value_infos(s, toks, c)?;
         } else if kind == onnx::RK_INITIALIZERS {
-            initializers = read_value_infos(s, toks, c)?;
+            for let vi of children_of_kind(s, c, onnx::RK_VALUE_INFO) {
+                let info = read_value_info(s, toks, vi)?;
+                if is_build_time(&info.dtype) {
+                    constants[info.name] = read_known(s, toks, vi, &info)?;
+                } else {
+                    initializers.push(info);
+                }
+            }
         } else if kind == onnx::RK_NODES {
             nodes = read_nodes(s, toks, c)?;
         }
     }
     return Result::Ok(Graph {
         name: quotable_text(s, toks, name_node),
-        inputs: parameters(inputs, &initializers),
+        inputs: parameters(inputs, &initializers, &constants),
         outputs,
         initializers,
+        constants,
         nodes,
     });
 }
@@ -93,8 +145,8 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
 
-/// A value's inline elements as the little-endian bytes the protobuf form
-/// carries, each read as ONNX's parser reads it (`onnx/defs/parser.cc`).
+/// A weight's inline elements as the little-endian bytes the protobuf form
+/// carries. A build-time tensor's are read into a `Known` instead.
 fn read_constant_data(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
@@ -103,6 +155,32 @@ fn read_constant_data(
     dtype: &String,
     rank: &Rank,
 ) -> Result<Option<ByteList>, String> {
+    if is_build_time(dtype) {
+        return Result::Ok(null);
+    }
+    let Some(element) = element_of(dtype) else {
+        return Result::Ok(null);
+    };
+    let Some(texts) = inline_texts(s, toks, vi, name, rank)? else {
+        return Result::Ok(null);
+    };
+    let width = element.width;
+    let mut bytes = ByteList::with_capacity(texts.len() * width);
+    for let text of texts {
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+    }
+    return Result::Ok(Option::Some(bytes));
+}
+
+/// A value's inline elements as text, each as ONNX's parser reads it
+/// (`onnx/defs/parser.cc`), or `None` where the value is written without any.
+fn inline_texts(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    vi: i32,
+    name: &String,
+    rank: &Rank,
+) -> Result<Option<List<String>>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
         return Result::Ok(null);
     };
@@ -111,21 +189,37 @@ fn read_constant_data(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
-    let Some(element) = element_of(dtype) else {
-        return Result::Ok(null);
-    };
-    let width = element.width;
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };
     let elements = children_of_kind(s, values, onnx::RK_TENSOR_ELEM);
     check_element_count(name, elements.len(), &extents)?;
-    let mut bytes = ByteList::with_capacity(elements.len() * width);
+    let mut texts: List<String> = [];
     for let e of elements {
-        let text = literal_text(toks, first_token(s, e));
-        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+        texts.push(literal_text(toks, first_token(s, e)));
     }
-    return Result::Ok(Option::Some(bytes));
+    return Result::Ok(Option::Some(texts));
+}
+
+/// An initializer the build reads, as its inline values spell it. ONNX writes
+/// a bool element as the integer `int32_data` holds.
+fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<Known, String> {
+    let Some(texts) = inline_texts(s, toks, vi, &info.name, &info.rank)? else {
+        return Result::Err(constant_without_values(&info.name));
+    };
+    let mut values: List<i64> = [];
+    for let text of texts {
+        let Ok(v) = i64::from_str(&text) else {
+            return Result::Err(`${info.name}: ${text} is not an integer`);
+        };
+        values.push(v);
+    }
+    let elements = if info.dtype == "bool" {
+        Elements::Bools(values.into_iter().map(|v| v != 0).collect());
+    } else {
+        Elements::Ints(values);
+    };
+    return Result::Ok(Known { extents: static_extents(&info.rank).unwrap(), elements });
 }
 
 /// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the
@@ -312,9 +406,8 @@ fn quotable_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Str
     return unquote(first_token_text(s, toks, node));
 }
 
-/// The first terminal under a node. Every caller names a rule whose first
-/// element is one, so a node with none is a grammar that moved under the
-/// reader.
+/// The first terminal under a node. Each caller names a rule that starts with
+/// one, so a node with none is a grammar that moved under the reader.
 fn first_token_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
     return toks.token_text(first_token(s, node));
 }

@@ -6,6 +6,8 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::ast::{AttrEntry, AttrObject, AttrValue};
+
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
 use super::options::CanonicalValue;
 use super::options_check::CanonicalOptions;
@@ -106,6 +108,62 @@ pub fn empty_options_canonical() -> Vec<u8> {
     out
 }
 
+/// The options as a `use` site writes them, before a descriptor types them.
+/// Writing none encodes as [`empty_options_canonical`] does.
+#[must_use]
+pub fn encode_written_options(options: Option<&AttrValue>) -> Vec<u8> {
+    let mut out = Vec::new();
+    match options {
+        Some(AttrValue::Object(entries)) => encode_written_table(&mut out, entries),
+        Some(other) => encode_written_value(&mut out, other),
+        None => encode_options_table(&mut out, &[]),
+    }
+    out
+}
+
+fn encode_written_table(out: &mut Vec<u8>, entries: &AttrObject) {
+    let mut sorted: Vec<(&String, &AttrEntry)> = entries.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(b.0));
+    write_len(out, sorted.len());
+    for (key, entry) in sorted {
+        write_str(out, key);
+        encode_written_value(out, &entry.value);
+    }
+}
+
+// Unvalidated, so a float may be non-finite: its bits are the encoding.
+fn encode_written_value(out: &mut Vec<u8>, v: &AttrValue) {
+    match v {
+        AttrValue::Bool(b) => {
+            out.push(0);
+            out.push(u8::from(*b));
+        }
+        AttrValue::Int(n) => {
+            out.push(1);
+            out.extend_from_slice(&n.to_le_bytes());
+        }
+        AttrValue::Float(f) => {
+            out.push(3);
+            out.extend_from_slice(&f.to_bits().to_le_bytes());
+        }
+        AttrValue::String(s) => {
+            out.push(4);
+            write_str(out, s);
+        }
+        AttrValue::Array(items) => {
+            out.push(7);
+            write_len(out, items.len());
+            for item in items {
+                encode_written_value(out, &item.value);
+            }
+        }
+        AttrValue::Object(entries) => {
+            out.push(8);
+            encode_written_table(out, entries);
+        }
+    }
+}
+
 fn write_len(out: &mut Vec<u8>, len: usize) {
     out.extend_from_slice(&(len as u64).to_le_bytes());
 }
@@ -177,6 +235,10 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
             for item in items {
                 encode_canonical_value(out, item);
             }
+        }
+        CanonicalValue::Map(entries) => {
+            out.push(8);
+            encode_options_table(out, entries);
         }
     }
 }
@@ -410,6 +472,21 @@ mod tests {
     // these assert the properties the cache key depends on directly on the
     // bytes: determinism, distinctness, `None`-drop, `Some`-transparency, and
     // `-0.0`/`+0.0` collapsing.
+
+    #[test]
+    fn map_options_encode_alike_in_either_key_order() {
+        let map = |entries: [(&str, i64); 2]| {
+            let pairs = entries
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), CanonicalValue::I64(*v)))
+                .collect();
+            opts(vec![("sizes", CanonicalValue::Map(pairs))])
+        };
+        assert_eq!(
+            encode_options_canonical(&map([("small", 1), ("large", 3)])),
+            encode_options_canonical(&map([("large", 3), ("small", 1)])),
+        );
+    }
 
     #[test]
     fn empty_table_equals_empty_options_canonical() {
