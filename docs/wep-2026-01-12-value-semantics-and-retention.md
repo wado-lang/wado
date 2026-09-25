@@ -178,7 +178,7 @@ one is reported at the declaration, wherever it lives.
 These two are not the whole family a body-less declaration carries.
 `#[immediate(p)]` sits beside them and answers a different question — how
 codegen lowers the call, not what the call keeps. See
-[the spec](./spec.md) for it.
+[the spec](./spec-attributes.md#immediate) for it.
 
 Where each is accepted:
 

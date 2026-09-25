@@ -41,6 +41,7 @@ mise run clippy-fix
 mise run update-golden-fixtures
 mise run update-golden-format-fixtures
 mise run doc-stdlib
+mise run update-docs-index
 mise run update-rust-paths-baseline
 mise run update-wadopoet-vocabulary
 mise run format
@@ -428,6 +429,10 @@ cargo run --bin wado --quiet -- doc --format markdown --title "WASI Standard Lib
 cargo run --bin wado --quiet -- doc --format markdown --title "WASI WebGPU Standard Library" \
   -o docs/stdlib-wasi-webgpu.md wasi:webgpu
 """
+
+[tasks.update-docs-index]
+description = "Regenerate the index of docs/README.md from the titles of the docs"
+run = "node scripts/docs-index.mjs"
 
 [tasks.clean]
 description = "Clean all build artifacts"

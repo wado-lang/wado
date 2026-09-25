@@ -7,7 +7,7 @@ shape. Each module's doc says how it works.
 
 - Optimization passes: [optimizer.md](./optimizer.md)
 - `wado format` rules: [formatter.md](./formatter.md)
-- Language features: [spec.md](./spec.md)
+- Language features: [the specification](./spec-overview.md)
 
 ## Pipeline
 
