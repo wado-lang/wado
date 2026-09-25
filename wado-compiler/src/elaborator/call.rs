@@ -679,7 +679,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return None;
         }
-        let owner = self.tysys.type_def(receiver).expect("a case's owner is nominal");
+        let owner = self
+            .tysys
+            .type_def(receiver)
+            .expect("a case's owner is nominal");
         self.record_case_owner(ident.id, owner);
         let table = self.tysys.type_table.borrow();
         Some(match table.get(receiver) {
@@ -716,7 +719,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `ns::Type::Case` names `Type` with its middle segment, which the
             // resolve walk answered for, so the declaration comes from the site.
             let def = self.tysys.qualified_owner_decl(ident)?;
-            (self.tysys.data.variant_cases.get(&def)?, case_name, CasePrefix::Namespace)
+            (
+                self.tysys.data.variant_cases.get(&def)?,
+                case_name,
+                CasePrefix::Namespace,
+            )
         };
         let (_, case_data) = variant_info.case_named(case_name)?;
         Some((variant_info.clone(), case_data.clone(), named_by))
@@ -3884,15 +3891,6 @@ impl TypeSystem {
         ))
     }
 
-    /// Infer type arguments for a variant constructor `Variant::Case(payload)`.
-    ///
-    /// Uses [`InferCtx`] with:
-    /// * a strong constraint from the payload expression (forward inference), and
-    /// * expected-return constraints from the declaration-site's type parameters,
-    ///   unified against the caller's expected generic-instance type args.
-    ///
-    /// Falls back to a bare `Variant` type if any type parameter remains unbound
-    /// and we are in a non-generic context — preserving the legacy behaviour.
     /// The declaration and type arguments of `expected`, where it is an
     /// instance of `variant_info`.
     fn expected_variant_args(
@@ -3928,6 +3926,15 @@ impl TypeSystem {
             .collect()
     }
 
+    /// Infer type arguments for a variant constructor `Variant::Case(payload)`.
+    ///
+    /// Uses [`InferCtx`] with:
+    /// * a strong constraint from the payload expression (forward inference), and
+    /// * expected-return constraints from the declaration-site's type parameters,
+    ///   unified against the caller's expected generic-instance type args.
+    ///
+    /// Falls back to a bare `Variant` type if any type parameter remains unbound
+    /// and we are in a non-generic context — preserving the legacy behaviour.
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,

@@ -491,7 +491,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A `Type::Case` identifier as the declaration owning the case and the
-    /// spelling: `Color::Red` at its own segments, a bare `Red` or `Self::Red` as annotate read it.
+    /// spelling: `Color::Red` at its own segments, `Red` or `Self::Red` as annotate read it.
     fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<DefId>, String)> {
         if let Some(owner) = self.ann_case_owner(ident.id) {
             let case = ident.segments.last().map_or(&ident.name, |seg| &seg.name);
@@ -11001,8 +11001,8 @@ fn reserves_a_name_only(func: &ast::Function) -> bool {
     func.unavailable_attr().is_some()
 }
 
-/// The discriminant a variant pattern matches. Pattern resolution rejects a case
-/// the scrutinee does not declare, so reify only ever sees one it resolved.
+/// The discriminant of a case the walk resolved. The walk rejects a case the
+/// variant does not declare, so reify only ever sees one it resolved.
 fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
     case_index.unwrap_or_else(|| {
         unreachable!("reify does not run on a pattern naming no case: `{case_name}`")

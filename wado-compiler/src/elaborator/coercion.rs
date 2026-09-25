@@ -126,10 +126,7 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
 /// Whether a call argument takes its type from its context: a numeric literal or
 /// `null`. Inference defers it, so the other arguments bind the parameter first.
 pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
-    arg.is_some_and(|arg| {
-        is_numeric_literal_expr(arg)
-            || matches!(arg, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
-    })
+    arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
@@ -417,8 +414,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `null` at an `Option<T>` is that `Option<T>`.
     fn try_coerce_null(&mut self, expr: &Expr, target_type: TypeId) -> Option<TypeId> {
-        let null_at_option = self.tysys.is_null_literal(expr)
-            && self.tysys.type_table.borrow().as_option(target_type).is_some();
+        let null_at_option = TypeSystem::is_null_literal(expr)
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .as_option(target_type)
+                .is_some();
         if !null_at_option {
             return None;
         }
@@ -845,7 +847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // `null`'s own type is what a target converts from to accept it, and
         // `Option<!>` reads badly in the message that says none was found.
-        if self.tysys.is_null_literal(element) {
+        if TypeSystem::is_null_literal(element) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
                     "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
