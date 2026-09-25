@@ -14,7 +14,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{
-    ArgSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
+    ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
@@ -1388,8 +1388,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.resolve_static_method_call_of_trait(static_call, None, ctx)
+        self.resolve_static_method_call_of_trait(static_call, None, ctx, expected_type)
     }
 
     /// [`Self::resolve_static_method_call`] restricted to one trait's impls,
@@ -1399,6 +1400,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         static_call: &ast::StaticMethodCallExpr,
         required_trait: Option<DefId>,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> TypeId {
         // A reflection trait is a trait, not a type, so `target_type` would not
         // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
@@ -1512,7 +1514,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // as `V::tag(…)`, and without it a case or an inherent static
                 // `V` declares of that name answers in the trait's place.
                 let required = self.tysys.resolutions.declared(head.site);
-                return self.resolve_static_method_call_of_trait(&on_self, required, ctx);
+                return self.resolve_static_method_call_of_trait(
+                    &on_self,
+                    required,
+                    ctx,
+                    expected_type,
+                );
             }
             // The same spelling on a trait that does declare parameters: the
             // turbofish is already spoken for, so say that rather than let the
@@ -1553,6 +1560,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &format!("{name}::{}", static_call.method),
                 Some(static_call.id),
                 static_call.span,
+            );
+        }
+
+        // A static call's head carries a turbofish, so only a generic variant builds a
+        // case here (`Result::<i32, String>::Ok(42)`). A spelling naming a trait asks for none.
+        let written_args = match self.tysys.type_table.borrow().get(target_type_id) {
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            _ => None,
+        };
+        if required_trait.is_none()
+            && let Some(written) = written_args
+            && let Some(variant) = self.tysys.variant_of_type(target_type_id).cloned()
+            && let Some((_, case_data)) = variant.case_named(&static_call.method)
+        {
+            if !static_call.type_args.is_empty() {
+                let _ = self.emit(TypeError::CaseTurbofishOnBoth {
+                    type_name: variant.name.clone(),
+                    case: static_call.method.clone(),
+                    span: static_call.span,
+                });
+                return self.resolve_args_without_callee(&static_call.args, ctx);
+            }
+            let case = CaseSite {
+                variant: &variant,
+                case: case_data,
+                written: &written,
+                owner: &variant.name,
+                site: static_call.id,
+                span: static_call.span,
+            };
+            return self.resolve_case_construction(
+                &case,
+                &static_call.args,
+                None,
+                expected_type,
+                ctx,
             );
         }
 
@@ -1631,29 +1674,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|e| e.module.clone())
             })
         });
-
-        // For generic variant constructors (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty() {
-            let instance_type_args = self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(target_type_id);
-            if let Some(instance_type_args) = instance_type_args
-                && let Some(variant_info) = self.tysys.variant_of_type(target_type_id).cloned()
-                && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
-                let mut payload_type = case_data.payload;
-                if !instance_type_args.is_empty() {
-                    payload_type = self
-                        .tysys
-                        .substitute_type_params(payload_type, &instance_type_args);
-                }
-                param_types.push(payload_type);
-            }
-        }
 
         // Resolve method-level type arguments
         let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&static_call.type_args);
@@ -1932,38 +1952,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {}
                 }
             }
-        }
-
-        // A static call's head carries a turbofish, so only a generic variant builds a
-        // case here (`Result::<i32, String>::Ok(42)`); no match falls through to lookup.
-        let written_args = match self.tysys.type_table.borrow().get(target_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
-            _ => None,
-        };
-        if builds_own_case
-            && let Some(explicit) = written_args
-            && let Some(variant_info) = self.tysys.variant_of_type(target_type_id).cloned()
-            && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
-        {
-            if !static_call.type_args.is_empty() {
-                let _ = self.emit(TypeError::CaseTurbofishOnBoth {
-                    type_name: variant_info.name.clone(),
-                    case: static_call.method.clone(),
-                    span: static_call.span,
-                });
-                return TypeTable::ERROR;
-            }
-            return self.construct_variant_case(
-                &variant_info,
-                case_data,
-                &args,
-                &static_call.args,
-                &explicit,
-                &variant_info.name,
-                None,
-                static_call.id,
-                static_call.span,
-            );
         }
 
         // Handle From<T>::from calls resolved via bodyless `impl From<T> for Type;`

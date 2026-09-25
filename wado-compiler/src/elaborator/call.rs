@@ -290,6 +290,19 @@ enum CalleeIdentKind<'a> {
     },
 }
 
+/// A case construction as the source wrote it.
+#[derive(Clone, Copy)]
+pub(super) struct CaseSite<'a> {
+    pub(super) variant: &'a VariantInfo,
+    pub(super) case: &'a VariantCaseData,
+    /// The variant's type arguments as written, empty where none were.
+    pub(super) written: &'a [TypeId],
+    /// The variant as the source names it, for diagnostics.
+    pub(super) owner: &'a str,
+    pub(super) site: AstId,
+    pub(super) span: Span,
+}
+
 impl CalleeIdentKind<'_> {
     /// The effective callee name used by `lookup_function_signature`
     /// and the dispatch match. Not callable on `AbstractTypeParam`
@@ -629,28 +642,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The variant and case a `Variant::Case(…)` or `ns::Variant::Case(…)`
-    /// callee constructs.
+    /// callee constructs, and whether a namespace qualifies it.
     fn case_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
         receiver_site: Option<ast::AstId>,
         ident: &ast::IdentExpr,
-    ) -> Option<(VariantInfo, VariantCaseData)> {
+    ) -> Option<(VariantInfo, VariantCaseData, bool)> {
         let (prefix, suffix) = callee_kind.effective_name().split_once("::")?;
-        let (variant_info, case_name) =
-            match self.variant_of_callee(callee_kind, receiver_site, prefix) {
-                Some(variant_info) => (variant_info, suffix),
-                None => {
-                    let (_, case_name) = suffix.split_once("::")?;
-                    self.namespace_alias_source(prefix, ident.id)?;
-                    // `ns::Type::Case` names `Type` with its middle segment, which the
-                    // resolve walk answered for, so the declaration comes from the site.
-                    let def = self.tysys.qualified_owner_decl(ident)?;
-                    (self.tysys.data.variant_cases.get(&def)?, case_name)
-                }
-            };
+        let (variant_info, case_name, namespaced) = if let Some(variant_info) =
+            self.variant_of_callee(callee_kind, receiver_site, prefix)
+        {
+            (variant_info, suffix, false)
+        } else {
+            let (_, case_name) = suffix.split_once("::")?;
+            self.namespace_alias_source(prefix, ident.id)?;
+            // `ns::Type::Case` names `Type` with its middle segment, which the
+            // resolve walk answered for, so the declaration comes from the site.
+            let def = self.tysys.qualified_owner_decl(ident)?;
+            (self.tysys.data.variant_cases.get(&def)?, case_name, true)
+        };
         let (_, case_data) = variant_info.case_named(case_name)?;
-        Some((variant_info.clone(), case_data.clone()))
+        Some((variant_info.clone(), case_data.clone(), namespaced))
     }
 
     /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
@@ -942,6 +955,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
+        if let Some((variant, case_data, namespaced)) =
+            self.case_of_callee(&callee_kind, receiver_site, ident)
+        {
+            let (owner, _) = effective_name
+                .rsplit_once("::")
+                .expect("a case callee is qualified");
+            if namespaced {
+                self.record_namespaced_case(ident, case_data.ast_id);
+            } else {
+                let (prefix, _) = effective_name
+                    .split_once("::")
+                    .expect("a case callee is qualified");
+                self.record_qualified_case(ident, prefix, case_data.ast_id);
+            }
+            let written = self.resolve_turbofish_args(&call.type_args);
+            let case = CaseSite {
+                variant: &variant,
+                case: &case_data,
+                written: &written,
+                owner,
+                site: call.id,
+                span: call.span,
+            };
+            return self.resolve_case_construction(
+                &case,
+                &call.args,
+                given_args,
+                expected_type,
+                ctx,
+            );
+        }
+
         // First, determine expected parameter types to handle coercion.
         let operation = self.operation_decl(&callee_kind);
         // An operation is its declaration's, whatever else the path spells.
@@ -1012,45 +1057,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Whether `param_types` holds a variant payload rather than declared
-        // function params (see the hole-pin loop below).
-        let mut is_variant_payload = false;
-
-        // A case payload typed under the turbofish (`Option::Some::<List<u8>>([])`)
-        // or the expected type, so a literal coerces on first resolve.
-        if param_types.is_empty()
-            && let Some((variant_info, case_data)) =
-                self.case_of_callee(&callee_kind, receiver_site, ident)
-        {
-            if case_data.has_payload(&self.tysys.type_table.borrow()) {
-                let mut payload_type = case_data.payload;
-                if !type_args.is_empty() {
-                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
-                } else if let Some(expected) = expected_type {
-                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                    if let ResolvedType::GenericInstance {
-                        def: expected_def,
-                        type_args: expected_args,
-                    } = expected_resolved
-                        && Some(expected_def)
-                            == self
-                                .tysys
-                                .resolutions
-                                .defs()
-                                .of_ast_id(variant_info.defined_at)
-                        && expected_args.len() == variant_info.type_param_type_ids.len()
-                    {
-                        payload_type = self
-                            .tysys
-                            .substitute_type_params(payload_type, &expected_args);
-                    }
-                }
-                param_types.push(payload_type);
-                is_variant_payload = true;
-            }
-        }
-
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
@@ -1061,16 +1067,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(inst) = &arg_inst {
             self.settle_onto_slots(inst, &callee_slots, &mut args);
-        }
-
-        // Pin a deferred hole carried into a variant payload (`Result::Ok(v)`,
-        // `v = gen()?`) against the payload type. Regular call arguments are
-        // pinned post-inference below; this loop runs pre-inference, so it is
-        // scoped to variant payloads to avoid touching them.
-        if is_variant_payload {
-            for (arg, &expected) in args.iter_mut().zip(&param_types) {
-                self.pin_arg_hole_against(arg, expected);
-            }
         }
 
         // Resolve the callee's identity. `Some(CalleeRef)` means we know
@@ -1422,26 +1418,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // projects only the result type.
                 return named.unwrap_or(flags_info.type_id);
             }
-            // Check if this is a variant case construction (Color::Red)
+            // A variant's own case was constructed above; any other name is a static.
             else if let Some(variant_info) =
                 self.variant_of_callee(&callee_kind, receiver_site, prefix)
             {
-                // Clone needed data to release the borrow on self
-                let variant_info = variant_info.clone();
-                if let Some((_, case_data)) = variant_info.case_named(suffix) {
-                    self.record_qualified_case(ident, prefix, case_data.ast_id);
-                    return self.construct_variant_case(
-                        &variant_info,
-                        case_data,
-                        &args,
-                        &call.args,
-                        &type_args,
-                        prefix,
-                        expected_type,
-                        call.id,
-                        call.span,
-                    );
-                } else if suffix == "from"
+                let variant_defined_at = variant_info.defined_at;
+                if suffix == "from"
                     && args.len() == 1
                     && self.requests_from_synthesis(&self.impl_target(prefix), args[0])
                 {
@@ -1449,7 +1431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .type_id_of_decl(variant_info.defined_at);
+                        .type_id_of_decl(variant_defined_at);
                     return self.resolve_from_call(target_type_id, args[0], call.id);
                 }
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
@@ -1476,23 +1458,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
-
-                    if let Some((variant_info, case_data)) =
-                        self.case_of_callee(&callee_kind, receiver_site, ident)
-                    {
-                        self.record_namespaced_case(ident, case_data.ast_id);
-                        return self.construct_variant_case(
-                            &variant_info,
-                            &case_data,
-                            &args,
-                            &call.args,
-                            &type_args,
-                            type_name,
-                            expected_type,
-                            call.id,
-                            call.span,
-                        );
-                    }
 
                     // The branch below reads the middle segment as a type, and
                     // says so here where nothing names one — otherwise the call
@@ -3556,47 +3521,90 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found == expected
     }
 
-    /// `Owner::Case` or `Owner::Case(payload)`, the turbofish written on the type
-    /// or on the case: the arity checks, the payload against the instantiated
-    /// case, and the variant instance it builds.
+    /// A case construction however spelled: the payload resolved against the
+    /// case under the site's type arguments, then the variant instance built.
+    pub(super) fn resolve_case_construction(
+        &mut self,
+        case: &CaseSite<'_>,
+        raw_args: &[Expr],
+        given_args: Option<Vec<TypeId>>,
+        expected_type: Option<TypeId>,
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let slots = &case.variant.type_param_type_ids;
+        let hints = self
+            .tysys
+            .variant_slot_hints(case.variant, case.written, expected_type);
+        let inst = self.instantiate(
+            slots,
+            &Instantiation {
+                kind: "variant",
+                name: case.owner,
+                span: case.span,
+                type_args: &hints,
+                self_binding: None,
+            },
+        );
+        let payload: Vec<TypeId> = [case.case.payload]
+            .into_iter()
+            .filter(|_| case.case.has_payload(&self.tysys.type_table.borrow()))
+            .collect();
+        let payload = self.instantiate_types(&payload, &inst);
+        let mut args = match given_args {
+            Some(args) => args,
+            None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst)),
+        };
+        self.settle_onto_slots(&inst, slots, &mut args);
+        // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
+        for (arg, &expected) in args.iter_mut().zip(&payload) {
+            self.pin_arg_hole_against(arg, expected);
+        }
+        self.construct_variant_case(case, &args, raw_args, expected_type)
+    }
+
+    /// The variant instance a case construction builds from its resolved
+    /// arguments, each checked against the case.
     pub(super) fn construct_variant_case(
         &mut self,
-        variant_info: &VariantInfo,
-        case_data: &VariantCaseData,
+        case: &CaseSite<'_>,
         args: &[TypeId],
         raw_args: &[Expr],
-        explicit: &[TypeId],
-        written_owner: &str,
         expected_type: Option<TypeId>,
-        site: AstId,
-        span: Span,
     ) -> TypeId {
+        let CaseSite {
+            variant,
+            case: case_data,
+            written,
+            owner,
+            site,
+            span,
+        } = *case;
         if !self.check_case_arity(case_data, args.len(), span)
             || !self.check_case_turbofish_arity(
-                explicit.len(),
-                written_owner,
-                variant_info.type_params.len(),
+                written.len(),
+                owner,
+                variant.type_params.len(),
                 span,
             )
         {
             return TypeTable::ERROR;
         }
         let payload = args.first().copied();
-        let variant_type = if variant_info.type_params.is_empty() {
+        let variant_type = if variant.type_params.is_empty() {
             self.tysys
                 .type_table
                 .borrow()
-                .type_id_of_decl(variant_info.defined_at)
+                .type_id_of_decl(variant.defined_at)
         } else {
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
-                variant_info,
+                variant,
                 case_data,
                 payload,
                 expected_type,
-                explicit,
+                written,
             );
-            self.defer_uninferable_variant(inferred, written_owner, variant_info, span)
+            self.defer_uninferable_variant(inferred, owner, variant, span)
         };
         let type_args = self
             .tysys
@@ -3815,6 +3823,41 @@ impl TypeSystem {
     ///
     /// Falls back to a bare `Variant` type if any type parameter remains unbound
     /// and we are in a non-generic context — preserving the legacy behaviour.
+    /// The declaration and type arguments of `expected`, where it is an
+    /// instance of `variant_info`.
+    fn expected_variant_args(
+        &self,
+        variant_info: &VariantInfo,
+        expected: Option<TypeId>,
+    ) -> Option<(DefId, Vec<TypeId>)> {
+        let table = self.type_table.borrow();
+        let ResolvedType::GenericInstance { def, type_args } = table.get(expected?) else {
+            return None;
+        };
+        (Some(*def) == table.defs().of_ast_id(variant_info.defined_at)
+            && type_args.len() == variant_info.type_param_type_ids.len())
+        .then(|| (*def, type_args.clone()))
+    }
+
+    /// Each slot of `variant_info` as a site pins it: the written argument, else
+    /// the expected type's, else `UNKNOWN` for the payload to answer.
+    fn variant_slot_hints(
+        &self,
+        variant_info: &VariantInfo,
+        written: &[TypeId],
+        expected: Option<TypeId>,
+    ) -> Vec<TypeId> {
+        let from_expected = self.expected_variant_args(variant_info, expected);
+        (0..variant_info.type_param_type_ids.len())
+            .map(|i| match written.get(i) {
+                Some(&arg) if arg != TypeTable::UNKNOWN => arg,
+                _ => from_expected
+                    .as_ref()
+                    .map_or(TypeTable::UNKNOWN, |(_, args)| args[i]),
+            })
+            .collect()
+    }
+
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
@@ -3829,12 +3872,6 @@ impl TypeSystem {
         // prelude are one declaration, and the annotation is the one the
         // caller's frame resolved.
         let mut canonical_def = None;
-        let variant_def = self
-            .type_table
-            .borrow()
-            .defs()
-            .of_ast_id(variant_info.defined_at);
-
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
         // Explicit turbofish args pin their slots as strong constraints; a `_`
@@ -3857,23 +3894,15 @@ impl TypeSystem {
         // Backward inference: extract type args from the caller's expected type.
         // Queued through `add_expected_return` so it runs after the payload pass,
         // preserving the "stronger constraint wins" policy via `or_insert`.
-        if let Some(expected) = expected_type {
-            let expected_resolved = self.type_table.borrow().get(expected).clone();
-            if let ResolvedType::GenericInstance {
-                def,
-                type_args: expected_args,
-            } = expected_resolved
-                && Some(def) == variant_def
-                && expected_args.len() == variant_info.type_param_type_ids.len()
+        if let Some((def, expected_args)) = self.expected_variant_args(variant_info, expected_type)
+        {
+            canonical_def = Some(def);
+            for (&param_id, &expected_arg) in variant_info
+                .type_param_type_ids
+                .iter()
+                .zip(expected_args.iter())
             {
-                canonical_def = Some(def);
-                for (&param_id, &expected_arg) in variant_info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(expected_args.iter())
-                {
-                    infer.add_expected_return(param_id, expected_arg);
-                }
+                infer.add_expected_return(param_id, expected_arg);
             }
         }
 

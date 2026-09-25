@@ -20,6 +20,7 @@ use crate::ast::{
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    turbofish_on_both,
 };
 use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -4084,10 +4085,19 @@ impl Parser {
             };
 
         // `Head::<Args>::Case` with no call: the qualified path the untargeted
-        // `Head::Case` produces, with the type args pinned on it. A
-        // method-level turbofish rules this out — `method::<U>` is never a case
-        // name — so that keeps expecting the call.
-        if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+        // `Head::Case` produces, with the type args pinned on it. Only a call
+        // takes a second turbofish, the static method's own.
+        if !method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+            let owner = match &head.namespace {
+                Some((namespace, _)) => format!("{namespace}::{}", head.name),
+                None => head.name.clone(),
+            };
+            return Err(ParseError {
+                message: turbofish_on_both(&owner, &method),
+                span: head.span.merge(&method_span),
+            });
+        }
+        if !self.check(&TokenKind::LParen) {
             let mut segments = Vec::new();
             if let Some((namespace, namespace_span)) = &head.namespace {
                 segments.push(PathSegment {

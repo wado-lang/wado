@@ -2805,29 +2805,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 )?;
             }
             ast::Expr::Ident(ident) => {
-                // A bare turbofish value (`pair::<_, bool>`, `ns::pair::<_>`)
-                // has no call to infer from, so a `_` slot here is
-                // unresolvable — validate its type args strictly. A turbofish
-                // on the path's prefix (`Maybe::<_>::Nothing`) does have one:
-                // the expected type fills the slot.
+                // Whether a `_` slot is answerable depends on what the path
+                // names, so the function-value path rejects it where it resolves.
                 for ty in &ident.type_args {
-                    if ident.type_args_on_prefix {
-                        Self::validate_turbofish_type_arg(
-                            ty,
-                            known_type_names,
-                            resource_type_names,
-                            type_params,
-                            logger,
-                        )?;
-                    } else {
-                        Self::validate_ast_type_names(
-                            ty,
-                            known_type_names,
-                            resource_type_names,
-                            type_params,
-                            logger,
-                        )?;
-                    }
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
                 }
             }
             ast::Expr::Literal(_) | ast::Expr::Error(_) => {}

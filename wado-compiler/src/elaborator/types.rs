@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
+use crate::ast::{self, AstId, Expr, Visibility, turbofish_on_both, wire_numbers_of};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -1581,7 +1581,8 @@ impl TypeError {
             } => (
                 Code::ArityMismatch,
                 format!(
-                    "`{type_name}` takes {}, the turbofish supplies {found}",
+                    "`{}` takes {}, the turbofish supplies {found}",
+                    unalias_namespace_member(type_name),
                     match expected {
                         0 => "no type arguments".to_string(),
                         1 => "1 type argument".to_string(),
@@ -1596,9 +1597,7 @@ impl TypeError {
                 span,
             } => (
                 Code::ArityMismatch,
-                format!(
-                    "type arguments are written on both `{type_name}` and its case `{case}`; write them on one"
-                ),
+                turbofish_on_both(&unalias_namespace_member(type_name), case),
                 *span,
             ),
             TypeError::SurplusTypeArguments {

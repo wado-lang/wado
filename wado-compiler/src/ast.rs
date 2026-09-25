@@ -464,6 +464,12 @@ pub trait AstVisitor: Sized {
     }
 }
 
+/// The diagnostic for type arguments written on both a type and its member.
+#[must_use]
+pub fn turbofish_on_both(owner: &str, member: &str) -> String {
+    format!("type arguments are written on both `{owner}` and `{member}`; write them on one")
+}
+
 /// The head name a type spells, or `None` for a shape with no nameable head.
 #[must_use]
 pub fn type_head_name(ty: &Type) -> Option<&str> {
@@ -3183,10 +3189,8 @@ pub struct IdentExpr {
     /// Call-site turbofish (`identity::<i32>(x)`) is recorded on `CallExpr.type_args`
     /// instead, so this is empty for identifiers used directly as a call callee.
     pub type_args: Vec<Type>,
-    /// Whether `type_args` were written on the path's *prefix* rather than on
-    /// the identifier itself — `Maybe::<i32>::Nothing` (a turbofish-qualified
-    /// case) as against `ns::f::<i32>` (a generic function reference). Only the
-    /// former admits a `_` slot, which the expected type fills.
+    /// Whether `type_args` were written on the path's prefix
+    /// (`Maybe::<i32>::Nothing`) rather than after its last segment.
     pub type_args_on_prefix: bool,
 }
 

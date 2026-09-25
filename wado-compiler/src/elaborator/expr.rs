@@ -19,7 +19,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{DefaultTypeBinding, slot_type_bindings};
+use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
@@ -423,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_method_call(method_call, ctx, expected_type)
             }
             Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx)
+                self.resolve_static_method_call(static_call, ctx, expected_type)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => {
@@ -1049,18 +1049,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
             // A payload-less case has no payload to infer from, so the
             // turbofish is the only source besides the expected type.
-            let explicit = self.resolve_turbofish_args(&ident.type_args);
-            let variant_type = self.construct_variant_case(
-                &variant_info,
-                case_data,
-                &[],
-                &[],
-                &explicit,
-                prefix,
-                expected_type,
-                ident.id,
-                ident.span,
-            );
+            let written = self.resolve_turbofish_args(&ident.type_args);
+            let case = CaseSite {
+                variant: &variant_info,
+                case: case_data,
+                written: &written,
+                owner: prefix,
+                site: ident.id,
+                span: ident.span,
+            };
+            let variant_type = self.construct_variant_case(&case, &[], &[], expected_type);
             if variant_type == TypeTable::ERROR {
                 return Some(TypeTable::ERROR);
             }
@@ -1201,8 +1199,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
-        // (a) Turbofish on the identifier: `name::<T, ...>`.
+        // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
+        // has no call to infer from, so a `_` slot is unanswerable.
         if !ident.type_args.is_empty() {
+            if let Some(span) = ident.type_args.iter().find_map(Self::first_infer_span) {
+                let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
+                return TypeTable::ERROR;
+            }
             if ident.type_args.len() != real_type_param_count {
                 let _ = self.emit(TypeError::GenericFunctionRefArgCountMismatch {
                     name: ident.name.clone(),
