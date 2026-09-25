@@ -1,0 +1,54 @@
+//! Split an `.onnx` into the two files Loam reads: a textual graph whose
+//! weights carry no values, and a safetensors checkpoint holding them.
+//!
+//!     wado run package-loam/tools/onnx_split.wado -- model.onnx model
+//!
+//! writes `model.onnxtext` and `model.safetensors` beside the stem it is given.
+
+use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { read as read_proto } from "../src/onnx_proto.wado";
+use { print } from "../src/onnx_print.wado";
+use { split_weights, write_safetensors } from "../src/safetensors.wado";
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
+    let given = args();
+    if given.len() != 2 {
+        eprintln("usage: onnx_split <model.onnx> <output stem>");
+        exit(2);
+    }
+    let [source, stem] = [given[0], given[1]];
+    let bytes = match fs::read(&source) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln(`${e}`);
+            exit(1);
+        },
+    };
+    let graph = match read_proto(bytes) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln(`${source}: ${e}`);
+            exit(1);
+        },
+    };
+    let [kept, stored] = split_weights(graph);
+    let text = match print(&kept) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln(`${source}: ${e}`);
+            exit(1);
+        },
+    };
+    for let [path, written] of [
+        [`${stem}.onnxtext`, fs::write(`${stem}.onnxtext`, &text)],
+        [`${stem}.safetensors`, fs::write(`${stem}.safetensors`, &write_safetensors(&stored))],
+    ] {
+        if let Err(e) = written {
+            eprintln(`${path}: ${e}`);
+            exit(1);
+        }
+    }
+    println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
+}

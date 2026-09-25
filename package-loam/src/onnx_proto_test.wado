@@ -173,6 +173,16 @@ fn read_initializer_of(weight: TensorProto) -> Result<Graph, ReadError> {
     return read(bytes);
 }
 
+test "a rank-0 tensor is a scalar, as the textual reader reads one" {
+    let g = read_initializer_of(TensorProto {
+        data_type: 1,
+        name: "S",
+        float_data: [2.0],
+    }).unwrap();
+
+    assert g.initializers[0].rank matches { Scalar };
+}
+
 test "a half initializer's elements come out of the low half of int32_data" {
     let g = read_initializer_of(TensorProto {
         dims: [2],

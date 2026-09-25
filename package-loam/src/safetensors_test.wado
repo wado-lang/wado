@@ -1,0 +1,78 @@
+//! The build's check of a checkpoint's header against the graph it supplies.
+
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { read_checkpoint } from "./runtime/checkpoint.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+use { StoredTensor, check_checkpoint, split_weights, write_safetensors } from "./safetensors.wado";
+
+global GRAPH: String = `
+g (float[N, 2] X) => (float[N, 3] Y)
+<float[2, 3] W, float[3] B = {0.0, 0.0, 0.0}>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+}
+`;
+
+fn check(stored: List<StoredTensor>) -> Result<(), String> {
+    let graph = read(&GRAPH).unwrap();
+    let layout: List<LayoutRule> = [
+        LayoutRule { pattern: "X", axes: ["Batch", "In"] },
+        LayoutRule { pattern: "W", axes: ["In", "Out"] },
+        LayoutRule { pattern: "B", axes: ["Out"] },
+    ];
+    let checked = infer(&graph, &Schema { layout }).unwrap();
+    let bytes = write_safetensors(&stored);
+    return check_checkpoint(&graph, &checked.shapes, &read_checkpoint(&bytes).unwrap()).map_err(|e| `${e}`);
+}
+
+fn weight(shape: List<i64>) -> StoredTensor {
+    let mut count = 1;
+    for let e of shape {
+        count *= e as i32;
+    }
+    return StoredTensor {
+        name: "W",
+        dtype: "F32",
+        shape,
+        data: ByteList::filled(count * 4, 0),
+    };
+}
+
+test "a checkpoint holding what the graph leaves to it checks" {
+    assert check([weight([2, 3])]) == Result::<(), String>::Ok(());
+}
+
+test "a weight the graph carries is not looked for in the checkpoint" {
+    let mut stored = [weight([2, 3])] as List<StoredTensor>;
+    stored.push(StoredTensor {
+        name: "B",
+        dtype: "F32",
+        shape: [7],
+        data: ByteList::filled(28, 0),
+    });
+    assert check(stored) == Result::<(), String>::Ok(());
+}
+
+test "an extent that disagrees with the graph names the axis" {
+    assert check([weight([2, 4])]).unwrap_err() == "W: axis Out is 4 in the checkpoint and 3 in the graph";
+}
+
+test "a weight the checkpoint lacks names itself" {
+    assert check([]).unwrap_err() == "W: the checkpoint has no such tensor";
+}
+
+test "splitting moves every carried weight into the checkpoint, under its name" {
+    let graph = read(&GRAPH).unwrap();
+    let [kept, stored] = split_weights(graph);
+    assert kept.initializers.len() == 2;
+    for let vi of kept.initializers {
+        assert vi.data matches { None };
+    }
+    assert stored.len() == 1;
+    assert stored[0].name == "B";
+    assert stored[0].dtype == "F32";
+    assert stored[0].shape == [3] as List<i64>;
+    assert stored[0].data == ByteList::filled(12, 0);
+}

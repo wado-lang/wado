@@ -21,6 +21,7 @@ use {
     is_build_time,
     parameters,
     push_element,
+    rank_of,
     upgraded,
 } from "./graph.wado";
 
@@ -303,7 +304,7 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
             for let d of shape.dim {
                 dims.push(read_dim(&d, &vi.name)?);
             }
-            Rank::Dims(dims);
+            rank_of(dims);
         },
         None => Rank::Unranked,
     };
@@ -330,7 +331,7 @@ fn read_initializer(t: &TensorProto, dtype: String) -> Result<ValueInfo, String>
     return Result::Ok(ValueInfo {
         name: t.name,
         dtype,
-        rank: Rank::Dims(dims),
+        rank: rank_of(dims),
         data: payload(t, &dtype, &extents)?,
     });
 }

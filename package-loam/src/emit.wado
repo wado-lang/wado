@@ -2,9 +2,10 @@
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
 use { TreeMap, TreeSet } from "core:collections";
-use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
+use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Known, Node, element_of, is_binary_elementwise, static_extents } from "./graph.wado";
+use { Graph, Node, element_of, is_binary_elementwise } from "./graph.wado";
+use { Expected, expected } from "./safetensors.wado";
 use {
     Checked,
     InferError,
@@ -128,6 +129,9 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     }
     w.blank();
     w.raw(&RUNTIME);
+    if loads_weights(graph) {
+        w.raw(&CHECKPOINT_RUNTIME);
+    }
     w.raw(&GRAPH_BANNER);
 
     emit_weights(&mut w, graph, checked, &names, &held);
@@ -224,6 +228,10 @@ impl Names {
 /// the module stands on its own.
 global RUNTIME: String = #include_str("./runtime/tensor.wado");
 
+/// The safetensors reader `Weights::load` calls, inlined only where the graph
+/// leaves a weight to a checkpoint.
+global CHECKPOINT_RUNTIME: String = #include_str("./runtime/checkpoint.wado");
+
 /// Where the inlined runtime ends and this graph's own code begins. A reader
 /// needs the line, and a test asserting a kernel is absent needs the boundary.
 internal global GRAPH_BANNER: String = `
@@ -236,11 +244,14 @@ fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
 }
 
 /// The names the generated module binds beyond the language's own. The
-/// runtime's are read out of the runtime, so a new kernel cannot be missed.
+/// runtime's are read out of the runtime, so a new kernel cannot be missed, and
+/// the checkpoint reader's are bound whether or not a graph inlines it.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
-    for let name of declared_in(&RUNTIME) {
-        reserved.insert(name);
+    for let source of [&RUNTIME, &CHECKPOINT_RUNTIME] {
+        for let name of declared_in(source) {
+            reserved.insert(name);
+        }
     }
     reserved.insert("forward");
     reserved.insert("weights");
@@ -258,13 +269,15 @@ global DECLARATION_KEYWORDS: List<String> = [
 /// because the runtime is inlined rather than lowered at a CM boundary.
 global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 
-/// Every module-level name a Wado source declares, by the one shape the
-/// runtime is written in: a declaration at column zero.
+/// Every module-level name a Wado source declares or imports, by the one shape
+/// the runtime is written in: a declaration or a `use` at column zero.
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
-        // An import would bind a name from a file this never reads.
-        assert !line.starts_with("use ");
+        if let Some(clause) = line.strip_prefix("use ") {
+            names.extend(&imported_names(&clause.to_string()));
+            continue;
+        }
         let mut declaration = line.as_str_slice();
         for let prefix of VISIBILITY_PREFIXES {
             if let Some(rest) = declaration.strip_prefix(prefix) {
@@ -284,6 +297,25 @@ fn declared_in(source: &String) -> List<String> {
             }
             names.push(name);
         }
+    }
+    return names;
+}
+
+/// The names a `use` clause binds: its namespace, or each item under its alias.
+fn imported_names(clause: &String) -> List<String> {
+    let [bound, _] = clause.split_once(" from ").unwrap();
+    let mut names: List<String> = [];
+    let mut aliased = false;
+    for let token of bound.to_string().replace("{", " ").replace("}", " ").replace(",", " ").split_whitespace() {
+        if token == "as" {
+            aliased = true;
+            continue;
+        }
+        if aliased {
+            names.pop();
+            aliased = false;
+        }
+        names.push(token.to_string());
     }
     return names;
 }
@@ -317,43 +349,62 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.blank();
     w.line("/// The graph's initializers.");
     weights.emit(w);
-    emit_embedded(w, graph, &checked.shapes, names, held);
+    emit_constructor(w, graph, &checked.shapes, names);
 }
 
-/// `Weights::embedded()`, where the graph carries every initializer's data.
-/// The compiler folds each payload's byte literal into a data segment.
-fn emit_embedded(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
-    names: &Names,
-    held: &TreeMap<String, String>,
-) {
+/// Whether some initializer's data is left to a checkpoint.
+fn loads_weights(graph: &Graph) -> bool {
     for let vi of &graph.initializers {
         if vi.data matches { None } {
-            return;
+            return true;
         }
     }
+    return false;
+}
+
+/// `Weights::embedded()` where the graph carries every initializer's data, and
+/// `Weights::load` reading the rest from a safetensors checkpoint otherwise.
+/// The compiler folds each carried payload's byte literal into a data segment.
+fn emit_constructor(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
+    let loads = loads_weights(graph);
     w.blank();
     ImplSpec::new("Weights").emit_begin(w);
-    w.line("/// The weights the graph carries.");
-    FnSpec::new("embedded", Vis::Pub).set_return_type("Weights").emit_begin(w);
-    w.begin("return Weights");
+    if loads {
+        w.line("/// The weights, those the graph does not carry read from a safetensors checkpoint.");
+        FnSpec::new("load", Vis::Pub)
+            .add_param("checkpoint", "&ByteList")
+            .set_return_type("Result<Weights, LoadError>")
+            .emit_begin(w);
+        w.line("let header = read_checkpoint(checkpoint)?;");
+        w.begin("return Result::Ok(Weights");
+    } else {
+        w.line("/// The weights the graph carries.");
+        FnSpec::new("embedded", Vis::Pub).set_return_type("Weights").emit_begin(w);
+        w.begin("return Weights");
+    }
     for let vi of &graph.initializers {
-        let Some(data) = vi.data else {
-            unreachable();
+        let primitive = element_of(&vi.dtype).unwrap().primitive;
+        let shape = shapes.get(vi.name).unwrap();
+        let e = expected(vi, &shape);
+        let data = match vi.data {
+            Some(bytes) => byte_string_literal(&bytes),
+            None => checkpoint_payload(&e),
         };
-        let element = held.get(vi.name).unwrap();
-        let axes = axis_list(&shapes.get(vi.name).unwrap());
-        w.begin(`${names.get(&vi.name)}: Tensor::<${element}, [${axes}]>`);
-        w.line(`data: List::<${element}>::from_le_bytes(${byte_string_literal(&data)}),`);
-        // Both readers attach data only to a tensor whose every extent is stated.
-        w.line(`extents: ${static_extents(&vi.rank).unwrap()},`);
+        w.begin(`${names.get(&vi.name)}: Tensor::<${primitive}, [${axis_list(&shape)}]>`);
+        w.line(`data: List::<${primitive}>::from_le_bytes(${data}),`);
+        w.line(`extents: ${e.extents},`);
         w.end_with(",");
     }
-    w.end_with(";");
+    w.end_with(if loads { ");" } else { ";" });
     w.end();
     w.end();
+}
+
+/// The call reading a tensor's bytes out of the checkpoint `load` was given,
+/// checked against what the build compiled it as.
+fn checkpoint_payload(e: &Expected) -> String {
+    let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
+    return wado`header.payload(checkpoint, "${e.tensor}", "${e.dtype}", [${axes.join(", ")}], ${e.extents}, ${e.width})?`;
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a

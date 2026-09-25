@@ -17,6 +17,8 @@ use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
 use { Graph } from "./graph.wado";
 use { infer } from "./infer.wado";
+use { header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { check_checkpoint } from "./safetensors.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -55,6 +57,24 @@ fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, KilnError> {
     return onnx_text::read(&source).map_err(|e| at(path, &e));
 }
 
+/// A checkpoint's leading bytes, through the end of its header or of the file,
+/// whichever comes first. The payloads are the loader's to read, not the build's.
+fn read_header(content: Stream<u8>) -> ByteList {
+    let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
+    loop {
+        let chunk = content.read(HEADER_CHUNK);
+        prefix.extend(&(chunk.items as ByteList));
+        if chunk.result != CopyResult::Completed || header_end(&prefix) matches { Ok(_) } {
+            break;
+        }
+    }
+    content.drop();
+    return prefix;
+}
+
+/// Enough for GPT-2's header in one read, which is 14 KiB.
+global HEADER_CHUNK: i32 = 65536;
+
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
     let path = req.primary.path;
     let mut graph = read_graph(&path, req.primary.content)?;
@@ -63,6 +83,16 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
     let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
+    if req.inputs.len() > 1 {
+        return Result::Err(KilnError::InvalidSchema(`loam: ${req.inputs.len()} inputs, and a checkpoint is one file`));
+    }
+    for let input of req.inputs {
+        if !input.path.ends_with(".safetensors") {
+            return Result::Err(KilnError::InvalidSchema(`loam: '${input.path}': an input is a .safetensors checkpoint`));
+        }
+        let checkpoint = read_checkpoint(read_header(input.content)).map_err(|e| at(&input.path, &e))?;
+        check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input.path, &e))?;
+    }
     let generated = emit(&graph, &checked).map_err(|e| at(&path, &e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,

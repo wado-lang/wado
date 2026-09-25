@@ -169,6 +169,34 @@ test "a float attribute may end its fraction at the point" {
     assert g.nodes[0].attrs[0].values == ["1.0"];
 }
 
+test "a tensor attribute is read as the tensor it spells" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            S = Constant <value = float {0.125}> ()
+            K = Constant <value = int64[2] {3, -4}> ()
+            M = Constant <value = bool[2] {1, 0}> ()
+            Y = Mul(X, S)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].tensor == Option::Some(Known { extents: [], elements: Elements::Floats([0.125]) });
+    assert g.nodes[1].attrs[0].tensor == Option::Some(Known { extents: [2], elements: Elements::Ints([3, -4]) });
+    assert g.nodes[2].attrs[0].tensor == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Bools([true, false]),
+    });
+}
+
+test "a tensor attribute of an element type not read carries no value" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            S = Constant <value = float16 {15360}> ()
+            Y = Identity(X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].tensor matches { None };
+    assert g.nodes[0].attrs[0].values.is_empty();
+}
+
 test "an attribute after the input list reads as the same attribute" {
     let g = read(
         `agraph (float[2, 3] X) => (float[3, 2] Y) {
@@ -236,6 +264,17 @@ test "an int64 initializer without inline values names itself" {
         }`,
     ).unwrap_err().reason;
     assert e == "S: the build reads this tensor, so the graph must carry its values";
+}
+
+test "an initializer's extents are integers, as ONNX's tensors state them" {
+    let e = read(
+        `agraph (float[N, 2] X) => (float[N, 2] Y)
+        <float[N] W>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "W: an initializer's extents are integers";
 }
 
 test "an initializer without inline values carries no data" {

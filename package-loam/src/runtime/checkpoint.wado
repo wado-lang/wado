@@ -1,0 +1,111 @@
+use json from "core:json";
+use { TreeMap } from "core:collections";
+
+pub struct LoadError {
+    pub reason: String,
+}
+
+impl Display for LoadError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for LoadError {
+}
+
+pub struct HeaderEntry {
+    pub dtype: String = "",
+    pub shape: List<i64> = [],
+    pub data_offsets: List<i64> = [],
+}
+
+pub struct Checkpoint {
+    entries: TreeMap<String, HeaderEntry>,
+    data_start: i32,
+}
+
+pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
+    let view = bytes.as_byte_slice();
+    if view.len() < 8 {
+        return Result::Err(LoadError { reason: `the header is 8 bytes, past the ${view.len()} given` });
+    }
+    let mut length: u64 = 0;
+    for let at of 0..<8 {
+        length |= (view[at] as u64) << (8 * at) as u64;
+    }
+    if length > (i32::MAX - 8) as u64 || 8 + length as i32 > view.len() {
+        return Result::Err(LoadError { reason: `the header is ${length} bytes, past the ${view.len() - 8} given` });
+    }
+    return Result::Ok(8 + length as i32);
+}
+
+pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError> {
+    let view = bytes.as_byte_slice();
+    let data_start = header_end(view)?;
+    let mut entries = match json::from_bytes::<TreeMap<String, HeaderEntry>>(view.slice(8, data_start)) {
+        Ok(entries) => entries,
+        Err(e) => {
+            return Result::Err(LoadError { reason: `the header is not JSON: ${e}` });
+        },
+    };
+    entries.remove("__metadata__");
+    return Result::Ok(Checkpoint { entries, data_start });
+}
+
+impl Checkpoint {
+    pub fn range(
+        &self,
+        tensor: String,
+        dtype: String,
+        axes: List<String>,
+        extents: List<i32>,
+        width: i32,
+    ) -> Result<[i32, i32], LoadError> {
+        let fail = |reason: String| LoadError { reason: `${tensor}: ${reason}` };
+        let Some(entry) = self.entries.get(tensor) else {
+            return Result::Err(fail("the checkpoint has no such tensor"));
+        };
+        if entry.dtype != dtype {
+            return Result::Err(fail(`the checkpoint holds ${entry.dtype}, and the graph ${dtype}`));
+        }
+        if entry.shape.len() != axes.len() {
+            return Result::Err(fail(`the checkpoint gives ${entry.shape.len()} axes, and the graph [${axes.join(", ")}]`));
+        }
+        let mut count: i64 = 1;
+        for let [i, axis] of axes.into_iter().enumerate() {
+            if entry.shape[i] != extents[i] as i64 {
+                return Result::Err(fail(`axis ${axis} is ${entry.shape[i]} in the checkpoint and ${extents[i]} in the graph`));
+            }
+            count *= extents[i] as i64;
+        }
+        let offsets = &entry.data_offsets;
+        let held = if offsets.len() == 2 { offsets[1] - offsets[0] } else { -1 };
+        if held != count * width as i64 {
+            return Result::Err(fail(
+                `the checkpoint's offsets hold ${held} bytes, and ${count} ${dtype} elements need ${count * width as i64}`,
+            ));
+        }
+        if offsets[0] < 0 || offsets[1] > (i32::MAX - self.data_start) as i64 {
+            return Result::Err(fail(`the checkpoint's offsets ${*offsets} fall outside what a module can address`));
+        }
+        return Result::Ok([self.data_start + offsets[0] as i32, self.data_start + offsets[1] as i32]);
+    }
+
+    pub fn payload<B: AsByteSlice>(
+        &self,
+        bytes: B,
+        tensor: String,
+        dtype: String,
+        axes: List<String>,
+        extents: List<i32>,
+        width: i32,
+    ) -> Result<ByteSlice, LoadError> {
+        let view = bytes.as_byte_slice();
+        let [start, end] = self.range(tensor, dtype, axes, extents, width)?;
+        if end > view.len() {
+            return Result::Err(LoadError { reason: `${tensor}: the payload ends at byte ${end}, past the ${view.len()} given` });
+        }
+        return Result::Ok(view.slice(start, end));
+    }
+}

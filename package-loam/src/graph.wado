@@ -19,6 +19,14 @@ pub variant Rank {
     Dims(List<Dim>),
 }
 
+/// The rank stating `dims`, which is a scalar where there are none.
+pub fn rank_of(dims: List<Dim>) -> Rank {
+    if dims.is_empty() {
+        return Rank::Scalar;
+    }
+    return Rank::Dims(dims);
+}
+
 /// The dimensions a rank states, a scalar's being none. `None` is a tensor
 /// whose rank the graph leaves open.
 pub fn dims_of(rank: &Rank) -> Option<List<Dim>> {
@@ -53,11 +61,13 @@ pub struct ValueInfo {
 }
 
 /// An element type a kernel reaches: the primitive a tensor is held in, its
-/// width in a payload, and the primitive the kernels compute it in.
+/// width in a payload, the primitive the kernels compute it in, and its name
+/// in a safetensors header.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
     pub computed: String,
+    pub stored: String,
 }
 
 /// The one element type the kernels have arithmetic for. A layout kernel moves
@@ -68,10 +78,10 @@ pub global KERNEL_ELEMENT: String = "f32";
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT }),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT }),
-        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64" }),
+        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),
         _ => null,
     };
 }
