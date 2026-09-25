@@ -1033,20 +1033,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
             // A payload-less case has no payload to infer from, so the
             // turbofish is the only source besides the expected type.
-            let explicit: Vec<TypeId> = if variant_info.type_params.is_empty() {
-                Vec::new()
-            } else {
-                ident
-                    .type_args
-                    .iter()
-                    .map(|t| self.resolve_type(t))
-                    .collect()
-            };
             let variant_type = self.construct_variant_case(
                 &variant_info,
                 case_data,
                 &[],
-                &explicit,
+                &ident.type_args,
                 prefix,
                 expected_type,
                 ident.id,
@@ -1657,9 +1648,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // Unrolling fixes the index to a literal per element.
-            if let Some(elem) =
-                self.tysys
-                    .variadic_enumerate_subscript_type(elements, &index.index, ctx)
+            if ctx.is_variadic_enumerate_index(&index.index)
+                && let Some(elem) = self.tysys.pack_element_type(elements)
             {
                 return elem;
             }
@@ -5033,31 +5023,23 @@ impl TypeSystem {
         self.exh_int(start_val, hi, scrutinee_type)
     }
 
-    /// The pack a comprehension's iterable walks: its `(name, index)` and the type
-    /// one element binds, a mapped pack's mapped element as the variadic for-of binds it.
+    /// The pack a comprehension's iterable walks, as [`pack_of`] reads it.
     pub(super) fn comprehension_pack(
         &self,
         iterable_type: TypeId,
     ) -> Option<(String, u32, TypeId)> {
         let type_table = self.type_table.borrow();
         let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
-        elems.iter().find_map(|&e| match type_table.get(e) {
-            ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem,
-            } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
-            _ => None,
-        })
+        pack_of(&type_table, &elems)
+    }
+
+    /// The type one expansion of the pack in `elements` binds.
+    pub(super) fn pack_element_type(&self, elements: &[TypeId]) -> Option<TypeId> {
+        pack_of(&self.type_table.borrow(), elements).map(|(_, _, elem)| elem)
     }
 
     /// Element type at a literal index into a tuple, which may carry a
-    /// variadic pack.
-    ///
-    /// An index that lands on the pack is rejected: the pack's arity and its
-    /// per-position types are only known once it expands, so neither the bound
-    /// nor the element type can be decided here. Only the scalar prefix ahead
-    /// of the pack (`[i32, ..T]`.0) has a fixed position.
+    /// variadic pack; only the scalars ahead of the pack have a fixed position.
     pub(super) fn tuple_literal_index_type(
         &self,
         elements: &[TypeId],
@@ -5082,36 +5064,6 @@ impl TypeSystem {
         ))
     }
 
-    /// The element type of `t[i]` where `t` is a pack-typed tuple and `i` is
-    /// the index of an enclosing variadic `.enumerate()` — the one non-literal
-    /// subscript a tuple admits, since unrolling fixes it per element.
-    ///
-    /// A mapped pack (`[..Option<F>]`) yields its mapped element, matching how
-    /// the variadic for-of binds one.
-    pub(super) fn variadic_enumerate_subscript_type(
-        &self,
-        elements: &[TypeId],
-        index_expr: &ast::Expr,
-        ctx: &FunctionContext,
-    ) -> Option<TypeId> {
-        let ast::Expr::Ident(ident) = index_expr else {
-            return None;
-        };
-        let local = ctx.lookup(&ident.name)?;
-        if !ctx.variadic_enumerate_indices.contains(&local.index) {
-            return None;
-        }
-        let type_table = self.type_table.borrow();
-        elements.iter().find_map(|&e| match type_table.get(e) {
-            ResolvedType::TypePack {
-                mapped_elem: Some(elem),
-                ..
-            } => Some(*elem),
-            ResolvedType::TypePack { .. } => Some(e),
-            _ => None,
-        })
-    }
-
     /// The type one element of a comprehension's iterable binds.
     pub(super) fn comprehension_pack_elem(&self, iterable_type: TypeId) -> Option<TypeId> {
         self.comprehension_pack(iterable_type)
@@ -5129,6 +5081,19 @@ impl TypeSystem {
             _ => None,
         }
     }
+}
+
+/// The pack in `elements`: its `(name, index)` and the type one expansion binds,
+/// a mapped pack's (`[..Option<F>]`) mapped element as the variadic for-of binds it.
+fn pack_of(table: &TypeTable, elements: &[TypeId]) -> Option<(String, u32, TypeId)> {
+    elements.iter().find_map(|&e| match table.get(e) {
+        ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
+        _ => None,
+    })
 }
 
 /// The values an integer literal may take at `prim`. `char` is included:

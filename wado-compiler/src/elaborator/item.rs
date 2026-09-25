@@ -1444,7 +1444,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
             type_id: self_slot,
-            declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
+            declaring_trait: Some(scope.tysys.def_at(trait_decl.id)),
         };
         scope.set_self_binding(declaring);
         scope.bind_param(

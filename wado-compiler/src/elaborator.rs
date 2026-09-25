@@ -438,17 +438,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         .0
     }
 
-    /// Run `body` recording into `fresh` in place of the facts `field` selects,
-    /// and hand back what it recorded. The enclosing facts return even on a panic.
-    pub(super) fn recording_into<T, R>(
-        &mut self,
-        field: for<'s> fn(&'s mut Self) -> &'s mut T,
-        fresh: T,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> (R, T) {
-        util::replaced(self, field, fresh, body)
-    }
-
     /// The single sink for every use→def edge, so the
     /// [`scope::Scope::suppress_reference_recording`] gate lives in one place.
     fn insert_reference(&mut self, use_id: AstId, def_id: AstId) {
@@ -1149,14 +1138,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .or_else(|| self.tysys.resolutions.prelude_decl(name))
     }
 
-    /// The trait a reference site names, in the form a mangled method name
-    /// embeds it: the declaration the site resolves to, plus the type
-    /// arguments the site wrote.
-    ///
-    /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
-    /// in the module that wrote the reference — so an alias and a second
-    /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration carries no identity — see [`TypeSystem::fq_trait_name_at`].
+    /// The trait a reference site names, as a mangled method name embeds it:
+    /// the declaration the writing module resolved it to, plus the written type arguments.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let written = self.get_type_name(ty);
         let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
@@ -1975,11 +1958,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource,
                     );
-                    let resource_def = self.tysys.resolutions.defs().of_ast_id(resource_decl.id);
                     self.resolve_operation_param_defaults(
                         &resource_decl.type_params,
                         &resource_decl.methods,
-                        resource_def,
+                        Some(self.tysys.def_at(resource_decl.id)),
                     );
                 }
                 // Other items will be added as needed
@@ -2252,7 +2234,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     decls: scope.sem.decls.clone(),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
-                let ((), mut populated) = scope.recording_into(
+                let ((), mut populated) = util::replaced(
+                    &mut *scope,
                     |elab| &mut elab.sem,
                     synthetic,
                     |scope| {
@@ -2318,10 +2301,8 @@ impl TypeSystem {
         self.associated_constant_of(owner, name)
     }
 
-    /// The declaration a qualified path's *owner* segment names — `Color` in
-    /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
-    /// resolve walk answered for. `None` for a bare name, which qualifies
-    /// nothing, and for an owner that reaches no declaration.
+    /// The declaration a qualified path's owner segment names: `Color` in
+    /// `Color::Red` or `ns::Color::Red`.
     pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
         self.resolutions.declared(ident.owner_segment()?.id)
     }
@@ -2331,9 +2312,8 @@ impl TypeSystem {
         self.signatures.function_sig(self.free_function_at(site)?)
     }
 
-    /// The free function the reference site `site` names, answered by the
-    /// module that wrote it (WEP 2026-08-12). `None` where it names something
-    /// else — a binder, a variant case, a node no walk saw.
+    /// The free function the reference site `site` names, as the module that
+    /// wrote it resolved it (WEP 2026-08-12).
     pub(super) fn free_function_at(&self, site: AstId) -> Option<DefId> {
         let def = self.resolutions.declared_if_walked(site)?;
         (self.resolutions.defs().kind(def) == DefKind::Function).then_some(def)
@@ -2368,8 +2348,7 @@ impl TypeSystem {
     }
 
     /// Whether the receiver's own declaration of this name and kind shadows a
-    /// trait impl's. Stated once here because every walk reaching both kinds
-    /// has to apply it, and one that reimplements it applies its own.
+    /// trait impl's; every walk reaching both kinds asks here rather than reimplementing it.
     pub(crate) fn inherent_shadows(
         &self,
         receiver: &trait_env::ImplTargetKey,

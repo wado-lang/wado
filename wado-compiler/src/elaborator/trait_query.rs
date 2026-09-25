@@ -25,7 +25,8 @@ use super::scope::{
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
-    MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
+    MethodInfo, MethodOwner, OperatorImpl, ResolvedTraitMethod, TraitMethodMatch, TypeError,
+    TypeLookup,
 };
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -3439,13 +3440,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             });
         if let Some(info) = written {
-            let mut resolved = ResolvedTraitMethod::of_operator_impl(
-                &self.tysys,
+            let found = OperatorImpl {
                 info,
-                method_name,
-                struct_name.to_string(),
-                lookup_type_id,
-            );
+                impl_name: struct_name.to_string(),
+                impl_type_id: lookup_type_id,
+            };
+            let mut resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, method_name);
             if let Some((_, return_type)) = auto_derive {
                 resolved.return_type = return_type;
             }

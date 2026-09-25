@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility};
+use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -108,6 +108,26 @@ pub(super) fn newtype_member_owner(
 }
 
 impl StructFieldInfo {
+    /// `decl` with its fields resolved to `fields`, in declaration order.
+    pub(crate) fn of_decl(
+        module_source: ModuleSource,
+        decl: &ast::StructDecl,
+        fields: Vec<(String, TypeId, Visibility)>,
+        type_param_type_ids: Vec<TypeId>,
+    ) -> Self {
+        Self {
+            name: decl.name.clone(),
+            module_source,
+            defined_at: decl.id,
+            fields,
+            field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
+            field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
+            field_wire_numbers: wire_numbers_of(&decl.fields),
+            type_params: RealTypeParams::of(&decl.type_params),
+            type_param_type_ids,
+        }
+    }
+
     /// Whether `Default` derives from the field defaults alone: every field
     /// declares one. A fieldless struct qualifies vacuously — it has exactly
     /// one value — which is what makes the `NoFields` marker a usable default
@@ -141,6 +161,25 @@ pub(crate) struct VariantCaseData {
 }
 
 impl VariantCaseData {
+    /// `decl`'s cases, each payload resolved by `payload_of`; a case without
+    /// one carries `()`.
+    pub(crate) fn collect(
+        decl: &ast::VariantDecl,
+        mut payload_of: impl FnMut(&ast::Type) -> TypeId,
+    ) -> Vec<Self> {
+        decl.cases
+            .iter()
+            .map(|case| Self {
+                name: case.name.clone(),
+                payload: case
+                    .payload
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, &mut payload_of),
+                ast_id: case.id,
+            })
+            .collect()
+    }
+
     /// Whether the case carries a payload, rather than being a unit case.
     pub(super) fn has_payload(&self, table: &TypeTable) -> bool {
         !matches!(table.get(self.payload), ResolvedType::Unit)
@@ -259,14 +298,16 @@ pub(crate) struct FlagsInfo {
 }
 
 impl FlagsInfo {
-    /// Each member's bitmask is `1 << index`, so the declaration holds at most 32.
+    /// The most members a declaration holds: each one's bitmask is `1 << index`.
+    pub(super) const MAX_MEMBERS: usize = u32::BITS as usize;
+
     pub(super) fn of_decl(
         type_id: TypeId,
         module_source: ModuleSource,
         decl: &ast::FlagsDecl,
     ) -> Self {
         assert!(
-            decl.flags.len() <= u32::BITS as usize,
+            decl.flags.len() <= Self::MAX_MEMBERS,
             "a flags declaration wider than a word is rejected before this"
         );
         let members = decl
@@ -306,6 +347,15 @@ pub(crate) struct GenericNewtypeInfo {
     /// [`StructFieldInfo::type_params`].
     pub(super) type_params: RealTypeParams,
     pub(super) base_type_ast: ast::Type,
+}
+
+impl GenericNewtypeInfo {
+    pub(crate) fn of_decl(decl: &ast::Newtype) -> Self {
+        Self {
+            type_params: RealTypeParams::of(&decl.type_params),
+            base_type_ast: decl.ty.clone(),
+        }
+    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -3112,6 +3162,14 @@ impl FunctionContext {
         None
     }
 
+    /// Whether `expr` names the index of an enclosing variadic `.enumerate()`,
+    /// the one non-literal subscript a pack-typed tuple admits.
+    pub(super) fn is_variadic_enumerate_index(&self, expr: &ast::Expr) -> bool {
+        matches!(expr, ast::Expr::Ident(ident)
+            if self.lookup(&ident.name)
+                .is_some_and(|local| self.variadic_enumerate_indices.contains(&local.index)))
+    }
+
     /// The binding `name` names here: one this frame owns, or one it reaches
     /// through its own environment. Registers no capture, unlike
     /// [`Self::lookup_or_capture`].
@@ -3470,6 +3528,21 @@ impl DataDecls {
         self.newtypes.insert(def, flags_type);
         self.flags_cases
             .insert(def, FlagsInfo::of_decl(flags_type, module_source, decl));
+    }
+
+    /// Declare the concrete newtype `decl_id` over `base`, which is also a type name.
+    pub(crate) fn declare_newtype(
+        &mut self,
+        type_table: &RefCell<TypeTable>,
+        def: DefId,
+        decl_id: AstId,
+        base: TypeId,
+    ) {
+        let newtype_id = type_table.borrow_mut().make_newtype(def, base);
+        type_table
+            .borrow_mut()
+            .register_decl_type(decl_id, newtype_id);
+        self.newtypes.insert(def, newtype_id);
     }
 
     /// Every declaration any table holds. A `flags` type is in two.
@@ -3888,14 +3961,17 @@ impl ResolvedTraitMethod {
         }
     }
 
-    /// The method of the operator impl `info` matched on `impl_type_id`.
+    /// `method_name` of the operator impl `found`.
     pub(super) fn of_operator_impl(
         tysys: &TypeSystem,
-        info: ArithmeticTraitInfo,
+        found: OperatorImpl,
         method_name: &str,
-        impl_name: String,
-        impl_type_id: TypeId,
     ) -> Self {
+        let OperatorImpl {
+            info,
+            impl_name,
+            impl_type_id,
+        } = found;
         Self {
             method_def: tysys.declared_method(info.impl_def, method_name),
             trait_name: info.trait_name,
@@ -3909,6 +3985,14 @@ impl ResolvedTraitMethod {
             is_type_param_receiver: false,
         }
     }
+}
+
+/// An operator trait impl, with the type it was found on: the receiver's own,
+/// or a newtype's base where dispatch fell back to it.
+pub(super) struct OperatorImpl {
+    pub(super) info: ArithmeticTraitInfo,
+    pub(super) impl_name: String,
+    pub(super) impl_type_id: TypeId,
 }
 
 /// A `From<Array<E>>` impl a literal can coerce through.

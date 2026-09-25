@@ -7,7 +7,8 @@ use crate::tir::TypeTable;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::types::{
-    EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData, VariantInfo,
+    EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData,
+    VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
@@ -112,7 +113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Item::Flags(flags_decl) => {
                     // The batch pass (`annotate_modules`) reports a flags wider than a word.
-                    if flags_decl.flags.len() > 32 {
+                    if flags_decl.flags.len() > FlagsInfo::MAX_MEMBERS {
                         continue;
                     }
                     let def = self.tysys.def_at(flags_decl.id);

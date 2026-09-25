@@ -25,6 +25,7 @@ use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
+use super::util;
 use super::util::parse_i128_literal;
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
@@ -490,9 +491,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// If `type_id` is a function type — possibly behind references or
-    /// fn-type newtypes such as `type Handler = fn(...);` — return its
-    /// signature. Otherwise return `None`. Borrows the type table once.
+    /// The signature of the function type `type_id` is, behind any references
+    /// or fn-type newtypes such as `type Handler = fn(...);`.
     pub(super) fn as_fn_signature(&self, type_id: TypeId) -> Option<FnSignature> {
         let table = self.type_table.borrow();
         let peeled_ref = table.peel_refs(type_id);
@@ -2303,7 +2303,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return walk(self);
         };
         let (result, overlay) =
-            self.recording_into(|elab| &mut elab.sem.types.body, BodyFacts::default(), walk);
+            util::replaced(self, |elab| &mut elab.sem.types.body, BodyFacts::default(), walk);
         self.sem.types.default_overlays.insert(site, overlay);
         result
     }
@@ -3470,7 +3470,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info: &VariantInfo,
         case_data: &VariantCaseData,
         args: &[TypeId],
-        explicit: &[TypeId],
+        turbofish: &[ast::Type],
         written_owner: &str,
         expected_type: Option<TypeId>,
         site: AstId,
@@ -3491,13 +3491,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .type_id_of_decl(variant_info.defined_at)
         } else {
+            let explicit: Vec<TypeId> = turbofish.iter().map(|t| self.resolve_type(t)).collect();
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
                 variant_info,
                 case_data,
                 payload,
                 expected_type,
-                explicit,
+                &explicit,
             );
             self.defer_uninferable_variant(inferred, written_owner, variant_info, span)
         };
@@ -3591,9 +3592,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// The effect / resource declaration a qualified callee's receiver segment
-    /// names — answered by the site the walk resolved, so an import alias needs
-    /// no translation back into a spelling.
+    /// The effect or resource declaration a qualified callee's receiver
+    /// segment names.
     fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
         let def = self.resolutions.declared(site?)?;
         self.is_effect_or_resource_decl(def).then_some(def)

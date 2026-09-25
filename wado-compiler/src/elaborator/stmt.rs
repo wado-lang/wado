@@ -295,19 +295,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        // Generic local structs need `T` etc. in scope while resolving field
-        // types (so a field of type `T` becomes a `TypeParam`, not
-        // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
-        // scope is entered unconditionally — harmless no-op when there are
-        // no type params.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
-        // Field default expressions are recorded here (the raw AST, in
-        // `field_defaults` below) and resolved into TIR by
-        // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
-        // split for a top-level struct.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let fields: Vec<_> = struct_decl

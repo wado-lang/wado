@@ -571,4 +571,34 @@ impl TypeSystem {
             ResolvedType::Error => "<error>".to_string(),
         }
     }
+
+    /// How `==` / `!=` compares these operands by identity, if it does.
+    pub(super) fn identity_of(
+        &self,
+        op: BinaryOp,
+        left: TypeId,
+        right: TypeId,
+    ) -> Option<Identity> {
+        if !matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+            return None;
+        }
+        let type_table = self.type_table.borrow();
+        if matches!(
+            (type_table.get(left), type_table.get(right)),
+            (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+        ) {
+            return Some(Identity::Reference);
+        }
+        type_table
+            .handles_compare(left, right)
+            .then_some(Identity::Handle)
+    }
+}
+
+/// What `==` compares when it compares by identity.
+pub(super) enum Identity {
+    Reference,
+    /// An unrestricted resource handle, which the host interns.
+    Handle,
 }

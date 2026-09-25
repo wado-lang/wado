@@ -28,7 +28,7 @@ use super::Elaborator;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
-    DataDecls, EnumInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo, StructFieldInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo, StructFieldInfo,
     TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
@@ -517,17 +517,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            data.variant_cases.insert(
-                                def,
-                                VariantInfo::of_decl(
-                                    module_source.clone(),
-                                    variant_decl,
-                                    Vec::new(),
-                                    Vec::new(),
-                                ),
-                            );
-                        }
+                        data.variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo::of_decl(
+                                module_source.clone(),
+                                variant_decl,
+                                Vec::new(),
+                                Vec::new(),
+                            ),
+                        );
                         register_variant_compiler_items(
                             &type_table,
                             variant_decl,
@@ -536,14 +534,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Enum(enum_decl) => {
-                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
-                            data.enum_cases
-                                .insert(def, EnumInfo::of_decl(module_source.clone(), enum_decl));
-                        }
+                        data.enum_cases.insert(
+                            resolutions.defs().def_at(enum_decl.id),
+                            EnumInfo::of_decl(module_source.clone(), enum_decl),
+                        );
                         register_enum_compiler_items(&type_table, enum_decl, module_source, logger);
                     }
                     Item::Resource(resource_decl) => {
-                        if let Some(def) = resolutions.defs().of_ast_id(resource_decl.id) {
+                        let def = resolutions.defs().def_at(resource_decl.id);
                             data.resource_types.insert(
                                 def,
                                 ResourceInfo {
@@ -584,7 +582,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     span: resource_decl.span,
                                 });
                             }
-                        }
                         register_type_compiler_item(
                             &type_table,
                             CompilerItemKind::Resource,
@@ -754,14 +751,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
                         let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
-                        let info = StructFieldInfo::of_decl(
-                            module_source.clone(),
-                            struct_decl,
-                            fields,
-                            type_param_type_ids,
-                        );
-                        data.struct_fields
-                            .insert(resolutions.defs().def_at(struct_decl.id), info);
+                        let info = data
+                            .struct_fields
+                            .get_mut(&resolutions.defs().def_at(struct_decl.id))
+                            .expect("the first sub-pass declared every struct");
+                        info.fields = fields;
+                        info.type_param_type_ids = type_param_type_ids;
                     }
                     // The pre-pass already recorded every generic newtype whole.
                     Item::Newtype(newtype_decl) if newtype_decl.type_params.is_empty() => {
@@ -784,24 +779,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )
                         });
                         let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            data.variant_cases.insert(
-                                def,
-                                VariantInfo::of_decl(
-                                    module_source.clone(),
-                                    variant_decl,
-                                    cases,
-                                    type_param_type_ids,
-                                ),
-                            );
-                        }
+                        data.variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo::of_decl(
+                                module_source.clone(),
+                                variant_decl,
+                                cases,
+                                type_param_type_ids,
+                            ),
+                        );
                     }
                     Item::Flags(flags_decl) => {
-                        // A flags value is a single 32-bit word at the CM
-                        // boundary (bitmask `1 << i`), so >32 members has no
-                        // representation. Reject it here rather than shifting
-                        // past the word width.
-                        if flags_decl.flags.len() > 32 {
+                        if flags_decl.flags.len() > FlagsInfo::MAX_MEMBERS {
                             logger.error_in(
                                 module_source,
                                 TypeError::FlagsTooManyMembers {
@@ -810,13 +799,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     span: flags_decl.name_span,
                                 },
                             )?;
-                            // Skip registering the malformed decl; building its
-                            // `1 << i` bitmasks would overflow the word width.
                             continue;
                         }
-                        let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) else {
-                            continue;
-                        };
+                        let def = resolutions.defs().def_at(flags_decl.id);
                         data.declare_flags(&type_table, def, module_source.clone(), flags_decl);
                     }
                     _ => {}
@@ -1631,31 +1616,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
-                        let Some(def) = defs.of_ast_id(struct_decl.id) else {
-                            continue;
-                        };
+                        let def = defs.def_at(struct_decl.id);
                         let type_id = tt.make_struct(StructDef::Decl(def));
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
-                        let Some(def) = defs.of_ast_id(enum_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_enum(def);
+                        let type_id = tt.make_enum(defs.def_at(enum_decl.id));
                         tt.register_decl_type(enum_decl.id, type_id);
                     }
                     Item::Variant(variant_decl) => {
-                        let Some(def) = defs.of_ast_id(variant_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_variant(def);
+                        let type_id = tt.make_variant(defs.def_at(variant_decl.id));
                         tt.register_decl_type(variant_decl.id, type_id);
                     }
                     Item::Resource(resource_decl) => {
-                        let Some(def) = defs.of_ast_id(resource_decl.id) else {
-                            continue;
-                        };
-                        let type_id = tt.make_resource(def);
+                        let type_id = tt.make_resource(defs.def_at(resource_decl.id));
                         tt.register_decl_type(resource_decl.id, type_id);
                     }
                     _ => {}

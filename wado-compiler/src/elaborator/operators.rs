@@ -16,11 +16,11 @@ use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{
-    ArithmeticTraitInfo, FunctionContext, MethodInfo, ResolvedTraitMethod, TypeError,
+    FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError,
 };
-use super::tysys::TypeSystem;
+use super::tysys::{Identity, TypeSystem};
 use super::util::bound_param_name;
-use crate::elaborator::reify::{CompoundHoist, Identity, collect_compound_hoists};
+use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::ImplHeader;
@@ -653,11 +653,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     [_only] => admitted.into_iter().next(),
                     [] | [_, _, ..] => None,
                 };
-                if let Some(trait_info) = trait_info_opt {
+                if let Some(info) = trait_info_opt {
+                    let found = OperatorImpl {
+                        info,
+                        impl_name,
+                        impl_type_id,
+                    };
                     return self.dispatch_operator_impl(
                         left,
                         (right, right_span),
-                        (trait_info, impl_name, impl_type_id),
+                        found,
                         method_name,
                         origin,
                     );
@@ -708,26 +713,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Find the shift trait implementation. `Shl` / `Shr` declare
                 // `rhs: u32` and take no trait argument, so there is nothing
                 // to select between.
-                let (trait_info_opt, (impl_name, impl_type_id)) = self
+                let found = self
                     .find_arithmetic_trait_impl(&struct_name, left, trait_, method_name, None)
-                    .map(|info| (Some(info), (struct_name.clone(), left)))
-                    .unwrap_or_else(|| {
-                        let info = self.find_arithmetic_trait_impl(
+                    .map(|info| OperatorImpl {
+                        info,
+                        impl_name: struct_name.clone(),
+                        impl_type_id: left,
+                    })
+                    .or_else(|| {
+                        self.find_arithmetic_trait_impl(
                             &lookup_name,
                             lookup_type_id,
                             trait_,
                             method_name,
                             None,
-                        );
-                        (info, (lookup_name.clone(), lookup_type_id))
+                        )
+                        .map(|info| OperatorImpl {
+                            info,
+                            impl_name: lookup_name.clone(),
+                            impl_type_id: lookup_type_id,
+                        })
                     });
-                if let Some(trait_info) = trait_info_opt {
+                if let Some(found) = found {
                     // Shift traits declare `rhs: u32` (not `&Self`), so
                     // `dispatch_trait_op_method` checks against it and wraps no `&`.
                     return self.dispatch_operator_impl(
                         left,
                         (right, right_span),
-                        (trait_info, impl_name, impl_type_id),
+                        found,
                         method_name,
                         origin,
                     );
@@ -1822,18 +1835,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         left: TypeId,
         right: (TypeId, Span),
-        impl_: (ArithmeticTraitInfo, String, TypeId),
+        found: OperatorImpl,
         method_name: &str,
         origin: Option<ast::AstId>,
     ) -> TypeId {
-        let (trait_info, impl_name, impl_type_id) = impl_;
-        let resolved = ResolvedTraitMethod::of_operator_impl(
-            &self.tysys,
-            trait_info,
-            method_name,
-            impl_name,
-            impl_type_id,
-        );
+        let resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, method_name);
         self.dispatch_trait_op_method(left, vec![right], &resolved, origin)
     }
 
@@ -1850,8 +1856,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         origin: Option<ast::AstId>,
     ) -> TypeId {
         if args.len() != resolved.param_types.len() {
-            // Only an impl declaring another arity than its trait gets here, and
-            // `TraitMethodArityMismatch` already reported it where it is written.
+            assert!(
+                self.logger.has_errors(),
+                "only an impl whose arity differs from its trait's reaches here, \
+                 and `TraitMethodArityMismatch` reports it"
+            );
             return TypeTable::ERROR;
         }
 

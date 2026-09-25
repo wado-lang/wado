@@ -35,7 +35,7 @@ use super::coercion::{
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
-use super::tysys::TypeSystem;
+use super::tysys::{Identity, TypeSystem};
 use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{
@@ -266,13 +266,6 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
         call.output_type,
         span,
     )
-}
-
-/// What `==` compares when it compares by identity.
-pub(super) enum Identity {
-    Reference,
-    /// An unrestricted resource handle, which the host interns.
-    Handle,
 }
 
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
@@ -877,12 +870,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
         TirEnum {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(enum_decl.id)
-                .expect("an `enum` declaration is declared"),
+            def: self.tysys.def_at(enum_decl.id),
             name: enum_decl.name.clone(),
             module_source: self.current_module_source.clone(),
             visibility: enum_decl.visibility,
@@ -907,7 +895,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `flags F { … }` declaration, typed as
     /// [`DataDecls::declare_flags`](super::types::DataDecls::declare_flags) interned it.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
-        let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
+        let def = self.tysys.def_at(flags_decl.id);
         let info = self.tysys.data.flags_cases.get(&def)?;
         Some(TirFlags {
             def,
@@ -957,7 +945,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `make_newtype_instance` — so it lands here without one, carrying the
     /// parameters its synthesized impls are written over.
     fn reify_newtype(&self, newtype_decl: &ast::Newtype) -> Option<TirNewtype> {
-        let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
+        let def = self.tysys.def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
         let type_id = self.tysys.data.newtypes.get(&def).copied();
         if !generic && type_id.is_none() {
@@ -992,49 +980,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let field_types = self
             .ann_struct_field_types(struct_decl.id)
             .expect("resolve_struct records the field types for every struct reify emits");
-
-        // Field-default expressions resolve in a per-struct
-        // `FunctionContext` keyed `struct:<name>` (no self, no other
-        // fields in scope), matching `Elaborator::resolve_struct`
-        // byte-for-byte so the synthesized purity check and reify see
-        // identical TIR.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let mut fields = Vec::with_capacity(struct_decl.fields.len());
-        for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = field_types[index];
-
-            let wire_name_override = wire_name_override_of(&field.attrs);
-
-            let default_expr: Option<Box<TirExpr>> = field.default.as_ref().map(|default_ast| {
-                Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
-            });
-
-            // A field is optional on deserialize iff it has a default value.
-            // `#[wire(default)]` is removed (rejected in `resolve_struct`).
-            let serde_default = field.default.is_some();
-
-            let serde_positional = field
-                .attrs
-                .iter()
-                .any(|a| a.name == WIRE && a.has_arg("positional"));
-
-            fields.push(TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-                wire_name_override,
-                serde_default,
-                serde_positional,
-                serde_number: wire_numbers[index],
-                default_expr,
-            });
-        }
+        let fields = self.reify_fields(struct_decl, &field_types);
 
         // Single source of truth: the body walk projected these type
         // params with each default resolved while the decl's type-param scope
@@ -1046,13 +992,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
 
         TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a `struct` declaration is declared"),
-            ),
+            def: StructDef::Decl(self.tysys.def_at(struct_decl.id)),
             type_args: Vec::new(),
             name: struct_decl.name.clone(),
             module_source: self.current_module_source.clone(),
@@ -1063,6 +1003,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span: struct_decl.span,
             wire_name_policy,
         }
+    }
+
+    /// `struct_decl`'s fields, typed by `field_types` in declaration order.
+    fn reify_fields(
+        &mut self,
+        struct_decl: &ast::StructDecl,
+        field_types: &[TypeId],
+    ) -> Vec<TirField> {
+        assert_eq!(field_types.len(), struct_decl.fields.len());
+        // A default resolves with no `self` and no other field in scope, in a
+        // context named as `resolve_struct` names it, so both see the same TIR.
+        let mut field_ctx =
+            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
+        struct_decl
+            .fields
+            .iter()
+            .zip(field_types)
+            .zip(wire_numbers)
+            .enumerate()
+            .map(|(index, ((field, &type_id), serde_number))| TirField {
+                name: field.name.clone(),
+                visibility: field.visibility,
+                type_id,
+                index: index as u32,
+                span: field.span,
+                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
+                wire_name_override: wire_name_override_of(&field.attrs),
+                serde_default: field.default.is_some(),
+                serde_positional: field
+                    .attrs
+                    .iter()
+                    .any(|a| a.name == WIRE && a.has_arg("positional")),
+                serde_number,
+                default_expr: field.default.as_ref().map(|default_ast| {
+                    Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
+                }),
+            })
+            .collect()
     }
 
     /// Reify a local item declaration (`Stmt::Item` — a `struct`/`type`
@@ -1089,66 +1068,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
     /// doesn't carry attributes, only `(name, type, visibility)`.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(info) = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local.struct_fields.get(&def))
-            .cloned()
-        else {
-            // `resolve_local_struct` inserts this unconditionally for every
-            // local struct declaration annotate resolved.
-            return;
-        };
-        // Field-default expressions resolve in a per-struct `FunctionContext`
-        // (no self, no other fields in scope), matching `reify_struct`.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let fields: Vec<TirField> = info
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(index, (name, type_id, visibility))| {
-                let field = struct_decl.fields.get(index);
-                let attrs: &[ast::Attribute] = field.map_or(&[], |f| &f.attrs);
-                let default_expr: Option<Box<TirExpr>> =
-                    field.and_then(|f| f.default.as_ref()).map(|default_ast| {
-                        Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(*type_id)))
-                    });
-                TirField {
-                    name: name.clone(),
-                    visibility: *visibility,
-                    type_id: *type_id,
-                    index: index as u32,
-                    span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == SECRET),
-                    wire_name_override: wire_name_override_of(attrs),
-                    serde_default: field.is_some_and(|f| f.default.is_some()),
-                    serde_positional: attrs
-                        .iter()
-                        .any(|a| a.name == WIRE && a.has_arg("positional")),
-                    serde_number: wire_numbers.get(index).copied().flatten(),
-                    default_expr,
-                }
-            })
-            .collect();
+        let def = self.tysys.def_at(struct_decl.id);
+        let info = &self.sem.decls.local.struct_fields[&def];
+        let name = info.name.clone();
+        let field_types: Vec<TypeId> = info.fields.iter().map(|&(_, ty, _)| ty).collect();
+        let fields = self.reify_fields(struct_decl, &field_types);
         // Single source of truth, as for a top-level struct: the body walk
         // projected these with the struct's own type-param scope alive.
         let type_params = self.ann_decl_type_params(struct_decl.id).expect(
             "resolve_local_struct records the type params for every local struct reify emits",
         );
         self.pending_local_structs.push(TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a function-local `struct` is declared"),
-            ),
+            def: StructDef::Decl(def),
             type_args: Vec::new(),
-            name: info.name,
+            name,
             module_source: self.current_module_source.clone(),
             visibility: ast::Visibility::Private,
             type_params,
@@ -1163,9 +1096,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return;
-        };
+        let def = self.tysys.def_at(newtype_decl.id);
         let generic = !newtype_decl.type_params.is_empty();
         let type_id = self.sem.decls.local.newtypes.get(&def).copied();
         if !generic && type_id.is_none() {
@@ -1187,26 +1118,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// come from `tysys.data.variant_cases`; the type-param table is
     /// projected from the AST.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
-        let def = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(variant_decl.id)
-            .expect("a `variant` declaration is declared");
-        let case_info = self.tysys.data.variant_cases.get(&def);
+        let def = self.tysys.def_at(variant_decl.id);
+        let case_info = &self.tysys.data.variant_cases[&def];
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
             .cases
             .iter()
+            .zip(&case_info.cases)
             .enumerate()
-            .map(|(index, case)| {
-                let payload = case_info
-                    .and_then(|info| info.cases.get(index).map(|c| c.payload))
-                    .unwrap_or(TypeTable::UNIT);
+            .map(|(index, (case, data))| {
                 tir::TirVariantCase {
                     name: case.name.clone(),
                     index: index as u32,
-                    payload,
+                    payload: data.payload,
                     span: case.span,
                     wire_name_override: wire_name_override_of(&case.attrs),
                 }
@@ -1267,12 +1191,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(decl.id)
-                .expect("a `resource` declaration is declared"),
+            def: self.tysys.def_at(decl.id),
             name: decl.name.clone(),
             visibility: decl.visibility,
             operations,
@@ -6407,9 +6326,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `.enumerate()` index: kept as `Index` here and rewritten to the
         // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
         if let Some(elems) = &tuple_elems
-            && let Some(elem_type) =
-                self.tysys
-                    .variadic_enumerate_subscript_type(elems, &index.index, ctx)
+            && ctx.is_variadic_enumerate_index(&index.index)
+            && let Some(elem_type) = self.tysys.pack_element_type(elems)
         {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return TirExpr::new(
@@ -10441,29 +10359,6 @@ impl TypeSystem {
         } else {
             method_call
         }
-    }
-
-    /// How `==` / `!=` compares these operands by identity, if it does.
-    pub(super) fn identity_of(
-        &self,
-        op: ast::BinaryOp,
-        left: TypeId,
-        right: TypeId,
-    ) -> Option<Identity> {
-        if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
-            return None;
-        }
-        let type_table = self.type_table.borrow();
-        if matches!(
-            (type_table.get(left), type_table.get(right)),
-            (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
-        ) {
-            return Some(Identity::Reference);
-        }
-        type_table
-            .handles_compare(left, right)
-            .then_some(Identity::Handle)
     }
 
     fn is_source_place(&self, expr: &TirExpr) -> bool {

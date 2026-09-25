@@ -2781,25 +2781,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target: &ImplTargetKey,
         from_type: TypeId,
     ) -> bool {
-        let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
-        let from_trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(CompilerItem::From)
-            .to_string();
-        self.tysys
-            .trait_env
-            .all_impl_keys(target)
-            .iter()
-            .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
-            .any(|header| {
-                header.is_synthesize_request
-                    && header.trait_head_name() == Some(from_trait_name.as_str())
-                    && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
-                        if generic.args.len() == 1
-                            && self.get_type_name_full(&generic.args[0]) == from_type_name)
-            })
+        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
+            return false;
+        };
+        let table = self.tysys.type_table.borrow();
+        let from_key = table.type_key(from_type);
+        self.tysys.trait_env.all_impl_keys(target).iter().any(|&impl_def| {
+            self.tysys.trait_env.impl_headers[&impl_def].is_synthesize_request
+                && self
+                    .tysys
+                    .signatures
+                    .impl_sig(impl_def)
+                    .is_some_and(|sig| {
+                        sig.trait_decl == Some(from_trait)
+                            && matches!(sig.trait_type_args.as_slice(),
+                                [arg] if table.type_key(*arg) == from_key)
+                    })
+        })
     }
 
     /// Report why a static call's arguments matched no impl, when the
