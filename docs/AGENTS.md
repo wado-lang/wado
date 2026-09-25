@@ -5,14 +5,27 @@ This is the documentation directory of Wado.
 ## Rules for Markdown
 
 - Keep documentation simple and MECE.
-- Don't document implementation details. They go stale, and a reader this far from the code has no way to notice.
+- Don't document implementation details outside a WEP. They go stale, and a reader this far from the code has no way to notice.
 - Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
 - Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`).
-- After updating any docs, run `mise run format`.
+- A document's first `#` heading is its title in the index below.
+- After updating any docs, run `mise run format`. After adding, removing, or retitling one, run `mise run update-docs-index`.
+
+## Specification
+
+The specification is `docs/spec-*.md`, one file per area of the language, and
+it is normative: `spec-overview.md` says what that means. A rule is stated in
+exactly one place. The specification says what the rule is; how it came to be
+belongs to the WEP that proposed it.
+
+A change that settles a rule writes it into the specification in the same
+change. A file stays readable in one sitting; an area that outgrows that splits
+into two files.
 
 ## WEP: Wado Evolution Proposals
 
-WEPs combine language specification and implementation strategy in a single document, covering both user-visible features and compiler architecture decisions.
+A WEP is a proposal: the problem, the design decided for it, and the work to
+get there. It covers user-visible features and compiler architecture alike.
 
 Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 
@@ -22,10 +35,12 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Roadmap: What will be done, in order
 - Known gaps: What is missing, whether or not it will be closed
 
-Keeping a WEP current comes first. A WEP that no longer describes the code is
-worse than no WEP, so a change that lands rewrites the sections it affected in
-the same breath — write down what the code now does, and do not wait to be
-asked.
+A WEP keeps its history. Alternatives weighed, how the design changed, and the
+checklist and roadmap entries that landed stay in it.
+
+Once a design settles, its rules move to the specification, and the WEP stops
+being where a reader looks a rule up. Where a WEP and the specification
+disagree, the specification holds.
 
 Adding or changing a language feature is the human's call, to adopt and to
 refuse alike. Propose it and wait. Recording a feature that already exists is
@@ -35,12 +50,6 @@ What an adopted decision already settles is not a second decision. Write out
 what follows from it — the mechanism it implies, the invariant it rests on, the
 case it forces — and say which decision it follows from where that is not
 obvious. A choice the adopted one leaves open is a gap, however small.
-
-It may include TODOs on WIP.
-
-A WEP states the design as it stands now; a change rewrites the affected
-sections. No update log, superseded alternatives, or landed-checklist — git
-history is the SSoT.
 
 Roadmap and Known gaps split on commitment, not on size. A roadmap item will be
 done, so it is ordered and each entry says what finishing it means. A known gap
@@ -55,154 +64,6 @@ understood.
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.
 
-### Index of WEPs
+## Index
 
-- [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
-- [Deterministic Math Library (libm) Integration](./wep-2026-01-10-deterministic-libm.md)
-- [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)
-- [WebAssembly Module Import Support](./wep-2026-01-10-wasm-import.md)
-- [Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md)
-- [Ambient Logging Functions](./wep-2026-01-12-ambient-logging.md)
-- [Data Section (`__DATA__`)](./wep-2026-01-12-data-section.md)
-- [Literal Type Conversion Rules](./wep-2026-01-12-literal-type-conversion.md)
-- [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
-- [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
-- [Compiler Pipeline Refactoring](./wep-2026-01-14-compiler-pipeline-refactoring.md)
-- [String Type Design](./wep-2026-01-15-string-type-design.md)
-- [Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md)
-- [World Conformance and Export Syntax](./wep-2026-01-16-world-conformance-and-export.md)
-- [Closure Implementation](./wep-2026-01-16-closure-implementation.md)
-- [Function Return Type Syntax](./wep-2026-01-16-function-return-type-syntax.md)
-- [CompilerHost Abstraction for Compiler I/O](./wep-2026-01-16-source-provider-abstraction.md)
-- [Type Stringification](./wep-2026-01-16-type-stringification.md)
-- [Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)
-- [JSON Literal Compatibility](./wep-2026-01-18-json-literal-compatibility.md)
-- [JSON Module Import](./wep-2026-01-18-json-module-import.md) (superseded by Kiln)
-- [Operator Overloading](./wep-2026-01-18-operator-overloading.md)
-- [Iterator-Based Literal Coercion](./wep-2026-01-18-iterator-based-literal-coercion.md) (superseded by Literal Coercion as `From<Array<…>>`)
-- [Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md)
-- [Associated Types in Traits](./wep-2026-01-20-associated-types.md)
-- [Indexing Traits Design](./wep-2026-01-20-indexing-traits.md)
-- [String Template Desugaring](./wep-2026-01-20-string-template-desugaring.md)
-- [Compile-Time Location Literals](./wep-2026-01-23-compile-time-location-literals.md)
-- [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md)
-- [Module Loader Design](./wep-2026-01-24-module-loader.md)
-- [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
-- [128-bit Integer Types (i128/u128)](./wep-2026-01-24-i128-u128-types.md)
-- [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md)
-- [Variant Payload Design](./wep-2026-01-25-variant-payload-design.md)
-- [Effect System Design](./wep-2026-01-27-effect-system-design.md)
-- [Match Expression Design](./wep-2026-01-28-match-expression-design.md)
-- [Global Variables](./wep-2026-01-27-global-variables.md)
-- [WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md)
-- [Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)
-- [SIMD v128 Types](./wep-2026-01-31-simd-v128.md)
-- [Format Traits](./wep-2026-02-01-format-traits.md)
-- [Wasm Plan Phase](./wep-2026-02-03-wasm-plan-phase.md)
-- [Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md)
-- [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md)
-- [Variant-Independent Types](./wep-2026-02-09-variant-independent-types.md)
-- [Compile-Time Tuple Enumeration](./wep-2026-02-10-compile-time-tuple-enumeration.md)
-- [Package Manifest (`wado.toml`)](./wep-2026-02-14-package-manifest.md)
-- [Wasm IR (WIR) Layer](./wep-2026-02-14-wir-layer.md)
-- [TIR-Level CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)
-- [WASI HTTP Integration](./wep-2026-02-21-wasi-http.md)
-- [Inspect (Debug Output)](./wep-2026-02-21-inspect-debug-output.md)
-- [CLI Subcommands for Package Management](./wep-2026-02-22-cli-subcommands.md)
-- [Struct Destructuring](./wep-2026-02-22-struct-destructuring.md)
-- [Tuple Destructuring](./wep-2026-02-22-tuple-destructuring.md)
-- [Base64 Encoding API](./wep-2026-02-27-base64-api.md)
-- [Serialization and Deserialization (Serde)](./wep-2026-02-28-serde.md)
-- [Documentation Generation (`wado doc`)](./wep-2026-02-28-doc-command.md)
-- [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md) (stream BLOCKED protocol corrected by Async Stream Canonical)
-- [Compile-Time File Inclusion (`#include_str`)](./wep-2026-03-02-include-str.md)
-- [Gale — Grammar Adaptive LL Engine](./wep-2026-03-02-gale.md)
-- [Range Object](./wep-2026-03-03-range-object.md)
-- [Default Trait](./wep-2026-03-04-default-trait.md)
-- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md)
-- [Conversion Traits (From, TryFrom, ? operator)](./wep-2026-03-16-conversion-traits.md)
-- [WIT Bundling in Component Binaries](./wep-2026-03-21-wit-bundling.md)
-- [Same-Scope Shadowing with Self-Reference](./wep-2026-03-25-same-scope-shadowing.md)
-- [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
-- [Redesign String and List APIs](./wep-2026-03-29-redesign-string-array-api.md)
-- [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
-- [Reactive Signals](./wep-2026-04-04-reactive-signals.md)
-- [URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)
-- [Default Arguments](./wep-2026-04-11-default-arguments.md)
-- [Effect Handler](./wep-2026-04-11-effect-handler.md)
-- [Kiln — Keyed IDL Lowering Notation](./wep-2026-04-12-kiln.md)
-- [LSP Architecture](./wep-2026-04-18-lsp-architecture.md)
-- [Generic `AsyncCall<T>` for CM async imports](./wep-2026-04-22-subtask-generic.md)
-- [Synopsis Tests](./wep-2026-04-26-synopsis-tests.md)
-- [Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md)
-- [NIR Interpreter (`niri`)](./wep-2026-04-27-nir-interpreter.md)
-- [Resource Inheritance and Narrowing (`resource extends`)](./wep-2026-04-28-resource-inheritance.md)
-- [Test Discovery](./wep-2026-05-02-test-discovery.md)
-- [WIT Interoperability](./wep-2026-05-02-wit-interoperability.md)
-- [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md)
-- [Normalized IR (NIR) Layer](./wep-2026-05-11-nir.md)
-- [String API — checked / unchecked / internal Discipline](./wep-2026-05-16-string-checked-unchecked-discipline.md)
-- [Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md)
-- [Ownership Analysis — Affine Resources, the Borrow Checker, and Value-Copy Elision](./wep-2026-05-21-resource-ownership.md)
-- [Elaborator Architecture — TypeSystem, Signatures, Annotate, Reify](./wep-2026-05-26-elaborator-rearchitecture.md)
-- [Constant Object Globalization](./wep-2026-05-31-const-object-globalization.md)
-- [`NirExprKind::ArrayLiteral` — a NIR-Materialized List Node](./wep-2026-05-31-nir-array-literal.md)
-- [Diagnostic Reason Chains for Type and Trait Errors](./wep-2026-06-02-diagnostic-reason-chains.md)
-- [The Sequence Family — `Array<T>` / `List<T>` / `Slice<T>`](./wep-2026-06-02-sequence-family.md)
-- [Optimizer Remarks for Missed Optimizations](./wep-2026-06-03-optimizer-remarks.md)
-- [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)
-- [Temporal Standard Library (`core:temporal`)](./wep-2026-06-05-core-temporal.md)
-- [CBOR Standard Library (`core:cbor`)](./wep-2026-06-05-core-cbor.md)
-- [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
-- [Jade — JSON Schema for Wado](./wep-2026-06-13-jade.md)
-- [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md)
-- [Compile-Time Data Providers](./wep-2026-06-13-compile-time-data-providers.md)
-- [Symbol Notation](./wep-2026-06-14-symbol-notation.md)
-- [Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md)
-- [Command-Line Argument Parsing (`core:args`)](./wep-2026-06-22-core-args.md)
-- [Lenient String Parsing (`LenientFromStr`)](./wep-2026-06-22-lenient-from-str.md)
-- [Structured Logging and Tracing (`core:log`)](./wep-2026-06-25-core-log.md)
-- [Trait Derivation Policy — Bound-Driven Synthesis](./wep-2026-06-25-trait-derivation.md)
-- [Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md)
-- [Wasm CM Component Import (`use`-based)](./wep-2026-06-26-wasm-cm-component-import.md)
-- [Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md)
-- [Marl — Markdown Renderer and Formatter](./wep-2026-07-05-marl.md)
-- [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
-- [Local Item Definitions](./wep-2026-07-09-local-item-definitions.md)
-- [Struct Walkability — Field Walks over `ReflectStruct` and `#[secret]` Fields](./wep-2026-07-10-struct-walkability.md)
-- [Gale Highlight Query — Customizable Syntax Highlighting](./wep-2026-07-12-gale-highlight-query.md)
-- [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
-- [Byte Literals (`b'x'` and `b"..."`)](./wep-2026-07-19-byte-literal.md)
-- [`let ... else` Statements](./wep-2026-07-22-let-else.md)
-- [Async Canonical Options for `stream.read` / `stream.write`](./wep-2026-07-25-async-stream-canonical.md)
-- [Provider Metadata — Source-Bundled Package Artifacts](./wep-2026-07-26-provider-metadata.md)
-- [Super Traits](./wep-2026-07-27-super-traits.md)
-- [`post-return` for Synchronously-Lifted Exports](./wep-2026-07-28-cm-post-return.md)
-- [Overload Resolution](./wep-2026-07-31-overload-resolution.md)
-- [Variant Return Scalarization at NIR](./wep-2026-08-03-variant-return-abi.md)
-- [`core:icu` — Internationalization as One Facade](./wep-2026-08-09-core-icu.md)
-- [Declaration Identity — One Identity, One Scope, One Answer](./wep-2026-08-12-declaration-identity.md)
-- [Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md)
-- [Power-Assert Coverage](./wep-2026-08-19-power-assert-coverage.md)
-- [Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md)
-- [The Component Model `map<K, V>` Type](./wep-2026-08-25-cm-map-type.md)
-- [Markup Dialect — Where the Top Level Lives](./wep-2026-08-29-markup-dialect.md)
-- [Stream Copy Results](./wep-2026-08-30-stream-copy-result.md)
-- [`wado lint` — Corpus Checks](./wep-2026-08-31-wado-lint.md)
-- [Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md)
-- [JSON Web Tokens (`core:jwt`)](./wep-2026-09-02-core-jwt.md)
-- [Total Reflection — `TypeInfo` and `match type`](./wep-2026-09-05-total-reflection.md)
-- [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
-- [Package File Exports — Assets and Submodules as API](./wep-2026-09-06-package-file-exports.md)
-- [Whole-File I/O (`core:fs`)](./wep-2026-09-12-core-fs.md)
-- [Declared Absence](./wep-2026-09-13-declared-absence.md)
-- [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
-- [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)
-- [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
-- [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
-- [External Subcommands](./wep-2026-09-19-external-subcommands.md)
-- [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
-- [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
-- [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
-- [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
+@README.md

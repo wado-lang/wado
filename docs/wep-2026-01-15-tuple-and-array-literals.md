@@ -166,4 +166,4 @@ let t = [1, 2, 3,];  // OK
 
 - [TypeScript Tuple Types](https://www.typescriptlang.org/docs/handbook/2/objects.html#tuple-types)
 - [JSON Specification](https://www.json.org/)
-- Current Wado spec: `spec.md` (List Literals, Tuple Literals sections)
+- Current Wado spec: `spec-literals.md` (List Literals, Tuple Literals sections)

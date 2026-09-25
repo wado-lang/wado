@@ -290,7 +290,7 @@ Refuse:
   analysis picks the defensive copies once, at lowering. There is no elision
   pass, and no hand-written `.copy()` for one to defeat. The only thing actually
   missing was a statement that the copies are as-if, and that is now in
-  [Memory Model](./spec.md#memory-model). How `&mut` is realized is an
+  [Memory Model](./spec-memory.md#memory-model). How `&mut` is realized is an
   implementation detail and stays in its WEP.
 - A falsifier field in the WEP template. A decision is allowed to rest on a
   preference.

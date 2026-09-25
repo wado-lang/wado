@@ -23,7 +23,7 @@ what Wado spells instead. Reactive Signals writes its examples in JSX and lists
 
 None of it exists. There is no `Element` type, no component model, no event
 wiring; `reactive` is a parser flag (`is_reactive` in the AST and the symbol
-table) with no entry in `docs/spec.md`. JSX would be the surface of a UI
+table) with no entry in the specification. JSX would be the surface of a UI
 framework that has not been built.
 
 What changed is that the surface question is now separable from the language

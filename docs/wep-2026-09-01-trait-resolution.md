@@ -2,7 +2,7 @@
 
 ## Context
 
-`docs/spec.md` says coherence guarantees that "for every `(Trait, Type)` pair,
+`docs/spec-traits.md` says coherence guarantees that "for every `(Trait, Type)` pair,
 there is at most one `impl Trait for Type` that can apply."
 
 That is false, and the orphan rules do not make it true. Both impls below are
@@ -219,7 +219,7 @@ foreign `impl Tr for Point` beats a blanket written here. One written for the
 receiver's head still names the receiver's own type constructor, where a value
 blanket names only a condition the receiver happens to meet.
 
-Both steps carry weight. Exact over head is `spec.md`'s "Specific Impls Win":
+Both steps carry weight. Exact over head is `spec-traits.md`'s "Specific Impls Win":
 `impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>` answers for `Box_<i32>`
 and the head impl answers for the rest. Head over any is what the prelude turns
 on: `RangeExclusive<T>` implements `Iterator`, so
