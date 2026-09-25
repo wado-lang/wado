@@ -28,9 +28,6 @@ use {
     upgraded,
 } from "./graph.wado";
 
-/// `TensorProto.DataType`'s `FLOAT`.
-global FLOAT: i32 = 1;
-
 /// A bare `TensorProto`, which is how ONNX's backend test data stores one.
 pub fn read_tensor<S: AsByteSlice>(bytes: S) -> Result<onnx::TensorProto, String> {
     return grog::decode::<onnx::TensorProto, S>(bytes).map_err(|e| `${e}`);
@@ -43,7 +40,7 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
     let raw = t.raw_data.unwrap_or(b"");
     let data_type = t.data_type.unwrap_or(0);
     let width = match data_type {
-        FLOAT | 6 => 4,
+        1 | 6 => 4,
         7 => 8,
         9 => 1,
         _ => {
@@ -55,7 +52,7 @@ pub fn known_tensor(t: &onnx::TensorProto) -> Result<Option<Known>, String> {
     }
     let typed = raw.is_empty();
     let elements = match data_type {
-        FLOAT => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
+        1 => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
         6 => {
             let values = if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) };
             Elements::Ints(values.into_iter().map(|v| v as i64).collect());
@@ -94,7 +91,7 @@ fn extents_of(t: &onnx::TensorProto, name: &String) -> Result<List<i32>, String>
 /// The element type name the textual format spells for a `TensorProto.DataType`.
 fn dtype_name(elem_type: i32) -> Option<String> {
     return match elem_type {
-        FLOAT => Option::Some("float"),
+        1 => Option::Some("float"),
         2 => Option::Some("uint8"),
         3 => Option::Some("int8"),
         4 => Option::Some("uint16"),
