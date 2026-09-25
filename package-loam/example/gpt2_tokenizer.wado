@@ -1,0 +1,279 @@
+//! GPT-2's byte-level BPE tokenizer, built from the `vocab.json` and
+//! `merges.txt` a GPT-2 checkpoint ships (Radford et al. 2019, § 2.2).
+
+use { TreeMap } from "core:collections";
+use icu from "core:icu";
+use { from_string } from "core:json";
+
+pub struct Tokenizer {
+    ids: TreeMap<String, i32>,
+    tokens: List<String>,
+    /// Each merge, written `"left right"`, by priority: the lowest merges first.
+    ranks: TreeMap<String, i32>,
+    specials: List<String>,
+    byte_chars: List<char>,
+    /// The byte each of `byte_chars` stands for, indexed by code point.
+    char_bytes: List<u8>,
+    letters: List<[u32, u32]>,
+    numbers: List<[u32, u32]>,
+}
+
+enum Class {
+    Space,
+    Letter,
+    Number,
+    Other,
+}
+
+impl Tokenizer {
+    /// `specials` are tokens matched in the text as they stand, before it is split.
+    pub fn new(vocab: &String, merges: &String, specials: List<String>) -> Tokenizer {
+        let ids = from_string::<TreeMap<String, i32>>(vocab).expect("vocab.json maps each token to its id");
+        let mut tokens: List<String> = [];
+        for let _ of 0..<ids.len() {
+            tokens.push("");
+        }
+        for let [token, id] of ids.entries() {
+            assert 0 <= *id < tokens.len();
+            tokens[*id] = *token;
+        }
+
+        let mut ranks = TreeMap::<String, i32>::new();
+        for let line of merges.lines() {
+            if !line.is_empty() && !line.starts_with("#version") {
+                let rank = ranks.len();
+                ranks[line.to_string()] = rank;
+            }
+        }
+
+        let byte_chars = byte_chars();
+        let mut char_bytes: List<u8> = [];
+        for let [b, c] of byte_chars.into_iter().enumerate() {
+            while char_bytes.len() <= c as i32 {
+                char_bytes.push(0);
+            }
+            char_bytes[c as i32] = b as u8;
+        }
+
+        return Tokenizer {
+            ids,
+            tokens,
+            ranks,
+            specials,
+            byte_chars,
+            char_bytes,
+            letters: icu::value_ranges("gc", "L").unwrap(),
+            numbers: icu::value_ranges("gc", "N").unwrap(),
+        };
+    }
+
+    pub fn encode(&self, text: &String) -> List<i32> {
+        let mut out: List<i32> = [];
+        let mut rest = text.as_str_slice();
+        loop {
+            let Some([at, special]) = self.next_special(rest) else {
+                self.encode_ordinary(rest, &mut out);
+                return out;
+            };
+            self.encode_ordinary(rest.slice(0, at), &mut out);
+            out.push(self.ids.get_str(&special).unwrap());
+            rest = rest.slice(at + special.len(), rest.len());
+        }
+    }
+
+    pub fn decode(&self, ids: &List<i32>) -> String {
+        let mut bytes: List<u8> = [];
+        for let id of *ids {
+            for let c of self.tokens[id].chars() {
+                bytes.push(self.char_bytes[c as i32]);
+            }
+        }
+        return String::from_utf8_lossy(bytes);
+    }
+
+    /// The first special token in `text`, and where it starts.
+    fn next_special(&self, text: StrSlice) -> Option<[i32, String]> {
+        let mut first: Option<[i32, String]> = null;
+        for let special of self.specials {
+            if let Some(at) = text.find(&special) {
+                if !first matches { Some([earlier, _]) && earlier <= at } {
+                    first = Option::Some([at, special]);
+                }
+            }
+        }
+        return first;
+    }
+
+    fn encode_ordinary(&self, text: StrSlice, out: &mut List<i32>) {
+        let chars: List<char> = text.chars().collect();
+        let mut at = 0;
+        while at < chars.len() {
+            let end = self.piece_end(&chars, at);
+            let mut piece = String::new();
+            for let k of at..<end {
+                piece.push(chars[k]);
+            }
+            self.merge(&piece, out);
+            at = end;
+        }
+    }
+
+    /// Where the piece starting at `at` ends, as GPT-2's pattern splits text:
+    /// `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+`.
+    fn piece_end(&self, chars: &List<char>, at: i32) -> i32 {
+        let n = chars.len();
+        if chars[at] == '\'' {
+            for let suffix of ["s", "t", "re", "ve", "m", "ll", "d"] {
+                if spells(chars, at + 1, &suffix) {
+                    return at + 1 + suffix.len();
+                }
+            }
+        }
+        let spaced = chars[at] == ' ' && at + 1 < n && !self.class_of(chars[at + 1]) matches { Space };
+        let lead = if spaced { at + 1 } else { at };
+        let class = self.class_of(chars[lead]);
+        let mut end = lead + 1;
+        while end < n && self.class_of(chars[end]) == class {
+            end += 1;
+        }
+        // A space run before a word leaves its last space to the word.
+        let leaves_one = class matches { Space } && end < n && end - at > 1;
+        return if leaves_one { end - 1 } else { end };
+    }
+
+    fn class_of(&self, c: char) -> Class {
+        if c.is_whitespace() {
+            return Class::Space;
+        }
+        if within(&self.letters, c) {
+            return Class::Letter;
+        }
+        if within(&self.numbers, c) {
+            return Class::Number;
+        }
+        return Class::Other;
+    }
+
+    /// Spells `piece` byte by byte, merges the adjacent pair of highest priority
+    /// until none has one, and appends the ids of what is left.
+    fn merge(&self, piece: &String, out: &mut List<i32>) {
+        let mut parts: List<String> = [];
+        for let b of piece.bytes() {
+            let mut part = String::new();
+            part.push(self.byte_chars[b as i32]);
+            parts.push(part);
+        }
+        loop {
+            let mut best = -1;
+            let mut best_rank = i32::MAX;
+            for let mut i = 0; i + 1 < parts.len(); i += 1 {
+                if let Some(rank) = self.ranks.get(`${parts[i]} ${parts[i + 1]}`) {
+                    if rank < best_rank {
+                        best_rank = rank;
+                        best = i;
+                    }
+                }
+            }
+            if best < 0 {
+                break;
+            }
+            let left = parts[best];
+            let right = parts[best + 1];
+            let mut merged: List<String> = [];
+            let mut i = 0;
+            while i < parts.len() {
+                if i + 1 < parts.len() && parts[i] == left && parts[i + 1] == right {
+                    merged.push(`${left}${right}`);
+                    i += 2;
+                } else {
+                    merged.push(parts[i]);
+                    i += 1;
+                }
+            }
+            parts = merged;
+        }
+        for let part of parts {
+            out.push(self.ids.get(part).unwrap());
+        }
+    }
+}
+
+/// The printable character each byte is spelled as, so that a token is text:
+/// a printable byte is itself, and the rest are shifted past 255 in order.
+fn byte_chars() -> List<char> {
+    let mut chars: List<char> = [];
+    let mut shifted: u32 = 256;
+    for let b of 0..<256 {
+        let printable = 0x21 <= b <= 0x7e || 0xa1 <= b <= 0xac || 0xae <= b <= 0xff;
+        let mut code = b as u32;
+        if !printable {
+            code = shifted;
+            shifted += 1;
+        }
+        chars.push(char::from_u32(code).unwrap());
+    }
+    return chars;
+}
+
+fn spells(chars: &List<char>, at: i32, text: &String) -> bool {
+    let mut i = at;
+    for let c of text.chars() {
+        if i >= chars.len() || chars[i] != c {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}
+
+fn within(ranges: &List<[u32, u32]>, c: char) -> bool {
+    let code = c as u32;
+    let mut lo = 0;
+    let mut hi = ranges.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let [first, last] = ranges[mid];
+        if code < first {
+            hi = mid;
+        } else if code > last {
+            lo = mid + 1;
+        } else {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct Tokenized {
+    text: String,
+    ids: List<i32>,
+}
+
+struct Oracle {
+    tokenize: List<Tokenized>,
+}
+
+/// The tokenizer of the tiny GPT-2 under `tests/models/`.
+pub fn tiny() -> Tokenizer {
+    return Tokenizer::new(
+        &#include_str("../tests/models/tiny-gpt2/vocab.json"),
+        &#include_str("../tests/models/tiny-gpt2/merges.txt"),
+        ["<|endoftext|>"],
+    );
+}
+
+test "each text encodes to the ids Hugging Face's tokenizer gives it, and back" {
+    let tokenizer = tiny();
+    let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
+    for let case of oracle.tokenize {
+        let ids = tokenizer.encode(&case.text);
+        assert ids == case.ids, case.text;
+        assert tokenizer.decode(&ids) == case.text;
+    }
+}
+
+test "an empty text is no tokens" {
+    let tokenizer = tiny();
+    assert tokenizer.encode(&"").is_empty();
+    assert tokenizer.decode(&[]) == "";
+}
