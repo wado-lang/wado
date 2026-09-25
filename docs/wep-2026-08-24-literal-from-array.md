@@ -130,7 +130,8 @@ Where the target's type arguments are still open — a callee's slot the call si
 instantiated — the elements decide them, as they do today.
 
 Newtypes peel: a `newtype N = List<i32>` target coerces through `List`'s impl and
-casts the result to `N`.
+casts the result to `N`. On a chain the first link carrying an impl takes the
+literal, so `type Vec3 = f32x4` coerces through `f32x4`'s impl, not `v128`'s.
 
 ### Spread
 

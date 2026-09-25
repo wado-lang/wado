@@ -1,0 +1,21 @@
+// `el: Element` on an `Element` subject narrows nothing, so it takes every
+// value and the `HtmlInputElement` arm after it can never run.
+use { Element, HtmlInputElement } from "wado-lang:web";
+
+fn kind(e: Element) -> i32 {
+    return match e {
+        el: Element => 1,
+        input: HtmlInputElement => 2,
+        _ => 0,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":8:9: analysis error: invalid pattern: unreachable arm: the arms before it take every value it matches",
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/lib.wado"
+  }
+}

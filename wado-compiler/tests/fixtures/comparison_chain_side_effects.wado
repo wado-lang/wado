@@ -1,7 +1,6 @@
-// `a < b < c` desugars to `let $m0 = b; (a < $m0) && ($m0 < c)`,
-// so the middle term is evaluated exactly once. Without that binding
-// the middle term would be called twice — verified by side-effect
-// counts.
+// `a < b < c` desugars to `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c)`,
+// so every term is evaluated exactly once, left to right — verified by
+// side-effect counts and by the order the terms print in.
 
 use { println, Stdout } from "core:cli";
 
@@ -10,6 +9,11 @@ global mut CALL_COUNT: i32 = 0;
 fn counted(value: i32) -> i32 {
     CALL_COUNT = CALL_COUNT + 1;
     return value;
+}
+
+fn v(n: i32) -> i32 with Stdout {
+    println(`eval ${n}`);
+    return n;
 }
 
 export fn run() with Stdout {
@@ -21,7 +25,14 @@ export fn run() with Stdout {
     CALL_COUNT = 0;
     assert 0 < counted(3) < counted(7) < 10;
     println(`${CALL_COUNT}`);
+
+    let r = v(3) < v(1) < v(2);
+    println(`${r}`);
+    let s = v(1) < v(2) < v(3) < v(4);
+    println(`${s}`);
+    let t = v(5) == v(6) == v(7);
+    println(`${t}`);
 }
 
 __DATA__
-{"stdout": "1\n2\n"}
+{"stdout": "1\n2\neval 3\neval 1\neval 2\nfalse\neval 1\neval 2\neval 3\neval 4\ntrue\neval 5\neval 6\neval 7\nfalse\n"}

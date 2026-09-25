@@ -1,0 +1,17 @@
+// The package is the unit of coherence: a dependency's type is foreign to
+// the package importing it, so a foreign trait cannot be implemented for it.
+use { Gadget } from "xpkg";
+
+impl Display for Gadget {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("gadget");
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "orphan rule",
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" }
+}

@@ -355,6 +355,20 @@ impl CanonicalIntrinsic {
         })
     }
 
+    /// Visit every declaration the canonical's type reaches through a value
+    /// payload or a dropped resource, each with the kind it is reached as.
+    pub fn for_each_decl(&self, f: &mut impl FnMut(&CmDecl, CmDeclKind)) {
+        if let Self::ResourceDrop(decl) = self {
+            f(decl, CmDeclKind::Resource);
+        }
+        if let Some(CmFuturePayload::Value(p)) = self.future_payload() {
+            p.for_each_decl(f);
+        }
+        if let Some(CmStreamPayload::Value(p)) = self.stream_payload() {
+            p.for_each_decl(f);
+        }
+    }
+
     pub fn future_payload(&self) -> Option<CmFuturePayload> {
         match self {
             Self::FutureNew(p)

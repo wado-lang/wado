@@ -1,0 +1,31 @@
+// A shape first minted inside a default method keeps its fields for the
+// module's later uses of the same shape.
+
+trait Sum {
+    fn base(&self) -> i32;
+
+    fn total(&self) -> i32 {
+        let p = { x: self.base(), y: 2 };
+        return p.x + p.y;
+    }
+}
+
+struct P {
+    n: i32,
+}
+
+impl Sum for P {
+    fn base(&self) -> i32 {
+        return self.n;
+    }
+}
+
+fn later() -> i32 {
+    let q = { x: 10, y: 20 };
+    return q.x + q.y;
+}
+
+test "the shape inside and after the default method" {
+    assert P { n: 1 }.total() == 3;
+    assert later() == 30;
+}

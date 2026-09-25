@@ -1,0 +1,17 @@
+// An operation is dispatched, never read: its bare import, its alias and its
+// qualified path each say so where they are written.
+use { Stdout::{write_via_stream} } from "wasi:cli";
+use { Greeting, Greeting::{hello, bye as farewell} } from "./sub/member_import_op_iface.wado";
+
+export fn run() {
+    let a = hello;
+    let b = farewell;
+    let c = Greeting::hello;
+    let d = write_via_stream;
+}
+
+__DATA__
+{
+  "compile_error": "is an operation: call it rather than read it as a value",
+  "compile_error_count": 4
+}

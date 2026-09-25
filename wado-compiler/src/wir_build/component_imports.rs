@@ -5,7 +5,7 @@
 //! `tests/wit_import_plan.rs` asserts the plan matches the compiled component.
 
 use crate::ast::Type;
-use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
+use crate::canonical::{CanonicalIntrinsic, CmDeclKind, CmFuturePayload};
 use crate::component_model::{
     CANONICAL_ERROR_CODE_INTERFACE, CmInterfaceRegistry, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
 };
@@ -140,12 +140,22 @@ pub fn resolve_import_plan(
         needed_resources.extend(here);
     }
 
-    // Phase 2: resource-defining interfaces for every referenced resource
-    // (transitive: a defining interface may reference further resources).
+    // Phase 2: the interfaces defining every resource a signature or canonical
+    // reaches, transitively, since a defining interface may reach more.
     let mut worklist: Vec<String> = needed_resources
         .iter()
         .map(|(source, _)| source.clone())
         .collect();
+    for canonical in needed_canonicals {
+        canonical.for_each_decl(&mut |decl, kind| {
+            if kind == CmDeclKind::Resource
+                && let Some(source) =
+                    registry.interface_declaring_cm_name(decl.module(), decl.cm_name())
+            {
+                worklist.push(source.to_string());
+            }
+        });
+    }
     let mut seen_sources: IndexSet<String> = IndexSet::default();
     while let Some(source) = worklist.pop() {
         if !seen_sources.insert(source.clone()) {

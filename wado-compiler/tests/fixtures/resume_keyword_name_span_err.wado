@@ -1,0 +1,21 @@
+// The ban points at the name, and covers type and effect parameters.
+use { println as resume } from "core:cli";
+fn
+resume() -> i32 {
+    return 1;
+}
+
+fn generic<resume>(x: resume) -> resume {
+    return x;
+}
+
+fn effectful<effect resume>(f: fn() with resume) with resume {
+    f();
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":4:1: analysis error: `resume` cannot be a name: it is the keyword that begins `resume value`; 8:12: `resume` cannot be a name: it is the keyword that begins `resume value`; 12:21: `resume` cannot be a name: it is the keyword that begins `resume value`; 2:18: `resume` cannot be a name"
+}

@@ -1,4 +1,4 @@
-use { println, eprintln, print, eprint, print_bytes, args, cwd, env } from "core:cli";
+use { println, eprintln, print, eprint, print_bytes, args, program_name, cwd, env } from "core:cli";
 use { Stdout, Stderr } from "core:cli";
 use { ErrorCode } from "wasi:cli";
 
@@ -120,7 +120,11 @@ test "env answers None for a name nothing sets" {
     assert env("WADO_CLI_TEST_UNSET_0f3a9c") matches { None };
 }
 
-test "args and cwd answer without trapping" {
-    let _ = args();
+test "the program name is this file, and args holds nothing after it" {
+    assert program_name() matches { Some(p) && p.ends_with("cli_test.wado") };
+    assert args().is_empty();
+}
+
+test "cwd answers without trapping" {
     let _ = cwd();
 }

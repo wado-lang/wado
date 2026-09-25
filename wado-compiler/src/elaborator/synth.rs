@@ -17,6 +17,7 @@ use super::callee::CalleeRef;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
+use super::tysys::{TypeSystem, range_item};
 use super::util::is_float_only_literal;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::name::{DeclName, RefKind};
@@ -38,6 +39,8 @@ pub(super) enum ArgClass {
     IntLit,
     FloatLit,
     StrLit,
+    /// `b"…"` / `#include_bytes`, which admit `List<u8>` and its newtypes.
+    BytesLit,
     NullLit,
     /// No type was produced; admits every parameter. The reason is carried so
     /// the ambiguity diagnostic can say what defeated selection.
@@ -256,35 +259,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
-    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a base name renders a function type's own parameters, so
-    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
-    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
-    /// `Holder<i32, String>`, which no `T` makes it.
-    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
-        let mut bindings = IndexMap::default();
-        unify(&self.tysys.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: IndexMap<u32, TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
-                .collect()
-        };
-        let filled = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(param, &substitution);
-        param_takes(&self.tysys.type_table.borrow(), filled, arg)
-    }
-
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -312,7 +286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 drop(tt);
-                self.slots_fill_param_to(param, *t)
+                self.tysys.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.
@@ -326,7 +300,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || tt.wide_int_item(tt.representation_head(param)).is_some()
             }
             ArgClass::FloatLit => tt.is_float(param),
-            ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
+            ArgClass::StrLit => tt.is_string(tt.representation_head(param)),
+            ArgClass::BytesLit => {
+                tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)
+            }
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }
@@ -369,42 +346,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 index + 1,
                 self.tysys.type_table.borrow().type_name(*arg),
             );
-        }
-    }
-
-    /// How an argument's class reads in a diagnostic — the reason-chain step
-    /// that says what this argument contributed to selection.
-    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
-        let tt = self.tysys.type_table.borrow();
-        match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
-            ArgClass::Head(head) => format!(
-                "is a `{}` whose type arguments are not pinned here",
-                head.to_display()
-            ),
-            ArgClass::IntLit => {
-                "is an integer literal, which admits every numeric parameter".to_string()
-            }
-            ArgClass::FloatLit => {
-                "is a float literal, which admits every float parameter".to_string()
-            }
-            ArgClass::StrLit => {
-                "is a string literal, which admits `String` and its newtypes".to_string()
-            }
-            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
-            ArgClass::Opaque(OpaqueReason::Closure) => {
-                "is a closure, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
-                "is a compound literal, so the parameter is what would type it".to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Inference) => {
-                "has a type that depends on inference here, so it admits every candidate"
-                    .to_string()
-            }
-            ArgClass::Opaque(OpaqueReason::Unresolved) => {
-                "did not resolve, so it admits every candidate".to_string()
-            }
         }
     }
 
@@ -479,11 +420,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Literal::Bool(_) => ArgClass::Exact(TypeTable::BOOL),
             ast::Literal::Unit => ArgClass::Exact(TypeTable::UNIT),
             ast::Literal::Null => ArgClass::NullLit,
-            // A `List<u8>` whatever the expected type says — the elaborator
-            // does not consult it here.
-            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => {
-                ArgClass::Exact(self.tysys.type_table.borrow_mut().make_byte_list())
-            }
+            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => ArgClass::BytesLit,
         }
     }
 
@@ -525,7 +462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 OpaqueReason::Unresolved
             });
         }
-        if let Some(AssocConstSig { ty, .. }) = self.associated_constant_of_path(id) {
+        if let Some(AssocConstSig { ty, .. }) = self.tysys.associated_constant_of_path(id) {
             return self.class_of_type(ty);
         }
         let name = name.to_string();
@@ -549,7 +486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_variant_cases_at(owner, prefix) {
             let declared_at = info.defined_at;
             let generic = !info.type_params.is_empty();
-            if info.cases.iter().any(|c| c.name == suffix) {
+            if info.case_named(suffix).is_some() {
                 if generic {
                     return ArgClass::Opaque(OpaqueReason::Inference);
                 }
@@ -645,7 +582,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => open,
                 }
             }
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -688,7 +629,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // this position alone.
             ArgClass::Exact(t) if !self.tysys.type_table.borrow().is_numeric(t) => open,
             ArgClass::IntLit | ArgClass::FloatLit | ArgClass::Exact(_) => class,
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -699,7 +644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let ArgClass::Exact(callee) = self.synth(&call.callee, scope) else {
                 return ArgClass::Opaque(OpaqueReason::Inference);
             };
-            return match self.as_fn_signature(callee) {
+            return match self.tysys.as_fn_signature(callee) {
                 Some(sig) => self.class_of_type(sig.return_type),
                 None => ArgClass::Opaque(OpaqueReason::Unresolved),
             };
@@ -710,28 +655,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A `fn`-typed local shadows a same-named function, as in `resolve_call`.
         if !ident.name.contains("::")
             && let Some(local) = scope.ctx.lookup(&ident.name)
-            && let Some(sig) = self.as_fn_signature(local.type_id)
+            && let Some(sig) = self.tysys.as_fn_signature(local.type_id)
         {
             return self.class_of_type(sig.return_type);
         }
-        let Some(callee) = self.synth_callee_ref(ident) else {
+        let Some(callee) = self.tysys.synth_callee_ref(ident) else {
             return ArgClass::Opaque(OpaqueReason::Inference);
         };
         if !self.lookup_function_type_params(&callee).is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let return_type = self.lookup_function_return_type(&callee, None);
+        let return_type = self.lookup_function_return_type(&callee);
         self.class_of_type(return_type)
-    }
-
-    /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site. A variant constructor, a static path or an effect
-    /// operation names no function there and is left to the expected type.
-    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
-            return None;
-        }
-        Some(self.callee_of(self.free_function_at(ident.id)?))
     }
 
     fn synth_method_call(
@@ -871,6 +806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::IntLit => Some(TypeTable::I32),
             ArgClass::FloatLit => Some(TypeTable::F64),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
+            ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
         }
     }
@@ -879,11 +815,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head alone otherwise — which is still enough to tell the two range
     /// types apart from a plain index.
     fn synth_range(&mut self, range: &ast::RangeExpr, scope: &mut SynthScope<'_>) -> ArgClass {
-        let item = match range.kind {
-            ast::RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            ast::RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
-        let range_decl = self.tysys.type_table.borrow().compiler_item_def(item);
+        let range_decl = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_item_def(range_item(range.kind));
         let start = self.synth(&range.start, scope);
         let element = start.meet(self.synth(&range.end, scope));
         let Some(def) = range_decl else {
@@ -1111,5 +1047,81 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
+    }
+}
+
+impl TypeSystem {
+    /// The callee identity of a plain `name(…)` call, read off its own
+    /// reference site. A variant constructor, a static path or an effect
+    /// operation names no function there and is left to the expected type.
+    fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
+        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
+            return None;
+        }
+        Some(self.callee_of(self.free_function_at(ident.id)?))
+    }
+
+    /// Whether `param`'s slots can be filled to make it `arg`. Structural, since a
+    /// base name drops arguments: `Holder<T, T>` spells like `Holder<i32, String>`.
+    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
+        let mut bindings = IndexMap::default();
+        unify(&self.type_table, param, arg, &mut bindings);
+        // A binding dropped here leaves that slot spelled as it was written, so
+        // the parameter can never equal the argument.
+        let substitution: IndexMap<u32, TypeId> = {
+            let tt = self.type_table.borrow();
+            bindings
+                .iter()
+                .filter_map(|(&slot, &filled)| match tt.get(slot) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let filled = self
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(param, &substitution);
+        param_takes(&self.type_table.borrow(), filled, arg)
+    }
+
+    /// How an argument's class reads in a diagnostic — the reason-chain step
+    /// that says what this argument contributed to selection.
+    pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
+        let tt = self.type_table.borrow();
+        match class {
+            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
+            ArgClass::Head(head) => format!(
+                "is a `{}` whose type arguments are not pinned here",
+                head.to_display()
+            ),
+            ArgClass::IntLit => {
+                "is an integer literal, which admits every numeric parameter".to_string()
+            }
+            ArgClass::FloatLit => {
+                "is a float literal, which admits every float parameter".to_string()
+            }
+            ArgClass::StrLit => {
+                "is a string literal, which admits `String` and its newtypes".to_string()
+            }
+            ArgClass::BytesLit => {
+                "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
+            }
+            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
+            ArgClass::Opaque(OpaqueReason::Closure) => {
+                "is a closure, so the parameter is what would type it".to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::CompoundLiteral) => {
+                "is a compound literal, so the parameter is what would type it".to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::Inference) => {
+                "has a type that depends on inference here, so it admits every candidate"
+                    .to_string()
+            }
+            ArgClass::Opaque(OpaqueReason::Unresolved) => {
+                "did not resolve, so it admits every candidate".to_string()
+            }
+        }
     }
 }

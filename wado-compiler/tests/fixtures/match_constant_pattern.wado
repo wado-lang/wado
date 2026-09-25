@@ -165,3 +165,17 @@ test "associated constant patterns" {
     };
     assert label == "max";
 }
+
+fn sign(x: i8) -> i32 {
+    return match x {
+        i8::MIN => 0,
+        -128..=-1 => 1,
+        0..=127 => 2,
+    };
+}
+
+test "constant pattern ahead of ranges that cover the type" {
+    assert sign(-128) == 0;
+    assert sign(-1) == 1;
+    assert sign(127) == 2;
+}

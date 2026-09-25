@@ -19,7 +19,7 @@
 //   wado run example/tree.wado example
 //   wado run example/tree.wado -L 2 -a .
 
-use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { args, println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 
@@ -146,7 +146,7 @@ fn walk(
     }
 }
 
-export fn run() with (Stdout, Stderr, Environment, Preopens) {
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let opts = match parse_args(args()) {
         Ok(o) => o,
         Err(msg) => {
@@ -155,7 +155,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
                 return;
             }
             eprintln(msg);
-            return;
+            exit_error();
         },
     };
 
@@ -167,7 +167,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         Ok(list) => list,
         Err(e) => {
             eprintln(`tree: ${e}`);
-            return;
+            exit_error();
         },
     };
 

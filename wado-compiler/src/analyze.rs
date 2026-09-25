@@ -6,70 +6,112 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
-    cm_import_of, for_each_function,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, Item, Module, UseDecl, UseItem,
+    Visibility, WorldExport, cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
+use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    entry_dir_of, namespace_member_alias, resolve_import_with_invocations, validate_module_path,
+use crate::name::{mangle_local_method, namespace_member_alias, validate_module_path};
+use crate::symbol::{
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
+    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
 };
+use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
+use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;
-
-/// Resolve `use_decl.source` against `from`, recognising
-/// `with { type: "wat" | "wasm" }` attributes and routing them to the
-/// loader-synthesised wasm-asset module (`ModuleSource::Wasm`) instead
-/// of the regular Wado module-source resolution.
-///
-/// Returns `None` when the wasm asset path itself is malformed (e.g.
-/// `core:libm.wat` with no leading `./`); the caller emits the
-/// downstream `InvalidModulePath` diagnostic.
-fn resolve_use_decl_module_source(
-    interner: &mut ModuleSourceInterner,
-    from: &ModuleSource,
-    use_decl: &UseDecl,
-    entry: Option<&ModuleSource>,
-    invocations: &InvocationIndex,
-) -> Option<ModuleSource> {
-    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
-        return resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
-            .ok()
-            .map(|path| interner.wasm(&path, kind));
-    }
-    Some(resolve_import_with_invocations(
-        interner,
-        from,
-        &use_decl.source,
-        entry,
-        invocations,
-    ))
-}
 
 /// `true` when this `use` declares a wasm asset import
 /// (`with { type: "wat" | "wasm" }`).
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
     wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
-use crate::symbol::{
-    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
-    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
-};
-use crate::token::Span;
+
+/// Every item, type or effect parameter, and enum, variant or flags member `module`
+/// declares under an expression keyword's name. A member reached by `.` may.
+fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
+    struct Names(Vec<(String, Span)>);
+    impl Names {
+        fn check(&mut self, name: &str, span: Span) {
+            if is_expression_keyword(name) {
+                self.0.push((name.to_string(), span));
+            }
+        }
+    }
+    impl AstVisitor for Names {
+        fn visit_item(&mut self, item: &Item) {
+            let at = item.name_span();
+            match item {
+                Item::Function(d) => self.check(&d.name, at),
+                Item::Interface(d) => self.check(&d.name, at),
+                Item::Struct(d) => self.check(&d.name, at),
+                Item::Newtype(d) => self.check(&d.name, at),
+                Item::Trait(d) => self.check(&d.name, at),
+                Item::Resource(d) => self.check(&d.name, at),
+                Item::World(d) => self.check(&d.name, at),
+                Item::Global(d) => self.check(&d.name, at),
+                Item::BuiltinTypeDecl(d) => self.check(&d.name, at),
+                Item::Enum(d) => {
+                    self.check(&d.name, at);
+                    for case in &d.cases {
+                        self.check(&case.name, case.name_span);
+                    }
+                }
+                Item::Variant(d) => {
+                    self.check(&d.name, at);
+                    for case in &d.cases {
+                        self.check(&case.name, case.name_span);
+                    }
+                }
+                Item::Flags(d) => {
+                    self.check(&d.name, at);
+                    for member in &d.flags {
+                        self.check(&member.name, member.name_span);
+                    }
+                }
+                Item::Use(_)
+                | Item::Impl(_)
+                | Item::Test(_)
+                | Item::TupleTypeDecl(_)
+                | Item::Error(_) => {}
+            }
+            walk_item(self, item);
+        }
+
+        fn visit_generic_params(&mut self, params: &[GenericParam]) {
+            for param in params {
+                self.check(&param.name, param.name_span);
+            }
+            walk_generic_params(self, params);
+        }
+    }
+    let mut names = Names(Vec::new());
+    for item in &module.items {
+        names.visit_item(item);
+    }
+    names.0
+}
 
 /// Whether a module's functions may omit a body without naming what backs it.
 fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
+    matches!(module_source, ModuleSource::Core { name } if name.as_str() == "builtin")
+        || takes_names_from_elsewhere(module_source)
+}
+
+/// Whether a module's declarations are a foreign export table's (WIT or a Wasm
+/// asset), which no Wado source spelled.
+fn takes_names_from_elsewhere(module_source: &ModuleSource) -> bool {
     match module_source {
-        ModuleSource::Core { name } => name.as_str() == "builtin",
         ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => true,
-        ModuleSource::Local { .. }
+        ModuleSource::Core { .. }
+        | ModuleSource::Local { .. }
         | ModuleSource::Dependency { .. }
         | ModuleSource::Remote { .. }
         | ModuleSource::EntryPoint { .. }
@@ -148,6 +190,8 @@ pub enum AnalyzeError {
     },
     /// A function declared without a body where nothing supplies one.
     MissingFunctionBody { name: String, span: Span },
+    /// A declaration or import spelled like a keyword that begins an expression.
+    KeywordName { name: String, span: Span },
     /// An `#[unavailable]` that cannot report what it was written to report.
     MalformedUnavailable { fault: UnavailableFault, span: Span },
     /// Undefined symbol reference
@@ -256,6 +300,11 @@ impl AnalyzeError {
             AnalyzeError::MissingFunctionBody { name, span } => (
                 Code::MissingFunctionBody,
                 format!("function '{name}' has no body"),
+                *span,
+            ),
+            AnalyzeError::KeywordName { name, span } => (
+                Code::InvalidSyntax,
+                expression_keyword_name_message(name),
                 *span,
             ),
             AnalyzeError::MalformedUnavailable { fault, span } => (
@@ -377,7 +426,7 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// compilation did not run the Kiln pipeline.
     invocations: InvocationIndex,
     /// `ModuleSource` interner shared with the loader. Forwarded to
-    /// [`resolve_use_decl_module_source`] so analyze-phase imports get
+    /// [`resolve_use_decl_source`] so analyze-phase imports get
     /// canonicalized identities.
     interner: Rc<RefCell<ModuleSourceInterner>>,
 }
@@ -834,6 +883,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         for (source, module) in modules {
             self.check_function_declarations(module, source);
+            if !takes_names_from_elsewhere(source) {
+                for (name, span) in keyword_named_declarations(module) {
+                    let _ = self
+                        .logger
+                        .error_in(source, AnalyzeError::KeywordName { name, span });
+                }
+            }
         }
 
         for (source, module) in modules {
@@ -915,7 +971,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 // Resolve the source path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
-                let Some(source_module) = resolve_use_decl_module_source(
+                let Some(source_module) = resolve_use_decl_source(
                     &mut self.interner.borrow_mut(),
                     module_source,
                     use_decl,
@@ -949,7 +1005,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             ..
                         } => {
                             for func_item in functions {
-                                let source_name = format!("{}::{}", interface_name, func_item.name);
+                                let source_name =
+                                    mangle_local_method(interface_name, &func_item.name);
                                 let export_name =
                                     func_item.alias.as_ref().unwrap_or(&func_item.name);
                                 self.symbols.register_reexport(
@@ -1031,18 +1088,65 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         )
     }
 
-    /// Reject an import whose local name the module also declares.
-    ///
-    /// The name then means two declarations at once, and every layering that
-    /// resolves it picks one on its own terms — which is how the same spelling
-    /// came to mean different things in different parts of the compiler. An
-    /// alias resolves it, so the program says which one it meant.
+    /// Reject `name` if it is spelled like a keyword that begins an expression.
+    fn reject_keyword_name(
+        &self,
+        module_source: &ModuleSource,
+        name: &str,
+        span: Span,
+    ) -> Result<(), Bail> {
+        if !is_expression_keyword(name) {
+            return Ok(());
+        }
+        self.logger.error_in(
+            module_source,
+            AnalyzeError::KeywordName {
+                name: name.to_string(),
+                span,
+            },
+        )
+    }
+
+    /// Imports `lookup_name` from `module_source` into `from` as `import_name`,
+    /// or reports why it cannot.
+    #[allow(clippy::too_many_arguments)]
+    fn import_symbol(
+        &mut self,
+        from: &ModuleSource,
+        module_source: &ModuleSource,
+        lookup_name: &str,
+        import_name: &str,
+        name_span: Span,
+        local_span: Span,
+        visibility: Visibility,
+    ) -> Result<(), Bail> {
+        let Some(symbol) = self.symbols.lookup_in_module(module_source, lookup_name) else {
+            return self.logger.error_in(
+                from,
+                AnalyzeError::ImportNotFound {
+                    module_source: module_source.clone(),
+                    name: lookup_name.to_string(),
+                    span: name_span,
+                },
+            );
+        };
+        let key = symbol.defined_at;
+        self.check_import_visibility(from, module_source, lookup_name, name_span)?;
+        self.check_reexport_widening(from, module_source, lookup_name, visibility, name_span)?;
+        self.reject_import_collision(from, import_name, local_span)?;
+        self.symbols.register_import(from, import_name, key);
+        Ok(())
+    }
+
+    /// Reject an import whose local name the module also declares: the name
+    /// would mean two declarations at once. An alias says which one is meant.
     fn reject_import_collision(
         &self,
         module_source: &ModuleSource,
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
+        self.reject_keyword_name(module_source, local_name, span)?;
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)
@@ -1087,7 +1191,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 // Resolve the import path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
-                let Some(module_source) = resolve_use_decl_module_source(
+                let Some(module_source) = resolve_use_decl_source(
                     &mut self.interner.borrow_mut(),
                     from_module_source,
                     use_decl,
@@ -1122,42 +1226,22 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Register imported symbols
                 for use_item in &use_decl.items {
                     match use_item {
-                        UseItem::Simple { name, alias, .. } => {
-                            if let Some(symbol) =
-                                self.symbols.lookup_in_module(&module_source, name)
-                            {
-                                let key = symbol.defined_at;
-                                let import_name = alias.as_ref().unwrap_or(name);
-                                self.check_import_visibility(
-                                    from_module_source,
-                                    &module_source,
-                                    name,
-                                    use_decl.span,
-                                )?;
-                                self.check_reexport_widening(
-                                    from_module_source,
-                                    &module_source,
-                                    name,
-                                    use_decl.visibility,
-                                    use_decl.span,
-                                )?;
-                                self.reject_import_collision(
-                                    from_module_source,
-                                    import_name,
-                                    use_decl.span,
-                                )?;
-                                self.symbols
-                                    .register_import(from_module_source, import_name, key);
-                            } else {
-                                self.logger.error_in(
-                                    from_module_source,
-                                    AnalyzeError::ImportNotFound {
-                                        module_source: module_source.clone(),
-                                        name: name.clone(),
-                                        span: use_decl.span,
-                                    },
-                                )?;
-                            }
+                        UseItem::Simple {
+                            name,
+                            name_span,
+                            alias,
+                            local_span,
+                            ..
+                        } => {
+                            self.import_symbol(
+                                from_module_source,
+                                &module_source,
+                                name,
+                                alias.as_ref().unwrap_or(name),
+                                *name_span,
+                                *local_span,
+                                use_decl.visibility,
+                            )?;
                         }
                         UseItem::InterfaceFunctions {
                             interface_name,
@@ -1165,56 +1249,26 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             ..
                         } => {
                             for func_item in functions {
-                                let lookup_name = format!("{}::{}", interface_name, func_item.name);
-                                if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&module_source, &lookup_name)
-                                {
-                                    let key = symbol.defined_at;
-                                    let import_name =
-                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.check_import_visibility(
-                                        from_module_source,
-                                        &module_source,
-                                        &lookup_name,
-                                        use_decl.span,
-                                    )?;
-                                    self.check_reexport_widening(
-                                        from_module_source,
-                                        &module_source,
-                                        &lookup_name,
-                                        use_decl.visibility,
-                                        use_decl.span,
-                                    )?;
-                                    // Registered under the bare member name
-                                    // like a `Simple` import, so it collides
-                                    // with a declaration the same way.
-                                    self.reject_import_collision(
-                                        from_module_source,
-                                        import_name,
-                                        use_decl.span,
-                                    )?;
-                                    self.symbols.register_import(
-                                        from_module_source,
-                                        import_name,
-                                        key,
-                                    );
-                                } else {
-                                    self.logger.error_in(
-                                        from_module_source,
-                                        AnalyzeError::ImportNotFound {
-                                            module_source: module_source.clone(),
-                                            name: lookup_name,
-                                            span: use_decl.span,
-                                        },
-                                    )?;
-                                }
+                                self.import_symbol(
+                                    from_module_source,
+                                    &module_source,
+                                    &mangle_local_method(interface_name, &func_item.name),
+                                    func_item.alias.as_ref().unwrap_or(&func_item.name),
+                                    func_item.name_span,
+                                    func_item.local_span,
+                                    use_decl.visibility,
+                                )?;
                             }
                         }
                         UseItem::Wildcard => {
                             // Wildcard import: module is loaded for side effects only,
                             // no symbols to register
                         }
-                        UseItem::Namespace { name: ns } => {
+                        UseItem::Namespace {
+                            name: ns,
+                            name_span,
+                        } => {
+                            self.reject_keyword_name(from_module_source, ns, *name_span)?;
                             // Register each reachable member under its `ns$member`
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time

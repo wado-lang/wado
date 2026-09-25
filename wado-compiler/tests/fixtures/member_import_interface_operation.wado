@@ -1,0 +1,42 @@
+// An interface operation imported as `use { E::{op} }` is called by its bare
+// name, or its alias, as `E::op` is: through the interface's handler, or its
+// default where none is installed. The import reaches the operation through a
+// re-export of `E` too, as `Stdout::{write_via_stream}` reaches `wasi:cli`'s.
+use { println, Stdout } from "core:cli";
+use { Stdout::{write_via_stream} } from "wasi:cli";
+use { Greeting, Greeting::{hello, bye as farewell} } from "./sub/member_import_op_iface.wado";
+use { Greeting::{hello as hi} } from "./sub/member_import_op_facade.wado";
+
+struct Polite {}
+
+impl Greeting for Polite {
+    fn hello(name: String) -> String {
+        resume `good day, ${name}`
+    }
+
+    fn bye() -> String {
+        resume "farewell"
+    }
+}
+
+fn greet() -> String with Greeting {
+    let v = hello();
+    return `${v}; ${hi("there")}; ${farewell()}`;
+}
+
+export fn run() with (Stdout, Greeting) {
+    println(greet());
+    let mut p = Polite {};
+    with Greeting => &mut p do {
+        println(greet());
+    }
+
+    let [rx, tx] = Stream::<u8>::new();
+    let done = write_via_stream(rx);
+    tx.write(b"streamed\n");
+    tx.drop();
+    done.read();
+}
+
+__DATA__
+{"stdout": "hello you; hello there; bye\ngood day, you; good day, there; farewell\nstreamed\n"}

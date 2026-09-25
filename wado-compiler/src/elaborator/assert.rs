@@ -27,14 +27,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ..
         } = scanner;
 
-        ctx.enter_scope();
-
-        debug_assert!(ctx.assert_capture_ctx.is_none());
-        ctx.assert_capture_ctx = Some(AssertCaptureContext {
-            slots,
-            ast_id_to_slot,
-            in_progress: IndexSet::default(),
-        });
+        let mut scope = ctx.enter_scope();
+        debug_assert!(scope.assert_capture_ctx.is_none());
+        let ctx = &mut scope.replacing(
+            |ctx| &mut ctx.assert_capture_ctx,
+            Some(AssertCaptureContext {
+                slots,
+                ast_id_to_slot,
+                in_progress: IndexSet::default(),
+            }),
+        );
 
         let cond_type = self.resolve_condition_expr(&assert_stmt.condition, ctx);
 
@@ -106,8 +108,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slots: stage5_slots,
             },
         );
-
-        ctx.exit_scope();
     }
 
     /// Hook the body walk calls on an `AstId` flagged for capture: resolves

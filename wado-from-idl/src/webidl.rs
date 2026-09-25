@@ -463,7 +463,7 @@ fn reject_overrides(
             let receivers = r
                 .methods
                 .iter()
-                .filter(|m| m.params.first().is_some_and(|p| p.name == "self"))
+                .filter(|m| m.params.first().is_some_and(|p| p.wit_name == "self"))
                 .map(|m| m.name.as_str())
                 .collect();
             (*name, receivers)

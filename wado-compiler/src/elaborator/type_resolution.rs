@@ -1,10 +1,7 @@
 //! AST Type to `TypeId` resolution.
 
-use std::hash::Hash;
-
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -12,7 +9,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::trait_query::SelfBinding;
-use super::types::TypeError;
+use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
@@ -567,12 +564,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
+    /// Report each default naming its own or a later parameter, which no
+    /// argument has settled when the default is read.
+    pub(super) fn report_forward_type_param_defaults(&mut self, params: &[ast::GenericParam]) {
+        for (slot, referenced) in forward_type_param_defaults(params) {
+            let _ = self.emit(TypeError::ForwardTypeParamDefault {
+                param: params[slot].name.clone(),
+                referenced,
+                span: params[slot]
+                    .default
+                    .as_ref()
+                    .expect("only a default names a parameter")
+                    .span(),
+            });
+        }
+    }
+
     /// Whether `def`'s declared defaults can be expanded at all: each names
     /// only parameters to its left, and the walk they set off terminates.
-    ///
-    /// One naming a parameter no argument has settled yet would leak the
-    /// parameter itself into the instantiation. Checked once per declaration:
-    /// the declaration is ill-formed, not the application that reached it.
     pub(super) fn type_param_defaults_are_ordered(&mut self, def: DefId) -> bool {
         if let Some(&ordered) = self.checked_type_param_defaults.get(&def) {
             return ordered;
@@ -596,27 +605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.checked_type_param_defaults.insert(def, false);
             return false;
         }
-        let mut ordered = true;
-        for slot in 0..params.len() {
-            let Some(default) = params[slot].default.clone() else {
-                continue;
-            };
-            let mut referenced = None;
-            self.walk_type_heads(&default, &mut |_, _, name, _, _| {
-                if referenced.is_none() && params[slot..].iter().any(|p| p.name == name) {
-                    referenced = Some(name.to_string());
-                }
-                false
-            });
-            if let Some(referenced) = referenced {
-                ordered = false;
-                let _ = self.emit(TypeError::ForwardTypeParamDefault {
-                    param: params[slot].name.clone(),
-                    referenced,
-                    span: default.span(),
-                });
-            }
-        }
+        let ordered = forward_type_param_defaults(&params).is_empty();
         self.checked_type_param_defaults.insert(def, ordered);
         ordered
     }
@@ -970,26 +959,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved.iter().all(|t| *t == first).then_some(first)
     }
 
-    /// Run `body` unless `key` is already on the walk, which means it is being
-    /// asked for what it is computing. Scoped so no exit from `body` can leave
-    /// the key behind and answer `None` for the rest of the module.
-    fn unless_on_walk<K, R>(
-        &mut self,
-        stack: impl Fn(&mut Self) -> &mut hashmap::IndexSet<K>,
-        key: K,
-        body: impl FnOnce(&mut Self) -> Option<R>,
-    ) -> Option<R>
-    where
-        K: Eq + Hash + Clone,
-    {
-        if !stack(self).insert(key.clone()) {
-            return None;
-        }
-        let answer = body(self);
-        stack(self).shift_remove(&key);
-        answer
-    }
-
     /// Every bound on `base_name` a projection may be answered from, each with
     /// the parameter space it was written in answered at this frame. A
     /// supertrait binds an assoc type too, so one walk serves every lookup.
@@ -1011,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(base_name)?
             .type_id;
         self.unless_on_walk(
-            |e| &mut e.bound_closure_stack,
+            |scope| &mut scope.bound_closure_stack,
             binder,
             |e| {
                 let mut out: Vec<FrameBound> = Vec::new();
@@ -1188,7 +1157,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
-            .map(|b| self.fq_trait_name_at(b.id, &b.name))
+            .map(|b| self.tysys.fq_trait_name_at(b.id, &b.name))
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
         self.tysys
@@ -1216,7 +1185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
-                    let fq = self.fq_trait_name_at(bound.id, &bound.name);
+                    let fq = self.tysys.fq_trait_name_at(bound.id, &bound.name);
                     (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()
@@ -1256,7 +1225,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `assoc`'s own bounds, so a pair already on the walk recurses.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     self.unless_on_walk(
-                        |e| &mut e.assoc_binding_stack,
+                        |scope| &mut scope.assoc_binding_stack,
                         (base, assoc.clone()),
                         |e| e.make_frame_projection(base, base_name, &assoc),
                     )

@@ -1,0 +1,35 @@
+// A `break` in a guard leaves the loop, from the first arm and from a later one.
+use { println, Stdout } from "core:cli";
+
+fn later_arm(xs: List<i32>) -> i32 {
+    let mut n = 0;
+    for let x of xs {
+        match x {
+            0 => n += 100,
+            1 && (if n > 5 { break; } else { true }) => n += 10,
+            _ => n += 1,
+        }
+    }
+    return n;
+}
+
+fn first_arm(xs: List<i32>) -> i32 {
+    let mut n = 0;
+    for let x of xs {
+        match x {
+            1 && (if n > 5 { break; } else { true }) => n += 10,
+            _ => n += 1,
+        }
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [2, 1, 1, 3, 1, 4];
+    println(`${later_arm(xs)} ${first_arm(xs)}`);
+}
+
+__DATA__
+{
+  "stdout": "11 11\n"
+}

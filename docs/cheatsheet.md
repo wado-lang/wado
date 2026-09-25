@@ -244,7 +244,7 @@ let sum = m + m;              // OK: Meters + Meters -> Meters
 let raw: f64 = m as f64;      // explicit cast required
 
 type Location = Point;
-let loc = Location { x: 0, y: 0 };
+let loc: Location = { x: 0, y: 0 };  // literal coercion; or `Point { … } as Location`
 loc.distance(&loc2);  // inherits Point methods, params expect &Location
 
 impl Location {
@@ -1286,6 +1286,7 @@ i32::from_str("xyz42abc".as_str_slice().slice(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi
+i32::abs(x)                           // i32::MIN wraps to itself
 
 // char classification and conversion
 let code = 'A' as i32;                // 65
@@ -1352,6 +1353,7 @@ Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic s
 // Iteration (integers and char via Step trait)
 for let i of 0..<5 { println(`${i}`); }    // 0, 1, 2, 3, 4
 for let c of 'a'..='e' { print(`${c}`); }  // abcde
+for let i of (0..<10).step_by(3) { ... }   // 0, 3, 6, 9 (any iterator takes step_by)
 ```
 
 ## Effects
@@ -1639,16 +1641,17 @@ eq_constant_time(&mac, &expected);   // any AsByteSlice: ByteList, String, …
 
 ### core:cli
 
-`println` / `eprintln` / `print` / `eprint`, `args`, `env`, `cwd`,
+`println` / `eprintln` / `print` / `eprint`, `args`, `program_name`, `env`, `cwd`,
 `exit`; `log_stdout` / `log_stderr` print with no effect. See
 [`core:cli`](./stdlib-core-cli.md).
 
 ```wado
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
-use { args, env } from "core:cli";
+use { args, program_name, env } from "core:cli";
 
 println("hello");
-for let arg of args() { println(`arg: ${arg}`); }
+for let arg of args() { println(`arg: ${arg}`); }   // what follows the program name
+program_name();   // Some("app.wado") under `wado run app.wado`, never the runner
 if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ```
 

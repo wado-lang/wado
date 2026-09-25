@@ -11,6 +11,7 @@ use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
+use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
@@ -89,24 +90,10 @@ pub(super) fn link_parent_captures(
         .collect()
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Whether `ty` is a bare rigid type parameter.
-    ///
-    /// A closure is not constrained by an expected return type of that shape:
-    /// the parameter belongs to the signature the call is instantiating, and
-    /// the closure's own body is what determines it. Seeding the body with it
-    /// would demand that the body produce an opaque type it cannot construct
-    /// — `fold(0, |acc, x| acc + x)` asked the closure to return `Acc`.
-    pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(ty),
-            ResolvedType::TypeParam { .. }
-        )
-    }
-
+impl TypeSystem {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
-        let tt = self.tysys.type_table.borrow();
+        let tt = self.type_table.borrow();
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
@@ -123,7 +110,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         }
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a closure parameter's type, defaulting unannotated params to
     /// the expected-type's positional param when one is available.
     fn closure_param_type(
@@ -143,9 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         TypeTable::UNKNOWN
     }
-}
 
-impl<H: CompilerHost> Elaborator<'_, H> {
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
@@ -167,7 +154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         self.reject_closure_defaults(closure);
-        let expected_fn = self.extract_expected_fn(expected_type);
+        let expected_fn = self.tysys.extract_expected_fn(expected_type);
 
         // Reify replays the `MutCapture`s in this order.
         let writes = Self::collect_capture_writes(closure);
@@ -233,11 +220,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.reject_unresolved_annotation(ty);
         }
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        // A bare type parameter belongs to the signature the call instantiates,
+        // and the closure's body determines it: `fold(0, |acc, x| acc + x)`.
         let body_expected = declared_return.or_else(|| {
-            expected_fn
-                .as_ref()
-                .map(|ef| ef.return_type)
-                .filter(|&rt| !self.is_rigid_type_param(rt))
+            expected_fn.as_ref().map(|ef| ef.return_type).filter(|&rt| {
+                !matches!(
+                    self.tysys.type_table.borrow().get(rt),
+                    ResolvedType::TypeParam { .. }
+                )
+            })
         });
         // Seed the closure's return type before walking the body, so a `?`
         // operator in the body (which checks `ctx.return_type` for

@@ -831,7 +831,7 @@ pub(super) fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, 
     let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
         return None;
     };
-    let is_tree_map = tt.compiler_item_def(CompilerItem::TreeMap) == Some(*def);
+    let is_tree_map = tt.is_compiler_item(*def, CompilerItem::TreeMap);
     match type_args.as_slice() {
         [key, value] if is_tree_map => Some((tid, *key, *value)),
         _ => None,

@@ -378,18 +378,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// [`Self::typecheck`] on a call argument. A template's mismatch is the
-    /// tag's parameter at fault, since no source spells the template's type.
+    /// [`Self::typecheck`] on a call argument, worded by [`ArgSite::mismatch`].
     pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
-        match site {
-            ArgSite::Written(span) => self.typecheck(actual, expected, span),
-            ArgSite::Template(span) => self.typecheck_worded(actual, expected, span, |payload| {
-                TypeError::TagParamNotTemplate {
-                    param: payload.expected,
-                    span,
-                }
-            }),
-        }
+        self.typecheck_worded(actual, expected, site.span(), |payload| {
+            site.mismatch(payload.expected, payload.found)
+        });
     }
 
     fn typecheck_worded(
