@@ -188,15 +188,15 @@ struct Member {
 
 variant Slot {
     Field([String, Access]),
-    /// The field the `oneof` is stored in, its variant, and its members.
-    Oneof([String, String, List<Member>]),
+    /// The field its `oneof` is stored in, that oneof's variant, and the member.
+    Member([String, String, Member]),
 }
 
 impl Slot {
     fn number(&self) -> i32 {
         return match self {
             Field([_, a]) => a.number,
-            Oneof([_, _, members]) => members[0].number,
+            Member([_, _, m]) => m.number,
         };
     }
 }
@@ -213,13 +213,9 @@ impl MessagePlan {
         for let slot of &self.slots {
             match slot {
                 Field([field, a]) => w.line(`${call}${a.put}${a.types}(${a.number}, &self.${field});`),
-                Oneof([field, sum, members]) => {
-                    w.begin(`if let Some(c) = &self.${field}`);
-                    w.begin("match c");
-                    for let m of members {
-                        w.line(`${sum}::${m.case}(v) => ${call}${m.put}${m.types}(${m.number}, v),`);
-                    }
-                    w.end();
+                Member([field, sum, m]) => {
+                    w.begin(`if let Some(${sum}::${m.case}(v)) = &self.${field}`);
+                    w.line(`${call}${m.put}${m.types}(${m.number}, v);`);
                     w.end();
                 },
             }
@@ -261,11 +257,7 @@ impl MessagePlan {
                             Stored(value) => write_stored_merge(w, a.number, &a.types, field, value),
                         }
                     },
-                    Oneof([field, sum, members]) => {
-                        for let m of members {
-                            write_member_merge(w, field, sum, m);
-                        }
-                    },
+                    Member([field, sum, m]) => write_member_merge(w, field, sum, m),
                 }
             }
             w.line("_ => {},");
@@ -465,11 +457,11 @@ impl Emitter {
         let mut variants: List<VariantSpec> = [];
         for let [field, sum, members] of oneofs {
             let mut v = VariantSpec::new(&sum, Vis::Pub);
-            for let m of &members {
+            for let m of members {
                 v.add_case_with_payload(&m.case, &m.payload);
+                slots.push(Slot::Member([field, sum, m]));
             }
             variants.push(v);
-            slots.push(Slot::Oneof([field, sum, members]));
         }
         slots.sort_by(|a, b| a.number().cmp(&b.number()));
         return Result::Ok(MessagePlan { spec, oneofs: variants, slots });

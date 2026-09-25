@@ -1,7 +1,7 @@
 // Schemas compiled by Grog, encoded and decoded by its runtime.
 use { TreeMap } from "core:collections";
 use grog from "lib:grog";
-use { Account, AccountAddress, AccountContact, Status } from "./demo.proto"
+use { Account, AccountAddress, AccountContact, Spread, SpreadPick, Status } from "./demo.proto"
     with {
         generator: { module: "lib:grog" },
     };
@@ -37,6 +37,13 @@ test "an empty proto3 message is no bytes" {
 
 test "implicit fields are written only when set" {
     assert grog::encode(&Account { id: 150, status: Status::Active }).to_hex() == "0896015001";
+}
+
+test "a oneof member is written at its own number" {
+    let last = Spread { pick: Option::Some(SpreadPick::Last("q")), middle: 2 };
+    assert grog::encode(&last).to_hex() == "28024a0171";
+    let first = Spread { pick: Option::Some(SpreadPick::First(3)), middle: 2 };
+    assert grog::encode(&first).to_hex() == "08032802";
 }
 
 test "every mapping round-trips" {

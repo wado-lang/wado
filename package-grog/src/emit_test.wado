@@ -203,11 +203,11 @@ impl grog::Message for Point {
         n += s.optional::<grog::SInt64>(2, &self.y);
         n += s.packed::<grog::Fixed32>(3, &self.tags);
         n += s.optional_message(5, &self.next);
-        if let Some(c) = &self.choice {
-            match c {
-                PointChoice::Label(v) => n += s.scalar::<grog::Str>(7, v),
-                PointChoice::Other(v) => n += s.message(8, v),
-            }
+        if let Some(PointChoice::Label(v)) = &self.choice {
+            n += s.scalar::<grog::Str>(7, v);
+        }
+        if let Some(PointChoice::Other(v)) = &self.choice {
+            n += s.message(8, v);
         }
         return n;
     }
@@ -217,11 +217,11 @@ impl grog::Message for Point {
         w.optional::<grog::SInt64>(2, &self.y);
         w.packed::<grog::Fixed32>(3, &self.tags);
         w.optional_message(5, &self.next);
-        if let Some(c) = &self.choice {
-            match c {
-                PointChoice::Label(v) => w.scalar::<grog::Str>(7, v),
-                PointChoice::Other(v) => w.message(8, v),
-            }
+        if let Some(PointChoice::Label(v)) = &self.choice {
+            w.scalar::<grog::Str>(7, v);
+        }
+        if let Some(PointChoice::Other(v)) = &self.choice {
+            w.message(8, v);
         }
         w.raw(&self.unknown_fields);
     }
