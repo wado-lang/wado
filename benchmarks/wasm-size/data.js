@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790311927485,
+  "lastUpdate": 1790315718123,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59599,6 +59599,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc6a5079475ce2944693bb4790509b54fedbfa8c",
+          "message": "Merge pull request #2155 from wado-lang/claude/wado-sample-code-expansion-lfs9ye\n\nfeat: SIMD fractal and path-tracer samples; Iterator::step_by; core:cli::program_name",
+          "timestamp": "2026-09-25T14:29:10+09:00",
+          "tree_id": "fe41612c7e82ad59ef40de9db1d912f0e3574fa5",
+          "url": "https://github.com/wado-lang/wado/commit/dc6a5079475ce2944693bb4790509b54fedbfa8c"
+        },
+        "date": 1790315717452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
             "unit": "bytes"
           },
           {
