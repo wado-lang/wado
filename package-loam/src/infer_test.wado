@@ -174,6 +174,26 @@ test "a node naming several outputs stops the build rather than trapping" {
     assert `${e}` == "Y = Relu: produces one output and names 2";
 }
 
+test "a weight's merged axis, written as its parts, contracts with a regrouped activation" {
+    let source = `g (float[1, 4, 2, 8] X) => (float[1, 4, 6] Y) <float[16, 6] W, int64[3] S = {1, 4, 16}> {
+        R = Reshape(X, S)
+        Y = MatMul(R, W)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Head", "Dim"]),
+        rule("W", ["(Head Dim)", "Out"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=1,Seq=4,Out=6";
+}
+
+test "regrouping a merged axis the layout wrote stops the build, its parts having no extents" {
+    let source = `g (float[16, 6] W) => (float[2, 8, 6] Y) <int64[3] S = {2, 8, 6}> {
+        Y = Reshape(W, S)
+    }`;
+    let e = y_axes(source, [rule("W", ["(Head Dim)", "Out"])]).unwrap_err();
+    assert e == "Y = Reshape: axis Head is ?, and Reshape reads static extents";
+}
+
 fn qkv() -> List<LayoutRule> {
     return [
         rule("X", ["Batch", "Seq", "Qkv"]),

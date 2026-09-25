@@ -378,6 +378,25 @@ g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
     assert out.contains("let Y = select(&C, &lift::<f32, [], [Batch, Key]>(&S, 2), X);");
 }
 
+test "a merged axis the layout writes is spelled with its parts' markers" {
+    let source = `
+g (float[4, 2, 8] X) => (float[4, 6] Y)
+<float[16, 6] W, int64[2] S = {4, 16}>
+{
+    R = Reshape(X, S)
+    Y = MatMul(R, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq", "Head", "Dim"]),
+        rule("W", ["(Head Dim)", "Out"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("pub W: Tensor<f32, [Merged<[Head, Dim]>, Out]>,");
+    assert out.contains("let Y = matmul(&R, &weights.W);");
+}
+
 test "Split cuts one run along the axis for each output" {
     let source = `
 g (float[1, 4, 24] X) => (float[1, 4, 8] K)

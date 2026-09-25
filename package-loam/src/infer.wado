@@ -473,7 +473,7 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     }
     let mut axes: List<Axis> = [];
     for let mut i = 0; i < dims.len(); i += 1 {
-        axes.push(Axis { name: names[i], extent: extent_of(&dims[i], &names[i]) });
+        axes.push(Axis::named(&names[i], extent_of(&dims[i], &names[i])));
     }
     return Result::Ok(Shape { axes });
 }
@@ -767,7 +767,7 @@ fn output_layout_axis(
             dims: rank,
         }));
     }
-    return Result::Ok(Axis { name: names[index], extent: Extent::Static(extent) });
+    return Result::Ok(Axis::named(&names[index], Extent::Static(extent)));
 }
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`

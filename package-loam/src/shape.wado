@@ -15,7 +15,7 @@ pub struct Axis {
 impl Axis {
     /// One axis standing for `parts`, named as the generated module spells it.
     /// See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
-    pub fn merged(parts: List<Axis>, extent: i32) -> Axis {
+    pub fn merged(parts: List<Axis>, extent: Extent) -> Axis {
         assert parts.len() >= 2;
         let mut names: List<String> = [];
         for let p of parts {
@@ -23,9 +23,29 @@ impl Axis {
         }
         return Axis {
             name: `Merged<[${names.join(", ")}]>`,
-            extent: Extent::Static(extent),
+            extent,
             parts,
         };
+    }
+
+    /// The axis a layout names: a plain name, or `(A B)` for a merge of `A` and
+    /// `B`, whose parts' extents the layout does not say.
+    pub fn named(name: &String, extent: Extent) -> Axis {
+        if !(name.starts_with("(") && name.ends_with(")")) {
+            return Axis { name: *name, extent };
+        }
+        let inner = name.as_str_slice().slice(1, name.len() - 1);
+        let mut parts: List<Axis> = [];
+        for let part of inner.split_whitespace() {
+            parts.push(Axis {
+                name: part.to_string(),
+                extent: Extent::Symbol("?"),
+            });
+        }
+        if parts.len() == 1 {
+            return Axis { name: parts[0].name, extent };
+        }
+        return Axis::merged(parts, extent);
     }
 
     /// The extent of an axis the caller has already shown static.
@@ -72,6 +92,11 @@ impl Shape {
             let Static(e) = axis.extent else {
                 return Result::Err(`axis ${axis.name} is ${axis.extent}, and ${*reader} reads static extents`);
             };
+            for let part of axis.parts {
+                if part.extent matches { Symbol(_) } {
+                    return Result::Err(`axis ${part.name} is ${part.extent}, and ${*reader} reads static extents`);
+                }
+            }
             extents.push(e);
         }
         return Result::Ok(extents);
@@ -119,7 +144,7 @@ impl Shape {
             } else if run.len() == 1 {
                 out.push(Option::Some(run[0]));
             } else {
-                out.push(Option::Some(Axis::merged(run, target)));
+                out.push(Option::Some(Axis::merged(run, Extent::Static(target))));
             }
         }
         return out;
