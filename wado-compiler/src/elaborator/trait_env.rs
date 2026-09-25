@@ -1538,20 +1538,21 @@ impl TraitEnv {
         &self,
         trait_: DefId,
         receiver: &name::FqTypeName,
-        is_mut: bool,
         wanted: &[name::FqTypeName],
     ) -> Option<&BlanketImpl> {
+        let is_mut = receiver.references().first() == Some(&name::RefKind::Mut);
         let defaults = &self.decl_header_of(&trait_)?.default_args;
         let default_at = |index: usize| Some(defaults.get(index)?.as_ref()?.at(receiver));
         self.blanket_impls.get(&trait_)?.iter().find(|b| {
-            let written = self.impl_headers[&b.def].trait_arg_ids();
+            let written_args = self.impl_headers[&b.def].trait_arg_ids();
             b.receiver == BlanketReceiver::Ref { is_mut }
                 && (0..defaults.len()).all(|i| {
+                    let written = written_args.get(i).cloned().or_else(|| default_at(i));
                     let want = wanted.get(i).cloned().or_else(|| default_at(i));
-                    match (written.get(i).cloned().or_else(|| default_at(i)), want) {
-                        (Some(written), Some(want)) => written.mentions_binder() || written == want,
-                        (written, want) => written.is_none() && want.is_none(),
-                    }
+                    written
+                        .as_ref()
+                        .is_some_and(name::FqTypeName::mentions_binder)
+                        || written == want
                 })
         })
     }

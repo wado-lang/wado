@@ -2254,9 +2254,9 @@ impl Monomorphizer {
         let Some(self_tid) = self.receiver_substitution_tid(info, substitution) else {
             return false;
         };
-        let (is_mut, inner) = match type_table.get(self_tid) {
-            ResolvedType::Ref(inner) => (false, *inner),
-            ResolvedType::MutRef(inner) => (true, *inner),
+        let (ref_kind, inner) = match type_table.get(self_tid) {
+            ResolvedType::Ref(inner) => (RefKind::Shared, *inner),
+            ResolvedType::MutRef(inner) => (RefKind::Mut, *inner),
             _ => return false,
         };
         let Some(trait_fq) = info.trait_name.as_ref() else {
@@ -2268,15 +2268,9 @@ impl Monomorphizer {
         let Some(blanket) = self.functions.trait_env.universal_ref_blanket(
             trait_,
             &type_table.fq_type_name(self_tid),
-            is_mut,
             trait_fq.args(),
         ) else {
             return false;
-        };
-        let ref_kind = if is_mut {
-            RefKind::Mut
-        } else {
-            RefKind::Shared
         };
         // Mirror the template ref arm (`method_call_info_for_type`): the call
         // name carries the shape + inner type; `call_rewrite` resolves it to the

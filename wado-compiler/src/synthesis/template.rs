@@ -1079,12 +1079,9 @@ pub(crate) fn trait_method_template(
         return Some(template);
     }
     let blanket = match tt.get(receiver) {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(
-            trait_,
-            &tt.fq_type_name(receiver),
-            matches!(tt.get(receiver), ResolvedType::MutRef(_)),
-            trait_name.args(),
-        ),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+            trait_env.universal_ref_blanket(trait_, &tt.fq_type_name(receiver), trait_name.args())
+        }
         // A newtype inherits its base's answer before any blanket but one
         // keyed on its own reflected shape (WEP 2026-09-01).
         ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
