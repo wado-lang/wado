@@ -16,6 +16,7 @@ use {
     CharClass,
     CharRange,
     Visibility,
+    merge_grammars,
 } from "../ir.wado";
 use { parse, parse_checked } from "./parser.wado";
 
@@ -1005,6 +1006,27 @@ rule : ID ;";
     assert_option_ident(&g.options[1], "Python");
     assert g.options[2].name == "superClass";
     assert_option_qualified(&g.options[2], ["my", "pkg", "BaseParser"]);
+}
+
+test "a lexer and a parser split each keep their own base" {
+    let lexer_g = parse("lexer grammar SLexer;
+options { superClass = LBase; language = Wado; }
+GT : { this.ok() }? '>' ;
+").unwrap();
+    let parser_g = parse("parser grammar SParser;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+").unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.lexer_superclass == "LBase";
+    assert merged.parser_superclass == "PBase";
+}
+
+test "parse wado_prs_super.g4" {
+    let g = parse(#include_str("../../tests/grammars/wado_prs_super.g4")).unwrap();
+    assert g.name == "WadoPrsSuper";
+    assert g.parser_superclass == "PsBase";
+    assert g.lexer_superclass.is_empty(), "a combined grammar's superClass is the parser's";
 }
 
 test "grammar options with string literal value" {

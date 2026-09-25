@@ -13,6 +13,7 @@ use { parse_highlight_query } from "./highlight_query.wado";
 use { GenContext } from "./gen_context.wado";
 use { Diagnostic } from "./gir.wado";
 use { CodeWriter } from "lib:wadopoet";
+use { count_occurrences } from "../tests/support/text.wado";
 
 fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
     let mut g = parse(input).unwrap();
@@ -48,35 +49,7 @@ fn highlight_output<S: AsStrSlice>(input: S) -> String {
 fn assert_capture_refused(run: &[String, List<Diagnostic>]) {
     assert run.1.len() == 1, `expected one diagnostic, got ${run.1.len()}`;
     assert run.1[0].message.contains("single token"), run.1[0].message;
-    assert index_of(&run.0, "RuleCapture {") == -1, run.0;
-}
-
-fn index_of<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
-    return match haystack.find(needle) {
-        Some(idx) => idx,
-        None => -1,
-    };
-}
-
-fn count_occurrences<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
-    let needle_len = needle.len();
-    if needle_len == 0 {
-        return 0;
-    }
-    let mut count = 0;
-    let mut remainder = haystack.to_string();
-    loop {
-        match remainder.find(needle) {
-            Some(idx) => {
-                count += 1;
-                remainder = remainder.substr_bytes(idx + needle_len, remainder.len());
-            },
-            None => {
-                break;
-            },
-        }
-    }
-    return count;
+    assert !run.0.contains("RuleCapture {"), run.0;
 }
 
 test "highlight defaults: more rule rows are deferred like token numbering" {
@@ -88,10 +61,9 @@ A : 'a' -> more ;
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    let a = index_of(&out, "// TK_A");
-    let b = index_of(&out, "// TK_B");
-    let ws = index_of(&out, "// TK_WS");
-    assert a >= 0 && b >= 0 && ws >= 0, out;
+    let a = out.find("// TK_A").expect(out);
+    let b = out.find("// TK_B").expect(out);
+    let ws = out.find("// TK_WS").expect(out);
     assert b < a, `TK_B row must precede deferred TK_A row: b=${b} a=${a}`;
     assert ws < a, `TK_WS row must precede deferred TK_A row: ws=${ws} a=${a}`;
 }
@@ -104,8 +76,8 @@ test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
 B : 'b' ;
 WS : ' ' -> skip ;
 ");
-    assert index_of(&out, "walk_(") == -1, out;
-    assert index_of(&out, "tokenize(input)") >= 0, out;
+    assert !out.contains("walk_("), out;
+    assert out.contains("tokenize(input)"), out;
 }
 
 test "highlight defaults: user ERROR rule suppresses the sentinel row" {
@@ -126,7 +98,7 @@ test "query maps a token to its default capture" {
 r : B ;
 B : 'b' ;
 ", "(B) @keyword");
-    assert index_of(&out, "0,  // TK_B @keyword") >= 0, out;
+    assert out.contains("0,  // TK_B @keyword"), out;
 }
 
 test "query maps a literal token to its default capture" {
@@ -134,7 +106,7 @@ test "query maps a literal token to its default capture" {
 r : 'let' B ;
 B : 'b' ;
 ", "\"let\" @keyword");
-    assert index_of(&out, " @keyword\n") >= 0, out;
+    assert out.contains(" @keyword\n"), out;
 }
 
 test "highlight fn: a grammar with a parser walks the CST, query or not" {
@@ -146,13 +118,13 @@ test "highlight fn: a grammar with a parser walks the CST, query or not" {
 r : B ;
 B : 'b' ;
 ", "(B) @keyword");
-    assert index_of(&plain, "highlight_walk(&mut visitor") >= 0, plain;
-    assert index_of(&plain, "hl_cover_unvisited(") >= 0, plain;
+    assert plain.contains("highlight_walk(&mut visitor"), plain;
+    assert plain.contains("hl_cover_unvisited("), plain;
     let contextual = highlight_output_q("grammar T;
 r : B ;
 B : 'b' ;
 ", "(r (B) @string)");
-    assert index_of(&contextual, "highlight_walk(&mut visitor") >= 0, contextual;
+    assert contextual.contains("highlight_walk(&mut visitor"), contextual;
 }
 
 test "rule capture is one rule-level entry, not one per token" {
@@ -165,8 +137,8 @@ name : IDENTIFIER | 'test' | 'task' ;
 IDENTIFIER : [a-z]+ ;
 ", "(name) @variable");
     assert count_occurrences(&out, "RuleCapture {") == 1, out;
-    assert index_of(&out, "rule_captures: [\n        RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },") >= 0, out;
-    assert index_of(&out, "overrides_by_kind: [],") >= 0, out;
+    assert out.contains("rule_captures: [\n        RuleCapture { rule_id: RK_NAME as i32, capture_id: 0, order: 0 },"), out;
+    assert out.contains("overrides_by_kind: [],"), out;
 }
 
 test "the mapping is one global, resolved at generation time" {
@@ -175,11 +147,11 @@ r : name '(' ;
 name : IDENTIFIER ;
 IDENTIFIER : [a-z]+ ;
 ", "(name) @variable\n\"(\" @punctuation.bracket");
-    assert index_of(&out, "pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {") >= 0, out;
-    assert index_of(&out, "HighlightVisitor::new(&HIGHLIGHT_MAPPING)") >= 0, out;
-    assert index_of(&out, "fn highlight_mapping") == -1, out;
-    assert index_of(&out, "rule_names") == -1, out;
-    assert index_of(&out, "capture_classes: [\n        \"punctuation bracket\",\n        \"variable\",\n    ],") >= 0, out;
+    assert out.contains("pub global HIGHLIGHT_MAPPING: HighlightMapping = HighlightMapping {"), out;
+    assert out.contains("HighlightVisitor::new(&HIGHLIGHT_MAPPING)"), out;
+    assert !out.contains("fn highlight_mapping"), out;
+    assert !out.contains("rule_names"), out;
+    assert out.contains("capture_classes: [\n        \"punctuation bracket\",\n        \"variable\",\n    ],"), out;
 }
 
 test "the highlighter is a library: no CLI entry point, no imports" {
@@ -187,8 +159,8 @@ test "the highlighter is a library: no CLI entry point, no imports" {
 r : B ;
 B : 'b' ;
 ", "(B) @keyword");
-    assert index_of(&out, "fn run") == -1, out;
-    assert index_of(&out, "use ") == -1, out;
+    assert !out.contains("fn run"), out;
+    assert !out.contains("use "), out;
 }
 
 test "a rule capture restates an earlier override on the same rule" {
@@ -196,7 +168,7 @@ test "a rule capture restates an earlier override on the same rule" {
 r : B ;
 B : 'b' ;
 ", "(r (B) @string)\n(r) @keyword");
-    assert index_of(&out, "string") == -1, out;
+    assert !out.contains("string"), out;
     assert count_occurrences(&out, "RuleCapture { rule_id: RK_R as i32, capture_id: 0, order: 0 },  // @keyword") == 1, out;
 }
 
@@ -259,11 +231,10 @@ test "query override emits a row under its token kind" {
 r : B ;
 B : 'b' ;
 ", "(r (B) @string)");
-    assert index_of(
-        &out,
+    assert out.contains(
         "[  // TK_B\n            RuleCapture { rule_id: RK_R as i32, capture_id: 0, order: 0 },  // @string\n        ],",
-    ) >= 0, out;
-    assert index_of(&out, "rule_captures: [],") >= 0, out;
+    ), out;
+    assert out.contains("rule_captures: [],"), out;
 }
 
 test "default on a named token the parser also writes inline maps that token" {
@@ -273,7 +244,7 @@ B : 'b' ;
 LP : '(' ;
 RP : ')' ;
 ", "(LP) @punctuation.bracket");
-    assert index_of(&out, "0,  // TK_LP @punctuation.bracket") >= 0, out;
+    assert out.contains("0,  // TK_LP @punctuation.bracket"), out;
 }
 
 test "default on an action-bearing named token the parser also writes inline" {
@@ -284,8 +255,8 @@ B : 'b' ;
 LP : '(' { lx.count += 1 } ;
 RP : ')' ;
 ", "(LP) @punctuation.bracket");
-    assert index_of(&out, "0,  // TK_LP @punctuation.bracket") >= 0, out;
-    assert index_of(&out, "TK_LIT_LP") < 0, out;
+    assert out.contains("0,  // TK_LP @punctuation.bracket"), out;
+    assert !out.contains("TK_LIT_LP"), out;
 }
 
 test "later override for the same rule and token wins (last-wins)" {
@@ -295,8 +266,8 @@ B : 'b' ;
 ", "(r (B) @string)
 (r (B) @keyword)");
     assert count_occurrences(&out, "RuleCapture {") == 1, out;
-    assert index_of(&out, "// @keyword") >= 0, out;
-    assert index_of(&out, "string") == -1, out;
+    assert out.contains("// @keyword"), out;
+    assert !out.contains("string"), out;
 }
 
 test "unknown token in query warns via ctx diagnostics" {
@@ -334,11 +305,8 @@ test "capture_vocabulary lists the query's distinct capture classes, sorted" {
         "grammar T; s : KW STR KW ; KW : 'if' ; STR : '\"' ~[\"]* '\"' ;",
         "(KW) @keyword\n(STR) @string\n",
     );
-    assert index_of(&out, "capture_names: [\n        \"keyword\",\n        \"string\",\n    ],") >= 0, out;
-    assert index_of(
-        &out,
-        "pub fn capture_vocabulary() -> List<String> {\n    return HIGHLIGHT_MAPPING.capture_names;\n}",
-    ) >= 0, out;
+    assert out.contains("capture_names: [\n        \"keyword\",\n        \"string\",\n    ],"), out;
+    assert out.contains("pub fn capture_vocabulary() -> List<String> {\n    return HIGHLIGHT_MAPPING.capture_names;\n}"), out;
 }
 
 test "capture_vocabulary lists a capture shared by two selectors once" {
@@ -346,10 +314,10 @@ test "capture_vocabulary lists a capture shared by two selectors once" {
         "grammar T; s : KW ID ; KW : 'if' ; ID : [a-z]+ ;",
         "(KW) @keyword\n(ID) @keyword\n",
     );
-    assert index_of(&out, "capture_names: [\n        \"keyword\",\n    ],") >= 0, out;
+    assert out.contains("capture_names: [\n        \"keyword\",\n    ],"), out;
 }
 
 test "capture_vocabulary is empty without a highlight query" {
     let out = highlight_output("grammar T; s : KW ; KW : 'if' ;");
-    assert index_of(&out, "capture_names: [],") >= 0, out;
+    assert out.contains("capture_names: [],"), out;
 }

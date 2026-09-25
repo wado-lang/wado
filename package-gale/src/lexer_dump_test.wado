@@ -5,46 +5,16 @@
 //! names the branch the lexer emitter took and why the cheaper one was not
 //! available — the question `gale dump --lexer` exists to answer.
 
-use {
-    merge_grammars,
-    synthesize_implicit_tokens,
-    normalize_caches,
-    alias_parser_literals,
-    canonicalize_empty_alt_groups,
-} from "./ir.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
-use { parse } from "./g4/parser.wado";
+use { assemble_grammar } from "./g4/parser.wado";
+use { count_occurrences } from "../tests/support/text.wado";
 
-/// Run the front-end the way `cmd_dump` does, then render the lexer report.
+/// The report `gale dump --lexer` prints for `input`.
 fn lexer_dump<S: AsStrSlice>(input: S) -> String {
-    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
-    alias_parser_literals(&mut merged);
-    canonicalize_empty_alt_groups(&mut merged);
-    normalize_caches(&mut merged);
-    return render_lexer_dump(&merged);
-}
-
-fn str_count<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len == 0 || n_len > h_len {
-        return 0;
-    }
-    let mut count = 0;
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            count += 1;
-        }
-    }
-    return count;
+    let inputs: List<[String, String]> = [
+        ["test.g4", input.to_string()],
+    ];
+    return render_lexer_dump(&assemble_grammar(&inputs).unwrap());
 }
 
 test "lexer dump names the grammar and summarizes strategies" {
@@ -164,7 +134,7 @@ test "lexer dump reports a scored alternation's suffix once" {
 r : I ;
 I : ('a' | 'ab') [0-9]* 'z' ;");
 
-    assert str_count(&report, "repeat [0-9]* then 'z'") == 1, report;
+    assert count_occurrences(&report, "repeat [0-9]* then 'z'") == 1, report;
     assert report.contains("greedy repeat: plain 1"), report;
 }
 

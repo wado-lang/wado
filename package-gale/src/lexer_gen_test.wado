@@ -6,6 +6,7 @@
 
 use { Grammar } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
+use { count_occurrences } from "../tests/support/text.wado";
 use {
     collect_literal_tokens,
     gen_token_constants,
@@ -120,27 +121,6 @@ fn token_globals_for<S: AsStrSlice>(input: S) -> String {
     let mut w = CodeWriter::new();
     gen_token_constants(&mut w, &g.lexer_rules, &lits);
     return w.to_string();
-}
-
-fn count_occurrences<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
-    let needle_len = needle.len();
-    if needle_len == 0 {
-        return 0;
-    }
-    let mut count = 0;
-    let mut remainder = haystack.to_string();
-    loop {
-        match remainder.find(needle) {
-            Some(idx) => {
-                count += 1;
-                remainder = remainder.substr_bytes(idx + needle_len, remainder.len());
-            },
-            None => {
-                break;
-            },
-        }
-    }
-    return count;
 }
 
 test "lexer_try_fn_name: rule name is case-preserved" {

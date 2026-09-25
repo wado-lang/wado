@@ -67,7 +67,7 @@ The emit _decisions_ below the route — plain vs lookahead-aware repeat, first-
 
 The plan never holds a second copy of the same elements. A scored alternation only peeks what follows it, so that suffix stays a step of the enclosing sequence and `gen_lexer_alt_seq` re-emits those steps from a `from` index; planning it apart would let the peek and the commit choose differently. Only a non-greedy repeat's exit try is cut out, since it alone lowers what follows outside the sequence's tail position.
 
-`codegen_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
+"every strategy the dump reports is one the emitter emitted" in `codegen_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
 
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
