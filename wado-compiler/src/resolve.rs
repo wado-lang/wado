@@ -12,7 +12,7 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
+use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias, split_local_method};
 use crate::symbol::SymbolTable;
 use crate::token::Span;
 
@@ -385,7 +385,7 @@ impl Resolutions {
         }
         let member = self.declared_if_walked(ident.id)?;
         let name = self.defs().name(member);
-        let operation = name.rsplit_once("::").map_or(name, |(_, op)| op);
+        let operation = split_local_method(name).map_or(name, |(_, op)| op);
         Some((self.defs().parent(member)?, operation))
     }
 

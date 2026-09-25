@@ -7,10 +7,7 @@ use crate::ast::{Item, Module};
 use crate::compiler_host::{Code, Diagnostic, Severity};
 use crate::hashmap::IndexMap;
 use crate::kiln::inline::InvocationIndex;
-use crate::name::{
-    canonical_local_path, module_parent_dir, normalize_module_path, resolve_local_identity,
-    resolve_module_path,
-};
+use crate::name::{module_parent_dir, resolve_local_identity, resolve_module_path};
 use crate::parse;
 use crate::path::is_cwd_relative;
 
@@ -77,14 +74,8 @@ where
 
         for import in local_wado_imports(&ast) {
             let child_key = resolve_module_path(&key, import);
-            // Must match the loader's identity derivation, which anchors an
-            // entry import on the entry directory and a deeper one on the
-            // importing module.
-            let child_loader_id = if key == entry_key {
-                canonical_local_path(&entry_dir, &normalize_module_path(import))
-            } else {
-                resolve_local_identity(&entry_dir, &loader_id, import)
-            };
+            let importer = (key != entry_key).then_some(loader_id.as_str());
+            let child_loader_id = resolve_local_identity(&entry_dir, importer, import);
             // Don't overwrite the entry's pinned identity (back-refs fold to it).
             if child_key != entry_key {
                 identities.insert(child_key.clone(), child_loader_id.clone());

@@ -39,21 +39,24 @@ pub(super) fn namespace_imports_of(
     let mut out = NamespaceImports::default();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
-            let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+            let mut namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
                 ast::UseItem::Namespace { name: ns, .. } => Some(ns),
                 ast::UseItem::Simple { .. }
                 | ast::UseItem::InterfaceFunctions { .. }
                 | ast::UseItem::Wildcard => None,
             });
-            for ns in namespaces {
-                let source = resolve_use_decl_source(
+            if let Some(first) = namespaces.next()
+                && let Some(source) = resolve_use_decl_source(
                     interner,
                     from_module,
                     use_decl,
                     entry_module,
                     invocations,
-                );
-                out.insert(ns.clone(), source);
+                )
+            {
+                for ns in std::iter::once(first).chain(namespaces) {
+                    out.insert(ns.clone(), source.clone());
+                }
             }
         }
     }
@@ -1468,12 +1471,12 @@ impl TraitEnv {
 
     /// Whether some `impl From<Array<[K, V]>> for` the declaration `target`
     /// exists, whichever of its instantiations it covers.
-    pub(super) fn converts_from_pairs(&self, target: DefId, from: DefId) -> bool {
+    pub(super) fn converts_from_pairs(&self, target: DefId, from_trait: DefId) -> bool {
         self.all_impl_keys(&ImplTargetKey::Decl(target))
             .iter()
             .filter_map(|key| self.impl_headers.get(key)?.trait_.as_ref())
             .any(|trait_| {
-                trait_.def == Some(from)
+                trait_.def == Some(from_trait)
                     && trait_.arg_ids.first().is_some_and(|array| {
                         matches!(array.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
                             && array.args().first().is_some_and(|element| {

@@ -20,8 +20,7 @@ use crate::module_source::{
     CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
 };
 use crate::name::{
-    canonical_local_path, decl_file_of, entry_dir_of,
-    normalize_module_path, resolve_import_with_invocations, resolve_local_identity,
+    decl_file_of, entry_dir_of, resolve_import_with_invocations, resolve_local_identity,
     resolve_module_path,
 };
 use crate::parser::Parser;
@@ -369,22 +368,27 @@ impl WasmAsset {
     }
 }
 
-/// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
-/// the `with { type: "wat" | "wasm" }` form to `ModuleSource::Wasm`. Mirrors
-/// `analyze::resolve_use_decl_module_source`.
+/// The module `use_decl` imports from `from`, a Wasm asset where its `with`
+/// says so. `None` for a malformed asset path, which analysis reports.
 pub fn resolve_use_decl_source(
     interner: &mut ModuleSourceInterner,
     from: &ModuleSource,
     use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
     invocations: &InvocationIndex,
-) -> ModuleSource {
-    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref())
-        && let Ok(path) = resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
-    {
-        return interner.wasm(&path, kind);
+) -> Option<ModuleSource> {
+    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
+        return resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
+            .ok()
+            .map(|path| interner.wasm(&path, kind));
     }
-    resolve_import_with_invocations(interner, from, &use_decl.source, entry, invocations)
+    Some(resolve_import_with_invocations(
+        interner,
+        from,
+        &use_decl.source,
+        entry,
+        invocations,
+    ))
 }
 
 /// Whether `bytes` is a CM component (vs a core module), per the preamble encoding.
@@ -520,7 +524,7 @@ pub fn resolve_wasm_asset_path(
     import_source: &str,
     entry_dir: &str,
 ) -> Result<String, LoadError> {
-    if !import_source.starts_with("./") && !import_source.starts_with("../") {
+    if !is_cwd_relative(import_source) {
         return Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         });
@@ -537,13 +541,14 @@ pub fn resolve_wasm_asset_path(
             "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => Ok(resolve_local_identity(entry_dir, path, import_source)),
+        ModuleSource::Local { path } => {
+            Ok(resolve_local_identity(entry_dir, Some(path), import_source))
+        }
         ModuleSource::Dependency { path, .. } => Ok(resolve_module_path(path, import_source)),
         ModuleSource::Remote { url, .. } => Ok(resolve_module_path(url, import_source)),
-        ModuleSource::EntryPoint { .. } => Ok(canonical_local_path(
-            entry_dir,
-            &normalize_module_path(import_source),
-        )),
+        ModuleSource::EntryPoint { .. } => {
+            Ok(resolve_local_identity(entry_dir, None, import_source))
+        }
         ModuleSource::Redirected { uri, .. } => Ok(resolve_module_path(uri, import_source)),
         ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
@@ -1212,10 +1217,6 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     pending_component_stdlib_deps: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
-    /// Entry directory: the anchor for canonicalizing local module identities
-    /// (see [`crate::name::canonical_local_path`]). Empty until the entry is
-    /// loaded, or when the entry filename has no parent.
-    entry_dir: String,
     /// Kiln invocation redirects: `(decl_file, from_path)` → generated entry
     /// module path. Consulted by `resolve_import` so a bare `use { X } from
     /// "<schema>"` picks up the generator's output.
@@ -1242,7 +1243,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             pending_component_imports: Vec::new(),
             pending_component_stdlib_deps: IndexSet::default(),
             entry_module_source: None,
-            entry_dir: String::new(),
             invocations: InvocationIndex::new(),
         }
     }
@@ -1318,7 +1318,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         )?
         .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_dir = entry_dir_of(Some(&entry_module_source));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
@@ -1349,8 +1348,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if self.loaded.contains_key(&module_source) {
                 continue;
             }
-
-            // Skip — handled by resolve_import returning EntryPoint directly
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
@@ -1511,26 +1508,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Handle a `use ... from "<path>" with { type: "wat"|"wasm" }`
-    /// declaration: validate what an embedded asset must be, resolve the asset
-    /// path to a `ModuleSource::Wasm`, and load + record the bytes.
-    ///
-    /// Only the wildcard form (`use _ from "..."`) is handled here; named
-    /// imports are rejected with a pointed diagnostic so users get a clear
-    /// message instead of a downstream elaborator failure.
+    /// Loads the asset a `use … from "<path>" with { type: "wat"|"wasm" }` names.
     async fn handle_wasm_import(
         &mut self,
         from_module_source: &ModuleSource,
         kind: WasmAssetKind,
         use_decl: &UseDecl,
     ) -> Result<(), LoadError> {
-        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &self.entry_dir)?;
+        let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
+        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)?;
         let source = self.interner.wasm(&path, kind);
-
-        let _ = use_decl; // accepted for both wildcard and named forms; the
-        // named form's items are resolved against the synthesized Wado
-        // module produced below.
-
         self.handle_wasm_source(source, kind).await
     }
 
@@ -1837,10 +1824,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.entry_module_source.as_ref(),
             &self.invocations,
         );
-        if !matches!(resolved, ModuleSource::Local { .. })
-            || import_source.starts_with("./")
-            || import_source.starts_with("../")
-        {
+        if !matches!(resolved, ModuleSource::Local { .. }) || is_cwd_relative(import_source) {
             return Ok(resolved);
         }
 

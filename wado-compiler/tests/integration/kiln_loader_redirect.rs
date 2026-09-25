@@ -3,7 +3,9 @@
 //! module.
 
 use crate::common::{MapHost, block_on};
-use wado_compiler::{CompilerHost, LogLevel, Semantics, kiln::InvocationIndex, load, parse, semantics_of};
+use wado_compiler::{
+    CompilerHost, LogLevel, Semantics, kiln::InvocationIndex, load, parse, semantics_of,
+};
 
 /// Run the three-stage frontend (parse → load → `semantics_of`) with the
 /// given kiln invocation index. Test-local helper that mirrors the

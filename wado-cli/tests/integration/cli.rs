@@ -403,7 +403,10 @@ fn test_run_exits_with_a_stdin_read_pending() {
     if status.is_none() {
         child.kill().unwrap();
     }
-    assert!(status.is_some_and(|s| s.success()), "`wado run` did not exit: {status:?}");
+    assert!(
+        status.is_some_and(|s| s.success()),
+        "`wado run` did not exit: {status:?}"
+    );
 }
 
 #[test]

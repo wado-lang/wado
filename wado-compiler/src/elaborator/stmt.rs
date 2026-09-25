@@ -11,9 +11,9 @@ use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
-use super::{Elaborator, ForwardDefaults};
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
+use super::{Elaborator, ForwardDefaults};
 use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -1571,17 +1571,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The alias of the immutable global `ns::NAME` names in a pattern, which is
-    /// a constant-value pattern as the bare `NAME` is.
+    /// The alias and type of the immutable global `ns::NAME` names in a pattern,
+    /// which is a constant-value pattern as the bare `NAME` is.
     pub(super) fn namespaced_constant(
         &self,
         qualifier: Option<&Type>,
         name: &str,
-    ) -> Option<String> {
-        self.sem
-            .imports
-            .pattern_ns_member(qualifier, name)
-            .filter(|alias| self.is_immutable_global(alias))
+    ) -> Option<(String, TypeId)> {
+        let alias = self.sem.imports.pattern_ns_member(qualifier, name)?;
+        let ty = self.immutable_global_type(&alias)?;
+        Some((alias, ty))
     }
 
     /// Whether `name` refers to an immutable global (defined here or imported),
@@ -1684,8 +1683,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 match lit {
                     Literal::Number(repr) if util::is_float_only_literal(repr) => {
                         let _ = self.emit(TypeError::InvalidPattern {
-                            message: "float literals cannot be used in match patterns"
-                                .to_string(),
+                            message: "float literals cannot be used in match patterns".to_string(),
                             span,
                         });
                     }
@@ -1784,15 +1782,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
-                    if let Some(alias) =
+                    if let Some((alias, ty)) =
                         self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
                         }
-                        let ty = self
-                            .immutable_global_type(&alias)
-                            .expect("a namespaced constant is an immutable global");
                         self.typecheck(ty, scrutinee_type, *span);
                         return Vec::new();
                     }
@@ -2266,7 +2261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
-    /// not it. An integer literal's range is the coercion's answer, not a pattern's.
+    /// not it. Whether its value is in range is [`Self::check_pattern_value`]'s.
     pub(super) fn literal_pattern_mismatch(
         &mut self,
         lit: &Literal,
@@ -2350,13 +2345,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             match pattern {
                 Pattern::Literal(Literal::Number(repr)) => {
-                    util::int_literal_range_error(repr, scrutinee_type, &tt)
+                    let (negated, digits) = repr
+                        .strip_prefix('-')
+                        .map_or((false, repr.as_str()), |digits| (true, digits));
+                    util::parse_u128_literal(digits).ok().and_then(|magnitude| {
+                        util::int_literal_range_error(
+                            magnitude,
+                            negated,
+                            digits,
+                            scrutinee_type,
+                            &tt,
+                        )
+                    })
                 }
-                Pattern::Literal(Literal::Byte(raw)) => escape::unescape_byte(raw)
-                    .ok()
-                    .and_then(|v| {
-                        util::int_value_range_error(v.into(), &format!("b'{raw}'"), scrutinee_type, &tt)
-                    }),
+                Pattern::Literal(Literal::Byte(raw)) => {
+                    escape::unescape_byte(raw).ok().and_then(|v| {
+                        util::int_value_range_error(
+                            v.into(),
+                            &format!("b'{raw}'"),
+                            scrutinee_type,
+                            &tt,
+                        )
+                    })
+                }
                 Pattern::Variant {
                     variant_name,
                     variant_qualifier: Some(qualifier),
@@ -3600,7 +3611,7 @@ pub(super) fn primitive_assoc_const_to_i128(
 }
 
 /// The type name qualifying a constant path such as `u8::MAX`.
-pub(super) fn const_qualifier_name(qualifier: &Type) -> Option<&str> {
+fn const_qualifier_name(qualifier: &Type) -> Option<&str> {
     match qualifier {
         Type::Named(named) => Some(named.name.as_str()),
         Type::Generic(generic) => Some(generic.name.as_str()),

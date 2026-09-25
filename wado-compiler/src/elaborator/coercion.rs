@@ -306,11 +306,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
                     let tt = self.tysys.type_table.borrow();
-                    let err_msg = if neg.is_some() {
-                        util::check_int_range_negative(value, target_type, &tt, repr)
-                    } else {
-                        util::check_int_range_positive(value, target_type, &tt, repr)
-                    };
+                    let err_msg =
+                        util::int_literal_range_error(value, neg.is_some(), repr, target_type, &tt);
                     drop(tt);
                     if let Some(err_msg) = err_msg {
                         let _ = self.emit(TypeError::InvalidLiteral {

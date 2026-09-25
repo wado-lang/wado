@@ -8,7 +8,7 @@ use crate::ast::{AstId, TestMetadata};
 use crate::defs::{DefId, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
-use crate::path::{normalize, relative_path};
+use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
@@ -1473,24 +1473,19 @@ pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> Str
     format!("global:{module_source}::{name}")
 }
 
-/// The canonical loader identity for a relative `import_source` imported from a
-/// local module `from_path`, anchored at `entry_dir`: compose
-/// ([`resolve_module_path`]) then canonicalize ([`canonical_local_path`]). The
-/// one resolver shared by the loader, the analyze/elaborator re-resolution, and
-/// the CLI Kiln harvest, so all three agree on identities.
+/// The loader identity of `import_source` imported from the local module
+/// `from_path`, or from the entry module where `None`, anchored at `entry_dir`.
 #[must_use]
-pub fn resolve_local_identity(entry_dir: &str, from_path: &str, import_source: &str) -> String {
-    canonical_local_path(entry_dir, &resolve_module_path(from_path, import_source))
-}
-
-/// Resolve an import source (`"./geometry.wado"`, `"core:cli"`) against the
-/// importing module.
-pub fn resolve_import(
-    interner: &mut ModuleSourceInterner,
-    from_module: &ModuleSource,
+pub fn resolve_local_identity(
+    entry_dir: &str,
+    from_path: Option<&str>,
     import_source: &str,
-) -> ModuleSource {
-    resolve_import_with_entry(interner, from_module, import_source, None)
+) -> String {
+    let resolved = match from_path {
+        Some(from_path) => resolve_module_path(from_path, import_source),
+        None => normalize_module_path(import_source),
+    };
+    canonical_local_path(entry_dir, &resolved)
 }
 
 /// The file a declaration in `source` is written in, as a [`InvocationIndex`]
@@ -1540,7 +1535,7 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
-    let relative = import_source.starts_with("./") || import_source.starts_with("../");
+    let relative = is_cwd_relative(import_source);
     // A relative import inherits the importer's package root.
     if relative {
         match from_module {
@@ -1579,7 +1574,7 @@ pub fn resolve_import_with_entry(
 
     if relative && let ModuleSource::Local { path: from_path } = from_module {
         let resolved =
-            resolve_local_identity(&entry_dir_of(entry_module), from_path, import_source);
+            resolve_local_identity(&entry_dir_of(entry_module), Some(from_path), import_source);
         // If this resolves to the entry module's canonical name, return the
         // entry ModuleSource to maintain a single type identity.
         if let Some(entry) = entry_module {
@@ -1594,12 +1589,8 @@ pub fn resolve_import_with_entry(
         return interner.local(&resolved);
     }
 
-    // Entry imports canonicalize against the entry dir, mirroring the loader.
     if matches!(from_module, ModuleSource::EntryPoint { .. }) {
-        let resolved = canonical_local_path(
-            &entry_dir_of(entry_module),
-            &normalize_module_path(import_source),
-        );
+        let resolved = resolve_local_identity(&entry_dir_of(entry_module), None, import_source);
         return interner.local(&resolved);
     }
 
@@ -2037,6 +2028,12 @@ pub fn wir_tuple_type_key(display: &str) -> String {
 /// - `mangle_local_method("Point", "sum")` → `"Point::sum"`
 pub fn mangle_local_method(struct_name: &str, method_name: &str) -> String {
     format!("{struct_name}::{method_name}")
+}
+
+/// The owner and member of a [`mangle_local_method`] name; `None` for a bare one.
+#[must_use]
+pub fn split_local_method(name: &str) -> Option<(&str, &str)> {
+    name.rsplit_once("::")
 }
 
 /// Build a local method name with trait from struct name, trait name, and method name.

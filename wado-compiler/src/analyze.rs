@@ -13,12 +13,10 @@ use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
+use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{
-    entry_dir_of, namespace_member_alias, resolve_import_with_invocations, validate_module_path,
-};
+use crate::name::{namespace_member_alias, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
@@ -30,38 +28,14 @@ use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// The module `use_decl` imports from `from`, a Wasm asset where its `with`
-/// says so. `None` for a malformed asset path, which the caller reports.
-fn resolve_use_decl_module_source(
-    interner: &mut ModuleSourceInterner,
-    from: &ModuleSource,
-    use_decl: &UseDecl,
-    entry: Option<&ModuleSource>,
-    invocations: &InvocationIndex,
-) -> Option<ModuleSource> {
-    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
-        return resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
-            .ok()
-            .map(|path| interner.wasm(&path, kind));
-    }
-    Some(resolve_import_with_invocations(
-        interner,
-        from,
-        &use_decl.source,
-        entry,
-        invocations,
-    ))
-}
-
 /// `true` when this `use` declares a wasm asset import
 /// (`with { type: "wat" | "wasm" }`).
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
     wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
 
-/// Every name `module` declares spelled like an expression keyword: an item at
-/// any depth, a type or effect parameter, or an enum, variant or flags member.
-/// A member reached by `.` may.
+/// Every item, type or effect parameter, and enum, variant or flags member `module`
+/// declares under an expression keyword's name. A member reached by `.` may.
 fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
     struct Names(Vec<(String, Span)>);
     impl Names {
@@ -127,10 +101,8 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
 
 /// Whether a module's functions may omit a body without naming what backs it.
 fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
-    match module_source {
-        ModuleSource::Core { name } => name.as_str() == "builtin",
-        _ => takes_names_from_elsewhere(module_source),
-    }
+    matches!(module_source, ModuleSource::Core { name } if name.as_str() == "builtin")
+        || takes_names_from_elsewhere(module_source)
 }
 
 /// Whether a module's declarations are a foreign export table's (WIT or a Wasm
@@ -454,7 +426,7 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// compilation did not run the Kiln pipeline.
     invocations: InvocationIndex,
     /// `ModuleSource` interner shared with the loader. Forwarded to
-    /// [`resolve_use_decl_module_source`] so analyze-phase imports get
+    /// [`resolve_use_decl_source`] so analyze-phase imports get
     /// canonicalized identities.
     interner: Rc<RefCell<ModuleSourceInterner>>,
 }
@@ -997,7 +969,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 // Resolve the source path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
-                let Some(source_module) = resolve_use_decl_module_source(
+                let Some(source_module) = resolve_use_decl_source(
                     &mut self.interner.borrow_mut(),
                     module_source,
                     use_decl,
@@ -1189,7 +1161,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 // Resolve the import path to ModuleSource, honoring
                 // wasm-asset attributes and Kiln invocation redirects.
-                let Some(module_source) = resolve_use_decl_module_source(
+                let Some(module_source) = resolve_use_decl_source(
                     &mut self.interner.borrow_mut(),
                     from_module_source,
                     use_decl,

@@ -8,7 +8,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -857,11 +857,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, determine expected parameter types to handle coercion.
         let operation = self.operation_decl(&callee_kind);
-        let signature = self.lookup_function_signature(
-            effective_name,
-            operation.as_ref().map(|(decl, op)| (*decl, op.as_str())),
-            callee_kind.callee_site(),
-        );
+        // An operation is its declaration's, whatever else the path spells.
+        let operation_signature = operation.as_ref().map(|(decl, op)| {
+            self.resolve_effect_op_signature(*decl, op)
+                .expect("`dispatched_operation` found the operation's signature")
+        });
+        let signature = match &operation_signature {
+            Some((params, _)) => Some((params.clone(), Vec::new())),
+            None => self.lookup_function_signature(effective_name, callee_kind.callee_site()),
+        };
         let signature_known = signature.is_some();
         let (mut param_types, callee_slots) = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
@@ -1472,9 +1476,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // alike. Ahead of the namespace arm below, which reads the
             // operation as a static method on the interface and mangles a body
             // nothing declares.
-            else if let Some((decl, operation)) = self.dispatched_operation(ident) {
+            else if let Some((decl, op)) = &operation {
                 (
-                    Some(self.effect_operation_callee(decl, &operation)),
+                    Some(self.effect_operation_callee(*decl, op)),
                     effective_name.to_string(),
                 )
             }
@@ -1958,21 +1962,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
-        // Defer (mint holes) or report uninferred type params.
-        self.defer_or_report_uninferred_fn_type_args(
-            &callee,
-            &mut type_args,
-            &declared_param_types,
-            &call.args,
-            &args,
-            expected_type,
-            call.span,
-        );
+        if !self.report_value_for_reference(&callee, &declared_param_types, &call.args, &args) {
+            self.defer_or_report_uninferred_fn_type_args(
+                &callee,
+                &mut type_args,
+                &args,
+                expected_type,
+                call.span,
+            );
+        }
 
-        let mut return_type = self.lookup_function_return_type(
-            &callee,
-            operation.as_ref().map(|(decl, op)| (*decl, op.as_str())),
-        );
+        let mut return_type = match operation_signature {
+            Some((_, return_type)) => return_type.unwrap_or(TypeTable::UNIT),
+            None => self.lookup_function_return_type(&callee),
+        };
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -2143,16 +2146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Look up the return type of a function
-    pub(super) fn lookup_function_return_type(
-        &mut self,
-        callee: &CalleeRef,
-        operation: Option<(DefId, &str)>,
-    ) -> TypeId {
-        if let Some((decl, operation)) = operation
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, operation)
-        {
-            return return_type;
-        }
+    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
         let callee_module = callee.module();
         let func_name = callee.name();
         // Handle builtin functions
@@ -2227,16 +2221,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
-        operation: Option<(DefId, &str)>,
         callee_site: Option<ast::AstId>,
     ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
-        // An operation is its declaration's, whatever else the path spells.
-        if let Some((decl, operation)) = operation
-            && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
-        {
-            return Some((params, Vec::new()));
-        }
-        // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
@@ -3044,6 +3030,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Reports each value a generic callee receives for a reference parameter, whose
+    /// unbound slot the argument check accepts it against. Whether it reported any.
+    fn report_value_for_reference(
+        &mut self,
+        callee: &CalleeRef,
+        param_types: &[TypeId],
+        arg_exprs: &[ast::Expr],
+        args: &[TypeId],
+    ) -> bool {
+        if self.lookup_function_type_params(callee).is_empty() {
+            return false;
+        }
+        let is_borrow = |this: &Self, t| {
+            RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
+        };
+        let mismatched: Vec<usize> = (0..param_types.len().min(args.len()))
+            .filter(|&i| {
+                is_borrow(self, param_types[i])
+                    && !matches!(args[i], TypeTable::ERROR | TypeTable::UNKNOWN)
+                    && !is_borrow(self, args[i])
+                    && !self.type_has_infer_hole(args[i])
+            })
+            .collect();
+        for &i in &mismatched {
+            let _ = self.emit(TypeError::TypeMismatch {
+                expected: self.tysys.type_id_to_string(param_types[i]),
+                found: self.tysys.type_id_to_string(args[i]),
+                span: arg_exprs[i].span(),
+            });
+        }
+        !mismatched.is_empty()
+    }
+
     /// Defer (mint inference holes) or report unresolved free-function type
     /// parameters, mirroring the instance-method deferral. Gated on a hole-free
     /// argument list and no expected type. Runs after
@@ -3053,8 +3072,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
-        param_types: &[TypeId],
-        arg_exprs: &[ast::Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: token::Span,
@@ -3063,29 +3080,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let space = RealTypeParams::borrowed(&params);
         let n = space.len();
         if n == 0 {
-            return;
-        }
-        // A value passed for a reference settles nothing: name the missing `&`
-        // rather than blame inference.
-        let value_for_reference: Vec<usize> = (0..param_types.len().min(args.len()))
-            .filter(|&i| {
-                let arg = args[i];
-                let settled_value = !matches!(arg, TypeTable::ERROR | TypeTable::UNKNOWN)
-                    && !self.type_has_infer_hole(arg);
-                let tt = self.tysys.type_table.borrow();
-                let is_borrow =
-                    |t| matches!(tt.get(t), ResolvedType::Ref(_) | ResolvedType::MutRef(_));
-                is_borrow(param_types[i]) && !is_borrow(arg) && settled_value
-            })
-            .collect();
-        if !value_for_reference.is_empty() {
-            for i in value_for_reference {
-                let _ = self.emit(TypeError::TypeMismatch {
-                    expected: self.tysys.type_id_to_string(param_types[i]),
-                    found: self.tysys.type_id_to_string(args[i]),
-                    span: arg_exprs.get(i).map_or(span, ast::Expr::span),
-                });
-            }
             return;
         }
         // Defaults are already substituted (`fill_defaulted_fn_type_args`), so

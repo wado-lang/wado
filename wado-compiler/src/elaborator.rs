@@ -1717,12 +1717,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 | ast::UseItem::Wildcard
                 | ast::UseItem::Namespace { .. } => None,
             });
-            if let Some(first) = interfaces.next() {
-                // `entry` must be threaded so identities match the loader
-                // (see `name::resolve_local_identity`). Wasm-asset imports
-                // resolve to `ModuleSource::Wasm`, matching the loader.
-                let source =
-                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations);
+            if let Some(first) = interfaces.next()
+                && let Some(source) =
+                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations)
+            {
                 for interface_name in std::iter::once(first).chain(interfaces) {
                     sources.insert(interface_name.clone(), source.clone());
                 }

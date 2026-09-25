@@ -1495,19 +1495,15 @@ fn canonical_decl_type_idx(
         .unwrap_or_else(|| unaliased(&format!("the canonical's type `{}`", decl.name_suffix())))
 }
 
-/// The distinct declarations the canonicals reach as `kind`.
-fn canonical_decls(
-    canonical_intrinsics: &[CanonicalIntrinsic],
-    kind: CmDeclKind,
-) -> IndexMap<DefId, CmDecl> {
-    let mut out: IndexMap<DefId, CmDecl> = IndexMap::default();
-    let mut keep = |decl: &CmDecl, at: CmDeclKind| {
-        if at == kind {
-            out.entry(decl.def()).or_insert_with(|| decl.clone());
-        }
-    };
+/// The distinct declarations the canonicals reach as a value.
+fn canonical_value_decls(canonical_intrinsics: &[CanonicalIntrinsic]) -> IndexSet<DefId> {
+    let mut out = IndexSet::default();
     for intrinsic in canonical_intrinsics {
-        intrinsic.for_each_decl(&mut keep);
+        intrinsic.for_each_decl(&mut |decl: &CmDecl, at: CmDeclKind| {
+            if at == CmDeclKind::Value {
+                out.insert(decl.def());
+            }
+        });
     }
     out
 }
@@ -1526,7 +1522,7 @@ fn prebuild_value_named_types(
         return;
     };
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for (def, _) in canonical_decls(canonical_intrinsics, CmDeclKind::Value) {
+    for def in canonical_value_decls(canonical_intrinsics) {
         if ctx.has_decl_type(def) {
             continue;
         }

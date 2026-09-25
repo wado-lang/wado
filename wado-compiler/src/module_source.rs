@@ -7,6 +7,7 @@
 use crate::compiler_host::DependencyIndex;
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
+use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
@@ -239,16 +240,14 @@ impl ModuleSourceInterner {
         let pkg = self.elect_package_root(&url, pkg);
         ModuleSource::Remote { pkg, url }
     }
-    /// A Kiln-generated module, in the package of the module importing it.
+    /// A Kiln-generated module, in the package of the first module importing it.
     pub fn redirected(&mut self, uri: &str, importer: &ModuleSource) -> ModuleSource {
         let uri = self.intern(uri);
-        let package = importer.package_id();
-        let first = self
+        let package = self
             .redirect_packages
             .entry(uri.clone())
-            .or_insert_with(|| package.clone());
-        // Kiln harvests the root package's invocations only.
-        assert_eq!(*first, package, "`{uri}` is imported from two packages");
+            .or_insert_with(|| importer.package_id())
+            .clone();
         ModuleSource::Redirected { uri, package }
     }
     pub fn wasm(&mut self, path: &str, kind: WasmAssetKind) -> ModuleSource {
@@ -268,7 +267,7 @@ impl ModuleSourceInterner {
         match segments {
             // Legacy: empty path represents entry module.
             [] => ModuleSource::entry_point_synthetic(),
-            [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
+            [first] if is_cwd_relative(first) => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
             all @ [first, rest @ ..] => match CmNamespace::from_prefix(first) {

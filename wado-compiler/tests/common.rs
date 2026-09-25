@@ -182,6 +182,10 @@ impl MapHost {
             diagnostics: Mutex::new(Vec::new()),
         }
     }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.lock().unwrap().clone()
+    }
 }
 
 impl CompilerHost for MapHost {

@@ -99,9 +99,8 @@ fn infer_in_instr(instr: &mut WirInstr) -> Flow {
                 spliced: Vec::new(),
             }
         }
-        // `br 0` inside targets the block's own end (a Block: fall-through past
-        // it; a Loop: re-entry), counted as an escape from the body: conservative
-        // for the loop, so a hint is only inferred where the trap is unavoidable.
+        // `br 0` targets the block's own end and counts as an escape: conservative
+        // for a loop, whose `br 0` re-enters.
         WirInstr::Block { body, .. } | WirInstr::Loop { body, .. } => {
             let flow = infer_in_body(body);
             Flow {
@@ -145,11 +144,8 @@ fn infer_in_instr(instr: &mut WirInstr) -> Flow {
     }
 }
 
-/// Backward pass for the `br_if` trap-tail rule: a `br_if` whose fall-through
-/// unavoidably traps must be taken on every well-defined execution, so it is
-/// hinted likely. `reaches_trap` is whether the path immediately *after* this
-/// slice unavoidably reaches `unreachable`; the return value is the same
-/// predicate for the path *before* the slice.
+/// Hints a `br_if` likely where its fall-through unavoidably traps. `reaches_trap`
+/// answers that for the path after `instrs`, and the result for the path before.
 fn hint_brif_trap_tail(instrs: &mut [WirInstr], flows: &[Flow], mut reaches_trap: bool) -> bool {
     for (instr, flow) in instrs.iter_mut().zip(flows).rev() {
         if reaches_trap && let WirInstr::BrIf { condition, .. } = instr {
@@ -161,10 +157,8 @@ fn hint_brif_trap_tail(instrs: &mut [WirInstr], flows: &[Flow], mut reaches_trap
                 reaches_trap = hint_brif_trap_tail(body, &flow.spliced, reaches_trap);
             }
             _ if flow.traps => reaches_trap = true,
-            // Control may leave (or definitely leaves) through this
-            // instruction; the path before it no longer unavoidably reaches
-            // the trap behind us.
-            other if flow.escape.is_some() || other.always_diverges() => reaches_trap = false,
+            // Control may leave here, so the path before need not reach the trap.
+            _ if flow.escape.is_some() => reaches_trap = false,
             _ => {}
         }
     }

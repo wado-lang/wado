@@ -704,8 +704,7 @@ struct EffectIndex<'a> {
     provided_import_fqs: &'a IndexSet<String>,
 }
 
-/// The declaration an operation call names, with the operation: `E` of
-/// `[ns::]*E::op`, or of a bare `op` imported as `use { E::{op} }`.
+/// `Resolutions::operation_at` for a callee expression.
 fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a str)> {
     let Expr::Ident(ident) = callee else {
         return None;
@@ -718,10 +717,9 @@ fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a 
 fn interface_at<'a>(
     sem: &Semantics,
     index: &EffectIndex<'a>,
-    def: Option<DefId>,
+    def: DefId,
 ) -> Option<(ModuleSource, String, &'a Option<String>)> {
     let resolutions = sem.resolutions()?;
-    let def = def?;
     let defs = resolutions.defs();
     let key = (defs.module(def).clone(), defs.name(def).to_string());
     let cm_fq = index.interface_cm_fq.get(&key)?;
@@ -784,10 +782,8 @@ fn binding_granted_effects(
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
-    interface: Option<DefId>,
+    interface: DefId,
 ) -> Vec<EffectRef> {
-    // The callee names its interface's declaration, so a same-named local
-    // `interface` cannot stand in for it.
     let Some((decl_module, name, cm_fq)) = interface_at(sem, index, interface) else {
         return Vec::new();
     };
@@ -1286,11 +1282,11 @@ fn call_site_effects(
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
-                dispatched: if dispatches_through_path {
-                    operation_requirements(sem, index, interface)
-                } else {
-                    Vec::new()
-                },
+                dispatched: interface
+                    .filter(|_| dispatches_through_path)
+                    .map_or_else(Vec::new, |interface| {
+                        operation_requirements(sem, index, interface)
+                    }),
             }
         })
         .collect()
@@ -1942,13 +1938,10 @@ impl PurityWalker<'_> {
         }
     }
 
-    /// Flags `Site::op(…)` when the dispatch demands a capability the position
-    /// does not hold. An operation declares no `with` clause of its own, so
-    /// nothing but the site says so.
+    /// Flags a call of `interface`'s operation `op` when the dispatch demands a
+    /// capability the position does not hold. An operation declares no `with` clause.
     fn flag_if_operation(&mut self, interface: DefId, op: &str, span: Span) {
-        // An operation declares no effect parameters, so there is nothing for
-        // the arguments to resolve.
-        let required = operation_requirements(self.sem, self.index, Some(interface));
+        let required = operation_requirements(self.sem, self.index, interface);
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }

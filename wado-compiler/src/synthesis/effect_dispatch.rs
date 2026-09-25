@@ -2208,40 +2208,35 @@ fn build_handler_op_closure(
         })
         .collect();
 
-    // Body: $h.<E>::<op>(<args>)
-    let receiver = TirExpr::new(
-        TirExprKind::Capture {
-            index: 0,
-            name: h_name.to_string(),
-        },
-        handler_type,
-        span,
-    );
-    // Reuse the exact mangled name + `method_info` reify registered. For a
-    // generic impl this is the template; the monomorphizer instantiates it
-    // from the receiver's type args like any user-written method call.
     let target = impl_info
         .methods
         .get(&op.name)
         .expect("caller checked impl_info.methods.contains_key(&op.name)");
+    // The mangled name and `method_info` reify registered: for a generic impl,
+    // the template.
+    let template = FunctionRef {
+        module_source: impl_info.impl_module.clone(),
+        name: target.mangled_name.clone(),
+        monomorph_info: None,
+        method_info: Some(target.method_info.clone()),
+    };
     let method_ret = impl_method_return_type(op, &type_table.borrow());
     let call_kind = if target.takes_self {
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: impl_info.impl_module.clone(),
-                name: target.mangled_name.clone(),
-                monomorph_info: None,
-                method_info: Some(target.method_info.clone()),
+        // `$h.<op>(<args>)`, which the monomorphizer instantiates from `$h`'s type.
+        let receiver = TirExpr::new(
+            TirExprKind::Capture {
+                index: 0,
+                name: h_name.to_string(),
             },
-            vec![],
-            arg_call_args,
-        )
+            handler_type,
+            span,
+        );
+        TirExprKind::method_call(Box::new(receiver), template, vec![], arg_call_args)
     } else {
         TirExprKind::Call {
             func: Box::new(static_handler_method_ref(
+                template,
                 target,
-                impl_info,
                 handler_type,
                 &type_table.borrow(),
             )),
@@ -2290,11 +2285,11 @@ fn build_handler_op_closure(
     )
 }
 
-/// The static call target of a handler method that declares no `self`,
-/// instantiated at the handler type's own arguments.
+/// The static call target of a handler method that declares no `self`: its
+/// `template`, instantiated at the handler type's own arguments.
 fn static_handler_method_ref(
+    template: FunctionRef,
     target: &HandlerMethodTarget,
-    impl_info: &HandlerImplInfo,
     handler_type: TypeId,
     tt: &TypeTable,
 ) -> FunctionRef {
@@ -2302,17 +2297,12 @@ fn static_handler_method_ref(
         .nominal_type_args(deref_type(tt, handler_type))
         .unwrap_or_default();
     if type_args.is_empty() {
-        return FunctionRef {
-            module_source: impl_info.impl_module.clone(),
-            name: target.mangled_name.clone(),
-            monomorph_info: None,
-            method_info: Some(target.method_info.clone()),
-        };
+        return template;
     }
     let arg_names: Vec<FqTypeName> = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
     let method_info = target.method_info.with_struct_type_args(&arg_names);
     FunctionRef {
-        module_source: impl_info.impl_module.clone(),
+        module_source: template.module_source,
         name: method_info.to_mangled_name(),
         monomorph_info: Some(MonomorphInfo {
             generic_name: target.mangled_name.clone(),

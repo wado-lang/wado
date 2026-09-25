@@ -549,14 +549,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(value) = self.check_int_literal_parses(repr, span) else {
             return;
         };
-        let message = {
-            let table = self.tysys.type_table.borrow();
-            if negated {
-                util::check_int_range_negative(value, TypeTable::I32, &table, repr)
-            } else {
-                util::check_int_range_positive(value, TypeTable::I32, &table, repr)
-            }
-        };
+        let message = util::int_literal_range_error(
+            value,
+            negated,
+            repr,
+            TypeTable::I32,
+            &self.tysys.type_table.borrow(),
+        );
         if let Some(message) = message {
             let _ = self.emit(TypeError::InvalidLiteral { message, span });
         }
@@ -920,7 +919,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ident.owner_segment().is_some()
             && self
-                .lookup_function_signature(&ident.name, None, Some(ident.id))
+                .lookup_function_signature(&ident.name, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {
@@ -2833,9 +2832,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        let reached = exhaustiveness::reached_arms(
-            &classified.iter().map(|(g, p)| (*g, p)).collect::<Vec<_>>(),
-        );
+        let reached = exhaustiveness::reached_arms(&classified);
         self.check_range_overlaps(&classified, &reached, span);
         self.check_unreachable_arms(arms, &classified, &reached);
 
@@ -3949,46 +3946,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
 
-        // struct_module_source was already determined above (before field resolution).
-
-        // Check for missing fields: fields without a declared default must be
-        // provided; fields with `= expr` are synthesized from the default
-        // expression (pure, resolved in the struct's module scope).
-        let struct_field_defaults: Vec<Option<ast::Expr>> = self
-            .struct_fields_of_written_decl(struct_decl)
-            .map(|info| info.field_defaults.clone())
-            .unwrap_or_default();
+        // A field left out takes its default, walked in the struct's module; one
+        // with none must be written.
         let mut fields = fields;
-        // Field names the user actually wrote in the literal, captured before
-        // default synthesis below so an omitted-but-defaulted field is not
-        // mistaken for an explicitly-provided one (matters for the visibility
-        // check further down).
+        // Captured before defaults are added, so a defaulted field is not read as written.
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
-        // A non-pub field may not be set from another module, nor read there
-        // from `base` via a spread. A default is evaluated in the defining
-        // module, so omitting a hidden field that has one keeps encapsulation.
+        // A non-pub field may be neither set nor spread-read from another module;
+        // omitting one with a default is fine, the default running in its own module.
         let vantage = self.visibility_vantage(Some(struct_lit.id));
-        let hidden_fields: IndexMap<String, Visibility> = match self
-            .struct_fields_of_written_decl(struct_decl)
-            .filter(|_| struct_module_source != vantage)
-        {
+        let (struct_field_defaults, hidden_fields, is_generic_struct): (
+            Vec<Option<ast::Expr>>,
+            IndexMap<String, Visibility>,
+            bool,
+        ) = match self.struct_fields_of_written_decl(struct_decl) {
             Some(info) => {
-                let same_package = struct_module_source.same_package(&vantage);
-                info.fields
-                    .iter()
-                    .filter(|(_, _, vis)| !vis.reachable_from(same_package))
-                    .map(|(name, _, vis)| (name.clone(), *vis))
-                    .collect()
+                let hidden = if struct_module_source == vantage {
+                    IndexMap::default()
+                } else {
+                    let same_package = struct_module_source.same_package(&vantage);
+                    info.fields
+                        .iter()
+                        .filter(|(_, _, vis)| !vis.reachable_from(same_package))
+                        .map(|(name, _, vis)| (name.clone(), *vis))
+                        .collect()
+                };
+                (
+                    info.field_defaults.clone(),
+                    hidden,
+                    !info.type_params.is_empty(),
+                )
             }
-            None => IndexMap::default(),
-        };
-        let report_hidden = |s: &Self, field_name: &str| {
-            let _ = s.emit(TypeError::PrivateFieldAccess {
-                struct_name: display_name.clone(),
-                field_name: field_name.to_string(),
-                visibility: hidden_fields[field_name],
-                span: struct_lit.span,
-            });
+            None => (Vec::new(), IndexMap::default(), false),
         };
         let mut omitted_hidden: Vec<String> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
@@ -4064,20 +4052,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        for field_name in hidden_fields.keys() {
+        for (field_name, &visibility) in &hidden_fields {
             if provided_names.contains(field_name) || !struct_lit.spreads.is_empty() {
-                report_hidden(self, field_name);
+                let _ = self.emit(TypeError::PrivateFieldAccess {
+                    struct_name: display_name.clone(),
+                    field_name: field_name.clone(),
+                    visibility,
+                    span: struct_lit.span,
+                });
             }
         }
 
-        // `struct_name` / `struct_module_source` were just reassigned to the
-        // canonical storage identity, so one `struct_fields_in` lookup on it
-        // answers both "is this generic" and "whose fields are these". Checking
-        // a module-level name set and a local-struct table separately could name
-        // two different structs when a local shadows a module-level generic.
-        let is_generic_struct = self
-            .struct_fields_of_written_decl(struct_decl)
-            .is_some_and(|info| !info.type_params.is_empty());
         let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.

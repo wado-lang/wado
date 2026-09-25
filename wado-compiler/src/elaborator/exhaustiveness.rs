@@ -170,14 +170,14 @@ pub(super) fn uncovered(patterns: &[&Pat]) -> Vec<Witness> {
 
 /// Whether some value reaches each arm, past the guardless arms before it. A
 /// guarded arm covers nothing but may be unreachable.
-pub(super) fn reached_arms(arms: &[(bool, &Pat)]) -> Vec<bool> {
+pub(super) fn reached_arms(arms: &[(bool, Pat)]) -> Vec<bool> {
     let rows = arms
         .iter()
         .enumerate()
-        .map(|(arm, &(guardless, pattern))| ArmRow {
+        .map(|(arm, (guardless, pattern))| ArmRow {
             pats: vec![pattern],
             arm,
-            guardless,
+            guardless: *guardless,
         })
         .collect();
     let mut reached = vec![false; arms.len()];
