@@ -26,9 +26,7 @@ pub fn read_tensor<S: AsByteSlice>(bytes: S) -> Result<onnx::TensorProto, String
     return grog::decode::<onnx::TensorProto, S>(bytes).map_err(|e| `${e}`);
 }
 
-/// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
-/// in the typed `float_data` or, as every exporter does, as little-endian
-/// bytes in `raw_data`. `None` where the tensor is some other element type.
+/// A `FLOAT` tensor's elements and extents, or `None` for any other element type.
 pub fn float_tensor(t: &onnx::TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
     if t.data_type != Option::Some(1) {
         return Result::Ok(null);
@@ -52,9 +50,7 @@ fn extents_of(t: &onnx::TensorProto) -> Result<List<i32>, String> {
     return Result::Ok(extents);
 }
 
-/// The element type names the textual format spells, indexed by
-/// `TensorProto.DataType`. The two formats must agree, since one `Graph`
-/// serves both readers.
+/// The element type name the textual format spells for a `TensorProto.DataType`.
 fn dtype_name(elem_type: i32) -> Option<String> {
     return match elem_type {
         1 => Option::Some("float"),
@@ -77,9 +73,7 @@ fn dtype_name(elem_type: i32) -> Option<String> {
     };
 }
 
-/// An extent as the shape algebra holds it. ONNX states a dimension as an
-/// `int64` and no tensor that fits in memory needs one, so narrowing it is
-/// where a file says something no graph can mean.
+/// An ONNX `int64` dimension as the shape algebra's `i32` extent.
 fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
     if !(0 <= dim <= i32::MAX as i64) {
         return Result::Err(`${tensor}: dimension ${dim}`);
@@ -156,7 +150,7 @@ fn payload(t: &onnx::TensorProto, dtype: &String, extents: &List<i32>) -> Result
     let width = element.width;
     let mut bytes = t.raw_data.unwrap_or(b"");
     if bytes.is_empty() {
-        if width == 4 {
+        if *dtype == "float" {
             for let v of t.float_data {
                 push_element(&mut bytes, v.to_bits(), width);
             }
@@ -183,20 +177,10 @@ fn payload(t: &onnx::TensorProto, dtype: &String, extents: &List<i32>) -> Result
 fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
     let name = a.name.unwrap_or("");
     let mut values: List<String> = [];
-    let mut is_list = true;
     match a.type {
-        Some(onnx::AttributeProtoAttributeType::Float) => {
-            values.push(`${a.f.unwrap_or(0.0)}`);
-            is_list = false;
-        },
-        Some(onnx::AttributeProtoAttributeType::Int) => {
-            values.push(`${a.i.unwrap_or(0)}`);
-            is_list = false;
-        },
-        Some(onnx::AttributeProtoAttributeType::String) => {
-            values.push(utf8(&a.s.unwrap_or(b"")));
-            is_list = false;
-        },
+        Some(onnx::AttributeProtoAttributeType::Float) => values.push(`${a.f.unwrap_or(0.0)}`),
+        Some(onnx::AttributeProtoAttributeType::Int) => values.push(`${a.i.unwrap_or(0)}`),
+        Some(onnx::AttributeProtoAttributeType::String) => values.push(String::from_utf8_lossy(a.s.unwrap_or(b""))),
         Some(onnx::AttributeProtoAttributeType::Floats) => {
             for let v of a.floats {
                 values.push(`${v}`);
@@ -209,42 +193,23 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         },
         Some(onnx::AttributeProtoAttributeType::Strings) => {
             for let v of a.strings {
-                values.push(utf8(&v));
+                values.push(String::from_utf8_lossy(v));
             }
         },
         // A tensor has no text form, so it travels whole. Only a float one
         // does, since the kernels compute in f32.
         Some(onnx::AttributeProtoAttributeType::Tensor) => {
-            is_list = false;
             if let Some(t) = &a.t {
                 if let Some([data, _]) = float_tensor(t)? {
-                    return Result::Ok(Attr {
-                        name,
-                        values: [],
-                        is_list: false,
-                        tensor: Option::Some(ConstTensor { data }),
-                    });
+                    return Result::Ok(Attr { name, values, tensor: Option::Some(ConstTensor { data }) });
                 }
             }
         },
         // A graph or a type has no text form, so the attribute is carried with
         // no value; the operator that reads one is refused by name anyway.
-        _ => {
-            is_list = false;
-        },
+        _ => {},
     }
-    return Result::Ok(Attr { name, values, is_list });
-}
-
-/// ONNX declares a string attribute as `bytes`, and the specification says it
-/// is UTF-8. Bytes that are not are kept as the replacement character rather
-/// than failing the read, since no shape rule consults an attribute.
-fn utf8(bytes: &ByteList) -> String {
-    let mut out = String::with_capacity(bytes.len());
-    if let Err(_) = out.push_utf8(bytes) {
-        return "\u{FFFD}";
-    }
-    return out;
+    return Result::Ok(Attr { name, values });
 }
 
 fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {

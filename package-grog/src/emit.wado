@@ -4,13 +4,14 @@
 use { TreeMap } from "core:collections";
 use { apply_case } from "core:serde";
 use { CodeWriter, EnumSpec, FieldSpec, StructSpec, VariantSpec, Vis, is_keyword, is_reserved } from "lib:wadopoet";
+use { FIELD_NUMBER_MAX } from "./lib.wado";
 use { is_scalar } from "./parse.wado";
 use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
 
 pub variant EmitError {
     /// The schema breaks a rule of its own, or names what the file does not declare.
     Invalid(String),
-    /// The schema is sound but uses what Grog does not map.
+    /// Grog cannot serve the request as made.
     Unsupported(String),
 }
 
@@ -162,7 +163,7 @@ struct Access {
     /// The Sizer and Writer method.
     put: String,
     take: Take,
-    /// The turbofish both are called with, or `""`.
+    /// The turbofish every call names, or `""`.
     types: String,
 }
 
@@ -179,7 +180,7 @@ struct Member {
     case: String,
     payload: String,
     number: i32,
-    /// The Sizer and Writer method for one value: `scalar`, `message` or `group`.
+    /// The runtime method for one value, `scalar`, `message` or `group`, on every pass.
     put: String,
     types: String,
     /// A message case's fresh value, which a read merges into unless the case
@@ -626,8 +627,8 @@ impl Emitter {
         return null;
     }
 
-    /// Whether the field holds a value it is not set to. A `required` field
-    /// has presence too: protobuf tells a missing one from a zero.
+    /// Whether an unset field is told apart from one set to its zero. A proto2
+    /// `required` field has presence too.
     fn presence(&self, decl: &MessageDecl, field: &Field) -> Presence {
         return match &self.file.syntax {
             Proto2 => Presence::Explicit,
@@ -656,7 +657,7 @@ impl Emitter {
             && self.feature(decl, field, |f| f.message_encoding) matches { Some(e) && e == "DELIMITED" };
     }
 
-    /// A feature as editions resolve it for a field: its own setting, else its message's.
+    /// A feature as editions resolve it for a field.
     fn feature(&self, decl: &MessageDecl, field: &Field, pick: fn(&Features) -> Option<String>) -> Option<String> {
         let mut path = decl.path;
         path.push(field.name);
@@ -716,7 +717,7 @@ fn field_name_of(name: &String) -> String {
 /// The field number range the wire format assigns, less the range protobuf
 /// keeps for itself.
 fn is_assignable_field_number(n: i32) -> bool {
-    return n >= 1 && n <= 536870911 && !(n >= 19000 && n <= 19999);
+    return n >= 1 && n <= FIELD_NUMBER_MAX && !(n >= 19000 && n <= 19999);
 }
 
 /// A scalar's Wado type, the runtime's `Scalar` for it, and its zero.
@@ -736,7 +737,8 @@ fn scalar(name: &String) -> [String, String, String] {
         "sfixed64" => ["i64", "SFixed64", "0"],
         "bool" => ["bool", "Bool", "false"],
         "string" => ["String", "Str", "\"\""],
-        _ => ["ByteList", "Bytes", "b\"\""],
+        "bytes" => ["ByteList", "Bytes", "b\"\""],
+        _ => unreachable(),
     };
     return [wado, `${RUNTIME}::${runtime}`, zero];
 }

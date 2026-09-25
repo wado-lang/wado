@@ -5,7 +5,7 @@ use { TreeMap } from "core:collections";
 
 /// The largest field number a tag carries, from the specification's
 /// "Assigning Field Numbers".
-global FIELD_NUMBER_MAX: u64 = 536870911;
+internal global FIELD_NUMBER_MAX: i32 = 536870911;
 
 /// How deep messages and groups may nest before a decode gives up, as
 /// protobuf's own parsers default to.
@@ -90,14 +90,16 @@ pub trait Enumeration with () {
 /// How one protobuf scalar type sits on the wire. The type implementing it
 /// only names the encoding; `Value` is the Wado type it encodes.
 pub trait Scalar with () {
-    type Value;
+    type Value: Eq;
 
     fn wire_type() -> WireType;
 
     fn zero() -> Self::Value;
 
     /// Whether a field with implicit presence leaves `v` off the wire.
-    fn is_zero(v: &Self::Value) -> bool;
+    fn is_zero(v: &Self::Value) -> bool {
+        return *v == Self::zero();
+    }
 
     /// The bytes `put` writes.
     fn len(v: &Self::Value) -> i32;
@@ -147,14 +149,7 @@ pub fn merge<M: Message, S: AsByteSlice>(message: &mut M, input: S) -> Result<()
 /// Read fields into `message` up to the reader's end, or for a group up to the
 /// end-group tag numbered `group`.
 fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Result<(), DecodeError> {
-    while r.pos < r.end {
-        r.read_tag()?;
-        if r.wire_type == WireType::EGroup {
-            if r.number != group {
-                return r.fail("an end-group tag closes no group opened for it");
-            }
-            return Result::Ok(());
-        }
+    while r.next_field(group)? {
         let [tag_start, value_start, number, wire_type] = [r.tag_start, r.value_start, r.number, r.wire_type];
         if !message.merge_field(number, r)? {
             // A field declined after reading into it is read again from its value.
@@ -168,9 +163,6 @@ fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Resu
             message.unknown_fields().extend(&r.stray);
             r.stray.truncate(0);
         }
-    }
-    if group != 0 {
-        return r.fail("a group is not closed");
     }
     return Result::Ok(());
 }
@@ -187,6 +179,16 @@ fn varint_len(value: u64) -> i32 {
 
 fn tag_len(number: i32) -> i32 {
     return varint_len(number as u64 << 3);
+}
+
+/// A length-prefixed record of a `payload`-byte body, tag included.
+fn delimited_len(number: i32, payload: i32) -> i32 {
+    return tag_len(number) + varint_len(payload as u64) + payload;
+}
+
+/// A scalar map entry's body: the key numbered 1 and the value 2, both written.
+fn entry_len<KS: Scalar, VS: Scalar>(k: &KS::Value, v: &VS::Value) -> i32 {
+    return tag_len(1) + KS::len(k) + tag_len(2) + VS::len(v);
 }
 
 fn packed_len<T: Scalar>(values: &List<T::Value>) -> i32 {
@@ -234,8 +236,7 @@ impl Sizer {
         if values.is_empty() {
             return 0;
         }
-        let payload = packed_len::<T>(values);
-        return tag_len(number) + varint_len(payload as u64) + payload;
+        return delimited_len(number, packed_len::<T>(values));
     }
 
     pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i32 {
@@ -243,7 +244,7 @@ impl Sizer {
         self.sizes.push(0);
         let n = m.size(self);
         self.sizes[slot] = n;
-        return tag_len(number) + varint_len(n as u64) + n;
+        return delimited_len(number, n);
     }
 
     pub fn optional_message<M: Message>(&mut self, number: i32, m: &Option<M>) -> i32 {
@@ -289,8 +290,7 @@ impl Sizer {
     ) -> i32 {
         let mut n = 0;
         for let [k, v] of map.entries() {
-            let entry = self.scalar::<KS>(1, k) + self.scalar::<VS>(2, v);
-            n += tag_len(number) + varint_len(entry as u64) + entry;
+            n += delimited_len(number, entry_len::<KS, VS>(k, v));
         }
         return n;
     }
@@ -302,7 +302,7 @@ impl Sizer {
             self.sizes.push(0);
             let entry = self.scalar::<KS>(1, k) + self.message(2, v);
             self.sizes[slot] = entry;
-            n += tag_len(number) + varint_len(entry as u64) + entry;
+            n += delimited_len(number, entry);
         }
         return n;
     }
@@ -426,7 +426,7 @@ impl Writer {
     pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(&mut self, number: i32, map: &TreeMap<K, V>) {
         for let [k, v] of map.entries() {
             self.tag(number, WireType::Len);
-            self.varint((tag_len(1) + KS::len(k) + tag_len(2) + VS::len(v)) as u64);
+            self.varint(entry_len::<KS, VS>(k, v) as u64);
             self.scalar::<KS>(1, k);
             self.scalar::<VS>(2, v);
         }
@@ -474,7 +474,7 @@ impl Reader {
         while self.pos < self.end {
             let byte = self.input[self.pos];
             self.pos += 1;
-            // The tenth byte carries the one bit 64 is not a multiple of 7 short of.
+            // 64 = 9 * 7 + 1: a tenth byte holds one bit.
             if shift == 63 && byte > 1 {
                 return self.fail("a varint overflows 64 bits");
             }
@@ -530,13 +530,32 @@ impl Reader {
             return self.fail("a tag names no wire type");
         };
         let number = tag >> 3;
-        if number == 0 || number > FIELD_NUMBER_MAX {
+        if number == 0 || number > FIELD_NUMBER_MAX as u64 {
             return self.fail("a tag's field number is out of range");
         }
         self.number = number as i32;
         self.wire_type = wire_type;
         self.value_start = self.pos;
         return Result::Ok(());
+    }
+
+    /// Read the next tag: `false` at the end of the message, or at the end-group
+    /// tag closing the group numbered `group` (0 outside one).
+    fn next_field(&mut self, group: i32) -> Result<bool, DecodeError> {
+        if self.pos >= self.end {
+            if group != 0 {
+                return self.fail("a group is not closed");
+            }
+            return Result::Ok(false);
+        }
+        self.read_tag()?;
+        if self.wire_type != WireType::EGroup {
+            return Result::Ok(true);
+        }
+        if self.number != group {
+            return self.fail("an end-group tag closes no group opened for it");
+        }
+        return Result::Ok(false);
     }
 
     fn skip_value(&mut self) -> Result<(), DecodeError> {
@@ -556,17 +575,7 @@ impl Reader {
             SGroup => {
                 let number = self.number;
                 self.enter()?;
-                loop {
-                    if self.pos >= self.end {
-                        return self.fail("a group is not closed");
-                    }
-                    self.read_tag()?;
-                    if self.wire_type == WireType::EGroup {
-                        if self.number != number {
-                            return self.fail("an end-group tag closes no group opened for it");
-                        }
-                        break;
-                    }
+                while self.next_field(number)? {
                     self.skip_value()?;
                 }
                 self.depth -= 1;
@@ -586,13 +595,9 @@ impl Reader {
 
     /// Read a length-prefixed message into `m`.
     fn merge_nested<M: Message>(&mut self, m: &mut M) -> Result<(), DecodeError> {
-        let n = self.length()?;
-        let outer = self.end;
-        self.end = self.pos + n;
-        self.enter()?;
+        let outer = self.open()?;
         merge_fields(m, self, 0)?;
-        self.depth -= 1;
-        self.end = outer;
+        self.close(outer);
         return Result::Ok(());
     }
 
@@ -713,8 +718,8 @@ impl Reader {
         return Result::Ok(true);
     }
 
-    /// Enter a map entry, returning the end of the message it sits in.
-    fn open_entry(&mut self) -> Result<i32, DecodeError> {
+    /// Enter a length-prefixed message, returning the end of the one it sits in.
+    fn open(&mut self) -> Result<i32, DecodeError> {
         let n = self.length()?;
         let outer = self.end;
         self.end = self.pos + n;
@@ -722,7 +727,7 @@ impl Reader {
         return Result::Ok(outer);
     }
 
-    fn close_entry(&mut self, outer: i32) {
+    fn close(&mut self, outer: i32) {
         self.depth -= 1;
         self.end = outer;
     }
@@ -736,29 +741,23 @@ impl Reader {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
-        let outer = self.open_entry()?;
+        let outer = self.open()?;
         let mut key = KS::zero();
         let mut value = VS::zero();
         let mut held = true;
-        while self.pos < self.end {
-            self.read_tag()?;
+        while self.next_field(0)? {
             if self.number == 1 && self.wire_type == KS::wire_type() {
-                match KS::take(self)? {
-                    Some(k) => key = k,
-                    None => held = false,
-                }
+                key = KS::take(self)?.unwrap();
             } else if self.number == 2 && self.wire_type == VS::wire_type() {
                 match VS::take(self)? {
                     Some(v) => value = v,
                     None => held = false,
                 }
-            } else if self.wire_type == WireType::EGroup {
-                return self.fail("an end-group tag closes no group opened for it");
             } else {
                 self.skip_value()?;
             }
         }
-        self.close_entry(outer);
+        self.close(outer);
         if !held {
             return Result::Ok(false);
         }
@@ -773,24 +772,19 @@ impl Reader {
         if self.wire_type != WireType::Len {
             return Result::Ok(false);
         }
-        let outer = self.open_entry()?;
+        let outer = self.open()?;
         let mut key = KS::zero();
         let mut value = M::default();
-        while self.pos < self.end {
-            self.read_tag()?;
+        while self.next_field(0)? {
             if self.number == 1 && self.wire_type == KS::wire_type() {
-                if let Some(k) = KS::take(self)? {
-                    key = k;
-                }
+                key = KS::take(self)?.unwrap();
             } else if self.number == 2 && self.wire_type == WireType::Len {
                 self.merge_nested(&mut value)?;
-            } else if self.wire_type == WireType::EGroup {
-                return self.fail("an end-group tag closes no group opened for it");
             } else {
                 self.skip_value()?;
             }
         }
-        self.close_entry(outer);
+        self.close(outer);
         map[key] = value;
         return Result::Ok(true);
     }
@@ -808,10 +802,6 @@ impl Scalar for Int32 {
 
     fn zero() -> i32 {
         return 0;
-    }
-
-    fn is_zero(v: &i32) -> bool {
-        return *v == 0;
     }
 
     fn len(v: &i32) -> i32 {
@@ -841,10 +831,6 @@ impl Scalar for Int64 {
         return 0;
     }
 
-    fn is_zero(v: &i64) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &i64) -> i32 {
         return varint_len(*v as u64);
     }
@@ -872,10 +858,6 @@ impl Scalar for UInt32 {
         return 0;
     }
 
-    fn is_zero(v: &u32) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &u32) -> i32 {
         return varint_len(*v as u64);
     }
@@ -901,10 +883,6 @@ impl Scalar for UInt64 {
 
     fn zero() -> u64 {
         return 0;
-    }
-
-    fn is_zero(v: &u64) -> bool {
-        return *v == 0;
     }
 
     fn len(v: &u64) -> i32 {
@@ -951,10 +929,6 @@ impl Scalar for SInt32 {
         return 0;
     }
 
-    fn is_zero(v: &i32) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &i32) -> i32 {
         return varint_len(zigzag_32(*v));
     }
@@ -980,10 +954,6 @@ impl Scalar for SInt64 {
 
     fn zero() -> i64 {
         return 0;
-    }
-
-    fn is_zero(v: &i64) -> bool {
-        return *v == 0;
     }
 
     fn len(v: &i64) -> i32 {
@@ -1013,10 +983,6 @@ impl Scalar for Fixed32 {
         return 0;
     }
 
-    fn is_zero(v: &u32) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &u32) -> i32 {
         return 4;
     }
@@ -1042,10 +1008,6 @@ impl Scalar for Fixed64 {
 
     fn zero() -> u64 {
         return 0;
-    }
-
-    fn is_zero(v: &u64) -> bool {
-        return *v == 0;
     }
 
     fn len(v: &u64) -> i32 {
@@ -1075,10 +1037,6 @@ impl Scalar for SFixed32 {
         return 0;
     }
 
-    fn is_zero(v: &i32) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &i32) -> i32 {
         return 4;
     }
@@ -1106,10 +1064,6 @@ impl Scalar for SFixed64 {
         return 0;
     }
 
-    fn is_zero(v: &i64) -> bool {
-        return *v == 0;
-    }
-
     fn len(v: &i64) -> i32 {
         return 8;
     }
@@ -1135,10 +1089,6 @@ impl Scalar for Bool {
 
     fn zero() -> bool {
         return false;
-    }
-
-    fn is_zero(v: &bool) -> bool {
-        return !*v;
     }
 
     fn len(v: &bool) -> i32 {
@@ -1232,10 +1182,6 @@ impl Scalar for Str {
         return "";
     }
 
-    fn is_zero(v: &String) -> bool {
-        return v.is_empty();
-    }
-
     fn len(v: &String) -> i32 {
         return varint_len(v.len() as u64) + v.len();
     }
@@ -1265,10 +1211,6 @@ impl Scalar for Bytes {
 
     fn zero() -> ByteList {
         return b"";
-    }
-
-    fn is_zero(v: &ByteList) -> bool {
-        return v.is_empty();
     }
 
     fn len(v: &ByteList) -> i32 {

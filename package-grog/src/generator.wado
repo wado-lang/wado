@@ -35,14 +35,8 @@ fn runtime_of(module: &String) -> Result<String, EmitError> {
             ` Grog was named by the path ${module}; name it by the package spec its runtime is a dependency under`,
         ));
     };
-    let mut end = view.len();
-    for let mut i = colon + 1; i < view.len(); i += 1 {
-        let c = view.slice(i, i + 1);
-        if c == "@" || c == "/" {
-            end = i;
-            break;
-        }
-    }
+    let rest = view.slice(colon + 1, view.len());
+    let end = rest.find_char(|c| c == '@' || c == '/').map(|i| colon + 1 + i).unwrap_or(view.len());
     return Result::Ok(view.slice(0, end).to_string());
 }
 
@@ -56,14 +50,9 @@ fn at(path: &String, e: EmitError) -> Error {
 
 /// `a/b/demo.proto` as `demo`.
 fn stem(path: &String) -> String {
-    let mut name = "";
-    for let part of path.split("/") {
-        name = part.to_string();
-    }
-    if name.ends_with(".proto") {
-        return name.as_str_slice().slice(0, name.len() - 6).to_string();
-    }
-    return name;
+    let view = path.as_str_slice();
+    let name = view.slice(view.rfind("/").map(|i| i + 1).unwrap_or(0), view.len());
+    return name.strip_suffix(".proto").unwrap_or(name).to_string();
 }
 
 test "a runtime named by a path is refused, naming the path" {
