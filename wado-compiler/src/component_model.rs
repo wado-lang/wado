@@ -690,6 +690,8 @@ pub struct CmFunctionInfo {
     pub is_async: bool,
     /// Parameter names and types: (`wado_name`, `cm_name`, type)
     pub params: Vec<(String, String, Type)>,
+    /// The indices in `params` of the closures, which cross as their `u32` keys.
+    pub callbacks: Vec<usize>,
     /// Return type
     pub return_type: Option<Type>,
 }
@@ -3427,6 +3429,7 @@ impl CmInterfaceRegistry {
             .function
             .clone()
             .unwrap_or_else(|| method_name.replace('_', "-"));
+        let (params, callbacks) = self.value_params(params);
         let func_info = CmFunctionInfo {
             namespace: wasi.namespace.clone(),
             interface_name: interface_name.to_string(),
@@ -3435,7 +3438,8 @@ impl CmInterfaceRegistry {
             interface_path: interface_path.clone(),
             package: wasi.package.clone(),
             is_async,
-            params: self.value_params(params),
+            params,
+            callbacks,
             return_type,
         };
 
@@ -3449,12 +3453,26 @@ impl CmInterfaceRegistry {
     }
 
     /// `params` at their value types: newtypes peeled and extern handles kept, so a
-    /// binding's GC-level types match the caller's.
-    fn value_params(&self, params: Vec<(String, String, Type)>) -> Vec<(String, String, Type)> {
-        params
+    /// binding's GC-level types match the caller's. A closure is its `u32` key,
+    /// and the indices of those come second.
+    fn value_params(
+        &self,
+        params: Vec<(String, String, Type)>,
+    ) -> (Vec<(String, String, Type)>, Vec<usize>) {
+        let mut callbacks = Vec::new();
+        let params = params
             .into_iter()
-            .map(|(name, cm_name, ty)| (name, cm_name, self.value_type(&ty)))
-            .collect()
+            .enumerate()
+            .map(|(i, (name, cm_name, ty))| {
+                if !matches!(ty, Type::Function(_)) {
+                    return (name, cm_name, self.value_type(&ty));
+                }
+                callbacks.push(i);
+                let key = NamedType::new(AstId::fresh(), "u32".to_string(), ty.span());
+                (name, cm_name, Type::Named(key))
+            })
+            .collect();
+        (params, callbacks)
     }
 
     /// Binds `key` to `func_info`; `Ok(false)` when `key` already binds the same signature.
@@ -3500,6 +3518,7 @@ impl CmInterfaceRegistry {
         params: Vec<(String, String, Type)>,
         return_type: Option<Type>,
     ) -> Result<(), String> {
+        let (params, callbacks) = self.value_params(params);
         let func_info = CmFunctionInfo {
             // A world import sits above any interface, so it has no namespace,
             // package or interface path to name: its alias is a bare key.
@@ -3510,7 +3529,8 @@ impl CmInterfaceRegistry {
             interface_path: String::new(),
             package: String::new(),
             is_async,
-            params: self.value_params(params),
+            params,
+            callbacks,
             return_type,
         };
         if self.bind(func_name.to_string(), &func_info)? {
@@ -5429,6 +5449,7 @@ mod tests {
             package: "cli".to_string(),
             is_async: true,
             params: vec![],
+            callbacks: vec![],
             return_type: None,
         };
         assert_eq!(

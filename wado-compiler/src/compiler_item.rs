@@ -624,6 +624,10 @@ pub enum CompilerItem {
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
     CmLowerArrayU8,
+    /// `core:rt::cm_callback_key`.
+    CmCallbackKey,
+    /// `core:rt::cm_callback`.
+    CmCallback,
     /// `core:rt::cm_await_blocked`.
     CmAwaitBlocked,
     /// `core:prelude/types::CopyResult`, how a CM copy ended.
@@ -854,6 +858,8 @@ impl CompilerItem {
         Self::MemoryToGcString,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
+        Self::CmCallbackKey,
+        Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
         Self::CmStreamReadU8,
@@ -1012,6 +1018,8 @@ impl CompilerItem {
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
+            Self::CmCallbackKey => "cm_callback_key",
+            Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
@@ -1105,6 +1113,8 @@ impl CompilerItem {
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
+            | Self::CmCallbackKey
+            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
             | Self::CmStreamReadU8
@@ -1354,6 +1364,8 @@ impl CompilerItem {
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
+            | Self::CmCallbackKey
+            | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
             | Self::CmStreamReadU8

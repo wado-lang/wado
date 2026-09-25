@@ -289,4 +289,10 @@ pub enum WadoType {
 
     // References
     Borrow(Box<WadoType>),
+
+    /// `fn mut(params) with effect`, which the host calls back.
+    Callback {
+        params: Vec<WadoType>,
+        effect: Option<String>,
+    },
 }

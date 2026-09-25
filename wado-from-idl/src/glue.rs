@@ -6,6 +6,7 @@ use std::fmt::Write;
 
 use heck::ToLowerCamelCase;
 use wado_compiler::ast::HandleClasses;
+use wado_compiler::name::callback_export_name;
 
 use crate::ir::{WadoFunction, WadoType};
 use crate::webidl::{JsMember, WebIdlOutput};
@@ -38,6 +39,27 @@ const $someObject = $some($object);
 const $nullableHandle = $nullable($handle);
 const $someNumber = $some(Number);
 const $nullableBigInt = $nullable(BigInt);
+
+// The component's `wado:callback/callback` export, which calls a closure back.
+// The component hands it over once instantiated.
+let $callbackExport;
+
+export function $connect(callback) {
+  $callbackExport = callback;
+}
+
+// One function per closure key, so `removeEventListener` is handed the very
+// function `addEventListener` was.
+const $callbacks = new Map();
+
+function $callback(key, call) {
+  let f = $callbacks.get(key);
+  if (f === undefined) {
+    f = (...args) => call(key, ...args);
+    $callbacks.set(key, f);
+  }
+  return f;
+}
 "#;
 
 /// Names JavaScript does not take as a parameter in a module, which is strict code.
@@ -196,7 +218,45 @@ fn write_function(out: &mut String, function: &WadoFunction, member: &JsMember) 
 
 /// `value`, as jco lifts it from the guest, in the form the DOM takes.
 fn from_guest(ty: &WadoType, value: &str) -> String {
+    if let WadoType::Callback { params, .. } = ty {
+        return callback(params, value);
+    }
     apply(conversion(ty).map(|(to_dom, _)| to_dom), value)
+}
+
+/// The function calling back the closure `key` names, which takes `params`.
+fn callback(params: &[WadoType], key: &str) -> String {
+    let export = callback_export_name(params.iter().map(argument_word)).to_lower_camel_case();
+    let args: Vec<String> = (0..params.len()).map(|i| format!(", a{i}")).collect();
+    let lifted: Vec<String> = params
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| format!(", {}", to_guest(ty, &format!("a{i}"))))
+        .collect();
+    format!(
+        "$callback({key}, (key{}) => $callbackExport.{export}(key{}))",
+        args.concat(),
+        lifted.concat()
+    )
+}
+
+/// What the callback export's name calls an argument of type `ty`.
+fn argument_word(ty: &WadoType) -> &'static str {
+    match ty {
+        WadoType::Named(_) => "handle",
+        WadoType::F64 => "f64",
+        WadoType::Bool => "bool",
+        WadoType::I8 => "i8",
+        WadoType::I16 => "i16",
+        WadoType::I32 => "i32",
+        WadoType::I64 => "i64",
+        WadoType::U8 => "u8",
+        WadoType::U16 => "u16",
+        WadoType::U32 => "u32",
+        WadoType::U64 => "u64",
+        WadoType::F32 => "f32",
+        _ => unreachable!("the WebIDL frontend admits no {ty:?} callback argument"),
+    }
 }
 
 /// `value`, as the DOM returns it, in the form jco lowers to the guest.
@@ -248,7 +308,10 @@ impl Conversion {
             | WadoType::TreeMap(..)
             | WadoType::Tuple(_)
             | WadoType::Stream(_)
-            | WadoType::Future(_) => unreachable!("the WebIDL frontend lowers to no {ty:?} here"),
+            | WadoType::Future(_)
+            | WadoType::Callback { .. } => {
+                unreachable!("the WebIDL frontend lowers to no {ty:?} here")
+            }
         }
     }
 

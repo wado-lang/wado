@@ -6,7 +6,7 @@
 //   node -e "import('<dir>/<name>.js').then(m => m.run.run())"
 
 import { transpile } from "@bytecodealliance/jco";
-import { copyFile, readdir, readFile, writeFile, mkdir, symlink, rm } from "node:fs/promises";
+import { appendFile, copyFile, readdir, readFile, writeFile, mkdir, symlink, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 const wasmPath = process.argv[2];
@@ -34,8 +34,19 @@ for (const [file, bytes] of Object.entries(files)) {
   await writeFile(p, bytes);
 }
 const entry = new TextDecoder().decode(files[`${name}.js`]);
-for (const file of glue.filter((file) => entry.includes(`./web-${file}`))) {
+const used = glue.filter((file) => entry.includes(`./web-${file}`));
+for (const file of used) {
   await copyFile(join(glueDir, file), join(outDir, `web-${file}`));
+}
+// The glue calls a closure back through the output's callback export, which the
+// output hands over once instantiated. Importing the output from the glue would
+// close a cycle the output's top-level reads of the glue do not survive.
+const callback = entry.match(/export \{[^}]*?\b(\w+) as 'wado:callback\/callback'/);
+if (callback) {
+  const connects = used.map(
+    (file, i) => `import { $connect as $connect${i} } from "./web-${file}";\n$connect${i}(${callback[1]});\n`,
+  );
+  await appendFile(join(outDir, `${name}.js`), connects.join(""));
 }
 await writeFile(join(outDir, "package.json"), '{"type":"module"}\n');
 // The output imports the shim by bare specifier, and `outDir` is usually a temp

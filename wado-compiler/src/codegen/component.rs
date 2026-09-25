@@ -1925,7 +1925,11 @@ fn resolve_task_return_valtype(
             }
         }
     }
-    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type)
+    let result = export
+        .cm_result
+        .as_ref()
+        .expect("only a synchronous export returns nothing");
+    cm_export_type_to_valtype(ctx, project, result, result_unit_type)
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
@@ -2166,12 +2170,14 @@ fn emit_world_exports(
                     .iter()
                     .map(|(n, val)| (n.as_str(), *val))
                     .collect();
-                let result_val =
-                    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type);
+                let result_val = export
+                    .cm_result
+                    .as_ref()
+                    .map(|ty| cm_export_type_to_valtype(ctx, project, ty, result_unit_type));
                 enc.function()
                     .async_(export.is_async)
                     .params(param_refs)
-                    .result(Some(result_val));
+                    .result(result_val);
             }
             func_type
         };
@@ -4447,10 +4453,14 @@ fn append_interface_instance_exports(
             // its owner's, and re-exporting it here fails a WIT decode.
             let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
-                for (_, cm_ty) in &export.cm_params {
+                for cm_ty in export
+                    .cm_params
+                    .iter()
+                    .map(|(_, ty)| ty)
+                    .chain(&export.cm_result)
+                {
                     collect_type_items(cm_ty, ctx, project, &mut named);
                 }
-                collect_type_items(&export.cm_result, ctx, project, &mut named);
             }
             type_items.extend(
                 named

@@ -27,6 +27,21 @@ pub const TEST_WORLD: &str = "test";
 /// `is_generator_world` helpers), never a scattered string literal.
 pub const GENERATOR_HOST_INTERFACE: &str = "KilnHost";
 
+/// The interface every [`CallbackExport`] belongs to.
+pub const CALLBACK_INTERFACE: &str = "wado:callback/callback";
+
+/// An export the host calls a Wado closure back through: `key` names the
+/// closure, and the rest are its arguments at their CM primitive types.
+#[derive(Debug, Clone)]
+pub struct CallbackExport {
+    /// The function name in [`CALLBACK_INTERFACE`] (e.g. `"call-f64"`).
+    pub cm_name: String,
+    /// The core function that lifts it.
+    pub core_func: String,
+    /// `(name, Wado primitive)` per parameter, the key first.
+    pub params: Vec<(String, &'static str)>,
+}
+
 /// Information about a world export function.
 ///
 /// World exports take two AST shapes (`export Foo;` interface form and

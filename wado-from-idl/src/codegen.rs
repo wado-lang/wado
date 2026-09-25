@@ -435,6 +435,17 @@ impl WadoCodeGenerator {
             WadoType::Future(inner) => format!("Future<{}>", Self::format_type(inner)),
             WadoType::Named(name) => name.clone(),
             WadoType::Borrow(inner) => format!("&{}", Self::format_type(inner)),
+            WadoType::Callback { params, effect } => {
+                let params = params
+                    .iter()
+                    .map(Self::format_type)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let effect = effect
+                    .as_ref()
+                    .map_or_else(String::new, |e| format!(" with {e}"));
+                format!("fn mut({params}){effect}")
+            }
         }
     }
 

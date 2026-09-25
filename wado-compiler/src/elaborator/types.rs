@@ -1085,6 +1085,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A closure an import takes, which the host cannot call back: one taking
+    /// anything but scalars and unrestricted handles, or returning a value.
+    CallbackAtCmBoundary {
+        function: String,
+        param: String,
+        span: Span,
+    },
+
     /// A slice view has no Component Model representation. Triggered when an
     /// `export` (or imported) function has a slice-typed parameter or return
     /// type.
@@ -2287,6 +2295,17 @@ impl TypeError {
                 Code::CmBoundaryType,
                 format!(
                     "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
+                ),
+                *span,
+            ),
+            TypeError::CallbackAtCmBoundary {
+                function,
+                param,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes only scalars and unrestricted handles, and returns nothing"
                 ),
                 *span,
             ),

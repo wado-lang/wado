@@ -4,6 +4,7 @@
 //! bindings go through monomorphization, lowering and optimization like any
 //! other function. Design: `docs/wep-2026-02-15-cm-binding-synthesis.md`.
 
+mod callback_export;
 mod cm_free;
 mod export_adapter;
 mod import_adapter;
@@ -39,6 +40,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
+use callback_export::synthesize_callback_exports;
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
     ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
@@ -473,7 +475,8 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
-    generate_import_adapters(&mut project);
+    let callbacks = generate_import_adapters(&mut project);
+    synthesize_callback_exports(&mut project, &callbacks);
     synthesize_export_adapters(&mut project)?;
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
@@ -495,8 +498,8 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 
 /// Synthesize a binding function for each used WASI effect call and resource
 /// method call, add them to the entry module, and rewrite effect-like call
-/// sites to target them.
-fn generate_import_adapters(project: &mut Package) {
+/// sites to target them. Answers the closure types those calls pass.
+fn generate_import_adapters(project: &mut Package) -> IndexSet<TypeId> {
     let entry_source = project.entry_module_source.clone();
 
     let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
@@ -513,8 +516,9 @@ fn generate_import_adapters(project: &mut Package) {
             }
         }
     }
+    let mut callbacks = IndexSet::default();
     if seen_effects.is_empty() {
-        return;
+        return callbacks;
     }
 
     let entry_type_table = entry_type_table(project);
@@ -600,6 +604,7 @@ fn generate_import_adapters(project: &mut Package) {
                     &project.cm_interface_registry,
                     &entry_type_table,
                     &mut applied_returns,
+                    &mut callbacks,
                 );
             }
             // Sync locals with any Let stmts that were updated by the rewrite
@@ -615,6 +620,7 @@ fn generate_import_adapters(project: &mut Package) {
             }
         }
     }
+    callbacks
 }
 
 /// Synthesize an export binding for each world export (signature-driven) and

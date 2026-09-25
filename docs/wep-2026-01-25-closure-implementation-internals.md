@@ -94,11 +94,11 @@ A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR 
 
 Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward to `$call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
 
-### Closures cannot cross the Component Model boundary
+### A closure crosses the Component Model boundary only as a key
 
-An exported or imported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload.
+An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing.
 
-A host callback does not need one to: the closure stays in a guest-side registry and a `u32` key crosses instead, with a synthesized export as the trampoline — see [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+The closure stays in a guest-side registry and a `u32` key crosses instead, with a synthesized export as the trampoline. See [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
 
 ## Consequences
 
@@ -110,7 +110,6 @@ A host callback does not need one to: the closure stays in a guest-side registry
 ## Open
 
 - [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run.
-- [ ] **Detect mutation through a call.** A closure is tagged `fn mut` from assignments to captured bindings, and nothing else counts: `xs.push(1)` on a captured `xs`, or passing one as `&mut n`, leaves the closure typed `fn`, so the binding is never boxed and the write lands on a copy with no diagnostic. The walk runs before method resolution, so it cannot ask whether a receiver is `&mut self`. Reading every call on a captured binding as a write would box more and mark more closures `fn mut`, which changes what compiles.
 - [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.
 - [ ] **`Fn` / `FnMut` as user-namable traits**, for user-defined callable types. Closure literals never need them.

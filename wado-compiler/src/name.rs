@@ -267,6 +267,15 @@ pub fn kebab_export_name(name: &str) -> String {
     name.replace('_', "-")
 }
 
+/// The `wado:callback/callback` function the host calls a closure back through,
+/// given a word per argument: its Wado primitive, or `handle` (`call-handle`).
+pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {
+    std::iter::once("call")
+        .chain(params)
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 /// Convert a Wado identifier (`snake_case` / `PascalCase` / `camelCase`) to
 /// Component Model kebab-case (`my-api`, `http-server`, `error-code`).
 ///

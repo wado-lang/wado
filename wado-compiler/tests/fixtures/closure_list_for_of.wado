@@ -5,38 +5,38 @@
 use { println, Stdout } from "core:cli";
 
 struct Holder {
-    fs: List<fn(i32)>,
+    fs: List<fn(i32) -> i32>,
 }
 
 export fn run() with Stdout {
     let mut seen: List<i32> = [];
-    let fs: List<fn(i32)> = [|v: i32| seen.push(v)];
+    let fs: List<fn(i32) -> i32> = [|v: i32| v * 10];
     for let f of fs {
-        f(1);
+        seen.push(f(1));
     }
     let h = Holder { fs };
     for let f of &h.fs {
-        (*f)(2);
+        seen.push((*f)(2));
     }
     let mut counters: List<fn mut() -> i32> = [];
     let mut n = 0;
     counters.push(|| {
-        n += 10;
+        n += 5;
         return n;
     });
     for let mut c of counters {
         seen.push(c());
     }
-    let o: Option<fn(i32)> = Option::Some(|v: i32| seen.push(v));
+    let o: Option<fn(i32) -> i32> = Option::Some(|v: i32| v * 10);
     if let Some(f) = &o {
-        (*f)(3);
+        seen.push((*f)(3));
     }
     match &o {
-        Some(f) => (*f)(4),
+        Some(f) => seen.push((*f)(4)),
         None => (),
     };
     println(`${seen:?}`);
 }
 
 __DATA__
-{"stdout": "[1, 2, 10, 3, 4]\n"}
+{"stdout": "[10, 20, 5, 30, 40]\n"}

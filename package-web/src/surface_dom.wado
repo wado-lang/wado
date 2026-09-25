@@ -6,11 +6,14 @@ use {
     Document,
     Dom,
     Element,
+    Event,
+    EventTarget,
     HtmlElement,
     HtmlInputElement,
     Node,
     Window,
     DOCUMENT_CLASS,
+    EVENT_CLASS,
     HANDLE_CLASS_STRIDE,
     HTML_ELEMENT_CLASS,
     HTML_INPUT_ELEMENT_CLASS,
@@ -40,6 +43,18 @@ struct SurfaceNode {
     last_child: i32,
     previous_sibling: i32,
     next_sibling: i32,
+}
+
+struct SurfaceEvent {
+    type: String,
+    target: i32,
+}
+
+struct Listener {
+    target: i32,
+    type: String,
+    capture: bool,
+    callback: fn mut(Event) with Dom,
 }
 
 struct Children {
@@ -135,11 +150,13 @@ fn strip_and_collapse_ascii_whitespace(text: &String) -> String {
 /// `createHTMLDocument()` makes, and the window holding it.
 pub struct SurfaceDom {
     nodes: List<SurfaceNode>,
+    events: List<SurfaceEvent>,
+    listeners: List<Listener>,
 }
 
 impl SurfaceDom {
     pub fn new() -> SurfaceDom {
-        let mut dom = SurfaceDom { nodes: [] };
+        let mut dom = SurfaceDom { nodes: [], events: [], listeners: [] };
         dom.push(Content::Document);
         dom.push(Content::Window);
         dom.append(DOCUMENT_INDEX, dom.push(Content::Doctype));
@@ -180,10 +197,47 @@ impl SurfaceDom {
     }
 
     fn index(&self, node: Node) -> i32 {
-        let handle = node as f64;
+        return self.target_index(node);
+    }
+
+    // Every event target is a node here, the window included.
+    fn target_index(&self, target: EventTarget) -> i32 {
+        let handle = target as f64;
         let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
         assert index < self.nodes.len() && self.handle(index) == handle;
         return index;
+    }
+
+    fn event_index(&self, event: Event) -> i32 {
+        let handle = event as f64;
+        let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
+        assert index < self.events.len() && EVENT_CLASS * HANDLE_CLASS_STRIDE + index as f64 == handle;
+        return index;
+    }
+
+    // The DOM standard's event path, which reaches the window from the document.
+    fn event_path(&self, target: i32) -> List<i32> {
+        let mut path: List<i32> = [];
+        let mut at = target;
+        while at != NO_NODE {
+            path.push(at);
+            at = if at == DOCUMENT_INDEX { WINDOW_INDEX } else { self.nodes[at].parent };
+        }
+        return path;
+    }
+
+    // Runs with this DOM reinstalled, since a listener is a program calling back
+    // into it. A listener added meanwhile waits for the next dispatch.
+    fn invoke(&mut self, target: i32, event: Event, capture: bool) {
+        let type = self.events[self.event_index(event)].type;
+        let listeners = self.listeners;
+        for let mut listener of listeners {
+            if listener.target == target && listener.type == type && listener.capture == capture {
+                with &mut *self do {
+                    (listener.callback)(event);
+                };
+            }
+        }
     }
 
     fn node(&self, index: i32) -> Option<Node> {
@@ -380,6 +434,61 @@ impl Dom for SurfaceDom {
 impl Window for SurfaceDom {
     fn document(&mut self, this: &Window) -> Document {
         resume self.handle(DOCUMENT_INDEX) as Document;
+    }
+
+    ..trap
+}
+
+// No event bubbles: `bubbles` is set only through `EventInit`, which the slice
+// leaves out.
+impl EventTarget for SurfaceDom {
+    fn add_event_listener(
+        &mut self,
+        this: &EventTarget,
+        type: String,
+        callback: fn mut(Event) with Dom,
+        options: Option<bool>,
+    ) {
+        self.listeners.push(Listener {
+            target: self.target_index(*this),
+            type,
+            capture: options.unwrap_or(false),
+            callback,
+        });
+        resume ();
+    }
+
+    fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
+        let target = self.target_index(*this);
+        self.events[self.event_index(event)].target = target;
+        let path = self.event_path(target);
+        for let mut i = path.len() - 1; i >= 0; i -= 1 {
+            self.invoke(path[i], event, true);
+        }
+        self.invoke(target, event, false);
+        resume true;
+    }
+
+    ..trap
+}
+
+impl Event for SurfaceDom {
+    fn new(&mut self, type: String) -> Event {
+        self.events.push(SurfaceEvent { type, target: NO_NODE });
+        resume (EVENT_CLASS * HANDLE_CLASS_STRIDE + (self.events.len() - 1) as f64) as Event;
+    }
+
+    fn type(&mut self, this: &Event) -> String {
+        resume self.events[self.event_index(*this)].type;
+    }
+
+    fn target(&mut self, this: &Event) -> Option<EventTarget> {
+        let target = self.events[self.event_index(*this)].target;
+        if target == NO_NODE {
+            resume null;
+        } else {
+            resume Option::Some(self.handle(target) as EventTarget);
+        }
     }
 
     ..trap
