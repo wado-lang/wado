@@ -2006,11 +2006,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Per argument, decide whether the parameter is by reference, compute the
-        // logical expected type, and delegate to the same `typecheck` helper
-        // `resolve_method_call` uses — so operator dispatch and a direct call
-        // apply identical `check_assignable` rules and cannot diverge. Mismatches
-        // accumulate in the logger rather than early-returning, as method calls do.
         // An impl read on a link below the receiver answers in the receiver's
         // type, as a method call does (WEP 2026-01-29).
         let receiver_head = self.tysys.get_base_type(receiver);
@@ -2022,6 +2017,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => resolved.return_type,
         };
 
+        // Per argument, decide whether the parameter is by reference, compute the
+        // logical expected type, and delegate to the same `typecheck` helper
+        // `resolve_method_call` uses — so operator dispatch and a direct call
+        // apply identical `check_assignable` rules and cannot diverge. Mismatches
+        // accumulate in the logger rather than early-returning, as method calls do.
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(

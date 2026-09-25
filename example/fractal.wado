@@ -116,14 +116,14 @@ fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [f64, f64] {
     }
     let mag = zr * zr + zi * zi;
     return [
-        smooth(count.extract_lane(0), mag.extract_lane(0), max_iter),
-        smooth(count.extract_lane(1), mag.extract_lane(1), max_iter),
+        smooth(count.extract_lane(0), mag.extract_lane(0)),
+        smooth(count.extract_lane(1), mag.extract_lane(1)),
     ];
 }
 
 /// The continuous iteration count `n + 1 - log2(log|z|)`, which removes the
 /// banding an integer count leaves.
-fn smooth(count: f64, mag: f64, max_iter: i32) -> f64 {
+fn smooth(count: f64, mag: f64) -> f64 {
     if mag <= BAILOUT {
         return -1.0;
     }

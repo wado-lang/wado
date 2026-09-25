@@ -160,30 +160,33 @@ impl Scene {
 
     /// Packs the spheres four to a `SpherePack`.
     fn build(&mut self) {
-        self.packs.clear();
-        for let base of (0..<(self.centers.len() + 3) / 4).map(|p| p * 4) {
-            let mut lanes: [List<f32>, List<f32>, List<f32>, List<f32>] = [[], [], [], []];
-            for let i of base..<base + 4 {
-                if i < self.centers.len() {
-                    let c = self.centers[i];
-                    lanes.0.push(c.x());
-                    lanes.1.push(c.y());
-                    lanes.2.push(c.z());
-                    lanes.3.push(self.radii[i] * self.radii[i]);
-                } else {
-                    lanes.0.push(0.0);
-                    lanes.1.push(0.0);
-                    lanes.2.push(0.0);
-                    lanes.3.push(-1.0);
-                }
-            }
+        for let mut base = 0; base < self.centers.len(); base += 4 {
+            let [a, b, c, d] = [
+                self.lane(base),
+                self.lane(base + 1),
+                self.lane(base + 2),
+                self.lane(base + 3),
+            ];
             self.packs.push(SpherePack {
-                cx: [lanes.0[0], lanes.0[1], lanes.0[2], lanes.0[3]],
-                cy: [lanes.1[0], lanes.1[1], lanes.1[2], lanes.1[3]],
-                cz: [lanes.2[0], lanes.2[1], lanes.2[2], lanes.2[3]],
-                r2: [lanes.3[0], lanes.3[1], lanes.3[2], lanes.3[3]],
+                cx: [a.0, b.0, c.0, d.0],
+                cy: [a.1, b.1, c.1, d.1],
+                cz: [a.2, b.2, c.2, d.2],
+                r2: [a.3, b.3, c.3, d.3],
             });
         }
+    }
+
+    /// Sphere `i` as pack lanes: its centre and radius², or an empty lane.
+    fn lane(&self, i: i32) -> [f32, f32, f32, f32] {
+        if i >= self.centers.len() {
+            return [0.0, 0.0, 0.0, -1.0];
+        }
+        let c = self.centers[i];
+        return [
+            c.x(),
+            c.y(),
+            c.z(), self.radii[i] * self.radii[i],
+        ];
     }
 
     /// The nearest sphere the ray meets within (`T_MIN`, `t_max`), as its
@@ -283,51 +286,31 @@ fn reflectance(cosine: f32, eta: f32) -> f32 {
     return r0 + (1.0 - r0) * f32::pow(1.0 - cosine, 5.0);
 }
 
-/// Where a ray goes after meeting a surface, and how much light it keeps;
+/// The direction a ray leaves a surface in, and how much light it keeps;
 /// `null` when the surface absorbs it.
-fn scatter(ray: &Ray, hit: &Hit, rng: &mut Xoshiro256pp) -> Option<[Ray, Vec3]> {
-    return match hit.material {
+fn scatter(ray: &Ray, hit: &Hit, rng: &mut Xoshiro256pp) -> Option<[Vec3, Vec3]> {
+    let diffuse = hit.normal + random_in_unit_sphere(rng).unit();
+    match hit.material {
         Diffuse(albedo) => {
-            let dir = hit.normal + random_in_unit_sphere(rng).unit();
-            Option::Some([
-                Ray { origin: hit.point, dir: dir.unit() },
-                albedo,
-            ]);
+            return Option::Some([diffuse, albedo]);
         },
         Checker([a, b]) => {
             let parity = (f32::floor(hit.point.x()) + f32::floor(hit.point.z())) as i32 & 1;
-            let dir = hit.normal + random_in_unit_sphere(rng).unit();
-            Option::Some([
-                Ray { origin: hit.point, dir: dir.unit() },
-                if parity == 0 { a } else { b },
-            ]);
+            return Option::Some([diffuse, if parity == 0 { a } else { b }]);
         },
         Metal([albedo, fuzz]) => {
             let dir = ray.dir.reflect(&hit.normal) + random_in_unit_sphere(rng).scale(fuzz);
-            if dir.dot(&hit.normal) > 0.0 {
-                Option::Some([
-                    Ray { origin: hit.point, dir: dir.unit() },
-                    albedo,
-                ]);
-            } else {
-                null;
-            }
+            return if dir.dot(&hit.normal) > 0.0 { Option::Some([dir, albedo]) } else { null };
         },
         Glass(ior) => {
             let eta = if hit.front { 1.0 / ior } else { ior };
             let cos_theta = f32::min(-ray.dir.dot(&hit.normal), 1.0);
             let sin_theta = f32::sqrt(1.0 - cos_theta * cos_theta);
-            let dir = if eta * sin_theta > 1.0 || reflectance(cos_theta, eta) > rand(rng) {
-                ray.dir.reflect(&hit.normal);
-            } else {
-                ray.dir.refract(&hit.normal, eta);
-            };
-            Option::Some([
-                Ray { origin: hit.point, dir: dir.unit() },
-                splat(1.0),
-            ]);
+            let reflects = eta * sin_theta > 1.0 || reflectance(cos_theta, eta) > rand(rng);
+            let dir = if reflects { ray.dir.reflect(&hit.normal) } else { ray.dir.refract(&hit.normal, eta) };
+            return Option::Some([dir, splat(1.0)]);
         },
-    };
+    }
 }
 
 fn sky(ray: &Ray) -> Vec3 {
@@ -344,11 +327,11 @@ fn trace(scene: &Scene, ray: Ray, depth: i32, rng: &mut Xoshiro256pp, rays: &mut
         let Some(hit) = scene.hit(&ray) else {
             return throughput * sky(&ray);
         };
-        let Some([next, attenuation]) = scatter(&ray, &hit, rng) else {
+        let Some([dir, attenuation]) = scatter(&ray, &hit, rng) else {
             return splat(0.0);
         };
         throughput = throughput * attenuation;
-        ray = next;
+        ray = Ray { origin: hit.point, dir: dir.unit() };
     }
     return splat(0.0);
 }

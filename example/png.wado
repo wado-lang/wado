@@ -93,19 +93,23 @@ fn filtered(img: &Image, y: i32, i: i32, kind: i32) -> u8 {
     return (x - predicted) as u8;
 }
 
-/// The filter a scanline compresses best under, by libpng's heuristic: the
-/// smallest sum of residuals read as signed bytes.
-fn best_filter(img: &Image, y: i32) -> i32 {
-    let mut best = 0;
+/// Scanline `y` as PNG stores it: the filter type byte, then the residuals
+/// under the filter that compresses best by libpng's heuristic, the smallest
+/// sum of residuals read as signed bytes.
+fn best_filtered_row(img: &Image, y: i32) -> ByteList {
+    let mut best: ByteList = [];
     let mut best_cost = i32::MAX;
     for let kind of 0..<5 {
+        let mut row = ByteList::with_capacity(img.width * 3 + 1);
+        row.push(kind as u8);
         let mut cost = 0;
         for let i of 0..<img.width * 3 {
-            let r = filtered(img, y, i, kind) as i32;
-            cost += if r < 128 { r } else { 256 - r };
+            let r = filtered(img, y, i, kind);
+            row.push(r);
+            cost += if r < 128 { r as i32 } else { 256 - r as i32 };
         }
         if cost < best_cost {
-            best = kind;
+            best = row;
             best_cost = cost;
         }
     }
@@ -119,14 +123,9 @@ pub fn encode(img: &Image) -> ByteList {
     push_u32_be(&mut ihdr, img.height as u32);
     ihdr.extend(&[8, 2, 0, 0, 0]);  // bit depth 8, truecolor, deflate, adaptive, no interlace
 
-    let stride = img.width * 3;
-    let mut scanlines = ByteList::with_capacity((stride + 1) * img.height);
+    let mut scanlines = ByteList::with_capacity((img.width * 3 + 1) * img.height);
     for let y of 0..<img.height {
-        let kind = best_filter(img, y);
-        scanlines.push(kind as u8);
-        for let i of 0..<stride {
-            scanlines.push(filtered(img, y, i, kind));
-        }
+        scanlines.extend(&best_filtered_row(img, y));
     }
 
     let mut out = PNG_SIGNATURE;
