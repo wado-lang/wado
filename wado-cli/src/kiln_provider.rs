@@ -52,6 +52,7 @@ use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
+use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
 
 use crate::build_dep::{
@@ -582,36 +583,6 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
             (relative_to(&base, &target).unwrap_or(path), hash)
         })
         .collect()
-}
-
-/// Fold `.` and `..` out of `path` without touching the filesystem. A `..` at
-/// the root, or leading a relative path, has nothing to pop and is kept.
-pub(crate) fn normalize_path(path: &Path) -> PathBuf {
-    use std::path::Component;
-
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                // `PathBuf::pop` would remove a `..` this loop just pushed,
-                // turning `../../pkg` into `pkg`. Above the root, `/..` is `/`.
-                match out.components().next_back() {
-                    Some(Component::Normal(_)) => {
-                        out.pop();
-                    }
-                    Some(Component::RootDir | Component::Prefix(_)) => {}
-                    Some(Component::CurDir | Component::ParentDir) | None => {
-                        out.push(component);
-                    }
-                }
-            }
-            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
-                out.push(component);
-            }
-        }
-    }
-    out
 }
 
 /// `target` expressed relative to `base`, with `..` for each level `target`
@@ -1171,7 +1142,7 @@ impl CliGeneratorProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiln_provider::{make_relative_sources, normalize_path};
+    use crate::kiln_provider::make_relative_sources;
     use wado_compiler::kiln::InvocationPath;
 
     fn runtime() -> tokio::runtime::Runtime {
@@ -1179,24 +1150,6 @@ mod tests {
             .enable_all()
             .build()
             .unwrap()
-    }
-
-    #[test]
-    fn normalize_path_keeps_a_parent_chain_it_cannot_pop() {
-        let cases = [
-            ("./../../pkg/gen.wado", "../../pkg/gen.wado"),
-            ("a/b/../c", "a/c"),
-            ("../a/..", ".."),
-            ("/a/b/../c", "/a/c"),
-            ("/../a", "/a"),
-        ];
-        for (input, expected) in cases {
-            assert_eq!(
-                normalize_path(Path::new(input)),
-                Path::new(expected),
-                "normalizing {input:?}"
-            );
-        }
     }
 
     /// A recorded path has to resolve back to the file it names, since it is

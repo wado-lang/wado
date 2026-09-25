@@ -1,6 +1,5 @@
-use std::borrow::Cow;
 use std::env;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use wado_lsp::host::discovery::{absolutize, governing_workspace};
@@ -84,24 +83,9 @@ pub(crate) fn resolve_manifest(
     }
 }
 
-/// `member_dir` as an absolute, `..`-free path so [`governing_workspace`] (which
-/// walks up with `pop()` and matches members with `strip_prefix`) can locate the
-/// workspace. An empty, relative, or `..`-bearing dir is canonicalized; an
-/// already absolute, `..`-free dir is borrowed untouched. Canonicalization stays
-/// CLI-side because `governing_workspace` lives in wasm32-only `wado-lsp`.
-fn workspace_anchor(member_dir: &Path) -> Cow<'_, Path> {
-    let has_parent_dir = member_dir.components().any(|c| c == Component::ParentDir);
-    if member_dir.is_absolute() && !has_parent_dir {
-        return Cow::Borrowed(member_dir);
-    }
-    fs::canonicalize(openable_dir(member_dir))
-        .map(Cow::Owned)
-        .unwrap_or(Cow::Borrowed(member_dir))
-}
-
 /// The workspace-root `wado.toml` contents governing `member_dir`, if any.
 fn find_workspace_root(member_dir: &Path, member_content: &str) -> Option<String> {
-    governing_workspace(&workspace_anchor(member_dir), member_content).map(|(_, content)| content)
+    governing_workspace(member_dir, member_content).map(|(_, content)| content)
 }
 
 /// The workspace root directory governing the package at `member_dir`, if it is
@@ -111,7 +95,7 @@ pub(crate) fn governing_workspace_root_dir(
 ) -> Result<Option<PathBuf>, DiscoveryError> {
     let content =
         fs::read_to_string(member_dir.join(MANIFEST_FILENAME)).map_err(DiscoveryError::Io)?;
-    Ok(governing_workspace(&workspace_anchor(member_dir), &content).map(|(dir, _)| dir))
+    Ok(governing_workspace(member_dir, &content).map(|(dir, _)| dir))
 }
 
 /// The directory a `license-file` path resolves against: the package's own root
@@ -124,7 +108,7 @@ pub(crate) fn license_file_base_dir(package_root: &Path) -> PathBuf {
     if own_manifest_declares_license_slot(&content) {
         return package_root.to_path_buf();
     }
-    governing_workspace(&workspace_anchor(package_root), &content)
+    governing_workspace(package_root, &content)
         .map(|(dir, _)| dir)
         .unwrap_or_else(|| package_root.to_path_buf())
 }
