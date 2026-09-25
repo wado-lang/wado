@@ -1124,12 +1124,21 @@ impl Parser {
         };
 
         // `export` implies `pub` (a CM export is part of the public API).
+        let export_span = self.peek().span;
         let has_export = if self.check(&TokenKind::Export) {
             self.advance();
             true
         } else {
             false
         };
+        if has_export && self.check(&TokenKind::Use) {
+            self.errors.push(ParseError {
+                message: "a re-export is not lowered at the component boundary, so a `use` \
+                    cannot be `export`; write `pub use`"
+                    .to_string(),
+                span: export_span,
+            });
+        }
 
         if has_internal && (has_pub || has_export) {
             return Err(ParseError {
@@ -1536,15 +1545,32 @@ impl Parser {
 
         // Check for wildcard import: `use _ from "..."`
         let mut items_span = None;
+        let modifier = visibility.keyword().trim_end();
         let items = if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "_") {
-            self.advance(); // consume `_`
+            let span = self.advance().span;
+            if visibility.reaches_beyond_file() {
+                self.errors.push(ParseError {
+                    message: format!("a wildcard import cannot be re-exported; drop `{modifier}`"),
+                    span,
+                });
+            }
             vec![UseItem::Wildcard]
         }
         // Check for namespace import: `use name from "..."` (ident followed by `from`)
         else if matches!(self.peek_kind(), TokenKind::Ident(_))
             && matches!(self.peek_nth(1).kind, TokenKind::From)
         {
+            let span = self.peek().span;
             let name = self.consume_ident()?;
+            if visibility.reaches_beyond_file() {
+                self.errors.push(ParseError {
+                    message: format!(
+                        "a namespace cannot be re-exported: `{name}`; drop `{modifier}`, or \
+                         re-export its members by name with `{modifier} use {{ ... }} from`"
+                    ),
+                    span,
+                });
+            }
             vec![UseItem::Namespace { name }]
         } else {
             // Parse items: `{...}`
