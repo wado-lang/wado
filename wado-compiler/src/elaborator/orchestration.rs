@@ -1311,10 +1311,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             annotate_ctx: scope::Scope::default(),
             invocations: Rc::clone(&state.invocations),
             interner: Rc::clone(&state.interner),
-            suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
-            assoc_binding_stack: hashmap::IndexSet::default(),
-            bound_closure_stack: hashmap::IndexSet::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }

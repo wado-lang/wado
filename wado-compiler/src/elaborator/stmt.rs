@@ -2450,18 +2450,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         TypeTable::UNKNOWN
     }
-    /// Resolve a loop statement (infinite loop).
-    ///
-    /// Naked `continue` inside this loop's body must jump to the top of
-    /// *this* loop, regardless of any enclosing C-style `for` whose
-    /// continue-retarget label is still on the stack. Take + restore
-    /// `for_continue_labels` around body resolution so the inner
-    /// `resolve_continue` sees an empty stack and lowers naturally.
+    /// Resolve a loop statement (infinite loop). Reify rebuilds the `Loop`.
     pub(super) fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) {
-        // Reify rebuilds the `Loop` stmt.
-        let saved = std::mem::take(&mut ctx.for_continue_labels);
         self.resolve_block(&loop_stmt.body, ctx, None);
-        ctx.for_continue_labels = saved;
     }
 
     /// Resolve a for-of loop.
@@ -2469,13 +2460,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// For tuples: compile-time expansion (one copy of the body per element).
     /// For non-tuples: iterator pattern via `into_iter()` + `next()`.
     pub(super) fn resolve_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
-        // Naked `continue` inside this for-of's body targets *this* loop,
-        // not an enclosing C-style `for` body label. The iterable itself
-        // is an expression — no `continue` stmt syntactically — but we
-        // clear the stack early so all internal resolve_* calls share the
-        // same invariant.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-
         // Unwrap an `.enumerate()` iterable at the AST level. The elaborator
         // never resolves it as a method call, so `mc.id` carries no annotations
         // — intentional, like the `tuple.len()` short-circuits on
@@ -2577,8 +2561,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
-
-        ctx.for_continue_labels = saved_continue;
     }
 
     /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
@@ -3153,10 +3135,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the `Break` stmt.
     }
 
-    /// Resolve a continue statement. `continue`
-    /// carries no facts; reify rebuilds the `Continue` (or the
-    /// `break <for-body-label>` retarget) from the AST and
-    /// `ctx.for_continue_labels`.
+    /// Resolve a continue statement. `continue` carries no facts; reify
+    /// rebuilds it, retargeted inside a C-style `for` body.
     pub(super) fn resolve_continue(
         &mut self,
         _continue_stmt: &ContinueStmt,
@@ -3169,9 +3149,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A naked `break` / `continue` in the body already targets that synthesised
     /// loop, so unlike the C-style `for` no label re-targeting is needed.
     pub(super) fn resolve_while(&mut self, w: &WhileStmt, ctx: &mut FunctionContext) {
-        // Naked `continue` inside this while's body targets *this* loop,
-        // not an enclosing C-style `for` body label.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         // Reify rebuilds the `loop { if !cond { break }
         // B }` (or `loop { match e { pat => B, _ => break } }`) shape from the
         // `DesugarKind::While` / `WhileLetChain` tag + the AST. This walk
@@ -3195,8 +3172,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.exit_scope();
             }
         }
-
-        ctx.for_continue_labels = saved_continue;
     }
 
     /// Resolve a C-style `for init; cond; update { B }` into
@@ -3207,16 +3182,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
         let body_label = for_body_label(ctx.fresh_serial());
-
-        // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
-        // continue-retarget stack at the loop boundary so the invariant
-        // ("the stack lists labels for the enclosing C-style `for` bodies that
-        // a naked `continue` should `break` to, innermost-first") cannot be
-        // violated by a future refactor that resolves part of the body
-        // outside `resolve_for_labeled_body`. Today the push/pop inside
-        // that helper alone would suffice, but the symmetry guards against
-        // a body-resolution path moving above the helper.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
 
         // The outer scope holds `init`'s bindings so the loop body can see
         // them while the surrounding function cannot.
@@ -3272,7 +3237,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span: *cond_span,
                     });
                     ctx.exit_scope();
-                    ctx.for_continue_labels = saved_continue;
                     return;
                 };
 
@@ -3288,13 +3252,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         ctx.exit_scope();
-        ctx.for_continue_labels = saved_continue;
     }
 
-    /// Resolve a for loop's body wrapped in its continue-retarget label.
-    /// Pushes `body_label` onto both `for_continue_labels` (so naked
-    /// `continue` inside the body becomes `break <body_label>`) and
-    /// `active_labels` (so the label validates as a known break target).
+    /// Resolve a for loop's body under its continue-retarget label, which
+    /// validates as a known break target inside it.
     fn resolve_for_labeled_body(
         &mut self,
         body_label: &str,
@@ -3302,11 +3263,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         // Reify rebuilds the labeled body block.
-        ctx.for_continue_labels.push(body_label.to_string());
         ctx.active_labels.push(body_label.to_string());
         self.resolve_block(body, ctx, None);
         ctx.active_labels.pop();
-        ctx.for_continue_labels.pop();
     }
 
     /// Resolve a for loop's optional update expression for its facts

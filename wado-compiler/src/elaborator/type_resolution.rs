@@ -1,10 +1,7 @@
 //! AST Type to `TypeId` resolution.
 
-use std::hash::Hash;
-
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -970,26 +967,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved.iter().all(|t| *t == first).then_some(first)
     }
 
-    /// Run `body` unless `key` is already on the walk, which means it is being
-    /// asked for what it is computing. Scoped so no exit from `body` can leave
-    /// the key behind and answer `None` for the rest of the module.
-    fn unless_on_walk<K, R>(
-        &mut self,
-        stack: impl Fn(&mut Self) -> &mut hashmap::IndexSet<K>,
-        key: K,
-        body: impl FnOnce(&mut Self) -> Option<R>,
-    ) -> Option<R>
-    where
-        K: Eq + Hash + Clone,
-    {
-        if !stack(self).insert(key.clone()) {
-            return None;
-        }
-        let answer = body(self);
-        stack(self).shift_remove(&key);
-        answer
-    }
-
     /// Every bound on `base_name` a projection may be answered from, each with
     /// the parameter space it was written in answered at this frame. A
     /// supertrait binds an assoc type too, so one walk serves every lookup.
@@ -1011,7 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(base_name)?
             .type_id;
         self.unless_on_walk(
-            |e| &mut e.bound_closure_stack,
+            |scope| &mut scope.bound_closure_stack,
             binder,
             |e| {
                 let mut out: Vec<FrameBound> = Vec::new();
@@ -1256,7 +1233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `assoc`'s own bounds, so a pair already on the walk recurses.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
                     self.unless_on_walk(
-                        |e| &mut e.assoc_binding_stack,
+                        |scope| &mut scope.assoc_binding_stack,
                         (base, assoc.clone()),
                         |e| e.make_frame_projection(base, base_name, &assoc),
                     )

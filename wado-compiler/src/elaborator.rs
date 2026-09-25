@@ -155,10 +155,8 @@ pub struct Elaborator<'a, H: CompilerHost> {
     current_module_source: ModuleSource,
     /// Entry module source (for cross-module import dedup)
     entry_module_source: ModuleSource,
-    /// Transient annotate-time scope: trait-resolution context (incl.
-    /// effect params), `type_implements_trait` recursion guard, and the
-    /// default-expression module fallback. Mutated only through the RAII
-    /// guards in [`scope`]; see [`scope::Scope`].
+    /// Transient walk state, mutated only through the RAII guards in
+    /// [`scope`]; see [`scope::Scope`].
     annotate_ctx: scope::Scope,
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
@@ -169,28 +167,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
     /// `record_use_specifier_references`).
     pub(super) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// When `true`, the single use→def edge sink [`Self::insert_reference`]
-    /// (which every `record_*` helper funnels through) drops edges instead of
-    /// recording them.
-    ///
-    /// One caller: argument classification
-    /// ([`Self::synthesize_arg_class`]), which walks an argument
-    /// *speculatively* to pick among overloads and must leave no trace — the
-    /// real walk of the same node records the authoritative edge once the
-    /// callee is chosen.
-    pub(super) suppress_reference_recording: bool,
     /// Per-module deferred-inference state, solved and swept in
     /// [`Self::finalize_infer_holes`] at the end of the module walk. See
     /// [`infer_hole`].
     pub(super) infer_holes: infer_hole::InferHoleTable,
-    /// The `(base, assoc)` pairs whose binding is being resolved right now.
-    /// Two assoc types bounded through each other have no fixpoint, so a pair
-    /// already on the walk contributes no binding and stays abstract.
-    pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
-    /// The binders whose bound closure is being built right now. A bound's own
-    /// arguments are read while it is built, so `T: Uses<T::Item>` asks for it
-    /// again, and a closure cannot answer itself.
-    pub(super) bound_closure_stack: hashmap::IndexSet<tir::TypeId>,
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
@@ -448,35 +428,63 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .namespace_imports(module)
             .cloned()
             .unwrap_or_default();
-        let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
-
-        let result = body(self);
-
-        self.current_module_source = saved_src;
-        self.sem.imports.namespace_imports = saved_ns;
-        result
+        struct Restore<'r, 'a, H: CompilerHost> {
+            elaborator: &'r mut Elaborator<'a, H>,
+            saved: Option<(ModuleSource, trait_env::NamespaceImports)>,
+        }
+        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
+            fn drop(&mut self) {
+                let (source, namespaces) = self.saved.take().expect("saved perspective present");
+                self.elaborator.current_module_source = source;
+                self.elaborator.sem.imports.namespace_imports = namespaces;
+            }
+        }
+        let saved_source = std::mem::replace(&mut self.current_module_source, module.clone());
+        let saved_namespaces =
+            std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
+        let guard = Restore {
+            elaborator: self,
+            saved: Some((saved_source, saved_namespaces)),
+        };
+        body(guard.elaborator)
     }
 
-    /// Run `body` with use→def reference recording suppressed, restoring the
-    /// previous setting on return. See
-    /// [`Self::suppress_reference_recording`].
-    pub(super) fn with_reference_recording_suppressed<R>(
+    /// Run `body` recording into `fresh` in place of the facts `field` selects,
+    /// and hand back what it recorded. The enclosing facts return even on a panic.
+    pub(super) fn recording_into<T, R>(
         &mut self,
+        field: for<'s> fn(&'s mut Self) -> &'s mut T,
+        fresh: T,
         body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        let saved = std::mem::replace(&mut self.suppress_reference_recording, true);
-        let result = body(self);
-        self.suppress_reference_recording = saved;
-        result
+    ) -> (R, T) {
+        struct Restore<'r, 'a, H: CompilerHost, T> {
+            elaborator: &'r mut Elaborator<'a, H>,
+            field: for<'s> fn(&'s mut Elaborator<'a, H>) -> &'s mut T,
+            saved: Option<T>,
+        }
+        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
+            fn drop(&mut self) {
+                if let Some(saved) = self.saved.take() {
+                    *(self.field)(self.elaborator) = saved;
+                }
+            }
+        }
+        let saved = std::mem::replace(field(self), fresh);
+        let mut guard = Restore {
+            elaborator: self,
+            field,
+            saved: Some(saved),
+        };
+        let result = body(guard.elaborator);
+        let saved = guard.saved.take().expect("enclosing facts present");
+        let recorded = std::mem::replace(field(guard.elaborator), saved);
+        (result, recorded)
     }
 
-    /// The single sink for every use→def edge. All `record_*` helpers funnel
-    /// through here, so the [`Self::suppress_reference_recording`] gate lives in
-    /// exactly one place: when set, the edge is dropped rather than recorded
-    /// as a spurious duplicate by a type-checking query (see the field docs).
+    /// The single sink for every use→def edge, so the
+    /// [`scope::Scope::suppress_reference_recording`] gate lives in one place.
     fn insert_reference(&mut self, use_id: AstId, def_id: AstId) {
-        if self.suppress_reference_recording {
+        if self.annotate_ctx.suppress_reference_recording {
             return;
         }
         self.sem.bindings.references.insert(use_id, def_id);
@@ -1967,17 +1975,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.resolve_variant_decl(variant_decl);
                 }
                 Item::Test(test_decl) => {
-                    // Reify indexes its own tests, so nothing reads this one.
-                    // Pass the running count for parity and resolve the body
-                    // for its facts.
-                    let test_index = test_count;
-                    let module_is_todo = module.has_todo();
-                    if self
-                        .resolve_test_decl(test_decl, test_index, module_is_todo)
-                        .is_some()
-                    {
-                        test_count += 1;
-                    }
+                    self.resolve_test_decl(test_decl, test_count, module.has_todo());
+                    test_count += 1;
                 }
                 Item::Global(global_decl) => {
                     self.resolve_global(global_decl);
@@ -1987,8 +1986,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // AST + decl tables, so the body walk does nothing for them.
                 Item::Enum(_) | Item::Flags(_) | Item::Newtype(_) => {}
                 Item::Interface(effect_decl) => {
-                    // Records `effect_ops`; reify reads them.
-                    self.resolve_effect_decl(effect_decl);
+                    self.record_effect_ops(effect_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &effect_decl.name,
                         &effect_decl.methods,
@@ -2003,7 +2001,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                 }
                 Item::Resource(resource_decl) => {
-                    self.resolve_resource_decl(resource_decl);
+                    self.record_effect_ops(resource_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
@@ -2295,29 +2293,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     decls: scope.sem.decls.clone(),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
-                // Swap the elaborator's owned `sem` with the
-                // synthetic. `resolve_method` writes through
-                // `scope.sem` (`record_*` calls, fact insertions)
-                // — they all land in `synthetic`'s fresh maps.
-                // Its `TirFunction` return is discarded; reify
-                // emits the authoritative TIR from the recorded
-                // facts.
-                let saved_sem = std::mem::replace(&mut scope.sem, synthetic);
-
-                let _ = scope.resolve_method(
-                    default_method,
-                    &struct_name,
-                    &impl_block.ty,
-                    Some(trait_n),
-                    Some(trait_ast),
-                    impl_is_concrete,
-                    &impl_block.type_params,
-                    None,
-                    impl_owner,
+                let ((), mut populated) = scope.recording_into(
+                    |elab| &mut elab.sem,
+                    synthetic,
+                    |scope| {
+                        scope.resolve_method(
+                            default_method,
+                            &struct_name,
+                            &impl_block.ty,
+                            Some(trait_n),
+                            Some(trait_ast),
+                            impl_is_concrete,
+                            &impl_block.type_params,
+                            None,
+                            impl_owner,
+                        );
+                    },
                 );
-
-                // Swap back, take the populated synthetic out.
-                let mut populated = std::mem::replace(&mut scope.sem, saved_sem);
 
                 // Drain decl-level writes that must flow back
                 // into the impl module's `TirModule`. The body

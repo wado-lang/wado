@@ -17,7 +17,7 @@ use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
-use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
+use super::sem::types::{BodyFacts, CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
@@ -2345,13 +2345,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_bindings: &[DefaultTypeBinding],
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let enclosing_facts = site.map(|_| std::mem::take(&mut self.sem.types.body));
-        let result =
-            self.with_resolving_home(home, |s| s.with_callee_type_bindings(type_bindings, body));
-        if let (Some(site), Some(enclosing)) = (site, enclosing_facts) {
-            let overlay = std::mem::replace(&mut self.sem.types.body, enclosing);
-            self.sem.types.default_overlays.insert(site, overlay);
-        }
+        let walk = |s: &mut Self| {
+            s.with_resolving_home(home, |s| s.with_callee_type_bindings(type_bindings, body))
+        };
+        let Some(site) = site else {
+            return walk(self);
+        };
+        let (result, overlay) =
+            self.recording_into(|elab| &mut elab.sem.types.body, BodyFacts::default(), walk);
+        self.sem.types.default_overlays.insert(site, overlay);
         result
     }
 

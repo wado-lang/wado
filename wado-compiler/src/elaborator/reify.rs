@@ -1329,9 +1329,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .filter(|p| p.is_effect)
             .map(|p| p.name.clone())
             .collect();
-        let saved_effect_param_names =
-            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
         let param_types = self
             .ann_fn_param_types(func.id)
             .expect("the declaring walk records param types for every function reify emits");
@@ -1364,12 +1361,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let body = func
-            .body
-            .as_ref()
-            .map(|b| self.reify_block(b, &mut ctx, None));
-
-        self.current_effect_param_names = saved_effect_param_names;
+        let body = self.with_replaced(
+            |reify| &mut reify.current_effect_param_names,
+            effect_param_names,
+            |this| {
+                func.body
+                    .as_ref()
+                    .map(|b| this.reify_block(b, &mut ctx, None))
+            },
+        );
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.
@@ -1582,19 +1582,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 continue;
             };
 
-            // Swap perspective. Both `self.sem` and the swap target carry
-            // lifetime `'a` (from the parent `&'a ModuleSemantics`), so
-            // the `mem::replace` is a pointer swap.
-            let saved_sem = std::mem::replace(&mut self.sem, synth_sem);
-            let saved_module_source =
-                std::mem::replace(&mut self.current_module_source, trait_module.clone());
-            let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
-
-            let mut tir_func = self.reify_method(default_method, &facts, concrete_owner.as_ref());
-
-            self.current_module_items = saved_module_items;
-            self.current_module_source = saved_module_source;
-            self.sem = saved_sem;
+            let mut tir_func =
+                self.with_perspective(trait_module.clone(), trait_items, synth_sem, |this| {
+                    this.reify_method(default_method, &facts, concrete_owner.as_ref())
+                });
 
             // `resolve_method` records this exact string under
             // `method_names`, which `reify_method` already read back.
@@ -2607,8 +2598,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Inside a C-style `for`, `continue` must break to the
                 // body label so the `update` expression runs before the
                 // next iteration; only while/loop bodies use a plain
-                // `Continue`. Mirror `Elaborator::resolve_continue`,
-                // keyed off `ctx.for_continue_labels`.
+                // `Continue`.
                 let stmt_kind = if let Some(body_label) = ctx.for_continue_labels.last() {
                     TirStmtKind::Break {
                         label: Some(body_label.clone()),
@@ -2635,12 +2625,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 vec![TirStmt::new(TirStmtKind::Expr(tir), match_expr.span)]
             }
             ast::Stmt::Loop(loop_stmt) => {
-                // `loop { … }` — direct lowering. The
-                // `for_continue_labels` save/restore mirrors
-                // `Elaborator::resolve_loop`.
-                let saved = std::mem::take(&mut ctx.for_continue_labels);
-                let body = self.reify_block(&loop_stmt.body, ctx, None);
-                ctx.for_continue_labels = saved;
+                let body = self.reify_block(&loop_stmt.body, &mut ctx.enter_loop(), None);
                 vec![TirStmt::new(TirStmtKind::Loop { body }, loop_stmt.span)]
             }
             ast::Stmt::LabeledBlock(labeled_block) => {
@@ -3331,12 +3316,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Elaborator::resolve_while`'s `Condition::Expr` arm
     /// the loop lowers into
     /// `Loop { if !cond { break; } body }`, which is the desugar
-    /// `DesugarKind::While` tags. `for_continue_labels` is saved /
-    /// restored around the body walk so naked `continue` inside
-    /// `while` targets this loop (not an enclosing C-style `for`).
+    /// `DesugarKind::While` tags.
     fn reify_while(&mut self, w: &ast::WhileStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
         let span = w.span;
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        let mut frame = ctx.enter_loop();
+        let ctx = &mut *frame;
 
         let stmts = match &w.condition {
             ast::Condition::Expr(cond_expr) => {
@@ -3378,7 +3362,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
 
-        ctx.for_continue_labels = saved_continue;
         vec![TirStmt::new(
             TirStmtKind::Loop {
                 body: TirBlock::new(stmts, span),
@@ -3955,13 +3938,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         info: ForOfIteratorInfo,
     ) -> Vec<TirStmt> {
-        use crate::tir::{
-            CallArg, ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
-            TypeTable,
-        };
+        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
 
         let span = for_of.span;
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        let mut frame = ctx.enter_loop();
+        let ctx = &mut *frame;
         let unique_id = ctx.fresh_serial();
         let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
@@ -4098,13 +4079,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
 
         ctx.active_labels.pop();
-        ctx.for_continue_labels = saved_continue;
-
-        let _ = CallArg::new(
-            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
-            false,
-        );
-        let _ = ResolvedType::Unit;
 
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
@@ -4656,7 +4630,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = f.span;
         let body_label = for_body_label(ctx.fresh_serial());
 
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
+        let mut frame = ctx.enter_loop();
+        let ctx = &mut *frame;
         ctx.enter_scope();
 
         let mut outer_stmts: Vec<TirStmt> = Vec::new();
@@ -4708,7 +4683,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // for-let-chain as `InvalidPattern`; emit
                     // empty to mirror.
                     ctx.exit_scope();
-                    ctx.for_continue_labels = saved_continue;
                     return vec![];
                 };
 
@@ -4777,7 +4751,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ));
 
         ctx.exit_scope();
-        ctx.for_continue_labels = saved_continue;
         outer_stmts
     }
 
@@ -5783,7 +5756,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // perspective: the default's free identifiers and decl
                     // lookups resolve in the struct module's scope.
                     let value = ctx.with_caller_bindings_hidden(|ctx| {
-                        self.with_const_module_perspective(&struct_module, |this| {
+                        self.with_module_perspective(&struct_module, |this| {
                             this.reify_expr(default_expr, ctx, Some(expected_field_ty))
                         })
                     });
@@ -5982,24 +5955,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
         let span = compound.span;
 
-        // Save/restore the override map so a nested compound assign keeps its
-        // own bindings; the scope keeps `$caN` names out of the enclosing map.
+        // A nested compound assign keeps its own overrides; the scope keeps
+        // `$caN` names out of the enclosing map.
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
-        let saved_overrides = std::mem::take(&mut self.compound_overrides);
-        ctx.enter_scope();
-        let mut prelude: Vec<TirStmt> = Vec::new();
-        self.bind_compound_hoists(&hoists, &mut prelude, ctx);
-
-        let result = self.reify_compound_assign_body(compound, ctx, op, prelude, span);
-        ctx.exit_scope();
-        self.compound_overrides = saved_overrides;
-        result
+        self.with_replaced(
+            |reify| &mut reify.compound_overrides,
+            IndexMap::default(),
+            |this| {
+                ctx.enter_scope();
+                let mut prelude: Vec<TirStmt> = Vec::new();
+                this.bind_compound_hoists(&hoists, &mut prelude, ctx);
+                let result = this.reify_compound_assign_body(compound, ctx, op, prelude, span);
+                ctx.exit_scope();
+                result
+            },
+        )
     }
 
     /// Build the read + write of a compound assign with the impure-operand
-    /// overrides active. Split out so `reify_compound_assign` restores the
-    /// override map on every return path.
+    /// overrides active.
     fn reify_compound_assign_body(
         &mut self,
         compound: &ast::CompoundAssignExpr,
@@ -7883,84 +7858,62 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // scope and may name items the caller cannot see, so swap the module
         // triple to the callee around the walk. The caller's `ctx` stays, as
         // the frame the walk's locals are allocated in.
-        let loaded = self.loaded_modules;
-        let all_sem = self.all_module_semantics;
-        let callee_ctx: Option<(&[Item], &ModuleSemantics)> =
-            if callee_module == &self.current_module_source {
-                None
-            } else {
-                match (loaded.get(callee_module), all_sem.get(callee_module)) {
-                    (Some(m), Some(callee_sem)) => Some((m.items.as_slice(), callee_sem)),
-                    _ => None,
-                }
-            };
-        let saved = callee_ctx.map(|(items, callee_sem)| {
-            (
-                std::mem::replace(&mut self.current_module_source, callee_module.clone()),
-                std::mem::replace(&mut self.current_module_items, items),
-                std::mem::replace(&mut self.sem, callee_sem),
-            )
-        });
-
         let named = slots_named_by_defaults(args.len(), func_params);
         let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
         let mut borrows = BorrowedPlaces::default();
-        ctx.with_caller_bindings_hidden(|ctx| {
-            // Once any slot is bound, every argument is, so each still runs
-            // ahead of what a default reads, in the order the call spells them.
-            // A `&mut` place stays in the call for the callee's writes to reach
-            // it, and a default borrows it again unless a closure would hold it.
-            if named.contains(&true) {
-                for ((arg, (name, _)), named) in args.iter_mut().zip(func_params).zip(&named) {
-                    let unbound = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
-                    let value = std::mem::replace(&mut arg.expr, unbound);
-                    arg.expr = if name == RECEIVER {
-                        self.bind_receiver_ahead(ctx, value, &mut prelude)
-                    } else if is_mut_borrow(&value)
-                        && self.tysys.is_source_place(&value)
-                        && !captured.contains(name)
-                    {
-                        let borrow =
-                            self.bind_subscripts_ahead(ctx, value, "arg_index", &mut prelude);
-                        if *named {
-                            let what = minted_name(name, ctx.fresh_serial());
-                            let stand_in = ctx.add_local(what, borrow.type_id, false, None);
-                            ctx.name_local(name.clone(), stand_in);
-                            borrows.0.push((stand_in, borrow.clone()));
-                        }
-                        borrow
-                    } else {
-                        bind_param_to_local(ctx, name, value, &mut prelude)
+        self.with_module_perspective(callee_module, |this| {
+            ctx.with_caller_bindings_hidden(|ctx| {
+                // Once any slot is bound, every argument is, so each still runs
+                // ahead of what a default reads, in the order the call spells them.
+                // A `&mut` place stays in the call for the callee's writes to reach
+                // it, and a default borrows it again unless a closure would hold it.
+                if named.contains(&true) {
+                    for ((arg, (name, _)), named) in args.iter_mut().zip(func_params).zip(&named) {
+                        let unbound =
+                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
+                        let value = std::mem::replace(&mut arg.expr, unbound);
+                        arg.expr = if name == RECEIVER {
+                            this.bind_receiver_ahead(ctx, value, &mut prelude)
+                        } else if is_mut_borrow(&value)
+                            && this.tysys.is_source_place(&value)
+                            && !captured.contains(name)
+                        {
+                            let borrow =
+                                this.bind_subscripts_ahead(ctx, value, "arg_index", &mut prelude);
+                            if *named {
+                                let what = minted_name(name, ctx.fresh_serial());
+                                let stand_in = ctx.add_local(what, borrow.type_id, false, None);
+                                ctx.name_local(name.clone(), stand_in);
+                                borrows.0.push((stand_in, borrow.clone()));
+                            }
+                            borrow
+                        } else {
+                            bind_param_to_local(ctx, name, value, &mut prelude)
+                        };
+                    }
+                }
+                for (i, named) in named.iter().enumerate().skip(args.len()) {
+                    let Some((name, Some(default_ast))) = func_params.get(i) else {
+                        break;
                     };
+                    // A trait method's default has no body for annotate to walk, so
+                    // without the parameter's type here it reifies untyped.
+                    let expected = param_types.get(i).copied();
+                    let mut resolved = this.reify_expr(default_ast, ctx, expected);
+                    if let Some(expected) = expected {
+                        this.settle_packs_in_default(&mut resolved, expected);
+                    }
+                    borrows.visit_expr(&mut resolved);
+                    if *named {
+                        resolved = bind_param_to_local(ctx, name, resolved, &mut prelude);
+                    }
+                    // A default is a value synthesized here, with no caller storage
+                    // behind it for the callee to write.
+                    args.push(CallArg::new(resolved, false));
                 }
-            }
-            for (i, named) in named.iter().enumerate().skip(args.len()) {
-                let Some((name, Some(default_ast))) = func_params.get(i) else {
-                    break;
-                };
-                // A trait method's default has no body for annotate to walk, so
-                // without the parameter's type here it reifies untyped.
-                let expected = param_types.get(i).copied();
-                let mut resolved = self.reify_expr(default_ast, ctx, expected);
-                if let Some(expected) = expected {
-                    self.settle_packs_in_default(&mut resolved, expected);
-                }
-                borrows.visit_expr(&mut resolved);
-                if *named {
-                    resolved = bind_param_to_local(ctx, name, resolved, &mut prelude);
-                }
-                // A default is a value synthesized here, with no caller storage
-                // behind it for the callee to write.
-                args.push(CallArg::new(resolved, false));
-            }
+            });
         });
-
-        if let Some((src, items, sem)) = saved {
-            self.current_module_source = src;
-            self.current_module_items = items;
-            self.sem = sem;
-        }
         if captured_call_site {
             self.call_site_location = None;
         }
@@ -8877,7 +8830,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// constant's body, say) needs this because the `ann_*` accessors key on
     /// `current_module_source`. A no-op when `module` is the current one or is
     /// not loaded.
-    fn with_const_module_perspective<R>(
+    fn with_module_perspective<R>(
         &mut self,
         module: &ModuleSource,
         body: impl FnOnce(&mut Self) -> R,
@@ -8893,20 +8846,71 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 _ => None,
             }
         };
-        let saved = swap.map(|(items, sem)| {
-            (
-                std::mem::replace(&mut self.current_module_source, module.clone()),
-                std::mem::replace(&mut self.current_module_items, items),
-                std::mem::replace(&mut self.sem, sem),
-            )
-        });
-        let result = body(self);
-        if let Some((src, items, sem)) = saved {
-            self.current_module_source = src;
-            self.current_module_items = items;
-            self.sem = sem;
+        match swap {
+            Some((items, sem)) => self.with_perspective(module.clone(), items, sem, body),
+            None => body(self),
         }
-        result
+    }
+
+    /// Run `body` with the field `field` selects set to `value`, restoring the
+    /// enclosing value on return (panic-safe).
+    fn with_replaced<T, R>(
+        &mut self,
+        field: fn(&mut Self) -> &mut T,
+        value: T,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        struct Restore<'r, 'a, H: CompilerHost, T> {
+            reify: &'r mut Reify<'a, H>,
+            field: for<'s> fn(&'s mut Reify<'a, H>) -> &'s mut T,
+            saved: Option<T>,
+        }
+        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
+            fn drop(&mut self) {
+                *(self.field)(self.reify) = self.saved.take().expect("saved field present");
+            }
+        }
+        let saved = std::mem::replace(field(self), value);
+        let guard = Restore {
+            reify: self,
+            field,
+            saved: Some(saved),
+        };
+        body(guard.reify)
+    }
+
+    /// Run `body` standing in another module: its source, its items and its
+    /// facts, all three restored on return.
+    fn with_perspective<R>(
+        &mut self,
+        module: ModuleSource,
+        items: &'a [Item],
+        sem: &'a ModuleSemantics,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        type Perspective<'a> = (ModuleSource, &'a [Item], &'a ModuleSemantics);
+        struct Restore<'r, 'a, H: CompilerHost> {
+            reify: &'r mut Reify<'a, H>,
+            saved: Option<Perspective<'a>>,
+        }
+        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
+            fn drop(&mut self) {
+                let (module, items, sem) = self.saved.take().expect("saved perspective present");
+                self.reify.current_module_source = module;
+                self.reify.current_module_items = items;
+                self.reify.sem = sem;
+            }
+        }
+        let saved = (
+            std::mem::replace(&mut self.current_module_source, module),
+            std::mem::replace(&mut self.current_module_items, items),
+            std::mem::replace(&mut self.sem, sem),
+        );
+        let guard = Restore {
+            reify: self,
+            saved: Some(saved),
+        };
+        body(guard.reify)
     }
 
     /// Reify a bare identifier reference. Local lookup goes through
@@ -9040,7 +9044,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // body under the defining module's perspective so every
             // annotation lookup hits the right module's records.
             let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                self.with_const_module_perspective(&const_module, |this| {
+                self.with_module_perspective(&const_module, |this| {
                     this.reify_expr(&const_expr, ctx, Some(type_id))
                 })
             });
@@ -9820,7 +9824,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Reify the body under its defining module so colliding cross-module
         // `AstId`s can't mis-type the inlined constant (see `reify_ident`).
-        let resolved = self.with_const_module_perspective(&const_module, |this| {
+        let resolved = self.with_module_perspective(&const_module, |this| {
             this.reify_expr(&const_expr, ctx, Some(type_id))
         });
         match &resolved.kind {
@@ -9877,7 +9881,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
         {
-            let resolved = self.with_const_module_perspective(&const_module, |this| {
+            let resolved = self.with_module_perspective(&const_module, |this| {
                 this.reify_expr(&const_expr, ctx, Some(type_id))
             });
             if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {

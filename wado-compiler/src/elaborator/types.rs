@@ -1,7 +1,7 @@
 //! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -2817,7 +2817,53 @@ pub(super) struct FunctionContext {
     pub(super) variadic_enumerate_indices: Vec<u32>,
 }
 
+/// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
+/// the context, and puts the enclosing value back on drop.
+pub(super) struct FieldFrame<'c, T: Default> {
+    ctx: &'c mut FunctionContext,
+    field: fn(&mut FunctionContext) -> &mut T,
+    enclosing: T,
+}
+
+impl<T: Default> Deref for FieldFrame<'_, T> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T: Default> DerefMut for FieldFrame<'_, T> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T: Default> Drop for FieldFrame<'_, T> {
+    fn drop(&mut self) {
+        *(self.field)(self.ctx) = std::mem::take(&mut self.enclosing);
+    }
+}
+
 impl FunctionContext {
+    pub(super) fn replacing<T: Default>(
+        &mut self,
+        field: fn(&mut FunctionContext) -> &mut T,
+        value: T,
+    ) -> FieldFrame<'_, T> {
+        let enclosing = std::mem::replace(field(self), value);
+        FieldFrame {
+            ctx: self,
+            field,
+            enclosing,
+        }
+    }
+
+    /// A loop's body, where a naked `continue` targets this loop and not an
+    /// enclosing C-style `for`.
+    pub(super) fn enter_loop(&mut self) -> FieldFrame<'_, Vec<String>> {
+        self.replacing(|ctx| &mut ctx.for_continue_labels, Vec::new())
+    }
+
     /// Enter a labeled block in either position, so a `break LABEL` inside
     /// resolves to the innermost block of that name.
     pub(super) fn push_labeled_block_frame(
@@ -3077,16 +3123,36 @@ impl FunctionContext {
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let scopes = std::mem::replace(&mut self.scopes, vec![IndexMap::default()]);
-        let outer_locals = std::mem::take(&mut self.outer_locals);
-        let deref_overrides = std::mem::take(&mut self.deref_overrides);
-        let outer_box_types = std::mem::take(&mut self.outer_box_types);
-        let result = body(self);
-        self.scopes = scopes;
-        self.outer_locals = outer_locals;
-        self.deref_overrides = deref_overrides;
-        self.outer_box_types = outer_box_types;
-        result
+        struct CallerBindings {
+            scopes: Vec<IndexMap<String, LocalVar>>,
+            outer_locals: IndexMap<String, OuterBinding>,
+            deref_overrides: IndexMap<String, (String, TypeId)>,
+            outer_box_types: IndexMap<String, TypeId>,
+        }
+        struct Restore<'c> {
+            ctx: &'c mut FunctionContext,
+            saved: Option<CallerBindings>,
+        }
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                let saved = self.saved.take().expect("saved caller bindings present");
+                self.ctx.scopes = saved.scopes;
+                self.ctx.outer_locals = saved.outer_locals;
+                self.ctx.deref_overrides = saved.deref_overrides;
+                self.ctx.outer_box_types = saved.outer_box_types;
+            }
+        }
+        let saved = CallerBindings {
+            scopes: std::mem::replace(&mut self.scopes, vec![IndexMap::default()]),
+            outer_locals: std::mem::take(&mut self.outer_locals),
+            deref_overrides: std::mem::take(&mut self.deref_overrides),
+            outer_box_types: std::mem::take(&mut self.outer_box_types),
+        };
+        let guard = Restore {
+            ctx: self,
+            saved: Some(saved),
+        };
+        body(guard.ctx)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.

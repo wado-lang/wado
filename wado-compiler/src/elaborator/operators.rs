@@ -4,6 +4,7 @@ use crate::ast::{self, AstId, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
+use crate::hashmap::IndexMap;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::primitive::PrimitiveType;
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
@@ -1586,7 +1587,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // same `&mut` subscript the write side does.
         let marked =
             Self::mark_mut_place_subscripts(&projected_subscripts_of_place(&compound.target), ctx);
-        let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
+        let mut frame = ctx.replacing(|ctx| &mut ctx.compound_hoist_types, IndexMap::default());
+        let ctx = &mut *frame;
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
         for (idx, hoist) in hoists.iter().enumerate() {
@@ -1623,7 +1625,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             ctx,
         );
-        ctx.compound_hoist_types = saved_hoist_types;
         Self::unmark_mut_place_subscripts(&marked, ctx);
         ctx.exit_scope();
         result

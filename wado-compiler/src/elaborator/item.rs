@@ -12,10 +12,7 @@ use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, MethodName, global_name};
-use crate::tir::{
-    FunctionKind, TirEffect, TirEffectOp, TirFunction, TirParam, TirResource, TirStruct, TirTest,
-    TirVariantDecl, TypeId, TypeTable, method_param_offset,
-};
+use crate::tir::{TirEffectOp, TirParam, TypeId, TypeTable, method_param_offset};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -24,7 +21,7 @@ use super::sig::{DeclSig, MethodSig};
 use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
-use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
+use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
@@ -33,10 +30,10 @@ use crate::elaborator::sem::types::MethodNames;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
+use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
 use crate::resolve::head_site;
-use crate::tir::{ResolvedType, StructDef, TirTypeParam};
-use crate::{hashmap, tir};
+use crate::tir::{ResolvedType, TirTypeParam};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -60,54 +57,6 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
         );
     }
     items.into_iter().next()
-}
-
-/// Body-walk placeholder for a function / method / test. The
-/// body walk records the signature facts (`fn_param_types`,
-/// `fn_return_types`, `decl_type_params`, `function_effects`,
-/// `method_names`, …) and resolves the body for its side-effect fact
-/// recording, but no longer assembles the function's TIR — reify is the
-/// sole producer. No caller reads the returned `TirFunction`, so a minimal
-/// shell with the right name + span satisfies the signature.
-fn placeholder_function(name: String, span: Span) -> TirFunction {
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        monomorph_info: None,
-        method_info: None,
-        params: vec![],
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: vec![],
-        retains: vec![],
-        immediates: vec![],
-        trap: None,
-        linear_memory: None,
-        body: None,
-        span,
-        local_count: 0,
-        locals: vec![],
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        inline_hint: tir::InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        declared_return_convention: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
 }
 
 /// Push a [`RegisterError`] into the diagnostic stream. Duplicate
@@ -1456,7 +1405,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_id
     }
 
-    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
+    pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
@@ -1486,25 +1435,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .struct_field_types
             .insert(struct_decl.id, struct_field_types);
-
-        TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a `struct` declaration is declared"),
-            ),
-            type_args: Vec::new(),
-            name: struct_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: struct_decl.visibility,
-            type_params: vec![],
-            monomorph_info: None,
-            fields: vec![],
-            span: struct_decl.span,
-            wire_name_policy: None,
-        }
     }
 
     /// Operation signatures the decl pass recorded for the declaration at
@@ -2046,39 +1976,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(super) fn resolve_effect_decl(&mut self, decl: &ast::InterfaceDecl) -> TirEffect {
-        let operations = self.declared_effect_ops(decl.id);
-        self.sem
-            .types
-            .effect_ops
-            .insert(decl.id, operations.clone());
-        TirEffect {
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            span: decl.span,
-        }
-    }
-
-    pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
-        let operations = self.declared_effect_ops(decl.id);
-        self.sem
-            .types
-            .effect_ops
-            .insert(decl.id, operations.clone());
-        TirResource {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(decl.id)
-                .expect("a `resource` declaration is declared"),
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            is_generic: !decl.type_params.is_empty(),
-            span: decl.span,
-        }
+    /// Record the operation signatures of the `interface` or `resource`
+    /// declared at `decl_id`.
+    pub(super) fn record_effect_ops(&mut self, decl_id: ast::AstId) {
+        let operations = self.declared_effect_ops(decl_id);
+        self.sem.types.effect_ops.insert(decl_id, operations);
     }
 
     /// Resolve a global variable declaration for its fact-recording side
@@ -2103,10 +2005,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Resolve a variant declaration
-    pub(super) fn resolve_variant_decl(
-        &mut self,
-        variant_decl: &ast::VariantDecl,
-    ) -> TirVariantDecl {
+    pub(super) fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
@@ -2129,22 +2028,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             variant_decl.span,
             self.logger,
         );
-
-        TirVariantDecl {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(variant_decl.id)
-                .expect("a `variant` declaration is declared"),
-            name: variant_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: variant_decl.visibility,
-            type_params: vec![],
-            cases: vec![],
-            span: variant_decl.span,
-            wire_name_policy: None,
-        }
     }
 
     /// Populate `func`'s generic-inference caches without resolving its body, so
@@ -2265,8 +2148,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         declared_return_type
     }
 
-    /// Resolve a function
-    pub(super) fn resolve_function(&mut self, func: &Function) -> Option<TirFunction> {
+    /// Resolve a function for its facts.
+    pub(super) fn resolve_function(&mut self, func: &Function) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -2410,50 +2293,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.fn_param_types.insert(sig_key, param_types);
         self.sem.types.fn_return_types.insert(sig_key, return_type);
         self.sem.types.decl_type_params.insert(sig_key, type_params);
-
-        Some(placeholder_function(func.name.clone(), func.span))
     }
 
-    /// Resolve a test declaration to a `TirFunction` and `TirTest`
+    /// Resolve a test declaration's body for its facts, under the name reify
+    /// gives its function.
     pub(super) fn resolve_test_decl(
         &mut self,
         test_decl: &ast::TestDecl,
         test_index: usize,
         module_is_todo: bool,
-    ) -> Option<(TirFunction, TirTest)> {
+    ) {
         let meta = test_decl.metadata(module_is_todo);
-        let ast::TestMetadata {
-            expect_trap,
-            is_todo,
-            timeout_ms,
-            is_synopsis,
-        } = meta;
         let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
-        let return_type = TypeTable::UNIT;
-        let mut ctx = FunctionContext::new(return_type, function_name.clone());
+        // Named as reify names it, so `#function` literals match.
+        let mut ctx = FunctionContext::new(TypeTable::UNIT, function_name);
 
         self.sem.decls.clear_fn_local_items();
 
-        // Recorded under `function_name` so `#function` literals match
-        // what reify emits.
         self.resolve_block(&test_decl.body, &mut ctx, None);
-
-        let tir_test = TirTest {
-            name: test_decl.name.clone(),
-            function_name: function_name.clone(),
-            line: test_decl.span.line,
-            span: test_decl.span,
-            expect_trap,
-            is_todo,
-            timeout_ms,
-            is_synopsis,
-        };
-
-        Some((
-            placeholder_function(function_name, test_decl.span),
-            tir_test,
-        ))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully
@@ -2472,7 +2330,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
         impl_def: Option<DefId>,
-    ) -> Option<TirFunction> {
+    ) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.sem.decls.clear_fn_local_items();
@@ -2681,14 +2539,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .generic_method_resolved_param_types
                 .insert(mangled_name, method_resolved_param_types);
         }
-
-        // Reify (`reify_method`) emits the method's `TirFunction`
-        // from the recorded facts (`method_impl_type_params`,
-        // `method_names`, `fn_param_types`, `fn_return_types`,
-        // `decl_type_params`, `function_effects`, the impl facts, …) + the
-        // AST. No caller reads this return value, so a minimal shell
-        // satisfies the signature.
-        Some(placeholder_function(func.name.clone(), func.span))
     }
 }
 
