@@ -611,6 +611,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
     }
 
+    /// The variant and case a constructor callee names: `Variant::Case`, a
+    /// bare case the walk answered for, or `ns::Variant::Case`.
+    fn constructed_case(
+        &self,
+        ident: &ast::IdentExpr,
+        callee_kind: &CalleeIdentKind<'_>,
+        receiver_site: Option<ast::AstId>,
+        effective_name: &str,
+    ) -> Option<(VariantInfo, VariantCaseData)> {
+        let (prefix, suffix) = effective_name.split_once("::")?;
+        let (variant, case) = match self.variant_of_callee(callee_kind, receiver_site, prefix) {
+            Some(variant) => (variant, suffix),
+            None => {
+                let def = self.tysys.qualified_owner_decl(ident)?;
+                (self.tysys.data.variant_cases.get(&def)?, suffix.rsplit_once("::")?.1)
+            }
+        };
+        let (_, case_data) = variant.case_named(case)?;
+        Some((variant.clone(), case_data.clone()))
+    }
+
     /// The variant a `Variant::Case(...)` callee constructs: the one the walk
     /// answered for a bare case, else the one `prefix` names at its site.
     fn variant_of_callee(
@@ -993,15 +1014,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty()
-            && let Some(pos) = effective_name.find("::")
-        {
-            let prefix = &effective_name[..pos];
-            let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
-                .cloned()
-                && let Some((_, case_data)) = variant_info.case_named(suffix)
+        if param_types.is_empty() {
+            if let Some((variant_info, case_data)) =
+                self.constructed_case(ident, &callee_kind, receiver_site, effective_name)
                 && case_data.has_payload(&self.tysys.type_table.borrow())
             {
                 let mut payload_type = case_data.payload;

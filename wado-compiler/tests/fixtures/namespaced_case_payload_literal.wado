@@ -1,0 +1,16 @@
+// A literal takes a case's payload type whether the case is written
+// `Size::Bytes` or `dep::Size::Bytes`.
+
+use dep from "./sub/namespaced_case_payload_literal_dep.wado";
+
+fn bytes(size: dep::Size) -> i64 {
+    return match size {
+        Bytes(n) => n,
+        Named(_) => -1,
+    };
+}
+
+test "a namespaced case coerces its literal payload" {
+    assert bytes(dep::Size::Bytes(5_000_000_000)) == 5_000_000_000;
+    assert bytes(dep::Size::Bytes(7)) == 7;
+}
