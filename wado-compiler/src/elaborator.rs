@@ -1089,9 +1089,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_params: &[ast::GenericParam],
         owner: Option<DefId>,
     ) -> FqTypeName {
-        if let Some(kind) = RefKind::from_ast(impl_ty) {
+        if RefKind::from_ast(impl_ty).is_some() {
             let target = trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
-            if matches!(Receiver::of_ref_impl(kind, &target), Receiver::RefTo(..)) {
+            if Receiver::ref_to(&target).is_some() {
                 return if type_params.is_empty() {
                     target
                 } else {

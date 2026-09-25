@@ -2,7 +2,7 @@
 
 use crate::elaborator::trait_env::ReceiverCandidate;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -406,16 +406,10 @@ impl Monomorphizer {
             .monomorph_info
             .as_ref()
             .is_some_and(|m| m.is_blanket)
-            && method_func.method_info.as_ref().is_some_and(|i| {
-                let Receiver::Ref(ref_kind) = i.receiver() else {
-                    return false;
-                };
-                i.trait_decl().is_some_and(|trait_| {
-                    self.functions
-                        .trait_env
-                        .has_universal_ref_blanket(trait_, *ref_kind == RefKind::Mut)
-                })
-            });
+            && method_func
+                .method_info
+                .as_ref()
+                .is_some_and(|i| self.names_universal_ref_blanket(i));
         if !type_args.is_empty()
             && !is_ref_blanket_call
             && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)

@@ -298,6 +298,18 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
+    /// Whether `info` names its trait's universal `&T` / `&mut T` blanket.
+    pub(super) fn names_universal_ref_blanket(&self, info: &LocalMethodName) -> bool {
+        let Receiver::Ref(kind) = info.receiver() else {
+            return false;
+        };
+        info.trait_decl().is_some_and(|trait_| {
+            self.functions
+                .trait_env
+                .has_universal_ref_blanket(trait_, *kind == RefKind::Mut)
+        })
+    }
+
     /// Queue a function instantiation unless its body is already queued. Two
     /// dispatch sites can derive distinct-but-equivalent `TypeId`s for one
     /// argument (a `GenericInstance` and the `Struct` it became), so the body
@@ -318,19 +330,13 @@ impl Monomorphizer {
         // under the blanket's home module: a request under another module
         // is dropped, and its call site reaches the body through
         // `lookup_instantiation_with_trait_fallback`. Only a *universal* `&T`
-        // blanket qualifies for the ref case, or a newtype-peeled `&^Trait`
+        // blanket qualifies for the ref case, or a newtype-peeled `&List^Trait`
         // shape impl would dedup wrongly.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && key.method_info.as_ref().is_some_and(|i| {
-                let Receiver::Ref(ref_kind) = i.receiver() else {
-                    return false;
-                };
-                i.trait_decl().is_some_and(|trait_| {
-                    self.functions
-                        .trait_env
-                        .has_universal_ref_blanket(trait_, *ref_kind == RefKind::Mut)
-                })
-            });
+            && key
+                .method_info
+                .as_ref()
+                .is_some_and(|i| self.names_universal_ref_blanket(i));
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
         if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
             return false;

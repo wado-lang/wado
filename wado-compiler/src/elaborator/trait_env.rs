@@ -362,11 +362,7 @@ impl ImplHeader {
     /// The receiver a `&X` / `&mut X` block registers under, naming `X`'s head;
     /// `None` for a `&T` blanket and any other target.
     pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
-        let ImplTargetKey::Ref(kind) = self.target else {
-            return None;
-        };
-        let receiver = name::Receiver::of_ref_impl(kind, &self.target_id);
-        matches!(receiver, name::Receiver::RefTo(..)).then_some(receiver)
+        name::Receiver::ref_to(&self.target_id)
     }
 
     /// What a `&X` / `&mut X` target refers to, keyed as a value target is;

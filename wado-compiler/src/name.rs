@@ -889,12 +889,18 @@ impl Receiver {
     /// under: the referent's head, or the bare kind where a parameter stands.
     #[must_use]
     pub fn of_ref_impl(kind: RefKind, target: &FqTypeName) -> Self {
-        match target.split_reference() {
-            Some((kind, referent)) if referent.binder_name().is_none() => {
-                Receiver::RefTo(kind, referent.head_only())
-            }
-            _ => Receiver::Ref(kind),
-        }
+        Self::ref_to(target).unwrap_or(Receiver::Ref(kind))
+    }
+
+    /// [`Receiver::RefTo`] the head `target` refers to; `None` unless `target`
+    /// is a reference to a named type.
+    #[must_use]
+    pub fn ref_to(target: &FqTypeName) -> Option<Self> {
+        let (kind, referent) = target.split_reference()?;
+        referent
+            .binder_name()
+            .is_none()
+            .then(|| Receiver::RefTo(kind, referent.head_only()))
     }
 
     /// The canonical head string — identity key and mangle base. Module
