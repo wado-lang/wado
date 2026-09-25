@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790306945963,
+  "lastUpdate": 1790311927485,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59545,6 +59545,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/46d6721ee60299cadabc86f68b5f6459f53079f7"
         },
         "date": 1790306945364,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1fb3cfbb5faa0d97e7f612d195a79d829acb9c46",
+          "message": "Merge pull request #2154 from wado-lang/claude/web-dom-tide-continuation-g9c29t\n\nfeat(web): run a `web:dom` program in the browser through generated glue, gated on Node against jsdom",
+          "timestamp": "2026-09-25T13:25:49+09:00",
+          "tree_id": "7c82faeb4352d465f328cd2d831401652c413cfe",
+          "url": "https://github.com/wado-lang/wado/commit/1fb3cfbb5faa0d97e7f612d195a79d829acb9c46"
+        },
+        "date": 1790311926713,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
