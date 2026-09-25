@@ -779,9 +779,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if func.body.is_some() && self.is_dead_item(func.id) {
                         continue;
                     }
-                    if let Some(tir_func) = self.reify_function(func) {
-                        tir_module.add_function(tir_func);
-                    }
+                    tir_module.add_function(self.reify_function(func));
                 }
                 Item::Struct(struct_decl) => {
                     tir_module.add_struct(self.reify_struct(struct_decl));
@@ -854,9 +852,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // branch calls it. Never dead-item-filtered: the only call
                     // to it is synthesized after liveness ran.
                     for method in default_impl_methods(effect_decl) {
-                        if let Some(tir_func) = self.reify_function(&method) {
-                            tir_module.add_function(tir_func);
-                        }
+                        tir_module.add_function(self.reify_function(&method));
                     }
                 }
                 Item::Resource(resource_decl) => {
@@ -1334,22 +1330,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// Reify a free function. Builds a fresh `FunctionContext`, walks
-    /// params + body, and assembles `TirFunction`. All inference
-    /// decisions are read from `sem.types`; reify only emits TIR.
-    ///
-    /// Parameters are added in declaration order to pin the walk-order
-    /// invariant.
-    fn reify_function(&mut self, func: &ast::Function) -> Option<TirFunction> {
-        // Single source of truth: read the return type
-        // `resolve_function` resolved, rather than re-reading the fragile
-        // name-keyed `function_return_types` map (shared with call sites and
-        // overwritable by later registrations).
+    /// Reify a free function.
+    fn reify_function(&mut self, func: &ast::Function) -> TirFunction {
+        self.reify_callable(func, func.name.clone(), false)
+    }
+
+    /// A function or method as its declaring walk resolved it, named for display
+    /// and not yet placed on an impl. Parameters are added in declaration order,
+    /// which pins the walk-order invariant.
+    fn reify_callable(
+        &mut self,
+        func: &ast::Function,
+        display_name: String,
+        in_handler_method: bool,
+    ) -> TirFunction {
         let return_type = self
             .ann_fn_return_type(func.id)
-            .expect("resolve_function records the return type for every function reify emits");
+            .expect("the declaring walk records the return type for every function reify emits");
 
-        let mut ctx = FunctionContext::new(return_type, func.name.clone());
+        let mut ctx = FunctionContext::new(return_type, display_name.clone());
+        ctx.in_handler_method = in_handler_method;
         if func.is_async {
             ctx.is_async = true;
             ctx.task_return_type = self.declared_task_return(func, return_type);
@@ -1366,34 +1366,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
 
-        // Single source of truth: read the resolved param types
-        // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
-        // bounds already realised), rather than re-resolving each here.
         let param_types = self
             .ann_fn_param_types(func.id)
-            .expect("resolve_function records param types for every function reify emits");
+            .expect("the declaring walk records param types for every function reify emits");
         let mut params = Vec::with_capacity(func.params.len());
         for (p_idx, param) in func.params.iter().enumerate() {
             let type_id = *param_types
                 .get(p_idx)
-                .expect("resolve_function records one param type per func.params entry");
-            // Do not reify the parameter's default here: defaults are expanded
-            // (and reified) at each call site by `reify_pad_args_with_defaults`.
-            // Reifying one into this function's own `ctx` would allocate a
-            // control-flow default's value local in the callee, surfacing as a
-            // parameter-shadowing `let` in the body at -O0 (returning the
-            // zero-initialised shadow).
-            let index = ctx.add_local_at(
-                param.name.clone(),
+                .expect("the declaring walk records one param type per func.params entry");
+            let name = if matches!(param.self_kind, ast::SelfKind::None) {
+                param.name.clone()
+            } else {
+                "self".to_string()
+            };
+            // A default is reified at each call site: one reified here would put
+            // its value local in this `ctx`, shadowing the parameter at -O0.
+            let local_index =
+                ctx.add_local_at(name.clone(), type_id, param.is_mut, Some(param.id), param.name_span);
+            params.push(TirParam {
+                name,
                 type_id,
-                param.is_mut,
-                Some(param.id),
-                param.name_span,
-            );
-            params.push(tir::TirParam {
-                name: param.name.clone(),
-                type_id,
-                local_index: index,
+                local_index,
                 is_mut: param.is_mut,
                 is_mut_ref: false,
                 span: param.span,
@@ -1407,13 +1400,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         self.current_effect_param_names = saved_effect_param_names;
 
-        // Single source of truth: read the TIR type params `resolve_function`
-        // projected (effect / `fn`-bound params filtered, dense indices,
-        // defaults resolved with the type-param scope alive), rather than
-        // re-projecting them here after the scope is torn down.
+        // Projected while the type-param scope was alive, so defaults are
+        // resolved; after it is torn down they cannot be.
         let type_params = self
             .ann_decl_type_params(func.id)
-            .expect("resolve_function records the type params for every function reify emits");
+            .expect("the declaring walk records the type params for every function reify emits");
         let declared_return_convention = self.resolved_return_convention(
             func,
             &params,
@@ -1429,9 +1420,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reject_bodyless_attrs_on_body(&func.attrs);
         }
 
-        Some(TirFunction {
+        TirFunction {
             module_source: ModuleSource::default(),
-            name: func.name.clone(),
+            name: display_name,
             def_id: self.def_of(func.id),
             visibility: func.visibility,
             is_export: func.is_export,
@@ -1477,7 +1468,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             declared_return_convention,
             kind: tir::FunctionKind::Regular,
             return_abi: tir::ReturnAbi::Single,
-        })
+        }
     }
 
     /// Reify the impl block's own declaration — its identity and rest
@@ -1544,10 +1535,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .methods
             .iter()
             .filter_map(|method| {
-                if self.is_dead_item(method.id) {
-                    return None;
-                }
-                self.reify_method(method, &facts, concrete_owner.as_ref())
+                (!self.is_dead_item(method.id))
+                    .then(|| self.reify_method(method, &facts, concrete_owner.as_ref()))
             })
             .collect()
     }
@@ -1630,41 +1619,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 std::mem::replace(&mut self.current_module_source, trait_module.clone());
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
-            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_ref());
+            let mut tir_func = self.reify_method(default_method, &facts, concrete_owner.as_ref());
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
             self.sem = saved_sem;
 
-            if let Some(mut tir_func) = tir_func_opt {
-                // `resolve_method` records this exact string under
-                // `method_names`, which `reify_method` already read back.
-                // Recomputing it covers the synthesis path, where the fact
-                // has no declaring walk to come from, and goes through the
-                // same `format_local` so the two spellings agree.
-                tir_func.name = MethodName::format_local(
-                    concrete_owner.as_ref().unwrap_or(&struct_name),
-                    Some(&trait_name_mangled),
-                    &default_method.name,
-                );
-                // Default methods from trait declarations are not marked
-                // pub in the AST, but they should be treated as pub since
-                // they are part of a trait implementation.
-                tir_func.visibility = Visibility::Public;
-                out.push(tir_func);
-            }
+            // `resolve_method` records this exact string under
+            // `method_names`, which `reify_method` already read back.
+            // Recomputing it covers the synthesis path, where the fact
+            // has no declaring walk to come from, and goes through the
+            // same `format_local` so the two spellings agree.
+            tir_func.name = MethodName::format_local(
+                concrete_owner.as_ref().unwrap_or(&struct_name),
+                Some(&trait_name_mangled),
+                &default_method.name,
+            );
+            // A trait's default method is part of the implementation, so it is
+            // public whatever its declaration says.
+            tir_func.visibility = Visibility::Public;
+            out.push(tir_func);
         }
 
         out
     }
 
-    /// Reify a single method inside an `impl` block. The method's
-    /// body walk shares the structure with [`Self::reify_function`];
-    /// the difference is that the receiver (`&self` / `&mut self`)
-    /// is synthesised from the recorded [`super::sem::types::ImplFacts::self_type`]
-    /// (no re-resolution of the impl target), and the resulting
-    /// [`TirFunction`] carries the `method_info` /
-    /// `impl_type_params` reify reads from the same recorded facts.
+    /// Reify a single method inside an `impl` block: a [`Self::reify_callable`]
+    /// placed on the impl its recorded [`ImplFacts`] describe.
     fn reify_method(
         &mut self,
         func: &ast::Function,
@@ -1675,8 +1656,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
         concrete_owner: Option<&FqTypeName>,
-    ) -> Option<TirFunction> {
-        use crate::ast::SelfKind;
+    ) -> TirFunction {
         use crate::name::LocalMethodName;
 
         // Single source of truth: the impl-type-param scheme is computed once
@@ -1692,26 +1672,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Method-level effect params (`<effect E>`) drive `Param` effect
-        // resolution in function-type params; publish them for the method
-        // body walk.
-        let effect_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| p.name.clone())
-            .collect();
-        let saved_effect_param_names =
-            std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
-        // Single source of truth: the impl block's mangled struct name as
-        // the elaborator computed it via `get_type_name(&impl_block.ty)`
-        // (recorded on `ImplFacts::struct_name`). Reconstructing it from
-        // `facts.self_type` would need the `&` / `&mut` / tuple
-        // special-cases and the `&T`-blanket "bare `&`" carve-out that
-        // `get_type_name` already encodes — exactly the
-        // parity-bug class WEP 2026-05-26 §"Reify — mechanical" calls out.
-        let _base_struct_name = facts.struct_name.clone();
         // Mangled / display names — read straight off the per-method facts
         // `resolve_method` already publishes; reify no longer runs
         // `format_local` itself.
@@ -1749,130 +1709,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             impl_type_params = Vec::new();
         }
 
-        // Single source of truth: read the return type `resolve_method`
-        // resolved, rather than re-resolving the return annotation.
-        let return_type = self
-            .ann_fn_return_type(func.id)
-            .expect("resolve_method records the return type for every impl method reify emits");
-
-        let mut ctx = FunctionContext::new(return_type, display_name);
-        ctx.in_handler_method = facts.is_handler_method;
-        if func.is_async {
-            ctx.is_async = true;
-            ctx.task_return_type = self.declared_task_return(func, return_type);
-        }
-
-        // Single source of truth: read the resolved param types
-        // `resolve_method` recorded (in `func.params` order, receiver
-        // included), rather than re-resolving each here.
-        let param_types = self
-            .ann_fn_param_types(func.id)
-            .expect("resolve_method records param types for every impl method reify emits");
-        let mut params = Vec::with_capacity(func.params.len());
-        for (p_idx, p) in func.params.iter().enumerate() {
-            let type_id = *param_types
-                .get(p_idx)
-                .expect("resolve_method records one param type per func.params entry");
-            let name = if matches!(p.self_kind, SelfKind::None) {
-                p.name.clone()
-            } else {
-                "self".to_string()
-            };
-            // See the free-function param loop: the param default is expanded
-            // at call sites and monomorphize drops this field, so reifying it
-            // into the method's `ctx` only pollutes its locals (a control-flow
-            // default's value local shadows the parameter at -O0). Leave it
-            // unbuilt.
-            let local_index =
-                ctx.add_local_at(name.clone(), type_id, p.is_mut, Some(p.id), p.name_span);
-            params.push(TirParam {
-                name,
-                type_id,
-                local_index,
-                is_mut: p.is_mut,
-                is_mut_ref: false,
-                span: p.span,
-            });
-        }
-
-        let body = func
-            .body
-            .as_ref()
-            .map(|b| self.reify_block(b, &mut ctx, None));
-
-        self.current_effect_param_names = saved_effect_param_names;
-
-        // Single source of truth: read the method-level type params
-        // `resolve_method` projected (effect / `fn`-bound params filtered,
-        // dense indices, defaults resolved with the type-param scope alive),
-        // rather than re-projecting them here after the scope is torn down.
-        let type_params = self.ann_decl_type_params(func.id).expect(
-            "resolve_method records the method type params for every impl method reify emits",
-        );
-        let declared_return_convention = self.resolved_return_convention(
-            func,
-            &params,
-            return_type,
-            body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params),
-        );
-        let retains = self.reify_retain_attrs(&func.attrs, &params);
-        let immediates = self.reify_immediate_attrs(&func.attrs, &params);
-        let trap = self.reify_trap_attrs(&func.attrs, &params);
-        let linear_memory = self.reify_linear_memory_attr(&func.attrs);
-        if body.is_some() {
-            self.reject_bodyless_attrs_on_body(&func.attrs);
-        }
-
-        Some(TirFunction {
-            module_source: ModuleSource::default(),
-            name: mangled_name,
-            def_id: self.def_of(func.id),
-            visibility: func.visibility,
-            is_export: false,
-            is_async: func.is_async,
-            type_params,
-            impl_type_params,
-            monomorph_info: None,
-            method_info: Some(method_info),
-            params,
-            return_type,
-            task_return_type: self.declared_task_return(func, return_type),
-            effects: self
-                .sem
-                .types
-                .function_effects
-                .get(&func.id)
-                .cloned()
-                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
-            retains,
-            immediates,
-            trap,
-            linear_memory,
-            body,
-            span: func.span,
-            local_count: ctx.local_count(),
-            locals: ctx.locals.clone(),
-            address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: hashmap::IndexSet::default(),
-            is_cm_binding: false,
-            is_dispatch_wrapper: false,
-            is_cm_export: false,
-            is_ambient: extract_is_ambient_attr(&func.attrs),
-            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
-            inline_hint: extract_inline_hint_attr(&func.attrs),
-            compiler_item: extract_compiler_item(
-                &func.attrs,
-                func.span,
-                &self.current_module_source,
-                self.logger,
-            ),
-            export_name: extract_export_name_attr(&func.attrs),
-            allocator_tag: extract_allocator_tag_attr(&func.attrs),
-            declared_return_convention,
-            kind: tir::FunctionKind::Regular,
-            return_abi: tir::ReturnAbi::Single,
-        })
+        let mut tir_func = self.reify_callable(func, display_name, facts.is_handler_method);
+        tir_func.name = mangled_name;
+        tir_func.is_export = false;
+        tir_func.impl_type_params = impl_type_params;
+        tir_func.method_info = Some(method_info);
+        tir_func
     }
 
     /// Reify a `test "…" { … }` block. Returns the synthesised

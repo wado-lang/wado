@@ -28,7 +28,7 @@ use crate::name::{
     namespace_member_alias,
 };
 use crate::symbol_notation::render;
-use crate::tir::{StructDef, TirTypeParam};
+use crate::tir::StructDef;
 use crate::{IndexMap, hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
@@ -325,23 +325,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             field_defaults.push(field.default.clone());
         }
 
-        // Resolved here, with the struct's own type params in scope, so a
-        // default naming a sibling param (`<A, B = A>`) means what it says —
-        // reify has only the enclosing function's params.
-        let type_params: Vec<TirTypeParam> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
-                projected_from: None,
-            })
-            .collect();
+        // Reify has only the enclosing function's params in scope.
+        let type_params = scope.data_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem

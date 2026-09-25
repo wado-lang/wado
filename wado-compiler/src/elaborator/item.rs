@@ -615,6 +615,37 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 
+    /// A data declaration's parameters for the TIR.
+    pub(super) fn data_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
+        self.project_type_params(params.iter())
+    }
+
+    /// A function's parameters for the TIR. An effect or `fn`-bound one takes
+    /// no slot, so the rest are numbered densely, as `register_generic_params` does.
+    fn fn_type_params(&mut self, params: &[ast::GenericParam]) -> Vec<TirTypeParam> {
+        self.project_type_params(params.iter().filter(|p| p.is_real_type_param()))
+    }
+
+    /// Resolved in this frame, where a default naming a sibling (`<A, B = A>`)
+    /// reaches it; once the frame is torn down it cannot.
+    fn project_type_params<'p>(
+        &mut self,
+        params: impl Iterator<Item = &'p ast::GenericParam>,
+    ) -> Vec<TirTypeParam> {
+        params
+            .enumerate()
+            .map(|(i, p)| TirTypeParam {
+                name: p.name.clone(),
+                is_effect: p.is_effect,
+                is_pack: p.is_pack,
+                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
+                default: p.default.as_ref().map(|ty| self.resolve_type(ty)),
+                index: i as u32,
+                projected_from: None,
+            })
+            .collect()
+    }
+
     fn saved_param_bounds(&self, name: &str) -> Vec<String> {
         self.saved()
             .type_param_bounds
@@ -1157,6 +1188,43 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.typecheck(resolved, expected, default_ast.span());
     }
 
+    /// Bind a parameter in its function's body frame. A default is walked for
+    /// the facts it records only; reify re-emits it at each call site.
+    fn bind_fn_param(
+        &mut self,
+        param: &ast::Param,
+        type_id: TypeId,
+        type_params: &[ast::GenericParam],
+        ctx: &mut FunctionContext,
+    ) {
+        if let Some(default_ast) = &param.default {
+            self.check_param_default(default_ast, type_id, type_params, ctx);
+        }
+        ctx.add_local_at(
+            param.name.clone(),
+            type_id,
+            param.is_mut,
+            Some(param.id),
+            param.span,
+        );
+        self.record_local_symbol(
+            param.id,
+            &param.name,
+            param.name_span,
+            param.is_mut,
+            type_id,
+        );
+    }
+
+    /// Walk a function's body, with its parameters bound, and check how it ends.
+    fn walk_fn_body(&mut self, func: &Function, return_type: TypeId, ctx: &mut FunctionContext) {
+        if let Some(b) = func.body.as_ref() {
+            self.resolve_block(b, ctx, None);
+        }
+        self.validate_missing_return_ast(return_type, func);
+        self.validate_loop_jumps_ast(func.body.as_ref());
+    }
+
     /// Resolve one method parameter's type. A receiver comes from the impl
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
@@ -1501,21 +1569,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             struct_field_types.push(scope.resolve_struct_field(field, &mut field_ctx));
         }
 
-        let type_params: Vec<TirTypeParam> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
-                projected_from: None,
-            })
-            .collect();
-
+        let type_params = scope.data_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem
@@ -2156,21 +2210,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
 
-        let type_params: Vec<TirTypeParam> = variant_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
-                projected_from: None,
-            })
-            .collect();
-
+        let type_params = scope.data_type_params(&variant_decl.type_params);
         drop(scope);
 
         self.sem
@@ -2388,7 +2428,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // takes a closure: the ABI represents neither.
         let crosses_cm_boundary = func.is_export || func.is_cm_import();
 
-        let mut params = Vec::new();
+        let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
             // Closures cannot cross the Component Model boundary.
@@ -2409,42 +2449,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: param.span,
                 });
             }
-            // Walked for the recorded expression types only; reify
-            // re-emits the default from the AST.
-            if let Some(default_ast) = &param.default {
-                if func.is_export {
-                    let _ = scope.emit(TypeError::DefaultInExportFn {
-                        function: func.name.clone(),
-                        param: param.name.clone(),
-                        span: default_ast.span(),
-                    });
-                }
-                scope.check_param_default(default_ast, type_id, &func.type_params, &mut ctx);
+            if func.is_export
+                && let Some(default_ast) = &param.default
+            {
+                let _ = scope.emit(TypeError::DefaultInExportFn {
+                    function: func.name.clone(),
+                    param: param.name.clone(),
+                    span: default_ast.span(),
+                });
             }
-            let index = ctx.add_local_at(
-                param.name.clone(),
-                type_id,
-                param.is_mut,
-                Some(param.id),
-                param.span,
-            );
-            scope.record_local_symbol(
-                param.id,
-                &param.name,
-                param.name_span,
-                param.is_mut,
-                type_id,
-            );
-            // `params` survives only to feed the recorded `fn_param_types`;
-            // the TIR `default_expr` is not built.
-            params.push(TirParam {
-                name: param.name.clone(),
-                type_id,
-                local_index: index,
-                is_mut: param.is_mut,
-                is_mut_ref: false,
-                span: param.span,
-            });
+            scope.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
+            param_types.push(type_id);
         }
 
         // Closures cannot cross the CM boundary in return position either.
@@ -2463,42 +2478,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
         }
 
-        if let Some(b) = func.body.as_ref() {
-            scope.resolve_block(b, &mut ctx, None);
-        }
+        scope.walk_fn_body(func, return_type, &mut ctx);
 
-        scope.validate_missing_return_ast(return_type, func);
-        scope.validate_loop_jumps_ast(func.body.as_ref());
-
-        // Convert AST type params to TIR type params (while type params
-        // still in scope). `<F: fn(...)>` / `<F: fn mut(...)>` bounds are
-        // realised eagerly by `register_generic_params` and do not consume
-        // a `TypeParam` index slot — drop them from the TIR list so the
-        // monomorphiser doesn't try to specialise on the closure's functor
-        // type. The remaining params keep their dense `register_generic_params`
-        // index, which matches both the `TypeParam(name, index)` entries in
-        // the type table and the positional order of the inference cache.
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if !p.is_real_type_param() {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                Some(TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                    index: idx,
-                    projected_from: None,
-                })
-            })
-            .collect();
+        let type_params = scope.fn_type_params(&func.type_params);
 
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
 
@@ -2523,10 +2505,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         drop(scope);
 
         let sig_key = func.id;
-        self.sem
-            .types
-            .fn_param_types
-            .insert(sig_key, params.iter().map(|p| p.type_id).collect());
+        self.sem.types.fn_param_types.insert(sig_key, param_types);
         self.sem.types.fn_return_types.insert(sig_key, return_type);
         self.sem.types.decl_type_params.insert(sig_key, type_params);
 
@@ -2764,75 +2743,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Resolve parameters (including &self). Defaults are resolved in the
         // method's lexical scope with earlier parameters already bound.
-        let mut params = Vec::new();
+        assert_eq!(param_types.len(), func.params.len());
         for (param, &type_id) in func.params.iter().zip(param_types.iter()) {
             if param.self_kind == ast::SelfKind::Value {
                 scope.check_self_by_value(type_id, param.span);
             }
-            // Walked for its side-effect fact recording; the resolved TIR is
-            // discarded (reify re-emits it from the AST).
-            if let Some(default_ast) = &param.default {
-                scope.check_param_default(default_ast, type_id, &func.type_params, &mut ctx);
-            }
-            let index = ctx.add_local_at(
-                param.name.clone(),
-                type_id,
-                param.is_mut,
-                Some(param.id),
-                param.span,
-            );
-            scope.record_local_symbol(
-                param.id,
-                &param.name,
-                param.name_span,
-                param.is_mut,
-                type_id,
-            );
-            // `params` survives only to feed the recorded `fn_param_types`;
-            // the TIR `default_expr` is not built.
-            params.push(TirParam {
-                name: param.name.clone(),
-                type_id,
-                local_index: index,
-                is_mut: param.is_mut,
-                is_mut_ref: false,
-                span: param.span,
-            });
+            scope.bind_fn_param(param, type_id, &func.type_params, &mut ctx);
         }
 
-        if let Some(b) = func.body.as_ref() {
-            scope.resolve_block(b, &mut ctx, None);
-        }
+        scope.walk_fn_body(func, return_type, &mut ctx);
 
-        scope.validate_missing_return_ast(return_type, func);
-        scope.validate_loop_jumps_ast(func.body.as_ref());
-
-        // Convert AST type params to TIR type params (while type params still
-        // in scope). Mirror the free-function path in `resolve_function`:
-        // `<F: fn(...)>` bounds are realised eagerly and dropped from the
-        // generic list; the remaining real type params use dense indices so
-        // the substitution map in `substitute_type_params` lines up.
-        let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<TirTypeParam> = func
-            .type_params
-            .iter()
-            .filter_map(|p| {
-                if !p.is_real_type_param() {
-                    return None;
-                }
-                let idx = non_effect_non_fn_idx;
-                non_effect_non_fn_idx += 1;
-                Some(TirTypeParam {
-                    name: p.name.clone(),
-                    is_effect: p.is_effect,
-                    is_pack: p.is_pack,
-                    bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                    default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                    index: idx,
-                    projected_from: None,
-                })
-            })
-            .collect();
+        let type_params = scope.fn_type_params(&func.type_params);
 
         // Store resolved param types for generic methods (before restoring type params scope)
         // so TypeParams have the correct ids for later inference at call sites.
@@ -2857,19 +2778,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(scope);
 
-        // Record the resolved param/return types for reify to read back
-        // (single source of truth = this path); `params` is in `func.params`
-        // order including the receiver.
+        // In `func.params` order, receiver included.
         let sig_key = func.id;
-        self.sem
-            .types
-            .fn_param_types
-            .insert(sig_key, params.iter().map(|p| p.type_id).collect());
+        self.sem.types.fn_param_types.insert(sig_key, param_types);
         self.sem.types.fn_return_types.insert(sig_key, return_type);
-        // Record the method-level TIR type params (with defaults resolved while
-        // the type-param scope was still alive, above) for reify to read back
-        // rather than re-projecting them after its scope is torn down.
-        self.sem.types.decl_type_params.insert(func.id, type_params);
+        self.sem.types.decl_type_params.insert(sig_key, type_params);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
