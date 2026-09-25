@@ -1142,7 +1142,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-<<<<<<< HEAD
     fn classify_from_marker(
         &mut self,
         trait_type: &ast::Type,
@@ -1150,20 +1149,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> Option<tir::SynthTrait> {
         let from = self.tysys.compiler_trait_def(CompilerItem::From);
         if marked.is_none_or(|trait_| from != Some(trait_)) {
-||||||| 014361be8
-    fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
-        use crate::compiler_item::CompilerItem;
-        let base = trait_type.head_base_name()?;
-        {
-            let tt = self.tysys.type_table.borrow();
-            if tt.compiler_items().trait_name_opt(CompilerItem::From) != Some(base) {
-                return None;
-            }
-=======
-    fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
-        let base = trait_type.head_base_name()?;
-        if !self.tysys.is_from_trait(&self.type_lookup(), base) {
->>>>>>> origin/main
             return None;
         }
         if let ast::Type::Generic(generic) = trait_type

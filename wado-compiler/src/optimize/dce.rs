@@ -466,62 +466,15 @@ fn resolve_imports(
         })
     };
 
-<<<<<<< HEAD
     // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
     // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.
-    for (interface, builtin) in [
-        ("Stdout", "call_indirect_stdout_write_via_stream"),
-        ("Stderr", "call_indirect_stderr_write_via_stream"),
+    for (interface, intrinsic) in [
+        ("Stdout", "call_indirect_stdout"),
+        ("Stderr", "call_indirect_stderr"),
     ] {
-        if project.provides_ambient_stdio_sink(interface)
-            && reachable.iter().any(|func_id| {
-                matches!(func_id, FunctionId::Free(f) if is_builtin_func(f)
-                    && f.name.strip_prefix("builtin::").unwrap_or(&f.name) == builtin)
-            })
-        {
+        if project.provides_ambient_stdio_sink(interface) && reaches_intrinsic(intrinsic) {
             used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
         }
-||||||| 014361be8
-    // Mark an ambient stdio function used when its `log_*` (panic /
-    // assert-diagnostic) builtin is reachable and the world provides that
-    // stream's sink — each stream gated on its own interface. In a sink-less
-    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
-    // which keys off the `func_map` this populates, so the two stay in
-    // agreement per stream and a purely-computational component stays
-    // import-free.
-    if project.provides_ambient_stdio_sink("Stdout")
-        && reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-                name.starts_with("call_indirect_stdout")
-            })
-        })
-    {
-        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
-    }
-    if project.provides_ambient_stdio_sink("Stderr")
-        && reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-                name.starts_with("call_indirect_stderr")
-            })
-        })
-    {
-        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
-=======
-    // Mark an ambient stdio function used when its `log_*` (panic /
-    // assert-diagnostic) builtin is reachable and the world provides that
-    // stream's sink — each stream gated on its own interface. In a sink-less
-    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
-    // which keys off the `func_map` this populates, so the two stay in
-    // agreement per stream and a purely-computational component stays
-    // import-free.
-    if project.provides_ambient_stdio_sink("Stdout") && reaches_intrinsic("call_indirect_stdout") {
-        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
-    }
-    if project.provides_ambient_stdio_sink("Stderr") && reaches_intrinsic("call_indirect_stderr") {
-        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
->>>>>>> origin/main
     }
 
     // Collect imports using registry lookup instead of hard-coded match

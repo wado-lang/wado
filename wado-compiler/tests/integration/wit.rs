@@ -7,68 +7,9 @@
 use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host, world_surface};
 use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
-<<<<<<< HEAD
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text, emit_wit_text_from};
-use wado_compiler::{CompilerOptions, OptLevel, compile_with_options, dump_with_host_and_world};
-
-/// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
-/// `source` under `world_fq`, the faithful world import set the emitter reads.
-fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> Vec<String> {
-    // Tolerant like the CLI's `resolve_world_imports`: a program that does not
-    // compile to a full component (e.g. no world entry point) has no faithful
-    // import set, which is the empty set for the emitter's purposes.
-    match block_on(dump_with_host_and_world(
-        source,
-        host,
-        Some("entry.wado"),
-        OptLevel::O2,
-        Some(world_fq),
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-    )) {
-        Ok(dump) => dump
-            .wir_package
-            .map(|pkg| pkg.imported_cm_interfaces)
-            .unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
-}
-||||||| 014361be8
-use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
-use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-/// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
-/// `source` under `world_fq`, the faithful world import set the emitter reads.
-fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> Vec<String> {
-    // Tolerant like the CLI's `resolve_world_imports`: a program that does not
-    // compile to a full component (e.g. no world entry point) has no faithful
-    // import set, which is the empty set for the emitter's purposes.
-    match block_on(dump_with_host_and_world(
-        source,
-        host,
-        Some("entry.wado"),
-        OptLevel::O2,
-        Some(world_fq),
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-    )) {
-        Ok(dump) => dump
-            .wir_package
-            .map(|pkg| pkg.imported_cm_interfaces)
-            .unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
-}
-=======
-use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::world_registry::WorldSurface;
->>>>>>> origin/main
+use wado_compiler::{CompilerOptions, OptLevel, compile_with_options};
 
 /// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
 /// emitter the world surface as the CLI does.
@@ -249,11 +190,11 @@ fn emit_compiled(source: &str, scope: WitScope) -> String {
     let snapshot = result
         .wit_emit_snapshot
         .expect("the WIT subset is retained");
-    let imports = result
+    let surface = result
         .wir_package
-        .map(|pkg| pkg.imported_cm_interfaces)
+        .map(|pkg| pkg.world_surface)
         .unwrap_or_default();
-    emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &imports)
+    emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &surface)
         .expect("emit_wit_text_from failed")
 }
 

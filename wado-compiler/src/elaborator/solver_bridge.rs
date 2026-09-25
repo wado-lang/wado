@@ -796,8 +796,8 @@ impl SolverBridge {
             fn_shape_name(false),
             fn_shape_name(true),
             TypeTable::ARRAY_TYPE_NAME,
-            TypeTable::UNIT_TYPE_NAME,
-            "!",
+            UNIT_TYPE_NAME,
+            NEVER_TYPE_NAME,
         ]
         .into_iter()
         .chain(PrimitiveType::all_primitive_names())

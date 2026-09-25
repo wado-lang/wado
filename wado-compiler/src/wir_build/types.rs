@@ -1333,15 +1333,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         type_args: elements,
                         ..
                     } = type_table.get(type_id)
-<<<<<<< HEAD
                         && type_table.is_tuple(type_id)
-                        && field_idx < elements.len()
-||||||| 014361be8
-                        && TypeTable::is_tuple_type(type_table.def_name(*def))
-                        && field_idx < elements.len()
-=======
-                        && TypeTable::is_tuple_type(type_table.def_name(*def))
->>>>>>> origin/main
                     {
                         // Check if this tuple maps to the same WIR type
                         if let Some(wir_tid) = ctx.tuple_type_map.get(elements)

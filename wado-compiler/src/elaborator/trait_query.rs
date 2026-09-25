@@ -57,29 +57,6 @@ pub(super) enum NewtypePeel {
     Here,
 }
 
-/// The compiler traits a written spelling can name where the scope resolves
-/// nothing: every [`OnBoundTrait`], plus `Display` and the `From` marker.
-const SPELLED_COMPILER_TRAITS: [CompilerItem; 18] = [
-    CompilerItem::Eq,
-    CompilerItem::Ord,
-    CompilerItem::Serialize,
-    CompilerItem::Deserialize,
-    CompilerItem::WireNumbered,
-    CompilerItem::Default,
-    CompilerItem::Reflect,
-    CompilerItem::ReflectStruct,
-    CompilerItem::ReflectVariant,
-    CompilerItem::ReflectEnum,
-    CompilerItem::ReflectFlags,
-    CompilerItem::ReflectNewtype,
-    CompilerItem::ReflectTemplate,
-    CompilerItem::Ref,
-    CompilerItem::RefMut,
-    CompilerItem::Inspect,
-    CompilerItem::Display,
-    CompilerItem::From,
-];
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
     Eq,
@@ -1035,140 +1012,6 @@ impl TypeSystem {
         self.compiler_trait_def(CompilerItem::Display) == Some(trait_)
     }
 
-<<<<<<< HEAD
-||||||| 014361be8
-    /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
-    /// site — a `#[derive(...)]` prefix.
-    pub(super) fn classify_on_bound_trait(
-        &self,
-        scope: &TypeLookup,
-        trait_name: &str,
-    ) -> Option<OnBoundTrait> {
-        let (on_bound, compiler_module) = {
-            let tt = self.type_table.borrow();
-            let items = tt.compiler_items();
-            let of = |item: CompilerItem, on_bound: OnBoundTrait| {
-                items.trait_module(item).map(|m| (on_bound, m.clone()))
-            };
-            if trait_name == items.trait_name(CompilerItem::Eq) {
-                of(CompilerItem::Eq, OnBoundTrait::Eq)
-            } else if trait_name == items.trait_name(CompilerItem::Ord) {
-                of(CompilerItem::Ord, OnBoundTrait::Ord)
-            } else if items.trait_name_opt(CompilerItem::Serialize) == Some(trait_name) {
-                of(CompilerItem::Serialize, OnBoundTrait::Serialize)
-            } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
-                of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
-            } else if items.trait_name_opt(CompilerItem::WireNumbered) == Some(trait_name) {
-                of(CompilerItem::WireNumbered, OnBoundTrait::WireNumbered)
-            } else if trait_name == items.trait_name(CompilerItem::Default) {
-                of(CompilerItem::Default, OnBoundTrait::Default)
-            } else if trait_name == items.trait_name(CompilerItem::Reflect) {
-                of(CompilerItem::Reflect, OnBoundTrait::Reflect)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectStruct) {
-                of(CompilerItem::ReflectStruct, OnBoundTrait::ReflectStruct)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectVariant) {
-                of(CompilerItem::ReflectVariant, OnBoundTrait::ReflectVariant)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectEnum) {
-                of(CompilerItem::ReflectEnum, OnBoundTrait::ReflectEnum)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectFlags) {
-                of(CompilerItem::ReflectFlags, OnBoundTrait::ReflectFlags)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectNewtype) {
-                of(CompilerItem::ReflectNewtype, OnBoundTrait::ReflectNewtype)
-            } else if trait_name == items.trait_name(CompilerItem::ReflectTemplate) {
-                of(CompilerItem::ReflectTemplate, OnBoundTrait::ReflectTemplate)
-            } else if trait_name == items.trait_name(CompilerItem::Ref) {
-                of(CompilerItem::Ref, OnBoundTrait::Ref)
-            } else if trait_name == items.trait_name(CompilerItem::RefMut) {
-                of(CompilerItem::RefMut, OnBoundTrait::RefMut)
-            } else if trait_name == items.trait_name(CompilerItem::Inspect) {
-                of(CompilerItem::Inspect, OnBoundTrait::Inspect)
-            } else {
-                None
-            }
-        }?;
-        match self.scoped_trait_decl_module(scope, trait_name) {
-            Some(module) => (*module == compiler_module).then_some(on_bound),
-            None => Some(on_bound),
-        }
-    }
-
-    /// `true` when `trait_name` resolves to the compiler's prelude `Display`
-    /// trait in this scope (not a same-name user trait). `Display` is not an
-    /// [`OnBoundTrait`] — it is never auto-derived except for plain enums — so
-    /// its identity is checked here rather than through `classify_on_bound_trait`.
-    pub(super) fn is_display_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
-        let compiler_module = {
-            let tt = self.type_table.borrow();
-            let items = tt.compiler_items();
-            if trait_name != items.trait_name(CompilerItem::Display) {
-                return false;
-            }
-            let Some(module) = items.trait_module(CompilerItem::Display) else {
-                return false;
-            };
-            module.clone()
-        };
-        match self.scoped_trait_decl_module(scope, trait_name) {
-            Some(module) => *module == compiler_module,
-            None => true,
-        }
-    }
-
-    /// The trait declaration `name` binds to in `scope`, following an alias to
-    /// the name the declaration calls itself.
-    ///
-    /// For the `TypeSystem` queries that hold a scope and a spelling rather
-    /// than a reference site; a caller with a site asks the site instead.
-    fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DefId> {
-        let key = scope.declaration(name)?;
-        self.trait_env.declares_trait(&key).then_some(key)
-    }
-
-=======
-    /// [`Self::on_bound_of`] for a caller holding a spelling with no reference
-    /// site — a `#[derive(...)]` prefix.
-    pub(super) fn classify_on_bound_trait(
-        &self,
-        scope: &TypeLookup,
-        trait_name: &str,
-    ) -> Option<OnBoundTrait> {
-        OnBoundTrait::of_compiler_item(self.scoped_compiler_trait(scope, trait_name)?)
-    }
-
-    /// Whether `trait_name` names the prelude's `Display` in `scope`.
-    pub(super) fn is_display_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
-        self.scoped_compiler_trait(scope, trait_name) == Some(CompilerItem::Display)
-    }
-
-    /// Whether `trait_name` names the prelude's `From` in `scope`.
-    pub(super) fn is_from_trait(&self, scope: &TypeLookup, trait_name: &str) -> bool {
-        self.scoped_compiler_trait(scope, trait_name) == Some(CompilerItem::From)
-    }
-
-    /// The compiler trait `trait_name` names in `scope`: the declaration it
-    /// resolves to, so an import alias counts, else the ambient trait so spelled.
-    fn scoped_compiler_trait(&self, scope: &TypeLookup, trait_name: &str) -> Option<CompilerItem> {
-        if let Some(def) = self.scoped_trait_decl_key(scope, trait_name) {
-            return self.compiler_item_of_trait(def);
-        }
-        let tt = self.type_table.borrow();
-        let items = tt.compiler_items();
-        SPELLED_COMPILER_TRAITS
-            .into_iter()
-            .find(|&item| items.trait_name_opt(item) == Some(trait_name))
-    }
-
-    /// The trait declaration `name` binds to in `scope`, following an alias to
-    /// the name the declaration calls itself.
-    ///
-    /// For the `TypeSystem` queries that hold a scope and a spelling rather
-    /// than a reference site; a caller with a site asks the site instead.
-    fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DefId> {
-        let key = scope.declaration(name)?;
-        self.trait_env.declares_trait(&key).then_some(key)
-    }
-
->>>>>>> origin/main
     /// Whether what a bound writes for `trait_`'s own parameters answers
     /// `wanted`, a position it leaves open taking the trait's declared default.
     /// A `Self` default names whatever is answering, which no written argument
@@ -1214,28 +1057,8 @@ impl TypeSystem {
             .collect();
         let (params, closure) = self.trait_env.supertrait_closure_declared(&named);
         self.supertrait_names(params, closure, &written)
-<<<<<<< HEAD
             .iter()
             .any(|(decl, named)| *decl == trait_ && self.args_answer(named.args(), trait_, wanted))
-||||||| 014361be8
-    }
-
-    /// The trait declaration `trait_name` binds to in scope (local, else an
-    /// explicit import); `None` when it falls through to the ambient compiler
-    /// trait. Lets a same-name user `trait` be distinguished from the compiler's.
-    fn scoped_trait_decl_module<'a>(
-        &self,
-        scope: &TypeLookup<'a>,
-        trait_name: &str,
-    ) -> Option<&'a ModuleSource> {
-        let def = scope.declaration(trait_name)?;
-        self.trait_env
-            .declares_trait(&def)
-            .then(|| scope.resolutions.defs().module(def))
-    }
-
-=======
->>>>>>> origin/main
     }
 
     fn walk_structural_derive_members(
@@ -2909,31 +2732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if (binding.is_none() && mentions_self) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
-<<<<<<< HEAD
-            let trait_key = self.tysys.resolutions.bound_decl(bound);
-            let Some(actual) = trait_key.and_then(|key| {
-                self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
-                    type_arg,
-                    &key,
-                    &constraint.name,
-                )
-            }) else {
-||||||| 014361be8
-            // The bound's own site says which trait declares the constraint.
-            let trait_key = self
-                .tysys
-                .fq_trait_name_at(bound.id, &bound.name)
-                .canonical();
-            let Some(actual) = trait_key.and_then(|key| {
-                self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
-                    type_arg,
-                    &key,
-                    &constraint.name,
-                )
-            }) else {
-=======
-            // The bound's own site says which trait declares the constraint.
-            let Some(trait_) = self.tysys.resolutions.declared(bound.id) else {
+            let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {
                 continue;
             };
             let registered = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
@@ -2944,7 +2743,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(actual) = registered
                 .or_else(|| self.concrete_reflect_assoc_type(type_arg, trait_, &constraint.name))
             else {
->>>>>>> origin/main
                 continue;
             };
             let expected = match binding {

@@ -29,19 +29,11 @@ use crate::component_model::{
 };
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
-<<<<<<< HEAD
 use crate::module_source::ModuleSource;
-use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
-||||||| 014361be8
-use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
-=======
-use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
     to_kebab,
 };
->>>>>>> origin/main
 use crate::package::{Package, test_selected};
 use crate::tir::{
     EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
@@ -457,15 +449,9 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
-<<<<<<< HEAD
     validate_imports_representable(&project)?;
-    generate_import_adapters(&mut project);
-||||||| 014361be8
-    generate_import_adapters(&mut project);
-=======
     let callbacks = generate_import_adapters(&mut project);
     synthesize_callback_exports(&mut project, &callbacks);
->>>>>>> origin/main
     synthesize_export_adapters(&mut project)?;
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;

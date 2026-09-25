@@ -2040,39 +2040,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
-<<<<<<< HEAD
     pub(super) fn lookup_function_return_type(
         &mut self,
         callee: &CalleeRef,
         effect_op: Option<&EffectOperation>,
     ) -> TypeId {
-        let callee_module = callee.module();
-        let func_name = callee.name();
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.tysys.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.tysys.get_builtin_return_type(builtin_name);
-||||||| 014361be8
-    /// Look up the return type of a function
-    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
-        let callee_module = callee.module();
-        let func_name = callee.name();
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.tysys.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.tysys.get_builtin_return_type(builtin_name);
-=======
-    /// Look up the return type of a function
-    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
         if let Some(intrinsic) = callee.intrinsic() {
             return self.tysys.get_builtin_return_type(intrinsic);
->>>>>>> origin/main
         }
 
         if let Some(op) = effect_op {
@@ -3103,13 +3077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
-<<<<<<< HEAD
                             let trait_ = self.tysys.resolutions.bound_decl(bound)?;
-||||||| 014361be8
-                            self.concrete_reflect_assoc_type(owner_ty, &bound.name, &assoc.name)
-=======
-                            let trait_ = self.tysys.resolutions.declared(bound.id)?;
->>>>>>> origin/main
                             self.concrete_reflect_assoc_type(owner_ty, trait_, &assoc.name)
                         });
                         if let Some(resolved) = resolved {

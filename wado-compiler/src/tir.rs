@@ -6008,7 +6008,6 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
-<<<<<<< HEAD
 /// A generic function template's identity: what a call selected, and what the
 /// monomorphizer instantiates, with no name in between.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -6056,25 +6055,6 @@ impl TemplateId {
     }
 }
 
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name. A name
-/// check that only compares `name` silently misses monomorphized builtins.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
-}
-
-||||||| 014361be8
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name. A name
-/// check that only compares `name` silently misses monomorphized builtins.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
-}
-
-=======
->>>>>>> origin/main
 /// The value a method call's receiver argument delivers, past the auto-`&` /
 /// `&mut` the elaborator takes of it. Every question about the receiver is about
 /// this value; the reference is only how the callee reaches it.
