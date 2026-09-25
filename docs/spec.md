@@ -4674,7 +4674,8 @@ Re-export rules:
 - A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
-- Only named items are re-exported: a namespace (`pub use utils from "..."`) or a wildcard (`pub use _ from "..."`) is a compile error, as is `export use`
+- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
+- A re-export stays at module level, so `export use` is a compile error
 
 ### Exception: The Prelude
 

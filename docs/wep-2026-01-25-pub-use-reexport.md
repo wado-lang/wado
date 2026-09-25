@@ -81,10 +81,10 @@ pub use {Stdout} from "wasi:cli";
 
 ### Restrictions
 
-1. Cannot re-export private (non-`pub`) items from other modules
-2. Cannot add `export` to re-exports (re-exports are module-level only): `export use` is a compile error
-3. A namespace cannot be re-exported. `use utils from "./utils.wado"` names a module, not an item, so `pub use utils from …` and `internal use utils from …` are compile errors. Re-export the members by name instead: `pub use { helper } from "./utils.wado"`.
-4. A wildcard import binds no name, so `pub use _ from …` and `internal use _ from …` are compile errors
+1. A re-export names only an item the module can import, and gives it no more reach than the item has.
+2. `export use` is a compile error. A re-export stays at module level and never reaches the CM boundary.
+3. A namespace cannot be re-exported, so `pub use utils from …` and `internal use utils from …` are compile errors. `use utils from "./utils.wado"` names a module, not an item. Re-export the members by name instead: `pub use { helper } from "./utils.wado"`.
+4. A wildcard cannot be re-exported, so `pub use _ from …` and `internal use _ from …` are compile errors. `use _ from` binds no name.
 
 ## Consequences
 
@@ -118,9 +118,3 @@ Implemented. Key components:
 - Circular re-export detection via visited set
 
 First use case: `i128`/`u128` types are defined in `core:prelude/int128` and re-exported from `core:prelude`.
-
-## Not in Scope
-
-- `pub(crate)` or other visibility modifiers (Wado has no crate concept)
-- Glob re-exports (`pub use * from "..."`)
-- Re-exporting with `export` for CM boundary exposure
