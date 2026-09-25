@@ -1,0 +1,29 @@
+// An unnamed `{ … }` against a generic struct instance is that struct's
+// literal, as it is against a non-generic one; the instance's arguments type
+// the fields. A target built from a pair array still takes a key-value literal.
+use { println } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Box<T> { value: T }
+
+struct Pair<A, B> { left: A, right: B }
+
+fn make() -> Box<i64> {
+    return { value: 7 };
+}
+
+fn show(p: Pair<String, u8>) -> String {
+    return `${p.left}=${p.right}`;
+}
+
+export fn run() with Stdout {
+    let value = 42;
+    let b: Box<i32> = { value };
+    println(`${b.value} ${make().value} ${show({ left: "k", right: 200 })}`);
+
+    let m: TreeMap<String, i32> = { a: 1, b: 2 };
+    println(`${m["b"]}`);
+}
+
+__DATA__
+{"stdout": "42 7 k=200\n2\n"}

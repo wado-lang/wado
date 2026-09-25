@@ -26,6 +26,7 @@ use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, lex_interpolation};
+use crate::syntax::expression_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
 
@@ -1384,6 +1385,16 @@ impl Parser {
                                 self.advance();
                                 AttrArg::KeyNumber(value, number)
                             }
+                            TokenKind::Minus
+                                if matches!(self.peek_nth(1).kind, TokenKind::NumberLit(_)) =>
+                            {
+                                self.advance();
+                                let TokenKind::NumberLit(number) = self.peek_kind().clone() else {
+                                    unreachable!("the lookahead saw a number");
+                                };
+                                self.advance();
+                                AttrArg::KeyNumber(value, format!("-{number}"))
+                            }
                             _ => {
                                 // `part_of = arr` names something in the source,
                                 // so it stays unquoted and keeps its own shape.
@@ -1543,8 +1554,9 @@ impl Parser {
         else if matches!(self.peek_kind(), TokenKind::Ident(_))
             && matches!(self.peek_nth(1).kind, TokenKind::From)
         {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
-            vec![UseItem::Namespace { name }]
+            vec![UseItem::Namespace { name, name_span }]
         } else {
             // Parse items: `{...}`
             let lbrace_span = self.peek().span;
@@ -1611,23 +1623,19 @@ impl Parser {
                 self.expect(&TokenKind::RBrace)?;
 
                 items.push(UseItem::InterfaceFunctions {
+                    id: self.alloc_ast_id(),
                     interface_name: name,
                     name_span,
                     functions,
                 });
             } else {
-                // Simple import, possibly with alias
-                let alias = if self.check(&TokenKind::As) {
-                    self.advance();
-                    Some(self.consume_ident()?)
-                } else {
-                    None
-                };
+                let (alias, local_span) = self.parse_use_alias(name_span)?;
                 items.push(UseItem::Simple {
                     id: self.alloc_ast_id(),
                     name,
                     name_span,
                     alias,
+                    local_span,
                 });
             }
 
@@ -1643,6 +1651,16 @@ impl Parser {
         Ok(items)
     }
 
+    /// An optional `as alias`, with the span of the name the import binds.
+    fn parse_use_alias(&mut self, name_span: Span) -> ParseResult<(Option<String>, Span)> {
+        if !self.check(&TokenKind::As) {
+            return Ok((None, name_span));
+        }
+        self.advance();
+        let alias_span = self.peek().span;
+        Ok((Some(self.consume_ident()?), alias_span))
+    }
+
     /// Parse simple use items (name or name as alias) for use inside `Effect::`{...}
     fn parse_use_item_simple_list(&mut self) -> ParseResult<Vec<UseItemSimple>> {
         let mut items = vec![];
@@ -1652,14 +1670,16 @@ impl Parser {
         }
 
         loop {
+            let name_span = self.peek().span;
             let name = self.consume_ident()?;
-            let alias = if self.check(&TokenKind::As) {
-                self.advance();
-                Some(self.consume_ident()?)
-            } else {
-                None
-            };
-            items.push(UseItemSimple { name, alias });
+            let (alias, local_span) = self.parse_use_alias(name_span)?;
+            items.push(UseItemSimple {
+                id: self.alloc_ast_id(),
+                name,
+                name_span,
+                alias,
+                local_span,
+            });
 
             if !self.check(&TokenKind::Comma) {
                 break;
@@ -4661,7 +4681,19 @@ impl Parser {
         self.mark_contextual_keyword(start_span);
         self.advance(); // consume `resume` ident
         let id = self.alloc_ast_id();
-        let value = self.parse_expr()?;
+        let value_start = self.peek().span;
+        let value = self.parse_expr().map_err(|err| {
+            if err.span.start != value_start.start {
+                return err;
+            }
+            ParseError {
+                message: format!(
+                    "`resume` takes a value; {}",
+                    expression_keyword_name_message("resume")
+                ),
+                span: start_span,
+            }
+        })?;
         let span = start_span.merge(&value.span());
         Ok(Expr::Resume(Box::new(ResumeExpr { id, value, span })))
     }
@@ -6967,7 +6999,7 @@ mod tests {
         if let Item::Use(use_decl) = &module.items[0] {
             assert_eq!(use_decl.source, "./utils.wado");
             assert_eq!(use_decl.items.len(), 1);
-            assert_matches!(&use_decl.items[0], UseItem::Namespace { name } if name == "utils");
+            assert_matches!(&use_decl.items[0], UseItem::Namespace { name, .. } if name == "utils");
         } else {
             panic!("expected use declaration");
         }

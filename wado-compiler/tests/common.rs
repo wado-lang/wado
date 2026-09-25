@@ -164,6 +164,50 @@ impl CompilerHost for FilesystemHost {
     }
 }
 
+/// A `CompilerHost` serving the given sources, keyed by the path the loader asks for.
+pub struct MapHost {
+    pub sources: indexmap::IndexMap<String, String>,
+    diagnostics: Mutex<Vec<Diagnostic>>,
+}
+
+impl MapHost {
+    pub fn new(sources: &[(&str, &str)]) -> Self {
+        install_trace_sink();
+        install_dev_stdlib();
+        Self {
+            sources: sources
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+            diagnostics: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.lock().unwrap().clone()
+    }
+}
+
+impl CompilerHost for MapHost {
+    fn load_source(
+        &self,
+        path: &str,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        let result = self.sources.get(path).cloned();
+        let path = path.to_string();
+        async move {
+            match result {
+                Some(s) => Ok(s.into_bytes()),
+                None => Err(SourceError::NotFound { path }),
+            }
+        }
+    }
+
+    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
+        self.diagnostics.lock().unwrap().push(diagnostic);
+    }
+}
+
 /// An in-memory `CompilerHost` for tests that don't need file loading
 pub struct InMemoryHost {
     diagnostics: Mutex<Vec<Diagnostic>>,

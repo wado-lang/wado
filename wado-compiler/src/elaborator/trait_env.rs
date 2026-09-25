@@ -13,7 +13,7 @@ use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId, TypeTable};
@@ -39,21 +39,24 @@ pub(super) fn namespace_imports_of(
     let mut out = NamespaceImports::default();
     for item in &module.items {
         if let Item::Use(use_decl) = item {
-            let namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
-                ast::UseItem::Namespace { name: ns } => Some(ns),
+            let mut namespaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::Namespace { name: ns, .. } => Some(ns),
                 ast::UseItem::Simple { .. }
                 | ast::UseItem::InterfaceFunctions { .. }
                 | ast::UseItem::Wildcard => None,
             });
-            for ns in namespaces {
-                let source = resolve_use_decl_source(
+            if let Some(first) = namespaces.next()
+                && let Some(source) = resolve_use_decl_source(
                     interner,
                     from_module,
                     use_decl,
                     entry_module,
                     invocations,
-                );
-                out.insert(ns.clone(), source);
+                )
+            {
+                for ns in std::iter::once(first).chain(namespaces) {
+                    out.insert(ns.clone(), source.clone());
+                }
             }
         }
     }
@@ -1203,6 +1206,24 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
+    /// Whether some `impl From<Array<[K, V]>> for` the declaration `target`
+    /// exists, whichever of its instantiations it covers.
+    pub(super) fn converts_from_pairs(&self, target: DefId, from_trait: DefId) -> bool {
+        self.all_impl_keys(&ImplTargetKey::Decl(target))
+            .iter()
+            .filter_map(|key| self.impl_headers.get(key)?.trait_.as_ref())
+            .any(|trait_| {
+                trait_.def == Some(from_trait)
+                    && trait_.arg_ids.first().is_some_and(|array| {
+                        matches!(array.head(), name::TypeHead::Builtin(head) if head == TypeTable::ARRAY_TYPE_NAME)
+                            && array.args().first().is_some_and(|element| {
+                                matches!(element.head(), name::TypeHead::Tuple)
+                                    && element.args().len() == 2
+                            })
+                    })
+            })
+    }
+
     /// Keys of the **inherent** impls on `type_name`, in global build order —
     /// the `trait_name.is_none()` subset of [`Self::all_impl_index`]. Used by
     /// instance-method lookup, which must not treat trait impls as inherent.
@@ -1760,15 +1781,20 @@ fn sited_impl_target_key(
     }
 }
 
-/// Returns `true` if the module source is a user-local module (part of the current package).
+/// Whether the module is user code, which coherence checks, rather than the
+/// stdlib. Ownership is per package, a remote one included.
 pub(super) fn is_user_local(ms: &ModuleSource) -> bool {
-    matches!(
-        ms,
+    match ms {
         ModuleSource::Local { .. }
-            | ModuleSource::Dependency { .. }
-            | ModuleSource::EntryPoint { .. }
-            | ModuleSource::Redirected { .. }
-    )
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::EntryPoint { .. }
+        | ModuleSource::Redirected { .. } => true,
+        // A Wasm asset declares only the extern functions it exports.
+        ModuleSource::Core { .. } | ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => {
+            false
+        }
+    }
 }
 
 /// The declarations a user package owns, as identities rather than bare
@@ -2442,6 +2468,7 @@ fn check_all_orphan_rules(
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
+<<<<<<< HEAD
 
     let owned = |def: &&DefId| is_user_local(defs.module(**def));
     let local = LocalDecls {
@@ -2452,11 +2479,40 @@ fn check_all_orphan_rules(
             .filter(owned)
             .any(|def| defs.name(*def) == name::TUPLE_TYPE_NAME),
     };
+||||||| 20edf112e
+
+    let owned = |def: &&DefId| is_user_local(defs.module(**def));
+    let local = LocalDecls {
+        types: type_decl_index.iter().filter(owned).copied().collect(),
+        traits: decl_index.iter().filter(owned).copied().collect(),
+        tuple: type_decl_index
+            .iter()
+            .filter(owned)
+            .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
+    };
+=======
+    let mut by_package: IndexMap<PackageId, LocalDecls> = IndexMap::default();
+>>>>>>> origin/main
 
     for header in impl_headers.values() {
         if !is_user_local(&header.module) {
             continue;
         }
+        let package = header.module.package_id();
+        let local: &LocalDecls = by_package.entry(package.clone()).or_insert_with(|| {
+            let owned = |def: &&DefId| {
+                let module = defs.module(**def);
+                is_user_local(module) && module.package_id() == package
+            };
+            LocalDecls {
+                types: type_decl_index.iter().filter(owned).copied().collect(),
+                traits: decl_index.iter().filter(owned).copied().collect(),
+                tuple: type_decl_index
+                    .iter()
+                    .filter(owned)
+                    .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
+            }
+        });
 
         let Some(trait_key) = header.trait_key() else {
             // Inherent impl: the orphan rule does not apply, but coherence does
@@ -2464,8 +2520,7 @@ fn check_all_orphan_rules(
             // two packages could add colliding methods to `String`. Use a trait
             // instead. `classify_position` looks through references and counts a
             // `LocalType` head as owned, and stdlib modules are skipped above.
-            if let PositionKind::ForeignType =
-                classify_position(&header.ty, header, &local, resolve)
+            if let PositionKind::ForeignType = classify_position(&header.ty, header, local, resolve)
             {
                 violations.push((
                     header.module.clone(),
@@ -2484,7 +2539,7 @@ fn check_all_orphan_rules(
         }
 
         // Foreign trait: apply RFC 2451 sequence check
-        if !check_orphan_rfc2451(header, &local, resolve) {
+        if !check_orphan_rfc2451(header, local, resolve) {
             violations.push((
                 header.module.clone(),
                 TypeError::OrphanViolation {
@@ -2783,9 +2838,9 @@ mod tests {
     }
 
     #[test]
-    fn test_is_user_local_remote_is_foreign() {
+    fn test_is_user_local_remote_is_user_code() {
         let mut interner = ModuleSourceInterner::new();
-        assert!(!is_user_local(
+        assert!(is_user_local(
             &interner.remote("https://example.com/lib.wado")
         ));
     }

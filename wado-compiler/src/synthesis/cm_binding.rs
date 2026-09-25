@@ -413,8 +413,16 @@ fn unresolvable_record_in_payload(
             .iter()
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
+<<<<<<< HEAD
     if let ResolvedType::GenericInstance { type_args, .. } = tt.get(type_id)
         && tt.is_result(type_id)
+||||||| 20edf112e
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
+        && tt.def_name(*def) == "Result"
+=======
+    if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
+        && tt.is_compiler_item(*def, CompilerItem::Result)
+>>>>>>> origin/main
     {
         return type_args
             .clone()

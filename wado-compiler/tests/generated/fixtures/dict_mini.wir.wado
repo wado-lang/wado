@@ -545,58 +545,58 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
     let i_3: i32;
     let self_11: ref "core:prelude/string.wado//String";
     let value_15: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
-    let value_25: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
+    let value_26: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
     let used: i32;
-    let $licm_used_31: i32;
-    let $licm_repr_32: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let $licm_repr_33: ref Array<u8>;
-    let $licm_used_34: i32;
+    let $licm_used_32: i32;
+    let $licm_repr_33: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let $licm_repr_34: ref Array<u8>;
+    let $licm_used_35: i32;
     let a: ref Array<u8>;
     let a_end: i32;
-    let i_44: i32;
+    let i_45: i32;
     i_3 = 0;
-    $licm_used_31 = local.tee $load_0(self.used);
-    $licm_repr_32 = local.tee $load_1(self.repr);
-    $licm_repr_33 = key.repr;
-    $licm_used_34 = key.used;
+    $licm_used_32 = local.tee $load_0(self.used);
+    $licm_repr_33 = local.tee $load_1(self.repr);
+    $licm_repr_34 = key.repr;
+    $licm_used_35 = key.used;
     b47: block {
         l48: loop {
-            break_if b47 i_3 >= $licm_used_31;
-            self_11 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_32, i_3).0;
+            break_if b47 i_3 >= $licm_used_32;
+            self_11 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_33, i_3).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
                 a = self_11.repr;
                 a_end = self_11.used;
-                if a_end != $licm_used_34 {
+                if a_end != $licm_used_35 {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
-                i_44 = 0;
+                i_45 = 0;
                 b51: block {
                     l52: loop {
-                        break_if b51 i_44 >= a_end;
-                        if builtin::array_get_value<u8>(a, i_44) != builtin::array_get_value<u8>($licm_repr_33, i_44) {
+                        break_if b51 i_45 >= a_end;
+                        if builtin::array_get_value<u8>(a, i_45) != builtin::array_get_value<u8>($licm_repr_34, i_45) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                         }
-                        i_44 = i_44 + 1;
+                        i_45 = i_45 + 1;
                         continue l52;
                     };
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
                 value_15 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_32, i_3, value_15);
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_33, i_3, value_15);
                 return;
             }
             i_3 = i_3 + 1;
             continue l48;
         };
     };
-    value_25 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
+    value_26 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
     used = $load_0;
     if @unlikely(used >= builtin::array_len($load_1)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self);
     }
-    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(self.repr, used, value_25);
+    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(self.repr, used, value_26);
     self.used = used + 1;
 }
 

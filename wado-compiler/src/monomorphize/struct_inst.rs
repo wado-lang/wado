@@ -100,6 +100,7 @@ impl Monomorphizer {
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,
                     serde_number: field.serde_number,
+                    serde_encoding: field.serde_encoding,
                     default_expr: None,
                 }
             })
@@ -120,7 +121,7 @@ impl Monomorphizer {
             }),
             fields,
             span: generic.span,
-            wire_name_policy: generic.wire_name_policy.clone(),
+            wire_name_policy: generic.wire_name_policy,
         };
 
         Some(concrete)

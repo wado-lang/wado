@@ -188,6 +188,31 @@ test "StructSpec with FieldSpec" {
 }
 
 
+test "a field's attributes precede it, one a line" {
+    let mut s = StructSpec::new("Foo");
+    s.add_field_spec(FieldSpec {
+        name: "x",
+        type_str: "i32",
+        is_pub: true,
+        default: Option::Some("0"),
+        attrs: ["wire(number = 1)", "wire(encoding = \"zigzag\")"],
+    });
+
+    let mut w = CodeWriter::new();
+    s.emit(&mut w);
+    let expected = "struct Foo {\n    #[wire(number = 1)]\n    #[wire(encoding = \"zigzag\")]\n    pub x: i32 = 0,\n}\n";
+    assert w.to_string() == expected;
+}
+
+test "an enum member's attributes precede it" {
+    let mut e = EnumSpec::new("Corpus");
+    e.add_member_with_attrs("Web", ["wire(number = 3)"]);
+
+    let mut w = CodeWriter::new();
+    e.emit(&mut w);
+    assert w.to_string() == "enum Corpus {\n    #[wire(number = 3)]\n    Web,\n}\n";
+}
+
 test "VariantSpec unit cases" {
     let mut v = VariantSpec::new("TokenKind", Vis::Pub);
     v.add_case("Number");

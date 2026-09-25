@@ -16,7 +16,7 @@ use crate::ir::{
     WadoWorldExportInterface, WadoWorldImport,
 };
 use crate::naming;
-use crate::naming::{to_snake_case, to_upper_camel_case};
+use crate::naming::{to_snake_case, to_upper_camel_case, to_wado_identifier};
 
 pub struct Transformer<'a> {
     resolve: &'a Resolve,
@@ -253,7 +253,7 @@ impl<'a> Transformer<'a> {
         let is_async = matches!(func.kind, FunctionKind::AsyncFreestanding);
 
         Ok(WadoFunction {
-            name: to_snake_case(name),
+            name: to_wado_identifier(name),
             doc_comment: func.docs.contents.clone(),
             cm_attr,
             params,
@@ -268,7 +268,7 @@ impl<'a> Transformer<'a> {
             .iter()
             .map(|param| {
                 Ok(WadoParam {
-                    name: to_snake_case(&param.name),
+                    name: to_wado_identifier(&param.name),
                     ty: self.transform_type(param.ty)?,
                     wit_name: param.name.clone(),
                 })
@@ -619,7 +619,7 @@ impl<'a> Transformer<'a> {
                         let raw_method = func_name.split('.').next_back().unwrap_or(func_name);
                         let method_attr =
                             format!("{cm_interface}#{kind_prefix}{resource_wit_name}.{raw_method}");
-                        (method_attr, to_snake_case(raw_method))
+                        (method_attr, to_wado_identifier(raw_method))
                     };
 
                     methods.push(WadoFunction {

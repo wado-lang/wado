@@ -308,6 +308,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
                 name: (**name).to_string(),
                 name_span: span,
                 alias: None,
+                local_span: span,
             });
         }
         return;
@@ -328,6 +329,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
                 name: (**name).to_string(),
                 name_span: span,
                 alias: None,
+                local_span: span,
             })
             .collect(),
         items_span: Some(span),

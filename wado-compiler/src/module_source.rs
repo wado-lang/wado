@@ -7,6 +7,7 @@
 use crate::compiler_host::DependencyIndex;
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
+use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
@@ -133,6 +134,8 @@ pub struct ModuleSourceInterner {
     /// Module path → its elected package root, so `pkg` is a function of the
     /// path and equal modules agree on their package.
     package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
+    /// Generated module URI → the package importing it, one for all its importers.
+    redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
 }
 
 impl ModuleSourceInterner {
@@ -141,6 +144,7 @@ impl ModuleSourceInterner {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
             dependencies: DependencyIndex::default(),
             package_roots: hashmap::IndexMap::default(),
+            redirect_packages: hashmap::IndexMap::default(),
         }
     }
 
@@ -236,10 +240,15 @@ impl ModuleSourceInterner {
         let pkg = self.elect_package_root(&url, pkg);
         ModuleSource::Remote { pkg, url }
     }
-    pub fn redirected(&mut self, uri: &str) -> ModuleSource {
-        ModuleSource::Redirected {
-            uri: self.intern(uri),
-        }
+    /// A Kiln-generated module, in the package of the first module importing it.
+    pub fn redirected(&mut self, uri: &str, importer: &ModuleSource) -> ModuleSource {
+        let uri = self.intern(uri);
+        let package = self
+            .redirect_packages
+            .entry(uri.clone())
+            .or_insert_with(|| importer.package_id())
+            .clone();
+        ModuleSource::Redirected { uri, package }
     }
     pub fn wasm(&mut self, path: &str, kind: WasmAssetKind) -> ModuleSource {
         ModuleSource::Wasm {
@@ -258,7 +267,7 @@ impl ModuleSourceInterner {
         match segments {
             // Legacy: empty path represents entry module.
             [] => ModuleSource::entry_point_synthetic(),
-            [first] if first.starts_with("./") || first.starts_with("../") => self.local(first),
+            [first] if is_cwd_relative(first) => self.local(first),
             [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
             [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
             all @ [first, rest @ ..] => match CmNamespace::from_prefix(first) {
@@ -405,6 +414,8 @@ pub enum ModuleSource {
     Redirected {
         /// Absolute URI (typically `file:///abs/path/to/file.wado`).
         uri: InternedStr,
+        /// The importing module's package. Not part of identity, which is `uri`.
+        package: PackageId,
     },
     /// Wasm asset imported via
     /// `use … from "<path>" with { type: "wat"|"wasm" }`. `path` is the canonical
@@ -431,8 +442,8 @@ pub enum ModuleSource {
 pub enum PackageId {
     Core,
     Binding(CmNamespace),
-    /// Entry point, its local modules, Kiln redirects, and wasm assets bundled
-    /// into the same component.
+    /// Entry point, its local modules, and wasm assets bundled into the same
+    /// component.
     Root,
     Dependency(InternedStr),
     Remote(InternedStr),
@@ -444,10 +455,8 @@ impl ModuleSource {
         match self {
             Self::Core { .. } => PackageId::Core,
             Self::Binding { namespace, .. } => PackageId::Binding(*namespace),
-            Self::Local { .. }
-            | Self::EntryPoint { .. }
-            | Self::Redirected { .. }
-            | Self::Wasm { .. } => PackageId::Root,
+            Self::Local { .. } | Self::EntryPoint { .. } | Self::Wasm { .. } => PackageId::Root,
+            Self::Redirected { package, .. } => package.clone(),
             Self::Dependency { pkg, .. } => PackageId::Dependency(pkg.clone()),
             Self::Remote { pkg, .. } => PackageId::Remote(pkg.clone()),
         }
@@ -477,7 +486,7 @@ impl PartialEq for ModuleSource {
             (Self::Local { path: a }, Self::Local { path: b }) => a == b,
             (Self::Dependency { path: a, .. }, Self::Dependency { path: b, .. }) => a == b,
             (Self::Remote { url: a, .. }, Self::Remote { url: b, .. }) => a == b,
-            (Self::Redirected { uri: a }, Self::Redirected { uri: b }) => a == b,
+            (Self::Redirected { uri: a, .. }, Self::Redirected { uri: b, .. }) => a == b,
             (
                 Self::Wasm {
                     path: a,
@@ -513,7 +522,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Local { path } => path.hash(state),
             Self::Dependency { path, .. } => path.hash(state),
             Self::Remote { url, .. } => url.hash(state),
-            Self::Redirected { uri } => uri.hash(state),
+            Self::Redirected { uri, .. } => uri.hash(state),
             Self::Wasm { path, kind } => {
                 path.hash(state);
                 kind.hash(state);
@@ -656,7 +665,7 @@ impl ModuleSource {
             Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
             Self::Remote { url, .. } => vec![url.to_string()],
             Self::EntryPoint { filename } => vec![entry_basename(filename).to_string()],
-            Self::Redirected { uri } => vec![uri.to_string()],
+            Self::Redirected { uri, .. } => vec![uri.to_string()],
             Self::Wasm { path, .. } => vec![path.to_string()],
         }
     }
@@ -869,7 +878,7 @@ impl fmt::Display for ModuleSource {
             // absolute under the test harness, relative on the CLI. The real
             // path for diagnostics comes from `source_path`.
             Self::EntryPoint { filename } => write!(f, "{}", entry_basename(filename)),
-            Self::Redirected { uri } => write!(f, "{uri}"),
+            Self::Redirected { uri, .. } => write!(f, "{uri}"),
             Self::Wasm { path, .. } => write!(f, "{path}"),
         }
     }
@@ -906,6 +915,26 @@ mod tests {
         let local = interner.local("../greet/src/lib.wado");
         assert_ne!(a, local);
         assert_eq!(a.qualify_name("hello"), "dep:../greet/src/lib.wado//hello");
+    }
+
+    #[test]
+    fn a_generated_module_joins_its_first_importers_package() {
+        let mut interner = ModuleSourceInterner::new();
+        let dep = interner.dependency("../greet/src/lib.wado");
+        let entry = interner.entry_point("main.wado");
+        let uri = "build/kiln/greet/schema.wado";
+        assert_eq!(
+            interner.redirected(uri, &dep).package_id(),
+            dep.package_id()
+        );
+        assert_eq!(
+            interner.redirected(uri, &entry).package_id(),
+            dep.package_id()
+        );
+        assert_eq!(
+            interner.redirected(uri, &entry),
+            interner.redirected(uri, &dep)
+        );
     }
 
     #[test]

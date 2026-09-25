@@ -1,0 +1,28 @@
+// An item at any depth, a member or an import spelled `resume` is refused like
+// a binding: nothing could name it bare afterwards, since `resume` begins
+// `resume value`.
+use { println as resume } from "core:cli";
+use resume from "./sub/pattern_ns_constant.wado";
+
+struct resume { a: i32 }
+
+enum Mode { resume, other }
+
+variant Step { resume(i32), done }
+
+flags Perm { resume, other }
+
+fn local() {
+    struct resume { b: i32 }
+}
+
+export fn run() {
+    local();
+}
+
+__DATA__
+{
+  "compile_error": "`resume` cannot be a name: it is the keyword that begins `resume value`",
+  "compile_error_count": 7,
+  "compile_error_codes": ["INVALID_SYNTAX"]
+}

@@ -39,6 +39,8 @@ pub(super) enum ArgClass {
     IntLit,
     FloatLit,
     StrLit,
+    /// `b"…"` / `#include_bytes`, which admit `List<u8>` and its newtypes.
+    BytesLit,
     NullLit,
     /// No type was produced; admits every parameter. The reason is carried so
     /// the ambiguity diagnostic can say what defeated selection.
@@ -299,6 +301,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),
+<<<<<<< HEAD
+||||||| 20edf112e
+            ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
+=======
+            ArgClass::BytesLit => {
+                tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)
+            }
+>>>>>>> origin/main
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }
     }
@@ -415,11 +425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Literal::Bool(_) => ArgClass::Exact(TypeTable::BOOL),
             ast::Literal::Unit => ArgClass::Exact(TypeTable::UNIT),
             ast::Literal::Null => ArgClass::NullLit,
-            // A `List<u8>` whatever the expected type says — the elaborator
-            // does not consult it here.
-            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => {
-                ArgClass::Exact(self.tysys.type_table.borrow_mut().make_byte_list())
-            }
+            ast::Literal::Bytes(_) | ast::Literal::IncludeBytes(_) => ArgClass::BytesLit,
         }
     }
 
@@ -581,7 +587,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None => open,
                 }
             }
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -624,7 +634,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // this position alone.
             ArgClass::Exact(t) if !self.tysys.type_table.borrow().is_numeric(t) => open,
             ArgClass::IntLit | ArgClass::FloatLit | ArgClass::Exact(_) => class,
-            ArgClass::Head(_) | ArgClass::StrLit | ArgClass::NullLit | ArgClass::Opaque(_) => open,
+            ArgClass::Head(_)
+            | ArgClass::StrLit
+            | ArgClass::BytesLit
+            | ArgClass::NullLit
+            | ArgClass::Opaque(_) => open,
         }
     }
 
@@ -656,7 +670,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.lookup_function_type_params(&callee).is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let return_type = self.lookup_function_return_type(&callee, None);
+        let return_type = self.lookup_function_return_type(&callee);
         self.class_of_type(return_type)
     }
 
@@ -797,6 +811,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::IntLit => Some(TypeTable::I32),
             ArgClass::FloatLit => Some(TypeTable::F64),
             ArgClass::StrLit => Some(self.get_string_struct_type()),
+            ArgClass::BytesLit => Some(self.tysys.type_table.borrow_mut().make_byte_list()),
             ArgClass::Head(_) | ArgClass::NullLit | ArgClass::Opaque(_) => None,
         }
     }
@@ -1039,9 +1054,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
 impl TypeSystem {
     /// The callee identity of a plain `name(…)` call, read off its own
-    /// reference site.
+    /// reference site. A variant constructor, a static path or an effect
+    /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") {
+        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
             return None;
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))
@@ -1086,6 +1102,9 @@ impl TypeSystem {
             }
             ArgClass::StrLit => {
                 "is a string literal, which admits `String` and its newtypes".to_string()
+            }
+            ArgClass::BytesLit => {
+                "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
             }
             ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
             ArgClass::Opaque(OpaqueReason::Closure) => {

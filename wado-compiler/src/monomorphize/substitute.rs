@@ -4,8 +4,15 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
+<<<<<<< HEAD
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
+||||||| 20edf112e
+use crate::hashmap::{IndexMap, IndexSet};
+=======
+use crate::compiler_item::CompilerItem;
+use crate::hashmap::{IndexMap, IndexSet};
+>>>>>>> origin/main
 use crate::tir::{
     InstantiationKey, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirPattern,
     TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
@@ -106,9 +113,21 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
+<<<<<<< HEAD
                 let is_tuple = type_table.is_tuple_def(def);
                 // Lowered by codegen as they are, never as a monomorphized struct.
                 if is_tuple || type_table.is_list(type_id) {
+||||||| 20edf112e
+                let name = type_table.def_name(def).to_string();
+                // Skip List and Tuple - they have special codegen handling and should remain
+                // as GenericInstance, not be rewritten to Struct
+                if name == "List" || TypeTable::is_tuple_type(&name) {
+=======
+                let is_tuple = TypeTable::is_tuple_type(type_table.def_name(def));
+                // Skip List and Tuple - they have special codegen handling and should remain
+                // as GenericInstance, not be rewritten to Struct
+                if is_tuple || type_table.is_compiler_item(def, CompilerItem::List) {
+>>>>>>> origin/main
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
@@ -146,6 +165,42 @@ impl Monomorphizer {
                 }
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
+<<<<<<< HEAD
+||||||| 20edf112e
+                // Skip empty type_args (invalid generic instances)
+                if type_args.is_empty() {
+                    continue;
+                }
+
+                // Skip List - it has special codegen handling and should not be
+                // monomorphized as a regular struct
+                if name == "List" {
+                    continue;
+                }
+
+                // Only collect if the struct is in our valid set
+                // This prevents library modules from trying to instantiate entry module's structs
+                if !valid_struct_names.contains(name) {
+                    continue;
+                }
+=======
+                // Skip empty type_args (invalid generic instances)
+                if type_args.is_empty() {
+                    continue;
+                }
+
+                // Skip List - it has special codegen handling and should not be
+                // monomorphized as a regular struct
+                if type_table.is_compiler_item(*def, CompilerItem::List) {
+                    continue;
+                }
+
+                // Only collect if the struct is in our valid set
+                // This prevents library modules from trying to instantiate entry module's structs
+                if !valid_struct_names.contains(name) {
+                    continue;
+                }
+>>>>>>> origin/main
 
                 // Only process if all type args are concrete (no TypeParams)
                 let all_concrete = type_args

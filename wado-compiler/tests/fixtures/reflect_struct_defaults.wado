@@ -1,5 +1,5 @@
-// `ReflectStruct::defaults()` — the declared field defaults as `[..Option<F>]`,
-// the value-level companion of `FieldTypes` (WEP 2026-06-13).
+// `ReflectStruct::default_slot(i)` — the field slots `[..Option<F>]` with only
+// field `i`'s declared default filled, and only that default evaluated.
 
 struct Config {
     host: String = "localhost",
@@ -11,24 +11,43 @@ struct NoDefaults {
     a: i32,
 }
 
-test "defaults carries each field's declared default" {
-    let slots = ReflectStruct::<Config>::defaults();
-    if let Some(host) = slots.0 {
+fn boom() -> i32 {
+    let xs: List<i32> = [];
+    return xs[builtin::black_box(3)];
+}
+
+struct Trapping {
+    first: i32 = boom(),
+    second: i32 = 7,
+}
+
+test "a slot carries its field's declared default" {
+    if let Some(host) = ReflectStruct::<Config>::default_slot(0).0 {
         assert host == "localhost";
     } else {
         assert false;
     }
-    if let Some(port) = slots.1 {
+    if let Some(port) = ReflectStruct::<Config>::default_slot(1).1 {
         assert port == 8080;
     } else {
         assert false;
     }
+    assert ReflectStruct::<Config>::default_slot(2).2 matches { None };
+}
+
+test "every other slot is empty" {
+    let slots = ReflectStruct::<Config>::default_slot(1);
+    assert slots.0 matches { None };
     assert slots.2 matches { None };
 }
 
 test "a field without a default has an empty slot" {
-    let slots = ReflectStruct::<NoDefaults>::defaults();
-    assert slots.0 matches { None };
+    assert ReflectStruct::<NoDefaults>::default_slot(0).0 matches { None };
+}
+
+test "only the named field's default is evaluated" {
+    let index = builtin::black_box(1);
+    assert ReflectStruct::<Trapping>::default_slot(index).1 matches { Some(7) };
 }
 
 __DATA__

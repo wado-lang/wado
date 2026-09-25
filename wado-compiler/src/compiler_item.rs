@@ -211,6 +211,9 @@ pub enum CompilerItem {
     /// `ReflectStruct::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
     /// library-side by `core:serde::wire_name`.
     CaseStyle,
+    /// `WireEncoding` — a numbered field's `#[wire(encoding)]`, as
+    /// `StructField::wire_encoding()` returns it.
+    WireEncoding,
 
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
@@ -409,6 +412,26 @@ pub enum CompilerItem {
     /// `Alignment::Right` — anchors the case-name / case-index pair used
     /// by template-string padding lowering.
     AlignmentRight,
+    /// `WireEncoding::Plain` — anchors the case a `StructField` carries.
+    WireEncodingPlain,
+    /// `WireEncoding::ZigZag` — anchors the case a `StructField` carries.
+    WireEncodingZigZag,
+    /// `WireEncoding::Fixed` — anchors the case a `StructField` carries.
+    WireEncodingFixed,
+    /// `CaseStyle::Identity` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleIdentity,
+    /// `CaseStyle::Camel` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleCamel,
+    /// `CaseStyle::Snake` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleSnake,
+    /// `CaseStyle::ScreamingSnake` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleScreamingSnake,
+    /// `CaseStyle::Pascal` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStylePascal,
+    /// `CaseStyle::Kebab` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleKebab,
+    /// `CaseStyle::ScreamingKebab` — anchors the case a `#[wire(name_policy)]` names.
+    CaseStyleScreamingKebab,
 
     // ── Methods (impl-block functions) ────────────────────────────────
     /// `List<T>::push` — recognised by the WIR optimiser to collapse
@@ -450,8 +473,8 @@ pub enum CompilerItem {
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
     ReflectStructFromFields,
-    /// `ReflectStruct::defaults` — the declared field defaults as `[..Option<F>]`.
-    ReflectStructDefaults,
+    /// `ReflectStruct::default_slot` — one field's declared default, in `[..Option<F>]`.
+    ReflectStructDefaultSlot,
     /// `ReflectStruct::empty_slots` — `[..Option<F>]` with every slot empty.
     ReflectStructEmptySlots,
     /// `ReflectTemplate::members` — the per-hole member tuple.
@@ -696,6 +719,7 @@ impl CompilerItem {
         Self::StreamChunk,
         Self::StreamWrite,
         Self::CaseStyle,
+        Self::WireEncoding,
         Self::Default,
         Self::FromLeBytes,
         Self::Reflect,
@@ -784,6 +808,16 @@ impl CompilerItem {
         Self::AlignmentLeft,
         Self::AlignmentCenter,
         Self::AlignmentRight,
+        Self::WireEncodingPlain,
+        Self::WireEncodingZigZag,
+        Self::WireEncodingFixed,
+        Self::CaseStyleIdentity,
+        Self::CaseStyleCamel,
+        Self::CaseStyleSnake,
+        Self::CaseStyleScreamingSnake,
+        Self::CaseStylePascal,
+        Self::CaseStyleKebab,
+        Self::CaseStyleScreamingKebab,
         Self::ListPush,
         Self::ListWithCapacity,
         Self::ListLen,
@@ -799,7 +833,7 @@ impl CompilerItem {
         Self::TreeMapNew,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
-        Self::ReflectStructDefaults,
+        Self::ReflectStructDefaultSlot,
         Self::ReflectStructEmptySlots,
         Self::ReflectTemplateMembers,
         Self::ReflectTemplateTail,
@@ -913,6 +947,7 @@ impl CompilerItem {
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
+            Self::WireEncoding => "wire_encoding",
             Self::Default => "default",
             Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
@@ -1001,6 +1036,16 @@ impl CompilerItem {
             Self::AlignmentLeft => "alignment_left",
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
+            Self::WireEncodingPlain => "wire_encoding_plain",
+            Self::WireEncodingZigZag => "wire_encoding_zigzag",
+            Self::WireEncodingFixed => "wire_encoding_fixed",
+            Self::CaseStyleIdentity => "case_style_identity",
+            Self::CaseStyleCamel => "case_style_camel",
+            Self::CaseStyleSnake => "case_style_snake",
+            Self::CaseStyleScreamingSnake => "case_style_screaming_snake",
+            Self::CaseStylePascal => "case_style_pascal",
+            Self::CaseStyleKebab => "case_style_kebab",
+            Self::CaseStyleScreamingKebab => "case_style_screaming_kebab",
             Self::ListPush => "list_push",
             Self::ListWithCapacity => "list_with_capacity",
             Self::ListLen => "list_len",
@@ -1016,7 +1061,7 @@ impl CompilerItem {
             Self::TreeMapNew => "tree_map_new",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
-            Self::ReflectStructDefaults => "reflect_struct_defaults",
+            Self::ReflectStructDefaultSlot => "reflect_struct_default_slot",
             Self::ReflectStructEmptySlots => "reflect_struct_empty_slots",
             Self::ReflectTemplateMembers => "reflect_template_members",
             Self::ReflectTemplateTail => "reflect_template_tail",
@@ -1163,6 +1208,17 @@ impl CompilerItem {
             | Self::StreamChunk
             | Self::StreamWrite
             | Self::CaseStyle
+            | Self::WireEncoding
+            | Self::WireEncodingPlain
+            | Self::WireEncodingZigZag
+            | Self::WireEncodingFixed
+            | Self::CaseStyleIdentity
+            | Self::CaseStyleCamel
+            | Self::CaseStyleSnake
+            | Self::CaseStyleScreamingSnake
+            | Self::CaseStylePascal
+            | Self::CaseStyleKebab
+            | Self::CaseStyleScreamingKebab
             | Self::Default
             | Self::FromLeBytes
             | Self::Reflect
@@ -1207,7 +1263,7 @@ impl CompilerItem {
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
-            | Self::ReflectStructDefaults
+            | Self::ReflectStructDefaultSlot
             | Self::ReflectStructEmptySlots
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
@@ -1415,9 +1471,11 @@ impl CompilerItem {
             }
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
-                CompilerItemKind::Enum
-            }
+            Self::Ordering
+            | Self::Alignment
+            | Self::CaseStyle
+            | Self::WireEncoding
+            | Self::CopyResult => CompilerItemKind::Enum,
             Self::StreamChunk | Self::StreamWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
@@ -1492,7 +1550,7 @@ impl CompilerItem {
             | Self::TreeMapNew
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
-            | Self::ReflectStructDefaults
+            | Self::ReflectStructDefaultSlot
             | Self::ReflectStructEmptySlots
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
@@ -1564,6 +1622,16 @@ impl CompilerItem {
             | Self::AlignmentLeft
             | Self::AlignmentCenter
             | Self::AlignmentRight
+            | Self::WireEncodingPlain
+            | Self::WireEncodingZigZag
+            | Self::WireEncodingFixed
+            | Self::CaseStyleIdentity
+            | Self::CaseStyleCamel
+            | Self::CaseStyleSnake
+            | Self::CaseStyleScreamingSnake
+            | Self::CaseStylePascal
+            | Self::CaseStyleKebab
+            | Self::CaseStyleScreamingKebab
             | Self::SerializeErrorKindCustom
             | Self::DeserializeErrorKindMissingField
             | Self::DeserializeErrorKindUnknownVariant

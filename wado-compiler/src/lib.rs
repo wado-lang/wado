@@ -1021,7 +1021,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             Some(&entry_source),
             &load_result.invocations,
         );
-        let Some(dep_module) = load_result.modules.get(&dep_source) else {
+        let Some(dep_module) = dep_source.and_then(|s| load_result.modules.get(&s)) else {
             return Err(bail(format!(
                 "`provider` on `{}` names an import that is not a component",
                 use_decl.source

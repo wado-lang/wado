@@ -1,0 +1,17 @@
+// Only the package that owns a type may write an inherent impl on it, and a
+// dependency's type belongs to the dependency.
+use { Gadget } from "xpkg";
+
+impl Gadget {
+    fn extra(&self) -> i32 {
+        return 9;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "coherence violation",
+  "dependencies": { "xpkg": "sub/xpkg/lib.wado" }
+}

@@ -7,7 +7,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -87,6 +87,28 @@ impl ArgSite {
         raw_args
             .get(i)
             .map_or(Self::Template(call_span), |arg| Self::Written(arg.span()))
+    }
+
+    /// The argument's type mismatch. A template's is the tag's parameter at
+    /// fault, since no source spells the template's type.
+    pub(super) fn mismatch(self, expected: String, found: String) -> TypeError {
+        match self {
+            Self::Written(span) => TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+            },
+            Self::Template(span) => TypeError::TagParamNotTemplate {
+                param: expected,
+                span,
+            },
+        }
+    }
+
+    pub(super) fn span(self) -> Span {
+        match self {
+            Self::Written(span) | Self::Template(span) => span,
+        }
     }
 }
 
@@ -252,6 +274,13 @@ enum CalleeIdentKind<'a> {
     /// case. `owner` is the variant declaring it and `spelled` its
     /// `Variant::Case` form, so the qualified constructor path serves it.
     Case { owner: DefId, spelled: String },
+    /// A bare operation call (`hello()`) imported as `use { E::{hello} }`.
+    /// `interface` declares `operation`, and `spelled` is its `E::hello` form.
+    Operation {
+        interface: DefId,
+        operation: String,
+        spelled: String,
+    },
     /// `T::suffix(...)` where `T` is still an abstract type parameter
     /// constrained only by trait bounds. Dispatched independently via
     /// `resolve_type_param_static_call`.
@@ -270,13 +299,16 @@ impl CalleeIdentKind<'_> {
     fn effective_name(&self) -> &str {
         match self {
             Self::AsIs(ident) => &ident.name,
-            Self::Rewritten(name) | Self::Case { spelled: name, .. } => name,
+            Self::Rewritten(name)
+            | Self::Case { spelled: name, .. }
+            | Self::Operation { spelled: name, .. } => name,
             Self::AbstractTypeParam { .. } => {
                 unreachable!("AbstractTypeParam takes the type-param dispatch path")
             }
         }
     }
 
+<<<<<<< HEAD
     /// The variant a bare case call constructs; `None` for every other shape,
     /// whose receiver is read from its own segment.
     fn case_owner(&self) -> Option<DefId> {
@@ -288,9 +320,40 @@ impl CalleeIdentKind<'_> {
 
     /// The callee as written, for the one shape no substitution rewrote.
     fn as_is(&self) -> Option<&ast::IdentExpr> {
+||||||| 20edf112e
+    /// The variant a bare case call constructs; `None` for every other shape,
+    /// whose receiver is read from its own segment.
+    fn case_owner(&self) -> Option<DefId> {
         match self {
+            Self::Case { owner, .. } => Some(*owner),
+            Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
+        }
+    }
+
+    /// The reference site of the callee itself, which says which declaration a
+    /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
+    /// `Self::` / `T::` prefix, so no walk saw it.
+    fn callee_site(&self) -> Option<ast::AstId> {
+=======
+    /// The reference site of the callee itself, which says which declaration a
+    /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
+    /// `Self::` / `T::` prefix, so no walk saw it.
+    fn callee_site(&self) -> Option<ast::AstId> {
+>>>>>>> origin/main
+        match self {
+<<<<<<< HEAD
             Self::AsIs(ident) => Some(ident),
             Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
+||||||| 20edf112e
+            Self::AsIs(ident) => Some(ident.id),
+            Self::Rewritten(_) | Self::Case { .. } | Self::AbstractTypeParam { .. } => None,
+=======
+            Self::AsIs(ident) => Some(ident.id),
+            Self::Rewritten(_)
+            | Self::Case { .. }
+            | Self::Operation { .. }
+            | Self::AbstractTypeParam { .. } => None,
+>>>>>>> origin/main
         }
     }
 
@@ -312,12 +375,26 @@ impl CalleeIdentKind<'_> {
             _ => None,
         }
     }
+<<<<<<< HEAD
 }
 
 /// An operation of an `interface` or resource, as a callee names it.
 pub(super) struct EffectOperation {
     decl: DefId,
     op: DefId,
+||||||| 20edf112e
+
+    /// The reference site of the interface a dispatch path `[ns::]E::op` names.
+    /// Its consumers read the operation off the path's *last* `::`, which is
+    /// the other half of the same split.
+    fn interface_site(&self) -> Option<ast::AstId> {
+        match self {
+            Self::AsIs(ident) => Some(ident.owner_segment()?.id),
+            _ => None,
+        }
+    }
+=======
+>>>>>>> origin/main
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -571,6 +648,7 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+<<<<<<< HEAD
     /// The declared operation a callee names: `[ns::]E::op` through `E`'s site,
     /// or an imported bare `op` through its own.
     fn effect_operation_of(&self, ident: &ast::IdentExpr) -> Option<EffectOperation> {
@@ -603,6 +681,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             defs.name(op.decl),
             defs.name(op.op),
         )
+||||||| 20edf112e
+    /// The callee of an operation dispatch `[ns::]E::op`, where `E` names an
+    /// effect or resource declaring `op`. `None` leaves the caller to report an
+    /// unknown function rather than defer an unvalidated call to codegen.
+    ///
+    /// Signature resolution, the effect check, dispatch and WIR all key on the
+    /// declaration's own name and the bare operation, so neither an import
+    /// alias nor a namespace qualifier may reach them.
+    fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
+        let (_, operation) = path.rsplit_once("::")?;
+        let decl = self
+            .tysys
+            .effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
+        self.tysys
+            .signatures
+            .resource_method_sig(decl, operation)
+            .is_some()
+            .then(|| {
+                let declared = self.tysys.resolutions.defs().name(decl).to_string();
+                CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
+            })
+=======
+    /// The effect or resource `callee_kind` dispatches an operation through,
+    /// with the operation.
+    fn operation_decl(&self, callee_kind: &CalleeIdentKind<'_>) -> Option<(DefId, String)> {
+        match callee_kind {
+            CalleeIdentKind::AsIs(ident) => self.tysys.dispatched_operation(ident),
+            CalleeIdentKind::Operation {
+                interface,
+                operation,
+                ..
+            } => Some((*interface, operation.clone())),
+            CalleeIdentKind::Rewritten(_)
+            | CalleeIdentKind::Case { .. }
+            | CalleeIdentKind::AbstractTypeParam { .. } => None,
+        }
+    }
+
+    /// The callee of an operation dispatch through `decl`, keyed by the
+    /// declaration's own name, never an import alias or namespace qualifier.
+    fn effect_operation_callee(&self, decl: DefId, operation: &str) -> CalleeRef {
+        let declared = self.tysys.resolutions.defs().name(decl).to_string();
+        CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
+>>>>>>> origin/main
     }
 
     /// The variant a `Variant::Case(...)` callee constructs: the one the walk
@@ -613,9 +735,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_site: Option<ast::AstId>,
         prefix: &str,
     ) -> Option<&VariantInfo> {
-        match callee_kind.case_owner() {
-            Some(owner) => self.type_lookup().variant_cases_of(owner),
-            None => self.lookup_variant_cases_at(receiver_site, prefix),
+        match callee_kind {
+            CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
+            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => None,
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+                self.lookup_variant_cases_at(receiver_site, prefix)
+            }
         }
     }
 
@@ -826,6 +951,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BareCase::None => {}
             }
         }
+        if let CalleeIdentKind::AsIs(bare) = callee_kind
+            && bare.owner_segment().is_none()
+            && let Some((interface, operation)) = self.tysys.dispatched_operation(bare)
+        {
+            let declared = self.tysys.resolutions.defs().name(interface);
+            let spelled = mangle_local_method(declared, &operation);
+            callee_kind = CalleeIdentKind::Operation {
+                interface,
+                operation,
+                spelled,
+            };
+        }
 
         // `Trait::method(recv, args…)` — the trait-qualified (UFCS) call form
         // (WEP 2026-07-31). Routed before the argument walk below because the
@@ -885,10 +1022,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk answered for it. Every receiver lookup below goes through that
         // site, so the spelling is never split back into an identity.
         let receiver_site = callee_kind.receiver_site();
-        // A case is reachable wherever its type is; only a static method has
-        // a visibility of its own to check.
-        if callee_kind.case_owner().is_none()
-            && let Some((struct_name, _)) = effective_name.rsplit_once("::")
+        // Only a static method has a visibility of its own to check: a case's is
+        // its type's, and an imported operation's `use` checked its own.
+        if !matches!(
+            callee_kind,
+            CalleeIdentKind::Case { .. } | CalleeIdentKind::Operation { .. }
+        ) && let Some((struct_name, _)) = effective_name.rsplit_once("::")
         {
             let receiver = self.impl_target_at(receiver_site, struct_name);
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
@@ -898,11 +1037,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_is()
             .and_then(|ident| self.effect_operation_of(ident));
         // First, determine expected parameter types to handle coercion.
+<<<<<<< HEAD
         let signature = self.lookup_function_signature(
             effective_name,
             effect_op.as_ref(),
             callee_kind.callee_site(),
         );
+||||||| 20edf112e
+        let signature = self.lookup_function_signature(
+            effective_name,
+            callee_kind.interface_site(),
+            callee_kind.callee_site(),
+        );
+=======
+        let operation = self.operation_decl(&callee_kind);
+        // An operation is its declaration's, whatever else the path spells.
+        let operation_signature = operation.as_ref().map(|(decl, op)| {
+            self.tysys
+                .resolve_effect_op_signature(*decl, op)
+                .expect("`dispatched_operation` found the operation's signature")
+        });
+        let signature = match &operation_signature {
+            Some((params, _)) => Some((params.clone(), Vec::new())),
+            None => self.lookup_function_signature(effective_name, callee_kind.callee_site()),
+        };
+>>>>>>> origin/main
         let signature_known = signature.is_some();
         let (mut param_types, callee_slots) = signature.unwrap_or_default();
         // The declaration's own frame, before instantiation replaces its slots
@@ -1035,9 +1194,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatches on `effective_name` (after any `Self::` / `T::`
         // prefix rewriting) while `ident` is kept around for LSP
         // segment-edge recording and other AST-id needs.
-        let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(pos) =
-            effective_name.find("::")
+        let imported_operation = if let CalleeIdentKind::Operation { .. } = &callee_kind {
+            let member = self
+                .tysys
+                .resolutions
+                .declared_if_walked(ident.id)
+                .expect("`operation_at` read the imported operation's declaration");
+            if self.record_reference_to_decl(ident.id, member, ident.span) {
+                return TypeTable::ERROR;
+            }
+            let (interface, op) = operation
+                .as_ref()
+                .expect("`operation_decl` answers for an operation callee");
+            Some(self.effect_operation_callee(*interface, op))
+        } else {
+            None
+        };
+        let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(callee) =
+            imported_operation
         {
+            (Some(callee), effective_name.to_string())
+        } else if let Some(pos) = effective_name.find("::") {
             let prefix = &effective_name[..pos];
             let suffix = &effective_name[pos + 2..];
 
@@ -1396,9 +1573,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // alike. Ahead of the namespace arm below, which reads the
             // operation as a static method on the interface and mangles a body
             // nothing declares.
+<<<<<<< HEAD
             else if let Some(op) = &effect_op {
                 (
                     Some(self.effect_operation_callee(op)),
+||||||| 20edf112e
+            else if let Some(callee) = self.effect_operation_callee(ident, effective_name) {
+                (Some(callee), effective_name.to_string())
+=======
+            else if let Some((decl, op)) = &operation {
+                (
+                    Some(self.effect_operation_callee(*decl, op)),
+>>>>>>> origin/main
                     effective_name.to_string(),
                 )
             }
@@ -1455,7 +1641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         || self.namespace_member(prefix, type_name).is_some();
                     if !names_a_member {
                         let _ = self.emit(TypeError::UnknownFunction {
-                            name: format!("{prefix}::{suffix}"),
+                            name: effective_name.to_string(),
                             span: call.span,
                         });
                         return TypeTable::ERROR;
@@ -1527,6 +1713,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ..StaticQuery::of(type_name, method_name)
                     });
                     if self.report_ambiguous_static(&resolved, method_name, call.span) {
+                        return TypeTable::ERROR;
+                    }
+                    if !resolved.resolves() {
+                        let _ = self.emit(TypeError::UnknownFunction {
+                            name: effective_name.to_string(),
+                            span: call.span,
+                        });
                         return TypeTable::ERROR;
                     }
                     let method_ref = resolved
@@ -1839,17 +2032,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
-        // Defer (mint holes) or report uninferred type params.
-        self.defer_or_report_uninferred_fn_type_args(
+        if !self.report_value_for_reference(
             &callee,
-            &mut type_args,
+            &declared_param_types,
+            &call.args,
             &args,
-            expected_type,
             call.span,
-        );
+        ) {
+            self.defer_or_report_uninferred_fn_type_args(
+                &callee,
+                &mut type_args,
+                &args,
+                expected_type,
+                call.span,
+            );
+        }
 
+<<<<<<< HEAD
         // Look up function return type
         let mut return_type = self.lookup_function_return_type(&callee, effect_op.as_ref());
+||||||| 20edf112e
+        // Look up function return type
+        let mut return_type =
+            self.lookup_function_return_type(&callee, callee_kind.interface_site());
+=======
+        let mut return_type = match operation_signature {
+            Some((_, return_type)) => return_type.unwrap_or(TypeTable::UNIT),
+            None => self.lookup_function_return_type(&callee),
+        };
+>>>>>>> origin/main
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -2017,11 +2228,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type
     }
 
+<<<<<<< HEAD
     pub(super) fn lookup_function_return_type(
         &mut self,
         callee: &CalleeRef,
         effect_op: Option<&EffectOperation>,
     ) -> TypeId {
+||||||| 20edf112e
+    /// Look up the return type of a function
+    pub(super) fn lookup_function_return_type(
+        &mut self,
+        callee: &CalleeRef,
+        interface_site: Option<ast::AstId>,
+    ) -> TypeId {
+=======
+    /// Look up the return type of a function
+    pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
+>>>>>>> origin/main
         let callee_module = callee.module();
         let func_name = callee.name();
         // Handle builtin functions
@@ -2033,6 +2256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.tysys.get_builtin_return_type(builtin_name);
         }
 
+<<<<<<< HEAD
         if let Some(op) = effect_op {
             return self
                 .effect_operation_sig(op)
@@ -2041,6 +2265,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or(TypeTable::UNIT);
         }
 
+||||||| 20edf112e
+        // Effect operations are routed here as `CalleeRef::local_namespace`, so
+        // `ModuleSource::Local { path }` matches `is_effect_like()`.
+        if callee_module.is_effect_like()
+            && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
+            && let Some((_, Some(return_type))) =
+                self.tysys.resolve_effect_op_signature(decl, func_name)
+        {
+            return return_type;
+        }
+
+=======
+>>>>>>> origin/main
         if let Some(def) = callee.def()
             && let Some(sig) = self.tysys.signatures.function_sig(def)
         {
@@ -2073,15 +2310,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
+<<<<<<< HEAD
         effect_op: Option<&EffectOperation>,
+||||||| 20edf112e
+        interface_site: Option<ast::AstId>,
+=======
+>>>>>>> origin/main
         callee_site: Option<ast::AstId>,
     ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+<<<<<<< HEAD
         if let Some(op) = effect_op {
             return Some((
                 self.effect_operation_sig(op).decl.param_types.clone(),
                 Vec::new(),
             ));
         }
+||||||| 20edf112e
+        // Check for qualified name (Type::method or Effect::operation)
+=======
+>>>>>>> origin/main
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
             let suffix = &name[pos + 2..];
@@ -2461,9 +2708,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
+<<<<<<< HEAD
         if let Some(op) = self.effect_operation_of(ident) {
             let defaults = Param::named_defaults(&self.effect_operation_sig(&op).params);
             let module = self.tysys.resolutions.defs().module(op.op).clone();
+||||||| 20edf112e
+        // `[ns::]E::op(args)` reads its defaults off the operation's own
+        // declaration, the same place `resolve_effect_op_signature` reads the
+        // parameter types the padding fills — and off the same segment, so the
+        // two agree on how many arguments the call owes.
+        if let Some(owner) = ident.owner_segment()
+            && let Some(operation) = ident.segments.last()
+            && let Some(decl) = self.tysys.effect_or_resource_decl_at(Some(owner.id))
+            && let Some(sig) = self
+                .tysys
+                .signatures
+                .resource_method_sig(decl, &operation.name)
+        {
+            let defaults = Param::named_defaults(&sig.params);
+            let module = self.tysys.resolutions.defs().module(sig.def).clone();
+=======
+        // `[ns::]E::op(args)` reads its defaults off the operation's own
+        // declaration, the same place `resolve_effect_op_signature` reads the
+        // parameter types the padding fills — and off the same segment, so the
+        // two agree on how many arguments the call owes.
+        if let Some((decl, operation)) = self.tysys.dispatched_operation(ident)
+            && let Some(sig) = self.tysys.signatures.resource_method_sig(decl, &operation)
+        {
+            let defaults = Param::named_defaults(&sig.params);
+            let module = self.tysys.resolutions.defs().module(sig.def).clone();
+>>>>>>> origin/main
             return (defaults, Some(module));
         }
         let Some(def) = self.tysys.free_function_at(ident.id) else {
@@ -2886,6 +3160,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args[i] = self.tysys.substitute_type_params(default_ty, &snapshot);
             }
         }
+    }
+
+    /// Reports each value a generic callee receives for a reference parameter, whose
+    /// unbound slot the argument check accepts it against. Whether it reported any.
+    fn report_value_for_reference(
+        &mut self,
+        callee: &CalleeRef,
+        param_types: &[TypeId],
+        arg_exprs: &[ast::Expr],
+        args: &[TypeId],
+        call_span: Span,
+    ) -> bool {
+        if self.lookup_function_type_params(callee).is_empty() {
+            return false;
+        }
+        let is_borrow = |this: &Self, t| {
+            RefKind::from_resolved(this.tysys.type_table.borrow().get(t)).is_some()
+        };
+        let mismatched: Vec<usize> = (0..param_types.len().min(args.len()))
+            .filter(|&i| {
+                is_borrow(self, param_types[i])
+                    && !matches!(args[i], TypeTable::ERROR | TypeTable::UNKNOWN)
+                    && !is_borrow(self, args[i])
+                    && !self.type_has_infer_hole(args[i])
+            })
+            .collect();
+        for &i in &mismatched {
+            let _ = self.emit(ArgSite::of(arg_exprs, i, call_span).mismatch(
+                self.tysys.type_id_to_string(param_types[i]),
+                self.tysys.type_id_to_string(args[i]),
+            ));
+        }
+        !mismatched.is_empty()
     }
 
     /// Defer (mint inference holes) or report unresolved free-function type
@@ -3741,6 +4048,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+<<<<<<< HEAD
+||||||| 20edf112e
+    /// The effect or resource declaration a qualified callee's receiver
+    /// segment names.
+    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
+        let def = self.resolutions.declared(site?)?;
+        self.is_effect_or_resource_decl(def).then_some(def)
+    }
+
+=======
+    /// The effect or resource an operation call dispatches through, with the
+    /// operation: `[ns::]E::op`, or a bare `op` imported as `use { E::{op} }`.
+    pub(super) fn dispatched_operation(&self, ident: &ast::IdentExpr) -> Option<(DefId, String)> {
+        let (decl, operation) = self.resolutions.operation_at(ident)?;
+        let dispatches = match ident.owner_segment() {
+            Some(_) => self.is_effect_or_resource_decl(decl),
+            None => self.trait_env.effect_decl_index.contains(&decl),
+        };
+        (dispatches
+            && self
+                .signatures
+                .resource_method_sig(decl, operation)
+                .is_some())
+        .then(|| (decl, operation.to_string()))
+    }
+
+>>>>>>> origin/main
     /// [`Self::packs_args_reach`] for a free function, whose parameter types
     /// the callee reference answers.
     fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {

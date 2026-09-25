@@ -17,6 +17,7 @@ use crate::ast::{
 use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
+use crate::name::wado_identifier;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -205,6 +206,7 @@ impl Builder {
                 name: "TreeMap".to_string(),
                 name_span: syn(),
                 alias: None,
+                local_span: syn(),
             }],
             items_span: Some(syn()),
             attributes: None,
@@ -279,7 +281,7 @@ impl Builder {
                     Param {
                         id: self.id(),
                         attrs: Vec::new(),
-                        name: p.name.to_snake_case(),
+                        name: wado_identifier(&p.name),
                         name_span: syn(),
                         ty,
                         self_kind: SelfKind::None,
@@ -302,7 +304,7 @@ impl Builder {
             ];
             methods.push(Function {
                 id: self.id(),
-                name: fname.to_snake_case(),
+                name: wado_identifier(fname),
                 name_span: syn(),
                 visibility: Visibility::Private,
                 is_export: false,
@@ -365,7 +367,7 @@ impl Builder {
                 Param {
                     id: self.id(),
                     attrs: Vec::new(),
-                    name: p.name.to_snake_case(),
+                    name: wado_identifier(&p.name),
                     name_span: syn(),
                     ty,
                     self_kind: SelfKind::None,
@@ -389,7 +391,7 @@ impl Builder {
         let id = self.id();
         self.items.push(Item::Function(Function {
             id,
-            name: func.name.to_snake_case(),
+            name: wado_identifier(&func.name),
             name_span: syn(),
             visibility: Visibility::Public,
             is_export: false,
@@ -835,5 +837,34 @@ mod tests {
             }
             other => panic!("expected Named Meters, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_keyword_named_function_or_param_is_escaped() {
+        let mut resolve = Resolve::new();
+        let package = resolve
+            .push_str(
+                "k.wit",
+                "package t:k;
+                 interface ops { match: func(resume: u32) -> u32; }
+                 world w { export ops; export resume: func(match: u32); }",
+            )
+            .unwrap();
+        let world = resolve.select_world(&[package], Some("w")).unwrap();
+        let b = build_bindings(&resolve, world).expect("build bindings");
+        let mut names = Vec::new();
+        for item in &b.module.items {
+            let functions = match item {
+                Item::Interface(d) => d.methods.iter().collect(),
+                Item::Function(f) => vec![f],
+                _ => Vec::new(),
+            };
+            for f in functions {
+                names.push(f.name.clone());
+                names.extend(f.params.iter().map(|p| p.name.clone()));
+            }
+        }
+        names.sort();
+        assert_eq!(names, ["match_", "match_", "resume_", "resume_"]);
     }
 }

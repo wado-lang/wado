@@ -120,13 +120,12 @@ Returns the per-field members.
 
 Assembles the struct from its field values.
 
-#### `fn defaults() -> Self::FieldSlots`
+#### `fn default_slot(index: i32) -> Self::FieldSlots`
 
-`#[compiler_item("reflect_struct_defaults")]`
+`#[compiler_item("reflect_struct_default_slot")]`
 
-The declared field defaults (`f: T = expr`), `None` where a field
-declares none. Read per field, so only a slot the wire left empty
-evaluates its default.
+Empty slots but `index`, which holds that field's declared default
+(`f: T = expr`) if it has one. No other field's default is evaluated.
 
 #### `fn empty_slots() -> Self::FieldSlots`
 
@@ -3155,6 +3154,11 @@ _Fields are private._
 
 The case's discriminant.
 
+#### `pub fn wire_discriminant(&self) -> i32`
+
+The discriminant a format writes: the case's `#[wire(number = N)]`, or
+its discriminant where it carries none.
+
 #### `pub fn holds(&self, v: &T) -> bool`
 
 Whether `v` is this case.
@@ -3266,6 +3270,10 @@ Whether the field is marked `#[secret]`.
 
 The field's `#[wire(number = N)]`, or `0` where it carries none: a
 field number starts at 1, so zero is the format's own non-number.
+
+#### `pub fn wire_encoding(&self) -> WireEncoding`
+
+The field's `#[wire(encoding = …)]`.
 
 #### `pub fn get(&self, v: &T) -> F`
 

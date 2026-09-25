@@ -1,0 +1,13 @@
+// A key set twice across one declaration's `#[wire]` attributes is refused,
+// since only one of the two could be read.
+
+struct Sample {
+    #[wire(number = 1, encoding = "zigzag")]
+    #[wire(encoding = "fixed")]
+    delta: i64,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`wire(encoding)` is written twice on one declaration", "compile_error_codes": ["ATTR_MISUSE"]}

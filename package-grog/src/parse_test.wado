@@ -1,0 +1,74 @@
+use { read } from "./parse.wado";
+use { FieldType, Label, Syntax } from "./schema.wado";
+
+test "a proto3 file's declarations" {
+    let file = read("syntax = \"proto3\";
+package demo.v1;
+import \"other.proto\";
+message Outer {
+  int32 id = 1;
+  optional string name = 2 [json_name = \"n\"];
+  repeated Inner items = 0x3;
+  map<string, int64> counts = 4;
+  oneof choice { bytes raw = 5; Kind kind = 6; }
+  message Inner { sint64 delta = 1; }
+  enum Kind { KIND_UNSPECIFIED = 0; KIND_A = -1; }
+}
+").unwrap();
+    assert file.syntax matches { Proto3 };
+    assert file.package == "demo.v1";
+    assert file.imports == ["other.proto"];
+    assert file.messages.len() == 2;
+    let outer = &file.messages[0];
+    assert outer.path == ["Outer"];
+    assert file.messages[1].path == ["Outer", "Inner"];
+    assert outer.fields.len() == 6;
+    assert outer.fields[0].label matches { None };
+    assert outer.fields[0].type_ matches { Scalar(t) && t == "int32" };
+    assert outer.fields[1].label matches { Optional };
+    assert outer.fields[2].number == 3;
+    assert outer.fields[2].type_ matches { Named(t) && t == "Inner" };
+    assert outer.fields[3].type_ matches { Map([k, Scalar(v)]) && k == "string" && v == "int64" };
+    assert outer.fields[4].oneof matches { Some(o) && o == "choice" };
+    assert outer.fields[5].line == 9;
+    assert file.enums[0].path == ["Outer", "Kind"];
+    assert file.enums[0].values[1].number == -1;
+}
+
+test "editions features at each level" {
+    let file = read("edition = \"2023\";
+option features.field_presence = IMPLICIT;
+message M {
+  option features.message_encoding = DELIMITED;
+  int32 a = 1 [features.field_presence = LEGACY_REQUIRED];
+}
+").unwrap();
+    assert file.syntax matches { Edition(y) && y == "2023" };
+    assert file.features.field_presence matches { Some(p) && p == "IMPLICIT" };
+    assert file.messages[0].features.message_encoding matches { Some(e) && e == "DELIMITED" };
+    assert file.messages[0].fields[0].features.field_presence matches { Some(p) && p == "LEGACY_REQUIRED" };
+}
+
+test "a group keeps its type name and lowercases its field name" {
+    let file = read("syntax = \"proto2\"; message M { optional group Data = 1 { optional int32 x = 2; } }").unwrap();
+    assert file.messages[0].fields[0].name == "data";
+    assert file.messages[0].fields[0].type_ matches { Group(n) && n == "Data" };
+}
+
+test "no syntax statement is proto2" {
+    assert read("message M {}").unwrap().syntax matches { Proto2 };
+}
+
+test "an unknown edition is refused" {
+    assert read("edition = \"1999\";") matches { Err(e) && e == "1: edition \"1999\" is not one Grog reads" };
+}
+
+test "descriptor.proto" {
+    let file = read(#include_str("../tests/proto/protobuf/src/google/protobuf/descriptor.proto")).unwrap();
+    assert file.package == "google.protobuf";
+    assert file.messages.len() > 30;
+}
+
+test "a field number past i32 is refused" {
+    assert read("message M { int32 a = 99999999999; }") matches { Err(e) && e == "1: 99999999999 is not a field number" };
+}

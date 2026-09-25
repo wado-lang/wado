@@ -716,7 +716,7 @@ impl Translator<'_> {
             monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
             fields: s.fields.iter().map(|f| fctx.convert_field(f)).collect(),
             span: s.span,
-            wire_name_policy: s.wire_name_policy.clone(),
+            wire_name_policy: s.wire_name_policy,
         }
     }
 
@@ -2043,7 +2043,14 @@ impl FunctionTranslator<'_, '_> {
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
                         tir::ResolvedType::Struct { def, type_args }
+<<<<<<< HEAD
                             if tt.is_compiler_struct_instance(peeled, CompilerItem::Box) =>
+||||||| 20edf112e
+                            if !type_args.is_empty() && tt.struct_head_name(*def) == box_name =>
+=======
+                            if !type_args.is_empty()
+                                && tt.is_compiler_struct(*def, CompilerItem::Box) =>
+>>>>>>> origin/main
                         {
                             self.base
                                 .struct_fields_map

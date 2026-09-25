@@ -1,0 +1,36 @@
+// A schema touching each mapping Grog makes, for the round-trip test.
+syntax = "proto3";
+
+package demo;
+
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_ACTIVE = 1;
+  STATUS_RETIRED = 2;
+}
+
+message Account {
+  int32 id = 1;
+  string name = 2;
+  optional int64 balance = 3;
+  sint32 delta = 4;
+  fixed64 checksum = 5;
+  sfixed32 offset = 6;
+  double ratio = 7;
+  bool verified = 8;
+  bytes avatar = 9;
+  Status status = 10;
+  repeated string tags = 11;
+  map<string, int32> limits = 12;
+  Address address = 13;
+  repeated Address history = 14;
+  oneof contact {
+    string email = 15;
+    uint64 phone = 16;
+  }
+
+  message Address {
+    string city = 1;
+    uint32 zip = 2;
+  }
+}

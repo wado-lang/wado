@@ -50,7 +50,9 @@ use tysys::TypeSystem;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
+use crate::ast::{
+    self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
+};
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -87,6 +89,19 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
         }
     }
     index
+}
+
+/// Reports a default naming a later parameter, in every generic-parameter
+/// list an item declares. A body's local items are checked where it is walked.
+struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
+
+impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+    fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
+        self.0.report_forward_type_param_defaults(params);
+        ast::walk_generic_params(self, params);
+    }
+
+    fn visit_block(&mut self, _: &ast::Block) {}
 }
 
 /// The sentence every `#[unavailable]` declaration in the program reports,
@@ -1369,7 +1384,161 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_struct_fields_of_decl(def)
     }
 
+<<<<<<< HEAD
     /// The impl target a receiver spelling names in the current frame.
+||||||| 20edf112e
+    /// Build effect name → declaring module map for a module.
+    ///
+    /// Three sources, applied in *increasing* precedence — each overwrites the
+    /// last, so the one written last here is the one that answers:
+    ///
+    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
+    ///    so the `use` declaration is the only record of what `Iface` means;
+    /// 2. the module's explicit imports, read from the symbol table where the
+    ///    analyzer already resolved aliases and re-export chains;
+    /// 3. the module's own `interface` / `resource` declarations, which win
+    ///    over any import of the name.
+    ///
+    /// The order is what the third clause requires, and stating it as a list
+    /// of decreasing precedence read the other way round.
+    ///
+    /// An import earns an entry by *being* an effect or a resource, asked of
+    /// the declaration. Guessing from the spelling — the `PascalCase` test this
+    /// replaces — admitted every imported struct and let a same-named one
+    /// answer for an effect it has nothing to do with.
+    fn build_effect_sources(
+        interner: &mut ModuleSourceInterner,
+        module: &Module,
+        module_source: &ModuleSource,
+        entry: Option<&ModuleSource>,
+        invocations: &InvocationIndex,
+        symbols: &SymbolTable,
+    ) -> IndexMap<String, ModuleSource> {
+        let mut sources = IndexMap::default();
+        for item in &module.items {
+            let Item::Use(use_decl) = item else {
+                continue;
+            };
+            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
+                ast::UseItem::Simple { .. }
+                | ast::UseItem::Wildcard
+                | ast::UseItem::Namespace { .. } => None,
+            });
+            if let Some(first) = interfaces.next() {
+                // `entry` must be threaded so identities match the loader
+                // (see `name::resolve_local_identity`). Wasm-asset imports
+                // resolve to `ModuleSource::Wasm`, matching the loader.
+                let source =
+                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations);
+                for interface_name in std::iter::once(first).chain(interfaces) {
+                    sources.insert(interface_name.clone(), source.clone());
+                }
+            }
+        }
+        for (local_name, sym) in symbols.imports_in(module_source) {
+            if matches!(sym.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)) {
+                sources.insert(local_name.to_string(), sym.module_source().clone());
+            }
+        }
+        for item in &module.items {
+            match item {
+                Item::Interface(effect_decl) => {
+                    sources.insert(effect_decl.name.clone(), module_source.clone());
+                }
+                Item::Resource(resource_decl) => {
+                    sources.insert(resource_decl.name.clone(), module_source.clone());
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// Canonical impl-target key for a type named at a use site, for the impl
+    /// indexes.
+    ///
+    /// Through [`Self::decl_key_or_local`], so an impl target and every other
+    /// name-only lookup answer from one chain. The table alone leaves out the
+    /// declaration indexes, and a receiver the module never imported — reached
+    /// only through a return type — would then key to the call site instead of
+    /// where it is declared.
+=======
+    /// Build effect name → declaring module map for a module.
+    ///
+    /// Three sources, applied in *increasing* precedence — each overwrites the
+    /// last, so the one written last here is the one that answers:
+    ///
+    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
+    ///    so the `use` declaration is the only record of what `Iface` means;
+    /// 2. the module's explicit imports, read from the symbol table where the
+    ///    analyzer already resolved aliases and re-export chains;
+    /// 3. the module's own `interface` / `resource` declarations, which win
+    ///    over any import of the name.
+    ///
+    /// The order is what the third clause requires, and stating it as a list
+    /// of decreasing precedence read the other way round.
+    ///
+    /// An import earns an entry by *being* an effect or a resource, asked of
+    /// the declaration. Guessing from the spelling — the `PascalCase` test this
+    /// replaces — admitted every imported struct and let a same-named one
+    /// answer for an effect it has nothing to do with.
+    fn build_effect_sources(
+        interner: &mut ModuleSourceInterner,
+        module: &Module,
+        module_source: &ModuleSource,
+        entry: Option<&ModuleSource>,
+        invocations: &InvocationIndex,
+        symbols: &SymbolTable,
+    ) -> IndexMap<String, ModuleSource> {
+        let mut sources = IndexMap::default();
+        for item in &module.items {
+            let Item::Use(use_decl) = item else {
+                continue;
+            };
+            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
+                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
+                ast::UseItem::Simple { .. }
+                | ast::UseItem::Wildcard
+                | ast::UseItem::Namespace { .. } => None,
+            });
+            if let Some(first) = interfaces.next()
+                && let Some(source) =
+                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations)
+            {
+                for interface_name in std::iter::once(first).chain(interfaces) {
+                    sources.insert(interface_name.clone(), source.clone());
+                }
+            }
+        }
+        for (local_name, sym) in symbols.imports_in(module_source) {
+            if matches!(sym.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)) {
+                sources.insert(local_name.to_string(), sym.module_source().clone());
+            }
+        }
+        for item in &module.items {
+            match item {
+                Item::Interface(effect_decl) => {
+                    sources.insert(effect_decl.name.clone(), module_source.clone());
+                }
+                Item::Resource(resource_decl) => {
+                    sources.insert(resource_decl.name.clone(), module_source.clone());
+                }
+                _ => {}
+            }
+        }
+        sources
+    }
+
+    /// Canonical impl-target key for a type named at a use site, for the impl
+    /// indexes.
+    ///
+    /// Through [`Self::decl_key_or_local`], so an impl target and every other
+    /// name-only lookup answer from one chain. The table alone leaves out the
+    /// declaration indexes, and a receiver the module never imported — reached
+    /// only through a return type — would then key to the call site instead of
+    /// where it is declared.
+>>>>>>> origin/main
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
         self.impl_target_at(None, type_name)
     }
@@ -1466,6 +1635,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
+<<<<<<< HEAD
     /// The effect `name` names at `site`, its use recorded; one naming no
     /// effect is reported.
     pub(crate) fn effect_named_at(
@@ -1491,11 +1661,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             });
         }
         effect
+||||||| 20edf112e
+=======
+    fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
+        if let Some(sym) = self.symbols.lookup_in_module(source, name) {
+            self.record_reference_to_def(site, sym.defined_at);
+        }
+>>>>>>> origin/main
     }
 
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
-    /// declarations. The cursor landing on an imported name inside a `use`
-    /// specifier list should jump to the defining symbol in the source module.
+    /// declarations, so the cursor on one jumps to its definition.
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
@@ -1509,13 +1685,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for use_item in &use_decl.items {
                 match use_item {
                     ast::UseItem::Simple { id, name, .. } => {
-                        if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
-                            self.record_reference_to_def(*id, sym.defined_at);
+                        self.record_use_reference(&source, *id, name);
+                    }
+                    ast::UseItem::InterfaceFunctions {
+                        id,
+                        interface_name,
+                        functions,
+                        ..
+                    } => {
+                        self.record_use_reference(&source, *id, interface_name);
+                        for function in functions {
+                            let member = name::mangle_local_method(interface_name, &function.name);
+                            self.record_use_reference(&source, function.id, &member);
                         }
                     }
-                    ast::UseItem::InterfaceFunctions { .. }
-                    | ast::UseItem::Wildcard
-                    | ast::UseItem::Namespace { .. } => {}
+                    ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
                 }
             }
         }
@@ -1706,6 +1890,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
+            ForwardDefaults(self).visit_item(item);
+            if let Item::Struct(ast::StructDecl { id, .. })
+            | Item::Variant(ast::VariantDecl { id, .. })
+            | Item::Newtype(ast::Newtype { id, .. }) = item
+                && let Some(def) = self.tysys.resolutions.defs().of_ast_id(*id)
+            {
+                self.type_param_defaults_are_ordered(def);
+            }
             match item {
                 Item::Function(func) => {
                     self.resolve_function(func);

@@ -85,7 +85,8 @@ pub trait ReflectStruct: Reflect {               // struct
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
     fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
-    fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
+    fn default_slot(index: i32) -> Self::FieldSlots;  // field `index`'s `f: T = expr`
+    fn empty_slots() -> Self::FieldSlots;        // every slot `None`
 }
 
 pub trait ReflectVariant: Reflect {              // variant
@@ -160,13 +161,16 @@ Every kind spells its build direction `from_<channel>`. `from_discriminant` /
 error, not a bug; `from_fields` is total, since a field-value tuple is already
 typed. `discriminant` / `bits` read the live tag off a value.
 
-`FieldSlots` and `defaults()` are the value-level companion of `FieldTypes`:
-the same pack under `Option`, carrying each field's declared default (`f: T =
-expr`) or `None`. They are not a parallel metadata list — a default is a value
-of the field's own type, so it belongs to the payload channel, and a build over
-a wire-ordered stream seeds its slots with one call. Keeping it off the member
-handle keeps every other `members()` walk from materializing defaults it never
-reads.
+`FieldSlots` is the value-level companion of `FieldTypes`: the same pack under
+`Option`. `default_slot(i)` fills slot `i` with field `i`'s declared default
+(`f: T = expr`) and leaves every other slot `None`. A default is a value of the
+field's own type, so it belongs to the payload channel, not to a metadata list.
+
+A default is evaluated only where it is read, as a struct literal evaluates only
+the defaults it needs. So `default_slot` takes the index rather than returning
+every default. A constant index folds the other slots away once the call is
+inlined. Keeping defaults off the member handle keeps every other `members()`
+walk from materializing them.
 
 ## Members
 
@@ -284,9 +288,9 @@ A struct's build direction is `from_fields`, which takes the field values in
 declaration order — but a self-describing format delivers them in wire order,
 and a pack map (`[..F::method(args)]`) applies one expression per element with
 no per-element context beyond a mutable cursor. Neither side can reorder alone,
-so the derivation holds the values: a slot tuple `[..Option<F>]` seeded with the
-declared defaults, written by the wire loop at the index the format reports and
-read back in declaration order.
+so the derivation holds the values: a slot tuple `[..Option<F>]` that starts
+empty, is written by the wire loop at the index the format reports, and is read
+back in declaration order.
 
 The blanket binds `T: ReflectStruct<FieldTypes = [..F]> + FieldSchema` and
 `..F: Deserialize`, and the walk needs three things the language grew for it: a
@@ -294,9 +298,9 @@ variadic `for-of` that binds the element index, that index as a tuple subscript
 so the wire loop can write one slot, and the comprehension that reads the slots
 back into `from_fields`' argument (WEP 2026-03-14).
 
-Seeding with `defaults()` is what makes a declared default an optional field:
-the wire overwrites the slot when it carries one, and a slot still empty at the
-end becomes a `MissingField` error naming the field.
+A slot still empty at the end reads `default_slot(i)`, which is what makes a
+declared default an optional field. A field that declares none becomes a
+`MissingField` error naming it.
 
 The wire protocol is unchanged — `next_field` over `FieldSchema`, one streaming
 pass — so no format implementation moves. `FieldSchema` is the one piece the

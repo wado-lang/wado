@@ -1,0 +1,11 @@
+// A Wasm asset's export table is no Wado source, so an export spelled like a
+// keyword is not refused there. Importing it takes an alias.
+use { add, resume as seven } from "./sub/wasm_import_keyword_export.wat" with { type: "wat" };
+
+test "an asset exporting `resume` imports" {
+    assert add(1, 2) == 3;
+    assert seven() == 7;
+}
+
+__DATA__
+{"test": {}}

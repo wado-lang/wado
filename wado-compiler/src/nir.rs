@@ -714,7 +714,7 @@ pub struct NirStruct {
     pub fields: Vec<NirField>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<ast::NamePolicy>,
 }
 
 #[derive(Debug, Clone)]

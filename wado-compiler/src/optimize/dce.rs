@@ -1056,9 +1056,17 @@ impl<'a> DceWalker<'a> {
                 // actually defined on the inner type (e.g., i32^Ord::cmp, not
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
+<<<<<<< HEAD
                 let boxed = def
                     .decl()
                     .is_some_and(|d| self.type_table.is_compiler_item_def(d, CompilerItem::Box));
+||||||| 20edf112e
+                let boxed = def.decl().is_some_and(|d| {
+                    self.type_table.compiler_item_def(CompilerItem::Box) == Some(d)
+                });
+=======
+                let boxed = self.type_table.is_compiler_struct(*def, CompilerItem::Box);
+>>>>>>> origin/main
                 if boxed && let Some(info) = func.method_info.clone() {
                     let original_method_id = FunctionId::Method(MethodName::new(
                         func.module_source.clone(),

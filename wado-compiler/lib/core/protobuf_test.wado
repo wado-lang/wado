@@ -1,6 +1,7 @@
 use {
     WireType,
     from_bytes,
+    is_assignable_field_number,
     to_bytes,
     read_fixed32,
     read_fixed64,
@@ -59,6 +60,17 @@ test "a tag carries the field number and what follows it" {
     assert tag_len(1) == 1;
     assert tag_len(15) == 1;
     assert tag_len(16) == 2;
+}
+
+test "a schema numbers fields from 1 up to 2^29 - 1, skipping the reserved range" {
+    assert !is_assignable_field_number(0);
+    assert is_assignable_field_number(1);
+    assert is_assignable_field_number(18999);
+    assert !is_assignable_field_number(19000);
+    assert !is_assignable_field_number(19999);
+    assert is_assignable_field_number(20000);
+    assert is_assignable_field_number(536870911);
+    assert !is_assignable_field_number(536870912);
 }
 
 test "zigzag moves the sign into the low bit" {
@@ -423,4 +435,154 @@ test "a tag whose wire type is not the field's is refused" {
     // The other direction: a `Fixed32` field tagged `Varint` (`0x08`), over
     // four bytes that are exactly one `f32`.
     assert from_bytes::<Float, ByteList>(b"\x08\x00\x00\x80\x3f") matches { Err(_) };
+}
+
+// `sint*`, `fixed*` and `sfixed*` share a Wado type with `int*`/`uint*`, so
+// `#[wire(encoding = …)]` says which the field is on the wire.
+struct Encodings {
+    #[wire(number = 1)]
+    #[wire(encoding = "zigzag")]
+    s32: i32,
+    #[wire(number = 2)]
+    #[wire(encoding = "zigzag")]
+    s64: i64,
+    #[wire(number = 3)]
+    #[wire(encoding = "fixed")]
+    f32_: u32,
+    #[wire(number = 4)]
+    #[wire(encoding = "fixed")]
+    f64_: u64,
+    #[wire(number = 5)]
+    #[wire(encoding = "fixed")]
+    sf32: i32,
+    #[wire(number = 6)]
+    #[wire(encoding = "fixed")]
+    sf64: i64,
+    #[wire(number = 7)]
+    #[wire(encoding = "zigzag")]
+    many: List<i32>,
+    #[wire(number = 8)]
+    #[wire(encoding = "zigzag")]
+    maybe: Option<i64>,
+}
+
+test "zigzag and fixed-width integers are written as their encoding says" {
+    let m = Encodings {
+        s32: -2,
+        s64: 1,
+        f32_: 1,
+        f64_: 2,
+        sf32: -1,
+        sf64: -2,
+        many: [-1, 1],
+        maybe: Option::Some(-3),
+    };
+    assert encode(&m) == "0803" + "1002" + "1d01000000" + "210200000000000000" + "2dffffffff" + "31feffffffffffffff" + "3801" + "3802" + "4005";
+    let back = decode::<Encodings>(to_bytes(&m).unwrap());
+    assert back.s32 == -2;
+    assert back.s64 == 1;
+    assert back.f32_ == 1;
+    assert back.f64_ == 2;
+    assert back.sf32 == -1;
+    assert back.sf64 == -2;
+    assert back.many.len() == 2;
+    assert back.many[0] == -1;
+    assert back.many[1] == 1;
+    assert back.maybe matches { Some(-3) };
+}
+
+test "a fixed-width field reads a packed run of its width" {
+    struct Fixeds {
+        #[wire(number = 1)]
+        #[wire(encoding = "fixed")]
+        items: List<u32> = [],
+    }
+
+    let m = decode::<Fixeds>(b"\x0a\x08\x01\x00\x00\x00\x02\x00\x00\x00");
+    assert m.items.len() == 2;
+    assert m.items[1] == 2;
+}
+
+test "a fixed-width field tagged as a varint is refused" {
+    struct Fixed {
+        #[wire(number = 1)]
+        #[wire(encoding = "fixed")]
+        v: u32 = 0,
+    }
+
+    assert from_bytes::<Fixed, ByteList>(b"\x0d\x01\x00\x00\x00") matches { Ok(f) && f.v == 1 };
+    assert from_bytes::<Fixed, ByteList>(b"\x08\x01") matches { Err(_) };
+}
+
+// A zero default is proto3's implicit presence, so the zero stays off the wire.
+// A field with no default, or an `Option`, is always written.
+struct Presence {
+    #[wire(number = 1)]
+    implicit: i32 = 0,
+    #[wire(number = 2)]
+    explicit: Option<i32> = null,
+    #[wire(number = 3)]
+    required: i32,
+    #[wire(number = 4)]
+    text: String = "",
+    #[wire(number = 5)]
+    flag: bool = false,
+    #[wire(number = 6)]
+    real: f64 = 0.0,
+    #[wire(number = 7)]
+    raw: ByteList = b"",
+}
+
+test "a zero in an implicit-presence field is not written" {
+    let zero = Presence { explicit: Option::Some(0), required: 0 };
+    assert encode(&zero) == "1000" + "1800";
+    let back = decode::<Presence>(to_bytes(&zero).unwrap());
+    assert back.implicit == 0;
+    assert back.explicit matches { Some(0) };
+}
+
+test "a nonzero implicit-presence field is written" {
+    let m = Presence { implicit: 1, required: 2, text: "a", flag: true, raw: b"\x00" };
+    assert encode(&m) == "0801" + "1802" + "220161" + "2801" + "3a0100";
+}
+
+test "negative zero is not the zero an absent field means" {
+    let m = Presence { required: 0, real: -0.0 };
+    assert encode(&m) == "1800" + "310000000000000080";
+}
+
+enum Mode {
+    #[wire(number = 1)]
+    Fast,
+    #[wire(number = 0)]
+    Off,
+}
+
+// A default other than the zero is not implicit presence: an absent field
+// would decode to the default, so a zero held there has to be written.
+struct Tuned {
+    #[wire(number = 1)]
+    retries: i32 = 3,
+    #[wire(number = 2)]
+    mode: Mode = Mode::Fast,
+    #[wire(number = 3)]
+    quiet: Mode = Mode::Off,
+}
+
+test "a default other than the zero is always written" {
+    let m = Tuned { retries: 0 };
+    assert encode(&m) == "0800" + "1001";
+    assert decode::<Tuned>(to_bytes(&m).unwrap()).retries == 0;
+}
+
+struct Computed {
+    #[wire(number = 1)]
+    cast: i64 = 0 as i64,
+    #[wire(number = 2)]
+    called: i32 = i32::max(1, 0),
+}
+
+test "a default is judged by its value, however it is written" {
+    assert encode(&Computed {}) == "1001";
+    assert encode(&Computed { called: 0 }) == "1000";
 }

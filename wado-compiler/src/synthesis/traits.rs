@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::convert::identity;
 use std::rc::Rc;
 
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
 use crate::elaborator::trait_env::{ImplReceiver, TraitEnv};
@@ -26,7 +26,7 @@ use super::common::{
     FormatterWriteStr, deref_expr, make_synthetic_free_function, make_synthetic_method,
     param_local, ref_expr, synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, Visibility};
+use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -481,10 +481,11 @@ struct ReflectFieldInfo {
     /// `#[wire(number = N)]`, or `0` where the field carries none. Zero is the
     /// wire format's own non-number: a field number starts at 1.
     wire_number: i32,
+    wire_encoding: WireEncoding,
     is_secret: bool,
     has_default: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
-    /// context — `defaults()` relocates its locals into the synthesized body.
+    /// context — `default_slot()` relocates its locals into the synthesized body.
     default_expr: Option<Box<TirExpr>>,
 }
 
@@ -500,7 +501,7 @@ struct ReflectTarget {
     receiver: FqTypeName,
     type_params: Vec<TirTypeParam>,
     fields: Vec<ReflectFieldInfo>,
-    wire_name_policy: Option<String>,
+    wire_name_policy: Option<NamePolicy>,
     span: Span,
 }
 
@@ -532,12 +533,13 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     index: f.index,
                     wire_name_override: f.wire_name_override.clone(),
                     wire_number: f.serde_number.unwrap_or(0) as i32,
+                    wire_encoding: f.serde_encoding,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
                 })
                 .collect(),
-            wire_name_policy: s.wire_name_policy.clone(),
+            wire_name_policy: s.wire_name_policy,
             span: s.span,
         })
         .collect()
@@ -646,7 +648,7 @@ fn generate_struct_reflect_methods(
         fields_tuple_type,
         span,
     );
-    let defaults_fn = generate_struct_defaults_fn(
+    let default_slot_fn = generate_struct_default_slot_fn(
         type_table,
         env,
         reflect_trait_name,
@@ -668,7 +670,8 @@ fn generate_struct_reflect_methods(
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         receiver,
         env.case_style_type,
-        name_policy,
+        *name_policy,
+        type_table.borrow().compiler_items(),
         &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
@@ -678,7 +681,7 @@ fn generate_struct_reflect_methods(
         type_name_fn,
         members_fn,
         from_fields_fn,
-        defaults_fn,
+        default_slot_fn,
         empty_slots_fn,
         wire_name_policy_fn,
     ];
@@ -746,7 +749,7 @@ pub(crate) const REFLECT_MEMBERS_ASSOC: &str = "Members";
 pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
-/// under `Option`, the shape `defaults()` returns and a streaming build fills.
+/// under `Option`, the shape `default_slot()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
 
 /// `ReflectTemplate`'s payload-pack associated type (`type Holes`): the hole
@@ -760,6 +763,7 @@ pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
 struct ReflectSynthEnv {
     string_type: TypeId,
     case_style_type: TypeId,
+    wire_encoding_type: TypeId,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
@@ -770,7 +774,7 @@ struct ReflectSynthEnv {
     type_name_method: String,
     members_method: String,
     from_fields_method: String,
-    defaults_method: String,
+    default_slot_method: String,
     empty_slots_method: String,
     wire_name_policy_method: String,
 }
@@ -791,12 +795,14 @@ impl ReflectSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
+        let wire_encoding_type = tt.make_compiler_enum(CompilerItem::WireEncoding);
         let (member_struct_name, member_struct_def) =
             resolve_member_struct(tt, CompilerItem::ReflectStructField);
         let items = tt.compiler_items();
         Self {
             string_type,
             case_style_type,
+            wire_encoding_type,
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
@@ -807,8 +813,8 @@ impl ReflectSynthEnv {
             from_fields_method: items
                 .method_name(CompilerItem::ReflectStructFromFields)
                 .to_string(),
-            defaults_method: items
-                .method_name(CompilerItem::ReflectStructDefaults)
+            default_slot_method: items
+                .method_name(CompilerItem::ReflectStructDefaultSlot)
                 .to_string(),
             empty_slots_method: items
                 .method_name(CompilerItem::ReflectStructEmptySlots)
@@ -889,10 +895,49 @@ fn generate_reflect_member_tuple_fn(
     )
 }
 
+/// The enum case a compiler item anchors, as a value of `enum_type`.
+fn compiler_enum_case(
+    item: CompilerItem,
+    enum_type: TypeId,
+    items: &CompilerItems,
+    span: Span,
+) -> TirExpr {
+    let (_, _, case_name, case_index) = items.require_enum_case(item);
+    TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type,
+            case_index,
+            case_name: case_name.to_string(),
+        },
+        enum_type,
+        span,
+    )
+}
+
+fn wire_encoding_item(encoding: WireEncoding) -> CompilerItem {
+    match encoding {
+        WireEncoding::Plain => CompilerItem::WireEncodingPlain,
+        WireEncoding::ZigZag => CompilerItem::WireEncodingZigZag,
+        WireEncoding::Fixed => CompilerItem::WireEncodingFixed,
+    }
+}
+
+fn case_style_item(name_policy: Option<NamePolicy>) -> CompilerItem {
+    match name_policy {
+        None => CompilerItem::CaseStyleIdentity,
+        Some(NamePolicy::Camel) => CompilerItem::CaseStyleCamel,
+        Some(NamePolicy::Snake) => CompilerItem::CaseStyleSnake,
+        Some(NamePolicy::ScreamingSnake) => CompilerItem::CaseStyleScreamingSnake,
+        Some(NamePolicy::Pascal) => CompilerItem::CaseStylePascal,
+        Some(NamePolicy::Kebab) => CompilerItem::CaseStyleKebab,
+        Some(NamePolicy::ScreamingKebab) => CompilerItem::CaseStyleScreamingKebab,
+    }
+}
+
 /// A metadata-struct field holding an integer literal of type `ty`.
 fn reflect_meta_int_field(
     name: &str,
-    value: u64,
+    value: i64,
     ty: TypeId,
     index: u32,
     span: Span,
@@ -901,7 +946,7 @@ fn reflect_meta_int_field(
         name: name.to_string(),
         value: TirExpr::new(
             TirExprKind::IntLiteral {
-                value,
+                value: value.cast_unsigned(),
                 repr: value.to_string(),
             },
             ty,
@@ -951,7 +996,7 @@ fn generate_struct_members_fn(
                 }
             };
             let field_fields = vec![
-                reflect_meta_int_field("index", u64::from(f.index), TypeTable::I32, 0, span),
+                reflect_meta_int_field("index", i64::from(f.index), TypeTable::I32, 0, span),
                 TirStructField {
                     name: "field_name".to_string(),
                     value: TirExpr::new(
@@ -986,13 +1031,21 @@ fn generate_struct_members_fn(
                 },
                 reflect_meta_int_field(
                     "wire_number",
-                    u64::try_from(f.wire_number).unwrap_or_else(|_| {
-                        unreachable!("reify rejects a field number outside 1..=536870911")
-                    }),
+                    i64::from(f.wire_number),
                     TypeTable::I32,
                     5,
                     span,
                 ),
+                TirStructField {
+                    name: "wire_encoding".to_string(),
+                    value: compiler_enum_case(
+                        wire_encoding_item(f.wire_encoding),
+                        env.wire_encoding_type,
+                        type_table.borrow().compiler_items(),
+                        span,
+                    ),
+                    field_index: 6,
+                },
             ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
@@ -1029,13 +1082,13 @@ fn generate_struct_members_fn(
     )
 }
 
-/// Build `S^ReflectStruct::defaults() -> [Option<F_0>, …]`:
-/// `return [Option::Some(<default_0>), Option::None, …];`.
+/// Build `S^ReflectStruct::default_slot(index) -> [Option<F_0>, …]`:
+/// `return [match index { 0 => Option::Some(<default_0>), _ => Option::None }, …];`.
 ///
 /// A default expression is reified in the struct's own context, numbered from
 /// zero, so its locals are re-allocated into this function's table before they
-/// are embedded — otherwise two fields' defaults would share slot 0.
-fn generate_struct_defaults_fn(
+/// are embedded — otherwise two fields' defaults would share one slot.
+fn generate_struct_default_slot_fn(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
     reflect_trait_name: &FqTraitName,
@@ -1045,11 +1098,19 @@ fn generate_struct_defaults_fn(
     slots_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, &env.defaults_method);
+    let method_info = trait_method_info(receiver, reflect_trait_name, &env.default_slot_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let mut next_local: u32 = 0;
-    let mut locals: Vec<TirLocal> = Vec::new();
+    let params = vec![TirParam {
+        name: "index".to_string(),
+        type_id: TypeTable::I32,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    }];
+    let mut locals = locals_from_params(&params);
+    let mut next_local = locals.len() as u32;
     let items = type_table.borrow().compiler_items().clone();
     let elements = fields
         .iter()
@@ -1058,7 +1119,26 @@ fn generate_struct_defaults_fn(
             Some(default) => {
                 let mut value = default.as_ref().clone();
                 relocate_synthetic_locals(&mut value, &mut next_local, &mut locals);
-                option_some(value, slot_type, &items)
+                let arm = |pattern, body| TirMatchArm {
+                    pattern,
+                    guard: None,
+                    body,
+                    span,
+                };
+                TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(local_expr(0, "index", TypeTable::I32, span)),
+                        arms: vec![
+                            arm(
+                                TirPattern::Literal(TirLiteralPattern::I128(i128::from(f.index))),
+                                option_some(value, slot_type, &items),
+                            ),
+                            arm(TirPattern::Wildcard, common::option_none(slot_type, &items)),
+                        ],
+                    },
+                    slot_type,
+                    span,
+                )
             }
             None => common::option_none(slot_type, &items),
         })
@@ -1079,11 +1159,11 @@ fn generate_struct_defaults_fn(
     );
 
     // One tuple literal reads as large to the cost heuristic, but a caller
-    // indexes one slot and the rest fold away — only once the call is inlined.
+    // passes a constant index, and every other arm folds away once inlined.
     let mut function = make_synthetic_method(
         qualified_name,
         method_info,
-        vec![],
+        params,
         slots_tuple_type,
         body,
         locals,
@@ -1205,47 +1285,20 @@ fn generate_struct_from_fields_fn(
     )
 }
 
-/// Map a `#[wire(name_policy)]` string to its `CaseStyle` case
-/// `(index, name)`. Mirrors `serde_synth::apply_rename_all`'s recognised
-/// strategies; any unknown string (and no attribute) falls back to `Identity`.
-fn case_style_variant(name_policy: &Option<String>) -> (u32, &'static str) {
-    match name_policy.as_deref() {
-        None => (0, "Identity"),
-        Some("camelCase") => (1, "Camel"),
-        Some("snake_case") => (2, "Snake"),
-        Some("SCREAMING_SNAKE_CASE") => (3, "ScreamingSnake"),
-        Some("PascalCase") => (4, "Pascal"),
-        Some("kebab-case") => (5, "Kebab"),
-        Some("SCREAMING-KEBAB-CASE") => (6, "ScreamingKebab"),
-        Some(_) => (0, "Identity"),
-    }
-}
-
 /// Build `T^Reflect*::wire_name_policy() -> CaseStyle` as
-/// `return CaseStyle::<variant>;` — the type's `#[wire(name_policy)]` as a
-/// `CaseStyle` value (casing itself is resolved library-side). Shared by all
-/// four reflect kinds.
+/// `return CaseStyle::<case>;`. Shared by all four reflect kinds.
 fn generate_wire_name_policy_fn(
     receiver: &FqTypeName,
     case_style_type: TypeId,
-    name_policy: &Option<String>,
+    name_policy: Option<NamePolicy>,
+    items: &CompilerItems,
     reflect_trait_name: &FqTraitName,
     wire_name_policy_method: &str,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, reflect_trait_name, wire_name_policy_method);
     let qualified_name = method_info.to_mangled_name();
-
-    let (case_index, case_name) = case_style_variant(name_policy);
-    let construct = TirExpr::new(
-        TirExprKind::EnumConstruct {
-            enum_type: case_style_type,
-            case_index,
-            case_name: case_name.to_string(),
-        },
-        case_style_type,
-        span,
-    );
+    let construct = compiler_enum_case(case_style_item(name_policy), case_style_type, items, span);
     let body = TirBlock::new(
         vec![TirStmt::new(
             TirStmtKind::Return {
@@ -1605,7 +1658,8 @@ fn generate_template_reflect_impls(
             generate_wire_name_policy_fn(
                 receiver,
                 env.case_style_type,
-                &None,
+                None,
+                module.type_table.borrow().compiler_items(),
                 &env.root_trait_name,
                 &env.wire_name_policy_method,
                 span,
@@ -1677,7 +1731,7 @@ fn generate_template_members_fn(
         .enumerate()
         .map(|(k, (hole, raw))| {
             vec![
-                reflect_meta_int_field("index", k as u64, TypeTable::I32, 0, span),
+                reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 string_field("lit", &unescape_template_segment(raw), 1),
                 string_field("raw", raw, 2),
                 string_field("source", &hole.source, 3),
@@ -1787,7 +1841,7 @@ struct ReflectVariantTarget {
     /// carry `()` as their payload.
     cases: Vec<(String, u32, TypeId, Option<String>)>,
     span: Span,
-    wire_name_policy: Option<String>,
+    wire_name_policy: Option<NamePolicy>,
 }
 
 /// Select the variants in `module` that need a synthesized `ReflectVariant`
@@ -1818,7 +1872,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
                 })
                 .collect(),
             span: v.span,
-            wire_name_policy: v.wire_name_policy.clone(),
+            wire_name_policy: v.wire_name_policy,
         })
         .collect()
 }
@@ -1951,7 +2005,8 @@ fn generate_variant_reflect_methods(
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         &target.receiver,
         env.case_style_type,
-        &target.wire_name_policy,
+        target.wire_name_policy,
+        type_table.borrow().compiler_items(),
         &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
@@ -2016,7 +2071,7 @@ fn generate_variant_cases_fn(
                     }
                 };
                 let case_fields = vec![
-                    reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
+                    reflect_meta_int_field("index", i64::from(*index), TypeTable::I32, 0, span),
                     TirStructField {
                         name: "case_name".to_string(),
                         value: TirExpr::new(
@@ -2463,10 +2518,15 @@ fn generate_enum_reflect_impls(
             cases: e
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.wire_name_override.clone()))
+                .map(|c| ReflectEnumCaseRow {
+                    name: c.name.clone(),
+                    index: c.index,
+                    wire_name_override: c.wire_name_override.clone(),
+                    wire_discriminant: c.wire_number.unwrap_or(c.index as i32),
+                })
                 .collect(),
             span: e.span,
-            wire_name_policy: e.wire_name_policy.clone(),
+            wire_name_policy: e.wire_name_policy,
         })
         .collect();
     if targets.is_empty() {
@@ -2493,11 +2553,18 @@ struct ReflectEnumTarget {
     def: DefId,
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
-    /// Per-case `(name, index, #[wire(name)])`; a case's discriminant is
-    /// its index.
-    cases: Vec<(String, u32, Option<String>)>,
+    cases: Vec<ReflectEnumCaseRow>,
     span: Span,
-    wire_name_policy: Option<String>,
+    wire_name_policy: Option<NamePolicy>,
+}
+
+/// One case of a `ReflectEnumTarget`; its discriminant is its index.
+struct ReflectEnumCaseRow {
+    name: String,
+    index: u32,
+    wire_name_override: Option<String>,
+    /// The case's `#[wire(number = N)]`, or its index where it carries none.
+    wire_discriminant: i32,
 }
 
 /// Which payload-free kind an env was resolved for: one env type serves both,
@@ -2653,7 +2720,8 @@ fn generate_enum_reflect_methods(
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         &target.receiver,
         env.case_style_type,
-        &target.wire_name_policy,
+        target.wire_name_policy,
+        type_table.borrow().compiler_items(),
         &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
@@ -2689,7 +2757,13 @@ fn generate_enum_members_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index, wire_name_override)| {
+        .map(|case| {
+            let ReflectEnumCaseRow {
+                name: case_name,
+                index,
+                wire_name_override,
+                wire_discriminant,
+            } = case;
             let wire_override = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
@@ -2716,7 +2790,7 @@ fn generate_enum_members_fn(
                 span,
             );
             vec![
-                reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 0, span),
+                reflect_meta_int_field("discriminant", i64::from(*index), TypeTable::I32, 0, span),
                 TirStructField {
                     name: "value".to_string(),
                     value,
@@ -2736,6 +2810,13 @@ fn generate_enum_members_fn(
                     value: wire_override,
                     field_index: 3,
                 },
+                reflect_meta_int_field(
+                    "wire_discriminant",
+                    i64::from(*wire_discriminant),
+                    TypeTable::I32,
+                    4,
+                    span,
+                ),
             ]
         })
         .collect();
@@ -2803,7 +2884,12 @@ fn generate_enum_from_discriminant_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
-    for (case_name, index, _) in &target.cases {
+    for ReflectEnumCaseRow {
+        name: case_name,
+        index,
+        ..
+    } in &target.cases
+    {
         let comparison = TirExpr::new(
             TirExprKind::Binary {
                 op: TirBinaryOp::Eq,
@@ -2903,7 +2989,7 @@ fn generate_newtype_reflect_impls(
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
                 display_name: tt.def_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
-                wire_name_policy: nt.wire_name_policy.clone(),
+                wire_name_policy: nt.wire_name_policy,
                 span: nt.span,
             })
             .collect()
@@ -2954,7 +3040,8 @@ fn generate_newtype_reflect_impls(
         let mut policy = generate_wire_name_policy_fn(
             &target.receiver,
             case_style_type,
-            &target.wire_name_policy,
+            target.wire_name_policy,
+            module.type_table.borrow().compiler_items(),
             &root_trait_name,
             &policy_method,
             target.span,
@@ -2981,7 +3068,7 @@ struct ReflectNewtypeTarget {
     /// `type N<T> = …`.
     type_params: Vec<TirTypeParam>,
     /// The declaration's own `#[wire(name_policy)]`.
-    wire_name_policy: Option<String>,
+    wire_name_policy: Option<NamePolicy>,
     span: Span,
 }
 
@@ -3020,7 +3107,7 @@ fn generate_flags_reflect_impls(
                     .map(|m| (m.name.clone(), m.bitmask))
                     .collect(),
                 span: f.span,
-                wire_name_policy: f.wire_name_policy.clone(),
+                wire_name_policy: f.wire_name_policy,
             })
         })
         .collect();
@@ -3053,7 +3140,7 @@ struct ReflectFlagsTarget {
     /// Per-member `(name, bitmask)`.
     members: Vec<(String, u32)>,
     span: Span,
-    wire_name_policy: Option<String>,
+    wire_name_policy: Option<NamePolicy>,
 }
 
 /// Synthesize one flags type's `type_name()`, `bits(&self)`, `from_bits(raw)`,
@@ -3124,7 +3211,8 @@ fn generate_flags_reflect_methods(
     let wire_name_policy_fn = generate_wire_name_policy_fn(
         &target.receiver,
         env.case_style_type,
-        &target.wire_name_policy,
+        target.wire_name_policy,
+        type_table.borrow().compiler_items(),
         &env.root_trait_name,
         &env.wire_name_policy_method,
         span,
@@ -3167,7 +3255,7 @@ fn generate_flags_members_fn(
             );
             let value = common::cast(bit_u32, target.flags_type);
             vec![
-                reflect_meta_int_field("bit", u64::from(*bitmask), TypeTable::U64, 0, span),
+                reflect_meta_int_field("bit", i64::from(*bitmask), TypeTable::U64, 0, span),
                 TirStructField {
                     name: "value".to_string(),
                     value,

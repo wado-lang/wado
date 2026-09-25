@@ -495,6 +495,7 @@ impl Semantics {
             CoercionKind::StringNewtype => "string_newtype",
             CoercionKind::BytesNewtype => "bytes_newtype",
             CoercionKind::ClosureToFnNewtype => "closure_to_fn_newtype",
+            CoercionKind::StructNewtype => "struct_newtype",
             CoercionKind::TupleToSequence => "tuple_to_sequence",
             CoercionKind::StructToMap => "struct_to_map",
         };

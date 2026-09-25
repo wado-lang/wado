@@ -373,7 +373,7 @@ impl WadoCodeGenerator {
         params
             .iter()
             .map(|p| {
-                if p.name == "self" {
+                if p.wit_name == "self" {
                     match &p.ty {
                         WadoType::Borrow(_) => "&self".to_string(),
                         _ => "self".to_string(),

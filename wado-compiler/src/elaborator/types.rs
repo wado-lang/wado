@@ -56,6 +56,29 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
+/// What a path read as a value names, when only a call can use it.
+#[derive(Debug, Clone, Copy)]
+pub enum CallableKind {
+    Operation,
+    StaticFunction,
+}
+
+/// Each slot whose default names its own or a later parameter, with the name.
+pub(super) fn forward_type_param_defaults(params: &[ast::GenericParam]) -> Vec<(usize, String)> {
+    params
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, param)| {
+            let mut heads = Vec::new();
+            collect_type_heads(param.default.as_ref()?, &mut heads);
+            let (_, name) = heads
+                .into_iter()
+                .find(|(_, name)| params[slot..].iter().any(|p| p.name == *name))?;
+            Some((slot, name))
+        })
+        .collect()
+}
+
 /// Every named head `ty` reaches, as a reference site and its spelling. The
 /// scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::` prefix
 /// is collected like any other and left to `declaration_at`, which answers
@@ -522,6 +545,12 @@ pub enum TypeError {
     /// Unknown variable
     UnknownIdentifier {
         name: String,
+        span: Span,
+    },
+    /// A path naming something only a call can use, read as a value.
+    CallableAsValue {
+        name: String,
+        callable: CallableKind,
         span: Span,
     },
 
@@ -1104,6 +1133,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A literal of a struct from elsewhere that leaves out fields it cannot set.
+    HiddenFieldsOmitted {
+        struct_name: String,
+        field_names: Vec<String>,
+        span: Span,
+    },
+
     /// A module symbol named through a namespace path (`ns::item`) from
     /// beyond its declared visibility. The `use` form of the same reach is
     /// [`crate::analyze::AnalyzeError::SymbolNotVisible`]; both render the
@@ -1460,12 +1496,22 @@ impl TypeError {
                 format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
+<<<<<<< HEAD
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
             TypeError::UnknownEffect { name, span } => (
                 Code::UnknownType,
                 format!("no effect named '{name}' is in scope"),
+||||||| 20edf112e
+            TypeError::UnknownType { name, span } => {
+                (Code::UnknownType, format!("unknown type '{name}'"), *span)
+            }
+=======
+            TypeError::UnknownType { name, span } => (
+                Code::UnknownType,
+                format!("unknown type '{}'", unalias_namespace_member(name)),
+>>>>>>> origin/main
                 *span,
             ),
             TypeError::SelfInUnboundedBound { param, span } => (
@@ -1499,8 +1545,9 @@ impl TypeError {
             TypeError::NotAType { name, kind, span } => (
                 Code::UnknownType,
                 format!(
-                    "`{name}` is {kind}, not a type: it names a set of operations, \
-                     and no value has it as its type"
+                    "`{}` is {kind}, not a type: it names a set of operations, \
+                     and no value has it as its type",
+                    unalias_namespace_member(name)
                 ),
                 *span,
             ),
@@ -1582,7 +1629,7 @@ impl TypeError {
             ),
             TypeError::UnknownFunction { name, span } => (
                 Code::UndefinedVariable,
-                format!("unknown function '{name}'"),
+                format!("unknown function '{}'", unalias_namespace_member(name)),
                 *span,
             ),
             TypeError::Unavailable { message, span } => {
@@ -1590,9 +1637,27 @@ impl TypeError {
             }
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
-                format!("unknown identifier '{name}'"),
+                format!("unknown identifier '{}'", unalias_namespace_member(name)),
                 *span,
             ),
+            TypeError::CallableAsValue {
+                name,
+                callable,
+                span,
+            } => {
+                let what = match callable {
+                    CallableKind::Operation => "an operation",
+                    CallableKind::StaticFunction => "a static function",
+                };
+                (
+                    Code::UndefinedVariable,
+                    format!(
+                        "`{}` is {what}: call it rather than read it as a value",
+                        unalias_namespace_member(name)
+                    ),
+                    *span,
+                )
+            }
             TypeError::UnknownBreakLabel { label, span } => (
                 Code::UndefinedVariable,
                 format!("labeled break target not found: no enclosing block labeled '{label}'"),
@@ -2045,7 +2110,7 @@ impl TypeError {
             ),
             TypeError::UnknownBound { name, span } => (
                 Code::UnknownType,
-                format!("'{name}' is not a declared trait"),
+                format!("'{}' is not a declared trait", unalias_namespace_member(name)),
                 *span,
             ),
             TypeError::CircularSupertrait {
@@ -2311,7 +2376,8 @@ impl TypeError {
             TypeError::UnknownTraitImpl { name, span } => (
                 Code::UnknownType,
                 format!(
-                    "cannot implement `{name}`: no trait, effect or resource by that name is in scope"
+                    "cannot implement `{}`: no trait, effect or resource by that name is in scope",
+                    unalias_namespace_member(name)
                 ),
                 *span,
             ),
@@ -2337,6 +2403,23 @@ impl TypeError {
                         unreachable!("a `pub` field is reachable from every module")
                     }
                 },
+                *span,
+            ),
+            TypeError::HiddenFieldsOmitted {
+                struct_name,
+                field_names,
+                span,
+            } => (
+                Code::PrivateSymbol,
+                format!(
+                    "cannot build `{struct_name}` with a literal here: it has fields this module \
+                     cannot set ({}); call a constructor it provides",
+                    field_names
+                        .iter()
+                        .map(|name| format!("`{name}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 *span,
             ),
             TypeError::PrivateNamespacedSymbol {
@@ -2569,6 +2652,25 @@ impl TypeError {
                 ),
                 *span,
             ),
+<<<<<<< HEAD
+||||||| 20edf112e
+            TypeError::NotAnEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "'{name}' is not an effect; only effect names are valid in `with E => h do` clauses"
+                ),
+                *span,
+            ),
+=======
+            TypeError::NotAnEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "'{}' is not an effect; only effect names are valid in `with E => h do` clauses",
+                    unalias_namespace_member(name)
+                ),
+                *span,
+            ),
+>>>>>>> origin/main
             TypeError::GenericEffectParamNotInstallable { name, span } => (
                 Code::UnsupportedFeature,
                 format!(
@@ -2599,9 +2701,12 @@ impl TypeError {
             ),
             TypeError::BareGenericFunctionRef { name, span } => (
                 Code::GenericFunctionRef,
-                format!(
-                    "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
-                ),
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
+                    )
+                },
                 *span,
             ),
             TypeError::GenericFunctionRefArgCountMismatch {
@@ -2612,7 +2717,8 @@ impl TypeError {
             } => (
                 Code::GenericFunctionRef,
                 format!(
-                    "wrong number of type arguments for generic function '{name}': expected {expected}, found {found}"
+                    "wrong number of type arguments for generic function '{}': expected {expected}, found {found}",
+                    unalias_namespace_member(name)
                 ),
                 *span,
             ),
@@ -2623,10 +2729,13 @@ impl TypeError {
                 span,
             } => (
                 Code::GenericFunctionRef,
-                format!(
-                    "cannot reference generic function '{name}' here: expected {expected_params} parameter{}, but '{name}' takes {found_params}",
-                    if *expected_params == 1 { "" } else { "s" },
-                ),
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "cannot reference generic function '{name}' here: expected {expected_params} parameter{}, but '{name}' takes {found_params}",
+                        if *expected_params == 1 { "" } else { "s" },
+                    )
+                },
                 *span,
             ),
         }

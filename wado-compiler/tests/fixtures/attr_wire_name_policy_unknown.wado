@@ -1,0 +1,11 @@
+// A `name_policy` naming no policy is refused rather than read as none.
+
+#[wire(name_policy = "lowercase")]
+struct Config {
+    user_id: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`wire(name_policy = \"lowercase\")` names no policy; one is `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `PascalCase`, `kebab-case`, `SCREAMING-KEBAB-CASE`", "compile_error_codes": ["ATTR_MISUSE"]}

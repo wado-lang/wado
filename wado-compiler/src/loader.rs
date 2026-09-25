@@ -20,8 +20,7 @@ use crate::module_source::{
     CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
 };
 use crate::name::{
-    canonical_local_path, canonicalize_entry_point, decl_file_of, entry_dir_of,
-    normalize_module_path, resolve_import_with_invocations, resolve_local_identity,
+    decl_file_of, entry_dir_of, resolve_import_with_invocations, resolve_local_identity,
     resolve_module_path,
 };
 use crate::parser::Parser;
@@ -143,7 +142,7 @@ impl std::fmt::Display for LoadError {
             LoadError::UnknownNamespace { namespace } => {
                 write!(
                     f,
-                    "unknown module namespace '{namespace}'; expected 'core', 'wasi' or 'web'"
+                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
                 )
             }
             LoadError::InvalidModulePath { path } => {
@@ -369,22 +368,27 @@ impl WasmAsset {
     }
 }
 
-/// Resolve a `use` declaration's import source to its `ModuleSource`, mapping
-/// the `with { type: "wat" | "wasm" }` form to `ModuleSource::Wasm`. Mirrors
-/// `analyze::resolve_use_decl_module_source`.
+/// The module `use_decl` imports from `from`, a Wasm asset where its `with`
+/// says so. `None` for a malformed asset path, which analysis reports.
 pub fn resolve_use_decl_source(
     interner: &mut ModuleSourceInterner,
     from: &ModuleSource,
     use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
     invocations: &InvocationIndex,
-) -> ModuleSource {
-    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref())
-        && let Ok(path) = resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
-    {
-        return interner.wasm(&path, kind);
+) -> Option<ModuleSource> {
+    if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
+        return resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
+            .ok()
+            .map(|path| interner.wasm(&path, kind));
     }
-    resolve_import_with_invocations(interner, from, &use_decl.source, entry, invocations)
+    Some(resolve_import_with_invocations(
+        interner,
+        from,
+        &use_decl.source,
+        entry,
+        invocations,
+    ))
 }
 
 /// Whether `bytes` is a CM component (vs a core module), per the preamble encoding.
@@ -520,7 +524,7 @@ pub fn resolve_wasm_asset_path(
     import_source: &str,
     entry_dir: &str,
 ) -> Result<String, LoadError> {
-    if !import_source.starts_with("./") && !import_source.starts_with("../") {
+    if !is_cwd_relative(import_source) {
         return Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         });
@@ -537,14 +541,15 @@ pub fn resolve_wasm_asset_path(
             "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => Ok(resolve_local_identity(entry_dir, path, import_source)),
+        ModuleSource::Local { path } => {
+            Ok(resolve_local_identity(entry_dir, Some(path), import_source))
+        }
         ModuleSource::Dependency { path, .. } => Ok(resolve_module_path(path, import_source)),
         ModuleSource::Remote { url, .. } => Ok(resolve_module_path(url, import_source)),
-        ModuleSource::EntryPoint { .. } => Ok(canonical_local_path(
-            entry_dir,
-            &normalize_module_path(import_source),
-        )),
-        ModuleSource::Redirected { uri } => Ok(resolve_module_path(uri, import_source)),
+        ModuleSource::EntryPoint { .. } => {
+            Ok(resolve_local_identity(entry_dir, None, import_source))
+        }
+        ModuleSource::Redirected { uri, .. } => Ok(resolve_module_path(uri, import_source)),
         ModuleSource::Wasm { .. } => Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
         }),
@@ -1212,12 +1217,6 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     pending_component_stdlib_deps: IndexSet<ModuleSource>,
     /// The entry module source (for dedup when sub-modules import back to entry)
     entry_module_source: Option<ModuleSource>,
-    /// Canonical name of the entry module (e.g., "./`cross_module_type_identity.wado`")
-    entry_canonical_name: Option<String>,
-    /// Entry directory: the anchor for canonicalizing local module identities
-    /// (see [`crate::name::canonical_local_path`]). Empty until the entry is
-    /// loaded, or when the entry filename has no parent.
-    entry_dir: String,
     /// Kiln invocation redirects: `(decl_file, from_path)` → generated entry
     /// module path. Consulted by `resolve_import` so a bare `use { X } from
     /// "<schema>"` picks up the generator's output.
@@ -1244,8 +1243,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             pending_component_imports: Vec::new(),
             pending_component_stdlib_deps: IndexSet::default(),
             entry_module_source: None,
-            entry_canonical_name: None,
-            entry_dir: String::new(),
             invocations: InvocationIndex::new(),
         }
     }
@@ -1285,8 +1282,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
         };
-        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
-            .await
+        self.load_all_inner(entry_ast, tentative_entry_source).await
     }
 
     /// Variant of [`Self::load_all`] that takes a pre-parsed entry module
@@ -1304,8 +1300,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     ) -> Result<LoadResult, LoadError> {
         let resolved_filename = entry_filename.unwrap_or("<stdin>");
         let tentative_entry_source = self.interner.entry_point(resolved_filename);
-        self.load_all_inner(entry_ast, entry_filename, tentative_entry_source)
-            .await
+        self.load_all_inner(entry_ast, tentative_entry_source).await
     }
 
     /// Shared post-parse loading: `tentative_entry_source` is the
@@ -1314,11 +1309,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     async fn load_all_inner(
         mut self,
         entry_ast: Module,
-        entry_filename: Option<&str>,
         tentative_entry_source: ModuleSource,
     ) -> Result<LoadResult, LoadError> {
-        let resolved_filename = entry_filename.unwrap_or("<stdin>");
-
         let entry_module_source = parse_stdlib_identity_attribute(
             &mut self.interner,
             &entry_ast,
@@ -1326,8 +1318,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         )?
         .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_canonical_name = Some(canonicalize_entry_point(resolved_filename));
-        self.entry_dir = entry_dir_of(Some(&entry_module_source));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
@@ -1358,8 +1348,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             if self.loaded.contains_key(&module_source) {
                 continue;
             }
-
-            // Skip — handled by resolve_import returning EntryPoint directly
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
@@ -1520,26 +1508,16 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Handle a `use ... from "<path>" with { type: "wat"|"wasm" }`
-    /// declaration: validate what an embedded asset must be, resolve the asset
-    /// path to a `ModuleSource::Wasm`, and load + record the bytes.
-    ///
-    /// Only the wildcard form (`use _ from "..."`) is handled here; named
-    /// imports are rejected with a pointed diagnostic so users get a clear
-    /// message instead of a downstream elaborator failure.
+    /// Loads the asset a `use … from "<path>" with { type: "wat"|"wasm" }` names.
     async fn handle_wasm_import(
         &mut self,
         from_module_source: &ModuleSource,
         kind: WasmAssetKind,
         use_decl: &UseDecl,
     ) -> Result<(), LoadError> {
-        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &self.entry_dir)?;
+        let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
+        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)?;
         let source = self.interner.wasm(&path, kind);
-
-        let _ = use_decl; // accepted for both wildcard and named forms; the
-        // named form's items are resolved against the synthesized Wado
-        // module produced below.
-
         self.handle_wasm_source(source, kind).await
     }
 
@@ -1832,98 +1810,33 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         });
     }
 
-    /// Resolve an import source relative to the importing module
+    /// Resolve an import source relative to the importing module, or say why
+    /// a bare one names nothing.
     fn resolve_import(
         &mut self,
         from_module_source: &ModuleSource,
         import_source: &str,
     ) -> Result<ModuleSource, LoadError> {
-        // Kiln invocation redirect: `use { X } from "./grammar.g4"` picks up
-        // the generated entry module when the `(decl_file, from_path)` pair
-        // is recorded on the loader. The returned `Redirected` wraps an
-        // absolute URI the loader hands verbatim to the host — no further
-        // base-path joining or relative-path normalization happens.
-        if !self.invocations.is_empty() {
-            let decl_file = decl_file_of(from_module_source);
-            if !decl_file.is_empty()
-                && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
-            {
-                return Ok(self.interner.redirected(entry_uri));
-            }
+        let resolved = resolve_import_with_invocations(
+            &mut self.interner,
+            from_module_source,
+            import_source,
+            self.entry_module_source.as_ref(),
+            &self.invocations,
+        );
+        if !matches!(resolved, ModuleSource::Local { .. }) || is_cwd_relative(import_source) {
+            return Ok(resolved);
         }
 
-        // Handle known namespaces
-        // Top-level: "core:cli" → Core { name: "cli" }
-        // Sub-module: "core:prelude/traits.wado" → Core { name: "prelude/traits.wado" }
-        if let Some(name) = import_source.strip_prefix("core:") {
-            return Ok(self.interner.core(name));
-        }
-        if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
-            return Ok(self.interner.binding(namespace, interface));
-        }
-
-        // Handle remote modules (http:// or https://)
-        if import_source.starts_with("https://") || import_source.starts_with("http://") {
-            return Ok(self.interner.remote(import_source));
-        }
-
-        // Handle local modules (./ or ../)
-        if import_source.starts_with("./") || import_source.starts_with("../") {
-            // For relative imports, resolve against from_module_source
-            if let ModuleSource::Local { path: from_file } = from_module_source {
-                let resolved = resolve_local_identity(&self.entry_dir, from_file, import_source);
-                // Fold a back-reference to the entry onto its EntryPoint identity.
-                if let Some(ref entry_canonical) = self.entry_canonical_name
-                    && resolved == *entry_canonical
-                    && let Some(ref entry_ms) = self.entry_module_source
-                {
-                    return Ok(entry_ms.clone());
-                }
-                return Ok(self.interner.local(&resolved));
-            }
-            if let ModuleSource::Remote { pkg, url: from_url } = from_module_source {
-                let resolved = resolve_module_path(from_url, import_source);
-                let pkg = pkg.to_string();
-                return Ok(self.interner.remote_module(&pkg, &resolved));
-            }
-            // A relative import inherits the importer's package root.
-            if let ModuleSource::Dependency { pkg, path } = from_module_source {
-                let resolved = resolve_module_path(path, import_source);
-                let pkg = pkg.to_string();
-                return Ok(self.interner.dependency_module(&pkg, &resolved));
-            }
-            // Entry imports canonicalize against the entry dir; stdlib / bare
-            // relative imports are not anchored there, so they only normalize.
-            if matches!(from_module_source, ModuleSource::EntryPoint { .. }) {
-                let resolved =
-                    canonical_local_path(&self.entry_dir, &normalize_module_path(import_source));
-                return Ok(self.interner.local(&resolved));
-            }
-            let canonical = normalize_module_path(import_source);
-            return Ok(self.interner.local(&canonical));
-        }
-
-        // Bare dependency name: resolve against `[dependencies]`. Only the
-        // consuming project resolves its own deps; a bare import from within
-        // a dependency must not bind to the consumer's deps.
-        if !matches!(from_module_source, ModuleSource::Dependency { .. }) {
-            if let Some(dep) = self.interner.resolve_dependency(import_source) {
-                return Ok(dep);
-            }
-            // A registry dependency is a prebuilt component: resolve to a
-            // `Wasm` source pointing at its fetched `.wasm`, imported across the
-            // CM boundary like a `with { type: "wasm" }` asset.
-            if let Some(component) = self.interner.resolve_component_dependency(import_source) {
-                return Ok(component);
-            }
-            // Declared but unresolvable (e.g. missing `[package].lib`): report
-            // why, instead of a generic "invalid module path".
-            if let Some(reason) = self.interner.unresolved_dependency(import_source) {
-                return Err(LoadError::DependencyUnresolved {
-                    name: import_source.to_string(),
-                    reason: reason.to_string(),
-                });
-            }
+        // Declared but unresolvable (e.g. missing `[package].lib`): report
+        // why, instead of a generic "invalid module path".
+        if !matches!(from_module_source, ModuleSource::Dependency { .. })
+            && let Some(reason) = self.interner.unresolved_dependency(import_source)
+        {
+            return Err(LoadError::DependencyUnresolved {
+                name: import_source.to_string(),
+                reason: reason.to_string(),
+            });
         }
 
         // Check for unknown namespace pattern (xxx:yyy)
@@ -2002,7 +1915,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     path: module_source.to_string(),
                 })
             }
-            ModuleSource::Redirected { uri } => {
+            ModuleSource::Redirected { uri, .. } => {
                 // Strip the `file:` scheme so the host sees a plain
                 // absolute path. Other schemes are passed through
                 // unchanged so in-memory hosts can use the URI as a key.
