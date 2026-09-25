@@ -13,13 +13,6 @@ use crate::nir_package::NirPackage;
 use crate::optimize::dce::{DescriptorCache, callee_descriptor};
 use crate::tir::TypeTable;
 
-/// The builtin general-name of a call's callee descriptor, resolving a
-/// monomorphized instance (`array_clone::<i32>`) to its generic builtin name.
-fn builtin_gname(func: &FunctionRef) -> Option<String> {
-    func.builtin_name()
-        .or_else(|| func.monomorphized_builtin_name())
-}
-
 /// Whether the call's stamped `func_id` is a full-length array clone
 /// (`array_clone` / its shallow spine twin). The *binding* matcher
 /// (`clone_referent`) uses this: a right-sized `array_clone_prefix` binding is
@@ -27,8 +20,8 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 /// clone would change the result length — prefix bindings never forward.
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
-        Some("builtin::array_clone" | "builtin::array_clone_shallow")
+        callee_descriptor(descriptors, func_id).intrinsic(),
+        Some("array_clone" | "array_clone_shallow")
     )
 }
 
@@ -38,10 +31,8 @@ fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
 /// present) is untouched by the forward.
 fn is_consuming_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
-        Some(
-            "builtin::array_clone" | "builtin::array_clone_shallow" | "builtin::array_clone_prefix"
-        )
+        callee_descriptor(descriptors, func_id).intrinsic(),
+        Some("array_clone" | "array_clone_shallow" | "array_clone_prefix")
     )
 }
 

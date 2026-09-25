@@ -119,7 +119,6 @@ pub fn link(package: Package) -> FlatPackage {
     let mut variants = Vec::new();
     let mut flags = Vec::new();
     let mut globals = Vec::new();
-    let mut imports = Vec::new();
     let mut tests = Vec::new();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
     let mut builtin_declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration> =
@@ -148,7 +147,6 @@ pub fn link(package: Package) -> FlatPackage {
         globals.extend(tir_mod.globals);
 
         if is_entry {
-            imports = tir_mod.imports;
             tests = tir_mod.tests;
         }
 
@@ -180,7 +178,6 @@ pub fn link(package: Package) -> FlatPackage {
         variant_index,
         flags,
         globals,
-        imports,
         tests,
         wasm_module_sources,
         builtin_declarations: BuiltinDeclarations::new(builtin_declarations),

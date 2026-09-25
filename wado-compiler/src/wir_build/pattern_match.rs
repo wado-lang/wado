@@ -228,10 +228,8 @@ impl FunctionTranslator<'_, '_> {
         };
         let (func_id, args) = (*func_id, args.clone());
         let func = self.callee_descriptor(func_id);
-        let builtin_name = func
-            .builtin_name()
-            .or_else(|| func.monomorphized_builtin_name())?;
-        if !MULTIVALUE_I64_BUILTINS.contains(&builtin_name.as_str()) {
+        let builtin_name = func.intrinsic()?;
+        if !MULTIVALUE_I64_BUILTINS.contains(&builtin_name) {
             return None;
         }
 
@@ -247,7 +245,7 @@ impl FunctionTranslator<'_, '_> {
             .map(|b| b.map(|local_index| self.local_name(local_index)))
             .collect();
 
-        let instr = self.translate_multivalue_i64_builtin(&builtin_name, &args);
+        let instr = self.translate_multivalue_i64_builtin(builtin_name, &args);
         Some(WirInstr::MultiValueLocalBind {
             instr: Box::new(instr),
             locals,

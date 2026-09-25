@@ -1,0 +1,130 @@
+//! A tiny GPT-2 decoder, compiled through Loam at a fixed batch and sequence
+//! length, checked against the logits onnxruntime computes for it.
+
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                dims: { batch_size: 1, sequence_length: 4 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    // The position ids and the attention mask, folded or widened.
+                    {
+                        pattern: "/transformer/Reshape_1_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    // Each Conv1D flattens [Batch, Seq] around its Gemm and restores it.
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    // The causal mask, sliced from the bias buffer at build time.
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "a tiny GPT-2 reproduces the logits onnxruntime computes" {
+    let [ids, ids_extents] = ints_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
+    let [mask, mask_extents] = ints_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"));
+    let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
+
+    let got = gpt2::forward(
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents: mask_extents },
+        &gpt2::Weights::embedded(),
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

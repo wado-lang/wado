@@ -4,7 +4,7 @@
 use {
     Request,
     Response,
-    Error,
+    Error as KilnError,
     OutputFile,
     KilnHost,
     Diagnostic as KilnDiagnostic,
@@ -12,6 +12,7 @@ use {
     read_all,
     read_text,
 } from "core:kiln";
+use { TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
 use { Graph } from "./graph.wado";
@@ -19,45 +20,50 @@ use { infer } from "./infer.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
+use { bind_dims, keep_outputs } from "./specialize.wado";
 
-/// Generator-side options, written at the `use ... with { generator: { options:
-/// { ... } } }` site. See WEP 2026-09-20 § "The Axis Schema Is an Invocation
-/// Option".
+/// The `generator.options` a `use ... with` site writes. See WEP 2026-09-20
+/// § "The Axis Schema Is an Invocation Option".
 pub struct Options {
     /// Patterns naming the axes of the graph's inputs and initializers.
     pub layout: List<LayoutRule>,
+    /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
+    pub dims: TreeMap<String, i32>,
+    /// The graph outputs `forward` returns. Empty keeps every output.
+    pub outputs: List<String>,
 }
 
 impl Deserialize for Options;
 
 /// Whatever the graph is wrong about, said against the file it was read from.
-fn at<E: Display>(path: &String, e: &E) -> Error {
-    return Error::InvalidSchema(`loam: '${path}': ${e}`);
+fn at<E: Error>(path: &String, e: &E) -> KilnError {
+    return KilnError::InvalidSchema(`loam: '${path}': ${e}`);
 }
 
-/// The two spellings of one graph. `.onnx` is ONNX's own form and what an
-/// exporter writes; `.onnxtext` is the form a hand-written fixture is written
-/// as, and what a repository can show a diff of.
-fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, Error> {
+/// The graph from either spelling: `.onnx`, which an exporter writes, or
+/// `.onnxtext`, which a fixture is written in and a diff can show.
+fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, KilnError> {
     if path.ends_with(".onnx") {
         return onnx_proto::read(read_all(content)).map_err(|e| at(path, &e));
     }
     let source = match read_text(content) {
         Ok(text) => text,
         Err(e) => {
-            return Result::Err(Error::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
+            return Result::Err(KilnError::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
         },
     };
     return onnx_text::read(&source).map_err(|e| at(path, &e));
 }
 
-export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
+export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
     let path = req.primary.path;
-    let graph = read_graph(&path, req.primary.content)?;
+    let mut graph = read_graph(&path, req.primary.content)?;
+    bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
+    keep_outputs(&mut graph, &req.options.outputs).map_err(|e| at(&path, &e))?;
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
-    let shapes = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
-    let generated = emit(&graph, &shapes).map_err(|e| at(&path, &e))?;
+    let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &checked).map_err(|e| at(&path, &e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,

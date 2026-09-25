@@ -254,11 +254,6 @@ pub(crate) fn build_callee_map(project: &NirPackage) -> CalleeMap {
 }
 
 /// Which callee ids are the builtins the engine evaluates.
-///
-/// `array_get_value` is generic, but a builtin is declared once and shared by every
-/// instantiation — the type arguments ride on the call, not on a monomorphized
-/// callee record — so the name is read off whichever of the two forms the
-/// callee has.
 pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
     let mut map = CtfeBuiltinMap::default();
     for func_rc in &project.functions {
@@ -267,22 +262,16 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             continue;
         };
         let descriptor = FunctionRef::from_resolved(&func, func.module_source.clone());
-        let Some(name) = descriptor
-            .builtin_name()
-            .or_else(|| descriptor.monomorphized_builtin_name())
-        else {
-            continue;
-        };
-        let builtin = match name.as_str() {
-            "builtin::array_get_value" | "builtin::array_get_value_u8" => CtfeBuiltin::ArrayGet,
-            "builtin::array_len" => CtfeBuiltin::ArrayLen,
-            "builtin::array_new" => CtfeBuiltin::ArrayNew,
-            "builtin::array_set" | "builtin::array_set_u8" => CtfeBuiltin::ArraySet,
-            "builtin::array_copy" => CtfeBuiltin::ArrayCopy,
-            "builtin::array_clone_prefix" => CtfeBuiltin::ArrayClonePrefix,
-            "builtin::cold_path" => CtfeBuiltin::ColdPath,
-            "builtin::select" => CtfeBuiltin::Select,
-            "builtin::i32_as_char" => CtfeBuiltin::I32AsChar,
+        let builtin = match descriptor.intrinsic() {
+            Some("array_get_value" | "array_get_value_u8") => CtfeBuiltin::ArrayGet,
+            Some("array_len") => CtfeBuiltin::ArrayLen,
+            Some("array_new") => CtfeBuiltin::ArrayNew,
+            Some("array_set" | "array_set_u8") => CtfeBuiltin::ArraySet,
+            Some("array_copy") => CtfeBuiltin::ArrayCopy,
+            Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
+            Some("cold_path") => CtfeBuiltin::ColdPath,
+            Some("select") => CtfeBuiltin::Select,
+            Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             _ => continue,
         };
         map.insert(id, builtin);

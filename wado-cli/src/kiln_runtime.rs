@@ -317,6 +317,20 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
             }
             Val::List(out)
         }
+        Type::Map(m) => {
+            let CanonicalValue::Map(entries) = v else {
+                return Err(mismatch());
+            };
+            let value_ty = m.value();
+            let mut out = Vec::with_capacity(entries.len());
+            for (key, value) in entries {
+                out.push((
+                    Val::String(key.clone()),
+                    canonical_to_val(value, &value_ty)?,
+                ));
+            }
+            Val::Map(out)
+        }
         Type::Record(r) => {
             let CanonicalValue::Struct(entries) = v else {
                 return Err(mismatch());
@@ -332,6 +346,7 @@ fn canonical_to_val(v: &CanonicalValue, ty: &Type) -> Result<Val, String> {
                     Some((_, cv)) => canonical_to_val(cv, &f.ty)?,
                     None if matches!(f.ty, Type::Option(_)) => Val::Option(None),
                     None if matches!(f.ty, Type::List(_)) => Val::List(Vec::new()),
+                    None if matches!(f.ty, Type::Map(_)) => Val::Map(Vec::new()),
                     None => {
                         return Err(format!("missing required options field `{}`", f.name));
                     }

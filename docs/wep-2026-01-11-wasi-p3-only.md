@@ -77,4 +77,4 @@ P2 requires explicit `subscribe()` calls and pollable management. P3's `async fu
 
 - WASI P3 proposal: https://github.com/WebAssembly/WASI/blob/main/wasip3/README.md
 - wasmtime P3 support: `vendor/wasmtime/crates/wasi/src/p3/wit/`
-- Wado spec WASI section: `spec.md` (WASI / Browser Support)
+- Wado spec WASI section: `spec-components.md` (WASI / Browser Support)
