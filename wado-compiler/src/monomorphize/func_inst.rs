@@ -2272,7 +2272,8 @@ impl Monomorphizer {
         else {
             return false;
         };
-        let method_type_args = self.substituted_method_type_args(method_func, substitution, type_table);
+        let method_type_args =
+            self.substituted_method_type_args(method_func, substitution, type_table);
         let (ref_info, monomorph_info) = ref_blanket_call(
             ref_kind,
             trait_fq,
@@ -2327,10 +2328,16 @@ impl Monomorphizer {
         else {
             panic!("a `&T` blanket is keyed by one pointee");
         };
-        let ref_kind = info.ref_receiver().expect("a `&T` blanket call has a ref receiver");
-        let trait_name = info.trait_name.as_ref().expect("a `&T` blanket call names its trait");
+        let ref_kind = info
+            .ref_receiver()
+            .expect("a `&T` blanket call has a ref receiver");
+        let trait_name = info
+            .trait_name
+            .as_ref()
+            .expect("a `&T` blanket call names its trait");
         let pointee = self.substitute_type(pointee, substitution, type_table);
-        let method_type_args = self.substituted_method_type_args(method_func, substitution, type_table);
+        let method_type_args =
+            self.substituted_method_type_args(method_func, substitution, type_table);
         let (ref_info, monomorph_info) = ref_blanket_call(
             ref_kind,
             trait_name,

@@ -1385,9 +1385,10 @@ impl SolverBridge {
         };
         let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
         match rank(&found) {
-            Selection::AmbiguousBlankets(live) => {
-                live.iter().map(|&i| self.impl_def_of(found[i].impl_)).collect()
-            }
+            Selection::AmbiguousBlankets(live) => live
+                .iter()
+                .map(|&i| self.impl_def_of(found[i].impl_))
+                .collect(),
             Selection::None
             | Selection::One(_)
             | Selection::AmbiguousTraits(_)

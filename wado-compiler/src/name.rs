@@ -2956,7 +2956,10 @@ impl FqTypeName {
     #[must_use]
     pub fn unifies_with(&self, other: &FqTypeName) -> bool {
         let open = |name: &FqTypeName| {
-            matches!(name.head, TypeHead::Binder { .. } | TypeHead::Projection { .. })
+            matches!(
+                name.head,
+                TypeHead::Binder { .. } | TypeHead::Projection { .. }
+            )
         };
         if open(self) {
             return other.reference.starts_with(&self.reference);
@@ -2967,7 +2970,11 @@ impl FqTypeName {
         self.reference == other.reference
             && self.head == other.head
             && self.args.len() == other.args.len()
-            && self.args.iter().zip(&other.args).all(|(a, b)| a.unifies_with(b))
+            && self
+                .args
+                .iter()
+                .zip(&other.args)
+                .all(|(a, b)| a.unifies_with(b))
     }
 
     /// The base, associated-type name, and declaring trait this projects off,

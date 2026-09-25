@@ -1000,8 +1000,14 @@ fn method_call_info_for_type(
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
             let ref_kind = RefKind::from_resolved(&resolved).expect("ref classify");
-            let (local_name, monomorph_info) =
-                ref_blanket_call(ref_kind, trait_name, method_name, inner, vec![], &tt.borrow());
+            let (local_name, monomorph_info) = ref_blanket_call(
+                ref_kind,
+                trait_name,
+                method_name,
+                inner,
+                vec![],
+                &tt.borrow(),
+            );
             MethodCallInfo {
                 local_name,
                 monomorph_info: Some(monomorph_info),
@@ -1051,8 +1057,10 @@ pub(crate) fn ref_blanket_call(
     let generic =
         LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
     let generic_name = generic.to_mangled_name();
-    let method_type_arg_names: Vec<FqTypeName> =
-        method_type_args.iter().map(|&arg| tt.fq_type_name(arg)).collect();
+    let method_type_arg_names: Vec<FqTypeName> = method_type_args
+        .iter()
+        .map(|&arg| tt.fq_type_name(arg))
+        .collect();
     let local_name = generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
     let monomorph_info = MonomorphInfo {
         generic_name,
@@ -1166,9 +1174,13 @@ fn inherent_method_template(
     tt: &TypeTable,
 ) -> Option<TemplateId> {
     trait_env
-        .answering_template(&tt.impl_receiver_key(receiver), None, &[], method, |block| {
-            tt.impl_reaches_instance(block, receiver)
-        })
+        .answering_template(
+            &tt.impl_receiver_key(receiver),
+            None,
+            &[],
+            method,
+            |block| tt.impl_reaches_instance(block, receiver),
+        )
         .or_else(|| match tt.get(receiver) {
             ResolvedType::Newtype { base_type, .. } => {
                 inherent_method_template(trait_env, method, *base_type, tt)

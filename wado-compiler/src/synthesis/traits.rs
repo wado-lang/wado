@@ -15,10 +15,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId,
-    TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirModule, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId, TypeTable,
 };
 use crate::token::Span;
 

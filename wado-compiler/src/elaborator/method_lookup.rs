@@ -1993,7 +1993,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// their bounds and impls generic over the receiver's head by their targets.
     /// A tie among impls with neither — two variadic impls of one trait — is
     /// coherence's, rejected where the second is written (WEP 2026-03-14 §5 Rule 2).
-    pub(super) fn report_tied_impls(&mut self, tied: &[Option<DefId>], receiver: TypeId, span: Span) {
+    pub(super) fn report_tied_impls(
+        &mut self,
+        tied: &[Option<DefId>],
+        receiver: TypeId,
+        span: Span,
+    ) {
         let env = Arc::clone(&self.tysys.trait_env);
         let (blankets, heads): (Vec<&ImplHeader>, Vec<&ImplHeader>) = tied
             .iter()

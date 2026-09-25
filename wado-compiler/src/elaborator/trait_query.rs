@@ -2622,7 +2622,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if self.check_and_register_bound(type_arg, trait_) {
             let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
-                bridge.tied_through_bound(&self.tysys, &self.annotate_ctx, &self.type_lookup(), type_arg, trait_)
+                bridge.tied_through_bound(
+                    &self.tysys,
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    type_arg,
+                    trait_,
+                )
             });
             self.report_tied_impls(&tied, type_arg, span);
             return true;

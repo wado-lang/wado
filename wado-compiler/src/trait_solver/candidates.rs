@@ -68,7 +68,14 @@ pub fn bound_candidates(
         .into_iter()
         .filter(|c| {
             let level = &levels[c.depth as usize];
-            answers_args(program, &program.impls[&c.impl_], level, Some(ty), &c.trait_args, args)
+            answers_args(
+                program,
+                &program.impls[&c.impl_],
+                level,
+                Some(ty),
+                &c.trait_args,
+                args,
+            )
         })
         .collect()
 }
