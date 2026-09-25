@@ -23,7 +23,7 @@ pub struct WindowError {
 /// The window `node` slides over the spatial extents `input`, with `kernel` the
 /// extents of one window. `ceil` rounds a partial last step up, as `MaxPool`'s
 /// `ceil_mode` does.
-pub fn window(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, WindowError> {
+pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, WindowError> {
     let spatial = input.len();
     let strides = ints(node, "strides", spatial, 1, 1)?;
     let dilations = ints(node, "dilations", spatial, 1, 1)?;

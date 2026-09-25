@@ -12,6 +12,7 @@ use {
     read_all,
     read_text,
 } from "core:kiln";
+use { TreeMap } from "core:collections";
 use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
 use { Graph } from "./graph.wado";
@@ -19,6 +20,7 @@ use { infer } from "./infer.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
+use { bind_dims, keep_outputs } from "./specialize.wado";
 
 /// Generator-side options, written at the `use ... with { generator: { options:
 /// { ... } } }` site. See WEP 2026-09-20 § "The Axis Schema Is an Invocation
@@ -26,6 +28,10 @@ use { LayoutRule, Schema } from "./schema.wado";
 pub struct Options {
     /// Patterns naming the axes of the graph's inputs and initializers.
     pub layout: List<LayoutRule>,
+    /// Static extents for the graph's symbolic dimensions, keyed by `dim_param`.
+    pub dims: TreeMap<String, i32>,
+    /// The graph outputs `forward` returns. Empty keeps every output.
+    pub outputs: List<String>,
 }
 
 impl Deserialize for Options;
@@ -53,7 +59,9 @@ fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, Error> {
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     let path = req.primary.path;
-    let graph = read_graph(&path, req.primary.content)?;
+    let mut graph = read_graph(&path, req.primary.content)?;
+    bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
+    keep_outputs(&mut graph, &req.options.outputs).map_err(|e| at(&path, &e))?;
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
     let shapes = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;

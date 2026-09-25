@@ -6,7 +6,7 @@ use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { Schema } from "./schema.wado";
-use { Window, WindowError, ints, window } from "./window.wado";
+use { Window, WindowError, ints, window_over } from "./window.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 does not fall back to a runtime check.
@@ -328,22 +328,22 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
     let op = node.op;
     if op == "Reshape" {
         arity(node, 2)?;
-        return reshape(node, &operand(node, shapes, 0)?, graph, schema);
+        return reshape(node, &operand_at(node, shapes, 0)?, graph, schema);
     }
     if op == "Flatten" {
         arity(node, 1)?;
-        return flatten(node, &operand(node, shapes, 0)?, schema);
+        return flatten(node, &operand_at(node, shapes, 0)?, schema);
     }
     if op == "MaxPool" {
         arity(node, 1)?;
-        let x = operand(node, shapes, 0)?;
+        let x = operand_at(node, shapes, 0)?;
         let window = window_of(node, &x, shapes)?;
         return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
     }
     if op == "Conv" {
         arity(node, 2)?;
-        let x = operand(node, shapes, 0)?;
-        let w = operand(node, shapes, 1)?;
+        let x = operand_at(node, shapes, 0)?;
+        let w = operand_at(node, shapes, 1)?;
         let group = int_attr(node, "group", 1)?;
         if group != 1 {
             return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
@@ -351,7 +351,7 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
         let window = window_of(node, &x, shapes)?;
         agree_at(node, &x.axes[1], &w.axes[1])?;
         if has_bias(node) {
-            let b = operand(node, shapes, 2)?;
+            let b = operand_at(node, shapes, 2)?;
             if b.rank() != 1 {
                 return Result::Err(operand_rank(node, 2, b.rank(), 1));
             }
@@ -388,7 +388,7 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
         }
         // ONNX broadcasts `C` into the product, so a bias of higher rank is
         // refused rather than widening a `Gemm` past the two axes it has.
-        let c = operand(node, shapes, 2)?;
+        let c = operand_at(node, shapes, 2)?;
         if c.rank() > product.rank() {
             return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
@@ -396,13 +396,13 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
     }
     if op == "Transpose" {
         arity(node, 1)?;
-        let shape = operand(node, shapes, 0)?;
+        let shape = operand_at(node, shapes, 0)?;
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
     }
     if is_unary_elementwise(&op) {
         arity(node, 1)?;
-        return operand(node, shapes, 0);
+        return operand_at(node, shapes, 0);
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
@@ -519,7 +519,7 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
     }
     let spatial = spatial_extents(node, x)?;
     let kernel = if node.op == "Conv" {
-        let w = operand(node, shapes, 1)?;
+        let w = operand_at(node, shapes, 1)?;
         if w.rank() != x.rank() {
             return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
         }
@@ -531,7 +531,7 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
         window_read(node, ints(node, "kernel_shape", spatial.len(), 1, 1))?;
     };
     let ceil = int_attr(node, "ceil_mode", 0)? != 0;
-    return window_read(node, window(node, &spatial, kernel, ceil));
+    return window_read(node, window_over(node, &spatial, kernel, ceil));
 }
 
 /// The extents past a shape's first two, which a window reads as static.
@@ -654,7 +654,7 @@ fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
 /// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
 /// `Gemm` over two-dimensional operands only.
 fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
-    let shape = operand(node, shapes, index)?;
+    let shape = operand_at(node, shapes, index)?;
     if shape.rank() != 2 {
         return Result::Err(operand_rank(node, index, shape.rank(), 2));
     }
@@ -745,8 +745,8 @@ fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
     arity(node, 2)?;
     return Result::Ok([
-        operand(node, shapes, 0)?,
-        operand(node, shapes, 1)?,
+        operand_at(node, shapes, 0)?,
+        operand_at(node, shapes, 1)?,
     ]);
 }
 
@@ -783,7 +783,7 @@ fn is_binary_elementwise(op: &String) -> bool {
     return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
 }
 
-fn operand(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
+fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
     let name = node.inputs[index];
     let Some(shape) = shapes.get(name) else {
         builtin::cold_path();
