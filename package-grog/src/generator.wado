@@ -32,7 +32,7 @@ fn runtime_of(module: &String) -> Result<String, EmitError> {
     let view = module.as_str_slice();
     let Some(colon) = view.find(":") else {
         return Result::Err(EmitError::Unsupported(
-            ` Grog was named by the path [object Object]; name it by the package spec its runtime is a dependency under`,
+            ` Grog was named by the path ${module}; name it by the package spec its runtime is a dependency under`,
         ));
     };
     let mut end = view.len();
@@ -64,4 +64,11 @@ fn stem(path: &String) -> String {
         return name.as_str_slice().slice(0, name.len() - 6).to_string();
     }
     return name;
+}
+
+test "a runtime named by a path is refused, naming the path" {
+    let Err(Unsupported(message)) = runtime_of(&"../package-grog") else {
+        panic("a path names no package");
+    };
+    assert message.contains("../package-grog");
 }
