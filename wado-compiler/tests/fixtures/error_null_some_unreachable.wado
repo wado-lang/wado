@@ -1,0 +1,12 @@
+// No `Option<!>` is a `Some`: its payload would be a `!`, which has no value.
+
+test "unreachable: a Some pattern on an Option<!>" {
+    let x = null;
+    assert !(x matches { Some(_) });
+    if let Some(_) = x {
+        assert false;
+    }
+}
+
+__DATA__
+{"compile_error": "invalid pattern: unreachable: no `Option<!>` is a `Some`, whose payload `!` has no value", "compile_error_count": 2}

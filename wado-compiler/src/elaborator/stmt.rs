@@ -1901,6 +1901,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     }
                 };
+                if payload_type == TypeTable::NEVER {
+                    let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: format!(
+                            "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `!` has no value"
+                        ),
+                        span: *span,
+                    });
+                }
 
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.

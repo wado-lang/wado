@@ -2774,10 +2774,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `TirExpr::type_id`. Falls back to `expected_type` (or
         // `UNKNOWN` when neither is available) for AST shapes that
         // evaporated during annotate (e.g. a stmt-position match
-        // whose recorder fires only at the stmt level).
+        // whose recorder fires only at the stmt level). An indefinite one
+        // (a bare `null`'s `Option<!>`) holds only where nothing else decides.
         let recorded_type = self
             .ann_expression_types(expr.id())
             .or(expected_type)
+            .or_else(|| self.ann_recorded_expression_type(expr.id()))
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
 
@@ -7727,15 +7729,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 Some(_) => (None, suffix),
             };
-            let case = owner
+            let names_case = owner
                 .and_then(|owner| self.type_lookup().variant_cases_of(owner))
                 .and_then(|info| info.case_named(case_name))
-                .map(|(index, case)| (index as u32, case.name.clone(), case.payload));
-            if let Some((case_index, case_name, payload_type)) = case {
+                .is_some();
+            if names_case {
                 let variant_type = self
                     .ann_generic_instantiations(call.id)
                     .map(|gi| gi.instance_type)
                     .unwrap_or(recorded_type);
+                let (case_index, payload_type) =
+                    self.variant_case_index_and_payload(variant_type, case_name);
+                let case_index = resolved_case_index(case_index, case_name);
+                let case_name = case_name.to_string();
                 let payload = call
                     .args
                     .first()

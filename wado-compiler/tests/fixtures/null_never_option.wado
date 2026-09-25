@@ -1,0 +1,47 @@
+// `null` is an `Option<!>`: with no context it stays one, and it answers last
+// wherever another argument says which `Option` it is.
+
+fn id<T>(x: T) -> T { return x; }
+
+fn wrap<T>(x: T) -> Option<T> { return Option::Some(x); }
+
+fn pair<T>(a: T, b: T) -> T { return a; }
+
+struct W {}
+
+impl W {
+    fn first<T>(&self, a: T, b: T) -> T { return a; }
+    fn second<T>(a: T, b: T) -> T { return b; }
+}
+
+test "a null with no context is an Option<!>" {
+    let x = null;
+    assert x matches { None };
+}
+
+test "a null through a generic parameter" {
+    assert id(null) matches { None };
+    assert wrap(null) matches { Some(None) };
+}
+
+test "a null as a case payload" {
+    assert Option::Some(null) matches { Some(None) };
+    assert Option::<_>::Some(null) matches { Some(None) };
+}
+
+test "a sibling argument says which Option a null is" {
+    let p = pair(null, Option::Some(1));
+    assert p matches { None };
+    let q = pair(Option::Some(2), null);
+    assert q matches { Some(2) };
+    assert W {}.first(null, Option::Some(3)) matches { None };
+    assert W::second(Option::Some(4), null) matches { None };
+}
+
+test "a null takes its context's Option" {
+    let x: Option<i32> = null;
+    assert x matches { None };
+}
+
+__DATA__
+{}

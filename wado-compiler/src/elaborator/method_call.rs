@@ -17,7 +17,7 @@ use super::call::{
     ArgSite, CaseSite, SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot,
 };
 use super::callee::StaticMethodRef;
-use super::coercion::is_numeric_literal_arg;
+use super::coercion::answers_last;
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -761,7 +761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for (i, (&param_type, &arg)) in
                     expected_param_types.iter().zip(args.iter()).enumerate()
                 {
-                    if is_numeric_literal_arg(args_ast.get(i)) {
+                    if answers_last(args_ast.get(i)) {
                         infer.add_deferred(param_type, arg);
                     } else {
                         infer.add(param_type, arg);
@@ -1785,7 +1785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let own_ids = sig.own_type_param_ids();
             let mut infer = InferCtx::new(&self.tysys.type_table, own_ids.clone());
             for (i, (&param_type, &arg)) in param_types.iter().zip(args.iter()).enumerate() {
-                if is_numeric_literal_arg(static_call.args.get(i)) {
+                if answers_last(static_call.args.get(i)) {
                     infer.add_deferred(param_type, arg);
                 } else {
                     infer.add(param_type, arg);

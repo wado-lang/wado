@@ -11,7 +11,7 @@ use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
-use super::coercion::is_numeric_literal_arg;
+use super::coercion::answers_last;
 use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
@@ -489,7 +489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|r| r.expect("every argument is resolved in one of the two passes"))
             .collect();
         for (i, arg) in args.iter().enumerate() {
-            if is_numeric_literal_arg(Some(arg))
+            if answers_last(Some(arg))
                 && let Some(param) = param_types.get(i).copied()
             {
                 let expected = self.apply_infer_holes(param);
@@ -522,7 +522,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expected = self.apply_infer_holes(param_type);
         let resolved = self.resolve_expr(arg, ctx, Some(expected));
-        if !is_numeric_literal_arg(Some(arg)) {
+        if !answers_last(Some(arg)) {
             self.solve_own_infer_holes_against(expected, resolved, own_vars);
         }
         resolved
@@ -2635,7 +2635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
             for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
-                if is_numeric_literal_arg(raw_args.get(i)) {
+                if answers_last(raw_args.get(i)) {
                     infer.add_deferred(*param_type, *arg);
                 } else {
                     infer.add(*param_type, *arg);
@@ -2717,7 +2717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (param_type, arg)) in resolved_param_types.iter().zip(args.iter()).enumerate() {
-            if is_numeric_literal_arg(raw_args.get(i)) {
+            if answers_last(raw_args.get(i)) {
                 infer.add_deferred(*param_type, *arg);
             } else {
                 infer.add(*param_type, *arg);
@@ -3387,7 +3387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // one position left and solve each slot from the wrong argument.
         let mut infer = InferCtx::new(&self.tysys.type_table, all_param_ids.clone());
         for (i, (param_type, arg)) in sig.decl.param_types.iter().zip(args.iter()).enumerate() {
-            if is_numeric_literal_arg(raw_args.get(i)) {
+            if answers_last(raw_args.get(i)) {
                 infer.add_deferred(*param_type, *arg);
             } else {
                 infer.add(*param_type, *arg);
@@ -4135,7 +4135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .zip(args.iter())
                     .enumerate()
                 {
-                    if is_numeric_literal_arg(call.args.get(i)) {
+                    if answers_last(call.args.get(i)) {
                         infer.add_deferred(*param_type, *arg);
                     } else {
                         infer.add(*param_type, *arg);
