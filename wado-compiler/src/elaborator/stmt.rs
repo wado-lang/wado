@@ -1152,9 +1152,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
-    /// The struct a struct pattern destructures, and whether its written name
-    /// is that struct. A scrutinee that is no struct is reported and has none;
-    /// a newtype's head is its base's, since it inherits the fields it wraps.
+    /// The struct a pattern destructures (a newtype's base), and whether its
+    /// written name names it. A scrutinee that is no struct is reported instead.
     fn struct_pattern_head(
         &self,
         type_name: Option<&str>,
@@ -1180,7 +1179,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let name_matches = type_name.is_none_or(|written| {
             let matches = self.pattern_qualifier_matches(type_name_id, head);
             if !matches {
-                let (expected, found) = self.pattern_mismatch_names(type_name_id, written, scrutinee);
+                let (expected, found) =
+                    self.pattern_mismatch_names(type_name_id, written, scrutinee);
                 let _ = self.emit(TypeError::PatternTypeMismatch {
                     expected,
                     found,
@@ -1377,7 +1377,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 for field in fields {
                     let field_type = match head {
-                        Some(_) => self.lookup_field_type(type_id, &field.field_name, field.span).1,
+                        Some(_) => {
+                            self.lookup_field_type(type_id, &field.field_name, field.span)
+                                .1
+                        }
                         None => TypeTable::ERROR,
                     };
                     if head.is_some_and(|(_, type_name_matches)| type_name_matches) {

@@ -777,7 +777,8 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance { def, type_args }
-                if type_table.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
+                if type_table.is_compiler_item(*def, CompilerItem::List)
+                    && type_args.len() == 1 =>
             {
                 let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {

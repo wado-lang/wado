@@ -178,7 +178,10 @@ fn lower_to_flat_inner(
         }
         ResolvedType::Unit => vec![],
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::List)
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::List)
                 && type_args.len() == 1 =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
@@ -361,7 +364,10 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::Option)
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::Option)
                 && type_args.len() == 1 =>
         {
             // Option<T> → disc(i32) + flat(T)
@@ -493,7 +499,10 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::Result)
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_item(*def, CompilerItem::Result)
                 && type_args.len() == 2 =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,

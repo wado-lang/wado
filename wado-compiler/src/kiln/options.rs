@@ -258,7 +258,9 @@ fn lower_type(
                 None
             }
         },
-        ResolvedType::Struct { def, .. } if types.is_compiler_struct(*def, CompilerItem::String) => {
+        ResolvedType::Struct { def, .. }
+            if types.is_compiler_struct(*def, CompilerItem::String) =>
+        {
             Some(OptionsType::String)
         }
         ResolvedType::Struct { def, .. } => {

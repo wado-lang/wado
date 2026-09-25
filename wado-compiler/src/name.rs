@@ -1492,9 +1492,8 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
     Ok(normalize_module_path(path))
 }
 
-/// Resolve an import path against the importing module's path, producing a path
-/// canonical from the project root — base `./sub/main.wado` with relative
-/// `../lib.wado` gives `./lib.wado`.
+/// Resolve an import against the importing module's path: base `./sub/main.wado`
+/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and authority.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
     if has_special_prefix(relative) {
         return relative.to_string();
@@ -1516,7 +1515,9 @@ fn split_uri_origin(path: &str) -> (&str, &str) {
     let scheme = &path[..colon];
     let is_scheme = scheme.len() > 1
         && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
-        && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
     if !is_scheme {
         return ("", path);
     }
@@ -1555,12 +1556,11 @@ pub fn entry_dir_of(entry_module: Option<&ModuleSource>) -> String {
     }
 }
 
-/// The parent directory of a module path (everything before the last `/`, or
-/// empty if none). Shared by every site that derives a [`canonical_local_path`]
-/// anchor, so they agree on it.
+/// The parent directory of a module path: everything before the last `/`, or
+/// empty if none. Every [`canonical_local_path`] anchor comes from here.
 #[must_use]
 pub fn module_parent_dir(path: &str) -> &str {
-    get_parent_path(path)
+    path.rfind('/').map_or("", |pos| &path[..pos])
 }
 
 /// The symbol name of a module-level global var: `global:{module_source}::{name}`.
@@ -1736,18 +1736,6 @@ pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<
         Some(relative.to_string())
     } else {
         Some(format!("./{relative}"))
-    }
-}
-
-/// Get the parent directory of a path.
-///
-/// Given `./sub/file.wado`, returns `./sub`.
-/// Given `./file.wado`, returns `.`.
-/// Given `file.wado`, returns empty string.
-fn get_parent_path(path: &str) -> &str {
-    match path.rfind('/') {
-        Some(pos) => &path[..pos],
-        None => "",
     }
 }
 
@@ -2521,7 +2509,10 @@ mod tests {
             "core:json/parse.wado"
         );
         assert_eq!(resolve_module_path("/x.wado", "./c.wado"), "/c.wado");
-        assert_eq!(resolve_module_path("C:/a/x.wado", "./c.wado"), "C:/a/c.wado");
+        assert_eq!(
+            resolve_module_path("C:/a/x.wado", "./c.wado"),
+            "C:/a/c.wado"
+        );
     }
 
     #[test]
@@ -2574,10 +2565,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_parent_path() {
-        assert_eq!(get_parent_path("./sub/file.wado"), "./sub");
-        assert_eq!(get_parent_path("./file.wado"), ".");
-        assert_eq!(get_parent_path("file.wado"), "");
+    fn test_module_parent_dir() {
+        assert_eq!(module_parent_dir("./sub/file.wado"), "./sub");
+        assert_eq!(module_parent_dir("./file.wado"), ".");
+        assert_eq!(module_parent_dir("file.wado"), "");
     }
 
     #[test]

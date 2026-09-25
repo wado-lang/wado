@@ -1419,13 +1419,10 @@ impl TypeTable {
     /// instance or as the monomorphized struct its declaration heads.
     #[must_use]
     pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
-        let Some(head) = self.compiler_item_def(item) else {
-            return false;
-        };
         match self.get(ty) {
-            ResolvedType::GenericInstance { def, .. } => *def == head,
+            ResolvedType::GenericInstance { def, .. } => self.is_compiler_item(*def, item),
             ResolvedType::Struct { def, type_args } => {
-                !type_args.is_empty() && def.decl() == Some(head)
+                !type_args.is_empty() && self.is_compiler_struct(*def, item)
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -1698,7 +1695,8 @@ impl TypeTable {
     /// Whether `head` is the struct `item` names.
     #[must_use]
     pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {
-        head.decl().is_some_and(|def| self.is_compiler_item(def, item))
+        head.decl()
+            .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
     /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`

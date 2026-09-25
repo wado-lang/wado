@@ -142,7 +142,9 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if type_table.borrow().is_compiler_item(*def, CompilerItem::List)
+        ) if type_table
+            .borrow()
+            .is_compiler_item(*def, CompilerItem::List)
             && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>

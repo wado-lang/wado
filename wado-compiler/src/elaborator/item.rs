@@ -1375,7 +1375,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.type_contains_slice_view_inner(type_table, *base_type, visited)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                if type_table.compiler_item_def(CompilerItem::Slice) == Some(*def) {
+                if type_table.is_compiler_item(*def, CompilerItem::Slice) {
                     return true;
                 }
                 type_args

@@ -3351,8 +3351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if tt.compiler_item_def(CompilerItem::Slice) == Some(*def)
-                    && type_args.len() == 1 =>
+                if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 =>
             {
                 Some(type_args[0])
             }
