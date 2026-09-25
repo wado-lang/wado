@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790315718123,
+  "lastUpdate": 1790325685513,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59633,6 +59633,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/dc6a5079475ce2944693bb4790509b54fedbfa8c"
         },
         "date": 1790315717452,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "20edf112edc9803599f8aa0c1270d6678c8b5a7b",
+          "message": "Merge pull request #2156 from wado-lang/claude/elegant-tesla-esoxyy\n\nrefactor(elaborator): 2,300 fewer lines, four compiler bugs fixed",
+          "timestamp": "2026-09-25T17:17:10+09:00",
+          "tree_id": "40afd7e0bafca8a3bb272f60a44f7c9eb61e3e87",
+          "url": "https://github.com/wado-lang/wado/commit/20edf112edc9803599f8aa0c1270d6678c8b5a7b"
+        },
+        "date": 1790325684746,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
