@@ -280,22 +280,22 @@ fn "list_from_le_bytes.wado/run"() {
     let bytes: ref "core:prelude//List<u8>";
     let a_end_112: i32;
     let i_117: i32;
-    let elements_185: ref Array<u16>;
-    let i_195: i32;
-    let elements_197: ref Array<u16>;
-    let a_end_202: i32;
-    let i_207: i32;
-    let $licm_repr_220: ref Array<f32>;
-    let $licm_repr_222: ref Array<u16>;
+    let elements_186: ref Array<u16>;
+    let i_196: i32;
+    let elements_198: ref Array<u16>;
+    let a_end_203: i32;
+    let i_208: i32;
+    let $licm_repr_221: ref Array<f32>;
     let $licm_repr_223: ref Array<u16>;
-    let $sroa_f_repr_228: ref Array<f32>;
+    let $licm_repr_224: ref Array<u16>;
+    let $sroa_f_repr_229: ref Array<f32>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:list_from_le_bytes.wado::$modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:list_from_le_bytes.wado::$modules_initialized = 1;
     };
-    $sroa_f_repr_228 = array.new_fixed<f32>(1_f32, -2.5_f32);
+    $sroa_f_repr_229 = array.new_fixed<f32>(1_f32, -2.5_f32);
     bytes = black_box(struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>(0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x20, 0xc0), used: 8 });
     g = "core:prelude/list.wado/core:prelude/list.wado/List<f32>::from_le_bytes<core:prelude/bytes.wado/ByteList>"(bytes);
     $cond_8 = $inline_core_prelude_array_wado_seq_eq_f32__8: block -> bool {
@@ -304,11 +304,11 @@ fn "list_from_le_bytes.wado/run"() {
             break $inline_core_prelude_array_wado_seq_eq_f32__8: 0;
         }
         i_117 = 0;
-        $licm_repr_220 = g.repr;
+        $licm_repr_221 = g.repr;
         b1: block {
             l2: loop {
                 break_if b1 i_117 >= a_end_112;
-                if (builtin::array_get_value<f32>($licm_repr_220, i_117) == builtin::array_get_value<f32>($sroa_f_repr_228, i_117)) == 0 {
+                if (builtin::array_get_value<f32>($licm_repr_221, i_117) == builtin::array_get_value<f32>($sroa_f_repr_229, i_117)) == 0 {
                     break $inline_core_prelude_array_wado_seq_eq_f32__8: 0;
                 }
                 i_117 = i_117 + 1;
@@ -356,17 +356,17 @@ condition: g == f
     builtin::array_set<u16>(local.tee $load_16(m.repr), 2, 3);
     m.used = 3;
     builtin::array_set<u16>($load_16, 0, 7);
-    elements_185 = array.new_fixed<u16>(7, 2, 3);
+    elements_186 = array.new_fixed<u16>(7, 2, 3);
     $cond_29 = $inline_core_prelude_array_wado_seq_eq_u16__31: block -> bool {
-        i_195 = 0;
-        $licm_repr_222 = $load_16;
+        i_196 = 0;
+        $licm_repr_223 = $load_16;
         b7: block {
             l8: loop {
-                break_if b7 i_195 >= 3;
-                if builtin::array_get_value<u16>($licm_repr_222, i_195) != builtin::array_get_value<u16>(elements_185, i_195) {
+                break_if b7 i_196 >= 3;
+                if builtin::array_get_value<u16>($licm_repr_223, i_196) != builtin::array_get_value<u16>(elements_186, i_196) {
                     break $inline_core_prelude_array_wado_seq_eq_u16__31: 0;
                 }
-                i_195 = i_195 + 1;
+                i_196 = i_196 + 1;
                 continue l8;
             };
         };
@@ -402,21 +402,21 @@ condition: m == [7, 2, 3] as List<u16>
         unreachable;
     }
     from_view = "core:prelude/list.wado/core:prelude/list.wado/List<u16>::from_le_bytes<core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: ref.as_non_null(global:list_from_le_bytes.wado::$const_obj_27), start: 0, end: 4 });
-    elements_197 = array.new_fixed<u16>(1, 2);
+    elements_198 = array.new_fixed<u16>(1, 2);
     $cond_32 = $inline_core_prelude_array_wado_seq_eq_u16__35: block -> bool {
-        a_end_202 = from_view.used;
-        if a_end_202 != 2 {
+        a_end_203 = from_view.used;
+        if a_end_203 != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u16__35: 0;
         }
-        i_207 = 0;
-        $licm_repr_223 = from_view.repr;
+        i_208 = 0;
+        $licm_repr_224 = from_view.repr;
         b12: block {
             l13: loop {
-                break_if b12 i_207 >= a_end_202;
-                if builtin::array_get_value<u16>($licm_repr_223, i_207) != builtin::array_get_value<u16>(elements_197, i_207) {
+                break_if b12 i_208 >= a_end_203;
+                if builtin::array_get_value<u16>($licm_repr_224, i_208) != builtin::array_get_value<u16>(elements_198, i_208) {
                     break $inline_core_prelude_array_wado_seq_eq_u16__35: 0;
                 }
-                i_207 = i_207 + 1;
+                i_208 = i_208 + 1;
                 continue l13;
             };
         };
