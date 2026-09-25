@@ -541,6 +541,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A turbofish on a case reached through `Self`, which already names them.
+    SelfCaseTurbofish {
+        case: String,
+        span: Span,
+    },
+
     /// Unknown function
     UnknownFunction {
         name: String,
@@ -1598,6 +1604,11 @@ impl TypeError {
             } => (
                 Code::ArityMismatch,
                 turbofish_on_both(&unalias_namespace_member(type_name), case),
+                *span,
+            ),
+            TypeError::SelfCaseTurbofish { case, span } => (
+                Code::ArityMismatch,
+                format!("`Self` already names its type arguments; remove the turbofish from `{case}`"),
                 *span,
             ),
             TypeError::SurplusTypeArguments {

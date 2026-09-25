@@ -290,6 +290,17 @@ enum CalleeIdentKind<'a> {
     },
 }
 
+/// What a case path names its variant with.
+#[derive(Clone, Copy)]
+enum CasePrefix {
+    /// `Variant::Case`, or a bare `Case` the expected type supplied.
+    Type,
+    /// `ns::Variant::Case`.
+    Namespace,
+    /// `Self::Case`, `Self` being this type.
+    OfSelf(TypeId),
+}
+
 /// A case construction as the source wrote it.
 #[derive(Clone, Copy)]
 pub(super) struct CaseSite<'a> {
@@ -634,36 +645,81 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<&VariantInfo> {
         match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
-            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => None,
-            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
-                self.lookup_variant_cases_at(receiver_site, prefix)
-            }
+            CalleeIdentKind::Operation { .. }
+            | CalleeIdentKind::AbstractTypeParam { .. }
+            | CalleeIdentKind::Rewritten(_) => None,
+            CalleeIdentKind::AsIs(_) => self.lookup_variant_cases_at(receiver_site, prefix),
         }
     }
 
-    /// The variant and case a `Variant::Case(…)` or `ns::Variant::Case(…)`
-    /// callee constructs, and whether a namespace qualifies it.
+    /// The impl's own type, where `ident` is a `Self::Case` path.
+    pub(super) fn self_case_receiver(&self, ident: &ast::IdentExpr) -> Option<TypeId> {
+        match ident.segments.as_slice() {
+            [head, _] if head.name == "Self" => self.annotate_ctx.trait_ctx.self_type,
+            _ => None,
+        }
+    }
+
+    /// The type arguments `Self` writes for a case reached through it, which
+    /// leaves no room for a turbofish on the case. Records the owner for reify.
+    pub(super) fn self_case_written(
+        &mut self,
+        ident: &ast::IdentExpr,
+        receiver: TypeId,
+        turbofish: &[ast::Type],
+        span: Span,
+    ) -> Option<Vec<TypeId>> {
+        let [_, case] = ident.segments.as_slice() else {
+            unreachable!("`self_case_receiver` matched two segments")
+        };
+        if !turbofish.is_empty() {
+            let _ = self.emit(TypeError::SelfCaseTurbofish {
+                case: case.name.clone(),
+                span,
+            });
+            return None;
+        }
+        let owner = self.tysys.type_def(receiver).expect("a case's owner is nominal");
+        self.record_case_owner(ident.id, owner);
+        let table = self.tysys.type_table.borrow();
+        Some(match table.get(receiver) {
+            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+            _ => Vec::new(),
+        })
+    }
+
+    /// The variant and case a `Variant::Case(…)`, `ns::Variant::Case(…)` or
+    /// `Self::Case(…)` callee constructs, and what names the variant.
     fn case_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
         receiver_site: Option<ast::AstId>,
         ident: &ast::IdentExpr,
-    ) -> Option<(VariantInfo, VariantCaseData, bool)> {
+    ) -> Option<(VariantInfo, VariantCaseData, CasePrefix)> {
+        if let Some(receiver) = self.self_case_receiver(ident) {
+            let variant_info = self.tysys.variant_of_type(receiver)?;
+            let (_, case_data) = variant_info.case_named(&ident.segments[1].name)?;
+            return Some((
+                variant_info.clone(),
+                case_data.clone(),
+                CasePrefix::OfSelf(receiver),
+            ));
+        }
         let (prefix, suffix) = callee_kind.effective_name().split_once("::")?;
-        let (variant_info, case_name, namespaced) = if let Some(variant_info) =
+        let (variant_info, case_name, named_by) = if let Some(variant_info) =
             self.variant_of_callee(callee_kind, receiver_site, prefix)
         {
-            (variant_info, suffix, false)
+            (variant_info, suffix, CasePrefix::Type)
         } else {
             let (_, case_name) = suffix.split_once("::")?;
             self.namespace_alias_source(prefix, ident.id)?;
             // `ns::Type::Case` names `Type` with its middle segment, which the
             // resolve walk answered for, so the declaration comes from the site.
             let def = self.tysys.qualified_owner_decl(ident)?;
-            (self.tysys.data.variant_cases.get(&def)?, case_name, true)
+            (self.tysys.data.variant_cases.get(&def)?, case_name, CasePrefix::Namespace)
         };
         let (_, case_data) = variant_info.case_named(case_name)?;
-        Some((variant_info.clone(), case_data.clone(), namespaced))
+        Some((variant_info.clone(), case_data.clone(), named_by))
     }
 
     /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
@@ -955,21 +1011,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
-        if let Some((variant, case_data, namespaced)) =
+        if let Some((variant, case_data, named_by)) =
             self.case_of_callee(&callee_kind, receiver_site, ident)
         {
             let (owner, _) = effective_name
                 .rsplit_once("::")
                 .expect("a case callee is qualified");
-            if namespaced {
-                self.record_namespaced_case(ident, case_data.ast_id);
-            } else {
-                let (prefix, _) = effective_name
-                    .split_once("::")
-                    .expect("a case callee is qualified");
-                self.record_qualified_case(ident, prefix, case_data.ast_id);
-            }
-            let written = self.resolve_turbofish_args(&call.type_args);
+            let written = match named_by {
+                CasePrefix::Namespace => {
+                    self.record_namespaced_case(ident, case_data.ast_id);
+                    self.resolve_turbofish_args(&call.type_args)
+                }
+                CasePrefix::Type => {
+                    let (prefix, _) = effective_name
+                        .split_once("::")
+                        .expect("a case callee is qualified");
+                    self.record_qualified_case(ident, prefix, case_data.ast_id);
+                    self.resolve_turbofish_args(&call.type_args)
+                }
+                CasePrefix::OfSelf(receiver) => {
+                    self.record_qualified_case(ident, "Self", case_data.ast_id);
+                    let Some(written) =
+                        self.self_case_written(ident, receiver, &call.type_args, call.span)
+                    else {
+                        return self.resolve_args_without_callee(&call.args, ctx);
+                    };
+                    written
+                }
+            };
             let case = CaseSite {
                 variant: &variant,
                 case: &case_data,
@@ -3557,6 +3626,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.settle_onto_slots(&inst, slots, &mut args);
         // A deferred hole carried into the payload (`Result::Ok(v)`, `v = gen()?`).
         for (arg, &expected) in args.iter_mut().zip(&payload) {
+            let expected = self.apply_infer_holes(expected);
             self.pin_arg_hole_against(arg, expected);
         }
         self.construct_variant_case(case, &args, raw_args, expected_type)

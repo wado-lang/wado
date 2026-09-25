@@ -1004,6 +1004,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         fits
     }
 
+    /// Check the turbofish on a case of a type that declares no parameters.
+    fn check_unparameterized_case(
+        &mut self,
+        ident: &ast::IdentExpr,
+        self_receiver: Option<TypeId>,
+        prefix: &str,
+    ) {
+        match self_receiver {
+            Some(receiver) => {
+                let _ = self.self_case_written(ident, receiver, &ident.type_args, ident.span);
+            }
+            None => {
+                self.check_case_turbofish_arity(ident.type_args.len(), prefix, 0, ident.span);
+            }
+        }
+    }
+
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
     /// case, an enum case, or a flags member. `None` when the prefix names no
     /// such type, so the caller can try other interpretations;
@@ -1018,7 +1035,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // inside a foreign default resolves in the declaring module. A bare
         // case (`None`, `Leaf`) has no such segment: the expected type
         // supplies it, or nothing does.
-        let (owner, spelled) = if let Some(seg) = ident.owner_segment() {
+        let self_receiver = self.self_case_receiver(ident);
+        let (owner, spelled) = if let Some(receiver) = self_receiver {
+            (self.tysys.type_def(receiver), ident.name.clone())
+        } else if let Some(seg) = ident.owner_segment() {
             (self.tysys.resolutions.declared(seg.id), ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
@@ -1049,7 +1069,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
             // A payload-less case has no payload to infer from, so the
             // turbofish is the only source besides the expected type.
-            let written = self.resolve_turbofish_args(&ident.type_args);
+            let written = match self_receiver {
+                Some(receiver) => {
+                    let Some(written) =
+                        self.self_case_written(ident, receiver, &ident.type_args, ident.span)
+                    else {
+                        return Some(TypeTable::ERROR);
+                    };
+                    written
+                }
+                None => self.resolve_turbofish_args(&ident.type_args),
+            };
             let case = CaseSite {
                 variant: &variant_info,
                 case: case_data,
@@ -1071,7 +1101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident.type_args.len(), prefix, 0, ident.span);
+            self.check_unparameterized_case(ident, self_receiver, prefix);
             let enum_type = self
                 .tysys
                 .type_table
@@ -1093,7 +1123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
-            self.check_case_turbofish_arity(ident.type_args.len(), prefix, 0, ident.span);
+            self.check_unparameterized_case(ident, self_receiver, prefix);
             return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None
@@ -1107,7 +1137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected: Option<TypeId>,
     ) -> BareCase {
         if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
-            self.record_bare_case(ident.id, owner);
+            self.record_case_owner(ident.id, owner);
             return BareCase::Of { owner, spelled };
         }
         let Some(qualified) = self.tysys.bare_case_at(ident.id) else {

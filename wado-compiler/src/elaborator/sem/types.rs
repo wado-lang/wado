@@ -238,10 +238,9 @@ macro_rules! with_body_facts {
             /// The type a type pattern (`p: T`) ascribes, keyed by the
             /// pattern's [`AstId`] — the `LetStmt`'s for a `let … else`.
             ann_pattern_ascription => pattern_ascriptions: $crate::tir::TypeId,
-            /// The type a bare case (`Red`, `Some(x)`) was read as a case of:
-            /// the expected type at the site, so reify constructs what
-            /// annotate typed.
-            ann_bare_case => bare_cases: $crate::defs::DefId,
+            /// The type a case path the source does not name was read as a case
+            /// of: a bare `Some(x)` or a `Self::Some(x)`.
+            ann_case_owner => case_owners: $crate::defs::DefId,
             /// The anonymous type a tagged template literal denotes, keyed
             /// by the [`crate::ast::TaggedTemplateExpr`]'s [`AstId`]. The
             /// tag call's own facts sit under the same key in

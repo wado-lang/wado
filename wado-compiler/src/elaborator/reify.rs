@@ -491,11 +491,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A `Type::Case` identifier as the declaration owning the case and the
-    /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
-    /// read it off the expected type.
+    /// spelling: `Color::Red` at its own segments, a bare `Red` or `Self::Red` as annotate read it.
     fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<DefId>, String)> {
-        if let Some(owner) = self.ann_bare_case(ident.id) {
-            return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
+        if let Some(owner) = self.ann_case_owner(ident.id) {
+            let case = ident.segments.last().map_or(&ident.name, |seg| &seg.name);
+            return Some((Some(owner), self.tysys.qualified_case(owner, case)));
         }
         let (prefix, _) = ident.name.split_once("::")?;
         let owner = self
@@ -8672,11 +8672,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // 5. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
-        //    instantiation's type_args when present. A bare case (`None`)
-        //    resolves to its declaration, which is no function; it is the
-        //    case below.
-        let is_bare_case = self.ann_bare_case(ident.id).is_some();
-        if !is_bare_case
+        //    instantiation's type_args when present. A case whose type the
+        //    path does not name (`None`, `Self::None`) is the case below.
+        let is_unnamed_case = self.ann_case_owner(ident.id).is_some();
+        if !is_unnamed_case
             && self
                 .sem
                 .decls
@@ -8697,7 +8696,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if !is_bare_case && let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
+        if !is_unnamed_case && let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
             let (import_src, original_name) = {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())

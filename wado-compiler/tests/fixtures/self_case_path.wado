@@ -1,0 +1,63 @@
+// `Self::Case` names a case of the impl's own type, as in Rust.
+
+variant Mb { J(i32), N }
+
+impl Mb {
+    fn mk(v: i32) -> Mb { return Self::J(v); }
+    fn none() -> Mb { return Self::N; }
+}
+
+variant Gb<T> { J(T), N }
+
+impl<T> Gb<T> {
+    fn mk(v: T) -> Gb<T> { return Self::J(v); }
+    fn none() -> Gb<T> { return Self::N; }
+}
+
+impl Gb<i64> {
+    fn seven() -> Gb<i64> { return Self::J(7); }
+}
+
+enum C { R, G }
+
+impl C {
+    fn red() -> C { return Self::R; }
+}
+
+flags P { Read, Write }
+
+impl P {
+    fn rw() -> P { return Self::Read | Self::Write; }
+}
+
+trait Make { fn make(v: i32) -> Self; }
+
+impl Make for Mb {
+    fn make(v: i32) -> Self { return Self::J(v); }
+}
+
+test "a payload case of a plain variant" {
+    assert Mb::mk(1) matches { J(1) };
+    assert Mb::none() matches { N };
+}
+
+test "a case of a generic variant takes Self's type arguments" {
+    assert Gb::<i32>::mk(2) matches { J(2) };
+    assert Gb::<String>::none() matches { N };
+}
+
+test "Self's written argument types the payload literal" {
+    assert Gb::<i64>::seven() matches { J(7) };
+}
+
+test "an enum case and a flags member" {
+    assert C::red() matches { R };
+    assert P::rw() as u32 == 3;
+}
+
+test "a trait impl's Self" {
+    assert Mb::make(3) matches { J(3) };
+}
+
+__DATA__
+{}

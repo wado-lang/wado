@@ -1359,10 +1359,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.assign_places.insert(key, place);
     }
 
-    /// Record that the bare case at `site` is a case of `owner`, the expected
-    /// type there.
-    pub(super) fn record_bare_case(&mut self, site: AstId, owner: DefId) {
-        self.sem.types.bare_cases.insert(site, owner);
+    /// Record that the case path at `site`, which does not name its type, is a
+    /// case of `owner`.
+    pub(super) fn record_case_owner(&mut self, site: AstId, owner: DefId) {
+        self.sem.types.case_owners.insert(site, owner);
     }
 
     /// Look up the recorded assignment-target place classification for the
