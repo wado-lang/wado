@@ -616,21 +616,40 @@ test "a constant no Wado literal spells is written as the prelude's constant" {
     assert folded_add(f32::NAN).unwrap().contains("v + f32::NAN");
 }
 
-test "a constant no operator can fold names the operator that reads it" {
-    let graph = constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5);
-    let e = emit_graph(&graph).unwrap_err();
+test "a constant with no closure to fold into is a rank-0 literal" {
+    let out = emitted(&emit_graph(&constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5)).unwrap());
 
-    assert `${e}` == "Y = Relu: no kernel folds the constant C";
+    assert out.contains("let C = Tensor::<f32, []> { data: [(0.5 as f32)], extents: [] };");
+    assert out.contains("let Y = map(&C, |v| f32::max(v, 0.0));");
 }
 
-test "a constant is not a value a graph can return" {
+test "a constant a closure folds is not bound as well" {
+    assert !folded_add(0.5).unwrap().contains("let C");
+}
+
+test "a folded scalar output is returned as its literal" {
     let graph = constant_graph(node("Relu", "Y", ["X"]), matrix_rank(), 0.5);
-    let e = emit_graph(&Graph {
+    let out = emitted(&emit_graph(&Graph {
         ..graph,
         outputs: [
             ValueInfo { name: "C", dtype: "float", rank: Rank::Scalar },
         ],
-    }).unwrap_err();
+    }).unwrap());
 
-    assert `${e}` == "C: a graph cannot return a tensor the build folded";
+    assert out.contains("let C = Tensor::<f32, []> { data: [(0.5 as f32)], extents: [] };");
+    assert out.contains("return C;");
+}
+
+test "a folded output of several elements is returned as its literal" {
+    let source = `g (float[2, 3] X) => (int64[2] Y) {
+        Y = Shape(X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["Dim"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+
+    assert out.contains("let Y = Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] };");
+    assert out.contains("return Y;");
 }

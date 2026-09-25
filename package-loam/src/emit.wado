@@ -36,14 +36,6 @@ pub struct NameCollision {
     pub ident: String,
 }
 
-/// A folded scalar reaching an operator that has nowhere to put it. Only a
-/// closure an operator already writes folds one, since it allocates no tensor.
-pub struct UnfoldedConstant {
-    pub node: String,
-    pub op: String,
-    pub tensor: String,
-}
-
 pub variant EmitError {
     /// An axis named as something the generated module already declares. A
     /// tensor name comes from the model and is renamed; an axis is the
@@ -53,9 +45,6 @@ pub variant EmitError {
     Operator(UnimplementedOperator),
     Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
-    Constant(UnfoldedConstant),
-    /// A graph output the build folded, which `forward` computes nothing for.
-    ReturnedConstant(String),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
 }
@@ -86,12 +75,6 @@ impl Display for NameCollision {
     }
 }
 
-impl Display for UnfoldedConstant {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.node} = ${self.op}: no kernel folds the constant ${self.tensor}`);
-    }
-}
-
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
@@ -102,8 +85,6 @@ impl Display for EmitError {
             Operator(e) => e.fmt(f),
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
-            Constant(e) => e.fmt(f),
-            ReturnedConstant(name) => f.write_str(`${name}: a graph cannot return a tensor the build folded`),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
         }
     }
@@ -191,7 +172,7 @@ impl Names {
                 names.take(&mut taken, &node.outputs[0])?;
             }
         }
-        for let tensor of literal_tensors(checked) {
+        for let tensor of literal_tensors(graph, checked, &scalar_literals(checked)) {
             names.take(&mut taken, &tensor)?;
         }
         return Result::Ok(names);
@@ -367,8 +348,7 @@ fn emit_embedded(
 struct Operands {
     values: TreeMap<String, String>,
     already_reference: TreeSet<String>,
-    /// A folded float of one element, as the literal that replaces it. It
-    /// allocates no tensor: every operator reading one folds it into a closure.
+    /// A folded float of one element, as the literal a closure folds in.
     scalars: TreeMap<String, String>,
 }
 
@@ -402,13 +382,8 @@ fn emit_forward(
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
-        scalars: TreeMap::<String, String>::new(),
+        scalars: scalar_literals(checked),
     };
-    for let [name, k] of checked.known.entries() {
-        if let Some(literal) = scalar_literal(k) {
-            exprs.scalars[*name] = literal;
-        }
-    }
     let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
     let mut widened: List<String> = [];
@@ -438,7 +413,7 @@ fn emit_forward(
     for let line of widened {
         w.line(&line);
     }
-    for let tensor of literal_tensors(checked) {
+    for let tensor of literal_tensors(graph, checked, &exprs.scalars) {
         let ident = names.get(&tensor);
         w.line(`let ${ident} = ${literal_tensor(checked, &tensor)};`);
         exprs.values[tensor] = ident;
@@ -460,10 +435,6 @@ fn emit_forward(
         w.line(`let ${ident} = ${node_call(node, checked, &exprs)?};`);
         exprs.values[produced] = ident;
     }
-    if checked.known.contains_key(result) {
-        builtin::cold_path();
-        return Result::Err(EmitError::ReturnedConstant(result));
-    }
     let returned = if converted(checked, held, &result) {
         `narrow(${exprs.reference(&result)})`;
     } else {
@@ -474,25 +445,46 @@ fn emit_forward(
     return Result::Ok(());
 }
 
-/// A folded float of one element as the literal a closure folds in, or `None`
-/// for any other folded tensor.
-fn scalar_literal(k: &Known) -> Option<String> {
-    if let Floats(v) = k.elements && v.len() == 1 {
-        return Option::Some(float_literal(v[0]));
+/// Every folded float of one element, as the literal a closure folds in.
+fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
+    let mut scalars = TreeMap::<String, String>::new();
+    for let [name, k] of checked.known.entries() {
+        if let Floats(v) = k.elements && v.len() == 1 {
+            scalars[*name] = float_literal(v[0]);
+        }
     }
-    return null;
+    return scalars;
 }
 
-/// The folded tensors a kernel reads as a tensor, which `forward` binds as
-/// literals. Stage 0 gave a shape to each one a kernel reads.
-fn literal_tensors(checked: &Checked) -> List<String> {
+/// The folded tensors something reads as a tensor, which `forward` binds as
+/// literals: all a kernel reads or the graph returns, save a scalar a closure folds.
+fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> List<String> {
     let mut tensors: List<String> = [];
-    for let [name, k] of checked.known.entries() {
-        if checked.shapes.contains_key(*name) && scalar_literal(k) matches { None } {
+    for let [name, _] of checked.known.entries() {
+        if checked.shapes.contains_key(*name)
+            && (!scalars.contains_key(*name) || read_as_tensor(graph, checked, scalars, name)) {
             tensors.push(*name);
         }
     }
     return tensors;
+}
+
+/// Whether a folded scalar is returned, or read where no closure folds it.
+fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
+    if graph.outputs[0].name == *scalar {
+        return true;
+    }
+    for let node of graph.nodes {
+        if checked.known.contains_key(node.outputs[0]) {
+            continue;
+        }
+        for let [index, input] of node.inputs.into_iter().enumerate() {
+            if input == *scalar && !folds_constant(&node, index, scalars) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// A folded tensor spelled out as a `Tensor` literal, under the shape stage 0
@@ -558,7 +550,6 @@ fn axis_names_of(axes: &List<Axis>) -> List<String> {
 fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let op = node.op;
-    check_constants_fold(node, exprs)?;
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
         let from = shapes.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
@@ -636,33 +627,16 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
 }
 
-/// A folded scalar is a literal rather than a tensor, so it stops the build in
-/// any operand position without a closure to fold it into.
-fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
-    for let [index, input] of node.inputs.into_iter().enumerate() {
-        if !exprs.scalars.contains_key(input) || folds_constant(node, index, exprs) {
-            continue;
-        }
-        builtin::cold_path();
-        return Result::Err(EmitError::Constant(UnfoldedConstant {
-            node: node.outputs[0],
-            op: node.op,
-            tensor: input,
-        }));
-    }
-    return Result::Ok(());
-}
-
-/// Whether the operand at `index` is one this operator folds: a binary
-/// elementwise operand whose partner is a tensor, or a `Gemm` bias.
-fn folds_constant(node: &Node, index: i32, exprs: &Operands) -> bool {
+/// Whether the operand at `index` is one this operator folds into a closure: a
+/// binary elementwise operand whose partner is a tensor, or a `Gemm` bias.
+fn folds_constant(node: &Node, index: i32, scalars: &TreeMap<String, String>) -> bool {
     if node.op == "Gemm" {
         return index == 2;
     }
     if index > 1 || binary_body(&node.op, &"x", &"y") matches { None } {
         return false;
     }
-    return !exprs.scalars.contains_key(node.inputs[1 - index]);
+    return !scalars.contains_key(node.inputs[1 - index]);
 }
 
 /// A two-operand node's operand expressions and the shapes stage 0 gave them.
