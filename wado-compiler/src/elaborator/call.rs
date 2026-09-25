@@ -1963,6 +1963,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &callee,
             &mut type_args,
             &declared_param_types,
+            &call.args,
             &args,
             expected_type,
             call.span,
@@ -3053,6 +3054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
         param_types: &[TypeId],
+        arg_exprs: &[ast::Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: token::Span,
@@ -3063,16 +3065,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if n == 0 {
             return;
         }
-        // A value passed for a reference settles nothing, and the argument
-        // check names the missing `&` where this would blame inference.
-        let misses_a_reference = param_types.iter().zip(args).any(|(&param, &arg)| {
-            let settled_value = !matches!(arg, TypeTable::ERROR | TypeTable::UNKNOWN)
-                && !self.type_has_infer_hole(arg);
-            let tt = self.tysys.type_table.borrow();
-            let is_borrow = |t| matches!(tt.get(t), ResolvedType::Ref(_) | ResolvedType::MutRef(_));
-            is_borrow(param) && !is_borrow(arg) && settled_value
-        });
-        if misses_a_reference {
+        // A value passed for a reference settles nothing: name the missing `&`
+        // rather than blame inference.
+        let value_for_reference: Vec<usize> = (0..param_types.len().min(args.len()))
+            .filter(|&i| {
+                let arg = args[i];
+                let settled_value = !matches!(arg, TypeTable::ERROR | TypeTable::UNKNOWN)
+                    && !self.type_has_infer_hole(arg);
+                let tt = self.tysys.type_table.borrow();
+                let is_borrow =
+                    |t| matches!(tt.get(t), ResolvedType::Ref(_) | ResolvedType::MutRef(_));
+                is_borrow(param_types[i]) && !is_borrow(arg) && settled_value
+            })
+            .collect();
+        if !value_for_reference.is_empty() {
+            for i in value_for_reference {
+                let _ = self.emit(TypeError::TypeMismatch {
+                    expected: self.tysys.type_id_to_string(param_types[i]),
+                    found: self.tysys.type_id_to_string(args[i]),
+                    span: arg_exprs.get(i).map_or(span, ast::Expr::span),
+                });
+            }
             return;
         }
         // Defaults are already substituted (`fill_defaulted_fn_type_args`), so

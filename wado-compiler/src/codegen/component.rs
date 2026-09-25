@@ -3654,32 +3654,12 @@ fn import_interfaces_with_resources(
         .filter(|info| info.resource_type.is_some())
         .collect();
 
-    // Phase 1: Import resource-defining source interfaces the plan calls for.
-    // Iterate the getter interfaces (for a stable import order) and import each
-    // referenced source via the shared `import_resource_source` helper, which is
-    // idempotent and also handles the outer resource / error-code aliases.
-    // Membership is the plan's: a source is imported iff listed as
-    // `ResourceSource`.
-    for interface_info in &interfaces_with_resources {
-        let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
-            continue;
-        };
-        let Some(source_path) = project
-            .cm_interface_registry
-            .resource_source_in(Some(&interface_info.path), resource_wado_name)
-        else {
-            continue;
-        };
-        if source_path == interface_info.path {
-            continue;
+    // Phase 1: every resource-defining interface the plan lists. The helper is
+    // idempotent and also emits the outer resource and error-code aliases.
+    for entry in import_plan {
+        if entry.kind == ImportKind::ResourceSource {
+            import_resource_source(builder, ctx, project, &entry.fq);
         }
-        if !import_plan
-            .iter()
-            .any(|e| e.fq == source_path && e.kind == ImportKind::ResourceSource)
-        {
-            continue;
-        }
-        import_resource_source(builder, ctx, project, source_path);
     }
 
     // Phase 2: Import the resource-getter interfaces the plan lists
