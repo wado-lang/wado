@@ -3409,7 +3409,9 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> Option<LocalMethodName> {
         let binder = info.fq_struct_name();
-        let key = self.current_param_substitution_key.get(binder.binder_name()?)?;
+        let key = self
+            .current_param_substitution_key
+            .get(binder.binder_name()?)?;
         let bound = *substitution.get(key)?;
         RefKind::from_resolved(type_table.get(bound))?;
         let candidate = self.named_by_impl(info.at_owner(&type_table.fq_type_name(bound)));

@@ -2146,10 +2146,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .and_then(FqTraitName::canonical)
                 .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
-            let is_ref_impl = matches!(
-                &impl_block.ty,
-                ast::Type::Reference(_) | ast::Type::MutReference(_),
-            );
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // what this block's methods are recorded under — owned, or the
@@ -2160,6 +2156,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(kind) => Receiver::Ref(kind),
                 None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
+            let is_ref_impl = receiver.ref_kind().is_some();
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
@@ -2173,15 +2170,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect(),
                 _ => Vec::new(),
             };
-            // Concrete-impl owner (`impl List<u8>`): the receiver's
-            // qualified mangle, matching call sites (issue #1348).
+            // Concrete-impl owner (`impl List<u8>`, `impl Eq for &Item`): the
+            // receiver's qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<FqTypeName> =
                 if !qualified_struct_name.references().is_empty() {
                     Some(qualified_struct_name.clone())
                 } else if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
-                    let peeled = tt.peel_refs(self_type);
-                    let is_instantiation = match tt.get(peeled) {
+                    let is_instantiation = match tt.get(self_type) {
                         ResolvedType::GenericInstance { .. } => true,
                         ResolvedType::Newtype { type_args, .. } => {
                             // A trait impl needs none: the trait index keys it.
@@ -2189,7 +2185,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                         _ => false,
                     };
-                    is_instantiation.then(|| tt.fq_type_name(peeled))
+                    is_instantiation.then(|| tt.fq_type_name(self_type))
                 } else {
                     None
                 };
