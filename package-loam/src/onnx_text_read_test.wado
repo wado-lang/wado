@@ -179,7 +179,10 @@ test "a tensor attribute is read as the tensor it spells" {
         }`,
     ).unwrap();
     assert g.nodes[0].attrs[0].tensor == Option::Some(Known { extents: [], elements: Elements::Floats([0.125]) });
-    assert g.nodes[1].attrs[0].tensor == Option::Some(Known { extents: [2], elements: Elements::Ints([3, -4]) });
+    assert g.nodes[1].attrs[0].tensor == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Ints([3, -4]),
+    });
     assert g.nodes[2].attrs[0].tensor == Option::Some(Known {
         extents: [2],
         elements: Elements::Bools([true, false]),

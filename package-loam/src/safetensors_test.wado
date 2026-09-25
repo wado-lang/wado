@@ -18,9 +18,18 @@ g (float[N, 2] X) => (float[N, 3] Y)
 fn check(stored: List<StoredTensor>) -> Result<(), String> {
     let graph = read(&GRAPH).unwrap();
     let layout: List<LayoutRule> = [
-        LayoutRule { pattern: "X", axes: ["Batch", "In"] },
-        LayoutRule { pattern: "W", axes: ["In", "Out"] },
-        LayoutRule { pattern: "B", axes: ["Out"] },
+        LayoutRule {
+            pattern: "X",
+            axes: ["Batch", "In"],
+        },
+        LayoutRule {
+            pattern: "W",
+            axes: ["In", "Out"],
+        },
+        LayoutRule {
+            pattern: "B",
+            axes: ["Out"],
+        },
     ];
     let checked = infer(&graph, &Schema { layout }).unwrap();
     let bytes = write_safetensors(&stored);

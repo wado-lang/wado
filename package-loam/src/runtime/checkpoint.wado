@@ -14,6 +14,8 @@ impl Display for LoadError {
 impl Error for LoadError {
 }
 
+/// Every field defaults so `__metadata__`, a map of strings, parses as an entry
+/// before it is dropped.
 pub struct HeaderEntry {
     pub dtype: String = "",
     pub shape: List<i64> = [],
@@ -32,7 +34,7 @@ pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
     }
     let mut length: u64 = 0;
     for let at of 0..<8 {
-        length |= (view[at] as u64) << (8 * at) as u64;
+        length |= view[at] as u64 << (8 * at) as u64;
     }
     if length > (i32::MAX - 8) as u64 || 8 + length as i32 > view.len() {
         return Result::Err(LoadError { reason: `the header is ${length} bytes, past the ${view.len() - 8} given` });
@@ -53,38 +55,46 @@ pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError
     return Result::Ok(Checkpoint { entries, data_start });
 }
 
+/// What the build compiled a checkpoint tensor as, which its header must state.
+pub struct Expected {
+    pub tensor: String,
+    pub dtype: String,
+    pub axes: List<String>,
+    pub extents: List<i32>,
+    pub width: i32,
+}
+
 impl Checkpoint {
-    pub fn range(
-        &self,
-        tensor: String,
-        dtype: String,
-        axes: List<String>,
-        extents: List<i32>,
-        width: i32,
-    ) -> Result<[i32, i32], LoadError> {
-        let fail = |reason: String| LoadError { reason: `${tensor}: ${reason}` };
-        let Some(entry) = self.entries.get(tensor) else {
+    pub fn range(&self, e: &Expected) -> Result<[i32, i32], LoadError> {
+        let fail = |reason: String| LoadError { reason: `${e.tensor}: ${reason}` };
+        let Some(entry) = self.entries.get(e.tensor) else {
             return Result::Err(fail("the checkpoint has no such tensor"));
         };
-        if entry.dtype != dtype {
-            return Result::Err(fail(`the checkpoint holds ${entry.dtype}, and the graph ${dtype}`));
+        if entry.dtype != e.dtype {
+            return Result::Err(fail(`the checkpoint holds ${entry.dtype}, and the graph ${e.dtype}`));
         }
-        if entry.shape.len() != axes.len() {
-            return Result::Err(fail(`the checkpoint gives ${entry.shape.len()} axes, and the graph [${axes.join(", ")}]`));
+        if entry.shape.len() != e.axes.len() {
+            return Result::Err(fail(
+                `the checkpoint gives ${entry.shape.len()} axes, and the graph [${e.axes.join(", ")}]`,
+            ));
         }
         let mut count: i64 = 1;
-        for let [i, axis] of axes.into_iter().enumerate() {
-            if entry.shape[i] != extents[i] as i64 {
-                return Result::Err(fail(`axis ${axis} is ${entry.shape[i]} in the checkpoint and ${extents[i]} in the graph`));
+        for let [i, axis] of e.axes.into_iter().enumerate() {
+            if entry.shape[i] != e.extents[i] as i64 {
+                return Result::Err(fail(
+                    `axis ${axis} is ${entry.shape[i]} in the checkpoint and ${e.extents[i]} in the graph`,
+                ));
             }
-            count *= extents[i] as i64;
+            count *= e.extents[i] as i64;
         }
         let offsets = &entry.data_offsets;
         let held = if offsets.len() == 2 { offsets[1] - offsets[0] } else { -1 };
-        if held != count * width as i64 {
-            return Result::Err(fail(
-                `the checkpoint's offsets hold ${held} bytes, and ${count} ${dtype} elements need ${count * width as i64}`,
-            ));
+        if held != count * e.width as i64 {
+            return Result::Err(
+                fail(
+                    `the checkpoint's offsets hold ${held} bytes, and ${count} ${e.dtype} elements need ${count * e.width as i64}`,
+                ),
+            );
         }
         if offsets[0] < 0 || offsets[1] > (i32::MAX - self.data_start) as i64 {
             return Result::Err(fail(`the checkpoint's offsets ${*offsets} fall outside what a module can address`));
@@ -92,19 +102,13 @@ impl Checkpoint {
         return Result::Ok([self.data_start + offsets[0] as i32, self.data_start + offsets[1] as i32]);
     }
 
-    pub fn payload<B: AsByteSlice>(
-        &self,
-        bytes: B,
-        tensor: String,
-        dtype: String,
-        axes: List<String>,
-        extents: List<i32>,
-        width: i32,
-    ) -> Result<ByteSlice, LoadError> {
+    pub fn payload<B: AsByteSlice>(&self, bytes: B, e: &Expected) -> Result<ByteSlice, LoadError> {
         let view = bytes.as_byte_slice();
-        let [start, end] = self.range(tensor, dtype, axes, extents, width)?;
+        let [start, end] = self.range(e)?;
         if end > view.len() {
-            return Result::Err(LoadError { reason: `${tensor}: the payload ends at byte ${end}, past the ${view.len()} given` });
+            return Result::Err(
+                LoadError { reason: `${e.tensor}: the payload ends at byte ${end}, past the ${view.len()} given` },
+            );
         }
         return Result::Ok(view.slice(start, end));
     }

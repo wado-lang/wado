@@ -424,6 +424,12 @@ internal fn cm_subtask_settled(event: WaitEvent) -> bool {
     return event.payload > CM_SUBTASK_STARTED;
 }
 
+/// The upper 28 bits of a packed CM word: a copy's count, or a subtask's
+/// handle. The word is unsigned, so bit 31 is part of the value.
+internal fn cm_packed_upper(packed: i32) -> i32 {
+    return (packed as u32 >> 4) as i32;
+}
+
 /// A set of waitable handles used for async task coordination.
 ///
 /// Lifecycle: create with `new()`, join waitables into the set, wait/poll for
@@ -520,10 +526,9 @@ pub struct AsyncCall<T> {
 }
 
 impl<T> AsyncCall<T> {
-    /// The subtask handle, the packed word's upper 28 bits, or 0 where the call
-    /// completed synchronously. Shifted unsigned, as a handle may reach bit 31.
+    /// The subtask handle, or 0 where the call completed synchronously.
     fn subtask_handle(&self) -> i32 {
-        return (self.__cm_packed as u32 >> 4) as i32;
+        return cm_packed_upper(self.__cm_packed);
     }
 
     /// Wait for the subtask to complete and return the lifted result.

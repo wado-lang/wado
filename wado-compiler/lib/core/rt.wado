@@ -26,6 +26,7 @@ use {
     WaitEvent,
     Waitable,
     WaitableSet,
+    cm_packed_upper,
     cm_subtask_settled,
     write_copy_is_final,
 } from "core:prelude/types.wado";
@@ -99,7 +100,7 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
 /// Each call to waitable-set.wait delivers one transition, so we loop until
 /// the subtask leaves the in-flight states.
 internal fn wait_for_subtask(packed: i32) with (WaitableSet, Subtask) {
-    let handle = (packed as u32 >> 4) as i32;
+    let handle = cm_packed_upper(packed);
     if handle != 0 {
         let subtask = handle as Subtask;
         let ws = WaitableSet::new();
@@ -181,7 +182,7 @@ internal fn cm_lower_string(s: String) -> i64 {
 /// `(ptr | (len << 32))`, the pointer taken unsigned: one past 2 GiB would
 /// otherwise sign-extend over the length.
 fn pack_ptr_len(ptr: i32, len: i32) -> i64 {
-    return (ptr as u32) as i64 | len as i64 << 32;
+    return ptr as u32 as i64 | len as i64 << 32;
 }
 
 /// Lowers `data[start..<start + len]` of a GC array to CM linear memory.
@@ -317,7 +318,7 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     if result == -1 {
         result = cm_await_blocked(handle);
     }
-    let count = (result as u32 >> 4) as i32;
+    let count = cm_packed_upper(result);
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, max, 1, 0);
     return StreamChunk {
@@ -339,14 +340,13 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
 }
 
 /// One `stream.write` of `count` elements from `ptr`, awaiting a BLOCKED copy.
-/// The count is the word's upper 28 bits, so it is shifted out unsigned.
 internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
     let mut result = builtin::stream_write(handle, ptr, count);
     if result == -1 {
         result = cm_await_blocked(handle);
     }
     return StreamWrite {
-        count: (result as u32 >> 4) as i32,
+        count: cm_packed_upper(result),
         result: cm_copy_result(result),
     };
 }

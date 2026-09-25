@@ -5,7 +5,8 @@ use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, element_of, is_binary_elementwise } from "./graph.wado";
-use { Expected, expected } from "./safetensors.wado";
+use { Expected } from "./runtime/checkpoint.wado";
+use { expected } from "./safetensors.wado";
 use {
     Checked,
     InferError,
@@ -349,7 +350,7 @@ fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Na
     w.blank();
     w.line("/// The graph's initializers.");
     weights.emit(w);
-    emit_constructor(w, graph, &checked.shapes, names);
+    emit_constructor(w, graph, &checked.shapes, names, held);
 }
 
 /// Whether some initializer's data is left to a checkpoint.
@@ -365,16 +366,21 @@ fn loads_weights(graph: &Graph) -> bool {
 /// `Weights::embedded()` where the graph carries every initializer's data, and
 /// `Weights::load` reading the rest from a safetensors checkpoint otherwise.
 /// The compiler folds each carried payload's byte literal into a data segment.
-fn emit_constructor(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
+fn emit_constructor(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    names: &Names,
+    held: &TreeMap<String, String>,
+) {
     let loads = loads_weights(graph);
     w.blank();
     ImplSpec::new("Weights").emit_begin(w);
     if loads {
         w.line("/// The weights, those the graph does not carry read from a safetensors checkpoint.");
-        FnSpec::new("load", Vis::Pub)
-            .add_param("checkpoint", "&ByteList")
-            .set_return_type("Result<Weights, LoadError>")
-            .emit_begin(w);
+        FnSpec::new("load", Vis::Pub).add_param("checkpoint", "&ByteList").set_return_type("Result<Weights, LoadError>").emit_begin(
+            w,
+        );
         w.line("let header = read_checkpoint(checkpoint)?;");
         w.begin("return Result::Ok(Weights");
     } else {
@@ -383,7 +389,7 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, 
         w.begin("return Weights");
     }
     for let vi of &graph.initializers {
-        let primitive = element_of(&vi.dtype).unwrap().primitive;
+        let primitive = held.get(vi.name).unwrap();
         let shape = shapes.get(vi.name).unwrap();
         let e = expected(vi, &shape);
         let data = match vi.data {
@@ -404,7 +410,9 @@ fn emit_constructor(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, 
 /// checked against what the build compiled it as.
 fn checkpoint_payload(e: &Expected) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
-    return wado`header.payload(checkpoint, "${e.tensor}", "${e.dtype}", [${axes.join(", ")}], ${e.extents}, ${e.width})?`;
+    return wado`header.payload(checkpoint, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
+        ", ",
+    )}], extents: ${e.extents}, width: ${e.width} })?`;
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a

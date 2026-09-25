@@ -78,7 +78,9 @@ pub global KERNEL_ELEMENT: String = "f32";
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" }),
+        "float" => Option::Some(
+            Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" },
+        ),
         "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
         "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
         "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),

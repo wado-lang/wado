@@ -39,7 +39,10 @@ test "a float the grammar cannot spell stops the print, naming the tensor" {
     let g = read(`g (float[1] X) => (float[1] Y) <float[1] W = {1.0}> { Y = Add(X, W) }`).unwrap();
     let mut w = g.initializers[0];
     w.data = Option::Some(b"\x00\x00\x80\x7f");
-    let broken = Graph { ..g, initializers: [w] };
+    let broken = Graph {
+        ..g,
+        initializers: [w],
+    };
     assert `${print(&broken).unwrap_err()}` == "W: inf has no text form";
 }
 
@@ -55,6 +58,9 @@ test "an attribute with no text form stops the print, naming it" {
             },
         ],
     };
-    let broken = Graph { ..g, nodes: [node] };
+    let broken = Graph {
+        ..g,
+        nodes: [node],
+    };
     assert `${print(&broken).unwrap_err()}` == "Y = Identity: attribute body has no text form";
 }

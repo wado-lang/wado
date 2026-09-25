@@ -52,15 +52,23 @@ use crate::{ast, tir};
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
 const CM_PACKED_COUNT_SHIFT: i32 = 4;
+const CM_PACKED_COUNT_MASK: i32 = 0x0FFF_FFFF;
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
 
-/// `result >> 4`: the element count of a packed CM async result.
+/// `result >> 4 & 0x0FFFFFFF`: the element count of a packed CM async result.
+/// The word is unsigned, so the mask clears what the signed shift extends.
 fn packed_count(result: TirExpr) -> TirExpr {
-    binary(
+    let shifted = binary(
         TirBinaryOp::Shr,
         result,
         i32_const(CM_PACKED_COUNT_SHIFT),
+        TypeTable::I32,
+    );
+    binary(
+        TirBinaryOp::BitAnd,
+        shifted,
+        i32_const(CM_PACKED_COUNT_MASK),
         TypeTable::I32,
     )
 }
@@ -2035,7 +2043,10 @@ mod cm_binding_tests {
         ("stream-read", Some("internal cm_stream_read_u8")),
         ("stream-write", Some("internal cm_stream_write_u8")),
         ("stream-write-raw", Some("internal cm_stream_write_raw_u8")),
-        ("stream-write-raw-all", Some("internal cm_stream_write_raw_all_u8")),
+        (
+            "stream-write-raw-all",
+            Some("internal cm_stream_write_raw_all_u8"),
+        ),
         ("stream-cancel-read", Some("canonical stream-cancel-read")),
         ("stream-cancel-write", Some("canonical stream-cancel-write")),
         (
