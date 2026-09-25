@@ -562,7 +562,7 @@ fn agree_at(node: &Node, left: &Axis, right: &Axis) -> Result<(), InferError> {
 /// extent at that position unless `allowzero` is set, and one `-1` is what the
 /// others leave of the element count.
 fn reshape_targets(node: &Node, operand: &Shape, written: &List<i64>, total: i64) -> Result<List<i32>, InferError> {
-    let allow_zero = node.attr("allowzero") matches { Some(a) && a.values.first() == Option::Some("1") };
+    let allow_zero = int_attr(node, "allowzero", 0)? != 0;
     let mut targets: List<i32> = [];
     let mut inferred = -1;
     let mut known: i64 = 1;

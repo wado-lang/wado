@@ -2,17 +2,7 @@
 //! attributes ONNX gives both, and the output extents they imply.
 
 use { Node } from "./graph.wado";
-
-/// Along each spatial axis: the window's extent, its step, the spacing of its
-/// taps, and the extents it produces. `pads` is in ONNX's order, every axis's
-/// leading pad and then every axis's trailing one.
-pub struct Window {
-    pub kernel: List<i32>,
-    pub strides: List<i32>,
-    pub dilations: List<i32>,
-    pub pads: List<i32>,
-    pub output: List<i32>,
-}
+pub use { Window } from "./runtime/tensor.wado";
 
 /// An attribute the window cannot be read from, and why.
 pub struct WindowError {

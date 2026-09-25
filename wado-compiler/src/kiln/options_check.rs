@@ -285,21 +285,19 @@ fn apply_default(
     if let Some(default) = &field.default {
         return Some(default.clone());
     }
-    if matches!(field.ty, OptionsType::Option(_)) {
-        return Some(CanonicalValue::None);
+    match field.ty {
+        OptionsType::Option(_) => Some(CanonicalValue::None),
+        OptionsType::List(_) => Some(CanonicalValue::List(Vec::new())),
+        OptionsType::Map(_) => Some(CanonicalValue::Map(Vec::new())),
+        _ => {
+            diagnostics.push(site.error(format!(
+                "kiln: required options field `{}` of type {} is missing",
+                site.path,
+                field.ty.describe()
+            )));
+            None
+        }
     }
-    if matches!(field.ty, OptionsType::List(_)) {
-        return Some(CanonicalValue::List(Vec::new()));
-    }
-    if matches!(field.ty, OptionsType::Map(_)) {
-        return Some(CanonicalValue::Map(Vec::new()));
-    }
-    diagnostics.push(site.error(format!(
-        "kiln: required options field `{}` of type {} is missing",
-        site.path,
-        field.ty.describe()
-    )));
-    None
 }
 
 fn push_mismatch(
