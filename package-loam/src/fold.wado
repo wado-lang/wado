@@ -38,10 +38,13 @@ pub fn fold(
     let folded = match op.as_str_slice() {
         "Identity" => *x,
         "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
-        "Unsqueeze" => unsqueeze(x, &axes_of(node, &operands, 1, "axes")?.unwrap())?,
-        "Squeeze" => squeeze(x, axes_of(node, &operands, 1, "axes")?)?,
+        "Unsqueeze" => Known {
+            extents: unsqueezed(&x.extents, &axes_of(node, known, 1, "axes")?.ok_or("axes is absent")?)?,
+            elements: x.elements,
+        },
+        "Squeeze" => Known { extents: squeezed(&x.extents, axes_of(node, known, 1, "axes")?)?, elements: x.elements },
         "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
-        "Slice" => slice(x, node, &operands)?,
+        "Slice" => slice(x, node, known)?,
         "Cast" => cast(x, int_attr(node, "to", 0)?)?,
         "Range" => range(x, &operands[1], &operands[2])?,
         "ConstantOfShape" => constant_of_shape(node, x)?,
@@ -171,8 +174,10 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements: picked(&data.elements, &picks) });
 }
 
-fn unsqueeze(x: &Known, axes: &List<i64>) -> Result<Known, String> {
-    let rank = x.extents.len() + axes.len();
+/// `Unsqueeze`'s output extents: `input` with a 1 at each of `axes`, which
+/// count the output's axes.
+pub fn unsqueezed(input: &List<i32>, axes: &List<i64>) -> Result<List<i32>, String> {
+    let rank = input.len() + axes.len();
     let mut inserted = List::<bool>::filled(rank, false);
     for let axis of *axes {
         inserted[axis_index(axis, rank)?] = true;
@@ -183,39 +188,41 @@ fn unsqueeze(x: &Known, axes: &List<i64>) -> Result<Known, String> {
         if inserted[i] {
             extents.push(1);
         } else {
-            extents.push(x.extents[next]);
+            extents.push(input[next]);
             next += 1;
         }
     }
-    return Result::Ok(Known { extents, elements: x.elements });
+    return Result::Ok(extents);
 }
 
-fn squeeze(x: &Known, axes: Option<List<i64>>) -> Result<Known, String> {
-    let rank = x.extents.len();
+/// `Squeeze`'s output extents: `input` without the listed axes, each of which
+/// must be 1, or without every 1 where none is listed.
+pub fn squeezed(input: &List<i32>, axes: Option<List<i64>>) -> Result<List<i32>, String> {
+    let rank = input.len();
     let mut dropped = List::<bool>::filled(rank, false);
     match axes {
         Some(listed) => {
             for let axis of listed {
                 let i = axis_index(axis, rank)?;
-                if x.extents[i] != 1 {
-                    return Result::Err(`axis ${axis} has extent ${x.extents[i]}, not 1`);
+                if input[i] != 1 {
+                    return Result::Err(`axis ${axis} has extent ${input[i]}, not 1`);
                 }
                 dropped[i] = true;
             }
         },
         None => {
             for let i of 0..<rank {
-                dropped[i] = x.extents[i] == 1;
+                dropped[i] = input[i] == 1;
             }
         },
     }
     let mut extents: List<i32> = [];
     for let i of 0..<rank {
         if !dropped[i] {
-            extents.push(x.extents[i]);
+            extents.push(input[i]);
         }
     }
-    return Result::Ok(Known { extents, elements: x.elements });
+    return Result::Ok(extents);
 }
 
 fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
@@ -251,18 +258,18 @@ fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements: picked(&joined_elements(parts)?, &picks) });
 }
 
-fn slice(x: &Known, node: &Node, operands: &List<Known>) -> Result<Known, String> {
+fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Known, String> {
     let rank = x.extents.len();
-    let starts = axes_of(node, operands, 1, "starts")?.unwrap();
-    let ends = axes_of(node, operands, 2, "ends")?.unwrap();
+    let starts = axes_of(node, known, 1, "starts")?.ok_or("starts is absent")?;
+    let ends = axes_of(node, known, 2, "ends")?.ok_or("ends is absent")?;
     let mut axes: List<i64> = [];
     for let i of 0..<starts.len() {
         axes.push(i as i64);
     }
-    if let Some(listed) = axes_of(node, operands, 3, "axes")? {
+    if let Some(listed) = axes_of(node, known, 3, "axes")? {
         axes = listed;
     }
-    let steps = if operands.len() > 4 { ints_of(&operands[4])? } else { List::<i64>::filled(starts.len(), 1) };
+    let steps = axes_of(node, known, 4, "steps")?.unwrap_or(List::<i64>::filled(starts.len(), 1));
     let mut begin = List::<i64>::filled(rank, 0);
     let mut step = List::<i64>::filled(rank, 1);
     let mut extents = x.extents;
@@ -510,9 +517,12 @@ fn ints_of(k: &Known) -> Result<List<i64>, String> {
 
 /// The integers an operator reads from operand `index`, or from the attribute
 /// `attr` an opset before 13 wrote them in. `None` where neither is given.
-fn axes_of(node: &Node, operands: &List<Known>, index: i32, attr: String) -> Result<Option<List<i64>>, String> {
-    if index < operands.len() {
-        return ints_of(&operands[index]).map(|v| Option::Some(v));
+pub fn axes_of(node: &Node, known: &TreeMap<String, Known>, index: i32, attr: String) -> Result<Option<List<i64>>, String> {
+    if index < node.inputs.len() && node.inputs[index] != "" {
+        let Some(k) = known.get(node.inputs[index]) else {
+            return Result::Err(`operand ${node.inputs[index]} is computed at run time, and the build reads it`);
+        };
+        return ints_of(&k).map(|v| Option::Some(v));
     }
     let Some(a) = node.attr(attr) else {
         return Result::Ok(null);

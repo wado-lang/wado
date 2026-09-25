@@ -4,8 +4,8 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { fold, reshape_extents } from "./fold.wado";
-use { Dim, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { axes_of, fold, reshape_extents, squeezed, unsqueezed } from "./fold.wado";
+use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
 use { Schema } from "./schema.wado";
 use { Window, WindowError, ints, window_over } from "./window.wado";
 
@@ -42,6 +42,13 @@ pub struct DeclaredConflict {
     pub axis: String,
     pub declared: Extent,
     pub produced: Extent,
+}
+
+/// A graph output declared as an element other than the one its node computes.
+pub struct DeclaredElementConflict {
+    pub tensor: String,
+    pub declared: String,
+    pub produced: String,
 }
 
 /// An operator was given fewer operands than it reads.
@@ -99,6 +106,7 @@ pub variant InferError {
     OperandRank(OperandRankConflict),
     DeclaredRank(DeclaredRankConflict),
     Declared(DeclaredConflict),
+    DeclaredElement(DeclaredElementConflict),
     Node(NodeConflict),
 }
 
@@ -172,6 +180,12 @@ impl Display for DeclaredConflict {
     }
 }
 
+impl Display for DeclaredElementConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.tensor}: declared ${self.declared} and computed in ${self.produced}`);
+    }
+}
+
 impl Display for InferError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
@@ -188,15 +202,17 @@ impl Display for InferError {
             OperandRank(e) => e.fmt(f),
             DeclaredRank(e) => e.fmt(f),
             Declared(e) => e.fmt(f),
+            DeclaredElement(e) => e.fmt(f),
             Node(e) => e.fmt(f),
         }
     }
 }
 
-/// A checked graph: every shape a kernel reads, keyed by tensor name, and the
-/// elements of every tensor the build folded.
+/// A checked graph: every shape a kernel reads and the primitive it holds,
+/// keyed by tensor name, and the elements of every tensor the build folded.
 pub struct Checked {
     pub shapes: TreeMap<String, Shape>,
+    pub primitives: TreeMap<String, String>,
     pub known: TreeMap<String, Known>,
 }
 
@@ -204,12 +220,16 @@ pub struct Checked {
 /// discharges the graph's extent conditions, so a successful return is the proof.
 pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     let mut shapes = TreeMap::<String, Shape>::new();
+    let mut primitives = TreeMap::<String, String>::new();
     let mut known = graph.constants;
-    for let vi of &graph.inputs {
-        shapes[vi.name] = shape_of(vi, schema)?;
-    }
-    for let vi of &graph.initializers {
-        shapes[vi.name] = shape_of(vi, schema)?;
+    for let declared of [&graph.inputs, &graph.initializers] {
+        for let vi of *declared {
+            shapes[vi.name] = shape_of(&vi, schema)?;
+            // An element no kernel reaches is left out, for emit to name.
+            if let Some(element) = element_of(&vi.dtype) {
+                primitives[vi.name] = element.computed;
+            }
+        }
     }
     for let node of &graph.nodes {
         if node.outputs.len() != 1 {
@@ -233,26 +253,86 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         }
         for let [index, input] of node.inputs.into_iter().enumerate() {
             if !read_at_build_time(node, index) {
-                materialize(&input, &known, &mut shapes, schema)?;
+                materialize(&input, &known, &mut shapes, &mut primitives, schema)?;
             }
         }
         shapes[node.outputs[0]] = infer_node(node, &shapes, &known, schema)?;
+        if let Some(p) = produced_primitive(node, &primitives)? {
+            primitives[node.outputs[0]] = p;
+        }
     }
     for let vi of &graph.outputs {
-        materialize(&vi.name, &known, &mut shapes, schema)?;
+        materialize(&vi.name, &known, &mut shapes, &mut primitives, schema)?;
         let Some(produced) = shapes.get(vi.name) else {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
         shapes[vi.name] = merge_declared(vi, &produced)?;
+        if let Some(element) = element_of(&vi.dtype)
+            && let Some(computed) = primitives.get(vi.name)
+            && element.computed != computed {
+            builtin::cold_path();
+            return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
+                tensor: vi.name,
+                declared: vi.dtype,
+                produced: computed,
+            }));
+        }
     }
-    return Result::Ok(Checked { shapes, known });
+    return Result::Ok(Checked { shapes, primitives, known });
 }
 
 /// Whether operand `index` is one the operator reads when the build runs, as
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
 pub fn read_at_build_time(node: &Node, index: i32) -> bool {
-    return node.op == "Reshape" && index == 1;
+    return index == 1 && (node.op == "Reshape" || node.op == "Unsqueeze" || node.op == "Squeeze");
+}
+
+/// The operators whose kernel moves elements without computing on them, so
+/// they carry any primitive through.
+fn is_layout(op: &String) -> bool {
+    return *op == "Reshape"
+        || *op == "Flatten"
+        || *op == "Unsqueeze"
+        || *op == "Squeeze"
+        || *op == "Identity"
+        || *op == "Transpose";
+}
+
+/// The primitive a node's kernel produces: its operand's for a layout kernel,
+/// `Cast`'s target, and f32 for every other kernel, which reads only f32.
+/// `None` where the operand is an element emit stops the build for.
+fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
+    let op = node.op;
+    if op == "Cast" {
+        return match int_attr(node, "to", 0)? {
+            1 => Result::Ok(Option::Some(KERNEL_ELEMENT)),
+            6 | 7 => Result::Ok(Option::Some("i64")),
+            9 => Result::Ok(Option::Some("bool")),
+            to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
+        };
+    }
+    if is_layout(&op) {
+        return Result::Ok(primitives.get(node.inputs[0]));
+    }
+    for let [index, input] of node.inputs.into_iter().enumerate() {
+        if read_at_build_time(node, index) {
+            continue;
+        }
+        if let Some(p) = primitives.get(input) && p != KERNEL_ELEMENT {
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in f32`));
+        }
+    }
+    return Result::Ok(Option::Some(KERNEL_ELEMENT));
+}
+
+/// The primitive a folded tensor is held in once a kernel reads it.
+fn known_primitive(k: &Known) -> String {
+    return match k.elements {
+        Ints(_) => "i64",
+        Floats(_) => KERNEL_ELEMENT,
+        Bools(_) => "bool",
+    };
 }
 
 /// Give a folded tensor a kernel reads the shape the kernel needs. One element
@@ -261,6 +341,7 @@ fn materialize(
     tensor: &String,
     known: &TreeMap<String, Known>,
     shapes: &mut TreeMap<String, Shape>,
+    primitives: &mut TreeMap<String, String>,
     schema: &Schema,
 ) -> Result<(), InferError> {
     if shapes.contains_key(*tensor) {
@@ -269,6 +350,7 @@ fn materialize(
     let Some(k) = known.get(*tensor) else {
         return Result::Ok(());
     };
+    primitives[*tensor] = known_primitive(&k);
     if k.len() == 1 {
         shapes[*tensor] = Shape { axes: [] };
         return Result::Ok(());
@@ -396,6 +478,25 @@ fn infer_node(
     if op == "Flatten" {
         arity(node, 1)?;
         return flatten(node, &operand_at(node, shapes, 0)?, schema);
+    }
+    if op == "Unsqueeze" || op == "Squeeze" {
+        let operand = operand_at(node, shapes, 0)?;
+        let input = static_extents_of(node, &operand)?;
+        let axes = match axes_of(node, known, 1, "axes") {
+            Ok(axes) => axes,
+            Err(reason) => return Result::Err(refusal(node, reason)),
+        };
+        let extents = if op == "Squeeze" {
+            squeezed(&input, axes)
+        } else if let Some(axes) = axes {
+            unsqueezed(&input, &axes)
+        } else {
+            Result::Err("axes is absent")
+        };
+        return match extents {
+            Ok(targets) => regrouped(node, &operand, &targets, schema),
+            Err(reason) => Result::Err(refusal(node, reason)),
+        };
     }
     if op == "MaxPool" {
         arity(node, 1)?;
@@ -770,6 +871,7 @@ fn arity(node: &Node, needed: i32) -> Result<(), InferError> {
 /// The operators whose output shape is their input's.
 fn is_unary_elementwise(op: &String) -> bool {
     return *op == "Identity"
+        || *op == "Cast"
         || *op == "Relu"
         || *op == "Sigmoid"
         || *op == "Tanh"

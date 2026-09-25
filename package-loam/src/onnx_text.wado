@@ -107,8 +107,8 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
 
-/// A value's inline elements as the little-endian bytes the protobuf form
-/// carries, where a kernel reaches its element type.
+/// A weight's inline elements as the little-endian bytes the protobuf form
+/// carries. A build-time tensor's are read into a `Known` instead.
 fn read_constant_data(
     s: &onnx::CstStore,
     toks: &onnx::TokenStream,
@@ -117,6 +117,9 @@ fn read_constant_data(
     dtype: &String,
     rank: &Rank,
 ) -> Result<Option<ByteList>, String> {
+    if is_build_time(dtype) {
+        return Result::Ok(null);
+    }
     let Some(element) = element_of(dtype) else {
         return Result::Ok(null);
     };

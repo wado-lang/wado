@@ -423,6 +423,48 @@ test "a Reshape target the graph computes from Shape folds at build time" {
     assert reshaped(source, [rule("X", ["Batch", "Row", "Col"])]).unwrap() == "Batch=2,Merged<[Row, Col]>=12";
 }
 
+/// An attention mask as an exporter writes it: an int64 input reshaped and
+/// widened by two unit axes before it becomes a float.
+global MASK: String = `g (int64[1, 4] M) => (float[1, 1, 1, 4] Y) <int64[2] T = {1, -1}> {
+    R = Reshape(M, T)
+    A = Constant<value_ints = [1]>()
+    U = Unsqueeze(R, A)
+    B = Constant<value_ints = [2]>()
+    V = Unsqueeze(U, B)
+    Y = Cast<to = 1>(V)
+}`;
+
+fn mask_layout() -> List<LayoutRule> {
+    return [
+        rule("M", ["Batch", "Key"]),
+        rule("U", ["Batch", "Head", "Key"]),
+        rule("V", ["Batch", "Head", "Query", "Key"]),
+    ];
+}
+
+test "an int64 input keeps its element until Cast makes it a float" {
+    let graph = read(&MASK).unwrap();
+    let checked = infer(&graph, &Schema { layout: mask_layout() }).unwrap();
+    assert checked.primitives["R"] == "i64";
+    assert checked.primitives["V"] == "i64";
+    assert checked.primitives["Y"] == "f32";
+    assert reshaped(MASK, mask_layout()).unwrap() == "Batch=1,Head=1,Query=1,Key=4";
+}
+
+test "arithmetic on an int64 tensor stops the build" {
+    let source = `g (int64[4] M) => (int64[4] Y) {
+        Y = Add(M, M)
+    }`;
+    assert reshaped(source, [rule("M", ["Key"])]).unwrap_err() == "Y = Add: operand M is i64, and Add computes in f32";
+}
+
+test "an output declared as an element other than the one computed stops the build" {
+    let source = `g (int64[4] M) => (float[4] Y) {
+        Y = Identity(M)
+    }`;
+    assert reshaped(source, [rule("M", ["Key"])]).unwrap_err() == "Y: declared float and computed in i64";
+}
+
 test "Shape of a symbolic extent stops the build" {
     let source = `g (float[N, 3] X) => (float[N, 3] Y) {
         S = Shape(X)

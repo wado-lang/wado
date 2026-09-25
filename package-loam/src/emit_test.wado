@@ -220,7 +220,7 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
 
-    assert out.contains("let Y = reshape::<[Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);");
+    assert out.contains("let Y = reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);");
     assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> {");
     // A merged axis is spelled with its parts' markers, never declared itself.
     assert out.contains("pub struct Chan {}");
@@ -521,6 +521,33 @@ fn matrix_rank() -> Rank {
 
 fn folded_add(value: f32) -> Result<String, EmitError> {
     return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
+}
+
+test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
+    let source = `g (int64[1, 4] M) => (float[1, 1, 4] Y) {
+        A = Constant<value_ints = [1]>()
+        U = Unsqueeze(M, A)
+        Y = Cast<to = 1>(U)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Key"]),
+        rule("U", ["Batch", "Head", "Key"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("M: &Tensor<i64, [Batch, Key]>");
+    assert !out.contains("widen");
+    assert out.contains("let U = reshape::<i64, [Batch, Key], [Batch, Head, Key]>(M, [1, 1, 4]);");
+    assert out.contains("let Y = map(&U, |v| v as f32);");
+}
+
+test "a Cast to the element a tensor already has computes nothing" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        C = Cast<to = 1>(X)
+        Y = Relu(C)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Feat"])]).unwrap());
+    assert !out.contains("let C");
+    assert out.contains("let Y = map(X, |v| f32::max(v, 0.0));");
 }
 
 test "Identity names its operand again and computes nothing" {

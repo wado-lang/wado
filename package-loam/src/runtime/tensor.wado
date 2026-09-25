@@ -181,7 +181,7 @@ pub struct Merged<Parts> {
 
 /// The same elements under another axis list. A regrouping keeps row-major
 /// order, so no element moves.
-pub fn reshape<In, Out>(t: &Tensor<f32, In>, extents: List<i32>) -> Tensor<f32, Out> {
+pub fn reshape<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
     assert element_count(&extents) == t.data.len();
     return Tensor { data: t.data, extents };
 }

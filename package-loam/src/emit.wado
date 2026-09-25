@@ -133,13 +133,13 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.raw(&RUNTIME);
     w.raw(&GRAPH_BANNER);
 
-    emit_weights(&mut w, graph, shapes, &names, &held);
+    emit_weights(&mut w, graph, checked, &names, &held);
     emit_forward(&mut w, graph, checked, &names, &held)?;
     return Result::Ok(w.to_string());
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel
-/// reaches stops the build. A node's own output is f32, so only these are kept.
+/// reaches stops the build. A node's own output is held as it is computed.
 fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError> {
     let mut held = TreeMap::<String, String>::new();
     for let declared of [&graph.inputs, &graph.initializers, &graph.outputs] {
@@ -310,21 +310,15 @@ fn sanitize(name: &String) -> String {
 }
 
 /// The graph's initializers, as the struct `forward` reads them from.
-fn emit_weights(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
-    names: &Names,
-    held: &TreeMap<String, String>,
-) {
+fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     for let vi of &graph.initializers {
-        weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, held, &vi.name));
+        weights.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
     }
     w.blank();
     w.line("/// The graph's initializers.");
     weights.emit(w);
-    emit_embedded(w, graph, shapes, names, held);
+    emit_embedded(w, graph, &checked.shapes, names, held);
 }
 
 /// `Weights::embedded()`, where the graph carries every initializer's data.
@@ -421,10 +415,10 @@ fn emit_forward(
     let mut widened: List<String> = [];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
-        forward.add_param(ident, `&${tensor_type(shapes, held, &vi.name)}`);
+        forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
         exprs.values[vi.name] = ident;
         exprs.already_reference.insert(vi.name);
-        if converted(&vi.name, held) {
+        if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(${ident});`);
             exprs.already_reference.remove(vi.name);
         }
@@ -432,12 +426,12 @@ fn emit_forward(
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = `weights.${ident}`;
-        if converted(&vi.name, held) {
+        if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(&weights.${ident});`);
             exprs.values[vi.name] = ident;
         }
     }
-    forward.add_param("weights", "&Weights").set_return_type(tensor_type(shapes, held, &result));
+    forward.add_param("weights", "&Weights").set_return_type(tensor_type(checked, held, &result));
 
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per operator.");
@@ -450,7 +444,7 @@ fn emit_forward(
         if checked.known.contains_key(produced) {
             continue;
         }
-        if node.op == "Identity" {
+        if is_alias(node, checked) {
             let source = node.inputs[0];
             exprs.values[produced] = exprs.values.get(source).unwrap();
             if exprs.already_reference.contains(source) {
@@ -459,30 +453,41 @@ fn emit_forward(
             continue;
         }
         let ident = names.get(&produced);
-        w.line(`let ${ident} = ${node_call(node, shapes, &exprs)?};`);
+        w.line(`let ${ident} = ${node_call(node, checked, &exprs)?};`);
         exprs.values[produced] = ident;
     }
     if checked.known.contains_key(result) {
         builtin::cold_path();
         return Result::Err(EmitError::ReturnedConstant(result));
     }
-    let returned = if converted(&result, held) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
+    let returned = if converted(checked, held, &result) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
     w.line(`return ${returned};`);
     w.end();
     return Result::Ok(());
 }
 
-/// Whether a boundary tensor is held in something no kernel computes in, so
-/// `forward` converts it on the way past.
-fn converted(tensor: &String, held: &TreeMap<String, String>) -> bool {
-    return held.get(*tensor).unwrap() != KERNEL_ELEMENT;
+/// Whether a boundary tensor is held in something other than what the kernels
+/// compute it in, so `forward` converts it on the way past.
+fn converted(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> bool {
+    return held.get(*tensor).unwrap() != checked.primitives.get(*tensor).unwrap();
+}
+
+/// Whether a node computes nothing, so its output is another name for its
+/// operand: an `Identity`, or a `Cast` to the primitive the operand has.
+fn is_alias(node: &Node, checked: &Checked) -> bool {
+    let primitives = &checked.primitives;
+    return node.op == "Identity"
+        || node.op == "Cast" && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 
 /// A tensor's type, as the axis marker types name it. A tensor the boundary
-/// does not declare is one a node produced, which is f32.
-fn tensor_type(shapes: &TreeMap<String, Shape>, held: &TreeMap<String, String>, tensor: &String) -> String {
-    let shape = shapes.get(*tensor).unwrap();
-    let element = held.get(*tensor).unwrap_or(KERNEL_ELEMENT);
+/// does not declare is held in what stage 0 computes it in.
+fn tensor_type(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> String {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    let element = match held.get(*tensor) {
+        Some(p) => p,
+        None => checked.primitives.get(*tensor).unwrap(),
+    };
     return `Tensor<${element}, [${axis_list(&shape)}]>`;
 }
 
@@ -500,10 +505,11 @@ fn axis_names_of(axes: &List<Axis>) -> List<String> {
 
 /// One node as the kernel call that computes it. The operand expressions are
 /// already in scope, since a graph's nodes are in topological order.
-fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
+fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
     let op = node.op;
     check_constants_fold(node, exprs)?;
-    if op == "Reshape" || op == "Flatten" {
+    if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
         let from = shapes.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
         let mut extents: List<i32> = [];
@@ -511,7 +517,15 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
             extents.push(axis.static_extent());
         }
         let operand = exprs.reference(&node.inputs[0]);
-        return Result::Ok(`reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${int_list(&extents)})`);
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        return Result::Ok(
+            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${int_list(&extents)})`,
+        );
+    }
+    if op == "Cast" {
+        let from = checked.primitives.get(node.inputs[0]).unwrap();
+        let to = checked.primitives.get(node.outputs[0]).unwrap();
+        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
     }
     if op == "MaxPool" || op == "Conv" {
         return Result::Ok(window_call(node, shapes, exprs));
@@ -832,6 +846,18 @@ fn binary_body(op: &String, lhs: &String, rhs: &String) -> Option<String> {
         return Option::Some(`f32::pow(${lhs}, ${rhs})`);
     }
     return null;
+}
+
+/// One element `v` of primitive `from` as `to`, as ONNX's `Cast` converts it:
+/// a bool is 1 or 0, and anything nonzero is true.
+fn cast_body(from: &String, to: &String) -> String {
+    if *from == "bool" {
+        return if *to == "i64" { "if v { 1 } else { 0 }" } else { "if v { 1.0 } else { 0.0 }" };
+    }
+    if *to == "bool" {
+        return if *from == "i64" { "v != 0" } else { "v != 0.0" };
+    }
+    return `v as ${to}`;
 }
 
 /// The expression a unary operator maps each element through, over `v`.

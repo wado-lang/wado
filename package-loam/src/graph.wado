@@ -49,23 +49,26 @@ pub struct ValueInfo {
 }
 
 /// An element type a kernel reaches: the Wado primitive a tensor of it is held
-/// in, and the bytes one element takes in a payload.
+/// in, the bytes one element takes in a payload, and the primitive the kernels
+/// see it as.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
+    pub computed: String,
 }
 
-/// The one element type the kernels have arithmetic for. Everything a node
-/// produces is in it, and a boundary held in another is converted past it.
+/// The one element type the kernels have arithmetic for. A layout kernel moves
+/// an `i64` or `bool` tensor, and every other kernel reads and produces this.
 pub global KERNEL_ELEMENT: String = "f32";
 
 /// `dtype`'s element, or `None` for one no kernel reaches, whose payload is not
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4 }),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2 }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2 }),
+        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT }),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64" }),
         _ => null,
     };
 }
