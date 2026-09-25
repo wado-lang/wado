@@ -1313,7 +1313,7 @@ fn round_to_increment(value: i128, increment: i128, mode: RoundingMode) -> i128 
         return value;
     }
     let negative = remainder < 0;
-    let magnitude = if negative { -remainder } else { remainder };
+    let magnitude = i128::abs(remainder);
     let doubled = magnitude * 2;
     let up = match mode {
         Ceil => !negative,
@@ -1669,7 +1669,7 @@ impl FromStr for Duration {
 /// are not reachable from a bare nanosecond count and trap.
 fn duration_from_nanoseconds(total: i128, largest_unit: Unit) -> Duration {
     let negative = total < 0;
-    let magnitude = if negative { -total } else { total };
+    let magnitude = i128::abs(total);
     // Each component is an i64 and the largest one carries the whole span, so a
     // count that does not fit is an overflow rather than something to wrap.
     let step = fixed_unit_nanoseconds(largest_unit);
