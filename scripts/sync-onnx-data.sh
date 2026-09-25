@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copy the ONNX backend test data Loam's tests read out of the `vendor/onnx`
-# submodule.
+# Copy `onnx.proto`, which Loam's reader imports through Grog, and the ONNX
+# backend test data Loam's tests read out of the `vendor/onnx` submodule.
 #
 # The tests say which files: every `../tests/onnx/...` path they name is
 # fetched, so naming a new model in a test and running this brings it in. A
@@ -52,6 +52,12 @@ while IFS= read -r rel; do
 done <<<"$wanted"
 
 echo "==> ${changed} changed of $(echo "$wanted" | wc -l | tr -d ' ') named by a test"
+
+PROTO=package-loam/src/onnx.proto
+if ! cmp -s vendor/onnx/onnx/onnx.proto "$PROTO"; then
+    cp vendor/onnx/onnx/onnx.proto "$PROTO"
+    echo "updated ${PROTO}"
+fi
 
 while IFS= read -r have; do
     rel=${have#"${DEST}/"}

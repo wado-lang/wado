@@ -1,12 +1,11 @@
 //! Reading the tensors the ONNX backend test data ships beside each model.
 //! One `.pb` file is one bare `TensorProto`.
 
-use { from_bytes } from "core:protobuf";
-use { TensorProto, float_tensor } from "../src/onnx_proto.wado";
+use { float_tensor, read_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
+    let Ok(t) = read_tensor(bytes) else {
         panic("the tensor did not decode");
     };
     let Ok(Some(pair)) = float_tensor(&t) else {
