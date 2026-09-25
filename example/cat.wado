@@ -58,7 +58,9 @@ fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
     ).wait();
     let file = match open_result {
         Ok(f) => f,
-        Err(e) => return Result::Err(`cannot open: ${e:?}`),
+        Err(e) => {
+            return Result::Err(`cannot open: ${e:?}`);
+        },
     };
     let [data, read_done] = file.read_via_stream(0 as Filesize);
     return copy_to_stdout(data, read_done);

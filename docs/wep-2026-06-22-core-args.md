@@ -127,7 +127,9 @@ conventions. The boundary is clean — argv tokens become scalar leaves via
 shell-split, so no trimming; a failed conversion is `InvalidValue`. An `enum`
 option (`--color red`, `--color=red`) takes its value as the case tag, matched
 against the case's wire name as a subcommand tag is, so `name_policy` gives it
-lowercase names. Matching it leniently (any casing) needs a lenient enum derive
+lowercase names. A value naming no case is `InvalidValue`, as any other bad
+value is; only a subcommand tag naming no case is `UnknownSubcommand`. Matching
+it leniently (any casing) needs a lenient enum derive
 and is deferred (see that WEP's future work).
 
 ### Positional Arguments
