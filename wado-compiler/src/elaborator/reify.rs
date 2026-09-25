@@ -21,7 +21,6 @@ use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
-use crate::primitive::PrimitiveType;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -82,6 +81,7 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, test_function_name,
 };
+use crate::primitive::PrimitiveType;
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
