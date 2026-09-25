@@ -240,14 +240,9 @@ fn callback(params: &[WadoType], key: &str) -> String {
     )
 }
 
-/// What the callback export's name calls an argument of type `ty`.
 fn argument_word(ty: &WadoType) -> &'static str {
-    match ty {
-        WadoType::Named(_) => "handle",
-        _ => ty.primitive_name().unwrap_or_else(|| {
-            unreachable!("the WebIDL frontend admits no {ty:?} callback argument")
-        }),
-    }
+    ty.callback_argument_word()
+        .unwrap_or_else(|| unreachable!("the WebIDL frontend admits no {ty:?} callback argument"))
 }
 
 /// `value`, as the DOM returns it, in the form jco lowers to the guest.

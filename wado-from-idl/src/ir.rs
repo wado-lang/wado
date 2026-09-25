@@ -298,6 +298,15 @@ pub enum WadoType {
 }
 
 impl WadoType {
+    /// What a callback export's name calls an argument of this type; `None`
+    /// where the host cannot call a closure back with one.
+    pub fn callback_argument_word(&self) -> Option<&'static str> {
+        match self {
+            Self::Named(_) => Some("handle"),
+            _ => self.primitive_name(),
+        }
+    }
+
     /// The Wado spelling of a primitive; `None` for any other type.
     pub fn primitive_name(&self) -> Option<&'static str> {
         Some(match self {

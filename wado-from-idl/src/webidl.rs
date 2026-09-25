@@ -766,7 +766,7 @@ impl Lowering<'_> {
                     return Err(format!("callback argument `{}`: optional", arg.name));
                 }
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
-                if matches!(ty, WadoType::Named(_)) || ty.primitive_name().is_some() {
+                if ty.callback_argument_word().is_some() {
                     return Ok(ty);
                 }
                 Err(format!(
