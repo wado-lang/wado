@@ -200,6 +200,7 @@ fn lower_to_flat_inner(
                     &names.array_fq,
                     "len",
                     ModuleSource::list(),
+                    names.list_len.clone(),
                     vec![],
                     TypeTable::I32,
                 ),
@@ -287,6 +288,7 @@ fn lower_to_flat_inner(
                         FunctionRef {
                             module_source: ModuleSource::list(),
                             name: iv_mangled,
+                            template: Some(names.list_index_value),
                             monomorph_info: None,
                             method_info: Some(iv_info),
                         },

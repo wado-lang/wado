@@ -18,9 +18,10 @@ use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
-    ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
-    TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable, positional_substitution,
+    ResolvedType, StructDef, TemplateId, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind,
+    TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
+    positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -755,6 +756,7 @@ fn build_dispatch_wrapper_function(
                 func: Box::new(FunctionRef {
                     module_source: effect_module.clone(),
                     name: effect_default_impl_name(base_name, op_name),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -807,6 +809,7 @@ fn build_dispatch_wrapper_function(
                 func: Box::new(FunctionRef {
                     module_source: interner.borrow_mut().local(base_name),
                     name: op_name.clone(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -855,6 +858,7 @@ fn build_dispatch_wrapper_function(
                 func: Box::new(FunctionRef {
                     module_source: ModuleSource::rt(),
                     name: "panic".to_string(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -1028,6 +1032,7 @@ fn build_resource_fallback_call(
     let func_ref = FunctionRef {
         module_source: effect_module.clone(),
         name: mangled_method_name,
+        template: None,
         monomorph_info,
         method_info: Some(method_info),
     };
@@ -2147,6 +2152,7 @@ fn wrap_async_result(
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
                 name: cm_wrap_async_func_name(base_name, &op.name),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -2235,6 +2241,7 @@ fn build_handler_op_closure(
             FunctionRef {
                 module_source: impl_info.impl_module.clone(),
                 name: target.mangled_name.clone(),
+                template: target.template.clone(),
                 monomorph_info: None,
                 method_info: Some(target.method_info.clone()),
             },
@@ -2300,6 +2307,7 @@ fn build_trap_closure(
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -2372,6 +2380,7 @@ fn build_default_closure(
             func: Box::new(FunctionRef {
                 module_source: plan.decl_module.clone(),
                 name: effect_default_impl_name(interface_name, &op.name),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -2821,6 +2830,7 @@ fn wrapper_call(
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
                 name: wrapper_name,
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -3136,6 +3146,7 @@ struct HandlerImplInfo {
 struct HandlerMethodTarget {
     mangled_name: String,
     method_info: LocalMethodName,
+    template: Option<TemplateId>,
 }
 
 /// Build the `HandlerImplKey -> HandlerImplInfo` map from every TIR function
@@ -3182,6 +3193,7 @@ fn build_handler_impl_index(
                 HandlerMethodTarget {
                     mangled_name: func.name.clone(),
                     method_info: method_info.clone(),
+                    template: func.template_id(),
                 },
             );
         }

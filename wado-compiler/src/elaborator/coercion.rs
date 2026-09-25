@@ -943,6 +943,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> LiteralCallee {
         let mut callee = LiteralCallee {
             method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method)),
+            impl_def,
             impl_module_source,
             trait_name,
             target_base_name: self.tysys.fq_receiver_head(output_type),

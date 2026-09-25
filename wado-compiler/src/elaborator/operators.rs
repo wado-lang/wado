@@ -6,7 +6,7 @@ use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::primitive::PrimitiveType;
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::binary_op_str;
 
@@ -1557,6 +1557,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let func = FunctionRef {
                             module_source: trait_info.impl_module_source.clone(),
                             name: mangled_method_name,
+                            template: Some(self.declared_template(trait_info.method_def)),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 receiver,
@@ -2062,9 +2063,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     |def| defs.module(def).clone(),
                 ),
         };
+        let template = match resolved.method_def {
+            _ if resolved.is_type_param_receiver => None,
+            Some(def) => Some(match resolved.impl_def {
+                Some(block) => TemplateId::Declared {
+                    def,
+                    block: Some(block),
+                },
+                None => self.declared_template(def),
+            }),
+            None => Some(TemplateId::Synthesized {
+                module: module_source.clone(),
+                name: mangled_method_name.clone(),
+            }),
+        };
         let function_ref = FunctionRef {
             module_source,
             name: mangled_method_name,
+            template,
             monomorph_info: None,
             method_info: Some(method_info),
         };

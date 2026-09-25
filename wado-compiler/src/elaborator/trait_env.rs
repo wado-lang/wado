@@ -17,7 +17,7 @@ use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
@@ -266,26 +266,6 @@ impl ImplHeader {
     /// receiver's module.
     pub(super) fn is_concrete(&self) -> bool {
         self.type_params.is_empty()
-    }
-
-    /// Whether the target reaches every instance of its head: its arguments,
-    /// if any, are distinct parameters of the block.
-    pub(super) fn covers_every_instance(&self) -> bool {
-        let args = match &self.ty {
-            Type::Named(_) => return true,
-            Type::Generic(g) => &g.args,
-            Type::NamespacedGeneric(g) => &g.args,
-            _ => return false,
-        };
-        let mut seen = IndexSet::default();
-        args.iter().all(|arg| {
-            let name = match arg {
-                Type::Named(n) => &n.name,
-                Type::TypePackSpread(name, _) => name,
-                _ => return false,
-            };
-            self.type_params.iter().any(|p| &p.name == name) && seen.insert(name.clone())
-        })
     }
 
     /// Whether the block writes a trait at all, whatever it resolves to.
@@ -651,19 +631,11 @@ pub(super) type ResourceStaticMethodIndex =
 /// per module declaring a receiver under that spelling.
 pub(crate) type TraitImplModuleIndex = IndexMap<(String, DefId), Vec<ModuleSource>>;
 
-/// Where each `impl <trait> for <type>` lives, reachable from both receiver
-/// namespaces.
-///
-/// The two are not interchangeable — a mangled head (`mod/Widget`) picks out
-/// one declaration, a declared name (`Widget`) picks out any declaration
-/// spelling itself that way — so they get separate storage and a query answers
-/// only from the namespace it named. Storing both in one map is what let a
-/// mangled query reach only the synthesised layer and a declared query only the
-/// AST layer (WEP 2026-08-12).
+/// Where each `impl <trait> for <type>` lives, keyed by the receiver's
+/// mangled head (`mod/Widget`), which picks out one declaration.
 #[derive(Debug, Default, Clone)]
 pub struct ImplModuleIndex {
     by_mangled: TraitImplModuleIndex,
-    by_declared: TraitImplModuleIndex,
 }
 
 impl ImplModuleIndex {
@@ -673,14 +645,10 @@ impl ImplModuleIndex {
             ImplReceiver::Instantiated(m) => self
                 .by_mangled
                 .get(&(m.as_mangled_str().to_string(), trait_)),
-            ImplReceiver::Declared(d) => {
-                self.by_declared.get(&(d.as_decl_str().to_string(), trait_))
-            }
         }
     }
 
-    /// Record `module` under both spellings of one receiver identity, so the
-    /// two namespaces cannot drift apart.
+    /// Record `module` under `receiver`'s mangled head.
     pub fn record(&mut self, receiver: &name::Receiver, trait_: DefId, module: &ModuleSource) {
         push_module(
             &mut self.by_mangled,
@@ -688,18 +656,6 @@ impl ImplModuleIndex {
             trait_,
             module,
         );
-        // A type parameter names no declaration, so it has no entry in the
-        // declaration namespace. Giving it one lets a generic impl's own `T`
-        // answer for a user `struct T` — the two are not the same receiver, and
-        // only the mangled namespace keeps a binder scoped to its template.
-        if !receiver.is_binder() {
-            push_module(
-                &mut self.by_declared,
-                receiver.decl_key().into_string(),
-                trait_,
-                module,
-            );
-        }
     }
 
     /// Record an impl on a generic head under its *instantiated* mangled
@@ -1404,32 +1360,6 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
-    /// Every module defining `impl <trait_> for <receiver>`, the one
-    /// [`Self::impl_module_for`] picks first. Generic impls pinning different
-    /// arguments may live in different modules, and the receiver's arguments,
-    /// not the receiver's head, choose among them.
-    pub(crate) fn impl_modules_for(
-        &self,
-        receiver: ImplReceiver<'_>,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-    ) -> Vec<&ModuleSource> {
-        let ast = self.trait_impl_modules.get(receiver, trait_);
-        let syn = self
-            .synthesised
-            .as_ref()
-            .and_then(|s| s.trait_impl_modules.get(receiver, trait_));
-        let mut modules: Vec<&ModuleSource> = pick_module_union(ast, syn, type_module)
-            .into_iter()
-            .collect();
-        for module in ast.into_iter().chain(syn).flatten() {
-            if !modules.contains(&module) {
-                modules.push(module);
-            }
-        }
-        modules
-    }
-
     /// Every impl entry whose target *head* matches `receiver`, across all
     /// declaring modules. The keyed lookups are exact; this is the widened
     /// form for callers that cannot canonicalise — monomorphize and synthesis
@@ -1484,19 +1414,74 @@ impl TraitEnv {
         self.trait_def(&fq.canonical()?)
     }
 
+    /// The template a call reaching `block` for `method` instantiates: the
+    /// block's own method, or the trait default it inherits.
+    pub(crate) fn method_template(&self, block: DefId, method: &str) -> Option<TemplateId> {
+        let header = self.impl_headers.get(&block)?;
+        let def = if let Some(written) = header.methods.iter().find(|m| m.name == method) {
+            written.def
+        } else {
+            let trait_ = self.trait_decl_headers.get(&header.trait_def()?)?;
+            trait_
+                .methods
+                .iter()
+                .find(|m| m.name == method && m.has_body)?
+                .def
+        };
+        Some(TemplateId::Declared {
+            def,
+            block: Some(block),
+        })
+    }
+
+    /// The written block on `receiver` whose body answers `method` of `trait_`
+    /// (`None` for an inherent method) at the instances `reaches` admits: one
+    /// written for a single instantiation before a generic one (coherence Rule
+    /// 1). A body-less marker writes no body, so it answers nothing.
+    pub(crate) fn answering_template(
+        &self,
+        receiver: &name::Receiver,
+        trait_: Option<DefId>,
+        method: &str,
+        reaches: impl Fn(DefId) -> bool,
+    ) -> Option<TemplateId> {
+        let reaching: Vec<(&ImplHeader, TemplateId)> = self
+            .all_by_receiver
+            .get(receiver)
+            .into_iter()
+            .flatten()
+            .filter_map(|&block| {
+                let header = self.impl_headers.get(&block)?;
+                let answers =
+                    !header.is_synthesize_request && header.trait_def() == trait_ && reaches(block);
+                Some((
+                    header,
+                    answers.then(|| self.method_template(block, method))??,
+                ))
+            })
+            .collect();
+        let (_, template) = reaching
+            .iter()
+            .find(|(header, _)| header.is_concrete())
+            .or_else(|| reaching.first())?;
+        Some(template.clone())
+    }
+
     /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls that
-    /// reach every instance of `receiver`, and that `module_source` writes
-    /// where it is given. A derived body answers wherever no such impl does.
+    /// reach every instance of `receiver` as `covers` says, and that
+    /// `module_source` writes where it is given. A derived body answers
+    /// wherever no such impl does.
     pub(crate) fn has_covering_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
         module_source: Option<&ModuleSource>,
+        covers: impl Fn(DefId) -> bool,
     ) -> bool {
         self.entries_by_receiver(receiver).any(|entry| {
             module_source.is_none_or(|module| self.defs.module(entry) == module)
                 && self.methodful_header_matches(entry, trait_)
-                && self.impl_headers[&entry].covers_every_instance()
+                && covers(entry)
         })
     }
 
@@ -1523,20 +1508,6 @@ impl TraitEnv {
             .is_some_and(|header| !header.methods.is_empty() && header.trait_def() == Some(trait_))
     }
 
-    /// Return the home module of a *value* blanket (`impl<T: Bound> Trait for
-    /// T`) for `trait_name`, if one exists — `value_blanket_for_trait` excludes
-    /// ref blankets, so a `impl<T: Inspect> Inspect for &T` is never returned for
-    /// a value receiver. `type_module` is preferred as a stable tie-breaker when
-    /// several modules host a value blanket for the trait.
-    pub(crate) fn blanket_impl_module_for_trait(
-        &self,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<&ModuleSource> {
-        self.value_blanket_for_trait(trait_, type_module)
-            .map(|b| &b.module)
-    }
-
     /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
     /// accepts. A trait may carry several disjoint value blankets — the four
     /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
@@ -1561,27 +1532,6 @@ impl TraitEnv {
         values.next()
     }
 
-    /// The value blanket `impl<Param: Bounds, ..> Trait for Param` for
-    /// `trait_name`, preferring one homed in `type_module`, else the first
-    /// registered. Ref blankets (`impl<T> Trait for &T`) are excluded — they
-    /// never dispatch a value receiver.
-    fn value_blanket_for_trait(
-        &self,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-    ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(&trait_)?;
-        let mut values = impls
-            .iter()
-            .filter(|b| b.receiver == BlanketReceiver::Value);
-        if let Some(hint) = type_module
-            && let Some(b) = values.clone().find(|b| &b.module == hint)
-        {
-            return Some(b);
-        }
-        values.next()
-    }
-
     /// Whether `trait_name` has a *universal* ref blanket
     /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
     /// bare type param, so it applies to every reference. Distinguished from a
@@ -1589,11 +1539,24 @@ impl TraitEnv {
     /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
     /// through the universal blanket only when one exists.
     pub(crate) fn has_universal_ref_blanket(&self, trait_: DefId, is_mut: bool) -> bool {
-        self.blanket_impls.get(&trait_).is_some_and(|impls| {
-            impls
-                .iter()
-                .any(|b| b.receiver == BlanketReceiver::Ref { is_mut })
-        })
+        self.universal_ref_blanket(trait_, is_mut).is_some()
+    }
+
+    /// The universal ref blanket [`Self::has_universal_ref_blanket`] asks about.
+    pub(crate) fn universal_ref_blanket(
+        &self,
+        trait_: DefId,
+        is_mut: bool,
+    ) -> Option<&BlanketImpl> {
+        self.blanket_impls
+            .get(&trait_)?
+            .iter()
+            .find(|b| b.receiver == BlanketReceiver::Ref { is_mut })
+    }
+
+    /// The blanket impl block `def` declares, if it is one.
+    pub(crate) fn blanket_of_block(&self, def: DefId) -> Option<&BlanketImpl> {
+        self.blanket_impls.values().flatten().find(|b| b.def == def)
     }
 
     /// What determines each of a blanket impl's parameters, in declaration
@@ -1770,46 +1733,14 @@ impl TraitEnv {
     }
 }
 
-/// Which namespace an impl-module query spells its receiver in. The two are not
-/// interchangeable — a mangled fq receiver picks out one declaration, a declared
-/// name picks out any declaration spelling itself that way — and each has its
-/// own storage, written from one receiver identity, so a query cannot land in
-/// the wrong one (WEP 2026-08-12). [`Self::Of`] carries the identity and derives
-/// both spellings; the others are for callers holding only one.
-
+/// The receiver an impl-module query asks about, in the mangled namespace that
+/// picks out one declaration (WEP 2026-08-12).
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ImplReceiver<'a> {
-    /// The receiver itself. Both spellings are derived from it here, so the
-    /// query names no namespace and cannot name the wrong one.
+    /// The receiver itself.
     Of(&'a name::Receiver),
-    /// A receiver with its type arguments applied (`List<…/Token>`). Only the
-    /// mangled namespace can spell an instantiation.
+    /// A receiver with its type arguments applied (`List<…/Token>`).
     Instantiated(&'a name::MangledName),
-    /// A declaration name and nothing more. Carries no module, so it cannot
-    /// separate two modules' same-named types — which is why it is a distinct
-    /// variant rather than a receiver a caller flattened.
-    Declared(&'a name::DeclName),
-}
-
-/// A receiver a lookup may try, kept in the form the thing that produced it
-/// had. A candidate list is assembled from several sources — a method info's
-/// receiver, a mangled struct key — and they are not one namespace. Carrying
-/// each in its own form is what keeps the query from having to guess.
-#[derive(Debug, Clone)]
-pub(crate) enum ReceiverCandidate {
-    Of(name::Receiver),
-    Instantiated(name::MangledName),
-    Declared(name::DeclName),
-}
-
-impl ReceiverCandidate {
-    pub(crate) fn as_receiver(&self) -> ImplReceiver<'_> {
-        match self {
-            ReceiverCandidate::Of(r) => ImplReceiver::Of(r),
-            ReceiverCandidate::Instantiated(m) => ImplReceiver::Instantiated(m),
-            ReceiverCandidate::Declared(d) => ImplReceiver::Declared(d),
-        }
-    }
 }
 
 /// The impl header's target, from the site the header wrote.

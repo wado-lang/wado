@@ -454,6 +454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.
             (CandidateOrigin::Inherited, Some(supply)) => {
+                let method_ref = method_ref.supplied_by(supply.impl_def);
                 // Resolved here rather than asked of every caller: the name
                 // costs a scope to resolve, and this is the one rung that needs
                 // it.

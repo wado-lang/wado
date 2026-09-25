@@ -248,6 +248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.tysys.type_table,
                         &func.attrs,
                         &func.name,
+                        self.tysys.resolutions.defs().def_at(func.id),
                         &self.current_module_source,
                         func.span,
                         self.logger,
@@ -276,6 +277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &self.tysys.type_table,
                             &method.attrs,
                             &method.name,
+                            (defs.def_at(method.id), None),
                             &trait_decl.name,
                             &owner_head,
                             &self.current_module_source,
@@ -333,10 +335,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // where the method declaration AND its owner type are
                 // simultaneously in scope.
                 for method in &impl_block.methods {
+                    let defs = scope.tysys.resolutions.defs();
+                    let decl = (defs.def_at(method.id), Some(defs.def_at(impl_block.id)));
                     register_method_compiler_item(
                         &scope.tysys.type_table,
                         &method.attrs,
                         &method.name,
+                        decl,
                         &scope.get_type_name(&impl_block.ty),
                         &struct_name,
                         &scope.current_module_source,

@@ -1,133 +1,20 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
-use crate::elaborator::trait_env::ReceiverCandidate;
-use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
 use crate::tir::{
-    CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
+    FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirLocal, TirModule, TirStmt, TirStmtKind, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
-use super::generic_function_key;
-use super::module_source_for_trait_impl;
 use super::state::Monomorphizer;
-use crate::monomorphize::func_inst::{blanket_pack_dispatch_args, receiver_candidates};
-use crate::monomorphize::{dispatch_receiver_head, generic_function_name};
-use crate::name::FqTraitName;
-
-/// Strip `&`/`&mut` and `Newtype` and return the underlying type's home
-/// module, if any. Used as the disambiguation hint for
-/// `TraitEnv::impl_module_for` and as the candidate module for inherent-
-/// method lookups; newtypes inherit their base type's inherent methods, so
-/// peeling them lines the hint up with where the inherited template lives.
-fn receiver_module_hint(tt: &TypeTable, tid: TypeId) -> Option<ModuleSource> {
-    let mut tid = tid;
-    loop {
-        match tt.get(tid) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-            ResolvedType::Newtype { base_type, .. } => tid = *base_type,
-            _ => return module_source_for_trait_impl(tt, tid),
-        }
-    }
-}
-
-/// Rebuild `func` to point at the monomorphized instance named `mangled`,
-/// preserving the call's `method_info`. The new `monomorph_info` records the
-/// pre-mono `generic_name` and the type args the instance was keyed with.
-///
-/// `func` is overwritten in full here, so move `method_info` out instead of
-/// cloning it.
-fn apply_instantiation(
-    func: &mut FunctionRef,
-    module_source: ModuleSource,
-    mangled: String,
-    generic_name: String,
-    impl_type_args: Vec<TypeId>,
-    method_type_args: Vec<TypeId>,
-    is_blanket: bool,
-) {
-    let method_info = std::mem::take(&mut func.method_info);
-    *func = FunctionRef {
-        module_source,
-        name: mangled,
-        monomorph_info: Some(MonomorphInfo {
-            generic_name,
-            impl_type_args,
-            method_type_args,
-            is_blanket,
-        }),
-        method_info,
-    };
-}
-
-impl Monomorphizer {
-    /// Find a queued instantiation, treating `key.module_source` as a hint.
-    /// Mirrors `lookup_template_with_trait_fallback`: on a literal-key miss,
-    /// consult `TraitEnv::impl_module_for` for the impl block's home and retry,
-    /// trying `type_module_hint` too for an inherent method. Returns
-    /// `(matched_key, mangled_name)`, so the caller rewrites to the same module.
-    fn lookup_instantiation_with_trait_fallback(
-        &self,
-        mut key: InstantiationKey,
-        struct_candidates: &[ReceiverCandidate],
-        type_module_hint: Option<&ModuleSource>,
-    ) -> Option<(InstantiationKey, String)> {
-        if let Some(mangled) = self.lookup_function_instantiation(&key) {
-            let mangled = mangled.clone();
-            return Some((key, mangled));
-        }
-        let trait_decl = key
-            .method_info
-            .as_ref()
-            .and_then(LocalMethodName::trait_decl);
-        if let Some(trait_) = trait_decl {
-            for candidate in struct_candidates {
-                for impl_module in self.functions.trait_env.impl_modules_for(
-                    candidate.as_receiver(),
-                    trait_,
-                    type_module_hint,
-                ) {
-                    key.module_source = impl_module.clone();
-                    if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                        let mangled = mangled.clone();
-                        return Some((key, mangled));
-                    }
-                }
-            }
-            // A blanket impl is keyed by no receiver, so its instantiation is
-            // found in the blanket's home module, by trait alone.
-            if let Some(impl_module) = self
-                .functions
-                .trait_env
-                .blanket_impl_module_for_trait(trait_, type_module_hint)
-            {
-                key.module_source = impl_module.clone();
-                if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                    let mangled = mangled.clone();
-                    return Some((key, mangled));
-                }
-            }
-        } else if let Some(type_module) = type_module_hint {
-            // Inherent methods: the impl block lives in the receiver type's
-            // own module (`impl<T> List<T> { fn len(&self) -> i32 ... }`).
-            key.module_source = type_module.clone();
-            if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                let mangled = mangled.clone();
-                return Some((key, mangled));
-            }
-        }
-        None
-    }
-}
 
 impl Monomorphizer {
     /// Rewrite function calls in all functions to use monomorphized names
     pub(super) fn rewrite_function_calls_in_module(&self, module: &mut TirModule) {
-        let type_table = module.type_table.borrow();
+        let mut type_table = module.type_table.borrow_mut();
         let mut rewriter = CallRewriter {
             mono: self,
-            type_table: &type_table,
+            type_table: &mut type_table,
         };
 
         for func_rc in &module.functions {
@@ -197,613 +84,73 @@ impl Monomorphizer {
         }
         LocalTypeUpdater { locals }.visit_block(block);
     }
-    /// Rewrite a `FuncRef { name, type_args }` whose `type_args` were pinned
-    /// at the elaborator (turbofish or expected-type inference) so its `name`
-    /// points at the monomorphized instance and its `type_args` is empty.
-    /// Lower (`lower::plan::closure`) later wraps the typed `FuncRef` into a
-    /// zero-capture closure that forwards into the rewritten instance.
-    fn rewrite_func_ref_expr(&self, expr: &mut TirExpr) {
-        if let TirExprKind::FuncRef {
-            module_source,
-            name,
-            type_args,
-        } = &mut expr.kind
-            && !type_args.is_empty()
-        {
-            // Match the lookup form used by `collect_func_instantiation_sites_in_expr`:
-            // free functions are keyed by their module-qualified name.
-            let qualified_name = generic_function_name(false, module_source, name);
-            let key = InstantiationKey {
-                def: None,
-                name: qualified_name,
-                module_source: module_source.clone(),
-                impl_type_args: vec![],
-                method_type_args: type_args.clone(),
-                method_info: None,
-            };
-            if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                name.clone_from(mangled);
+
+    /// Point a call or function reference at the instance its template reaches,
+    /// the same answer collection queued it under.
+    fn rewrite_to_instance(&self, expr: &mut TirExpr, type_table: &mut TypeTable) {
+        let templates = &self.functions.templates;
+        let Some((key, _)) = self.call_instance(expr, templates, type_table) else {
+            return;
+        };
+        let Some(mangled) = self.lookup_function_instantiation(&key).cloned() else {
+            return;
+        };
+        match &mut expr.kind {
+            TirExprKind::Call {
+                func, type_args, ..
+            } => {
+                apply_instantiation(func, &key, mangled);
                 type_args.clear();
             }
+            TirExprKind::FuncRef {
+                module_source,
+                name,
+                type_args,
+                template,
+            } => {
+                module_source.clone_from(&key.module_source);
+                *name = mangled;
+                type_args.clear();
+                *template = None;
+            }
+            _ => unreachable!("only a call or a function reference reaches an instance"),
         }
-    }
-
-    fn rewrite_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
-        if let TirExprKind::Call {
-            func,
-            type_args,
-            args,
-            ..
-        } = &mut expr.kind
-        {
-            let original_func_name = func.name.clone();
-            let qualified_func_key =
-                generic_function_key(func.is_method(), &func.module_source, &func.name);
-            let qualified_func_name = qualified_func_key.1;
-
-            // Resolve type_args: use explicit ones, or infer from args for implicit generic calls.
-            // Only attempt inference for free functions (not method calls), since method calls
-            // have their own rewriting logic below.
-            let effective_type_args: Option<Vec<TypeId>> = if !type_args.is_empty() {
-                Some(type_args.clone())
-            } else if func.method_info.is_none() && func.monomorph_info.is_none() {
-                self.infer_instantiated_type_args(
-                    &qualified_func_name,
-                    &func.method_info,
-                    args,
-                    type_table,
-                )
-            } else {
-                None
-            };
-
-            if let Some(inferred_args) = effective_type_args {
-                let key = InstantiationKey {
-                    def: None,
-                    name: qualified_func_name,
-                    module_source: func.module_source.clone(),
-                    impl_type_args: vec![],
-                    method_type_args: inferred_args,
-                    method_info: func.method_info.clone(),
-                };
-                if let Some(mangled) = self.lookup_function_instantiation(&key) {
-                    let mangled = mangled.clone();
-                    apply_instantiation(
-                        func,
-                        key.module_source.clone(),
-                        mangled,
-                        original_func_name,
-                        key.impl_type_args.clone(),
-                        key.method_type_args.clone(),
-                        false,
-                    );
-
-                    if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
-                        && let Some(&concrete) = key.method_type_args.get(*index as usize)
-                    {
-                        expr.type_id = concrete;
-                    }
-
-                    type_args.clear();
-                }
-            }
-            // Also handle static method calls that need rewriting
-            if let FunctionRef {
-                monomorph_info: Some(monomorph),
-                method_info: Some(info),
-                ..
-            } = &**func
-                && (!monomorph.impl_type_args.is_empty() || !monomorph.method_type_args.is_empty())
-            {
-                let mut names_to_try = vec![MethodName::format_local(
-                    &info.fq_base_struct_name(),
-                    info.trait_name.as_ref(),
-                    &info.method_name,
-                )];
-                if info.struct_name() != info.base_struct_name() {
-                    names_to_try.push(MethodName::format_local(
-                        &info.fq_struct_name(),
-                        info.trait_name.as_ref(),
-                        &info.method_name,
-                    ));
-                }
-                // A blanket static's instantiation is keyed by the blanket's
-                // own template name (`T^CaseName::by_name`), not the
-                // receiver's — mirror `collect_func_instantiation_sites_in_expr`.
-                if monomorph.is_blanket {
-                    names_to_try.insert(0, monomorph.generic_name.clone());
-                }
-                let impl_ta = info
-                    .trait_decl()
-                    .filter(|_| monomorph.is_blanket)
-                    .and_then(|trait_| {
-                        blanket_pack_dispatch_args(
-                            &monomorph.impl_type_args,
-                            &self.functions.trait_env,
-                            info,
-                            trait_,
-                            &func.module_source,
-                            &monomorph.generic_name,
-                            type_table,
-                        )
-                    })
-                    .unwrap_or_else(|| monomorph.impl_type_args.clone());
-                let candidates = receiver_candidates(Some(info), &[]);
-                for generic_method_name in names_to_try {
-                    let key = InstantiationKey {
-                        def: None,
-                        name: generic_method_name.clone(),
-                        module_source: func.module_source.clone(),
-                        impl_type_args: impl_ta.clone(),
-                        method_type_args: monomorph.method_type_args.clone(),
-                        method_info: Some(info.clone()),
-                    };
-                    if let Some((key, mangled)) =
-                        self.lookup_instantiation_with_trait_fallback(key, &candidates, None)
-                    {
-                        apply_instantiation(
-                            func,
-                            key.module_source.clone(),
-                            mangled,
-                            generic_method_name,
-                            key.impl_type_args.clone(),
-                            key.method_type_args,
-                            false,
-                        );
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    fn rewrite_method_call_expr(&self, expr: &mut TirExpr, type_table: &TypeTable) {
-        let TirExprKind::Call {
-            func: method_func,
-            type_args,
-            args,
-            has_receiver: true,
-        } = &mut expr.kind
-        else {
-            return;
-        };
-        let Some((receiver, _)) = args.split_first() else {
-            return;
-        };
-        let receiver = &receiver.expr;
-
-        // Extract method name from method_info or fall back to function name
-        let method_name = method_func
-            .method_info
-            .as_ref()
-            .map(|info| info.method_name.clone())
-            .unwrap_or_else(|| method_func.name.clone());
-
-        if type_args.is_empty()
-            && let Some(info) = method_func.method_info.as_ref()
-            && self.receiver_keeps_newtype_own_impl(receiver.type_id, type_table, info)
-        {
-            return;
-        }
-
-        // If this is a generic method call, rewrite to monomorphized name.
-        // Skip a call dispatched through the *universal* ref blanket
-        // (`impl<T: Bound> Trait for &T`, template name `&^Trait` / `&mut^Trait`)
-        // — a synthesized ref dispatch like `..F::inspect::<Formatter>()` on a
-        // `&List<i32>` field: resolving by the receiver's peeled struct name would
-        // retarget the inner type's impl (`List<i32>^Inspect`) and drop the
-        // leading `&`. A bare-`T` blanket (serde `Serialize`) and a shape ref impl
-        // (`&List^IntoIterator`) both still resolve here — the former has no `&`
-        // head, the latter has no universal `&T` blanket.
-        let is_ref_blanket_call = method_func
-            .monomorph_info
-            .as_ref()
-            .is_some_and(|m| m.is_blanket)
-            && method_func.method_info.as_ref().is_some_and(|i| {
-                i.ref_receiver().is_some_and(|ref_kind| {
-                    let is_mut = ref_kind == RefKind::Mut;
-                    i.trait_decl().is_some_and(|trait_| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(trait_, is_mut)
-                    })
-                })
-            });
-        if !type_args.is_empty()
-            && !is_ref_blanket_call
-            && let Some(struct_name) = self.get_struct_name_from_type(receiver.type_id, type_table)
-        {
-            // Try both inherent and trait method formats. A newtype's OWN impl
-            // is tried before its base, so the rewrite lands on the newtype's
-            // own queued instantiation (`ByteList^…`) rather than the inherited
-            // base (`List<u8>^…`). Mirrors the collect path in `func_inst.rs`.
-            let trait_name_opt = method_func
-                .method_info
-                .as_ref()
-                .and_then(|info| info.trait_name.clone());
-            let (own_name, names_to_try) = self.newtype_aware_method_names(
-                receiver.type_id,
-                type_table,
-                &method_name,
-                trait_name_opt.as_ref(),
-            );
-
-            let info_ref = method_func.method_info.as_ref();
-            let candidates =
-                self.newtype_aware_candidates(own_name.as_deref(), info_ref, &struct_name);
-            let receiver_module = receiver_module_hint(type_table, receiver.type_id);
-            let mut rewritten = false;
-            for (full_method_name, _tn) in &names_to_try {
-                let key = InstantiationKey {
-                    def: None,
-                    name: full_method_name.clone(),
-                    module_source: method_func.module_source.clone(),
-                    impl_type_args: vec![],
-                    method_type_args: type_args.clone(),
-                    method_info: method_func.method_info.clone(),
-                };
-                if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
-                    key,
-                    &candidates,
-                    receiver_module.as_ref(),
-                ) {
-                    apply_instantiation(
-                        method_func,
-                        key.module_source.clone(),
-                        mangled,
-                        full_method_name.clone(),
-                        key.impl_type_args.clone(),
-                        key.method_type_args,
-                        false,
-                    );
-                    type_args.clear();
-                    rewritten = true;
-                    break;
-                }
-            }
-            // Handle "double generics": method on monomorphized generic struct
-            // e.g., c.transform::<i64>() where c: Container<i32>
-            // Also handles GenericInstance receivers (e.g., Option<i32>)
-            if !rewritten {
-                let base_info = self
-                    .structs
-                    .mangled_to_key
-                    .get(&struct_name)
-                    .map(|k| (k.name.clone(), k.impl_type_args.clone()))
-                    .or_else(|| {
-                        self.struct_info_for_method(
-                            receiver.type_id,
-                            type_table,
-                            &method_name,
-                            trait_name_opt.as_ref(),
-                        )
-                        .filter(|(_, args)| !args.is_empty())
-                    });
-                if let Some((base_struct, impl_type_args)) = base_info {
-                    // The method template is named after the receiver's fq head:
-                    // `base_struct` is a struct-instantiation key, which carries
-                    // no module.
-                    let receiver_head = dispatch_receiver_head(type_table, receiver.type_id);
-                    // Try both inherent and trait method formats
-                    let mut dg_names = vec![(
-                        MethodName::format_local(&receiver_head, None, &method_name),
-                        None::<FqTraitName>,
-                    )];
-                    if let Some(ref tn) = trait_name_opt {
-                        dg_names.push((
-                            MethodName::format_local(&receiver_head, Some(tn), &method_name),
-                            Some(tn.clone()),
-                        ));
-                    }
-
-                    let info_ref = method_func.method_info.as_ref();
-                    let dg_candidates = receiver_candidates(info_ref, &[&base_struct]);
-                    let dg_receiver_module = receiver_module_hint(type_table, receiver.type_id);
-                    for (generic_method_name, _tn) in &dg_names {
-                        let combined_key = InstantiationKey {
-                            def: None,
-                            name: generic_method_name.clone(),
-                            module_source: method_func.module_source.clone(),
-                            impl_type_args: impl_type_args.clone(),
-                            method_type_args: type_args.clone(),
-                            method_info: method_func.method_info.clone(),
-                        };
-                        if let Some((combined_key, mangled)) = self
-                            .lookup_instantiation_with_trait_fallback(
-                                combined_key,
-                                &dg_candidates,
-                                dg_receiver_module.as_ref(),
-                            )
-                        {
-                            apply_instantiation(
-                                method_func,
-                                combined_key.module_source.clone(),
-                                mangled,
-                                generic_method_name.clone(),
-                                combined_key.impl_type_args.clone(),
-                                combined_key.method_type_args.clone(),
-                                false,
-                            );
-                            type_args.clear();
-
-                            if let ResolvedType::TypeParam { index, .. } =
-                                type_table.get(expr.type_id)
-                            {
-                                let impl_count = impl_type_args.len() as u32;
-                                if *index < impl_count {
-                                    if let Some(&concrete) =
-                                        combined_key.impl_type_args.get(*index as usize)
-                                    {
-                                        expr.type_id = concrete;
-                                    }
-                                } else {
-                                    let method_index = (*index - impl_count) as usize;
-                                    if let Some(&concrete) =
-                                        combined_key.method_type_args.get(method_index)
-                                    {
-                                        expr.type_id = concrete;
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        // Empty `type_args` over a `GenericInstance` receiver —
-        // `nums.index_value(0)` on a `Triple<i32>`. Skipped for a blanket-impl
-        // `monomorph_info`: the args derived from the receiver (`[i32]`) are not
-        // what the blanket was queued with (`[List<i32>]`), so a match here would
-        // route to the inner type's impl. The blanket branch below handles it.
-        else if let Some((base_struct, impl_type_args)) = self.struct_info_for_method(
-            receiver.type_id,
-            type_table,
-            &method_name,
-            method_func
-                .method_info
-                .as_ref()
-                .and_then(|info| info.trait_name.as_ref()),
-        ) && !impl_type_args.is_empty()
-            && !method_func
-                .monomorph_info
-                .as_ref()
-                .is_some_and(|m| m.is_blanket)
-        {
-            // A struct-instantiation key names its template without a module;
-            // the method template is named after the receiver.
-            let receiver_head = dispatch_receiver_head(type_table, receiver.type_id);
-            // Try trait method name format first (e.g., Triple^IndexValue::index_value)
-            let mut possible_keys = Vec::new();
-            if let Some(info) = method_func.method_info.as_ref()
-                && info.trait_name.is_none()
-                && info.base_struct_name() != base_struct
-            {
-                possible_keys.push(InstantiationKey {
-                    def: None,
-                    name: MethodName::format_local(&info.fq_base_struct_name(), None, &method_name),
-                    module_source: method_func.module_source.clone(),
-                    impl_type_args: impl_type_args.clone(),
-                    method_type_args: vec![],
-                    method_info: None,
-                });
-            }
-            if let Some(info) = method_func.method_info.as_ref()
-                && let Some(ref trait_name) = info.trait_name
-            {
-                // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
-                if info.base_struct_name() != base_struct {
-                    possible_keys.push(InstantiationKey {
-                        def: None,
-                        name: MethodName::format_local(
-                            &info.fq_base_struct_name(),
-                            Some(trait_name),
-                            &method_name,
-                        ),
-                        module_source: method_func.module_source.clone(),
-                        impl_type_args: impl_type_args.clone(),
-                        method_type_args: vec![],
-                        method_info: None,
-                    });
-                }
-                let trait_method_name =
-                    MethodName::format_local(&receiver_head, Some(trait_name), &method_name);
-                possible_keys.push(InstantiationKey {
-                    def: None,
-                    name: trait_method_name,
-                    module_source: method_func.module_source.clone(),
-                    impl_type_args: impl_type_args.clone(),
-                    method_type_args: vec![],
-                    method_info: None,
-                });
-            }
-            // Also try regular method format
-            possible_keys.push(InstantiationKey {
-                def: None,
-                name: MethodName::format_local(&receiver_head, None, &method_name),
-                module_source: method_func.module_source.clone(),
-                impl_type_args,
-                method_type_args: vec![],
-                method_info: None,
-            });
-
-            let info_ref = method_func.method_info.as_ref();
-            let pk_candidates = receiver_candidates(info_ref, &[&base_struct]);
-            let pk_receiver_module = receiver_module_hint(type_table, receiver.type_id);
-            for mut key in possible_keys {
-                // Help the trait_env fallback by carrying the call's method_info on
-                // the lookup key. `InstantiationKey` equality ignores `method_info`,
-                // so this only feeds the fallback's trait-name extraction; it does
-                // not perturb the literal hashmap lookup.
-                if key.method_info.is_none() {
-                    key.method_info.clone_from(&method_func.method_info);
-                }
-                if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
-                    key,
-                    &pk_candidates,
-                    pk_receiver_module.as_ref(),
-                ) {
-                    apply_instantiation(
-                        method_func,
-                        key.module_source.clone(),
-                        mangled,
-                        key.name.clone(),
-                        key.impl_type_args.clone(),
-                        key.method_type_args,
-                        false,
-                    );
-                    break;
-                }
-            }
-        }
-        // Blanket impl fallback: if the FunctionRef has monomorph_info from a
-        // blanket impl, rewrite to the monomorphized function name.
-        {
-            let blanket_lookup = if let FunctionRef {
-                monomorph_info: Some(mono),
-                ..
-            } = &**method_func
-                && mono.is_blanket
-            {
-                let info = method_func.method_info.as_ref();
-                let impl_ta = match (info.and_then(LocalMethodName::trait_decl), info) {
-                    (Some(trait_), Some(method)) => blanket_pack_dispatch_args(
-                        &mono.impl_type_args,
-                        &self.functions.trait_env,
-                        method,
-                        trait_,
-                        &method_func.module_source,
-                        &mono.generic_name,
-                        type_table,
-                    ),
-                    _ => None,
-                }
-                .unwrap_or_else(|| mono.impl_type_args.clone());
-                let key = InstantiationKey {
-                    def: None,
-                    name: mono.generic_name.clone(),
-                    module_source: method_func.module_source.clone(),
-                    impl_type_args: impl_ta.clone(),
-                    method_type_args: mono.method_type_args.clone(),
-                    method_info: method_func.method_info.clone(),
-                };
-                let mi = method_func.method_info.as_ref();
-                let candidates = receiver_candidates(mi, &[]);
-                let blanket_receiver_module = receiver_module_hint(type_table, receiver.type_id);
-                self.lookup_instantiation_with_trait_fallback(
-                    key,
-                    &candidates,
-                    blanket_receiver_module.as_ref(),
-                )
-                .map(|(k, mangled)| {
-                    (
-                        mangled,
-                        mono.generic_name.clone(),
-                        impl_ta.clone(),
-                        mono.method_type_args.clone(),
-                        k.module_source,
-                    )
-                })
-            } else {
-                None
-            };
-            if let Some((mangled, generic_name, impl_ta, method_ta, ms)) = blanket_lookup {
-                apply_instantiation(
-                    method_func,
-                    ms,
-                    mangled,
-                    generic_name,
-                    impl_ta,
-                    method_ta,
-                    true,
-                );
-            }
-        }
-        // Tuple variadic impl: rewrite `[]^Eq::eq` → `[]<i32,i32,i32>^Eq::eq`.
-        // The reserved tuple base name `[]` is unique to built-in tuples.
-        if let Some(ref info) = method_func.method_info
-            && TypeTable::is_tuple_type(&info.struct_name())
-        {
-            let mono = method_func.monomorph_info.as_ref();
-            let generic_name = mono.map(|m| m.generic_name.clone()).unwrap_or_else(|| {
-                // A tuple is module-independent, so its receiver form is bare.
-                MethodName::format_local(
-                    &FqTypeName::builtin(TypeTable::TUPLE_TYPE_NAME),
-                    info.trait_name.as_ref(),
-                    &info.method_name,
-                )
-            });
-            let impl_type_args = mono.map(|m| m.impl_type_args.clone()).unwrap_or_else(|| {
-                let receiver_type = type_table.peel_refs(receiver.type_id);
-                type_table.as_tuple(receiver_type).unwrap_or_default()
-            });
-            {
-                let key = InstantiationKey {
-                    def: None,
-                    name: generic_name.clone(),
-                    module_source: method_func.module_source.clone(),
-                    impl_type_args: impl_type_args.clone(),
-                    method_type_args: vec![],
-                    method_info: method_func.method_info.clone(),
-                };
-                let candidates = receiver_candidates(Some(info), &[TypeTable::TUPLE_TYPE_NAME]);
-                let tuple_receiver_module = receiver_module_hint(type_table, receiver.type_id);
-                if let Some((key, mangled)) = self.lookup_instantiation_with_trait_fallback(
-                    key,
-                    &candidates,
-                    tuple_receiver_module.as_ref(),
-                ) {
-                    apply_instantiation(
-                        method_func,
-                        key.module_source,
-                        mangled,
-                        generic_name,
-                        impl_type_args,
-                        vec![],
-                        false,
-                    );
-                }
-            }
-        }
-    }
-
-    /// For implicit generic calls (where `type_args` is empty but the callee was instantiated),
-    /// try to find the matching instantiation by checking all instantiated variants of the callee.
-    fn infer_instantiated_type_args(
-        &self,
-        qualified_func_name: &str,
-        method_info: &Option<LocalMethodName>,
-        args: &[CallArg],
-        type_table: &TypeTable,
-    ) -> Option<Vec<TypeId>> {
-        // Look for any instantiation whose name matches and whose arg types match
-        for (key, _mangled) in &self.functions.instantiated {
-            if key.name != qualified_func_name {
-                continue;
-            }
-            if key.method_info != *method_info {
-                continue;
-            }
-            if key.method_type_args.is_empty() {
-                continue;
-            }
-            // Found a candidate. Check if it's the right one by verifying
-            // that no type params remain in the args (concrete call).
-            // For single-instantiation cases (the common case), this is sufficient.
-            let all_args_concrete = args
+        if let ResolvedType::TypeParam { index, .. } = type_table.get(expr.type_id)
+            && let Some(&concrete) = key
+                .impl_type_args
                 .iter()
-                .all(|a| !type_table.contains_type_param(a.expr.type_id));
-            if all_args_concrete {
-                return Some(key.method_type_args.clone());
-            }
+                .chain(&key.method_type_args)
+                .nth(*index as usize)
+        {
+            expr.type_id = concrete;
         }
-        None
     }
+}
+
+/// Rebuild `func` to point at the instance `key` names, keeping the call's
+/// `method_info`. `monomorph_info` records the template's name and the
+/// arguments the instance was keyed with.
+fn apply_instantiation(func: &mut FunctionRef, key: &InstantiationKey, mangled: String) {
+    let generic_name = if key.method_info.is_some() {
+        key.name.clone()
+    } else {
+        func.name.clone()
+    };
+    let is_blanket = func.monomorph_info.as_ref().is_some_and(|m| m.is_blanket);
+    func.module_source.clone_from(&key.module_source);
+    func.name = mangled;
+    func.template = None;
+    func.monomorph_info = Some(MonomorphInfo {
+        generic_name,
+        impl_type_args: key.impl_type_args.clone(),
+        method_type_args: key.method_type_args.clone(),
+        is_blanket,
+    });
 }
 
 struct CallRewriter<'a> {
     mono: &'a Monomorphizer,
-    type_table: &'a TypeTable,
+    type_table: &'a mut TypeTable,
 }
 
 impl TirMutVisitor for CallRewriter<'_> {
@@ -819,23 +166,7 @@ impl TirMutVisitor for CallRewriter<'_> {
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &expr.kind {
-            TirExprKind::Call {
-                has_receiver: false,
-                ..
-            } => {
-                self.mono.rewrite_call_expr(expr, self.type_table);
-            }
-            TirExprKind::Call {
-                has_receiver: true, ..
-            } => {
-                self.mono.rewrite_method_call_expr(expr, self.type_table);
-            }
-            TirExprKind::FuncRef { .. } => {
-                self.mono.rewrite_func_ref_expr(expr);
-            }
-            _ => {}
-        }
+        self.mono.rewrite_to_instance(expr, self.type_table);
         self.walk_expr(expr);
     }
 }

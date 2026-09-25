@@ -78,7 +78,7 @@ use crate::name::{
 };
 use crate::symbol::{Symbol, SymbolKind};
 use crate::tir::{
-    EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
+    EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
 };
 use crate::token::Span;
@@ -221,6 +221,10 @@ fn literal_callee_ref(callee: &LiteralCallee) -> tir::FunctionRef {
     FunctionRef {
         module_source: callee.impl_module_source.clone(),
         name: callee.mangled_name.clone(),
+        template: callee.method_def.map(|def| TemplateId::Declared {
+            def,
+            block: callee.impl_def,
+        }),
         monomorph_info: (!callee.type_arg_ids.is_empty()).then(|| MonomorphInfo {
             generic_name: format!("{}::{}", callee.target_base_name, callee.method),
             impl_type_args: callee.type_arg_ids.clone(),
@@ -1730,7 +1734,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_export: false,
             is_async: func.is_async,
             type_params,
-            impl_origin: (!impl_type_params.is_empty()).then(|| origin.clone()),
+            impl_origin: Some(origin.clone()),
             impl_type_params,
             monomorph_info: None,
             method_info: Some(method_info),
@@ -3983,6 +3987,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 func: Box::new(FunctionRef {
                     module_source: assert_failed_module_source,
                     name: "assert_failed".to_string(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -7518,6 +7523,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
+                    template: Some(match facts.method_def {
+                        Some(def) => self.tysys.signatures.declared_template(def),
+                        None => TemplateId::Synthesized {
+                            module: facts.module_source.clone(),
+                            name: facts.mangled_name.clone(),
+                        },
+                    }),
                     module_source: facts.module_source,
                     name: facts.mangled_name,
                     monomorph_info: None,
@@ -8591,6 +8603,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 func: Box::new(tir::FunctionRef {
                                     module_source: ns_source,
                                     name: rest.to_string(),
+                                    template: None,
                                     monomorph_info: None,
                                     method_info: None,
                                 }),
@@ -8663,6 +8676,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     func: Box::new(tir::FunctionRef {
                         module_source: callee_module,
                         name: callee_name,
+                        template: self
+                            .tysys
+                            .resolutions
+                            .declared_if_walked(ident.id)
+                            .map(|def| TemplateId::Declared { def, block: None }),
                         monomorph_info: None,
                         method_info: None,
                     }),
@@ -9325,6 +9343,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: self.current_module_source.clone(),
                     name: ident.name.clone(),
                     type_args,
+                    template: self
+                        .tysys
+                        .resolutions
+                        .declared_if_walked(ident.id)
+                        .map(|def| TemplateId::Declared { def, block: None }),
                 },
                 recorded_type,
                 ident.span,
@@ -9348,6 +9371,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: import_src,
                     name: original_name,
                     type_args,
+                    template: Some(TemplateId::Declared { def, block: None }),
                 },
                 recorded_type,
                 ident.span,
@@ -9372,6 +9396,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: symbol.module_source().clone(),
                     name: symbol.name.clone(),
                     type_args,
+                    template: self
+                        .tysys
+                        .resolutions
+                        .declared_if_walked(ident.id)
+                        .map(|def| TemplateId::Declared { def, block: None }),
                 },
                 recorded_type,
                 ident.span,
@@ -9736,6 +9765,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: method_info.to_mangled_name(),
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }
@@ -10645,6 +10675,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tir::FunctionRef {
             module_source,
             name: method_info.to_mangled_name(),
+            template: None,
             monomorph_info: None,
             method_info: Some(method_info),
         }
@@ -11048,6 +11079,7 @@ fn build_int128_from_pair(
             func: Box::new(tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }),
@@ -11116,6 +11148,7 @@ fn build_int128_literal_call(
                 func: Box::new(tir::FunctionRef {
                     module_source: ModuleSource::int128(),
                     name: mangled_func_name,
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 }),
@@ -11153,6 +11186,7 @@ fn build_int128_from_intermediate(
             func: Box::new(tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }),

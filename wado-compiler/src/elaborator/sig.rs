@@ -7,7 +7,7 @@ use crate::ast::{Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable, positional_substitution};
+use crate::tir::{TemplateId, TypeId, TypeTable, positional_substitution};
 
 use super::sem::decls::FunctionSig;
 use crate::ast;
@@ -79,6 +79,13 @@ impl Signatures {
     /// Canonical signature of the method `def` declares.
     pub(crate) fn method_sig(&self, def: DefId) -> Option<&MethodSig> {
         self.method_sigs.get(&def)
+    }
+
+    /// What a call of the written declaration `def` instantiates: a free
+    /// function stands alone, a method sits in the block declaring it.
+    pub(crate) fn declared_template(&self, def: DefId) -> TemplateId {
+        let block = self.method_sig(def).and_then(|sig| sig.declaring_impl);
+        TemplateId::Declared { def, block }
     }
 
     /// Canonical signature of the operation `name` on the `interface` /

@@ -384,6 +384,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(trait_name.clone()),
             method.to_string(),
         );
+        let template = tir::TemplateId::Synthesized {
+            module: module_source.clone(),
+            name: method_info.to_mangled_name(),
+        };
         let monomorph_info = if type_args.is_empty() {
             None
         } else {
@@ -402,6 +406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         FunctionRef {
             module_source,
             name: method_info.to_mangled_name(),
+            template: Some(template),
             monomorph_info,
             method_info: Some(method_info),
         }
@@ -586,6 +591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: self.current_module_source.clone(),
             name: method_info.to_mangled_name(),
+            template: None,
             monomorph_info: None,
             method_info: Some(method_info),
         };
@@ -1387,13 +1393,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .fq_base_type_name(structure_ty);
+        let name = MethodName::format_local(&receiver, Some(&trait_name), &method);
         let func_ref = FunctionRef {
+            template: Some(tir::TemplateId::Synthesized {
+                module: module_source.clone(),
+                name: name.clone(),
+            }),
             module_source,
-            name: MethodName::format_local(&receiver, Some(&trait_name), &method),
+            name,
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
                 receiver,
-                Some(trait_name.clone()),
+                Some(trait_name),
                 method.clone(),
             )),
         };

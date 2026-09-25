@@ -704,9 +704,8 @@ mod tests {
         assert_eq!(defs.module(defs.members(greet)[0]), &module);
     }
 
-    /// A method the symbol table already collected (registered as
-    /// `Owner::method` so it can be imported) keeps that one identity and is
-    /// only linked to its owner.
+    /// A method the symbol table already collected (as `Owner::method`, so it
+    /// can be imported) keeps that one identity, named as its owner's member.
     #[test]
     fn a_member_the_symbol_table_collected_gets_no_second_identity() {
         let source = r#"
@@ -719,8 +718,7 @@ mod tests {
             .unwrap();
         assert_eq!(defs.members(logger).len(), 1);
         let method = defs.members(logger)[0];
-        // Registered under its importable name, and reached only once.
-        assert_eq!(defs.name(method), "Logger::log");
+        assert_eq!(defs.name(method), "log");
         assert_eq!(
             defs.iter()
                 .filter(|d| defs.ast_id(*d) == defs.ast_id(method))

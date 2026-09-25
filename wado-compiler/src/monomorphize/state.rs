@@ -5,15 +5,12 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::defs::DefId;
-use crate::elaborator::trait_env::{ReceiverCandidate, TraitEnv};
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::monomorphize::{Templates, dispatch_receiver_name};
-use crate::name::{
-    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, RefKind,
-    mangle_generic_name,
-};
-use crate::tir::{InstantiationKey, ResolvedType, TirTypeParam, TypeId, TypeTable};
+use crate::monomorphize::Templates;
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -36,13 +33,10 @@ pub(super) struct FuncInstState {
     /// under its rewritten form too ([`Monomorphizer::alias_canonical_keys`]),
     /// so pre- and post-substitution `TypeId`s of one type reach one entry.
     pub instantiated: IndexMap<InstantiationKey, String>,
-    /// The mangled names present in [`Self::instantiated`], which a blanket
-    /// instance is deduped on (`instantiated` is grow-only, so this stays a
-    /// faithful mirror of its value set).
-    pub instantiated_names: IndexSet<String>,
-    /// The `(module, mangled name)` pairs queued so far: the identity of every
-    /// other instance, since two keys can name one body.
-    pub instantiated_homes: IndexSet<(ModuleSource, String)>,
+    /// The `(module, mangled name)` of every queued instance, with the
+    /// template it instantiates: two keys can name one body, never two
+    /// templates.
+    pub instantiated_homes: IndexMap<(ModuleSource, String), Option<TemplateId>>,
     /// Work queue of pending function instantiations, each a key of
     /// [`Self::instantiated`].
     pub pending: Vec<InstantiationKey>,
@@ -191,8 +185,7 @@ impl Monomorphizer {
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
-                instantiated_names: IndexSet::default(),
-                instantiated_homes: IndexSet::default(),
+                instantiated_homes: IndexMap::default(),
                 pending: Vec::new(),
                 trait_env,
                 templates: Rc::new(Templates::default()),
@@ -299,43 +292,28 @@ impl Monomorphizer {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
-        if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
-            return false;
-        }
-        // A blanket instance is one body wherever it is asked from, queued
-        // under the blanket's home module: a request under another module
-        // is dropped, and its call site reaches the body through
-        // `lookup_instantiation_with_trait_fallback`. Only a *universal* `&T`
-        // blanket qualifies for the ref case, or a newtype-peeled `&^Trait`
-        // shape impl would dedup wrongly.
-        let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && key.method_info.as_ref().is_some_and(|i| {
-                i.ref_receiver().is_some_and(|ref_kind| {
-                    i.trait_decl().is_some_and(|trait_| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(trait_, ref_kind == RefKind::Mut)
-                    })
-                })
-            });
-        let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
-        if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
-            return false;
-        }
-        // Any other instance is one body per module, the module being part of
-        // its identity: `&List<T>`'s and `&Array<T>`'s impls of one trait
-        // mangle alike under the collapsed `&` head and live in two modules.
-        // A second key under the body's own module — a `GenericInstance` and
-        // the `Struct` it became — is an alias of that body.
+        assert!(
+            !self.concrete_impl_owns_name(&key, &mangled_name, type_table),
+            "`{mangled_name}` instantiates a generic block where a written impl answers"
+        );
+        // An instance is one body per module, the module being part of its
+        // identity: `&List<T>`'s and `&Array<T>`'s impls of one trait mangle
+        // alike under the collapsed `&` head and live in two modules. A second
+        // key under the body's own module — a `GenericInstance` and the
+        // `Struct` it became — is an alias of that body.
         let home = (key.module_source.clone(), mangled_name.clone());
-        if self.functions.instantiated_homes.contains(&home) {
+        if let Some(template) = self.functions.instantiated_homes.get(&home) {
+            assert_eq!(
+                *template, key.template,
+                "two templates instantiate `{mangled_name}` in `{}`",
+                key.module_source
+            );
             self.functions.instantiated.insert(key, mangled_name);
             return false;
         }
-        self.functions.instantiated_homes.insert(home);
         self.functions
-            .instantiated_names
-            .insert(mangled_name.clone());
+            .instantiated_homes
+            .insert(home, key.template.clone());
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);
@@ -481,54 +459,6 @@ impl Monomorphizer {
         MethodName::join_struct_method(&mangled_struct, &mangled_method)
     }
 
-    /// Get the struct name from a `type_id`, unwrapping references if needed
-    /// For generic instances, returns the mangled name with type args (e.g., "List<i32>")
-    pub fn get_struct_name_from_type(
-        &self,
-        type_id: TypeId,
-        type_table: &TypeTable,
-    ) -> Option<String> {
-        match type_table.get(type_id) {
-            // The identity a method name is built from, so the rendered
-            // spelling: `Slice<u8>::internal_repr`, not `Slice`.
-            ResolvedType::Struct { def, type_args } => {
-                Some(type_table.struct_rendered_name(*def, type_args))
-            }
-            ResolvedType::Enum { def }
-            | ResolvedType::Variant { def }
-            | ResolvedType::Flags { def } => Some(type_table.def_name(*def).to_string()),
-            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            // `()` names its impls under the same spelling the source writes
-            // (`impl Trait for ()`), so a unit receiver finds them like a
-            // primitive does.
-            ResolvedType::Unit => Some(TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::GenericResource { def, type_args } => {
-                // Return the mangled name with type args (e.g., "List<i32>", "Box<String>")
-                let args: Vec<String> = type_args
-                    .iter()
-                    .map(|arg| type_table.mangle_type_arg_for_generic(*arg))
-                    .collect();
-                Some(mangle_generic_name(type_table.def_name(*def), &args))
-            }
-            ResolvedType::BuiltinArray(elem) => {
-                let arg = type_table.mangle_type_name(*elem);
-                Some(mangle_generic_name(TypeTable::ARRAY_TYPE_NAME, &[arg]))
-            }
-            // Newtypes are transparent for method lookup — unwrap to base type,
-            // same as Ref/MutRef. The elaborator already resolves methods through
-            // newtypes, so the monomorphizer needs to see the base type to find
-            // the correct generic function template.
-            ResolvedType::Newtype { base_type, .. } => {
-                self.get_struct_name_from_type(*base_type, type_table)
-            }
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                self.get_struct_name_from_type(*inner, type_table)
-            }
-            _ => None,
-        }
-    }
-
     /// The newtype's own name when `type_id` peels to one that answers this call
     /// with its *own* impl, else `None`. Unlike
     /// [`Self::get_struct_name_from_type`], which peels newtypes transparently,
@@ -604,70 +534,6 @@ impl Monomorphizer {
         // Comparing those two never matched for a generic newtype, so the guard
         // never fired and the receiver was peeled to the base it inherits from.
         own.as_ref() == Some(&info.fq_base_struct_name())
-    }
-
-    /// The ordered `(mangled_method_name, trait_name)` formats to probe when
-    /// resolving a generic method call, a newtype's own impl before its base so
-    /// resolution lands on `ByteList^serialize` rather than `List^serialize`.
-    /// Each candidate name yields both the inherent and trait-qualified forms.
-    /// Shared by the collect and rewrite paths, keeping them in lockstep.
-    pub fn newtype_aware_method_names(
-        &self,
-        receiver_type_id: TypeId,
-        type_table: &TypeTable,
-        method_name: &str,
-        trait_name: Option<&FqTraitName>,
-    ) -> (Option<String>, Vec<(String, Option<FqTraitName>)>) {
-        let own_name = self.newtype_own_struct_name_with_impl(
-            receiver_type_id,
-            type_table,
-            method_name,
-            trait_name,
-        );
-        let mut names: Vec<(String, Option<FqTraitName>)> = Vec::new();
-        let mut push_for = |s: FqTypeName| {
-            names.push((MethodName::format_local(&s, None, method_name), None));
-            if let Some(tn) = trait_name {
-                names.push((
-                    MethodName::format_local(&s, Some(tn), method_name),
-                    Some(tn.clone()),
-                ));
-            }
-        };
-        if let Some(own) = own_name.clone() {
-            push_for(own);
-        }
-        // The key's `impl_type_args` are empty here — the instantiation is
-        // spelled into the name, so the receiver keeps its type arguments.
-        push_for(dispatch_receiver_name(type_table, receiver_type_id));
-        (own_name.map(|n| n.to_mangled()), names)
-    }
-
-    /// Build the candidate struct-name set for trait-fallback template lookup,
-    /// ordered newtype-own first, then the method's base/impl struct names, then
-    /// the receiver's struct name. Mirrors the ordering of the name list from
-    /// [`Self::newtype_aware_method_names`].
-    pub fn newtype_aware_candidates<'a>(
-        &self,
-        own_name: Option<&'a str>,
-        info: Option<&'a LocalMethodName>,
-        struct_name: &'a str,
-    ) -> Vec<ReceiverCandidate> {
-        let mangled = |s: &str| ReceiverCandidate::Instantiated(MangledName::new(s));
-        let mut c: Vec<ReceiverCandidate> = Vec::new();
-        // `own_name` is `FqTypeName::to_mangled`, so it carries its module.
-        if let Some(own) = own_name {
-            c.push(mangled(own));
-        }
-        if let Some(info) = info {
-            c.push(ReceiverCandidate::Of(info.receiver.clone()));
-            c.push(mangled(&info.struct_name()));
-        }
-        // `struct_name` is `get_struct_name_from_type`'s rendered spelling —
-        // the declaration's own name, with no module. Asking the mangled map
-        // for it reaches nothing, because every key there is module-qualified.
-        c.push(ReceiverCandidate::Declared(DeclName::new(struct_name)));
-        c
     }
 
     /// A generic newtype answers under its own head for what its own impl

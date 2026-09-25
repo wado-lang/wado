@@ -160,6 +160,7 @@ impl Monomorphizer {
                         impl_type_args: type_args.clone(),
                         method_type_args: vec![],
                         method_info: None, // Struct instantiation,
+                        template: None,
                     };
 
                     let mangled = self.instantiation_name(&key, type_table);

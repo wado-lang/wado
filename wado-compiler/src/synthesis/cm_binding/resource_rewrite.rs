@@ -1260,6 +1260,7 @@ fn synthesize_stream_read_func(
     // carries it rather than the spelling `List` happens to have.
     let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
     let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
+    let list_template = |item| type_table.borrow().compiler_items().require_template(item);
     // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
     let list_method = |method: &str| {
         LocalMethodName::new(list_fq.clone(), None, method.to_string())
@@ -1380,6 +1381,7 @@ fn synthesize_stream_read_func(
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::list(),
                 name: with_capacity.to_mangled_name(),
+                template: Some(list_template(CompilerItem::ListWithCapacity)),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::with_capacity"),
                     impl_type_args: vec![elem_type_id],
@@ -1479,6 +1481,7 @@ fn synthesize_stream_read_func(
             FunctionRef {
                 module_source: ModuleSource::list(),
                 name: push.to_mangled_name(),
+                template: Some(list_template(CompilerItem::ListPush)),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::push"),
                     impl_type_args: vec![elem_type_id],
@@ -1883,13 +1886,22 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     else {
         return;
     };
-    let (canonical, helper) = if is_future {
+    let (canonical, helper, item) = if is_future {
         let payload = classify_future_payload(tt, payload_tid);
-        (CanonicalIntrinsic::FutureNew(payload), "cm_future_pair")
+        (
+            CanonicalIntrinsic::FutureNew(payload),
+            "cm_future_pair",
+            CompilerItem::CmFuturePair,
+        )
     } else {
         let payload = classify_stream_payload(tt, payload_tid);
-        (CanonicalIntrinsic::StreamNew(payload), "cm_stream_pair")
+        (
+            CanonicalIntrinsic::StreamNew(payload),
+            "cm_stream_pair",
+            CompilerItem::CmStreamPair,
+        )
     };
+    let template = tt.compiler_items().require_template(item);
     let result_type = expr.type_id;
     let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);
     *expr = TirExpr::new(
@@ -1897,6 +1909,7 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::rt(),
                 name: helper.to_string(),
+                template: Some(template),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: helper.to_string(),
                     impl_type_args: vec![payload_tid],

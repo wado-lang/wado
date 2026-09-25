@@ -1311,7 +1311,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut type_table = state.tysys.type_table.borrow_mut();
         for (def, sig) in &sem.decls.impl_sigs {
             signatures.impl_sigs.insert(*def, sig.clone());
-            type_table.record_impl_target(*def, sig.target_type_args.clone());
+            type_table.record_impl_target(*def, sig.target, sig.target_type_args.clone());
         }
     }
 
@@ -3322,6 +3322,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> CompilerNamed {
             Some(Resolved::Function {
                 module_source,
                 name,
+                ..
             }) => {
                 named
                     .functions

@@ -81,6 +81,9 @@ pub(super) struct StaticMethodRef {
     /// The method this selection picked. `None` when no declaration backs
     /// it — the auto-derived `Default::default`.
     pub method_id: Option<DefId>,
+    /// The `impl` block supplying the body, where it is not the one declaring
+    /// [`Self::method_id`]: a trait's default, emitted once per block.
+    pub supplying_block: Option<DefId>,
 }
 
 impl StaticMethodRef {
@@ -97,6 +100,14 @@ impl StaticMethodRef {
             method_name: method_name.into(),
             trait_name,
             method_id,
+            supplying_block: None,
+        }
+    }
+
+    pub fn supplied_by(self, block: DefId) -> Self {
+        Self {
+            supplying_block: Some(block),
+            ..self
         }
     }
 }

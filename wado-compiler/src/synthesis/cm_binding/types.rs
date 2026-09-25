@@ -14,7 +14,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
 };
 
@@ -54,6 +54,10 @@ pub struct CmStdlibNames {
     pub index_value: FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: FqTypeName,
+    /// `List::len`, the declaration a list adapter's length call instantiates.
+    pub list_len: TemplateId,
+    /// `List`'s `index_value`, likewise for the element read.
+    pub list_index_value: TemplateId,
     /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
     pub tree_map: Option<String>,
 }
@@ -91,6 +95,8 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            list_len: items.require_template(CompilerItem::ListLen),
+            list_index_value: items.require_template(CompilerItem::ListIndexValue),
             tree_map: items
                 .struct_name_opt(CompilerItem::TreeMap)
                 .map(str::to_string),

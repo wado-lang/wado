@@ -715,6 +715,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "copy_value".to_string(),
+        template: None,
         monomorph_info: Some(MonomorphInfo {
             generic_name: "copy_value".to_string(),
             impl_type_args: vec![type_id],
@@ -758,6 +759,7 @@ fn build_array_clone(
     let func = FunctionRef {
         module_source: ModuleSource::builtin(),
         name: name.to_string(),
+        template: None,
         monomorph_info: Some(MonomorphInfo {
             generic_name: name.to_string(),
             impl_type_args: vec![elem_type],

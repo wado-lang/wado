@@ -1858,6 +1858,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let referenced = FunctionRef {
                     module_source: module_source.clone(),
                     name: name.clone(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 };

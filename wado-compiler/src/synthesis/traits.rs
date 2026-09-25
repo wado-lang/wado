@@ -22,8 +22,8 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::common::{
-    deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
-    synth_span, write_str_stmt,
+    FormatterWriteStr, deref_expr, make_synthetic_free_function, make_synthetic_method,
+    param_local, ref_expr, synth_span, write_str_stmt,
 };
 use crate::ast::Visibility;
 use crate::defs::DefId;
@@ -34,8 +34,8 @@ use crate::name::{
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
-use crate::synthesis::template::blanket_dispatch_for;
-use crate::tir::{StructDef, TemplateShape, TraitRef};
+use crate::synthesis::template::{blanket_dispatch_for, trait_method_template};
+use crate::tir::{StructDef, TemplateId, TemplateShape, TraitRef};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -46,9 +46,8 @@ use crate::{hashmap, tir};
 /// [`super::template::FormatStdlibNames`].
 #[derive(Clone, Debug)]
 pub(crate) struct TraitsStdlibNames {
-    /// `formatter` named by its declaring module — the form a function name
-    /// embeds. The bare `formatter` stays for type-table lookups.
-    pub formatter_fq: FqTypeName,
+    /// `Formatter::write_str`, the text a derived body writes through.
+    pub write_str: FormatterWriteStr,
     /// The same traits as a mangled method name embeds them.
     pub display_fq: FqTraitName,
     pub inspect_fq: FqTraitName,
@@ -86,7 +85,7 @@ impl TraitsStdlibNames {
         let (_, _, greater_name, greater_index) =
             items.require_enum_case(CompilerItem::OrderingGreater);
         Self {
-            formatter_fq: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
+            write_str: FormatterWriteStr::from_type_table(type_table),
             display_fq: items.trait_fq(CompilerItem::Display),
             inspect_fq: items.trait_fq(CompilerItem::Inspect),
             lower_hex_fq: items.trait_fq(CompilerItem::LowerHex),
@@ -320,6 +319,7 @@ pub fn synthesize_traits(project: Package) -> Package {
     // canonical project-wide synthesis layer is rebuilt afterwards by
     // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
     // and captures concrete-ness from the synthesized function itself.
+    let partial_impls = first_module.type_table.borrow().partial_impls();
     let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
@@ -333,6 +333,7 @@ pub fn synthesize_traits(project: Package) -> Package {
             requested: &requested,
             module: module_source.clone(),
             names: &names,
+            partial_impls: &partial_impls,
         };
         generate_enum_trait_impls(module, &mut ctx);
         generate_flags_trait_impls(module, &mut ctx);
@@ -369,6 +370,7 @@ pub fn synthesize_defaults(project: &mut Package) {
         .bound_driven_synth_requests(|key| Some(key) == default_trait_key.as_ref())
         .into_iter()
         .collect();
+    let partial_impls = first_module.type_table.borrow().partial_impls();
 
     let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
@@ -383,6 +385,7 @@ pub fn synthesize_defaults(project: &mut Package) {
             requested: &requested,
             module: module_source.clone(),
             names: &names,
+            partial_impls: &partial_impls,
         };
         generate_struct_default_impls(module, &mut ctx);
     }
@@ -428,6 +431,14 @@ fn run_reflect_synthesis(
     generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &FqTraitName),
 ) {
     let trait_env = project.trait_env.clone();
+    let partial_impls = project
+        .tir_modules
+        .values()
+        .next()
+        .expect("tir_modules must contain at least the entry module during synthesis")
+        .type_table
+        .borrow()
+        .partial_impls();
     let mut pending = SynthRequests::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
@@ -441,6 +452,7 @@ fn run_reflect_synthesis(
             requested,
             module: module_source,
             names: &names,
+            partial_impls: &partial_impls,
         };
         generate_impls(module, &mut ctx, trait_name);
     }
@@ -2168,6 +2180,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -3377,6 +3390,10 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// trait / struct names
     /// instead of hard-coding `"Inspect"` / `"Formatter"` / etc.
     pub(crate) names: &'env TraitsStdlibNames,
+    /// The impl blocks reaching only some instances of their head, as
+    /// [`TypeTable::impl_covers_every_instance`] answers once per pass, before
+    /// it borrows the table for writing.
+    pub(crate) partial_impls: &'env IndexSet<DefId>,
 }
 
 impl SynthesisCtx<'_, '_, '_> {
@@ -3456,7 +3473,9 @@ impl SynthesisCtx<'_, '_, '_> {
             ImplScope::AnyModule => None,
         };
         self.trait_env
-            .has_covering_methodful_impl_by_receiver(&type_key, trait_, module)
+            .has_covering_methodful_impl_by_receiver(&type_key, trait_, module, |block| {
+                !self.partial_impls.contains(&block)
+            })
             || self.pending_has(receiver, trait_key)
     }
 
@@ -3997,7 +4016,7 @@ fn generate_variant_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, 
 fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     let module_source = module.module_source.clone();
     let mut generated = Vec::new();
-    let formatter_fq = ctx.names.formatter_fq.clone();
+    let write_str = ctx.names.write_str.clone();
     let inspect_method = ctx.names.inspect_method.clone();
     let inspect_fq = ctx.names.inspect_fq.clone();
     let lower_hex_fq = ctx.names.lower_hex_fq.clone();
@@ -4064,7 +4083,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                     span,
                     &inspect_fq,
                     &inspect_method,
-                    &formatter_fq,
+                    &write_str,
                     &lower_hex_fq,
                     &lower_hex_method,
                 ))));
@@ -4093,7 +4112,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             *rspan,
             &inspect_fq,
             &inspect_method,
-            &formatter_fq,
+            &write_str,
             &lower_hex_fq,
             &lower_hex_method,
         ))));
@@ -4136,7 +4155,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
 
     let display_fq = ctx.names.display_fq.clone();
     let display_method = ctx.names.display_method.clone();
-    let formatter_fq = ctx.names.formatter_fq.clone();
+    let write_str = ctx.names.write_str.clone();
 
     let enum_infos: Vec<_> = module
         .enums
@@ -4170,7 +4189,7 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
             *espan,
             &display_fq,
             &display_method,
-            &formatter_fq,
+            &write_str,
         ))));
         ctx.record_impl(receiver, &display_fq.canonical().expect(KEYED));
     }
@@ -4192,7 +4211,7 @@ fn generate_enum_display_fn(
     span: Span,
     display_trait: &FqTraitName,
     display_method: &str,
-    formatter_fq: &FqTypeName,
+    write_str: &FormatterWriteStr,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, display_trait, display_method);
     let qualified_name = method_info.to_mangled_name();
@@ -4208,7 +4227,7 @@ fn generate_enum_display_fn(
                 fmt(),
                 string_type,
                 span,
-                formatter_fq,
+                write_str,
             )],
             span,
         );
@@ -4307,7 +4326,7 @@ fn generate_opaque_inspect_fn(
     span: Span,
     inspect_trait: &FqTraitName,
     inspect_method: &str,
-    formatter_fq: &FqTypeName,
+    write_str: &FormatterWriteStr,
     lower_hex_trait: &FqTraitName,
     lower_hex_method: &str,
 ) -> TirFunction {
@@ -4343,7 +4362,7 @@ fn generate_opaque_inspect_fn(
                 fmt(),
                 string_type,
                 span,
-                formatter_fq,
+                write_str,
             ),
             hex_stmt,
         ],
@@ -4732,33 +4751,54 @@ fn trait_call_on_type(
         blanket_dispatch_for(trait_env, value_type, trait_name, method_name, tt)
     };
 
-    let (impl_module, monomorph_info) = if let Some((mono, blanket_module)) = blanket {
-        (blanket_module, Some(mono))
-    } else {
-        let impl_module = if is_type_param {
-            module_source.clone()
+    let (impl_module, monomorph_info, template) =
+        if let Some((mono, blanket_module, template)) = blanket {
+            (blanket_module, Some(mono), Some(template))
         } else {
-            resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
-        };
-        let monomorph_info = if needs_ref_monomorph {
-            match &resolved {
-                ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                    let base_info =
-                        trait_method_info(&info.fq_base_struct_name(), trait_name, method_name);
-                    Some(MonomorphInfo {
-                        generic_name: base_info.to_mangled_name(),
-                        impl_type_args: vec![*inner_id],
-                        method_type_args: vec![],
-                        is_blanket: true,
-                    })
+            let impl_module = if is_type_param {
+                module_source.clone()
+            } else {
+                resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
+            };
+            let monomorph_info = if needs_ref_monomorph {
+                match &resolved {
+                    ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
+                        let base_info =
+                            trait_method_info(&info.fq_base_struct_name(), trait_name, method_name);
+                        Some(MonomorphInfo {
+                            generic_name: base_info.to_mangled_name(),
+                            impl_type_args: vec![*inner_id],
+                            method_type_args: vec![],
+                            is_blanket: true,
+                        })
+                    }
+                    _ => None,
                 }
-                _ => None,
-            }
-        } else {
-            None
+            } else {
+                None
+            };
+            let template = if is_type_param || tt.receiver_head_awaits_substitution(value_type) {
+                None
+            } else {
+                trait_name
+                    .canonical()
+                    .and_then(|trait_| {
+                        trait_method_template(trait_env, trait_, method_name, value_type, tt)
+                    })
+                    .or_else(|| {
+                        Some(TemplateId::Synthesized {
+                            module: impl_module.clone(),
+                            name: trait_method_info(
+                                &info.fq_base_struct_name(),
+                                trait_name,
+                                method_name,
+                            )
+                            .to_mangled_name(),
+                        })
+                    })
+            };
+            (impl_module, monomorph_info, template)
         };
-        (impl_module, monomorph_info)
-    };
 
     let fn_name = info.to_mangled_name();
     TirExpr::new(
@@ -4767,6 +4807,7 @@ fn trait_call_on_type(
             FunctionRef {
                 module_source: impl_module,
                 name: fn_name,
+                template,
                 monomorph_info,
                 method_info: Some(info),
             },

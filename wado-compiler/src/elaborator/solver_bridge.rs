@@ -1025,7 +1025,20 @@ impl SolverBridge {
             } else {
                 &declarations[..]
             };
-            derive(program, lowering.trait_decl(trait_), eligible);
+            let trait_ = lowering.trait_decl(trait_);
+            // An impl with no block is one the compiler states on a primitive,
+            // whose target writes no argument.
+            let covers = |id: ImplId, def: &ImplDef| {
+                if let Some(&block) = lowering.impl_defs.get(&id) {
+                    return table.impl_covers_every_instance(block);
+                }
+                assert!(
+                    matches!(&def.target, SolverType::Decl(_, args) if args.is_empty()),
+                    "a compiler-stated impl targets a head writing no argument"
+                );
+                true
+            };
+            derive(program, trait_, eligible, covers);
         }
     }
 

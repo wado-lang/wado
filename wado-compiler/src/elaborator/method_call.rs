@@ -7,7 +7,8 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TupleSlot, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TemplateId, TupleSlot, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -544,6 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_found = method_info.is_some();
         let MethodInfo {
             method_def: dispatched_method_def,
+            impl_block: dispatched_impl_block,
             mut return_type,
             self_kind,
             param_types,
@@ -575,6 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             MethodInfo {
                 impl_type_bindings: Vec::new(),
                 method_def: None,
+                impl_block: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
                 param_types: vec![],
@@ -975,6 +978,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
 
+        // What the call instantiates: the declaration dispatch selected, in the
+        // block that answered, or the body derivation mints in the receiver's
+        // module. A bound on a parameter answers from no block; the instance
+        // decides.
+        let template = match (dispatched_method_def, dispatched_impl_block) {
+            (Some(def), Some(block)) => Some(TemplateId::Declared {
+                def,
+                block: Some(block),
+            }),
+            (Some(_), None) => None,
+            (None, _) => trait_impl_module_source
+                .clone()
+                .map(|module| TemplateId::Synthesized {
+                    module,
+                    name: MethodName::format_local(
+                        &base_struct_name,
+                        trait_name.as_ref(),
+                        method_name,
+                    ),
+                }),
+        };
+
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
             // A method from a concrete instantiation impl (`impl List<u8>`) is a
@@ -1103,6 +1128,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func = FunctionRef {
             module_source: method_module_source,
             name: mangled_method_name,
+            template,
             monomorph_info,
             method_info: Some(method_info),
         };
@@ -2382,15 +2408,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Wrapper` to find and mints a shape head under the wrong module.
         let receiver_name = mangled_struct_name.head_only();
 
-        // Build monomorph_info for generic instantiations
+        let generic_name =
+            MethodName::format_local(&receiver_name, trait_name_opt.as_ref(), &static_call.method);
+        let template = match &selected {
+            Some(r) => self.static_template(r, || generic_name.clone()),
+            None => declaration.map(|def| self.declared_template(def)),
+        };
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
-            let generic_name = MethodName::format_local(
-                &receiver_name,
-                trait_name_opt.as_ref(),
-                &static_call.method,
-            );
             Some(MonomorphInfo {
                 generic_name,
                 impl_type_args: struct_type_args.clone(),
@@ -2442,6 +2468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .concrete_impl_module_of(selected.as_ref())
                 .unwrap_or(struct_module),
             name: mangled_func_name,
+            template,
             monomorph_info,
             method_info: Some(method_info),
         };
@@ -2583,6 +2610,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: blanket_module,
             name: method_info.to_mangled_name(),
+            template: self.tysys.trait_env.method_template(blanket_def, method),
             monomorph_info: Some(MonomorphInfo {
                 generic_name: template_name,
                 impl_type_args: vec![receiver_type_id],
@@ -3358,6 +3386,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (!open).then_some(impl_def)
     }
 
+    /// What a static call instantiates: the selected declaration in the block
+    /// supplying its body, or the body derivation mints as `derived_name`.
+    /// `None` for a declaration no block supplies, which the instance decides.
+    pub(super) fn static_template(
+        &self,
+        selected: &StaticMethodRef,
+        derived_name: impl FnOnce() -> String,
+    ) -> Option<TemplateId> {
+        let Some(def) = selected.method_id else {
+            return Some(TemplateId::Synthesized {
+                module: selected.module.clone(),
+                name: derived_name(),
+            });
+        };
+        let block = selected
+            .supplying_block
+            .or_else(|| self.tysys.signatures.method_sig(def)?.declaring_impl)?;
+        Some(TemplateId::Declared {
+            def,
+            block: Some(block),
+        })
+    }
+
+    /// What a call of the written declaration `def` instantiates.
+    pub(super) fn declared_template(&self, def: DefId) -> TemplateId {
+        self.tysys.signatures.declared_template(def)
+    }
+
     /// The module a concrete block hosts its function in — its own.
     fn concrete_impl_module_of(&self, selected: Option<&StaticMethodRef>) -> Option<ModuleSource> {
         let impl_def = self.concrete_impl_of(selected)?;
@@ -3644,7 +3700,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = newtype_id;
         }
 
-        // Build monomorph_info for impl-level and/or method-level generic instantiation
+        let template = self.static_template(&method_ref, || final_mangled_name.clone());
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
@@ -3724,6 +3780,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: struct_module,
             name: final_mangled_name,
+            template,
             monomorph_info,
             method_info: Some({
                 // The same head the name was built from: mono looks the concrete

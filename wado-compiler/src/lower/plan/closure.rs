@@ -939,6 +939,7 @@ impl ClosureLowerer {
                         FunctionRef {
                             module_source: ModuleSource::format(),
                             name: format!("{}::{}", fmt.fq, fmt.write_literal),
+                            template: None,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 fmt.fq.clone(),
@@ -1037,6 +1038,7 @@ impl ClosureLowerer {
                         Some(target_trait),
                         target_method,
                     ),
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         FqTypeName::shape(&self.module_source, struct_name),
@@ -1421,6 +1423,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             name,
             module_source: func_module,
             type_args: _,
+            template: _,
         } = &expr.kind
         {
             let Some(sig) = self.func_sigs.get(name.as_str()) else {
@@ -1479,6 +1482,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     func: Box::new(FunctionRef {
                         module_source: func_module,
                         name: func_name,
+                        template: None,
                         monomorph_info: None,
                         method_info: None,
                     }),
@@ -1799,6 +1803,7 @@ impl ClosureCallSiteLowerer<'_> {
         *func = FunctionRef {
             module_source: self.module_source.clone(),
             name: specialized_name.clone(),
+            template: None,
             monomorph_info: orig_monomorph_info,
             method_info: specialized_method_info,
         };
@@ -1889,6 +1894,7 @@ impl ClosureCallSiteLowerer<'_> {
             // a different module, but the impl itself doesn't move.
             module_source: functor.module_source.clone(),
             name: new_name,
+            template: None,
             monomorph_info: None,
             method_info: Some(new_method_info),
         };

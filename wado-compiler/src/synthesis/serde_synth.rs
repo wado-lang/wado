@@ -236,7 +236,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
             if func
                 .impl_origin
                 .as_ref()
-                .is_some_and(|origin| !tt.impl_target_covers_every_instance(&origin.target_args))
+                .is_some_and(|origin| !tt.impl_covers_every_instance(origin.def))
             {
                 return None;
             }
@@ -425,6 +425,7 @@ fn byte_slice_method_call(
             FunctionRef {
                 module_source,
                 name: method_info.to_mangled_name(),
+                template: Some(compiler_items.require_template(item)),
                 monomorph_info: Some(monomorph_info),
                 method_info: Some(method_info),
             },

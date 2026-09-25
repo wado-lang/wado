@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -688,6 +688,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Some(MethodInfo {
                             impl_type_bindings: Vec::new(),
                             method_def: None,
+                            impl_block: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -732,6 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Some(MethodInfo {
                             impl_type_bindings: Vec::new(),
                             method_def: None,
+                            impl_block: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
                             param_types: vec![],
@@ -1010,6 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(MethodInfo {
             impl_type_bindings,
             method_def: Some(sig.def),
+            impl_block: Some(impl_ref.0),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -1132,6 +1135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A generic resource is rejected, so its methods take no slots.
             impl_type_bindings: Vec::new(),
             method_def: Some(sig.def),
+            impl_block: None,
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -2217,6 +2221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_info: MethodInfo {
                     impl_type_bindings: impl_type_bindings.clone(),
                     method_def: Some(method_sig.def),
+                    impl_block: Some(impl_ref.0),
                     return_type,
                     self_kind,
                     param_types,
@@ -2273,6 +2278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_info: MethodInfo {
                         impl_type_bindings,
                         method_def: Some(default_method.sig.def),
+                        impl_block: Some(impl_ref.0),
                         return_type: instantiated.return_type,
                         self_kind,
                         param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -3221,6 +3227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
+            impl_block,
             mut return_type,
             self_kind,
             param_types,
@@ -3292,6 +3299,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 function_ref: FunctionRef {
                     module_source: index_mut_info.impl_module_source.clone(),
                     name: mangled_index_mut_name,
+                    template: Some(self.declared_template(index_mut_info.method_def)),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         container_fq,
@@ -3374,6 +3382,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func = FunctionRef {
             module_source: method_call_module_source,
             name: mangled_method_name,
+            template: method_def
+                .zip(impl_block)
+                .map(|(def, block)| TemplateId::Declared {
+                    def,
+                    block: Some(block),
+                }),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
                 output_fq,

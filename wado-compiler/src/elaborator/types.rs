@@ -2585,6 +2585,9 @@ pub(super) struct MethodInfo {
     /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
     /// error-recovery placeholder.
     pub(super) method_def: Option<DefId>,
+    /// The `impl` block whose body answers: with [`Self::method_def`], the
+    /// template the call instantiates. `None` where no block backs the body.
+    pub(super) impl_block: Option<DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)

@@ -1907,6 +1907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(self.declared_template(trait_info.method_def)),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1959,6 +1960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(self.declared_template(trait_info.method_def)),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,

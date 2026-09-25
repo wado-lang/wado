@@ -396,6 +396,7 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
     name: &str,
+    def: DefId,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -412,6 +413,7 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
     let resolved = Resolved::Function {
         module_source: module_source.clone(),
         name: name.to_string(),
+        def: Some(def),
     };
     bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }
@@ -421,6 +423,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
     method_name: &str,
+    (def, block): (DefId, Option<DefId>),
     owner_type: &str,
     owner_head: &FqTypeName,
     module_source: &ModuleSource,
@@ -436,6 +439,8 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
         owner_type: owner_type.to_string(),
         owner_head: Some(owner_head.clone()),
         name: method_name.to_string(),
+        def: Some(def),
+        block,
     };
     bind_compiler_item(type_table, item, resolved, module_source, span, logger);
 }

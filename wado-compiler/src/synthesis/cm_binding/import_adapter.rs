@@ -950,6 +950,7 @@ impl<'a> AdapterBuilder<'a> {
             &self.lower_ctx.names.array_fq,
             "len",
             ModuleSource::list(),
+            self.lower_ctx.names.list_len.clone(),
             vec![],
             TypeTable::I32,
         );
@@ -1045,6 +1046,7 @@ impl<'a> AdapterBuilder<'a> {
                     FunctionRef {
                         module_source: ModuleSource::list(),
                         name: iv_mangled,
+                        template: Some(self.lower_ctx.names.list_index_value.clone()),
                         monomorph_info: None,
                         method_info: Some(iv_info),
                     },
@@ -1312,6 +1314,7 @@ impl<'a> AdapterBuilder<'a> {
                 module_source: self.entry_source.clone(),
                 name: lift_fn_name,
                 type_args: Vec::new(),
+                template: None,
             },
             lift_fn_type,
             synth_span(),

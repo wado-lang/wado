@@ -43,6 +43,7 @@ pub struct List<T> {
 }
 
 impl<T> List<T> {
+    #[compiler_item("list_with_capacity")]
     pub fn with_capacity(capacity: i32) -> List<T> {
         return List { repr: builtin::array_new(capacity), used: 0 };
     }
@@ -82,6 +83,7 @@ impl<T> List<T> {
         return out;
     }
 
+    #[compiler_item("list_len")]
     pub fn len(&self) -> i32 {
         return self.used;
     }
@@ -312,6 +314,7 @@ impl<T> List<T> {
 impl<T> IndexValue<i32> for List<T> {
     type Output = T;
 
+    #[compiler_item("list_index_value")]
     fn index_value(&self, index: i32) -> Self::Output {
         assert index < self.used, "index out of bounds";
         return self.repr[index];

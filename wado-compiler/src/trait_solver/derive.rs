@@ -11,14 +11,20 @@ use crate::hashmap::IndexSet;
 
 /// Add to `program` the impls of `trait_` that `declarations` derive, in
 /// declaration order. A declaration an impl covers at every instance derives
-/// nothing; one covered at some instances derives for the rest.
-pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
+/// nothing; one covered at some instances derives for the rest. `covers` says
+/// which impls reach every instance of their head.
+pub fn derive(
+    program: &mut Program,
+    trait_: TraitDeclId,
+    declarations: &[Declaration],
+    covers: impl Fn(ImplId, &ImplDef) -> bool,
+) {
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
-        .values()
-        .filter(|def| def.trait_ == Some(trait_))
-        .filter_map(|def| match &def.target {
-            SolverType::Decl(head, args) if covers_every_instance(args) => Some(*head),
+        .iter()
+        .filter(|(_, def)| def.trait_ == Some(trait_))
+        .filter_map(|(&id, def)| match &def.target {
+            SolverType::Decl(head, _) if covers(id, def) => Some(*head),
             SolverType::Decl(..)
             | SolverType::Param(_)
             | SolverType::Pack(_)
@@ -64,19 +70,6 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             break;
         }
     }
-}
-
-/// Whether a target's arguments are distinct parameters, which every instance
-/// of its head matches.
-fn covers_every_instance(args: &[SolverType]) -> bool {
-    let mut seen = IndexSet::default();
-    args.iter().all(|arg| match arg {
-        SolverType::Param(index) | SolverType::Pack(index) => seen.insert(*index),
-        SolverType::Decl(..)
-        | SolverType::Ref { .. }
-        | SolverType::Tuple(_)
-        | SolverType::Projection { .. } => false,
-    })
 }
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
@@ -133,10 +126,16 @@ mod tests {
         });
     }
 
+    /// An answer for the programs here, whose written impls all reach every
+    /// instance of their heads.
+    fn every_instance(_: ImplId, _: &ImplDef) -> bool {
+        true
+    }
+
     /// The impls `derive` added to `prelude()`, in order.
     fn derived(program: Program, declarations: &[Declaration]) -> Vec<ImplDef> {
         let mut p = program;
-        derive(&mut p, EQ, declarations);
+        derive(&mut p, EQ, declarations, every_instance);
         p.impls
             .values()
             .filter(|def| def.origin == ImplOrigin::Derived)
@@ -282,16 +281,18 @@ mod tests {
     }
 
     /// `impl Eq for Wrapper<i32>` covers one instance: the rest still derive,
-    /// and the derived impl yields where the written one reaches.
+    /// and the derived impl yields where the written one reaches. `derive` is
+    /// handed that answer; `TypeTable::impl_covers_every_instance` computes it.
     #[test]
     fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
         let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
         let mut p = prelude();
-        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        let written = p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
         derive(
             &mut p,
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
+            |id, _| id != written,
         );
         let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
         assert_eq!(asked(wrapper_of(decl(I32))), Some(0));

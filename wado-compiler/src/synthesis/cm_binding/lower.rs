@@ -673,6 +673,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
             &names.array_fq,
             "len",
             ModuleSource::list(),
+            names.list_len.clone(),
             vec![],
             TypeTable::I32,
         ),
@@ -761,6 +762,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
                 FunctionRef {
                     module_source: ModuleSource::list(),
                     name: iv_mangled,
+                    template: Some(names.list_index_value.clone()),
                     monomorph_info: None,
                     method_info: Some(iv_info),
                 },
@@ -892,20 +894,30 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 .method_name(CompilerItem::TreeMapEntriesIterNext)
                 .to_string(),
         );
-        let len_method = items.method_name(CompilerItem::TreeMapLen).to_string();
-        let entries_method = items.method_name(CompilerItem::TreeMapEntries).to_string();
+        let method = |item| {
+            (
+                items.method_name(item).to_string(),
+                items.require_template(item),
+            )
+        };
         (
             map_head,
             map_source,
             iter,
             iter_source,
-            next,
-            len_method,
-            entries_method,
+            (
+                next,
+                items.require_template(CompilerItem::TreeMapEntriesIterNext),
+            ),
+            method(CompilerItem::TreeMapLen),
+            method(CompilerItem::TreeMapEntries),
             ref_pair,
             opt,
         )
     };
+    let (next_method, next_template) = next_method;
+    let (len_method, len_template) = len_method;
+    let (entries_method, entries_template) = entries_method;
 
     let mut stmts = Vec::new();
 
@@ -923,6 +935,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             &map_head,
             &len_method,
             map_source.clone(),
+            len_template,
             vec![key_tid, value_tid],
             vec![],
             TypeTable::I32,
@@ -961,6 +974,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             &map_head,
             &entries_method,
             map_source,
+            entries_template,
             vec![key_tid, value_tid],
             vec![],
             iter_tid,
@@ -994,6 +1008,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 FunctionRef {
                     module_source: iter_source,
                     name: next_mangled,
+                    template: Some(next_template),
                     monomorph_info: None,
                     method_info: Some(next_method),
                 },

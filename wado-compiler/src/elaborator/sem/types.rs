@@ -612,6 +612,8 @@ pub(crate) struct LiteralCallee {
     /// The method the literal calls. A literal spells no name, so nothing else
     /// names it.
     pub(crate) method_def: Option<DefId>,
+    /// The impl block declaring [`Self::method_def`].
+    pub(crate) impl_def: Option<DefId>,
     /// Module that hosts the impl block.
     pub(crate) impl_module_source: ModuleSource,
     /// The trait as the impl block declares it — the spelling the method

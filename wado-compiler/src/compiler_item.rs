@@ -12,6 +12,7 @@ use crate::defs::DefId;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
+use crate::tir::TemplateId;
 
 /// The two fields of the `List` / `String` sequence containers, which share a
 /// `{ repr: array<T>, used: i32 }` layout: an owned backing array plus the
@@ -412,6 +413,13 @@ pub enum CompilerItem {
     /// `List::new` + a sequence of `.push(...)` calls into
     /// `array.new_fixed`.
     ListPush,
+    /// `List<T>::with_capacity` — the buffer a `list<T>` lift fills.
+    ListWithCapacity,
+    /// `List<T>::len` — the element count a `list<T>` lower sizes its buffer by.
+    ListLen,
+    /// `List`'s `IndexValue<i32>::index_value` — the element read a `list<T>`
+    /// lower walks.
+    ListIndexValue,
     /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
@@ -432,6 +440,8 @@ pub enum CompilerItem {
     TreeMapLen,
     /// `TreeMap::entries` — the pair traversal the `map<K, V>` lower walks.
     TreeMapEntries,
+    /// `TreeMap::new` — the empty map a `map<K, V>` lift fills.
+    TreeMapNew,
     /// `ReflectStruct::members` — the per-field member tuple.
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
@@ -604,6 +614,8 @@ pub enum CompilerItem {
     /// `Formatter::internal_write_literal` — the only call a synthesized
     /// closure-functor `Display` / `Inspect` body makes.
     FormatterWriteLiteral,
+    /// `Formatter::write_str` — the text a derived `Inspect` body writes.
+    FormatterWriteStr,
     /// `core:rt::assert_failed`.
     AssertFailed,
     /// `core:rt::cm_future_pair`.
@@ -764,6 +776,9 @@ impl CompilerItem {
         Self::AlignmentCenter,
         Self::AlignmentRight,
         Self::ListPush,
+        Self::ListWithCapacity,
+        Self::ListLen,
+        Self::ListIndexValue,
         Self::ListFromTuple,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
@@ -771,6 +786,7 @@ impl CompilerItem {
         Self::TreeMapEntriesIterNext,
         Self::TreeMapLen,
         Self::TreeMapEntries,
+        Self::TreeMapNew,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
         Self::ReflectStructDefaults,
@@ -836,6 +852,7 @@ impl CompilerItem {
         Self::DeserializeVariantEnd,
         Self::FormatterNew,
         Self::FormatterWriteLiteral,
+        Self::FormatterWriteStr,
         Self::AssertFailed,
         Self::CmFuturePair,
         Self::CmStreamPair,
@@ -972,6 +989,9 @@ impl CompilerItem {
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
+            Self::ListWithCapacity => "list_with_capacity",
+            Self::ListLen => "list_len",
+            Self::ListIndexValue => "list_index_value",
             Self::ListFromTuple => "list_from_tuple",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
@@ -979,6 +999,7 @@ impl CompilerItem {
             Self::TreeMapEntriesIterNext => "tree_map_entries_iter_next",
             Self::TreeMapLen => "tree_map_len",
             Self::TreeMapEntries => "tree_map_entries",
+            Self::TreeMapNew => "tree_map_new",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
             Self::ReflectStructDefaults => "reflect_struct_defaults",
@@ -990,6 +1011,7 @@ impl CompilerItem {
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
             Self::FormatterWriteLiteral => "formatter_write_literal",
+            Self::FormatterWriteStr => "formatter_write_str",
             Self::AssertFailed => "assert_failed",
             Self::CmFuturePair => "cm_future_pair",
             Self::CmStreamPair => "cm_stream_pair",
@@ -1157,6 +1179,9 @@ impl CompilerItem {
             | Self::OperatorOrd
             | Self::From
             | Self::ListPush
+            | Self::ListWithCapacity
+            | Self::ListLen
+            | Self::ListIndexValue
             | Self::ListFromTuple
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
@@ -1171,6 +1196,7 @@ impl CompilerItem {
             | Self::MemberWireNameOverride
             | Self::FormatterNew
             | Self::FormatterWriteLiteral
+            | Self::FormatterWriteStr
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectEnumDiscriminant
@@ -1240,7 +1266,8 @@ impl CompilerItem {
             | Self::TreeMapIndexAssign
             | Self::TreeMapEntriesIterNext
             | Self::TreeMapLen
-            | Self::TreeMapEntries => false,
+            | Self::TreeMapEntries
+            | Self::TreeMapNew => false,
             // Loaded only when the user imports `core:serde` (which
             // happens implicitly for kiln-options decoding). The
             // validator skips the check; downstream synthesis ICEs
@@ -1325,7 +1352,9 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::FormatterNew | Self::FormatterWriteLiteral => CompilerItemKind::Method,
+            Self::FormatterNew | Self::FormatterWriteLiteral | Self::FormatterWriteStr => {
+                CompilerItemKind::Method
+            }
             Self::AssertFailed
             | Self::CmFuturePair
             | Self::CmStreamPair
@@ -1426,6 +1455,9 @@ impl CompilerItem {
             | Self::Shr
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
+            | Self::ListWithCapacity
+            | Self::ListLen
+            | Self::ListIndexValue
             | Self::ListFromTuple
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
@@ -1433,6 +1465,7 @@ impl CompilerItem {
             | Self::TreeMapEntriesIterNext
             | Self::TreeMapLen
             | Self::TreeMapEntries
+            | Self::TreeMapNew
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
             | Self::ReflectStructDefaults
@@ -1664,6 +1697,8 @@ pub enum Resolved {
     Function {
         module_source: ModuleSource,
         name: String,
+        /// The declaration. `None` only where a test mints the entry.
+        def: Option<DefId>,
     },
     Method {
         module_source: ModuleSource,
@@ -1674,6 +1709,10 @@ pub enum Resolved {
         /// where a registry entry is minted by a test.
         owner_head: Option<FqTypeName>,
         name: String,
+        /// The declaration, and the `impl` block declaring it — `None` for a
+        /// trait's. `None` only where a test mints the entry.
+        def: Option<DefId>,
+        block: Option<DefId>,
     },
     /// The module that owns the tuple type family. Tuples have no
     /// user-visible declared name on the Wado side, only an owning
@@ -2196,6 +2235,26 @@ impl CompilerItems {
         }
     }
 
+    /// The template a synthesised call to a [`CompilerItemKind::Method`] or
+    /// [`CompilerItemKind::Function`] item instantiates.
+    pub fn require_template(&self, item: CompilerItem) -> TemplateId {
+        let (def, block) = match self.require(item) {
+            Resolved::Method {
+                def,
+                block: Some(block),
+                ..
+            } => (*def, Some(*block)),
+            Resolved::Method { block: None, .. } => panic!(
+                "compiler item `{item}` is a trait's declaration, which no body answers: \
+                 the receiver's impl does"
+            ),
+            Resolved::Function { def, .. } => (*def, None),
+            other => kind_mismatch_ice(item, "Method or Function", other),
+        };
+        let def = def.unwrap_or_else(|| panic!("compiler item `{item}` records no declaration"));
+        TemplateId::Declared { def, block }
+    }
+
     /// Module + owner-type name + method name of a
     /// [`CompilerItemKind::Method`] item.
     pub fn require_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {
@@ -2513,6 +2572,8 @@ mod tests {
                 owner_type: "String".to_string(),
                 owner_head: None,
                 name: "push_str_v2".to_string(),
+                def: None,
+                block: None,
             },
         )
         .unwrap();

@@ -9,7 +9,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -1652,6 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .substitute_type_params(return_type, &combined_type_args);
                     }
 
+                    let template = self.static_template(&method_ref, || final_mangled.clone());
                     let monomorph_info = if combined_type_args.is_empty() {
                         None
                     } else {
@@ -1680,6 +1681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let func_ref = FunctionRef {
                         module_source: struct_module,
                         name: final_mangled,
+                        template,
                         monomorph_info,
                         // The receiver `final_mangled` was built from: DCE and
                         // monomorphization key on this, so a different one here
@@ -1971,6 +1973,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: callee.module().clone(),
             name: callee.name().to_string(),
+            template: callee
+                .def()
+                .map(|def| TemplateId::Declared { def, block: None }),
             monomorph_info: None,
             method_info: None, // Free function call,
         };
@@ -4085,6 +4090,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let func_ref = FunctionRef {
                 module_source: self.current_module_source.clone(),
                 name: mangled_name,
+                // The receiver is a parameter: the instance's dispatch picks.
+                template: None,
                 monomorph_info,
                 method_info: Some(method_info),
             };

@@ -372,6 +372,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),

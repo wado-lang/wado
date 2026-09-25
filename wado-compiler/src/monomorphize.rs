@@ -3,6 +3,7 @@
 //! generate a concrete definition per site, and rewrite types and calls onto the
 //! monomorphized names.
 
+mod call_instance;
 mod call_rewrite;
 mod func_inst;
 mod state;
@@ -16,18 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, FreeFunctionName};
-
-/// Key used to store/look up a generic function in the global function map.
-///
-/// `module_source` is the function body's home module (where it is registered
-/// in `Package::functions` as `(ModuleSource, name)`). Two generic methods
-/// that share a mangled name across different modules — for instance, a
-/// `struct Tuple` in a user module vs. core's variadic-tuple impl in
-/// `core:prelude/tuple` — coexist in this map because their keys differ by
-/// `module_source`. Without this disambiguation, the second insertion silently
-/// overwrites the first and `try_queue_function` picks up the wrong template.
-pub(crate) type GenericFunctionKey = (ModuleSource, String);
+use crate::name::FreeFunctionName;
 
 /// The bare-string form of the function name used inside `InstantiationKey.name`
 /// (which downstream codegen feeds into `mangle_generic_name`).
@@ -47,105 +37,49 @@ pub(crate) fn generic_function_name(
     }
 }
 
-/// `(module_source, generic_function_name(...))` — the canonical lookup key.
-fn generic_function_key(
-    is_method: bool,
-    module_source: &ModuleSource,
-    name: &str,
-) -> GenericFunctionKey {
-    (
-        module_source.clone(),
-        generic_function_name(is_method, module_source, name),
-    )
-}
-
-/// Every generic function template, reached by the key a call site spells.
-///
-/// Generic impls on one head name their methods alike (`impl<T> Pair<T, i32>`
-/// and `impl<T> Pair<T, i64>` both emit `Pair::f`), so a key reaches one
-/// template per block, and the receiver's arguments choose among them. A
-/// synthesized body names no block and answers where no written one reaches.
+/// Every generic function template, keyed by the declaration a call selected.
 #[derive(Default, Clone)]
 pub(crate) struct Templates {
-    by_key: IndexMap<GenericFunctionKey, Vec<Rc<RefCell<TirFunction>>>>,
+    by_id: IndexMap<TemplateId, Rc<RefCell<TirFunction>>>,
 }
 
 impl Templates {
-    /// Register `func_rc`, replacing an earlier registration of its block.
     fn insert(&mut self, func_rc: &Rc<RefCell<TirFunction>>) {
         let func = func_rc.borrow();
-        let key = generic_function_key(func.is_method(), &func.module_source, &func.name);
-        let block = |f: &TirFunction| f.impl_origin.as_ref().map(|o| o.def);
-        let group = self.by_key.entry(key).or_default();
-        match group
-            .iter()
-            .position(|t| block(&t.borrow()) == block(&func))
-        {
-            Some(at) => group[at] = Rc::clone(func_rc),
-            None => group.push(Rc::clone(func_rc)),
+        assert!(func.is_template(), "`{}` instantiates nothing", func.name);
+        let id = func
+            .template_id()
+            .unwrap_or_else(|| panic!("`{}` is an instance, not a template", func.name));
+        if let Some(prior) = self.by_id.insert(id.clone(), Rc::clone(func_rc)) {
+            assert!(
+                Rc::ptr_eq(&prior, func_rc),
+                "two templates share the identity {id:?}"
+            );
         }
     }
 
-    fn contains(&self, key: &GenericFunctionKey) -> bool {
-        self.by_key.contains_key(key)
-    }
-
-    /// Every template `key` reaches, whatever its receiver.
-    fn named(&self, key: &GenericFunctionKey) -> &[Rc<RefCell<TirFunction>>] {
-        self.by_key.get(key).map_or(&[], Vec::as_slice)
-    }
-
-    /// The one template `key` names for a receiver with `impl_args`: the block
-    /// reaching it, else the synthesized body.
-    fn get(
-        &self,
-        key: &GenericFunctionKey,
-        impl_args: &[TypeId],
-        type_table: &TypeTable,
-    ) -> Option<&Rc<RefCell<TirFunction>>> {
-        let named = self.named(key);
-        let reaching: Vec<_> = named
-            .iter()
-            .filter(|t| {
-                t.borrow()
-                    .impl_origin
-                    .as_ref()
-                    .is_some_and(|origin| origin.reaches(impl_args, type_table))
-            })
-            .collect();
-        let found = if reaching.is_empty() {
-            named
-                .iter()
-                .filter(|t| t.borrow().impl_origin.is_none())
-                .collect()
-        } else {
-            reaching
-        };
-        match found.as_slice() {
-            [only] => Some(only),
-            _ => None,
-        }
-    }
-
-    fn keys(&self) -> impl Iterator<Item = &GenericFunctionKey> {
-        self.by_key.keys()
+    /// The template `id` names; `None` where the declaration is emitted as
+    /// written.
+    fn get(&self, id: &TemplateId) -> Option<&Rc<RefCell<TirFunction>>> {
+        self.by_id.get(id)
     }
 
     /// The templates with a body, which a transitive scan may instantiate.
     fn with_bodies(&self) -> Self {
-        let mut out = Self::default();
-        for func_rc in self.by_key.values().flatten() {
-            if func_rc.borrow().body.is_some() {
-                out.insert(func_rc);
-            }
+        Self {
+            by_id: self
+                .by_id
+                .iter()
+                .filter(|(_, func)| func.borrow().body.is_some())
+                .map(|(id, func)| (id.clone(), Rc::clone(func)))
+                .collect(),
         }
-        out
     }
 }
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, TemplateId, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
 };
 
 use state::Monomorphizer;
@@ -155,8 +89,7 @@ use state::Monomorphizer;
 pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
     let mut generic_functions = Templates::default();
     for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+        if func_rc.borrow().is_template() {
             generic_functions.insert(func_rc);
         }
     }
@@ -255,50 +188,6 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
 
     // Rebuild variant index since structs may have changed
     flat.rebuild_variant_indices();
-}
-
-/// Peel `&`/`&mut` and newtypes off a dispatch receiver — the same
-/// transparency the struct-info lookups apply when they report the struct a
-/// call keys on. A newtype that inherits its base's impl is dispatched through
-/// the base, so keeping the newtype's own identity would name a template that
-/// does not exist.
-fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
-    let mut tid = tt.peel_refs(type_id);
-    loop {
-        match tt.get_unerased(tid) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => tid = *inner,
-            // A newtype that inherits its base's impl dispatches through the
-            // base; one that declares its own is its own receiver. `flags` is
-            // always the latter — its impls are written against the flags
-            // name, never against the `u32` it erases to.
-            ResolvedType::Newtype { base_type, .. } => tid = *base_type,
-            _ => return tid,
-        }
-    }
-}
-
-/// The receiver *head* a dispatch template is named after: no type arguments,
-/// for keys that carry them in `impl_type_args`. Prefer it over a
-/// struct-instantiation key's `name`, which carries no module.
-fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> FqTypeName {
-    tt.fq_base_type_name(dispatch_receiver_type(tt, type_id))
-}
-
-/// The receiver's full instantiated name, for keys whose `impl_type_args` are
-/// empty because the instantiation is spelled into the name itself
-/// (`StructField<Thing,i32>::get`). Using the bare head here would collapse
-/// every instantiation onto one key and mint an instance whose body still
-/// carries the impl's type parameters.
-fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> FqTypeName {
-    let tid = dispatch_receiver_type(tt, type_id);
-    // `fq_type_name` spells the representation, which answers `u32` for a
-    // `flags` type and names a template no impl declares — impls on a `flags`
-    // type are written against the flags name. The head form reads the identity
-    // itself, so only this one needs the step.
-    match tt.get_unerased(tid) {
-        ResolvedType::Flags { .. } => tt.fq_base_type_name(tid),
-        _ => tt.fq_type_name(tid),
-    }
 }
 
 /// Determine the module where trait implementations for a concrete type are defined.
@@ -453,8 +342,7 @@ impl Monomorphizer {
         let mut generic_functions = external_generic_functions.clone();
 
         for func_rc in &module.functions {
-            let func = func_rc.borrow();
-            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+            if func_rc.borrow().is_template() {
                 generic_functions.insert(func_rc);
             }
         }
@@ -503,42 +391,14 @@ impl Monomorphizer {
             let mut batch: Vec<TirFunction> = Vec::new();
             while let Some(key) = self.functions.pending.pop() {
                 let concrete = {
-                    // Every producer routes through `TraitEnv` and so sets
-                    // `FunctionRef::module_source` to the body's home module,
-                    // making the literal `(module_source, name)` lookup total: a
-                    // miss is a producer bug, surfaced as the panic below.
-                    let lookup_key = (key.module_source.clone(), key.name.clone());
-                    let generic_func = generic_functions.get(
-                        &lookup_key,
-                        &key.impl_type_args,
-                        &module.type_table.borrow(),
-                    );
-                    // No fallback: every queue producer above (in
-                    // `func_inst::collect_function_instantiation_sites`)
-                    // reads `module_source` straight off the matched
-                    // template, so the literal lookup is total. A miss
-                    // means a producer skipped the routing rules — a
-                    // compiler bug, not a missing-impl-at-the-call-site
-                    // condition.
-                    let gf = generic_func.unwrap_or_else(|| {
-                        let available: Vec<&ModuleSource> = generic_functions
-                            .keys()
-                            .filter(|(_, n)| n == &key.name)
-                            .map(|(m, _)| m)
-                            .collect();
-                        panic!(
-                            "no generic template for queued instantiation \
-                             `{}` at module `{}` (impl_type_args={:?}, \
-                             method_type_args={:?}); templates with this name \
-                             exist at: {:?}. Producer set the wrong \
-                             `FunctionRef::module_source` — issue #1110 (1)",
-                            key.name,
-                            key.module_source,
-                            key.impl_type_args,
-                            key.method_type_args,
-                            available,
-                        )
-                    });
+                    // A key is queued only off a template the registry holds.
+                    let gf = key
+                        .template
+                        .as_ref()
+                        .and_then(|id| generic_functions.get(id))
+                        .unwrap_or_else(|| {
+                            panic!("queued `{}` names no registered template", key.name)
+                        });
                     let gf_borrowed = gf.borrow();
                     self.instantiate_function(
                         &gf_borrowed,

@@ -5052,6 +5052,7 @@ impl<'a> TirUnparser<'a> {
                 name,
                 module_source,
                 type_args,
+                template: _,
             } => {
                 // Source-form reproduces the name as written (bare); debug-form
                 // qualifies every module the same way.

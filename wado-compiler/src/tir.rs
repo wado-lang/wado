@@ -843,9 +843,9 @@ pub struct TypeTable {
     /// declaration. Lives on the shared `TypeTable` because elaboration runs one
     /// `Elaborator` per module.
     bound_driven_synth_requests: IndexSet<(TypeHead, ModuleSource, DefId)>,
-    /// The arguments each impl block's target writes, a binder as its own
-    /// `TypeParam`: what decides which instances of the head the block reaches.
-    impl_targets: IndexMap<DefId, Vec<TypeId>>,
+    /// What each impl block's target writes: what decides which instances of
+    /// the head the block reaches.
+    impl_targets: IndexMap<DefId, ImplTarget>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -5026,6 +5026,9 @@ impl TirExpr {
 pub struct FunctionRef {
     pub module_source: ModuleSource,
     pub name: String,
+    /// The declaration the call's producer selected, which a template call
+    /// instantiates. `None` where the producer selected none.
+    pub template: Option<TemplateId>,
     pub monomorph_info: Option<MonomorphInfo>,
     pub method_info: Option<LocalMethodName>,
 }
@@ -5036,6 +5039,7 @@ impl FunctionRef {
         Self {
             module_source,
             name: func.name.clone(),
+            template: func.template_id(),
             monomorph_info: func.monomorph_info.clone(),
             method_info: func.method_info.clone(),
         }
@@ -5218,6 +5222,8 @@ pub enum TirExprKind {
         /// Consumed by the monomorphizer, which queues the corresponding
         /// instantiation and rewrites `name` to the mangled form.
         type_args: Vec<TypeId>,
+        /// The function declaration referenced, as [`FunctionRef::template`].
+        template: Option<TemplateId>,
     },
     /// Read a global variable
     GlobalVarGet {
@@ -6027,6 +6033,31 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
+/// A generic function template's identity: what a call selected, and what the
+/// monomorphizer instantiates, with no name in between.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TemplateId {
+    /// A written declaration, and the impl block its body was emitted into —
+    /// a trait's default body is emitted once per impl.
+    Declared { def: DefId, block: Option<DefId> },
+    /// A body synthesis minted, which declares nothing: the name it gave it in
+    /// its module.
+    Synthesized { module: ModuleSource, name: String },
+}
+
+impl TemplateId {
+    /// The module the body is emitted into: its block's where it has one.
+    pub fn home(&self, defs: &DefTable) -> ModuleSource {
+        match self {
+            Self::Declared {
+                block: Some(block), ..
+            } => defs.module(*block).clone(),
+            Self::Declared { def, block: None } => defs.module(*def).clone(),
+            Self::Synthesized { module, .. } => module.clone(),
+        }
+    }
+}
+
 /// Whether a function identifies as the core builtin `builtin`, matching both
 /// the plain generic form (`name`) and a monomorphized instance whose `name` is
 /// mangled but whose `monomorph_info.generic_name` is the base name. A name
@@ -6199,9 +6230,9 @@ pub struct TirGlobal {
     pub span: Span,
 }
 
-/// A generic `impl` block, as a template emitted from it reaches its receivers.
-/// Blocks on one head name their methods alike, so the block is what tells two
-/// templates of one name apart.
+/// An `impl` block, as a method emitted from it reaches its receivers. Blocks on
+/// one head name their methods alike, so the block is what tells two templates
+/// of one name apart.
 #[derive(Debug, Clone)]
 pub struct ImplOrigin {
     pub def: DefId,
@@ -6221,18 +6252,70 @@ impl ImplOrigin {
     }
 }
 
+/// What an impl block's target writes.
+#[derive(Debug, Clone)]
+struct ImplTarget {
+    /// The target as a whole, its reference included.
+    whole: TypeId,
+    /// The arguments of the head it names past any reference, a binder as its
+    /// own `TypeParam`.
+    args: Vec<TypeId>,
+}
+
 impl TypeTable {
-    /// Record the arguments impl block `def`'s target writes.
-    pub fn record_impl_target(&mut self, def: DefId, target_args: Vec<TypeId>) {
-        self.impl_targets.insert(def, target_args);
+    /// Record what impl block `def`'s target writes: `whole`, and `args` for
+    /// the head it names.
+    pub fn record_impl_target(&mut self, def: DefId, whole: TypeId, args: Vec<TypeId>) {
+        self.impl_targets.insert(def, ImplTarget { whole, args });
     }
 
-    /// Whether impl block `def` reaches `instance`, a receiver type; a block
-    /// whose target was never recorded reaches every instance.
+    /// Impl block `def`'s target head at `head_args`; `None` where the target
+    /// is no generic head of that arity.
+    pub fn impl_target_at(&mut self, def: DefId, head_args: &[TypeId]) -> Option<TypeId> {
+        match self.get_unerased(self.impl_target(def).whole) {
+            ResolvedType::GenericInstance {
+                def: head,
+                type_args,
+            } if type_args.len() == head_args.len() => {
+                let head = *head;
+                Some(self.intern(ResolvedType::GenericInstance {
+                    def: head,
+                    type_args: head_args.to_vec(),
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    fn impl_target(&self, def: DefId) -> &ImplTarget {
+        self.impl_targets.get(&def).unwrap_or_else(|| {
+            panic!("impl block {def:?} is asked about before its target is recorded")
+        })
+    }
+
+    /// Whether impl block `def` reaches `instance`, a receiver type. Every
+    /// reference target keys under one `&` head, so a reference instance is
+    /// reached only where the referents' heads agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
-        let Some(written) = self.impl_targets.get(&def) else {
-            return true;
-        };
+        let target = self.impl_target(def);
+        if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
+            self.get_unerased(target.whole)
+            && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
+            && !matches!(
+                self.get(*written),
+                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+            )
+        {
+            let head = self.impl_receiver_key(*written);
+            let mut link = self.peel_refs(*asked);
+            while self.impl_receiver_key(link) != head {
+                let ResolvedType::Newtype { base_type, .. } = self.get_unerased(link) else {
+                    return false;
+                };
+                link = *base_type;
+            }
+        }
+        let written = &target.args;
         let instance = self.peel_refs(instance);
         let args = match self.get(instance) {
             ResolvedType::Struct { type_args, .. } => type_args.clone(),
@@ -6241,16 +6324,52 @@ impl TypeTable {
         self.impl_target_binding(written, &args).is_some()
     }
 
-    /// Whether an impl target writing `written` reaches every instance of its
-    /// head: its arguments are distinct binders.
-    pub fn impl_target_covers_every_instance(&self, written: &[TypeId]) -> bool {
+    /// Whether impl block `def` reaches every instance of its head: the target
+    /// names a head, and its arguments are distinct binders. A reference, a
+    /// tuple, `()` or a function type is a shape, reached one way at a time.
+    pub fn impl_covers_every_instance(&self, def: DefId) -> bool {
+        let target = self.impl_target(def);
+        let names_a_head = match self.get_unerased(target.whole) {
+            ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Unit
+            | ResolvedType::Function { .. } => false,
+            ResolvedType::GenericInstance { .. } => !self.is_tuple(target.whole),
+            ResolvedType::Primitive(_)
+            | ResolvedType::Never
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
+        };
         let mut seen = IndexSet::default();
-        written.iter().all(|&arg| match self.get(arg) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                seen.insert(*index)
-            }
-            _ => false,
-        })
+        names_a_head
+            && target.args.iter().all(|&arg| match self.get(arg) {
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    seen.insert(*index)
+                }
+                _ => false,
+            })
+    }
+
+    /// Every recorded impl block reaching only some instances of its head.
+    pub fn partial_impls(&self) -> IndexSet<DefId> {
+        self.impl_targets
+            .keys()
+            .copied()
+            .filter(|&def| !self.impl_covers_every_instance(def))
+            .collect()
     }
 
     /// What an impl target writing `written` binds at a receiver with
@@ -6492,8 +6611,8 @@ pub struct TirFunction {
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
-    /// The generic `impl` block a method template was emitted into. `None`
-    /// for anything else, instances included.
+    /// The `impl` block a method was emitted into. `None` for anything else,
+    /// instances included.
     pub impl_origin: Option<ImplOrigin>,
     /// If this function was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
@@ -7074,6 +7193,31 @@ impl TirFunction {
         self.type_params.iter().any(|p| !p.is_effect)
     }
 
+    /// Whether monomorphization instantiates this function rather than
+    /// emitting it as written.
+    pub fn is_template(&self) -> bool {
+        self.has_real_type_params() || !self.impl_type_params.is_empty()
+    }
+
+    /// The declaration a call of this function reaches: its declaration and
+    /// block, or the name synthesis gave it. `None` for an instance, which no
+    /// call instantiates.
+    pub fn template_id(&self) -> Option<TemplateId> {
+        if self.monomorph_info.is_some() {
+            return None;
+        }
+        Some(match self.def_id {
+            Some(def) => TemplateId::Declared {
+                def,
+                block: self.impl_origin.as_ref().map(|origin| origin.def),
+            },
+            None => TemplateId::Synthesized {
+                module: self.module_source.clone(),
+                name: self.name.clone(),
+            },
+        })
+    }
+
     /// Returns the copied type if this is a synthesized value-copy function.
     #[inline]
     pub fn value_copy_type(&self) -> Option<TypeId> {
@@ -7515,11 +7659,15 @@ pub struct InstantiationKey {
     /// Method info for method instantiations (None for struct/enum instantiations)
     /// Not included in equality/hash - used only for name formatting
     pub method_info: Option<LocalMethodName>,
+    /// The function template instantiated, which is what the instance is
+    /// made from. `None` for a struct or enum.
+    pub template: Option<TemplateId>,
 }
 
 impl PartialEq for InstantiationKey {
     fn eq(&self, other: &Self) -> bool {
         self.def == other.def
+            && self.template == other.template
             && self.name == other.name
             && self.module_source == other.module_source
             && self.impl_type_args == other.impl_type_args
@@ -7532,6 +7680,7 @@ impl Eq for InstantiationKey {}
 impl std::hash::Hash for InstantiationKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.def.hash(state);
+        self.template.hash(state);
         self.name.hash(state);
         self.module_source.hash(state);
         self.impl_type_args.hash(state);
@@ -7898,5 +8047,79 @@ mod tests {
             table.substitute_type_params(projection, &substitution),
             projection
         );
+    }
+
+    /// Records a block whose target is `whole`, naming a head with `args`, and
+    /// asks whether it covers every instance of that head.
+    fn covers(table: &mut TypeTable, whole: TypeId, args: Vec<TypeId>) -> bool {
+        let block = DefId::for_test(1);
+        table.record_impl_target(block, whole, args);
+        table.impl_covers_every_instance(block)
+    }
+
+    #[test]
+    fn a_target_of_distinct_binders_covers_every_instance() {
+        let mut table = TypeTable::new();
+        let k = table.make_type_param("K".to_string(), 0);
+        let v = table.make_type_param("V".to_string(), 1);
+        let head = table.make_builtin_array(k);
+        assert!(covers(&mut table, head, vec![k, v]));
+    }
+
+    #[test]
+    fn a_target_writing_no_argument_covers_its_head() {
+        let mut table = TypeTable::new();
+        assert!(covers(&mut table, TypeTable::I32, vec![]));
+    }
+
+    #[test]
+    fn a_pack_binder_covers_every_arity() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let rest = table.make_type_pack("Rest".to_string(), 1);
+        let head = table.make_builtin_array(t);
+        assert!(covers(&mut table, head, vec![t, rest]));
+    }
+
+    /// `impl<T> Tr for Pair<T, T>` reaches only the instances whose two
+    /// arguments agree.
+    #[test]
+    fn a_binder_written_twice_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let head = table.make_builtin_array(t);
+        assert!(!covers(&mut table, head, vec![t, t]));
+    }
+
+    #[test]
+    fn a_concrete_argument_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let head = table.make_builtin_array(t);
+        assert!(!covers(&mut table, head, vec![t, TypeTable::I32]));
+    }
+
+    /// `impl<T> Display for &Wrapper<T>` writes distinct binders for `Wrapper`,
+    /// but its head is `&`, of which it reaches one kind of referent.
+    #[test]
+    fn a_reference_target_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        let t = table.make_type_param("T".to_string(), 0);
+        let wrapper = table.make_builtin_array(t);
+        let whole = table.make_ref(wrapper);
+        assert!(!covers(&mut table, whole, vec![t]));
+    }
+
+    #[test]
+    fn a_unit_target_reaches_some_instances() {
+        let mut table = TypeTable::new();
+        assert!(!covers(&mut table, TypeTable::UNIT, vec![]));
+    }
+
+    #[test]
+    #[should_panic(expected = "before its target is recorded")]
+    fn a_block_with_no_recorded_target_is_not_answered_for() {
+        let table = TypeTable::new();
+        let _ = table.impl_covers_every_instance(DefId::for_test(1));
     }
 }

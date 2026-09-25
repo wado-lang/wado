@@ -1566,6 +1566,7 @@ impl<'a> PatternLowerer<'a> {
                 FunctionRef {
                     module_source,
                     name: mangled_name,
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },

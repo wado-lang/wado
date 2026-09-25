@@ -2329,6 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `impl` block.
                 impl_type_bindings: Vec::new(),
                 method_def: Some(sig.def),
+                impl_block: None,
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
                 param_types: instantiated.param_types[first_value_param..].to_vec(),
@@ -3238,6 +3239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Derived from the receiver's structure, off no `impl` block.
             impl_type_bindings: Vec::new(),
             method_def: None,
+            impl_block: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],
