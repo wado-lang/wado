@@ -93,8 +93,8 @@ axes orthogonal.
 
 Naming the enforced axis also covers more ground. A representation can only be
 stated for a resource that has one to name, but `Waitable` and `core:icu`'s
-interned handles are copyable for the same reason the web bindings' handles are, with a
-different backing. One field says so for all three.
+interned handles are copyable for the same reason the web bindings' handles
+are, with a different backing. One field says so for all three.
 
 ### Why mandatory + structural over namespace inference
 

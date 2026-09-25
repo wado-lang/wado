@@ -18,11 +18,11 @@ Checked against:
 
 ## A host object has no handle a GC guest can let go of
 
-`wado-lang:web` binds the DOM. A page hands the program the same objects again and again,
-and a program keeps them in lists, struct fields and closures. The bindings therefore
-does not use CM resources for them. Each object crosses as an `f64` index into a
-table the glue owns, and nothing ever releases an entry: every object the
-program has seen stays alive for the life of the page
+`wado-lang:web` binds the DOM. A page hands the program the same objects again
+and again, and a program keeps them in lists, struct fields and closures. The
+bindings therefore do not use CM resources for them. Each object crosses as an
+`f64` index into a table the glue owns, and nothing ever releases an entry:
+every object the program has seen stays alive for the life of the page
 ([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md), "Lifecycle").
 
 What the spec offers instead:
@@ -64,8 +64,8 @@ representation, but only to the instance that implements the resource
 (CanonicalABI.md, "`canon resource.rep`"). An importer needs a host function per
 resource type to compare two handles.
 
-The web bindings avoid this only because its handles are not CM resources: the glue
-interns each object, so one object always crosses as one number.
+The web bindings avoid this only because their handles are not CM resources:
+the glue interns each object, so one object always crosses as one number.
 
 What to report to the CM: an importer cannot tell whether two handles name the
 same resource.
@@ -115,8 +115,8 @@ back through. What that costs:
   serving several instances has to route each key back to its own. A function
   value would carry its instance with it.
 
-What to report to the CM: nothing new. The need is already on the list; the web bindings
-add a concrete consumer and the cost of the workaround.
+What to report to the CM: nothing new. The need is already on the list; the
+web bindings add a concrete consumer and the cost of the workaround.
 
 ## Checked and not a CM gap
 
@@ -143,7 +143,8 @@ spec's.
 
 ### Exceptions from the host
 
-A DOM operation that throws traps in the web bindings ([Web § Exceptions](./wep-2026-04-01-web.md#exceptions)).
+A DOM operation that throws traps in the web bindings
+([Web § Exceptions](./wep-2026-04-01-web.md#exceptions)).
 
 The CM has a channel for it. The JS API turns an exception thrown by a function
 whose WIT result is a `result` into that result's `error` case
