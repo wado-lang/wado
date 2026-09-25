@@ -1,0 +1,199 @@
+//! Text in, text out: GPT-2 (124M) continues a prompt one greedy token at a
+//! time, picking the tokens onnxruntime picks. `fetch.sh` downloads the model
+//! and splits it; the weights load from the checkpoint at run time.
+//!
+//!     package-loam/example/gpt2-124m/fetch.sh
+//!     cd package-loam/example/gpt2-124m
+//!     wado run gpt2.wado -- "Hello, my name is"
+//!
+//! The graph is compiled for a fixed context. A shorter sequence is padded on
+//! the right: attention is causal, so no real position reads the padding.
+
+use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Tokenizer } from "../gpt2_tokenizer.wado";
+use gpt2 from "./gpt2.onnxtext"
+    with {
+        generator: {
+            module: "../../src/generator.wado",
+            inputs: ["./gpt2.safetensors"],
+            options: {
+                // `sequence_length` is CONTEXT.
+                dims: { batch_size: 1, sequence_length: 32 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_f.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*c_proj.bias",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    // The language-model head: the token embedding, transposed.
+                    {
+                        pattern: "onnx::MatMul_3718",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Reshape_1_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+global CONTEXT: i32 = 32;
+global STEPS: i32 = 8;
+
+/// The token the model ranks first after `ids`.
+fn next_token(ids: &List<i32>, weights: &gpt2::Weights) -> i32 {
+    let mut input: List<i64> = [];
+    let mut mask: List<i64> = [];
+    for let i of 0..<CONTEXT {
+        let real = i < ids.len();
+        input.push(if real { ids[i] as i64 } else { 0 });
+        mask.push(if real { 1 } else { 0 });
+    }
+    let logits = gpt2::forward(
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: input,
+            extents: [1, CONTEXT],
+        },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: mask,
+            extents: [1, CONTEXT],
+        },
+        weights,
+    );
+    let vocab = logits.extents[2];
+    let row = (ids.len() - 1) * vocab;
+    let mut best = 0;
+    for let v of 1..<vocab {
+        if logits.data[row + v] > logits.data[row + best] {
+            best = v;
+        }
+    }
+    return best;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let mut prompt = args().join(" ");
+    if prompt.is_empty() {
+        prompt = "Hello, my name is";
+    }
+    let tokenizer = Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
+    let mut ids = tokenizer.encode(&prompt);
+    if ids.is_empty() || ids.len() + STEPS > CONTEXT {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${CONTEXT - STEPS}`);
+        return;
+    }
+    let checkpoint = match fs::read("gpt2.safetensors") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let weights = match gpt2::Weights::load(&checkpoint) {
+        Ok(weights) => weights,
+        Err(e) => {
+            eprintln(`gpt2.safetensors: ${e}`);
+            return;
+        },
+    };
+    for let _ of 0..<STEPS {
+        ids.push(next_token(&ids, &weights));
+    }
+    println(tokenizer.decode(&ids));
+}
