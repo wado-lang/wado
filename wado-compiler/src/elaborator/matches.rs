@@ -26,7 +26,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pattern arm. The pattern's bindings (e.g. `Some(x)`) must be in
         // scope for the optional guard, and `resolve_if_pattern` records
         // their `local_symbols` / `local_types` entries.
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&m.pattern, scrutinee_type, ctx, m.span);
         if let Some(guard) = &m.guard {
             let body = self.resolve_expr(guard, ctx, Some(TypeTable::BOOL));
@@ -36,7 +36,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // (BOOL) inconsistent with the arm body's actual type.
             self.typecheck(body, TypeTable::BOOL, guard.span());
         }
-        ctx.exit_scope();
 
         TypeTable::BOOL
     }

@@ -1,0 +1,26 @@
+// A `with … do` body is a block, so its local items are in scope in it.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct MyCounter {
+    value: i32,
+}
+
+impl Counter for MyCounter {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+test "a local item declared in a with body" {
+    let mut m = MyCounter { value: 0 };
+    let got = with Counter => &mut m do {
+        struct Pair { a: i32 }
+        let p = Pair { a: Counter::next() };
+        p.a
+    };
+    assert got == 1;
+}

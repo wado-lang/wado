@@ -25,7 +25,14 @@ use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
+<<<<<<< HEAD
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
+||||||| dc6a50794
+use super::types::{FunctionContext, TypeError, VarRef};
+=======
+use super::types::{FunctionContext, TypeError, VarRef};
+use super::tysys::TypeSystem;
+>>>>>>> origin/main
 use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
@@ -458,17 +465,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
-                ctx.push_labeled_block_frame(lb.label.clone(), expected_type);
-
-                ctx.enter_scope();
+                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected_type);
                 // A labeled block yields via `break label: value`, not a tail
                 // expression, so its trailing statement stays in statement
                 // position (a discarded tail `match` may have arms of
                 // differing types).
-                self.resolve_block(&lb.block, ctx, expected_type);
-                ctx.exit_scope();
-
-                let target = ctx.pop_labeled_block_frame();
+                self.resolve_block(&lb.block, &mut frame, expected_type);
+                let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
                 // the same unification; project only the result type.
@@ -517,7 +520,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.settle_branch_holes(&mut branch_types, expected_type);
         let result_type =
-            expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
+            expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
         // Report a `break label: null` whose `Option<...>` inner could not be
         // inferred against a resolved non-`Option` result. A type still UNKNOWN
@@ -542,24 +545,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             TypeTable::NEVER
         }
-    }
-
-    /// The branch that types a block the use site expects nothing from: the
-    /// first carrying a real value. A `never`, `unit` or unresolved branch
-    /// steps aside, and a block holding only those takes its first.
-    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
-        let tt = self.tysys.type_table.borrow();
-        branch_types
-            .iter()
-            .copied()
-            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
-            .or_else(|| {
-                branch_types
-                    .iter()
-                    .copied()
-                    .find(|&t| t != TypeTable::NEVER)
-            })
-            .unwrap_or(branch_types[0])
     }
 
     /// Range-check an integer literal against the `i32` it defaults to, the
@@ -747,18 +732,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
-        // Canonicalize `ns::member` to its `ns$member` alias; the registries
-        // below are keyed by these aliases. The rewritten ident keeps the
-        // original `id` so use→def edges still resolve back to the user's text.
+        // The registries are keyed by the `ns$member` alias; the original `id`
+        // keeps use→def edges on the user's text.
         let canonical_ident;
-        let ident = if let Some(canon) = self.canonical_ns_ref_at(&ident.name, ident.id) {
+        let ident = if let Some(name) = self.canonical_ns_ref_at(&ident.name, ident.id) {
             canonical_ident = ast::IdentExpr {
-                id: ident.id,
-                name: canon,
-                segments: ident.segments.clone(),
-                type_args: ident.type_args.clone(),
-                type_args_on_prefix: ident.type_args_on_prefix,
-                span: ident.span,
+                name,
+                ..ident.clone()
             };
             &canonical_ident
         } else {
@@ -837,7 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // cross-module collision, issue #1342). Reify produces the const's
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
-        if let Some(assoc) = self.associated_constant_of_path(ident) {
+        if let Some(assoc) = self.tysys.associated_constant_of_path(ident) {
             let (Some(owner), Some(member)) = (ident.owner_segment(), ident.segments.last()) else {
                 unreachable!("an associated constant path names an owner and a member")
             };
@@ -969,7 +949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(ty) = self.global_type_in(&ident.name, home) {
             return Some(ty);
         }
-        let sig = self.free_function_sig_at(ident.id)?.clone();
+        let sig = self.tysys.free_function_sig_at(ident.id)?.clone();
         Some(
             self.compute_func_ref_type_from_sig(&sig, &[])
                 .unwrap_or(TypeTable::UNKNOWN),
@@ -1071,74 +1051,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let variant_info = lookup_case!(variant_cases_of);
-        if let Some(variant_info) = variant_info {
-            // Find the case by name
-            if let Some((_case_index, case_data)) = variant_info
-                .cases
-                .iter()
-                .enumerate()
-                .find(|(_, c)| c.name == suffix)
-                .map(|(i, c)| (i, c.clone()))
-            {
-                self.record_qualified_case(ident, prefix, case_data.ast_id);
-                self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
-                // Unit variant - payload must be unit type
-                let payload_is_unit = matches!(
-                    self.tysys.type_table.borrow().get(case_data.payload),
-                    ResolvedType::Unit
-                );
-                if !payload_is_unit {
-                    let _ = self.emit(TypeError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: 0,
-                        span: ident.span,
-                    });
-                    return Some(TypeTable::ERROR);
-                }
-
-                // Infer variant type for generic variants
-                let variant_type = if variant_info.type_params.is_empty() {
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(variant_info.defined_at)
-                } else {
-                    {
-                        // `Maybe::<i32>::Nothing` pins its slots here: a
-                        // payload-less case has no payload to infer from, so
-                        // the turbofish is the only source besides the
-                        // expected type.
-                        let explicit_args: Vec<TypeId> = ident
-                            .type_args
-                            .iter()
-                            .map(|t| self.resolve_type(t))
-                            .collect();
-                        let inferred = self.tysys.infer_variant_type_args(
-                            &self.annotate_ctx,
-                            &variant_info,
-                            &case_data,
-                            None,
-                            expected_type,
-                            &explicit_args,
-                        );
-                        self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
-                    }
-                };
-
-                // Record generic type args for
-                // payload-less variant references that compile to a
-                // `VariantConstruct` (e.g. `Option::<i32>::None`).
-                let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                self.record_generic_instantiation(ident.id, type_args, variant_type);
-
-                // Reify rebuilds the payload-less
-                // `VariantConstruct` from the AST + recorded generic
-                // instantiation. Not an l-value.
-                return Some(through_newtype.map_or(variant_type, |(_, named)| named));
+        if let Some(variant_info) = variant_info
+            && let Some((_, case_data)) = variant_info.case_named(suffix)
+        {
+            self.record_qualified_case(ident, prefix, case_data.ast_id);
+            self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
+            // A payload-less case has no payload to infer from, so the
+            // turbofish is the only source besides the expected type.
+            let variant_type = self.construct_variant_case(
+                &variant_info,
+                case_data,
+                &[],
+                &ident.type_args,
+                prefix,
+                expected_type,
+                ident.id,
+                ident.span,
+            );
+            if variant_type == TypeTable::ERROR {
+                return Some(TypeTable::ERROR);
             }
+            return Some(through_newtype.map_or(variant_type, |(_, named)| named));
         }
 
         // Check for enum case: Color::Red (enums have no payload)
@@ -1210,7 +1143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             newtype_member_owner(&lookup, &self.tysys, owner).map_or(owner, |(base, _)| base);
         let declared = lookup
             .variant_cases_of(members)
-            .is_some_and(|v| v.cases.iter().any(|c| c.name == name))
+            .is_some_and(|v| v.case_named(name).is_some())
             || lookup
                 .enum_cases_of(members)
                 .is_some_and(|e| e.find_case(name).is_some())
@@ -1265,7 +1198,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
+        let Some((sig, _def_module, _defining_name)) = self.tysys.lookup_func_sig_for_ref(ident)
+        else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream
             // stays sane.
@@ -1369,21 +1303,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_union: false,
             },
         );
-    }
-
-    /// Canonical signature, defining module, and defining name for a
-    /// function-reference identifier (local or imported, possibly aliased).
-    /// The name is the *defining* one — `"foo"` for `use { foo as bar }` —
-    /// keeping the TIR `FuncRef` aligned with the post-monomorphization
-    /// key space.
-    fn lookup_func_sig_for_ref(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<(FunctionSig, ModuleSource, String)> {
-        let def = self.free_function_at(ident.id)?;
-        let sig = self.tysys.signatures.function_sig(def)?.clone();
-        let defs = self.tysys.resolutions.defs();
-        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
     }
 
     /// Derive type arguments for a generic function reference from an expected
@@ -1503,37 +1422,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Element type at a literal index into a tuple, which may carry a
-    /// variadic pack.
-    ///
-    /// An index that lands on the pack is rejected: the pack's arity and its
-    /// per-position types are only known once it expands, so neither the bound
-    /// nor the element type can be decided here. Only the scalar prefix ahead
-    /// of the pack (`[i32, ..T]`.0) has a fixed position.
-    pub(super) fn tuple_literal_index_type(
-        type_table: &std::cell::RefCell<TypeTable>,
-        elements: &[TypeId],
-        index: usize,
-    ) -> Result<TypeId, String> {
-        let table = type_table.borrow();
-        let Some(pack_pos) = elements.iter().position(|&t| table.is_type_pack(t)) else {
-            return elements.get(index).copied().ok_or_else(|| {
-                format!(
-                    "tuple index {index} out of bounds, tuple has {} elements",
-                    elements.len()
-                )
-            });
-        };
-        if index < pack_pos {
-            return Ok(elements[index]);
-        }
-        Err(format!(
-            "tuple index {index} lands on a variadic pack, whose arity and element \
-             types are only known once it expands; walk the tuple with `for-of` or \
-             a comprehension instead"
-        ))
-    }
-
     /// Look up field type from a struct or tuple type
     pub(super) fn lookup_field_type(
         &mut self,
@@ -1585,8 +1473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
                 {
-                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
-                    {
+                    match self.tysys.tuple_literal_index_type(&type_args, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
                             let _ = self.emit(TypeError::InvalidLiteral { message, span });
@@ -1729,36 +1616,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The element type of `t[i]` where `t` is a pack-typed tuple and `i` is
-    /// the index of an enclosing variadic `.enumerate()` — the one non-literal
-    /// subscript a tuple admits, since unrolling fixes it per element.
-    ///
-    /// A mapped pack (`[..Option<F>]`) yields its mapped element, matching how
-    /// the variadic for-of binds one.
-    pub(super) fn variadic_enumerate_subscript_type(
-        type_table: &std::cell::RefCell<TypeTable>,
-        elements: &[TypeId],
-        index_expr: &ast::Expr,
-        ctx: &FunctionContext,
-    ) -> Option<TypeId> {
-        let ast::Expr::Ident(ident) = index_expr else {
-            return None;
-        };
-        let local = ctx.lookup(&ident.name)?;
-        if !ctx.variadic_enumerate_indices.contains(&local.index) {
-            return None;
-        }
-        let type_table = type_table.borrow();
-        elements.iter().find_map(|&e| match type_table.get(e) {
-            ResolvedType::TypePack {
-                mapped_elem: Some(elem),
-                ..
-            } => Some(*elem),
-            ResolvedType::TypePack { .. } => Some(e),
-            _ => None,
-        })
-    }
-
     /// Resolve an index expression
     /// [`Self::resolve_index`] for a subscript reached outside
     /// [`Self::resolve_expr`], which is otherwise the only place a visited
@@ -1804,7 +1661,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !util::is_float_only_literal(repr)
                 && let Ok(idx) = repr.parse::<usize>()
             {
-                match Self::tuple_literal_index_type(&self.tysys.type_table, elements, idx) {
+                match self.tysys.tuple_literal_index_type(elements, idx) {
                     Ok(elem) => return elem,
                     Err(message) => {
                         let _ = self.emit(TypeError::InvalidLiteral {
@@ -1816,12 +1673,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             // Unrolling fixes the index to a literal per element.
-            if let Some(elem) = Self::variadic_enumerate_subscript_type(
-                &self.tysys.type_table,
-                elements,
-                &index.index,
-                ctx,
-            ) {
+            if ctx.is_variadic_enumerate_index(&index.index)
+                && let Some(elem) = self.tysys.pack_element_type(elements)
+            {
                 return elem;
             }
             // Non-constant index on tuple
@@ -1834,22 +1688,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // For List and custom types, look for Index or IndexValue trait implementation
         // (List implements IndexValue<i32> with type Output = T)
-        let struct_name = match &base_type {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)
-                .unwrap_or_default(),
-            // The raw GC array dispatches `[]` through `impl IndexValue /
-            // IndexAssign for Array<T>`, keyed by the base name "Array".
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            _ => String::new(),
-        };
+        let struct_name = self
+            .tysys
+            .struct_name_for_type(base_type_id)
+            .unwrap_or_default();
 
         // For newtypes, also resolve the base type name for trait impl lookup
         let (lookup_name, lookup_type_id) =
@@ -2056,23 +1898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => recv_type,
         };
-        let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)
-                .unwrap_or_default(),
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            _ => return None,
-        };
-        if struct_name.is_empty() {
-            return None;
-        }
+        let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
         self.index_lookup_or_newtype_base(
@@ -2111,92 +1937,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
-                // Enter scope for chain elements and then_block
-                ctx.enter_scope();
                 self.resolve_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
-                    ctx,
+                    &mut ctx.enter_scope(),
                     expected_type,
                     true,
                     if_expr.span,
                 );
-                ctx.exit_scope();
 
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    // The chain's result is what the then block and the else
-                    // block agree on, exactly as in the `Condition::Expr` arm.
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => TypeTable::UNIT,
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // An `if let` whose branches are all bare `null` leaves the
-                // type unresolved; report it rather than ICEing in codegen.
-                // When one branch resolved, the other's `null` tail is checked
-                // against it — the sibling's type is what agreement adopted.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same arm-agreement rule as the `Condition::Expr` arm below:
-                // `expected_type = Some(X)` pins `type_id` unconditionally, so
-                // the chain and else blocks could still disagree and a divergent
-                // branch would silently miscompile. Skipped at `Unit`, which is
-                // statement position — the branches drop their values there.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    // `resolve_let_chain_stmts` resolves the then-branch under
-                    // the same `expected_type`, so a mismatch there is already
-                    // diagnosed — and re-checking via `block_result_type` would
-                    // report a spurious "found ()". The else-block is resolved
-                    // independently, so check it directly.
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(else_type, type_id, eb.span);
-                    } else {
-                        // Missing `else` with a non-Unit expected
-                        // type: the implicit `else { () }` cannot
-                        // produce the expected type. See the
-                        // `Condition::Expr` arm for the rationale
-                        // (without this guard the WIR builder
-                        // would produce `(if (result T) ...)`
-                        // without an else and `wasmparser` would
-                        // reject the module at `-O0`).
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the if-let-chain (recorded via
-                // `DesugarKind::IfLetChain`) from the AST. The body walk
-                // ran `resolve_let_chain_stmts` for its fact-recording side
-                // effects (pattern bindings, element resolution) and computed
-                // the result type. Project only the result type.
-                type_id
+                // `resolve_let_chain_stmts` resolved the then block under the
+                // same expectation, so a mismatch there is already diagnosed.
+                self.settle_if_result(if_expr, expected_type, true)
             }
             Condition::Expr(expr) => {
                 // Resolve the condition and both blocks for their facts; reify
@@ -2207,97 +1959,85 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
-
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-
-                    // `never` is the bottom type: a branch returning `never` is compatible
-                    // with any type, so the result type comes from the non-never branch.
-                    //
-                    // An indefinite branch defers to its sibling's resolved
-                    // type; its tail is patched below.
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => {
-                            if then_type != TypeTable::UNIT {
-                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                                let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: "()".to_string(),
-                                    found: type_name,
-                                    span: if_expr.then_block.span,
-                                });
-                            }
-                            TypeTable::UNIT
-                        }
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // Report any unresolved `null` tail in either branch against
-                // the determined result type — AST mirror of the old
-                // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed indefinite (both branches a bare `null`)
-                // `report_uninferable_result` already fired and the null pass
-                // is skipped.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same rule as `resolve_match_expr`: an if-expression whose
-                // result is consumed needs branches that agree. Inference
-                // diagnoses the `expected_type = None` case, but `Some(X)`
-                // bypasses it and would emit an `(if (result X) …)` whose other
-                // side pushes the wrong type. Skipped at `Unit`.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
-                    } else {
-                        // Without an explicit `else` the implicit branch is `()`,
-                        // which cannot satisfy a non-Unit expected type.
-                        // `type_id` is left as-is: the recorded diagnostic
-                        // aborts before WIR build, so a result-typed `if` with
-                        // no else never reaches `wasmparser`.
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the `If` node from the AST; the
-                // body walk resolved the condition and both blocks for
-                // their fact-recording side effects and ran branch-agreement /
-                // null diagnostics off the AST (`ast_block_result_type`).
-                // Project only the result type.
-                type_id
+                self.settle_if_result(if_expr, expected_type, false)
             }
         }
+    }
+
+    /// The type a walked `if` yields: the settled expectation, else what the
+    /// branches agree on. `then_checked`: the then block already met the expectation.
+    fn settle_if_result(
+        &mut self,
+        if_expr: &IfExpr,
+        expected_type: Option<TypeId>,
+        then_checked: bool,
+    ) -> TypeId {
+        let expected_type = self.settled_result_expectation(expected_type);
+        let type_id = if let Some(ty) = expected_type {
+            ty
+        } else {
+            let (then_type, else_type) = self.if_branch_types(if_expr);
+            // `never` is the bottom type and an indefinite branch defers to its
+            // sibling, so either takes the other branch's type.
+            match (
+                self.agreed_branch_type(&[then_type, else_type]),
+                &if_expr.else_block,
+            ) {
+                (Some(agreed), _) => agreed,
+                (None, None) => {
+                    if then_type != TypeTable::UNIT {
+                        let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                        let _ = self.emit(TypeError::TypeMismatch {
+                            expected: "()".to_string(),
+                            found: type_name,
+                            span: if_expr.then_block.span,
+                        });
+                    }
+                    TypeTable::UNIT
+                }
+                (None, Some(else_block)) => {
+                    let (then_name, else_name) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_names_for_mismatch(then_type, else_type);
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected: then_name,
+                        found: else_name,
+                        span: else_block.span,
+                    });
+                    then_type
+                }
+            }
+        };
+
+        // Both branches a bare `null` leaves the type indefinite, which is
+        // reported instead of the tails.
+        if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+            let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+            if let Some(eb) = &if_expr.else_block {
+                blocks.push(eb);
+            }
+            self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+        }
+
+        // A settled expectation skipped agreement, so each branch is checked here
+        // lest one push the wrong type; `Unit` is statement position, where none is kept.
+        if expected_type.is_some() && type_id != TypeTable::UNIT {
+            if !then_checked {
+                let then_type = self.ast_block_result_type(&if_expr.then_block);
+                self.check_branch_type(then_type, type_id, if_expr.then_block.span);
+            }
+            match &if_expr.else_block {
+                Some(eb) => {
+                    let else_type = self.ast_block_result_type(eb);
+                    self.check_branch_type(else_type, type_id, eb.span);
+                }
+                // The implicit `else { () }` cannot produce a non-Unit type.
+                None => self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span),
+            }
+        }
+        type_id
     }
 
     /// Emit a `TypeMismatch` error when a branch's block-result type
@@ -2811,16 +2551,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, Span) {
-        ctx.enter_scope();
-
+        let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
         if let Some(g) = arm.guard.as_ref() {
             self.resolve_expr(g, ctx, Some(TypeTable::BOOL));
         }
         let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
-
-        ctx.exit_scope();
-
         (body_type, arm.body.span())
     }
 
@@ -2863,11 +2599,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let message = if matches!(missing.as_slice(), [Witness::Wild]) {
+            let tt = self.tysys.type_table.borrow();
             let is_resource = matches!(
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .get(self.structure_head(scrutinee_type)),
+                tt.get(tt.scrutinee_structure_head(scrutinee_type)),
                 ResolvedType::Resource { .. }
             );
             if is_resource {
@@ -2887,20 +2621,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let _ = self.emit(TypeError::InvalidPattern { message, span });
     }
 
-    fn structure_head(&self, type_id: TypeId) -> TypeId {
-        self.tysys
-            .type_table
-            .borrow()
-            .scrutinee_structure_head(type_id)
-    }
-
     /// Project an AST pattern onto the shape coverage reads, asked of the
+<<<<<<< HEAD
     /// structure its type wraps. `None` for a pattern that failed to resolve.
     fn exh_pattern(&mut self, pattern: &ast::Pattern, written_type: TypeId) -> Option<Pat> {
         let scrutinee_type = self.structure_head(written_type);
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
+||||||| dc6a50794
+    /// structure its type wraps, as pattern resolution asks it.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
+        let scrutinee_type = self.structure_head(scrutinee_type);
+        match pattern {
+            ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
+=======
+    /// structure its type wraps, as pattern resolution asks it.
+    fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> Pat {
+        let scrutinee_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
+        match pattern {
+            ast::Pattern::Wildcard | ast::Pattern::Error(_) => Pat::Wild,
+>>>>>>> origin/main
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
                 // A bare identifier is a case when it names one, a constant-value
                 // pattern when it names an immutable global, else a binding.
@@ -2935,7 +2680,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
             ast::Pattern::Range {
                 start, end, kind, ..
+<<<<<<< HEAD
             } => return self.exh_range(start, end, *kind, scrutinee_type),
+||||||| dc6a50794
+            } => self.exh_range(start, end, *kind, scrutinee_type),
+=======
+            } => self.tysys.exh_range(start, end, *kind, scrutinee_type),
+>>>>>>> origin/main
             ast::Pattern::Tuple(patterns, _) => {
                 let types = self.tysys.type_table.borrow().as_tuple(scrutinee_type)?;
                 let elements = types
@@ -3039,6 +2790,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+<<<<<<< HEAD
     /// Why `pattern` is dead when an earlier guardless narrowing takes every
     /// value of its type.
     fn narrowed_past(&self, earlier: &[(bool, Pat)], pattern: &Pat) -> Option<String> {
@@ -3099,10 +2851,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.literal_pattern_mismatch(lit, scrutinee_type).is_some() {
             return None;
         }
+||||||| dc6a50794
+    fn exh_is_unsigned(&self, scrutinee_type: TypeId) -> bool {
+        self.tysys
+            .type_table
+            .borrow()
+            .is_unsigned_int(scrutinee_type)
+    }
+
+    /// The values an integer pattern of this type may take.
+    fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
+        let ResolvedType::Primitive(prim) = *self.tysys.type_table.borrow().get(scrutinee_type)
+        else {
+            return None;
+        };
+        Self::primitive_range(prim).map(|(min, max)| IntDomain {
+            min,
+            max,
+            is_char: prim == PrimitiveType::Char,
+        })
+    }
+
+    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Pat {
+        Pat::Int {
+            lo,
+            hi,
+            domain: self.int_domain(scrutinee_type),
+        }
+    }
+
+    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+        // A literal that does not parse was reported where it was lexed or
+        // resolved, and takes no value here.
+=======
+    fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Pat {
+        // A literal that does not parse was reported where it was lexed or
+        // resolved, and takes no value here.
+>>>>>>> origin/main
         let value = match lit {
             Literal::Number(repr) if util::is_float_only_literal(repr) => return None,
             Literal::Number(repr) => {
-                if self.exh_is_unsigned(scrutinee_type) {
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .is_unsigned_int(scrutinee_type)
+                {
                     util::parse_u128_literal(repr).map(|v| v as i128).ok()
                 } else {
                     util::parse_i128_literal(repr).ok()
@@ -3127,8 +2921,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => return Some(Pat::Opaque),
         };
+<<<<<<< HEAD
         let value = value?;
         self.exh_int(value, value, scrutinee_type)
+||||||| dc6a50794
+        value.map_or(Pat::Opaque, |v| self.exh_int(v, v, scrutinee_type))
+=======
+        value.map_or(Pat::Opaque, |v| self.tysys.exh_int(v, v, scrutinee_type))
+>>>>>>> origin/main
     }
 
     /// The case `name` of the enum or variant `scrutinee_type`, its payload
@@ -3138,8 +2938,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         name: &str,
         payload: Option<&ast::Pattern>,
+<<<<<<< HEAD
     ) -> Option<Pat> {
         if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
+||||||| dc6a50794
+    ) -> Pat {
+        if let Some(enum_info) = self.enum_of_type(scrutinee_type) {
+=======
+    ) -> Pat {
+        if let Some(enum_info) = self.tysys.enum_of_type(scrutinee_type) {
+>>>>>>> origin/main
             let cases: Rc<[Case]> = enum_info
                 .cases
                 .iter()
@@ -3155,6 +2963,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 payload: None,
             });
         }
+<<<<<<< HEAD
         let variant_info = self.variant_of_type(scrutinee_type).cloned()?;
         let index = variant_info.cases.iter().position(|c| c.name == name)?;
         let cases: Rc<[Case]> = variant_info
@@ -3179,6 +2988,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => None,
         };
         Some(Pat::Case {
+||||||| dc6a50794
+        let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned() else {
+            return Pat::Wild;
+        };
+        let Some(index) = variant_info.cases.iter().position(|c| c.name == name) else {
+            return Pat::Wild;
+        };
+        let cases: Rc<[Case]> = variant_info
+            .cases
+            .iter()
+            .map(|c| Case {
+                name: c.name.clone(),
+                has_payload: c.payload != TypeTable::UNIT,
+            })
+            .collect();
+        let payload = payload.filter(|_| cases[index].has_payload).map(|p| {
+            let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                _ => Vec::new(),
+            };
+            let payload_type = self
+                .tysys
+                .substitute_type_params(variant_info.cases[index].payload, &type_args);
+            Box::new(self.exh_pattern(p, payload_type))
+        });
+        Pat::Case {
+=======
+        let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type).cloned() else {
+            return Pat::Wild;
+        };
+        let Some((index, case)) = variant_info.case_named(name) else {
+            return Pat::Wild;
+        };
+        let cases: Rc<[Case]> = {
+            let tt = self.tysys.type_table.borrow();
+            variant_info
+                .cases
+                .iter()
+                .map(|c| Case {
+                    name: c.name.clone(),
+                    has_payload: c.has_payload(&tt),
+                })
+                .collect()
+        };
+        let payload = payload.filter(|_| cases[index].has_payload).map(|p| {
+            let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                _ => Vec::new(),
+            };
+            let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
+            Box::new(self.exh_pattern(p, payload_type))
+        });
+        Pat::Case {
+>>>>>>> origin/main
             cases,
             index,
             payload,
@@ -3205,7 +3068,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let Some(AssocConstSig {
                 value: const_expr, ..
-            }) = self.associated_constant_qualified(variant_qualifier, variant_name)
+            }) = self
+                .tysys
+                .associated_constant_qualified(variant_qualifier, variant_name)
             else {
                 if self
                     .namespaced_constant(variant_qualifier, variant_name)
@@ -3235,6 +3100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.exh_case(scrutinee_type, &normalized, bindings.first())
     }
 
+<<<<<<< HEAD
     fn exh_range(
         &mut self,
         start: &ast::Pattern,
@@ -3262,6 +3128,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.exh_int(start_val, hi, scrutinee_type)
     }
 
+||||||| dc6a50794
+    fn exh_range(
+        &self,
+        start: &ast::Pattern,
+        end: &ast::Pattern,
+        kind: ast::RangeKind,
+        scrutinee_type: TypeId,
+    ) -> Pat {
+        // Bad or empty bounds were reported where the pattern was resolved.
+        let is_unsigned = self.exh_is_unsigned(scrutinee_type);
+        let (Some(start_val), Some(end_val)) = (
+            util::range_endpoint_to_i128(start, is_unsigned),
+            util::range_endpoint_to_i128(end, is_unsigned),
+        ) else {
+            return Pat::Wild;
+        };
+        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() || (!inclusive && order.is_ge()) {
+            return Pat::Wild;
+        }
+        let hi = if inclusive { end_val } else { end_val - 1 };
+        self.exh_int(start_val, hi, scrutinee_type)
+    }
+
+=======
+>>>>>>> origin/main
     fn format_missing_cases(cases: &[String]) -> String {
         match cases.len() {
             1 => format!("case `{}`", cases[0]),
@@ -3274,15 +3167,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 format!("cases {}, and `{last}`", rest.join(", "))
             }
-        }
-    }
-
-    /// The values an integer literal may take at `prim`. `char` is included:
-    /// a `\u{…}` escape is checked against the scalar range the same way.
-    fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
-        match prim {
-            PrimitiveType::Char => Some((0, 0x0010_FFFF)),
-            other => other.int_range(),
         }
     }
 
@@ -3692,6 +3576,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
+<<<<<<< HEAD
     /// The struct declaration an unnamed literal's target names, or `None` where
     /// it declares none or builds from key-value pairs.
     pub(super) fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
@@ -3711,6 +3596,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+||||||| dc6a50794
+    /// The struct declaration an unnamed literal's target names, or `None`
+    /// where it declares none and the literal interns by its fields.
+    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
+        match *self.tysys.type_table.borrow().get(expected_type?) {
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            } => Some(def),
+            _ => None,
+        }
+    }
+
+=======
+>>>>>>> origin/main
     pub(super) fn resolve_struct_literal(
         &mut self,
         struct_lit: &ast::StructLiteralExpr,
@@ -3723,7 +3623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let implicit_decl = if struct_lit.name.is_some() {
             None
         } else {
-            let Some(def) = self.implicit_struct_target(expected_type) else {
+            let Some(def) = self.tysys.implicit_struct_target(expected_type) else {
                 return self.resolve_anonymous_struct_literal(struct_lit, ctx, expected_type);
             };
             Some(def)
@@ -4820,11 +4720,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// Check if a type contains a `TypePack` (variadic pack parameter).
-    pub(super) fn type_contains_pack(&self, type_id: TypeId) -> bool {
-        self.tysys.type_table.borrow().contains_type_pack(type_id)
-    }
-
     /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
     /// once the binding is in scope. `None` when the form is not an enumerate
     /// or the index position is a wildcard.
@@ -4852,41 +4747,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The pack a comprehension's iterable walks: its `(name, index)` and the
-    /// type the binding takes for one element.
-    ///
-    /// A mapped pack (`[..StructField<T, F>]`) binds the mapped element, the
-    /// same choice the variadic for-of makes.
-    pub(super) fn comprehension_pack_elem(
-        type_table: &std::cell::RefCell<TypeTable>,
-        iterable_type: TypeId,
-    ) -> Option<TypeId> {
-        Self::comprehension_pack_of(type_table, iterable_type).map(|(_, _, elem)| elem)
-    }
-
-    pub(super) fn comprehension_pack(
-        &self,
-        iterable_type: TypeId,
-    ) -> Option<(String, u32, TypeId)> {
-        Self::comprehension_pack_of(&self.tysys.type_table, iterable_type)
-    }
-
-    fn comprehension_pack_of(
-        type_table: &std::cell::RefCell<TypeTable>,
-        iterable_type: TypeId,
-    ) -> Option<(String, u32, TypeId)> {
-        let type_table = type_table.borrow();
-        let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
-        elems.iter().find_map(|&e| match type_table.get(e) {
-            ResolvedType::TypePack {
-                name,
-                index,
-                mapped_elem,
-            } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
-            _ => None,
-        })
-    }
-
     /// Resolve `[for let v of tuple { expr }]`.
     ///
     /// Only a pack-typed tuple is walkable: a concrete tuple's elements have
@@ -4900,7 +4760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let (source, is_enumerate) = Self::split_enumerate(&comp.iterable);
         let iterable_type = self.resolve_expr(source, ctx, None);
-        let Some((pack_name, pack_index, elem_type)) = self.comprehension_pack(iterable_type)
+        let Some((pack_name, pack_index, elem_type)) = self.tysys.comprehension_pack(iterable_type)
         else {
             let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
             let _ = self.emit(TypeError::InvalidPattern {
@@ -4921,17 +4781,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             elem_type
         };
 
-        ctx.enter_scope();
-        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
-        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
-        let body_type = self.resolve_expr(&comp.body, ctx, None);
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
+        let mut scope = ctx.enter_scope();
+        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, &mut scope);
+        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, &scope);
+        let body_type = self.resolve_expr(
+            &comp.body,
+            &mut scope.enter_enumerate_body(index_binding),
+            None,
+        );
 
         // A body that yields the element unchanged reproduces the source shape;
         // anything else maps the pack through the body's type.
@@ -5014,7 +4871,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (elem_idx, elem) in tuple_lit.elements.iter().enumerate() {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_type_id = self.resolve_expr(inner, ctx, None);
-                if self.type_contains_pack(spread_type_id) {
+                if self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_pack(spread_type_id)
+                {
                     // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
                     // splices its own elements, so each pack lands directly in
                     // the literal's type and monomorphize expands it there. A
@@ -5220,9 +5082,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap();
 
         // Allocate a local for the Some payload binding (walk-order parity).
-        ctx.enter_scope();
-        let _v_local = ctx.add_local("$qm_v".to_string(), some_type, false, None);
-        ctx.exit_scope();
+        ctx.enter_scope()
+            .add_local("$qm_v".to_string(), some_type, false, None);
 
         // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
@@ -5254,11 +5115,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         drop(tt);
 
-        ctx.enter_scope();
         // The `$qm_v` local is allocated for walk-order parity; reify rebuilds
         // the `?` desugar and its own bindings, so the index is not kept here.
-        ctx.add_local("$qm_v".to_string(), ok_type, false, None);
-        ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
+        let mut scope = ctx.enter_scope();
+        scope.add_local("$qm_v".to_string(), ok_type, false, None);
+        scope.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
         // error types differ (no-op when they match). `resolve_from_call`
@@ -5267,8 +5128,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if inner_err_type != outer_err_type {
             let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
         }
-
-        ctx.exit_scope();
 
         // Reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded
@@ -5375,6 +5234,162 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
+    }
+}
+
+impl TypeSystem {
+    /// Signature, defining module and defining name of the function an identifier
+    /// references; the defining name (`foo` under `use { foo as bar }`) is the mono key.
+    fn lookup_func_sig_for_ref(
+        &self,
+        ident: &ast::IdentExpr,
+    ) -> Option<(FunctionSig, ModuleSource, String)> {
+        let def = self.free_function_at(ident.id)?;
+        let sig = self.signatures.function_sig(def)?.clone();
+        let defs = self.resolutions.defs();
+        Some((sig, defs.module(def).clone(), defs.name(def).to_string()))
+    }
+
+    /// The branch type that types a block its use site expects nothing from:
+    /// the first that is not `never`, `unit` or unresolved, else the first.
+    fn representative_branch_type(&self, branch_types: &[TypeId]) -> TypeId {
+        let tt = self.type_table.borrow();
+        branch_types
+            .iter()
+            .copied()
+            .find(|&t| t != TypeTable::NEVER && t != TypeTable::UNIT && !tt.is_indefinite(t))
+            .or_else(|| {
+                branch_types
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER)
+            })
+            .unwrap_or(branch_types[0])
+    }
+
+    /// The values an integer pattern of this type may take.
+    fn int_domain(&self, scrutinee_type: TypeId) -> Option<IntDomain> {
+        let ResolvedType::Primitive(prim) = *self.type_table.borrow().get(scrutinee_type) else {
+            return None;
+        };
+        primitive_range(prim).map(|(min, max)| IntDomain {
+            min,
+            max,
+            is_char: prim == PrimitiveType::Char,
+        })
+    }
+
+    fn exh_int(&self, lo: i128, hi: i128, scrutinee_type: TypeId) -> Pat {
+        Pat::Int {
+            lo,
+            hi,
+            domain: self.int_domain(scrutinee_type),
+        }
+    }
+
+    fn exh_range(
+        &self,
+        start: &ast::Pattern,
+        end: &ast::Pattern,
+        kind: ast::RangeKind,
+        scrutinee_type: TypeId,
+    ) -> Pat {
+        // Bad or empty bounds were reported where the pattern was resolved.
+        let is_unsigned = self.type_table.borrow().is_unsigned_int(scrutinee_type);
+        let (Some(start_val), Some(end_val)) = (
+            util::range_endpoint_to_i128(start, is_unsigned),
+            util::range_endpoint_to_i128(end, is_unsigned),
+        ) else {
+            return Pat::Wild;
+        };
+        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
+        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
+        if order.is_gt() || (!inclusive && order.is_ge()) {
+            return Pat::Wild;
+        }
+        let hi = if inclusive { end_val } else { end_val - 1 };
+        self.exh_int(start_val, hi, scrutinee_type)
+    }
+
+    /// The pack a comprehension's iterable walks, as [`pack_of`] reads it.
+    pub(super) fn comprehension_pack(
+        &self,
+        iterable_type: TypeId,
+    ) -> Option<(String, u32, TypeId)> {
+        let type_table = self.type_table.borrow();
+        let (elems, _) = type_table.as_tuple_through_ref(iterable_type)?;
+        pack_of(&type_table, &elems)
+    }
+
+    /// The type one expansion of the pack in `elements` binds.
+    pub(super) fn pack_element_type(&self, elements: &[TypeId]) -> Option<TypeId> {
+        pack_of(&self.type_table.borrow(), elements).map(|(_, _, elem)| elem)
+    }
+
+    /// Element type at a literal index into a tuple, which may carry a
+    /// variadic pack; only the scalars ahead of the pack have a fixed position.
+    pub(super) fn tuple_literal_index_type(
+        &self,
+        elements: &[TypeId],
+        index: usize,
+    ) -> Result<TypeId, String> {
+        let table = self.type_table.borrow();
+        let Some(pack_pos) = elements.iter().position(|&t| table.is_type_pack(t)) else {
+            return elements.get(index).copied().ok_or_else(|| {
+                format!(
+                    "tuple index {index} out of bounds, tuple has {} elements",
+                    elements.len()
+                )
+            });
+        };
+        if index < pack_pos {
+            return Ok(elements[index]);
+        }
+        Err(format!(
+            "tuple index {index} lands on a variadic pack, whose arity and element \
+             types are only known once it expands; walk the tuple with `for-of` or \
+             a comprehension instead"
+        ))
+    }
+
+    /// The type one element of a comprehension's iterable binds.
+    pub(super) fn comprehension_pack_elem(&self, iterable_type: TypeId) -> Option<TypeId> {
+        self.comprehension_pack(iterable_type)
+            .map(|(_, _, elem)| elem)
+    }
+
+    /// The struct declaration an unnamed literal's target names, or `None`
+    /// where it declares none and the literal interns by its fields.
+    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
+        match *self.type_table.borrow().get(expected_type?) {
+            ResolvedType::Struct {
+                def: StructDef::Decl(def),
+                ..
+            } => Some(def),
+            _ => None,
+        }
+    }
+}
+
+/// The pack in `elements`: its `(name, index)` and the type one expansion binds,
+/// a mapped pack's (`[..Option<F>]`) mapped element as the variadic for-of binds it.
+fn pack_of(table: &TypeTable, elements: &[TypeId]) -> Option<(String, u32, TypeId)> {
+    elements.iter().find_map(|&e| match table.get(e) {
+        ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } => Some((name.clone(), *index, mapped_elem.unwrap_or(e))),
+        _ => None,
+    })
+}
+
+/// The values an integer literal may take at `prim`. `char` is included:
+/// a `\u{…}` escape is checked against the scalar range the same way.
+fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
+    match prim {
+        PrimitiveType::Char => Some((0, 0x0010_FFFF)),
+        other => other.int_range(),
     }
 }
 
@@ -5546,29 +5561,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let item = match range.kind {
-            RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
-        let struct_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .struct_name(item)
-            .to_string();
-
-        let struct_type = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow()
-                .require_compiler_item_def(item);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_generic_instance(def, vec![element_type])
-        };
+        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form

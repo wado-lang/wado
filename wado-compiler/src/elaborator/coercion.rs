@@ -2,6 +2,7 @@
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
@@ -721,9 +722,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // fold walks them, so the `$acc` reserved below lands on the index
         // reify will allocate for it.
         let has_spread = !struct_lit.spreads.is_empty();
-        if has_spread {
-            ctx.enter_scope();
-        }
+        let mut spread_scope;
+        let ctx: &mut FunctionContext = if has_spread {
+            spread_scope = ctx.enter_scope();
+            &mut spread_scope
+        } else {
+            ctx
+        };
         let mut value_type = value_type;
         for member in struct_lit.members() {
             match member {
@@ -752,7 +757,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if has_spread {
             ctx.add_local("$acc".to_string(), output_type, true, None);
-            ctx.exit_scope();
         }
 
         Some(target_type)
@@ -790,7 +794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) -> Option<(FromArrayInfo, TypeId, bool)> {
         let resolve = |elaborator: &mut Self, ty: TypeId| {
-            let name = elaborator.literal_target_name(ty)?;
+            let name = elaborator.tysys.literal_target_name(ty)?;
             match elaborator
                 .find_from_array_impls(&name, ty, want_pair)
                 .as_slice()
@@ -821,20 +825,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None
             }
         }
-    }
-
-    /// The name a literal's target type carries its impls under. Broader than
-    /// [`super::tysys::TypeSystem::struct_name_for_type`], which omits the
-    /// nominal shapes that are not structs: a variant is a literal target too
-    /// (`core:value::Value` is the case that matters).
-    fn literal_target_name(&self, target_type: TypeId) -> Option<String> {
-        self.tysys.struct_name_for_type(target_type).or_else(|| {
-            self.tysys
-                .type_table
-                .borrow()
-                .nominal_head(target_type)
-                .map(|(name, _)| name)
-        })
     }
 
     /// Record the `From` a literal element converts through to reach its
@@ -888,7 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !is_literal_expr(element) {
             return false;
         }
-        let Some(name) = self.literal_target_name(slot_type) else {
+        let Some(name) = self.tysys.literal_target_name(slot_type) else {
             return false;
         };
         let Some(from_def) = self.tysys.compiler_trait_def(CompilerItem::From) else {
@@ -921,14 +911,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `type_id` is a map — a type a `{ k: v, … }` literal builds
     /// through `From<Array<[K, V]>>` — rather than a composable struct.
     pub(super) fn is_key_value_literal_target(&mut self, type_id: TypeId) -> bool {
-        self.literal_target_name(type_id)
+        self.tysys
+            .literal_target_name(type_id)
             .is_some_and(|name| !self.find_from_array_impls(&name, type_id, true).is_empty())
     }
 
     /// The `LiteralSpread::spread_literal` a `..base` member calls on
     /// `output_type`, or `None` where the type does not implement the trait.
     fn literal_spread_call(&mut self, output_type: TypeId) -> Option<LiteralCallee> {
-        let name = self.literal_target_name(output_type)?;
+        let name = self.tysys.literal_target_name(output_type)?;
         let trait_ = self.tysys.compiler_trait_def(CompilerItem::LiteralSpread)?;
         let info =
             self.find_arithmetic_trait_impl(&name, output_type, trait_, "spread_literal", None)?;
@@ -1089,5 +1080,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             output_type
         };
         Some(result_type)
+    }
+}
+
+impl TypeSystem {
+    /// The name a literal's target type carries its impls under: a variant is a
+    /// target too, which [`Self::struct_name_for_type`] omits (`core:value::Value`).
+    fn literal_target_name(&self, target_type: TypeId) -> Option<String> {
+        self.struct_name_for_type(target_type).or_else(|| {
+            self.type_table
+                .borrow()
+                .nominal_head(target_type)
+                .map(|(name, _)| name)
+        })
     }
 }

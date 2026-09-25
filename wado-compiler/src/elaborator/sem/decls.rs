@@ -9,7 +9,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::super::sig::{DeclSig, MethodSig};
-use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
+use super::super::types::{DataDecls, StructFieldInfo};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
@@ -141,33 +141,17 @@ pub(crate) struct ModuleDecls {
     /// (which records) from reify (which emits).
     pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
-    /// Additions to the type tables made during this module's walk, consulted
-    /// by [`super::super::types::TypeLookup`] before the shared `all_*`
-    /// tables. Populated by [`super::super::Elaborator::collect_types`] and by
-    /// call sites that instantiate a generic newtype on demand.
-    ///
-    /// Keyed by declaration, so a module-level `struct` and the same spelling
-    /// declared inside a function body are two entries rather than one that
-    /// wins — and so a walk standing in another module reads these without
-    /// having to hide them first.
-    pub(crate) local_struct_fields: IndexMap<DefId, StructFieldInfo>,
-    pub(crate) local_newtypes: IndexMap<DefId, TypeId>,
-    pub(crate) local_generic_newtypes: IndexMap<DefId, GenericNewtypeInfo>,
-    pub(crate) local_enum_cases: IndexMap<DefId, EnumInfo>,
-    pub(crate) local_flags_cases: IndexMap<DefId, FlagsInfo>,
-    pub(crate) local_variant_cases: IndexMap<DefId, VariantInfo>,
+    /// Additions to the data tables made during this module's walk, read by
+    /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.
+    pub(crate) local: DataDecls,
 
     /// Fields of the anonymous struct shapes this walk interned. A shape names
     /// no declaration, so it is keyed by the shape's own id — the same head
     /// [`crate::tir::StructDef::Anon`] carries.
     pub(crate) anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
 
-    /// The local items in scope at the walk's position, by the name written in
-    /// source. `hoist_local_items` saves and restores it per block, and
-    /// `clear_fn_local_items` empties it per function body.
-    ///
-    /// It answers with an identity; a declaration's contents come from the
-    /// maps above.
+    /// The identities of the local items in scope at the walk's position, by the
+    /// name written in source. Their contents come from the maps above.
     pub(crate) fn_local_items: IndexMap<String, DefId>,
 }
 

@@ -381,12 +381,8 @@ pub(crate) struct TypeAnnotations {
     /// and the trait-omitted display form). Reify reads these instead of
     /// re-running `format_local` against the impl facts' `struct_name`.
     pub(crate) method_names: IndexMap<AstId, MethodNames>,
-    /// Resolved field types per struct decl `AstId`, in declaration order, as
-    /// `resolve_struct` produced them with the type-param scope in place. Reify
-    /// reads these rather than `tysys.all_struct_fields`, which is seeded by the
-    /// static decl-field pass — that runs before import scopes exist and cannot
-    /// follow `pub use` chains, so a field typed by a re-exported decl lands
-    /// there as UNKNOWN.
+    /// Resolved field types per struct decl, in declaration order. Unlike
+    /// `tysys.data.struct_fields`, these follow `pub use` re-export chains.
     pub(crate) struct_field_types: IndexMap<AstId, Vec<tir::TypeId>>,
     /// Place classification for each identifier that resolves to one — local,
     /// `&mut`-deref-capture, or global — so `assign_to_target` can validate

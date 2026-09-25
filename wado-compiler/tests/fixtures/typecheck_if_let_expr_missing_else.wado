@@ -1,0 +1,10 @@
+use {println, Stdout} from "core:cli";
+
+export fn run() with Stdout {
+    let o: Option<i32> = Some(42);
+    let x = if let Some(v) = o { v };
+    println(`${x:?}`);
+}
+
+__DATA__
+{"compile_error": ":5:32: analysis error: type mismatch: expected '()', found 'i32'", "compile_error_count": 1}

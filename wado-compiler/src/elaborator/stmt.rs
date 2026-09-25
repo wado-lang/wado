@@ -1,9 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr,
-    ExprStmt, ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt,
-    Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
+    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
+    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnStmt, Stmt, TaskReturnStmt,
+    Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::primitive::PrimitiveType;
@@ -12,29 +12,42 @@ use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::types::{BindingSite, FunctionContext, TypeError};
+use super::tysys::TypeSystem;
 use super::util;
+<<<<<<< HEAD
 use super::{Elaborator, ForwardDefaults};
 use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
+||||||| dc6a50794
+use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
+=======
+use crate::ast::{BinaryOp, RangeKind, StructPatternField};
+>>>>>>> origin/main
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::types::{
-    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
-};
+use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias,
 };
 use crate::symbol_notation::render;
+<<<<<<< HEAD
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, escape, hashmap, tir};
+||||||| dc6a50794
+use crate::tir::{StructDef, TirTypeParam};
+use crate::{IndexMap, hashmap, tir};
+=======
+use crate::tir::StructDef;
+use crate::{hashmap, tir};
+>>>>>>> origin/main
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RefBinding {
+pub(super) enum RefBinding {
     None,
     Ref,
     MutRef,
@@ -90,8 +103,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) {
-        ctx.enter_scope();
-        let outer_items = self.hoist_local_items(block);
+        let ctx = &mut ctx.enter_scope();
+        let items = self.sem.decls.fn_local_items.clone();
+        util::replaced(
+            self,
+            |elaborator| &mut elaborator.sem.decls.fn_local_items,
+            items,
+            |this| this.resolve_block_stmts(block, ctx, expected_type, tail_value),
+        );
+    }
+
+    fn resolve_block_stmts(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) {
+        self.hoist_local_items(block);
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
             // The trailing statement is resolved in value position when the
@@ -130,20 +159,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.resolve_stmt(s, ctx);
         }
-        if let Some(outer) = outer_items {
-            self.sem.decls.fn_local_items = outer;
-        }
-        ctx.exit_scope();
     }
 
-    /// Bring a block's local items into scope ahead of its statements,
-    /// answering with the enclosing block's to restore on the way out.
-    ///
-    /// Three passes, because a name resolves through its field info: the
-    /// structs take their identity and a fieldless entry, then the newtypes
-    /// resolve — to a fixpoint, so a base may name a later newtype — then the
-    /// struct fields are filled in.
-    fn hoist_local_items(&mut self, block: &Block) -> Option<IndexMap<String, DefId>> {
+    /// Bring a block's local items into scope ahead of its statements: structs, then
+    /// newtypes to a fixpoint (a base may name a later one), then struct fields.
+    fn hoist_local_items(&mut self, block: &Block) {
         let items: Vec<&ast::Item> = block
             .stmts
             .iter()
@@ -152,10 +172,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             })
             .collect();
-        if items.is_empty() {
-            return None;
-        }
-        let outer = self.sem.decls.fn_local_items.clone();
         for item in &items {
             if let ast::Item::Struct(struct_decl) = item {
                 self.declare_local_struct(struct_decl);
@@ -178,7 +194,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in items {
             self.resolve_local_item(item);
         }
-        Some(outer)
     }
 
     /// Resolve a statement for its facts. Reify rebuilds the `TirStmt`(s)
@@ -194,7 +209,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::While(while_stmt) => self.resolve_while(while_stmt, ctx),
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
-            Stmt::Loop(loop_stmt) => self.resolve_loop(loop_stmt, ctx),
+            Stmt::Loop(loop_stmt) => self.resolve_block(&loop_stmt.body, ctx, None),
             Stmt::Match(match_expr) => {
                 // A `match` in statement position discards its result, so pin
                 // the expected type to `Unit` (the WIR builder drops each arm
@@ -205,7 +220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_expression_type(match_expr.id, ty);
             }
             Stmt::Break(break_stmt) => self.resolve_break(break_stmt, ctx),
-            Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
+            Stmt::Continue(_) => {}
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
             // Already resolved ahead of the block's statements.
@@ -256,9 +271,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Give a local struct its identity before any of its block's
     /// declarations are resolved, so a type may name one written later.
     fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
+        let def = self.tysys.def_at(struct_decl.id);
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
         // generic struct: its usage sites mint separate `GenericInstance`
         // TypeIds, and this one exists so `type_id_of_decl` has something to
@@ -284,65 +297,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &ParamSlot::list(&struct_decl.type_params),
             &self.tysys.type_table,
         );
-        self.sem.decls.local_struct_fields.insert(
+        self.sem.decls.local.struct_fields.insert(
             def,
             StructFieldInfo {
                 name: mangled_name,
-                module_source: self.current_module_source.clone(),
-                defined_at: struct_decl.id,
-                fields: Vec::new(),
-                field_ast_ids: Vec::new(),
-                field_defaults: Vec::new(),
-                field_wire_numbers: Vec::new(),
-                type_params: RealTypeParams::of(&struct_decl.type_params),
-                type_param_type_ids,
+                ..StructFieldInfo::of_decl(
+                    self.current_module_source.clone(),
+                    struct_decl,
+                    Vec::new(),
+                    type_param_type_ids,
+                )
             },
         );
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        // Generic local structs need `T` etc. in scope while resolving field
-        // types (so a field of type `T` becomes a `TypeParam`, not
-        // `UNKNOWN`), mirroring `resolve_struct`'s top-level handling. The
-        // scope is entered unconditionally — harmless no-op when there are
-        // no type params.
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&struct_decl.type_params, 0);
 
-        // Field default expressions are recorded here (the raw AST, in
-        // `field_defaults` below) and resolved into TIR by
-        // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
-        // split for a top-level struct.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let mut fields = Vec::new();
-        let mut field_ast_ids = Vec::new();
-        let mut field_defaults = Vec::new();
-        for field in &struct_decl.fields {
-            let type_id = scope.resolve_struct_field(field, &mut field_ctx);
-            fields.push((field.name.clone(), type_id, field.visibility));
-            field_ast_ids.push(field.id);
-            field_defaults.push(field.default.clone());
-        }
-
-        // Resolved here, with the struct's own type params in scope, so a
-        // default naming a sibling param (`<A, B = A>`) means what it says —
-        // reify has only the enclosing function's params.
-        let type_params: Vec<TirTypeParam> = struct_decl
-            .type_params
+        let fields: Vec<_> = struct_decl
+            .fields
             .iter()
-            .enumerate()
-            .map(|(i, p)| TirTypeParam {
-                name: p.name.clone(),
-                is_effect: p.is_effect,
-                is_pack: p.is_pack,
-                bounds: p.bounds.iter().map(|b| b.name.clone()).collect(),
-                default: p.default.as_ref().map(|ty| scope.resolve_type(ty)),
-                index: i as u32,
-                projected_from: None,
+            .map(|field| {
+                let type_id = scope.resolve_struct_field(field, &mut field_ctx);
+                (field.name.clone(), type_id, field.visibility)
             })
             .collect();
+
+        let type_params = scope.data_type_params(&struct_decl.type_params);
         drop(scope);
 
         self.sem
@@ -350,22 +335,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
-        let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
-            return;
-        };
-        info.fields = fields;
-        info.field_ast_ids = field_ast_ids;
-        info.field_defaults = field_defaults;
-        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
-        // Local structs have no `Item::Struct` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // statement handling (`reify_local_struct`) is what discovers and
-        // builds this declaration's `TirStruct`, from the `local_struct_fields`
-        // entry just recorded above (annotate records facts; reify is the
-        // sole TIR producer, matching every other declaration kind).
+        let def = self.tysys.def_at(struct_decl.id);
+        self.sem
+            .decls
+            .local
+            .struct_fields
+            .get_mut(&def)
+            .expect("`declare_local_struct` ran over this block first")
+            .fields = fields;
     }
 
     /// Report what a signature's written types cannot mean.
@@ -458,16 +435,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // base AST with its arguments substituted, so what is recorded is the
         // declaration — the same entry a module-level generic newtype makes.
         if !newtype_decl.type_params.is_empty() {
-            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-                return true;
-            };
-            self.sem.decls.local_generic_newtypes.insert(
-                def,
-                GenericNewtypeInfo {
-                    type_params: RealTypeParams::of(&newtype_decl.type_params),
-                    base_type_ast: newtype_decl.ty.clone(),
-                },
-            );
+            let def = self.tysys.def_at(newtype_decl.id);
+            self.sem
+                .decls
+                .local
+                .generic_newtypes
+                .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
             self.sem
                 .decls
                 .fn_local_items
@@ -478,37 +451,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == TypeTable::UNKNOWN {
             return false;
         }
-        // Same as the local struct: the head is this declaration's identity.
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_newtype(def, base_type_id);
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(newtype_decl.id, type_id);
-        // Durable entry: some trait-bound synthesis (e.g. the auto-derived
-        // `Display` a template string needs) re-resolves a newtype's base type
-        // rather than reading `ResolvedType` directly, so it must be
-        // discoverable post-declaration the same way struct field info is
-        // (see `resolve_local_struct`).
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        self.sem.decls.local_newtypes.insert(def, type_id);
+        let def = self.tysys.def_at(newtype_decl.id);
+        self.sem.decls.local.declare_newtype(
+            &self.tysys.type_table,
+            def,
+            newtype_decl.id,
+            base_type_id,
+        );
         self.sem
             .decls
             .fn_local_items
             .insert(newtype_decl.name.clone(), def);
-        // Local newtypes have no `Item::Newtype` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // handling (`reify_local_newtype`) discovers and builds this
-        // declaration's `TirNewtype`, from the `local_newtypes` entry just
-        // recorded above.
         true
     }
 
@@ -531,10 +484,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // target: its frame keeps an inner `break LABEL` from landing on an
         // outer block expression reusing the name. Its collected types are
         // dropped with the block's value.
-        ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
-        // resolve_block already handles scope entry/exit
-        self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
-        ctx.pop_labeled_block_frame();
+        self.resolve_block_with_position(
+            &labeled_block.block,
+            &mut ctx.enter_labeled_block(labeled_block.label.clone(), expected_type),
+            expected_type,
+            tail_value,
+        );
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
@@ -663,60 +618,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Reify rebuilds the `Let` / `LetDestructure`
-        // stmt from the AST + recorded facts (`let_annotated_types`,
-        // `local_types`, the binding symbols). This walk binds the pattern into
-        // `ctx`, records the local symbols, registers closure defaults, and
-        // ran the type-mismatch diagnostic above (the resolved `value_type`'s
-        // only consumer).
-        match &let_stmt.pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-                let mut closure_candidate = ast_value;
-                while let ast::Expr::Unary(u) = closure_candidate {
-                    closure_candidate = &u.expr;
+        let Some(name) = self.bind_let_ident(let_stmt, type_id, ctx) else {
+            match &let_stmt.pattern {
+                ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
+                    self.resolve_let_pattern(
+                        &let_stmt.pattern,
+                        type_id,
+                        let_stmt.is_mut,
+                        let_stmt.span,
+                        BindingSite::Let,
+                        ctx,
+                    );
                 }
-                if let ast::Expr::Closure(closure) = closure_candidate {
-                    let defaults: Vec<(String, Option<ast::Expr>)> = closure
-                        .params
-                        .iter()
-                        .map(|p| (p.name.clone(), p.default.clone()))
-                        .collect();
-                    if defaults.iter().any(|(_, d)| d.is_some()) {
-                        ctx.closure_defaults.insert(name.clone(), defaults);
-                    }
+                ast::Pattern::Wildcard => {}
+                _ => {
+                    self.check_irrefutable_pattern(
+                        &let_stmt.pattern,
+                        let_stmt.span,
+                        BindingSite::Let,
+                    );
                 }
             }
-            ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                self.resolve_let_pattern(
-                    &let_stmt.pattern,
-                    type_id,
-                    let_stmt.is_mut,
-                    let_stmt.span,
-                    BindingSite::Let,
-                    ctx,
-                );
-            }
-            ast::Pattern::Wildcard => {
-                // `let _ = expr;` — value evaluated for side effects, result
-                // discarded; nothing to bind.
-            }
-            _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
+            return;
+        };
+        let mut closure_candidate = ast_value;
+        while let ast::Expr::Unary(u) = closure_candidate {
+            closure_candidate = &u.expr;
+        }
+        if let ast::Expr::Closure(closure) = closure_candidate {
+            let defaults: Vec<(String, Option<ast::Expr>)> = closure
+                .params
+                .iter()
+                .map(|p| (p.name.clone(), p.default.clone()))
+                .collect();
+            if defaults.iter().any(|(_, d)| d.is_some()) {
+                ctx.closure_defaults.insert(name.clone(), defaults);
             }
         }
+    }
+
+    /// Bind a `let`'s single-name pattern into `ctx`, answering the name; `None`
+    /// for any other pattern, which is left unbound.
+    fn bind_let_ident<'s>(
+        &mut self,
+        let_stmt: &'s LetStmt,
+        type_id: TypeId,
+        ctx: &mut FunctionContext,
+    ) -> Option<&'s String> {
+        let (ast::Pattern::Ident {
+            id,
+            name,
+            span: name_span,
+        }
+        | ast::Pattern::MutIdent {
+            id,
+            name,
+            span: name_span,
+        }) = &let_stmt.pattern
+        else {
+            return None;
+        };
+        let is_mut = let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
+        self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
+        Some(name)
     }
 
     /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
@@ -784,43 +749,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an uninitialized let declaration: `let x: T;`
-    ///
-    /// Emits a `TirStmtKind::Let` with a unit placeholder value so that
-    /// the local is pre-allocated (Wasm zero-initializes locals) without
-    /// emitting a `LocalSet`.  The bind phase has already verified that the
-    /// variable is assigned before any use.
+    /// Report the fields a struct pattern without `..` leaves out.
+    fn check_struct_pattern_complete(
+        &self,
+        head: StructDef,
+        fields: &[ast::StructPatternField],
+        span: Span,
+    ) {
+        let Some(struct_info) = self.lookup_struct_fields_of(head) else {
+            return;
+        };
+        let missing: Vec<_> = struct_info
+            .fields
+            .iter()
+            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
+            .map(|(name, _, _)| name.clone())
+            .collect();
+        if !missing.is_empty() {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: format!(
+                    "all fields (missing: {}), or use `..` to ignore remaining fields",
+                    missing.join(", ")
+                ),
+                found: format!(
+                    "pattern with {} of {} fields",
+                    fields.len(),
+                    struct_info.fields.len()
+                ),
+                span,
+            });
+        }
+    }
+
+    /// Resolve an uninitialized let declaration, `let x: T;`, whose use before
+    /// assignment the bind phase has already ruled out.
     fn resolve_uninit_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
-        // Type annotation is guaranteed by the parser when there is no initializer.
         let annotated_type = let_stmt
             .ty
             .as_ref()
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-
-        // Reify rebuilds the pre-declared `Let` (with
-        // its unit placeholder value) from the AST; this walk only binds the
-        // local and records its symbol.
-        match &let_stmt.pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let is_mut =
-                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-            }
-            _ => {
-                self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
-            }
+        if self.bind_let_ident(let_stmt, type_id, ctx).is_none() {
+            self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
         }
     }
 
@@ -888,7 +859,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee);
-        match (self.variant_of_type(head), self.enum_of_type(head)) {
+        match (
+            self.tysys.variant_of_type(head),
+            self.tysys.enum_of_type(head),
+        ) {
             (Some(variant), _) => variant.cases.len(),
             (None, Some(enumeration)) => enumeration.cases.len(),
             (None, None) => 0,
@@ -928,11 +902,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => self
+                .tysys
                 .enum_of_type(type_id)
                 .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
+                .tysys
                 .variant_of_type(type_id)
-                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+                .is_some_and(|info| info.case_named(case_name).is_some()),
             _ => false,
         }
     }
@@ -1111,33 +1087,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// `type_id` with its reference layers peeled, and the reference kind a
-    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
-    fn peel_scrutinee_refs(
-        &self,
-        type_id: TypeId,
-        ref_binding: RefBinding,
-    ) -> (TypeId, RefBinding) {
-        let tt = self.tysys.type_table.borrow();
-        let mut current = type_id;
-        let mut ref_binding = ref_binding;
-        loop {
-            match tt.get(current) {
-                ResolvedType::Ref(inner) => {
-                    current = *inner;
-                    ref_binding = RefBinding::Ref;
-                }
-                ResolvedType::MutRef(inner) => {
-                    current = *inner;
-                    if ref_binding == RefBinding::None {
-                        ref_binding = RefBinding::MutRef;
-                    }
-                }
-                _ => return (current, ref_binding),
-            }
-        }
-    }
-
     /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
     pub(super) fn resolve_let_pattern(
         &mut self,
@@ -1152,6 +1101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
+<<<<<<< HEAD
     /// The struct a pattern destructures (a newtype's base), and whether its
     /// written name names it. A scrutinee that is no struct is reported instead.
     fn struct_pattern_head(
@@ -1239,6 +1189,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         head.decl() == Some(written)
     }
 
+||||||| dc6a50794
+    /// Whether a struct pattern's qualifier names the scrutinee's own head.
+    ///
+    /// Declaration against declaration, never spelling against spelling. A
+    /// shape names no declaration, so no qualifier matches one; a qualifier the
+    /// walk could not place is left to the diagnostic its unresolved name earns
+    /// elsewhere.
+    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
+        let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
+        else {
+            return true;
+        };
+        head.decl() == Some(written)
+    }
+
+=======
+>>>>>>> origin/main
     /// The two spellings a pattern mismatch prints.
     ///
     /// The written qualifier and the scrutinee's rendering can be the same
@@ -1310,7 +1277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
             }
             ast::Pattern::Tuple(patterns, has_rest) => {
-                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
+                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
                 let elem_types = {
                     let type_table = self.tysys.type_table.borrow();
                     if let Some(elem_types) = type_table.as_tuple(type_id) {
@@ -1367,6 +1334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 has_rest,
                 span: pat_span,
             } => {
+<<<<<<< HEAD
                 let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
                 let head = self.struct_pattern_head(
                     type_name.as_deref(),
@@ -1374,7 +1342,92 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_id,
                     *pat_span,
                 );
+||||||| dc6a50794
+                let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
+                // Every lookup below asks the scrutinee's head, which an
+                // anonymous shape and a function-local `struct` both have and
+                // neither of them can be reached by spelling. A newtype's head
+                // is its base's: it inherits the fields it wraps.
+                let struct_head = {
+                    let tt = self.tysys.type_table.borrow();
+                    match tt.get(tt.reflect_structure_head(type_id)) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
+                    }
+                };
+=======
+                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
+                // Every lookup below asks the scrutinee's head, which an
+                // anonymous shape and a function-local `struct` both have and
+                // neither of them can be reached by spelling. A newtype's head
+                // is its base's: it inherits the fields it wraps.
+                let struct_head = {
+                    let tt = self.tysys.type_table.borrow();
+                    match tt.get(tt.reflect_structure_head(type_id)) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
+                    }
+                };
+>>>>>>> origin/main
 
+<<<<<<< HEAD
+||||||| dc6a50794
+                let type_name_matches = match (type_name, struct_head) {
+                    (Some(written), Some(head)) => {
+                        let matches = self.pattern_qualifier_matches(*type_name_id, head);
+                        if !matches {
+                            let (expected, found) =
+                                self.pattern_mismatch_names(*type_name_id, written, type_id);
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
+                                expected,
+                                found,
+                                span: *pat_span,
+                            });
+                        }
+                        matches
+                    }
+                    _ => true,
+                };
+
+                if struct_head.is_none() {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected: "struct type".to_string(),
+                        found: self.tysys.type_table.borrow().type_name(type_id),
+                        span: *pat_span,
+                    });
+                    return;
+                }
+
+                // Resolve each field pattern
+=======
+                let type_name_matches = match (type_name, struct_head) {
+                    (Some(written), Some(head)) => {
+                        let matches = self.tysys.pattern_qualifier_matches(*type_name_id, head);
+                        if !matches {
+                            let (expected, found) =
+                                self.pattern_mismatch_names(*type_name_id, written, type_id);
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
+                                expected,
+                                found,
+                                span: *pat_span,
+                            });
+                        }
+                        matches
+                    }
+                    _ => true,
+                };
+
+                if struct_head.is_none() {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected: "struct type".to_string(),
+                        found: self.tysys.type_table.borrow().type_name(type_id),
+                        span: *pat_span,
+                    });
+                    return;
+                }
+
+                // Resolve each field pattern
+>>>>>>> origin/main
                 for field in fields {
                     let field_type = match head {
                         Some(_) => {
@@ -1402,10 +1455,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
+<<<<<<< HEAD
                 if let Some((head, _)) = head
                     && !has_rest
                 {
                     self.report_unlisted_struct_fields(head, fields, *pat_span);
+||||||| dc6a50794
+                // Exhaustiveness check: without `..`, all fields must be listed
+                if !has_rest
+                    && let Some(head) = struct_head
+                    && let Some(struct_info) = self.lookup_struct_fields_of(head)
+                {
+                    let total_fields = struct_info.fields.len();
+                    if fields.len() != total_fields {
+                        let missing: Vec<_> = struct_info
+                            .fields
+                            .iter()
+                            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
+                            .map(|(name, _, _)| name.clone())
+                            .collect();
+                        if !missing.is_empty() {
+                            let _ = self.emit(TypeError::PatternTypeMismatch {
+                                        expected: format!(
+                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
+                                            missing.join(", ")
+                                        ),
+                                        found: format!(
+                                            "pattern with {} of {} fields",
+                                            fields.len(),
+                                            total_fields
+                                        ),
+                                        span: *pat_span,
+                                    });
+                        }
+                    }
+=======
+                if !has_rest && let Some(head) = struct_head {
+                    self.check_struct_pattern_complete(head, fields, *pat_span);
+>>>>>>> origin/main
                 }
             }
             ast::Pattern::Typed {
@@ -1535,17 +1622,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_with_position(b, ctx, expected_type, tail_value);
                 }
 
-                // Enter scope for chain element bindings and then_block.
-                ctx.enter_scope();
                 self.resolve_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
-                    ctx,
+                    &mut ctx.enter_scope(),
                     expected_type,
                     tail_value,
                     if_stmt.span,
                 );
-                ctx.exit_scope();
             }
         }
     }
@@ -1674,7 +1758,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> PatBindings {
-        let (peeled_type, ref_binding) = self.peel_scrutinee_refs(scrutinee_type, RefBinding::None);
+        let (peeled_type, ref_binding) = self
+            .tysys
+            .peel_scrutinee_refs(scrutinee_type, RefBinding::None);
         self.resolve_if_pattern_inner(pattern, peeled_type, ctx, span, ref_binding)
     }
 
@@ -1771,9 +1857,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Vec::new()
             }
-            Pattern::Tuple(patterns, has_rest) => {
+            Pattern::Tuple(patterns, _) => {
                 let (scrutinee_type, ref_binding) =
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
                     if let Some(types) = self.tysys.type_table.borrow().as_tuple(scrutinee_type) {
                         types
@@ -1786,7 +1872,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
 
-                let _ = has_rest;
                 let mut bindings: PatBindings = Vec::new();
                 for (p, &ty) in patterns.iter().zip(
                     element_types
@@ -1806,7 +1891,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             } => {
                 let (scrutinee_type, ref_binding) =
-                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 // `<ns>::<Case>` (single `::`, prefix is a namespace import
                 // alias) canonicalizes to the bare `<Case>`; the registries
                 // below are keyed by canonical names. Multi-segment forms
@@ -1831,8 +1916,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Use the base type name (no generic args) to match how
                     // `associated_constants` keys are built via `get_type_name`.
                     // Resolve to literal patterns when possible for switch optimization.
-                    if let Some(assoc) =
-                        self.associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
+                    if let Some(assoc) = self
+                        .tysys
+                        .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
                     {
                         self.check_inherent_member_visibility(
                             assoc.inherent_visibility,
@@ -1923,7 +2009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     // Look up the enum case index
-                    if let Some(enum_info) = self.enum_of_type(scrutinee_type).cloned() {
+                    if let Some(enum_info) = self.tysys.enum_of_type(scrutinee_type).cloned() {
                         if let Some(case_data) =
                             enum_info.find_case(normalized_variant_name).cloned()
                         {
@@ -1963,14 +2049,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
                 if let Some(id) = name_id
-                    && let Some(variant_info) = self.variant_of_type(scrutinee_type).cloned()
-                    && let Some(case_data) = variant_info
-                        .cases
-                        .iter()
-                        .find(|c| c.name == normalized_variant_name)
-                        .cloned()
+                    && let Some(case_ast_id) = self
+                        .tysys
+                        .variant_of_type(scrutinee_type)
+                        .and_then(|info| info.case_named(normalized_variant_name))
+                        .map(|(_, case)| case.ast_id)
                 {
-                    self.record_reference_to_def(*id, case_data.ast_id);
+                    self.record_reference_to_def(*id, case_ast_id);
                 }
 
                 // The cases belong to the structure the scrutinee wraps, so the
@@ -2053,6 +2138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (scrutinee_type, ref_binding) =
+<<<<<<< HEAD
                     self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let head = self.struct_pattern_head(
                     type_name.as_deref(),
@@ -2060,6 +2146,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     scrutinee_type,
                     *pat_span,
                 );
+||||||| dc6a50794
+                    self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                let mut type_name_matches = true;
+                if let Some(expected_name) = type_name {
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    if let ResolvedType::Struct { def, .. } = resolved
+                        && !self.pattern_qualifier_matches(*type_name_id, def)
+                    {
+                        let (expected, found) = self.pattern_mismatch_names(
+                            *type_name_id,
+                            expected_name,
+                            scrutinee_type,
+                        );
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected,
+                            found,
+                            span: *pat_span,
+                        });
+                        type_name_matches = false;
+                    }
+                }
+=======
+                    self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                let mut type_name_matches = true;
+                if let Some(expected_name) = type_name {
+                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                    if let ResolvedType::Struct { def, .. } = resolved
+                        && !self.tysys.pattern_qualifier_matches(*type_name_id, def)
+                    {
+                        let (expected, found) = self.pattern_mismatch_names(
+                            *type_name_id,
+                            expected_name,
+                            scrutinee_type,
+                        );
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected,
+                            found,
+                            span: *pat_span,
+                        });
+                        type_name_matches = false;
+                    }
+                }
+>>>>>>> origin/main
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
@@ -2087,10 +2216,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
+<<<<<<< HEAD
                 if let Some((head, _)) = head
                     && !has_rest
                 {
                     self.report_unlisted_struct_fields(head, fields, *pat_span);
+||||||| dc6a50794
+                // Exhaustiveness check
+                if !has_rest {
+                    let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                        ResolvedType::Struct { def, .. } => Some(*def),
+                        _ => None,
+                    };
+                    if let Some(head) = struct_head
+                        && let Some(struct_info) = self.lookup_struct_fields_of(head)
+                    {
+                        let total_fields = struct_info.fields.len();
+                        if fields.len() != total_fields {
+                            let missing: Vec<_> = struct_info
+                                .fields
+                                .iter()
+                                .filter(|(name, _, _)| {
+                                    !fields.iter().any(|f| f.field_name == *name)
+                                })
+                                .map(|(name, _, _)| name.clone())
+                                .collect();
+                            if !missing.is_empty() {
+                                let _ = self.emit(TypeError::PatternTypeMismatch {
+                                        expected: format!(
+                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
+                                            missing.join(", ")
+                                        ),
+                                        found: format!(
+                                            "pattern with {} of {} fields",
+                                            fields.len(),
+                                            total_fields
+                                        ),
+                                        span: *pat_span,
+                                    });
+                            }
+                        }
+                    }
+=======
+                let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
+                    ResolvedType::Struct { def, .. } => Some(*def),
+                    _ => None,
+                };
+                if !has_rest && let Some(head) = struct_head {
+                    self.check_struct_pattern_complete(head, fields, *pat_span);
+>>>>>>> origin/main
                 }
                 field_bindings
             }
@@ -2318,16 +2492,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// nothing). Reify rebuilds the actual `None` pattern; the body walk
     /// only needs the yes/no answer for its binding/fact walk.
     fn try_null_as_none_pattern(&self, scrutinee_type: TypeId) -> bool {
-        let Some(variant_info) = self.variant_of_type(scrutinee_type) else {
+        let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type) else {
             return false;
         };
-        let none_case_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_variant_case_name(CompilerItem::OptionNone)
-            .to_string();
-        variant_info.cases.iter().any(|c| c.name == none_case_name)
+        let tt = self.tysys.type_table.borrow();
+        variant_info
+            .case_named(tt.compiler_variant_case_name(CompilerItem::OptionNone))
+            .is_some()
     }
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
@@ -2514,16 +2685,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) -> TypeId {
-        // Clone payload first to avoid borrow conflict with substitute_type_params.
         let payload_opt = self
             .type_lookup()
             .variant_cases_of(variant)
-            .and_then(|info| {
-                info.cases
-                    .iter()
-                    .find(|case| case.name == case_name)
-                    .map(|case| case.payload)
-            });
+            .and_then(|info| info.case_named(case_name))
+            .map(|(_, case)| case.payload);
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
@@ -2542,32 +2708,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         TypeTable::UNKNOWN
     }
-    /// Resolve a loop statement (infinite loop).
-    ///
-    /// Naked `continue` inside this loop's body must jump to the top of
-    /// *this* loop, regardless of any enclosing C-style `for` whose
-    /// continue-retarget label is still on the stack. Take + restore
-    /// `for_continue_labels` around body resolution so the inner
-    /// `resolve_continue` sees an empty stack and lowers naturally.
-    pub(super) fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) {
-        // Reify rebuilds the `Loop` stmt.
-        let saved = std::mem::take(&mut ctx.for_continue_labels);
-        self.resolve_block(&loop_stmt.body, ctx, None);
-        ctx.for_continue_labels = saved;
-    }
 
     /// Resolve a for-of loop.
     ///
     /// For tuples: compile-time expansion (one copy of the body per element).
     /// For non-tuples: iterator pattern via `into_iter()` + `next()`.
     pub(super) fn resolve_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
-        // Naked `continue` inside this for-of's body targets *this* loop,
-        // not an enclosing C-style `for` body label. The iterable itself
-        // is an expression — no `continue` stmt syntactically — but we
-        // clear the stack early so all internal resolve_* calls share the
-        // same invariant.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-
         // Unwrap an `.enumerate()` iterable at the AST level. The elaborator
         // never resolves it as a method call, so `mc.id` carries no annotations
         // — intentional, like the `tuple.len()` short-circuits on
@@ -2605,7 +2751,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_zip_variadic = matches!(
             actual_iterable,
             Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-        ) && self.type_contains_pack(iterable_type_id);
+        ) && self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_pack(iterable_type_id);
 
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
@@ -2669,8 +2819,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
-
-        ctx.for_continue_labels = saved_continue;
     }
 
     /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
@@ -2761,7 +2909,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_mut = for_of.is_mut;
         let is_destructured = matches!(&for_of.binding, Pattern::Tuple(..));
 
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         ctx.add_local_at(
             binding_name.clone(),
             binding_type,
@@ -2800,16 +2948,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
-        for stmt in &for_of.body.stmts {
-            self.resolve_stmt(stmt, ctx);
-        }
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
+        let ctx = &mut ctx.enter_enumerate_body(index_binding);
+        self.resolve_block(&for_of.body, ctx, None);
     }
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
@@ -2861,7 +3001,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut element_overlays: Vec<BodyFacts> = Vec::new();
 
         for &elem_type in elems {
-            ctx.enter_scope();
+            let ctx = &mut ctx.enter_scope();
 
             // When iterating through a reference, the element binds by reference
             // (`&T_k`); otherwise by value. Mirrors `tuple_element_binding`.
@@ -2946,8 +3086,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // their pre-loop state so the next element records from a clean
             // slate.
             element_overlays.push(self.sem.types.split_off(overlay_base));
-
-            ctx.exit_scope();
         }
 
         // Record this for-of's per-element overlays as one instantiation (in
@@ -3035,8 +3173,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Make `$for_of_N` visible to a body-level `break $for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
-        // would otherwise reject it). Pop after the body has been resolved.
-        ctx.active_labels.push(label);
+        // would otherwise reject it).
+        let ctx = &mut ctx.enter_label(label);
 
         // `$iter_N.next()` — dispatch on the `$iter_N` local, no AST.
         let next_outcome = self.resolve_method_call_with(
@@ -3152,19 +3290,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
-        ctx.enter_scope();
+        let mut scope = ctx.enter_scope();
         let binding = if for_of.is_mut {
             mut_bindings_of(&for_of.binding)
         } else {
             for_of.binding.clone()
         };
-        ctx.irrefutable_site = Some(BindingSite::ForOf);
-        self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
-        ctx.irrefutable_site = None;
-        self.resolve_block(&for_of.body, ctx, None);
-        ctx.exit_scope();
-
-        ctx.active_labels.pop();
+        self.resolve_if_pattern_inner(
+            &binding,
+            item_type,
+            &mut scope.replacing(|ctx| &mut ctx.irrefutable_site, Some(BindingSite::ForOf)),
+            span,
+            RefBinding::None,
+        );
+        self.resolve_block(&for_of.body, &mut scope, None);
     }
 
     /// Conservative superset of `boxing.rs`'s boxed set (also names flags /
@@ -3245,25 +3384,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the `Break` stmt.
     }
 
-    /// Resolve a continue statement. `continue`
-    /// carries no facts; reify rebuilds the `Continue` (or the
-    /// `break <for-body-label>` retarget) from the AST and
-    /// `ctx.for_continue_labels`.
-    pub(super) fn resolve_continue(
-        &mut self,
-        _continue_stmt: &ContinueStmt,
-        _ctx: &FunctionContext,
-    ) {
-    }
-
     /// Resolve a `while` or `while let` into a `loop`: the former guarded by
     /// `if !cond { break; }`, the latter by `match expr { pat => B, _ => break }`.
     /// A naked `break` / `continue` in the body already targets that synthesised
     /// loop, so unlike the C-style `for` no label re-targeting is needed.
     pub(super) fn resolve_while(&mut self, w: &WhileStmt, ctx: &mut FunctionContext) {
-        // Naked `continue` inside this while's body targets *this* loop,
-        // not an enclosing C-style `for` body label.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         // Reify rebuilds the `loop { if !cond { break }
         // B }` (or `loop { match e { pat => B, _ => break } }`) shape from the
         // `DesugarKind::While` / `WhileLetChain` tag + the AST. This walk
@@ -3282,37 +3407,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
                 // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
-                ctx.enter_scope();
-                self.resolve_let_chain_stmts(elements, &w.body, ctx, None, false, *cond_span);
-                ctx.exit_scope();
+                self.resolve_let_chain_stmts(
+                    elements,
+                    &w.body,
+                    &mut ctx.enter_scope(),
+                    None,
+                    false,
+                    *cond_span,
+                );
             }
         }
-
-        ctx.for_continue_labels = saved_continue;
     }
 
-    /// Resolve a C-style `for init; cond; update { B }` into
-    /// `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
-    /// with the `let pat = e` form guarding on a `match` instead. The outer block
-    /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
-    /// reroutes a naked `continue` to, so control still falls through `update`.
+    /// Resolve a C-style `for` as `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
+    /// where a `continue` breaks `B`'s label so `update` still runs.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
         let body_label = for_body_label(ctx.fresh_serial());
 
-        // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
-        // continue-retarget stack at the loop boundary so the invariant
-        // ("the stack lists labels for the enclosing C-style `for` bodies that
-        // a naked `continue` should `break` to, innermost-first") cannot be
-        // violated by a future refactor that resolves part of the body
-        // outside `resolve_for_labeled_body`. Today the push/pop inside
-        // that helper alone would suffice, but the symmetry guards against
-        // a body-resolution path moving above the helper.
-        let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-
         // The outer scope holds `init`'s bindings so the loop body can see
         // them while the surrounding function cannot.
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
 
         // Reify rebuilds the C-style-for desugar
         // (`{ init; loop { if !cond { break } $for_N_body: { B } update } }`,
@@ -3363,30 +3478,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .to_string(),
                         span: *cond_span,
                     });
-                    ctx.exit_scope();
-                    ctx.for_continue_labels = saved_continue;
                     return;
                 };
 
                 let scrutinee_type = self.resolve_expr(expr, ctx, None);
-                ctx.enter_scope();
+                let ctx = &mut ctx.enter_scope();
                 self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
                 // Body and update both run inside the pattern scope so they can
                 // name the bindings introduced by `pat`.
                 self.resolve_for_labeled_body(&body_label, &f.body, ctx);
                 self.resolve_for_update(f.update.as_ref(), ctx);
-                ctx.exit_scope();
             }
         }
-
-        ctx.exit_scope();
-        ctx.for_continue_labels = saved_continue;
     }
 
-    /// Resolve a for loop's body wrapped in its continue-retarget label.
-    /// Pushes `body_label` onto both `for_continue_labels` (so naked
-    /// `continue` inside the body becomes `break <body_label>`) and
-    /// `active_labels` (so the label validates as a known break target).
+    /// Resolve a for loop's body under its continue-retarget label, which
+    /// validates as a known break target inside it.
     fn resolve_for_labeled_body(
         &mut self,
         body_label: &str,
@@ -3394,11 +3501,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         // Reify rebuilds the labeled body block.
-        ctx.for_continue_labels.push(body_label.to_string());
-        ctx.active_labels.push(body_label.to_string());
-        self.resolve_block(body, ctx, None);
-        ctx.active_labels.pop();
-        ctx.for_continue_labels.pop();
+        self.resolve_block(body, &mut ctx.enter_label(body_label.to_string()), None);
     }
 
     /// Resolve a for loop's optional update expression for its facts
@@ -3407,6 +3510,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(u) = update {
             self.resolve_expr(u, ctx, None);
         }
+    }
+}
+
+impl TypeSystem {
+    /// `type_id` with its reference layers peeled, and the reference kind a
+    /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
+    pub(super) fn peel_scrutinee_refs(
+        &self,
+        type_id: TypeId,
+        ref_binding: RefBinding,
+    ) -> (TypeId, RefBinding) {
+        let tt = self.type_table.borrow();
+        let mut current = type_id;
+        let mut ref_binding = ref_binding;
+        loop {
+            match tt.get(current) {
+                ResolvedType::Ref(inner) => {
+                    current = *inner;
+                    ref_binding = RefBinding::Ref;
+                }
+                ResolvedType::MutRef(inner) => {
+                    current = *inner;
+                    if ref_binding == RefBinding::None {
+                        ref_binding = RefBinding::MutRef;
+                    }
+                }
+                _ => return (current, ref_binding),
+            }
+        }
+    }
+
+    /// Whether a struct pattern's qualifier declares the scrutinee's own head;
+    /// an unplaced qualifier is left to its unresolved-name diagnostic.
+    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
+        let Some(written) = site.and_then(|site| self.resolutions.declared_if_walked(site)) else {
+            return true;
+        };
+        head.decl() == Some(written)
     }
 }
 
