@@ -3,19 +3,20 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrObject, AttrValue,
-    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
-    ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
-    Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr,
-    IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
-    LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind,
-    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
-    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
-    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
-    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
-    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrItem, AttrObject,
+    AttrValue, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr,
+    CastExpr, ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr,
+    CompoundAssignOp, Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function, FunctionType, GenericParam,
+    GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember,
+    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern,
+    RangeKind, ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt,
+    StructDecl, StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt,
+    TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr,
+    TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple,
+    VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
+    written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -62,7 +63,11 @@ fn attr_value_depth(v: &AttrValue) -> usize {
     use crate::ast::AttrValue;
     match v {
         AttrValue::Array(items) if !items.is_empty() => {
-            1 + items.iter().map(attr_value_depth).max().unwrap_or(0)
+            1 + items
+                .iter()
+                .map(|item| attr_value_depth(&item.value))
+                .max()
+                .unwrap_or(0)
         }
         AttrValue::Object(obj) if !obj.is_empty() => {
             1 + obj
@@ -548,14 +553,21 @@ impl<'a> Unparser<'a> {
         };
 
         // A comment inside the `{ }` has no slot in the one-line item list, so
-        // drop the candidates that keep the items inline.
+        // drop the candidates that keep the items inline. The same holds for the
+        // `with` clause.
         let comment_in_items = u
             .items_span
             .is_some_and(|s| self.has_comment_in_range(s.start, s.end));
+        let comment_in_with = u
+            .attributes
+            .as_ref()
+            .is_some_and(|a| self.has_comment_in_range(a.span.start, a.span.end));
         let candidates: Vec<(bool, bool)> = candidates
             .iter()
             .copied()
-            .filter(|&(wrap_imports, _)| wrap_imports || !comment_in_items)
+            .filter(|&(wrap_imports, with_multiline)| {
+                (wrap_imports || !comment_in_items) && (with_multiline || !comment_in_with)
+            })
             .collect();
 
         for (i, &(wrap_imports, with_multiline)) in candidates.iter().enumerate() {
@@ -648,7 +660,7 @@ impl<'a> Unparser<'a> {
         self.indent_level += 1;
         self.write_indent();
         self.output.push_str("with ");
-        self.unparse_attr_object_multiline(&attrs.entries);
+        self.unparse_attr_object_multiline(&attrs.entries, attrs.span);
         self.indent_level -= 1;
     }
 
@@ -722,7 +734,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(if *b { "true" } else { "false" });
             }
             AttrValue::Array(items) => {
-                self.delimited("[", "]", items, Unparser::unparse_attr_value);
+                self.delimited("[", "]", items, |s, item| s.unparse_attr_value(&item.value));
             }
             AttrValue::Object(obj) => {
                 self.output.push_str("{ ");
@@ -739,24 +751,26 @@ impl<'a> Unparser<'a> {
     /// Emit an attribute value. A container nested inside another container
     /// (depth ≥ 2) is always expanded multi-line; a leaf container (depth 1,
     /// only scalar members) is inline-first and falls back to multi-line only
-    /// when it overflows. Scalars are always inline.
-    fn unparse_attr_value_wrapped(&mut self, v: &AttrValue) {
+    /// when it overflows. Scalars are always inline. `span` is the value's.
+    fn unparse_attr_value_wrapped(&mut self, v: &AttrValue, span: Span) {
         match v {
             AttrValue::Object(obj) if !obj.is_empty() => {
                 self.emit_container_value(
                     attr_value_depth(v),
+                    span,
                     |s| s.unparse_attr_value(v),
                     |s| {
-                        s.unparse_attr_object_multiline(obj);
+                        s.unparse_attr_object_multiline(obj, span);
                     },
                 );
             }
             AttrValue::Array(items) if !items.is_empty() => {
                 self.emit_container_value(
                     attr_value_depth(v),
+                    span,
                     |s| s.unparse_attr_value(v),
                     |s| {
-                        s.unparse_attr_array_multiline(items);
+                        s.unparse_attr_array_multiline(items, span);
                     },
                 );
             }
@@ -764,15 +778,17 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Shared container-rendering policy: force multi-line at depth ≥ 2,
-    /// otherwise try `inline` and roll back to `multiline` only on overflow.
+    /// Shared container-rendering policy: force multi-line at depth ≥ 2 or
+    /// around a comment, otherwise try `inline` and roll back to `multiline`
+    /// only on overflow.
     fn emit_container_value(
         &mut self,
         depth: usize,
+        span: Span,
         inline: impl Fn(&mut Self),
         multiline: impl Fn(&mut Self),
     ) {
-        if depth >= 2 {
+        if depth >= 2 || self.has_comment_in_range(span.start, span.end) {
             multiline(self);
             return;
         }
@@ -785,32 +801,36 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit `{` then one `key: value,` per line (recursively wrapping each
-    /// value as needed), then a closing `}` on its own indented line.
-    fn unparse_attr_object_multiline(&mut self, obj: &AttrObject) {
+    /// value as needed), then a closing `}` on its own indented line. A comment
+    /// keeps its place among the entries.
+    fn unparse_attr_object_multiline(&mut self, obj: &AttrObject, span: Span) {
         self.output.push_str("{\n");
         self.indent_level += 1;
         for (k, entry) in obj {
-            self.write_indent();
+            self.open_entry_line(span.start, entry.key_span.start);
             self.output.push_str(k);
             self.output.push_str(": ");
-            self.unparse_attr_value_wrapped(&entry.value);
+            self.unparse_attr_value_wrapped(&entry.value, entry.value_span);
             self.output.push_str(",\n");
         }
+        self.flush_comments_in(span.start, span.end, Spacing::Tight);
         self.indent_level -= 1;
         self.write_indent();
         self.output.push('}');
     }
 
     /// Emit `[` then one element per line (recursively wrapping each as needed),
-    /// then a closing `]` on its own indented line.
-    fn unparse_attr_array_multiline(&mut self, items: &[AttrValue]) {
+    /// then a closing `]` on its own indented line. A comment keeps its place
+    /// among the elements.
+    fn unparse_attr_array_multiline(&mut self, items: &[AttrItem], span: Span) {
         self.output.push_str("[\n");
         self.indent_level += 1;
         for item in items {
-            self.write_indent();
-            self.unparse_attr_value_wrapped(item);
+            self.open_entry_line(span.start, item.span.start);
+            self.unparse_attr_value_wrapped(&item.value, item.span);
             self.output.push_str(",\n");
         }
+        self.flush_comments_in(span.start, span.end, Spacing::Tight);
         self.indent_level -= 1;
         self.write_indent();
         self.output.push(']');

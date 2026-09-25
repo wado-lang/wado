@@ -264,7 +264,7 @@ fn lower_inline(
         Some(AttrValue::Array(items)) => items
             .iter()
             .enumerate()
-            .filter_map(|(i, v)| match v {
+            .filter_map(|(i, item)| match &item.value {
                 AttrValue::String(s) => Some(resolve_or_reject(
                     module_path,
                     s,
@@ -641,6 +641,7 @@ mod tests {
     fn entry(value: AttrValue) -> AttrEntry {
         AttrEntry {
             key_span: span(),
+            value_span: span(),
             value,
         }
     }
@@ -654,6 +655,7 @@ mod tests {
         entries_map.insert("generator".to_string(), entry(AttrValue::Object(gen_obj)));
         ImportAttributes {
             entries: entries_map,
+            span: span(),
         }
     }
 

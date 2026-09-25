@@ -564,6 +564,50 @@ fn test_format_use_with_wraps_nested_array() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A comment inside a `with { ... }` clause stays where it was written: ahead of
+/// an array element, an object entry, or the closing bracket.
+#[test]
+fn test_format_use_with_keeps_interior_comments() {
+    let source = r#"use g from "./x.g4"
+    with {
+        // the generator
+        generator: {
+            layout: [
+                { pattern: "a", axes: ["A"] },
+                // before b
+                { pattern: "b", axes: ["B"] },
+                // after the last element
+            ],
+            /* block */ output_dir: "x",
+        },
+    };
+"#;
+    let expected = r#"use g from "./x.g4"
+    with {
+        // the generator
+        generator: {
+            layout: [
+                {
+                    pattern: "a",
+                    axes: ["A"],
+                },
+                // before b
+                {
+                    pattern: "b",
+                    axes: ["B"],
+                },
+                // after the last element
+            ],
+            /* block */ output_dir: "x",
+        },
+    };
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, expected);
+    let formatted2 = wado_compiler::format(&formatted).expect("format failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A `test` item carrying a leading comment and an outer attribute must format
 /// idempotently — the blank line between the comment and the attribute must not
 /// grow on repeated passes. Regression test: `Item::Test` was missing from

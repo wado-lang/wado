@@ -208,7 +208,12 @@ fn check_value(
             for (i, item) in items.iter().enumerate() {
                 // An element carries no key of its own: blame the list's key.
                 let item_path = format!("{}[{i}]", site.path);
-                match check_value(inner, item, site.child(&item_path, site.span), diagnostics) {
+                match check_value(
+                    inner,
+                    &item.value,
+                    site.child(&item_path, site.span),
+                    diagnostics,
+                ) {
                     Some(v) => out.push(v),
                     None => ok = false,
                 }
@@ -341,7 +346,7 @@ fn attr_value_kind(v: &AttrValue) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AttrEntry;
+    use crate::ast::{AttrEntry, AttrItem};
     use crate::kiln::options::{CanonicalValue, OptionsDescriptor, OptionsField, OptionsType};
     use crate::token::Span;
 
@@ -362,12 +367,25 @@ mod tests {
     fn entry_at(line: usize, column: usize, value: AttrValue) -> AttrEntry {
         AttrEntry {
             key_span: Span::new(0, 0, line, column),
+            value_span: Span::default(),
             value,
         }
     }
 
     fn entry(value: AttrValue) -> AttrEntry {
         entry_at(3, 9, value)
+    }
+
+    fn array(values: Vec<AttrValue>) -> AttrValue {
+        AttrValue::Array(
+            values
+                .into_iter()
+                .map(|value| AttrItem {
+                    span: Span::default(),
+                    value,
+                })
+                .collect(),
+        )
     }
 
     /// The file and `(line, column)` a diagnostic squiggles.
@@ -487,7 +505,7 @@ mod tests {
         let mut obj = AttrObject::default();
         obj.insert(
             "entries".to_string(),
-            entry(AttrValue::Array(vec![
+            entry(array(vec![
                 AttrValue::String("a".to_string()),
                 AttrValue::String("b".to_string()),
             ])),
@@ -507,7 +525,7 @@ mod tests {
         let mut obj = AttrObject::default();
         obj.insert(
             "entries".to_string(),
-            entry_at(6, 13, AttrValue::Array(vec![AttrValue::Int(1)])),
+            entry_at(6, 13, array(vec![AttrValue::Int(1)])),
         );
         let err = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap_err();
         let d = only(&err);

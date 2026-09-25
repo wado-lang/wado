@@ -2041,8 +2041,16 @@ pub enum AttrValue {
     Int(i64),
     Float(f64),
     Bool(bool),
-    Array(Vec<AttrValue>),
+    Array(Vec<AttrItem>),
     Object(AttrObject),
+}
+
+/// One element of an attribute array, with the span of its value, which is
+/// what places a comment between two elements.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttrItem {
+    pub span: Span,
+    pub value: AttrValue,
 }
 
 /// An attribute object's entries, in parse order, each keyed by its name.
@@ -2059,6 +2067,7 @@ pub fn attr_value<'a>(object: &'a AttrObject, key: &str) -> Option<&'a AttrValue
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttrEntry {
     pub key_span: Span,
+    pub value_span: Span,
     pub value: AttrValue,
 }
 
@@ -2080,15 +2089,6 @@ impl AttrValue {
             _ => None,
         }
     }
-
-    /// Borrow the inner array, if this is a [`AttrValue::Array`].
-    #[must_use]
-    pub fn as_array(&self) -> Option<&[AttrValue]> {
-        match self {
-            AttrValue::Array(a) => Some(a.as_slice()),
-            _ => None,
-        }
-    }
 }
 
 /// Import attributes for `with { ... }` clause.
@@ -2102,6 +2102,8 @@ impl AttrValue {
 pub struct ImportAttributes {
     /// Top-level key/value entries, in parse order.
     pub entries: AttrObject,
+    /// The braces, `{` through `}`.
+    pub span: Span,
 }
 
 impl ImportAttributes {
