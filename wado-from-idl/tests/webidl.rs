@@ -9,6 +9,7 @@ struct Definitions {
     interfaces: Vec<String>,
     mixins: Vec<String>,
     includes: Vec<String>,
+    callbacks: Vec<String>,
 }
 
 impl Definitions {
@@ -21,12 +22,14 @@ impl Definitions {
   "interfaces": [{}],
   "mixins": [{}],
   "includes": [{}],
-  "typedefs": [{}]
+  "typedefs": [{}],
+  "callbacks": [{}]
 }}"#,
             self.interfaces.join(", "),
             self.mixins.join(", "),
             self.includes.join(", "),
             typedef("Timestamp", &plain("double")),
+            self.callbacks.join(", "),
         );
         serde_json::from_str(&json).expect("the test snapshot should parse")
     }
@@ -367,6 +370,99 @@ fn a_member_the_slice_cannot_express_is_skipped_and_reported() {
             "Element.prepend: `nodes`: variadic",
             "Element.alert: 2 overloads",
             "Element.(getter): getter operation",
+        ]
+    );
+}
+
+fn callback(name: &str, ret: &str, args: &[String]) -> String {
+    format!(
+        r#"{{"type": "callback", "name": "{name}", "idlType": {ret}, "arguments": [{}], "extAttrs": []}}"#,
+        args.join(", ")
+    )
+}
+
+#[test]
+fn a_callback_is_a_closure_the_host_calls_back_with_scalars_and_handles() {
+    let listener = definition(
+        "callback interface",
+        "EventListener",
+        "null",
+        "",
+        false,
+        &[operation(
+            "handleEvent",
+            &plain("undefined"),
+            &[argument("event", &plain("Node"), false, "null")],
+            "",
+        )],
+    );
+    let mut defs = chain();
+    defs.callbacks = vec![
+        listener,
+        callback(
+            "FrameRequestCallback",
+            &plain("undefined"),
+            &[argument("time", &plain("double"), false, "null")],
+        ),
+        callback(
+            "Filter",
+            &plain("boolean"),
+            &[argument("node", &plain("Node"), false, "null")],
+        ),
+        callback(
+            "TextCallback",
+            &plain("undefined"),
+            &[argument("text", &plain("DOMString"), false, "null")],
+        ),
+    ];
+    let members = [
+        operation(
+            "addEventListener",
+            &plain("undefined"),
+            &[
+                argument("type", &plain("DOMString"), false, "null"),
+                argument("callback", &nullable("EventListener"), false, "null"),
+            ],
+            "",
+        ),
+        operation(
+            "requestAnimationFrame",
+            &plain("unsigned long"),
+            &[argument(
+                "callback",
+                &plain("FrameRequestCallback"),
+                false,
+                "null",
+            )],
+            "",
+        ),
+        operation(
+            "filter",
+            &plain("undefined"),
+            &[argument("filter", &plain("Filter"), false, "null")],
+            "",
+        ),
+        operation(
+            "onText",
+            &plain("undefined"),
+            &[argument("callback", &plain("TextCallback"), false, "null")],
+            "",
+        ),
+        operation("currentListener", &plain("EventListener"), &[], ""),
+    ];
+    defs.interfaces.push(partial("Element", &members));
+    let (code, skipped) = defs.generate();
+    assert!(code.contains("callback: fn mut(Node) with Dom);"), "{code}");
+    assert!(
+        code.contains("callback: fn mut(f64) with Dom) -> u32;"),
+        "{code}"
+    );
+    assert_eq!(
+        skipped,
+        [
+            "Element.filter: `filter`: a callback returning a value",
+            "Element.on_text: `callback`: callback argument `text`: neither a scalar nor a handle",
+            "Element.current_listener: a callback in a result",
         ]
     );
 }
