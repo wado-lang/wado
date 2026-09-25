@@ -5,7 +5,7 @@
 
 use predicates::prelude::*;
 
-use crate::common::{custom_sections, project_root, wado, wado_bin, wado_in};
+use crate::common::{custom_sections, wado, wado_in};
 
 /// A project under a directory whose name contains a space must compile. The
 /// entry is passed by ABSOLUTE path so the Kiln harvest uses an absolute
@@ -379,34 +379,6 @@ fn test_run_propagates_a_guest_exit_code() {
         .stderr(predicate::str::contains("run_exit_code: bad input"))
         .stderr(predicate::str::contains("Runtime error").not())
         .stderr(predicate::str::contains("wasm backtrace").not());
-}
-
-#[test]
-fn test_run_exits_with_a_stdin_read_pending() {
-    // The host's stdin read blocks on a pipe nobody closes; exiting must not wait on it.
-    let mut child = std::process::Command::new(wado_bin())
-        .current_dir(project_root())
-        .args(["run", "wado-cli/tests/fixtures/run_pending_stdin.wado"])
-        .stdin(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break Some(status);
-        }
-        if std::time::Instant::now() > deadline {
-            break None;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    };
-    if status.is_none() {
-        child.kill().unwrap();
-    }
-    assert!(
-        status.is_some_and(|s| s.success()),
-        "`wado run` did not exit: {status:?}"
-    );
 }
 
 #[test]

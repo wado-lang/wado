@@ -216,12 +216,7 @@ fn main() {
     let driver = std::thread::Builder::new()
         .name("main".to_string())
         .stack_size(STACK_SIZE)
-        .spawn(move || {
-            let outcome = runtime.block_on(async_main());
-            // A plain drop waits on blocking tasks still running, such as a stdin read.
-            runtime.shutdown_background();
-            outcome
-        })
+        .spawn(move || runtime.block_on(async_main()))
         .unwrap_or_else(|e| {
             eprintln!("Error: failed to start the driver thread: {e}");
             process::exit(1);

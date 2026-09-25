@@ -1107,12 +1107,6 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         )
     }
 
-    /// Reject an import whose local name the module also declares.
-    ///
-    /// The name then means two declarations at once, and every layering that
-    /// resolves it picks one on its own terms — which is how the same spelling
-    /// came to mean different things in different parts of the compiler. An
-    /// alias resolves it, so the program says which one it meant.
     /// Imports `lookup_name` from `module_source` into `from` as `import_name`,
     /// or reports why it cannot.
     #[allow(clippy::too_many_arguments)]
@@ -1144,6 +1138,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Ok(())
     }
 
+    /// Reject an import whose local name the module also declares: the name
+    /// would mean two declarations at once. An alias says which one is meant.
     fn reject_import_collision(
         &self,
         module_source: &ModuleSource,
