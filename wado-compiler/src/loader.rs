@@ -142,7 +142,7 @@ impl std::fmt::Display for LoadError {
             LoadError::UnknownNamespace { namespace } => {
                 write!(
                     f,
-                    "unknown module namespace '{namespace}'; expected 'core', 'wasi' or 'web'"
+                    "unknown module namespace '{namespace}'; expected 'core' or 'wasi'"
                 )
             }
             LoadError::InvalidModulePath { path } => {
