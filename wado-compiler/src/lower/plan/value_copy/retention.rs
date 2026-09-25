@@ -1704,15 +1704,20 @@ impl StoresWalker<'_> {
         }
     }
 
+    /// Each binding names a part of `source`, so it carries what that part
+    /// can at its own type, as a projection does.
     fn bind_pattern(&mut self, pattern: &TirPattern, source: &TirExpr) {
-        let carried = self.carried(source);
+        let carried = self.carried(source).all();
         if carried.is_empty() {
             return;
         }
-        let mut binds: IndexSet<u32> = IndexSet::default();
-        analyze::collect_pattern_bindings(pattern, &mut binds);
-        for b in binds {
-            self.rebind(b, &carried);
+        let mut binds: Vec<(u32, TypeId)> = Vec::new();
+        analyze::for_each_pattern_binding(pattern, &mut |local_index, type_id| {
+            binds.push((local_index, type_id));
+        });
+        for (local_index, type_id) in binds {
+            let placed = self.placed(type_id, carried.clone());
+            self.rebind(local_index, &placed);
         }
     }
 
