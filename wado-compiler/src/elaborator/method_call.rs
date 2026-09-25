@@ -1088,6 +1088,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
+        if matched_ref_kind.is_some() && !receiver_struct_name.references().is_empty() {
+            method_info = method_info.at_owner(&receiver_struct_name);
+        }
         method_info.is_type_param_receiver = is_type_param_receiver;
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;

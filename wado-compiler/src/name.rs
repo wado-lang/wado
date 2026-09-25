@@ -1212,6 +1212,21 @@ impl LocalMethodName {
         }
     }
 
+    /// This method named at the receiver one concrete `impl` block writes. A
+    /// `&X` owner stays a reference receiver carrying `X`, as its call sites spell it.
+    #[must_use]
+    pub fn at_owner(&self, owner: &FqTypeName) -> Self {
+        match owner.split_reference() {
+            Some((kind, pointee)) => Self {
+                receiver: Receiver::Ref(kind),
+                struct_type_args: vec![pointee],
+                is_type_param_receiver: false,
+                ..self.clone()
+            },
+            None => self.with_substituted_struct_name(owner),
+        }
+    }
+
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {

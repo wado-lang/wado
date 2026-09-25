@@ -1995,11 +1995,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             resolved.method_name.clone(),
         );
         if header.is_concrete() {
+            let function = template.at_owner(&header.target_id);
             return FunctionRef {
                 module_source: header.module.clone(),
-                name: template.to_mangled_name(),
+                name: function.to_mangled_name(),
                 monomorph_info: None,
-                method_info: Some(template),
+                method_info: Some(function),
             };
         }
         let pointee = self

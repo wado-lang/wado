@@ -1362,7 +1362,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             String::new(),
         );
         if let Some(owner) = facts.concrete_owner.as_ref() {
-            naming = naming.with_substituted_struct_name(owner);
+            naming = naming.at_owner(owner);
         }
 
         Some(TirImpl {
@@ -1547,7 +1547,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
             mangled_name = MethodName::format_local(owner, facts.trait_name.as_ref(), &func.name);
-            method_info = method_info.with_substituted_struct_name(owner);
+            method_info = method_info.at_owner(owner);
             impl_type_params = Vec::new();
         }
 

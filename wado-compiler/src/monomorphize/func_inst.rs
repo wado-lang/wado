@@ -3400,6 +3400,27 @@ impl Monomorphizer {
         shorter().unwrap_or(info)
     }
 
+    /// The concrete impl written on the reference a type-param receiver binds
+    /// (`impl Show for &Wrap<bool>` under `T = &Wrap<bool>`), if there is one.
+    fn ref_impl_at_instance(
+        &self,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<LocalMethodName> {
+        let binder = info.fq_struct_name();
+        let key = self.current_param_substitution_key.get(binder.binder_name()?)?;
+        let bound = *substitution.get(key)?;
+        RefKind::from_resolved(type_table.get(bound))?;
+        let candidate = self.named_by_impl(info.at_owner(&type_table.fq_type_name(bound)));
+        self.functions.trait_env.concrete_impl_module_for(
+            ImplReceiver::Instantiated(&candidate.mangled_struct_name()),
+            candidate.base_trait_name()?,
+            None,
+        )?;
+        Some(candidate)
+    }
+
     /// Resolve a method call in a generic body to its concrete target after
     /// substitution, delegating by receiver kind: a reference type-param to
     /// [`Self::try_ref_blanket_shortcut`], a type-param (`T^Ord::cmp` →
@@ -3483,7 +3504,13 @@ impl Monomorphizer {
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
         // name directly instead of adding type args.
-        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+        let ref_impl = info
+            .is_type_param_receiver
+            .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
+            .flatten();
+        let mut new_info = if let Some(ref_impl) = ref_impl {
+            ref_impl
+        } else if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
