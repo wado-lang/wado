@@ -1,6 +1,6 @@
 // A narrowing hands out a held resource's handle as the resource it extends,
 // so the arm may call that resource's own methods with no `with` naming it.
-use { Dom, Element, HtmlInputElement, Node } from "web:dom";
+use { Dom, Element, HtmlInputElement, Node } from "wado-lang:web";
 
 fn from_param(n: Node) -> String {
     return match n {
@@ -33,4 +33,9 @@ export fn run() with Dom {
 }
 
 __DATA__
-{"compile_only": true}
+{
+  "compile_only": true,
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/lib.wado"
+  }
+}
