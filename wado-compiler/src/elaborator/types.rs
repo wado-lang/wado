@@ -1,6 +1,7 @@
 //! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
+use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -2873,6 +2874,7 @@ pub(super) struct FunctionContext {
 
 /// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
 /// the context, and puts the enclosing value back on drop.
+#[must_use]
 pub(super) struct FieldFrame<'c, T: Default> {
     ctx: &'c mut FunctionContext,
     field: fn(&mut FunctionContext) -> &mut T,
@@ -2898,6 +2900,89 @@ impl<T: Default> Drop for FieldFrame<'_, T> {
     }
 }
 
+/// A stretch of the walk with one more entry on a `FunctionContext` stack.
+/// Derefs to the context, and pops the entry on drop.
+#[must_use]
+pub(super) struct StackFrame<'c, T> {
+    ctx: &'c mut FunctionContext,
+    stack: fn(&mut FunctionContext) -> &mut Vec<T>,
+    depth: usize,
+}
+
+impl<T> Deref for StackFrame<'_, T> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T> DerefMut for StackFrame<'_, T> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T> Drop for StackFrame<'_, T> {
+    fn drop(&mut self) {
+        let stack = (self.stack)(self.ctx);
+        assert_eq!(stack.len(), self.depth, "a frame pops the entry it pushed");
+        stack.pop();
+    }
+}
+
+/// A labeled block's break target and label, both in scope. Derefs to the
+/// context, and pops both on drop.
+#[must_use]
+pub(super) struct LabeledBlockFrame<'c> {
+    ctx: &'c mut FunctionContext,
+    targets_depth: usize,
+    labels_depth: usize,
+}
+
+impl LabeledBlockFrame<'_> {
+    fn pop(&mut self) -> LabeledBlockTarget {
+        assert_eq!(
+            self.ctx.active_labels.len(),
+            self.labels_depth,
+            "a labeled block pops the label it pushed"
+        );
+        assert_eq!(
+            self.ctx.labeled_block_targets.len(),
+            self.targets_depth,
+            "a labeled block pops the target it pushed"
+        );
+        self.ctx.active_labels.pop();
+        self.ctx
+            .labeled_block_targets
+            .pop()
+            .expect("a labeled block's target is on the stack")
+    }
+
+    /// Leave the block, handing back the breaks it collected.
+    pub(super) fn finish(self) -> LabeledBlockTarget {
+        ManuallyDrop::new(self).pop()
+    }
+}
+
+impl Deref for LabeledBlockFrame<'_> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl DerefMut for LabeledBlockFrame<'_> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl Drop for LabeledBlockFrame<'_> {
+    fn drop(&mut self) {
+        self.pop();
+    }
+}
+
 impl FunctionContext {
     pub(super) fn replacing<T: Default>(
         &mut self,
@@ -2912,34 +2997,71 @@ impl FunctionContext {
         }
     }
 
+    pub(super) fn pushing<T>(
+        &mut self,
+        stack: fn(&mut FunctionContext) -> &mut Vec<T>,
+        entry: T,
+    ) -> StackFrame<'_, T> {
+        stack(self).push(entry);
+        let depth = stack(self).len();
+        StackFrame {
+            ctx: self,
+            stack,
+            depth,
+        }
+    }
+
+    /// A lexical block, whose bindings go out of scope with the frame.
+    pub(super) fn enter_scope(&mut self) -> StackFrame<'_, IndexMap<String, LocalVar>> {
+        self.pushing(|ctx| &mut ctx.scopes, IndexMap::default())
+    }
+
+    /// A stretch where `break label` names a known target.
+    pub(super) fn enter_label(&mut self, label: String) -> StackFrame<'_, String> {
+        self.pushing(|ctx| &mut ctx.active_labels, label)
+    }
+
     /// A loop's body, where a naked `continue` targets this loop and not an
     /// enclosing C-style `for`.
     pub(super) fn enter_loop(&mut self) -> FieldFrame<'_, Vec<String>> {
         self.replacing(|ctx| &mut ctx.for_continue_labels, Vec::new())
     }
 
+    /// A stretch where `subscripts` name `&mut` places rather than values read.
+    pub(super) fn marking_mut_places(
+        &mut self,
+        subscripts: &[AstId],
+    ) -> FieldFrame<'_, IndexSet<AstId>> {
+        let mut marked = self.mut_place_subscripts.clone();
+        marked.extend(subscripts.iter().copied());
+        self.replacing(|ctx| &mut ctx.mut_place_subscripts, marked)
+    }
+
+    /// A variadic loop's body, where `index` is a constant subscript.
+    pub(super) fn enter_enumerate_body(&mut self, index: Option<u32>) -> FieldFrame<'_, Vec<u32>> {
+        let mut indices = self.variadic_enumerate_indices.clone();
+        indices.extend(index);
+        self.replacing(|ctx| &mut ctx.variadic_enumerate_indices, indices)
+    }
+
     /// Enter a labeled block in either position, so a `break LABEL` inside
     /// resolves to the innermost block of that name.
-    pub(super) fn push_labeled_block_frame(
+    pub(super) fn enter_labeled_block(
         &mut self,
         label: String,
         expected_type: Option<TypeId>,
-    ) {
+    ) -> LabeledBlockFrame<'_> {
         self.labeled_block_targets.push(LabeledBlockTarget {
             label: label.clone(),
             break_types: Vec::new(),
             expected_type,
         });
         self.active_labels.push(label);
-    }
-
-    pub(super) fn pop_labeled_block_frame(&mut self) -> LabeledBlockTarget {
-        self.active_labels
-            .pop()
-            .expect("labeled block frame pushed before pop");
-        self.labeled_block_targets
-            .pop()
-            .expect("labeled block frame pushed before pop")
+        LabeledBlockFrame {
+            targets_depth: self.labeled_block_targets.len(),
+            labels_depth: self.active_labels.len(),
+            ctx: self,
+        }
     }
 
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
@@ -3069,16 +3191,6 @@ impl FunctionContext {
     /// How many locals the function has allocated.
     pub(super) fn local_count(&self) -> u32 {
         self.next_local
-    }
-
-    /// Enter a new scope (for blocks, if/while/for/loop bodies)
-    pub(super) fn enter_scope(&mut self) {
-        self.scopes.push(IndexMap::default());
-    }
-
-    /// Exit the current scope
-    pub(super) fn exit_scope(&mut self) {
-        self.scopes.pop();
     }
 
     /// Add a local variable to the current scope.

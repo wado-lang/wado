@@ -391,6 +391,9 @@ return or a panic leaves it swapped. The guards are:
 - `FunctionContext::replacing`, for a context field replaced for a sub-walk,
   such as a loop's labels. Its guard derefs to the context and restores the
   field on drop.
+- `FunctionContext::enter_scope`, `enter_label` and `enter_labeled_block`, for
+  a lexical block, a break target, and a labeled block with the breaks it
+  collects. Each guard derefs to the context and pops its frame on drop.
 - `with_caller_bindings_hidden`, while a travelled expression is walked or
   reified.
 
@@ -709,7 +712,7 @@ Each is a grep:
 | Name-keyed AST predicates                        | 0      | 1   |
 | AST-level type-param substitution helpers        | 0      | 0   |
 | Walk state swapped and restored outside a guard  | 0      | 0   |
-| Block-scope pushes popped by hand                | 0      | 41  |
+| Block-scope pushes popped by hand                | 0      | 0   |
 | `with_module_perspective_for` call sites         | 1      | 1   |
 | `with_reference_recording_suppressed` call sites | 1      | 1   |
 | Walker signatures taking or returning a TIR node | 0      | 0   |
@@ -931,19 +934,6 @@ identically through `module_elaborator` and `Reify::new` rather than one
 Finishing it: dissolve `AnnotateState`, with `tysys`, `module_semantics`,
 `liveness` and `world_registry` landing on `Semantics` and the rest becoming
 driver locals or `ElabEnv` fields.
-
-### Block scopes popped by hand
-
-Every swap of walk state restores on drop, but the lexical block stack does
-not. `FunctionContext` has 40 `enter_scope` / `exit_scope` pairs across the
-walk and reify. A block with local items also replaces the function-local item
-table and puts it back by hand. That makes 41, the count in the invariant
-table. An early return between a push and its pop leaves the frame pushed. Two
-of the pairs are not nested: they pop and push again mid-block to drop the
-bindings a guard introduced.
-
-Finishing it: one guard per block frame, on the `FieldFrame` pattern, so the
-count reaches 0.
 
 ### The hole sweep is still a hand list
 

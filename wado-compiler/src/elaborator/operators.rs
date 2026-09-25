@@ -1112,23 +1112,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
-    /// Mark `subscripts` as `&mut` places for the walks that follow, answering
-    /// what [`Self::unmark_mut_place_subscripts`] takes back. One already
-    /// marked is left out, so a nested walk does not unmark its caller's.
-    fn mark_mut_place_subscripts(subscripts: &[AstId], ctx: &mut FunctionContext) -> Vec<AstId> {
-        subscripts
-            .iter()
-            .copied()
-            .filter(|id| ctx.mut_place_subscripts.insert(*id))
-            .collect()
-    }
-
-    fn unmark_mut_place_subscripts(marked: &[AstId], ctx: &mut FunctionContext) {
-        for id in marked {
-            ctx.mut_place_subscripts.swap_remove(id);
-        }
-    }
-
     /// Resolve `expr` with every subscript `target` projects through standing as
     /// a `&mut` place. `Err` is the refusal, already reported: one of those
     /// subscripts hands out something no write can reach the element through.
@@ -1139,9 +1122,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Result<TypeId, ()> {
         let projected = projected_subscripts_of_place(target);
-        let marked = Self::mark_mut_place_subscripts(&projected, ctx);
-        let resolved = self.resolve_expr(expr, ctx, None);
-        Self::unmark_mut_place_subscripts(&marked, ctx);
+        let resolved = self.resolve_expr(expr, &mut ctx.marking_mut_places(&projected), None);
         if let Some(refusal) = projected
             .iter()
             .find_map(|id| self.subscript_write_refusal(*id))
@@ -1548,12 +1529,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (a subscript against its index key type) so the annotate and reify
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
-        ctx.enter_scope();
+        let mut scope = ctx.enter_scope();
         // `h[0].n += 3` reads and writes one place, so the read side takes the
         // same `&mut` subscript the write side does.
-        let marked =
-            Self::mark_mut_place_subscripts(&projected_subscripts_of_place(&compound.target), ctx);
-        let mut frame = ctx.replacing(|ctx| &mut ctx.compound_hoist_types, IndexMap::default());
+        let mut marked = scope.marking_mut_places(&projected_subscripts_of_place(&compound.target));
+        let mut frame = marked.replacing(|ctx| &mut ctx.compound_hoist_types, IndexMap::default());
         let ctx = &mut *frame;
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
@@ -1583,17 +1563,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             compound.span,
             Some(compound.id),
         );
-        let result = self.assign_to_target(
+        self.assign_to_target(
             &compound.target,
             AssignValue::Resolved {
                 type_id: combined,
                 span: compound.span,
             },
             ctx,
-        );
-        Self::unmark_mut_place_subscripts(&marked, ctx);
-        ctx.exit_scope();
-        result
+        )
     }
 
     /// Resolve `a OP1 b OP2 c [OP3 d …]` as the equivalent
@@ -1615,7 +1592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Enter a fresh scope for the `$mK` bindings so they don't leak
         // into the surrounding function's local namespace.
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
 
         // First comparison: resolve `chain.first` and `cmp[0].right` with
         // the same bidirectional coercion `resolve_binary` would apply.
@@ -1665,8 +1642,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             prev = right;
         }
-
-        ctx.exit_scope();
 
         TypeTable::BOOL
     }

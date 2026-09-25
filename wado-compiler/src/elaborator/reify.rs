@@ -2231,10 +2231,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) -> TirBlock {
-        ctx.enter_scope();
-        let stmts =
-            self.reify_positioned_stmts(&block.stmts, block.span, ctx, expected_type, tail_value);
-        ctx.exit_scope();
+        let stmts = self.reify_positioned_stmts(
+            &block.stmts,
+            block.span,
+            &mut ctx.enter_scope(),
+            expected_type,
+            tail_value,
+        );
         TirBlock::new(stmts, block.span)
     }
 
@@ -2299,9 +2302,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     continue;
                 }
                 if let ast::Stmt::LabeledBlock(labeled_block) = s {
-                    ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
-                    let block = self.reify_block(&labeled_block.block, ctx, expected_type);
-                    ctx.pop_labeled_block_frame();
+                    let block = self.reify_block(
+                        &labeled_block.block,
+                        &mut ctx.enter_labeled_block(labeled_block.label.clone(), expected_type),
+                        expected_type,
+                    );
                     stmts.push(TirStmt::new(
                         TirStmtKind::LabeledBlock {
                             label: labeled_block.label.clone(),
@@ -2515,14 +2520,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Stmt::LabeledBlock(labeled_block) => {
                 // `LABEL: { … }` stmt — mirrors
-                // `Elaborator::resolve_labeled_block`.
-                // Push the label onto `active_labels` so a nested
-                // `break LABEL` lowers against this frame, walk the
-                // inner block, pop. The block result is dropped at
-                // stmt position, so no `expected_type` propagates.
-                ctx.push_labeled_block_frame(labeled_block.label.clone(), None);
-                let block = self.reify_block(&labeled_block.block, ctx, None);
-                ctx.pop_labeled_block_frame();
+                // `Elaborator::resolve_labeled_block`. The block result is
+                // dropped at stmt position, so no `expected_type` propagates.
+                let block = self.reify_block(
+                    &labeled_block.block,
+                    &mut ctx.enter_labeled_block(labeled_block.label.clone(), None),
+                    None,
+                );
                 vec![TirStmt::new(
                     TirStmtKind::LabeledBlock {
                         label: labeled_block.label.clone(),
@@ -3044,21 +3048,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
             }
             ast::Expr::LabeledBlock(lb) => {
-                // Match `Elaborator::resolve_expr`'s `LabeledBlock`
-                // arm: push a `LabeledBlockTarget`
-                // so any `break label: expr` inside lowers via this
-                // frame, walk the inner block, pop the frame, emit
-                // `TirExprKind::LabeledBlock`. The result type is the
-                // recorded `expression_types[lb.id]`; annotate already
-                // unified break types into it.
+                // Match `Elaborator::resolve_expr`'s `LabeledBlock` arm. The
+                // result type is the recorded `expression_types[lb.id]`;
+                // annotate already unified break types into it.
                 // Fall back to the block's unified result type when the use
                 // site supplies no expected type, so a `null` resolving only
                 // from a sibling break still coerces, as a `break label: null`
                 // or as the fall-through tail.
                 let branch_expected = expected_type.or(Some(recorded_type));
-                ctx.push_labeled_block_frame(lb.label.clone(), branch_expected);
-                let tir_block = self.reify_block(&lb.block, ctx, branch_expected);
-                ctx.pop_labeled_block_frame();
+                let tir_block = self.reify_block(
+                    &lb.block,
+                    &mut ctx.enter_labeled_block(lb.label.clone(), branch_expected),
+                    branch_expected,
+                );
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
                         label: lb.label.clone(),
@@ -3210,18 +3212,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // Mirror `Elaborator::resolve_while`'s LetChain arm:
                 // the else-branch unconditionally `break`s out of the loop.
                 let else_block = TirBlock::new(vec![bare_break(span)], *cond_span);
-                ctx.enter_scope();
-                let body_stmts = self.reify_let_chain_stmts(
+                self.reify_let_chain_stmts(
                     elements,
                     &w.body,
                     Some(&else_block),
-                    ctx,
+                    &mut ctx.enter_scope(),
                     None,
                     false,
                     *cond_span,
-                );
-                ctx.exit_scope();
-                body_stmts
+                )
             }
         };
 
@@ -3503,31 +3502,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (Vec::new(), IndexMap::default())
         };
 
-        ctx.enter_scope();
-
-        ctx.reify_assert_capture_ctx = Some(ReifyAssertCaptureContext {
-            slots: slot_facts
-                .iter()
-                .enumerate()
-                .map(
-                    |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
-                        name: format!("$v{i}"),
-                        label: label.clone(),
-                        emitted: false,
-                        local_index: None,
-                        type_id: None,
-                        conditional: *conditional,
-                        is_place: *is_place,
-                        hoisted: *hoisted,
-                        place_expr: None,
-                        seen_local_index: None,
-                    },
-                )
-                .collect(),
-            ast_id_to_slot,
-            in_progress: IndexSet::default(),
-            emitted_lets: Vec::new(),
-        });
+        let mut scope = ctx.enter_scope();
+        let ctx = &mut scope.replacing(
+            |ctx| &mut ctx.reify_assert_capture_ctx,
+            Some(ReifyAssertCaptureContext {
+                slots: slot_facts
+                    .iter()
+                    .enumerate()
+                    .map(
+                        |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
+                            name: format!("$v{i}"),
+                            label: label.clone(),
+                            emitted: false,
+                            local_index: None,
+                            type_id: None,
+                            conditional: *conditional,
+                            is_place: *is_place,
+                            hoisted: *hoisted,
+                            place_expr: None,
+                            seen_local_index: None,
+                        },
+                    )
+                    .collect(),
+                ast_id_to_slot,
+                in_progress: IndexSet::default(),
+                emitted_lets: Vec::new(),
+            }),
+        );
 
         let cond_tir = self.reify_condition_expr(&assert_stmt.condition, ctx);
 
@@ -3741,8 +3742,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
 
-        ctx.exit_scope();
-
         let assert_serial = ctx.fresh_serial();
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
@@ -3828,7 +3827,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        ctx.active_labels.push(label.clone());
+        let ctx = &mut ctx.enter_label(label.clone());
 
         let iter_local_ref = TirExpr::new(
             TirExprKind::Local {
@@ -3865,10 +3864,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (name.to_string(), index)
         };
 
-        ctx.enter_scope();
-        let binding_pattern = self.reify_pattern(&for_of.binding, info.item_type, ctx);
-        let body_block = self.reify_block(&for_of.body, ctx, None);
-        ctx.exit_scope();
+        let mut scope = ctx.enter_scope();
+        let binding_pattern = self.reify_pattern(&for_of.binding, info.item_type, &mut scope);
+        let body_block = self.reify_block(&for_of.body, &mut scope, None);
 
         let some_pattern = TirPattern::Variant {
             enum_type: option_type,
@@ -3916,8 +3914,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let loop_tir = TirStmt::new(TirStmtKind::Loop { body: loop_body }, span);
-
-        ctx.active_labels.pop();
 
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
@@ -3996,7 +3992,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         for (i, &elem_type) in elems.iter().enumerate() {
-            ctx.enter_scope();
+            let ctx = &mut ctx.enter_scope();
             if let Some(overlay) = instantiation.get(i) {
                 self.tuple_overlay_stack.push(overlay);
             }
@@ -4120,7 +4116,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             if instantiation.get(i).is_some() {
                 self.tuple_overlay_stack.pop();
             }
-            ctx.exit_scope();
 
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
@@ -4131,17 +4126,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ));
         }
 
-        let label = format!("$tuple_for_of_{unique_id}");
-        ctx.active_labels.push(label.clone());
-        let result = vec![TirStmt::new(
+        vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
-                label,
+                label: format!("$tuple_for_of_{unique_id}"),
                 block: TirBlock::new(outer_stmts, span),
             },
             span,
-        )];
-        ctx.active_labels.pop();
-        result
+        )]
     }
 
     /// Emit a deferred `VariadicForOf` TIR node for tuples whose
@@ -4236,7 +4227,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         let is_mut = for_of.is_mut;
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         let binding_local = ctx.add_local_at(
             binding_name.clone(),
             binding_type,
@@ -4304,14 +4295,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let index_binding =
             Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
-        let mut body = self.reify_block(&for_of.body, ctx, None);
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
+        let mut body = self.reify_block(
+            &for_of.body,
+            &mut ctx.enter_enumerate_body(index_binding),
+            None,
+        );
         if !destruct_stmts.is_empty() {
             destruct_stmts.extend(body.stmts);
             body.stmts = destruct_stmts;
@@ -4372,7 +4360,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             _ => None,
         };
 
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         let binding_local = ctx.add_local_at(
             binding_name.clone(),
             binding_type,
@@ -4434,14 +4422,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let index_binding =
             Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
-        let body = self.reify_expr(&comp.body, ctx, None);
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
+        let body = self.reify_expr(
+            &comp.body,
+            &mut ctx.enter_enumerate_body(index_binding),
+            None,
+        );
 
         TirExpr::new(
             TirExprKind::VariadicTupleComprehension {
@@ -4465,8 +4450,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let body_label = for_body_label(ctx.fresh_serial());
 
         let mut frame = ctx.enter_loop();
-        let ctx = &mut *frame;
-        ctx.enter_scope();
+        let ctx = &mut frame.enter_scope();
 
         let mut outer_stmts: Vec<TirStmt> = Vec::new();
         if let Some(init) = &f.init {
@@ -4515,17 +4499,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // Annotate already diagnosed multi-element
                     // for-let-chain as `InvalidPattern`; emit
                     // empty to mirror.
-                    ctx.exit_scope();
                     return vec![];
                 };
 
                 let scrutinee = self.reify_expr(expr, ctx, None);
                 let scrutinee_type = scrutinee.type_id;
-                ctx.enter_scope();
-                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, ctx);
-                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
-                let update_stmts = self.reify_for_update(f.update.as_ref(), ctx);
-                ctx.exit_scope();
+                let mut scope = ctx.enter_scope();
+                let tir_pattern = self.reify_pattern(pattern, scrutinee_type, &mut scope);
+                let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, &mut scope);
+                let update_stmts = self.reify_for_update(f.update.as_ref(), &mut scope);
 
                 let mut then_stmts = vec![labeled_body];
                 then_stmts.extend(update_stmts);
@@ -4574,7 +4556,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
 
-        ctx.exit_scope();
         outer_stmts
     }
 
@@ -4588,11 +4569,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         body: &ast::Block,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
-        ctx.for_continue_labels.push(body_label.to_string());
-        ctx.active_labels.push(body_label.to_string());
-        let body_block = self.reify_block(body, ctx, None);
-        ctx.active_labels.pop();
-        ctx.for_continue_labels.pop();
+        let mut retarget = ctx.pushing(|ctx| &mut ctx.for_continue_labels, body_label.to_string());
+        let body_block = self.reify_block(
+            body,
+            &mut retarget.enter_label(body_label.to_string()),
+            None,
+        );
         TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label: body_label.to_string(),
@@ -4754,18 +4736,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .else_block
                     .as_ref()
                     .map(|b| self.reify_block_with_position(b, ctx, expected_type, tail_value));
-                ctx.enter_scope();
-                let stmts = self.reify_let_chain_stmts(
+                self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
                     else_block.as_ref(),
-                    ctx,
+                    &mut ctx.enter_scope(),
                     expected_type,
                     tail_value,
                     if_stmt.span,
-                );
-                ctx.exit_scope();
-                stmts
+                )
             }
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
@@ -4837,18 +4816,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .else_block
                     .as_ref()
                     .map(|b| self.reify_block(b, ctx, None));
-                ctx.enter_scope();
-                let stmts = self.reify_let_chain_stmts(
+                self.reify_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
                     else_block.as_ref(),
-                    ctx,
+                    &mut ctx.enter_scope(),
                     None,
                     false,
                     if_stmt.span,
-                );
-                ctx.exit_scope();
-                stmts
+                )
             }
         }
     }
@@ -4883,17 +4859,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .else_block
                     .as_ref()
                     .map(|b| self.reify_block_value(b, ctx, branch_expected));
-                ctx.enter_scope();
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
                     else_block.as_ref(),
-                    ctx,
+                    &mut ctx.enter_scope(),
                     branch_expected,
                     true,
                     if_expr.span,
                 );
-                ctx.exit_scope();
                 let chain_block = TirBlock::new(stmts, if_expr.span);
                 return TirExpr::new(TirExprKind::Block(chain_block), recorded_type, if_expr.span);
             }
@@ -5750,12 +5724,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             |reify| &mut reify.compound_overrides,
             IndexMap::default(),
             |this| {
-                ctx.enter_scope();
+                let ctx = &mut ctx.enter_scope();
                 let mut prelude: Vec<TirStmt> = Vec::new();
                 this.bind_compound_hoists(&hoists, &mut prelude, ctx);
-                let result = this.reify_compound_assign_body(compound, ctx, op, prelude, span);
-                ctx.exit_scope();
-                result
+                this.reify_compound_assign_body(compound, ctx, op, prelude, span)
             },
         )
         .0
@@ -5892,8 +5864,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
 
-        ctx.enter_scope();
-        let v_local = ctx.add_local("$qm_v".to_string(), some_type, false, None);
+        let v_local = ctx
+            .enter_scope()
+            .add_local("$qm_v".to_string(), some_type, false, None);
 
         let some_arm = TirMatchArm {
             pattern: TirPattern::Variant {
@@ -5950,8 +5923,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         };
 
-        ctx.exit_scope();
-
         TirExpr::new(
             TirExprKind::Match {
                 expr: Box::new(inner),
@@ -5994,9 +5965,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // OuterErr`).
         let need_from_conversion = inner_err_type != outer_err_type;
 
-        ctx.enter_scope();
-        let v_local = ctx.add_local("$qm_v".to_string(), ok_type, false, None);
-        let e_local = ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
+        let mut scope = ctx.enter_scope();
+        let v_local = scope.add_local("$qm_v".to_string(), ok_type, false, None);
+        let e_local = scope.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
         let (ok_name, ok_index, err_name, err_index) = {
             let tt = self.tysys.type_table.borrow();
@@ -6086,8 +6057,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         };
 
-        ctx.exit_scope();
-
         TirExpr::new(
             TirExprKind::Match {
                 expr: Box::new(inner),
@@ -6167,7 +6136,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             chain.comparisons.len() >= 2,
             "the parser makes a single comparison a `Binary`"
         );
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
 
         let cmp0 = &chain.comparisons[0];
@@ -6246,8 +6215,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
             prev_tir = next_prev;
         }
-
-        ctx.exit_scope();
 
         stmts.push(TirStmt::new(TirStmtKind::Expr(acc_tir), chain.span));
         TirExpr::new(
@@ -6818,7 +6785,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // accumulator is seeded with the first member so the common
         // `{ ..base, … }` costs one copy and one merge.
         let label = "$kv_lit".to_string();
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut acc: Option<u32> = None;
         let mut run: Vec<TirExpr> = Vec::new();
@@ -6884,7 +6851,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
             span,
         ));
-        ctx.exit_scope();
 
         cast(TirExpr::new(
             TirExprKind::LabeledBlock {
@@ -7026,13 +6992,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         }
 
-        ctx.enter_scope();
         // `with ... do { ... }` evaluates to its body block's trailing value.
         // Propagate the recorded result type so the body's tail expression
         // replays any coercion (e.g. literal widening) the annotate phase
         // applied against the binding's expected type.
-        let body = self.reify_block(&with_expr.body, ctx, Some(result_type));
-        ctx.exit_scope();
+        let body = self.reify_block(&with_expr.body, &mut ctx.enter_scope(), Some(result_type));
 
         TirExpr::new(
             TirExprKind::WithHandler {
@@ -7053,13 +7017,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee = self.reify_expr(&m.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         let pattern_tir = self.reify_pattern(&m.pattern, scrutinee_type, ctx);
         let arm_body = match &m.guard {
             Some(guard) => self.reify_expr(guard, ctx, Some(TypeTable::BOOL)),
             None => TirExpr::new(TirExprKind::BoolLiteral(true), TypeTable::BOOL, m.span),
         };
-        ctx.exit_scope();
 
         let arms = vec![
             TirMatchArm {
@@ -7323,14 +7286,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .arms
             .iter()
             .map(|arm| {
-                ctx.enter_scope();
+                let ctx = &mut ctx.enter_scope();
                 let pattern = self.reify_pattern(&arm.pattern, scrutinee_type, ctx);
                 let guard = arm
                     .guard
                     .as_ref()
                     .map(|g| self.reify_expr(g, ctx, Some(TypeTable::BOOL)));
                 let body = self.reify_expr(&arm.body, ctx, branch_expected);
-                ctx.exit_scope();
                 TirMatchArm {
                     pattern,
                     guard,

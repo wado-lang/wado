@@ -49,9 +49,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // here remain in the function frame). A new lexical scope is opened
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
-        ctx.enter_scope();
-        self.resolve_block_value(&with_expr.body, ctx, expected_type);
-        ctx.exit_scope();
+        self.resolve_block_value(&with_expr.body, &mut ctx.enter_scope(), expected_type);
 
         // `with ... do { ... }` is an expression: it evaluates to its body
         // block's value. The shared block-result rule types it from the

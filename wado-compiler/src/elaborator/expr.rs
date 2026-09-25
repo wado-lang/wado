@@ -457,17 +457,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
             Expr::LabeledBlock(lb) => {
-                ctx.push_labeled_block_frame(lb.label.clone(), expected_type);
-
-                ctx.enter_scope();
+                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected_type);
                 // A labeled block yields via `break label: value`, not a tail
                 // expression, so its trailing statement stays in statement
                 // position (a discarded tail `match` may have arms of
                 // differing types).
-                self.resolve_block(&lb.block, ctx, expected_type);
-                ctx.exit_scope();
-
-                let target = ctx.pop_labeled_block_frame();
+                self.resolve_block(&lb.block, &mut frame, expected_type);
+                let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
                 // the same unification; project only the result type.
@@ -1912,17 +1908,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
-                // Enter scope for chain elements and then_block
-                ctx.enter_scope();
                 self.resolve_let_chain_stmts(
                     elements,
                     &if_expr.then_block,
-                    ctx,
+                    &mut ctx.enter_scope(),
                     expected_type,
                     true,
                     if_expr.span,
                 );
-                ctx.exit_scope();
 
                 // `resolve_let_chain_stmts` resolved the then block under the
                 // same expectation, so a mismatch there is already diagnosed.
@@ -2529,16 +2522,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> (TypeId, Span) {
-        ctx.enter_scope();
-
+        let ctx = &mut ctx.enter_scope();
         self.resolve_if_pattern(&arm.pattern, scrutinee_type, ctx, arm.span);
         if let Some(g) = arm.guard.as_ref() {
             self.resolve_expr(g, ctx, Some(TypeTable::BOOL));
         }
         let body_type = self.resolve_expr(&arm.body, ctx, expected_type);
-
-        ctx.exit_scope();
-
         (body_type, arm.body.span())
     }
 
@@ -4483,17 +4472,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             elem_type
         };
 
-        ctx.enter_scope();
-        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, ctx);
-        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
-        let body_type = self.resolve_expr(&comp.body, ctx, None);
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
+        let mut scope = ctx.enter_scope();
+        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, &mut scope);
+        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, &scope);
+        let body_type = self.resolve_expr(
+            &comp.body,
+            &mut scope.enter_enumerate_body(index_binding),
+            None,
+        );
 
         // A body that yields the element unchanged reproduces the source shape;
         // anything else maps the pack through the body's type.
@@ -4787,9 +4773,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap();
 
         // Allocate a local for the Some payload binding (walk-order parity).
-        ctx.enter_scope();
-        let _v_local = ctx.add_local("$qm_v".to_string(), some_type, false, None);
-        ctx.exit_scope();
+        ctx.enter_scope()
+            .add_local("$qm_v".to_string(), some_type, false, None);
 
         // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
@@ -4821,11 +4806,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         drop(tt);
 
-        ctx.enter_scope();
         // The `$qm_v` local is allocated for walk-order parity; reify rebuilds
         // the `?` desugar and its own bindings, so the index is not kept here.
-        ctx.add_local("$qm_v".to_string(), ok_type, false, None);
-        ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
+        let mut scope = ctx.enter_scope();
+        scope.add_local("$qm_v".to_string(), ok_type, false, None);
+        scope.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
         // error types differ (no-op when they match). `resolve_from_call`
@@ -4834,8 +4819,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if inner_err_type != outer_err_type {
             let _ = self.resolve_from_call(outer_err_type, inner_err_type, qm_id);
         }
-
-        ctx.exit_scope();
 
         // Reify rebuilds the `Result` `?` desugar
         // (`reify_question_mark_result`) from the AST + the recorded

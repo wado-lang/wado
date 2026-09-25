@@ -151,7 +151,7 @@ pub(crate) struct ModuleDecls {
     pub(crate) anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
 
     /// The local items in scope at the walk's position, by the name written in
-    /// source. `hoist_local_items` saves and restores it per block, and
+    /// source. Each block restores the enclosing table on leaving, and
     /// `clear_fn_local_items` empties it per function body.
     ///
     /// It answers with an identity; a declaration's contents come from the

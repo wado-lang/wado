@@ -28,7 +28,7 @@ use crate::name::{
 };
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
-use crate::{IndexMap, hashmap, tir};
+use crate::{hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -89,8 +89,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) {
-        ctx.enter_scope();
-        let outer_items = self.hoist_local_items(block);
+        let ctx = &mut ctx.enter_scope();
+        let items = self.sem.decls.fn_local_items.clone();
+        util::replaced(
+            self,
+            |elaborator| &mut elaborator.sem.decls.fn_local_items,
+            items,
+            |this| this.resolve_block_stmts(block, ctx, expected_type, tail_value),
+        );
+    }
+
+    fn resolve_block_stmts(
+        &mut self,
+        block: &Block,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+        tail_value: bool,
+    ) {
+        self.hoist_local_items(block);
         let len = block.stmts.len();
         for (i, s) in block.stmts.iter().enumerate() {
             // The trailing statement is resolved in value position when the
@@ -129,20 +145,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             self.resolve_stmt(s, ctx);
         }
-        if let Some(outer) = outer_items {
-            self.sem.decls.fn_local_items = outer;
-        }
-        ctx.exit_scope();
     }
 
-    /// Bring a block's local items into scope ahead of its statements,
-    /// answering with the enclosing block's to restore on the way out.
+    /// Bring a block's local items into scope ahead of its statements.
     ///
     /// Three passes, because a name resolves through its field info: the
     /// structs take their identity and a fieldless entry, then the newtypes
     /// resolve — to a fixpoint, so a base may name a later newtype — then the
     /// struct fields are filled in.
-    fn hoist_local_items(&mut self, block: &Block) -> Option<IndexMap<String, DefId>> {
+    fn hoist_local_items(&mut self, block: &Block) {
         let items: Vec<&ast::Item> = block
             .stmts
             .iter()
@@ -151,10 +162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => None,
             })
             .collect();
-        if items.is_empty() {
-            return None;
-        }
-        let outer = self.sem.decls.fn_local_items.clone();
         for item in &items {
             if let ast::Item::Struct(struct_decl) = item {
                 self.declare_local_struct(struct_decl);
@@ -177,7 +184,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for item in items {
             self.resolve_local_item(item);
         }
-        Some(outer)
     }
 
     /// Resolve a statement for its facts. Reify rebuilds the `TirStmt`(s)
@@ -467,10 +473,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // target: its frame keeps an inner `break LABEL` from landing on an
         // outer block expression reusing the name. Its collected types are
         // dropped with the block's value.
-        ctx.push_labeled_block_frame(labeled_block.label.clone(), expected_type);
-        // resolve_block already handles scope entry/exit
-        self.resolve_block_with_position(&labeled_block.block, ctx, expected_type, tail_value);
-        ctx.pop_labeled_block_frame();
+        self.resolve_block_with_position(
+            &labeled_block.block,
+            &mut ctx.enter_labeled_block(labeled_block.label.clone(), expected_type),
+            expected_type,
+            tail_value,
+        );
     }
 
     pub(super) fn resolve_let(&mut self, let_stmt: &LetStmt, ctx: &mut FunctionContext) {
@@ -1412,17 +1420,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_with_position(b, ctx, expected_type, tail_value);
                 }
 
-                // Enter scope for chain element bindings and then_block.
-                ctx.enter_scope();
                 self.resolve_let_chain_stmts(
                     elements,
                     &if_stmt.then_block,
-                    ctx,
+                    &mut ctx.enter_scope(),
                     expected_type,
                     tail_value,
                     if_stmt.span,
                 );
-                ctx.exit_scope();
             }
         }
     }
@@ -2593,7 +2598,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_mut = for_of.is_mut;
         let is_destructured = matches!(&for_of.binding, Pattern::Tuple(..));
 
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
         ctx.add_local_at(
             binding_name.clone(),
             binding_type,
@@ -2632,16 +2637,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
-        if let Some(local) = index_binding {
-            ctx.variadic_enumerate_indices.push(local);
-        }
+        let ctx = &mut ctx.enter_enumerate_body(index_binding);
         for stmt in &for_of.body.stmts {
             self.resolve_stmt(stmt, ctx);
         }
-        if index_binding.is_some() {
-            ctx.variadic_enumerate_indices.pop();
-        }
-        ctx.exit_scope();
     }
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
@@ -2693,7 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut element_overlays: Vec<BodyFacts> = Vec::new();
 
         for &elem_type in elems {
-            ctx.enter_scope();
+            let ctx = &mut ctx.enter_scope();
 
             // When iterating through a reference, the element binds by reference
             // (`&T_k`); otherwise by value. Mirrors `tuple_element_binding`.
@@ -2778,8 +2777,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // their pre-loop state so the next element records from a clean
             // slate.
             element_overlays.push(self.sem.types.split_off(overlay_base));
-
-            ctx.exit_scope();
         }
 
         // Record this for-of's per-element overlays as one instantiation (in
@@ -2867,8 +2864,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Make `$for_of_N` visible to a body-level `break $for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
-        // would otherwise reject it). Pop after the body has been resolved.
-        ctx.active_labels.push(label);
+        // would otherwise reject it).
+        let ctx = &mut ctx.enter_label(label);
 
         // `$iter_N.next()` — dispatch on the `$iter_N` local, no AST.
         let next_outcome = self.resolve_method_call_with(
@@ -2984,19 +2981,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
-        ctx.enter_scope();
+        let mut scope = ctx.enter_scope();
         let binding = if for_of.is_mut {
             mut_bindings_of(&for_of.binding)
         } else {
             for_of.binding.clone()
         };
-        ctx.irrefutable_site = Some(BindingSite::ForOf);
-        self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
-        ctx.irrefutable_site = None;
-        self.resolve_block(&for_of.body, ctx, None);
-        ctx.exit_scope();
-
-        ctx.active_labels.pop();
+        self.resolve_if_pattern_inner(
+            &binding,
+            item_type,
+            &mut scope.replacing(|ctx| &mut ctx.irrefutable_site, Some(BindingSite::ForOf)),
+            span,
+            RefBinding::None,
+        );
+        self.resolve_block(&for_of.body, &mut scope, None);
     }
 
     /// Conservative superset of `boxing.rs`'s boxed set (also names flags /
@@ -3100,9 +3098,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
                 // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
-                ctx.enter_scope();
-                self.resolve_let_chain_stmts(elements, &w.body, ctx, None, false, *cond_span);
-                ctx.exit_scope();
+                self.resolve_let_chain_stmts(
+                    elements,
+                    &w.body,
+                    &mut ctx.enter_scope(),
+                    None,
+                    false,
+                    *cond_span,
+                );
             }
         }
     }
@@ -3115,7 +3118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The outer scope holds `init`'s bindings so the loop body can see
         // them while the surrounding function cannot.
-        ctx.enter_scope();
+        let ctx = &mut ctx.enter_scope();
 
         // Reify rebuilds the C-style-for desugar
         // (`{ init; loop { if !cond { break } $for_N_body: { B } update } }`,
@@ -3166,22 +3169,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .to_string(),
                         span: *cond_span,
                     });
-                    ctx.exit_scope();
                     return;
                 };
 
                 let scrutinee_type = self.resolve_expr(expr, ctx, None);
-                ctx.enter_scope();
+                let ctx = &mut ctx.enter_scope();
                 self.resolve_if_pattern(pattern, scrutinee_type, ctx, elem_span);
                 // Body and update both run inside the pattern scope so they can
                 // name the bindings introduced by `pat`.
                 self.resolve_for_labeled_body(&body_label, &f.body, ctx);
                 self.resolve_for_update(f.update.as_ref(), ctx);
-                ctx.exit_scope();
             }
         }
-
-        ctx.exit_scope();
     }
 
     /// Resolve a for loop's body under its continue-retarget label, which
@@ -3193,9 +3192,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         // Reify rebuilds the labeled body block.
-        ctx.active_labels.push(body_label.to_string());
-        self.resolve_block(body, ctx, None);
-        ctx.active_labels.pop();
+        self.resolve_block(body, &mut ctx.enter_label(body_label.to_string()), None);
     }
 
     /// Resolve a for loop's optional update expression for its facts

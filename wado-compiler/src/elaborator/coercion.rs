@@ -701,9 +701,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // fold walks them, so the `$acc` reserved below lands on the index
         // reify will allocate for it.
         let has_spread = !struct_lit.spreads.is_empty();
-        if has_spread {
-            ctx.enter_scope();
-        }
+        let mut spread_scope;
+        let ctx: &mut FunctionContext = if has_spread {
+            spread_scope = ctx.enter_scope();
+            &mut spread_scope
+        } else {
+            ctx
+        };
         let mut value_type = value_type;
         for member in struct_lit.members() {
             match member {
@@ -732,7 +736,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if has_spread {
             ctx.add_local("$acc".to_string(), output_type, true, None);
-            ctx.exit_scope();
         }
 
         Some(target_type)
