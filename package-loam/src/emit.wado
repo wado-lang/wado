@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
+use { Graph, KERNEL_ELEMENT, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm, window_of } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
@@ -351,22 +351,13 @@ fn emit_embedded(
         let axes = axis_list(&shapes.get(vi.name).unwrap());
         w.begin(`${names.get(&vi.name)}: Tensor::<${element}, [${axes}]>`);
         w.line(`data: List::<${element}>::from_le_bytes(${byte_string_literal(&data)}),`);
-        w.line(`extents: [${extent_list(&vi.rank)}],`);
+        // Both readers attach data only to a tensor whose every extent is stated.
+        w.line(`extents: ${int_list(&static_extents(&vi.rank).unwrap())},`);
         w.end_with(",");
     }
     w.end_with(";");
     w.end();
     w.end();
-}
-
-/// A tensor's extents as a list literal's elements. Both readers attach data
-/// only to a tensor whose every extent is stated.
-fn extent_list(rank: &Rank) -> String {
-    let mut spelled: List<String> = [];
-    for let e of static_extents(rank).unwrap() {
-        spelled.push(`${e}`);
-    }
-    return spelled.join(", ");
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a
@@ -498,15 +489,12 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     if op == "Reshape" || op == "Flatten" {
         let from = shapes.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
-        let mut extents: List<String> = [];
+        let mut extents: List<i32> = [];
         for let axis of to.axes {
-            extents.push(`${axis.static_extent()}`);
+            extents.push(axis.static_extent());
         }
-        return Result::Ok(
-            `reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, [${extents.join(
-                ", ",
-            )}])`,
-        );
+        let operand = exprs.reference(&node.inputs[0]);
+        return Result::Ok(`reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${int_list(&extents)})`);
     }
     if op == "MaxPool" || op == "Conv" {
         return Result::Ok(window_call(node, shapes, exprs));
