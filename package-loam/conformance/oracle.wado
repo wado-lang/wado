@@ -15,9 +15,9 @@ pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
     return pair;
 }
 
-/// How far a generated kernel may sit from the output ONNX ships. A
-/// transcendental operator is where the two implementations part; the rest
-/// agree bit for bit.
+/// How far a generated kernel may sit from the output ONNX ships, relative to
+/// the value past 1. A transcendental operator parts the two implementations,
+/// and so does a long sum taken in another order, in proportion to its size.
 pub global TOLERANCE: f32 = 1e-6;
 
 /// `Sqrt` of a negative element is NaN, and the two implementations agreeing
@@ -27,7 +27,7 @@ pub fn assert_close(got: &List<f32>, want: &List<f32>) {
     for let mut i = 0; i < want.len(); i += 1 {
         assert got[i].is_nan() == want[i].is_nan();
         if !want[i].is_nan() {
-            assert f32::abs(got[i] - want[i]) < TOLERANCE;
+            assert f32::abs(got[i] - want[i]) < TOLERANCE * f32::max(1.0, f32::abs(want[i]));
         }
     }
 }

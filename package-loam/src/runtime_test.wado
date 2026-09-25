@@ -120,11 +120,19 @@ test "reshape keeps the elements in order under the new extents" {
 }
 
 fn window(kernel: List<i32>, strides: List<i32>, pads: List<i32>, output: List<i32>) -> Window {
-    return Window { kernel, strides, dilations: [1, 1], pads, output };
+    return Window {
+        kernel,
+        strides,
+        dilations: [1, 1],
+        pads,
+        output,
+    };
 }
 
 test "max_pool takes each window's largest element, the padding never" {
-    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 1, 3, 3], [1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0]);
+    let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 1, 3, 3], [
+        1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0,
+    ]);
 
     let y = max_pool::<Batch, Inner, [Row, Col], [Row, Col]>(&x, &window([2, 2], [2, 2], [1, 1, 1, 1], [2, 2]));
     assert y.extents == [1, 1, 2, 2] as List<i32>;
@@ -135,11 +143,15 @@ test "conv sums each window against the weight across the input channels" {
     // Two input channels of 2x2 and one 2x2 filter per output channel.
     let x: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 2, 2], [1.0, 2.0, 3.0, 4.0, 10.0, 20.0, 30.0, 40.0]);
     let w: Tensor<f32, [Col, Inner, Row, Col]> = tensor([2, 2, 2, 2], [
-        1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
     ]);
 
-    let y = conv::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &window([2, 2], [1, 1], [0, 0, 0, 0], [1, 1]));
+    let y = conv::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &window(
+        [2, 2],
+        [1, 1],
+        [0, 0, 0, 0],
+        [1, 1],
+    ));
     assert y.extents == [1, 2, 1, 1] as List<i32>;
     assert y.data == [11.0, 44.0] as List<f32>;
 }
@@ -149,7 +161,9 @@ test "conv_bias adds each output channel's bias" {
     let w: Tensor<f32, [Col, Inner, Row, Col]> = tensor([2, 1, 1, 1], [1.0, 10.0]);
     let b: Tensor<f32, [Col]> = tensor([2], [0.5, -0.5]);
 
-    let y = conv_bias::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, &window([1, 1], [1, 1], [0, 0, 0, 0], [1, 2]));
+    let y = conv_bias::<Batch, Inner, Col, [Row, Col], [Row, Col], [Row, Col]>(&x, &w, &b, &window([1, 1], [1, 1], [
+        0, 0, 0, 0,
+    ], [1, 2]));
     assert y.data == [1.5, 2.5, 9.5, 19.5] as List<f32>;
 }
 

@@ -451,7 +451,9 @@ fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferErr
     let mut extents: List<i32> = [];
     for let axis of operand.axes {
         let Static(e) = axis.extent else {
-            return Result::Err(refusal(node, `axis ${axis.name} is ${axis.extent}, and ${node.op} reads static extents`));
+            return Result::Err(
+                refusal(node, `axis ${axis.name} is ${axis.extent}, and ${node.op} reads static extents`),
+            );
         };
         extents.push(e);
     }
@@ -475,7 +477,10 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema)
 /// per spatial position, which the output layout names.
 fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -> Result<Shape, InferError> {
     let [batch, channels] = lead;
-    let mut extents = [batch.static_extent(), channels.static_extent()] as List<i32>;
+    let mut extents = [
+        batch.static_extent(),
+        channels.static_extent(),
+    ] as List<i32>;
     extents.extend(&window.output);
     let mut axes = [batch, channels] as List<Axis>;
     for let i of 2..<extents.len() {
@@ -507,7 +512,10 @@ fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, wh
 /// attributes are understood rather than in either stage alone.
 pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Result<Window, InferError> {
     if x.rank() < 3 {
-        return Result::Err(refusal(node, `the operand has rank ${x.rank()}, and a window slides over axes past the second`));
+        return Result::Err(refusal(
+            node,
+            `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
+        ));
     }
     let spatial = spatial_extents(node, x)?;
     let kernel = if node.op == "Conv" {
@@ -515,12 +523,12 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
         if w.rank() != x.rank() {
             return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
         }
-        spatial_extents(node, &w)?
+        spatial_extents(node, &w)?;
     } else {
         if node.attr("kernel_shape") matches { None } {
             return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
         }
-        window_read(node, ints(node, "kernel_shape", spatial.len(), 1, 1))?
+        window_read(node, ints(node, "kernel_shape", spatial.len(), 1, 1))?;
     };
     let ceil = int_attr(node, "ceil_mode", 0)? != 0;
     return window_read(node, window(node, &spatial, kernel, ceil));

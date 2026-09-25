@@ -435,7 +435,10 @@ test "Flatten at axis 0 puts a new unit axis first" {
     let source = `g (float[2, 3] X) => (float[1, 6] Y) {
         Y = Flatten <axis = 0> (X)
     }`;
-    let layout: List<LayoutRule> = [rule("X", ["Row", "Col"]), rule("Y", ["One", "Cells"])];
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["One", "Cells"]),
+    ];
     assert reshaped(source, layout).unwrap() == "One=1,Merged<[Row, Col]>=6";
 }
 
@@ -451,7 +454,10 @@ test "an axis no regrouping determines takes the output's layout name" {
     let source = `g (float[2, 12] X) => (float[2, 1, 3, 4] Y) <int64[4] S = {2, 1, 3, 4}> {
         Y = Reshape(X, S)
     }`;
-    let layout: List<LayoutRule> = [rule("X", ["Batch", "Wide"]), rule("Y", ["Batch", "One", "Three", "Four"])];
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Wide"]),
+        rule("Y", ["Batch", "One", "Three", "Four"]),
+    ];
     assert reshaped(source, layout).unwrap() == "Batch=2,One=1,Three=3,Four=4";
 }
 
@@ -459,7 +465,10 @@ test "a Reshape target no integer initializer carries stops the build" {
     let source = `g (float[2, 12] X, float[2] S) => (float[24] Y) {
         Y = Reshape(X, S)
     }`;
-    let e = reshaped(source, [rule("X", ["Batch", "Wide"]), rule("S", ["Two"])]).unwrap_err();
+    let e = reshaped(source, [
+        rule("X", ["Batch", "Wide"]),
+        rule("S", ["Two"]),
+    ]).unwrap_err();
     assert e == "Y = Reshape: the target shape S is not an int64 initializer the graph carries";
 }
 

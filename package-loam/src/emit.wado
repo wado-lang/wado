@@ -503,7 +503,9 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
             extents.push(`${axis.static_extent()}`);
         }
         return Result::Ok(
-            `reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, [${extents.join(", ")}])`,
+            `reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, [${extents.join(
+                ", ",
+            )}])`,
         );
     }
     if op == "MaxPool" || op == "Conv" {
@@ -628,13 +630,17 @@ fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
         // Stage 0 read the same window and stopped the build there.
         unreachable();
     };
-    let geometry = `&Window { kernel: ${int_list(&window.kernel)}, strides: ${int_list(&window.strides)}, dilations: ${int_list(&window.dilations)}, pads: ${int_list(&window.pads)}, output: ${int_list(&window.output)} }`;
+    let geometry = `&Window { kernel: ${int_list(&window.kernel)}, strides: ${int_list(&window.strides)}, dilations: ${int_list(
+        &window.dilations,
+    )}, pads: ${int_list(&window.pads)}, output: ${int_list(&window.output)} }`;
     let input = exprs.reference(&node.inputs[0]);
     if node.op == "MaxPool" {
         return `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`;
     }
     let w = shapes.get(node.inputs[1]).unwrap();
-    let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(&w)}], [${spatial_axes(&y)}]>`;
+    let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(
+        &w,
+    )}], [${spatial_axes(&y)}]>`;
     let weight = exprs.reference(&node.inputs[1]);
     if has_bias(node) {
         return `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`;

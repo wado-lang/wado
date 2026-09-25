@@ -26,7 +26,10 @@ test "Flatten reproduces the output ONNX ships" {
     );
 
     let got: flatten::Tensor<f32, [flatten::Batch, flatten::Merged<[flatten::Chan, flatten::Row, flatten::Col]>]> = flatten::forward(
-        &flatten::Tensor::<f32, [flatten::Batch, flatten::Chan, flatten::Row, flatten::Col]> { data: x, extents: x_extents },
+        &flatten::Tensor::<f32, [flatten::Batch, flatten::Chan, flatten::Row, flatten::Col]> {
+            data: x,
+            extents: x_extents,
+        },
         &flatten::Weights {},
     );
 

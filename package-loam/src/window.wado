@@ -52,12 +52,14 @@ pub fn window(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> 
         }
         let span = input[i] + pads[i] + pads[spatial + i] - reach;
         if span < 0 {
-            return Result::Err(WindowError {
-                attr: "kernel_shape",
-                reason: `reaches ${reach} along spatial axis ${i}, past the ${input[i] + pads[i] + pads[spatial + i]} the padded input holds`,
-            });
+            return Result::Err(
+                WindowError {
+                    attr: "kernel_shape",
+                    reason: `reaches ${reach} along spatial axis ${i}, past the ${input[i] + pads[i] + pads[spatial + i]} the padded input holds`,
+                },
+            );
         }
-        let mut out = (if ceil { (span + strides[i] - 1) / strides[i] } else { span / strides[i] }) + 1;
+        let mut out = if ceil { (span + strides[i] - 1) / strides[i] } else { span / strides[i] } + 1;
         // A last window that would start in the trailing pad covers no input.
         if ceil && (out - 1) * strides[i] >= input[i] + pads[i] {
             out -= 1;
@@ -74,7 +76,10 @@ pub fn ints(node: &Node, name: String, count: i32, fallback: i32, least: i32) ->
         return Result::Ok(List::<i32>::filled(count, fallback));
     };
     if attr.values.len() != count {
-        return Result::Err(WindowError { attr: name, reason: `holds ${attr.values.len()} values and the operator reads ${count}` });
+        return Result::Err(WindowError {
+            attr: name,
+            reason: `holds ${attr.values.len()} values and the operator reads ${count}`,
+        });
     }
     let mut values: List<i32> = [];
     for let text of attr.values {
