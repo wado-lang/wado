@@ -809,6 +809,20 @@ impl SolverBridge {
         lowering.opaque_heads.insert(anonymous);
         let template = lowering.template_shape();
         lowering.opaque_heads.insert(template);
+        // `type_id` spells a resolved type under these heads whether or not an
+        // impl header named one.
+        for name in [
+            fn_shape_name(false),
+            fn_shape_name(true),
+            TypeTable::ARRAY_TYPE_NAME,
+            TypeTable::UNIT_TYPE_NAME,
+            "!",
+        ]
+        .into_iter()
+        .chain(PrimitiveType::all_primitive_names())
+        {
+            lowering.builtin(name);
+        }
         // A struct declared in a body has its identity here and its fields
         // only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
