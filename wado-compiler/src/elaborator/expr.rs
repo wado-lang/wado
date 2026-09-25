@@ -87,6 +87,13 @@ pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr
     int_literal_repr(lit).map(|repr| (lit, repr, negated))
 }
 
+/// Whether `target` is `f32` or `f64`, the floats `as` converts to. A half
+/// takes no `as` cast at all.
+pub(super) fn is_full_float(tt: &TypeTable, target: TypeId) -> bool {
+    tt.primitive_head(target)
+        .is_some_and(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))
+}
+
 /// The literal `-NUM` negates, which both range checks read as one literal so
 /// the boundary is the signed minimum.
 pub(super) fn negated_literal(unary: &ast::UnaryExpr) -> Option<&ast::LiteralExpr> {
@@ -3449,6 +3456,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reaches a target wider than `i32` (`65 as i128`). It never lands on
         // `i32`, so the defaulted range check must not judge it.
         let source_type = match int_literal_cast_operand(&cast.expr) {
+            // A float has no bit pattern to write, so the literal converts by
+            // value, as `let x: f32 = N;` does.
+            Some(_) if is_full_float(&self.tysys.type_table.borrow(), target_type) => {
+                self.try_coerce_numeric_literal(&cast.expr, target_type)
+                    .expect("a float takes every integer literal");
+                target_type
+            }
             Some((lit, repr, _)) => {
                 self.check_int_literal_parses(repr, lit.span);
                 self.record_expression_type(cast.expr.id(), TypeTable::I32);
