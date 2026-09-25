@@ -21,8 +21,6 @@ lib = "src/lib.wado"
 exclude = ["tests/antlr4-compat/**"]
 
 [test]
-# Kiln intermediates are not standalone source files. Keep this exclusion
-# when the package is used outside the repository's `.gitignore` coverage.
-# `tests/generated/` is Kiln output with no test blocks. The test that imports
-# each file already compiles it.
+# Kiln output, not standalone sources: `build/` holds intermediates that are not
+# always under `.gitignore`, and each `tests/generated/` parser compiles with its test.
 exclude = ["build/**", "tests/generated/**"]
