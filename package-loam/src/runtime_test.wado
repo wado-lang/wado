@@ -284,6 +284,14 @@ test "reduce folds the named axes to extent 1" {
     assert mean.data == [51.0, 61.0] as List<f32>;
 }
 
+test "reduce_mean over a tensor with no elements has none" {
+    let t: Tensor<f32, [Row, Col]> = tensor([0, 5], []);
+
+    let mean = reduce_mean(&t, [1]);
+    assert mean.extents == [0, 1] as List<i32>;
+    assert mean.data.is_empty();
+}
+
 test "permute puts input axis perm[i] at output axis i" {
     // Element (b, r, c) holds 100b + 10r + c.
     let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [

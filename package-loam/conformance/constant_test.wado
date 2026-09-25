@@ -1,6 +1,6 @@
 //! `pytorch-operator/test_operator_mm`: a `Constant` feeding a `Gemm` bias.
 //! The constant holds one element, so it folds into the closure and no tensor
-//! is allocated for it.
+//! is allocated for it. Its one axis is named all the same, as any rank is.
 
 use { assert_close, tensor_of } from "./oracle.wado";
 use { Batch, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
@@ -16,6 +16,10 @@ use { Batch, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-ope
                     {
                         pattern: "1",
                         axes: ["In", "Out"],
+                    },
+                    {
+                        pattern: "2",
+                        axes: ["Out"],
                     },
                 ],
             },

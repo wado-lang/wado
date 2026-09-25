@@ -5,7 +5,18 @@ use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use { axes_of, axis_index, fold, regrouped_extents, resolve_index } from "./fold.wado";
-use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, dims_of, element_of } from "./graph.wado";
+use {
+    Dim,
+    Graph,
+    KERNEL_ELEMENT,
+    Known,
+    Node,
+    Rank,
+    ValueInfo,
+    dims_of,
+    element_of,
+    is_binary_elementwise,
+} from "./graph.wado";
 use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, WindowError, ints, window_over } from "./window.wado";
@@ -233,7 +244,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         }
     }
     for let node of &graph.nodes {
-        if node.outputs.len() != 1 && node.op != "Split" {
+        if node.outputs.is_empty() || node.outputs.len() != 1 && node.op != "Split" {
             builtin::cold_path();
             return Result::Err(InferError::OutputCount(OutputCountConflict {
                 node: node_name(node),
@@ -241,6 +252,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
                 given: node.outputs.len(),
             }));
         }
+        operands_given(node, &known, &shapes)?;
         match fold(node, &known, &shapes) {
             Ok(Some(k)) => {
                 known[node.outputs[0]] = k;
@@ -260,7 +272,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         let produced = if node.op == "Split" {
             split(node, &shapes, &known, schema)?;
         } else {
-            [infer_node(node, &shapes, &known, schema)?] as List<Shape>;
+            [infer_node(node, &shapes, &known, schema, graph.opset)?] as List<Shape>;
         };
         let primitive = produced_primitive(node, &primitives)?;
         for let [i, shape] of produced.into_iter().enumerate() {
@@ -366,8 +378,7 @@ fn known_primitive(k: &Known) -> String {
     };
 }
 
-/// Give a folded tensor a kernel reads the shape the kernel needs. One element
-/// broadcasts as a scalar; more take the axes the layout names.
+/// Give a folded tensor a kernel reads the axes the layout names.
 fn materialize(
     tensor: &String,
     known: &TreeMap<String, Known>,
@@ -382,10 +393,6 @@ fn materialize(
         return Result::Ok(());
     };
     primitives[*tensor] = known_primitive(&k);
-    if k.len() == 1 {
-        shapes[*tensor] = Shape { axes: [] };
-        return Result::Ok(());
-    }
     let mut dims: List<Dim> = [];
     for let e of k.extents {
         dims.push(Dim::Static(e));
@@ -492,12 +499,10 @@ fn infer_node(
     shapes: &TreeMap<String, Shape>,
     known: &TreeMap<String, Known>,
     schema: &Schema,
+    opset: Option<i64>,
 ) -> Result<Shape, InferError> {
     let op = node.op;
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
-        if op == "Reshape" {
-            arity(node, 2)?;
-        }
         let operand = operand_at(node, shapes, 0)?;
         return match regrouped_extents(node, known, &static_extents_of(node, &operand)?) {
             Ok(targets) => regrouped(node, &operand, &targets, schema),
@@ -505,11 +510,9 @@ fn infer_node(
         };
     }
     if op == "Flatten" {
-        arity(node, 1)?;
         return flatten(node, &operand_at(node, shapes, 0)?, schema);
     }
     if op == "Gather" {
-        arity(node, 2)?;
         let data = operand_at(node, shapes, 0)?;
         let indices = operand_at(node, shapes, 1)?;
         let axis = gather_axis(node, data.rank())?;
@@ -519,13 +522,11 @@ fn infer_node(
         return Result::Ok(Shape { axes });
     }
     if op == "MaxPool" {
-        arity(node, 1)?;
         let x = operand_at(node, shapes, 0)?;
         let window = window_of(node, &x, shapes)?;
         return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
     }
     if op == "Conv" {
-        arity(node, 2)?;
         let x = operand_at(node, shapes, 0)?;
         let w = operand_at(node, shapes, 1)?;
         let group = int_attr(node, "group", 1)?;
@@ -556,7 +557,6 @@ fn infer_node(
         return at_node(node, a.elementwise(&b, op));
     }
     if op == "Gemm" {
-        arity(node, 2)?;
         let [_, _, trans_a, trans_b] = gemm_options(node)?;
         let a = gemm_matrix(node, shapes, 0, trans_a)?;
         let b = gemm_matrix(node, shapes, 1, trans_b)?;
@@ -573,24 +573,20 @@ fn infer_node(
         return at_node(node, product.elementwise(&c, op));
     }
     if op == "Transpose" {
-        arity(node, 1)?;
         let shape = operand_at(node, shapes, 0)?;
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
     }
     if is_unary_elementwise(&op) {
-        arity(node, 1)?;
         return operand_at(node, shapes, 0);
     }
     if op == "Where" {
-        arity(node, 3)?;
         let branches = at_node(node, operand_at(node, shapes, 1)?.elementwise(&operand_at(node, shapes, 2)?, op))?;
         return at_node(node, branches.elementwise(&operand_at(node, shapes, 0)?, op));
     }
     if op == "Softmax" {
-        arity(node, 1)?;
         let x = operand_at(node, shapes, 0)?;
-        softmax_axis(node, x.rank())?;
+        softmax_axis(node, x.rank(), opset)?;
         return Result::Ok(x);
     }
     if is_reduction(&op) {
@@ -691,7 +687,8 @@ fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, Infer
     let extents = static_extents_of(node, operand)?;
     let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
     let leading = element_count(&extents[0..<axis].to_list());
-    return regrouped(node, operand, &[leading, element_count(&extents) / leading], schema);
+    let trailing = element_count(&extents[axis..<extents.len()].to_list());
+    return regrouped(node, operand, &[leading, trailing], schema);
 }
 
 /// Every extent of an operand the operator reads as static.
@@ -857,7 +854,19 @@ pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
     return axis_attr(node, 0, rank, rank - 1);
 }
 
-pub fn softmax_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+/// The axis `Softmax` normalizes along. Before opset 13 it normalized every
+/// axis from `axis` on as one, which is a single axis only where `axis` is the last.
+pub fn softmax_axis(node: &Node, rank: i32, opset: Option<i64>) -> Result<i32, InferError> {
+    if let Some(version) = opset && version < 13 {
+        let axis = axis_attr(node, 1, rank, rank - 1)?;
+        if axis != rank - 1 {
+            return Result::Err(refusal(
+                node,
+                `opset ${version} normalizes axes ${axis} to ${rank - 1} as one, and Loam normalizes along one axis`,
+            ));
+        }
+        return Result::Ok(axis);
+    }
     return axis_attr(node, -1, rank, rank - 1);
 }
 
@@ -941,26 +950,61 @@ fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
 }
 
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
-    arity(node, 2)?;
     return Result::Ok([
         operand_at(node, shapes, 0)?,
         operand_at(node, shapes, 1)?,
     ]);
 }
 
-/// A graph that reached Loam has run once already, so a short operand list is
-/// a hand-edited file rather than an exporter's output. It still reports.
-fn arity(node: &Node, needed: i32) -> Result<(), InferError> {
-    if node.inputs.len() >= needed {
-        return Result::Ok(());
+/// Every operand `node` names is defined, and none it needs is absent, so the
+/// rules after this read an operand by position. A hand-edited file breaks this.
+fn operands_given(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    shapes: &TreeMap<String, Shape>,
+) -> Result<(), InferError> {
+    if let Some(needed) = required_operands(&node.op) {
+        let mut given = 0;
+        while given < node.inputs.len() && node.inputs[given] != "" {
+            given += 1;
+        }
+        if given < needed {
+            builtin::cold_path();
+            return Result::Err(InferError::OperandCount(OperandCountConflict {
+                node: node_name(node),
+                op: node.op,
+                given,
+                needed,
+            }));
+        }
     }
-    builtin::cold_path();
-    return Result::Err(InferError::OperandCount(OperandCountConflict {
-        node: node_name(node),
-        op: node.op,
-        given: node.inputs.len(),
-        needed,
-    }));
+    for let input of node.inputs {
+        if input != "" && !known.contains_key(input) && !shapes.contains_key(input) {
+            builtin::cold_path();
+            return Result::Err(InferError::Undefined(input));
+        }
+    }
+    return Result::Ok(());
+}
+
+/// How many leading operands `op` cannot do without, or `None` for an operator
+/// Loam does not know. One an older opset wrote as an attribute is not counted.
+fn required_operands(op: &String) -> Option<i32> {
+    if is_unary_elementwise(op) || is_reduction(op) {
+        return Option::Some(1);
+    }
+    if is_binary_elementwise(op) {
+        return Option::Some(2);
+    }
+    return match op.as_str_slice() {
+        "Constant" => Option::Some(0),
+        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" => Option::Some(
+            1,
+        ),
+        "Gather" | "MatMul" | "Gemm" | "Conv" => Option::Some(2),
+        "Range" | "Where" => Option::Some(3),
+        _ => null,
+    };
 }
 
 /// The operators whose output shape is their input's.
@@ -978,10 +1022,6 @@ fn is_unary_elementwise(op: &String) -> bool {
         || *op == "Abs";
 }
 
-/// The operators that broadcast two operands against each other.
-pub fn is_binary_elementwise(op: &String) -> bool {
-    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
-}
 
 fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
     let name = node.inputs[index];

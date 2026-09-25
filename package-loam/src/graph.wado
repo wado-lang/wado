@@ -155,11 +155,27 @@ impl Attr {
         }
         return Result::Ok(values);
     }
+
+    /// `ints` for a float attribute.
+    pub fn floats(&self) -> Result<List<f32>, String> {
+        let mut values: List<f32> = [];
+        for let text of self.values {
+            values.push(float_of(&text)?);
+        }
+        return Result::Ok(values);
+    }
 }
 
 fn int_of(text: &String) -> Result<i64, String> {
     let Ok(v) = i64::from_str(text) else {
         return Result::Err(`holds '${text}', which is not an integer`);
+    };
+    return Result::Ok(v);
+}
+
+fn float_of(text: &String) -> Result<f32, String> {
+    let Ok(v) = f32::from_str(text) else {
+        return Result::Err(`holds '${text}', which is not a number`);
     };
     return Result::Ok(v);
 }
@@ -195,10 +211,7 @@ impl Node {
         let Some(text) = self.one_value(name)? else {
             return Result::Ok(fallback);
         };
-        let Ok(v) = f32::from_str(&text) else {
-            return Result::Err(`holds '${text}', which is not a number`);
-        };
-        return Result::Ok(v);
+        return float_of(&text);
     }
 
     fn one_value<S: AsStrSlice>(&self, name: S) -> Result<Option<String>, String> {
@@ -227,6 +240,53 @@ pub struct Graph {
     pub initializers: List<ValueInfo>,
     pub constants: TreeMap<String, Known> = TreeMap::new(),
     pub nodes: List<Node>,
+    /// The default domain's opset, which fixes what an operator means. `None`
+    /// where the graph names none, read as the current one.
+    pub opset: Option<i64> = null,
+}
+
+/// The version a model imports the default domain at, from `(domain, version)`
+/// pairs: ONNX spells that domain `""` or `"ai.onnx"`.
+pub fn default_opset(imports: &List<[String, i64]>) -> Option<i64> {
+    for let [domain, version] of *imports {
+        if domain == "" || domain == "ai.onnx" {
+            return Option::Some(version);
+        }
+    }
+    return null;
+}
+
+/// `nodes` as the current opset defines them, read from `opset`'s definitions.
+/// A spelling whose older meaning no later opset has stops the read.
+pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, String> {
+    let Some(version) = opset else {
+        return Result::Ok(nodes);
+    };
+    let mut out: List<Node> = [];
+    for let node of nodes {
+        if version < 7 && is_binary_elementwise(&node.op) && node.attr("axis") matches { Some(_) } {
+            return Result::Err(
+                `${node.outputs.join(", ")} = ${node.op}: opset ${version} aligns the operands at attribute axis, which no later opset does`,
+            );
+        }
+        if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
+            let mut attrs = node.attrs;
+            attrs.push(Attr {
+                name: "axis",
+                values: ["1"],
+                is_list: false,
+            });
+            out.push(Node { ..node, attrs });
+            continue;
+        }
+        out.push(node);
+    }
+    return Result::Ok(out);
+}
+
+/// The operators that broadcast two operands against each other.
+pub fn is_binary_elementwise(op: &String) -> bool {
+    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
 }
 
 /// The message both readers give a build-time tensor written without values.

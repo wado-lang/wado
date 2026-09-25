@@ -4,14 +4,13 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Known, Node, element_of, static_extents } from "./graph.wado";
+use { Graph, Known, Node, element_of, is_binary_elementwise, static_extents } from "./graph.wado";
 use {
     Checked,
     InferError,
     gather_axis,
     gemm_options,
     has_bias,
-    is_binary_elementwise,
     is_reduction,
     reduced_axes,
     softmax_axis,
@@ -449,7 +448,7 @@ fn emit_forward(
         let calls = if node.op == "Split" {
             split_calls(node, checked, &exprs);
         } else {
-            [node_call(node, checked, &exprs)?] as List<String>;
+            [node_call(node, checked, &exprs, graph.opset)?] as List<String>;
         };
         for let [i, call] of calls.into_iter().enumerate() {
             let output = node.outputs[i];
@@ -502,7 +501,7 @@ fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, St
             continue;
         }
         for let [index, input] of node.inputs.into_iter().enumerate() {
-            if input == *scalar && !folds_constant(&node, index, scalars) {
+            if input == *scalar && folded_literal(&node, index, scalars, &checked.shapes) matches { None } {
                 return true;
             }
         }
@@ -579,7 +578,7 @@ fn settled<T>(read: Result<T, InferError>) -> T {
 
 /// One node as the kernel call that computes it. The operand expressions are
 /// already in scope, since a graph's nodes are in topological order.
-fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64>) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let op = node.op;
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
@@ -639,7 +638,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         return Result::Ok(`select(${operands.join(", ")})`);
     }
     if op == "Softmax" {
-        let axis = settled(softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
+        let axis = settled(softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank(), opset));
         return Result::Ok(`softmax(${exprs.reference(&node.inputs[0])}, ${axis})`);
     }
     if is_reduction(&op) {
@@ -724,16 +723,29 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<St
     return Result::Ok(`reduce(${a}, ${axes}, 0.0, |x, y| x + y)`);
 }
 
-/// Whether the operand at `index` is one this operator folds into a closure: a
-/// binary elementwise operand whose partner is a tensor, or a `Gemm` bias.
-fn folds_constant(node: &Node, index: i32, scalars: &TreeMap<String, String>) -> bool {
+/// The literal operand `index` folds into a closure as, or `None` where it is
+/// read as a tensor. A binary elementwise operand folds where its partner is a
+/// tensor of no lower rank, so the output keeps the partner's shape; a `Gemm` bias always does.
+fn folded_literal(
+    node: &Node,
+    index: i32,
+    scalars: &TreeMap<String, String>,
+    shapes: &TreeMap<String, Shape>,
+) -> Option<String> {
+    let Some(literal) = scalars.get(node.inputs[index]) else {
+        return null;
+    };
     if node.op == "Gemm" {
-        return index == 2;
+        return if index == 2 { Option::Some(literal) } else { null };
     }
     if index > 1 || !is_binary_elementwise(&node.op) {
-        return false;
+        return null;
     }
-    return !scalars.contains_key(node.inputs[1 - index]);
+    let partner = node.inputs[1 - index];
+    if scalars.contains_key(partner) || shapes[node.inputs[index]].rank() > shapes[partner].rank() {
+        return null;
+    }
+    return Option::Some(literal);
 }
 
 /// A two-operand node's operand expressions and the shapes stage 0 gave them.
@@ -750,11 +762,11 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 /// so no tensor is allocated for it and the other operand is walked once.
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
-    if let Some(literal) = exprs.scalars.get(node.inputs[1]) {
+    if let Some(literal) = folded_literal(node, 1, &exprs.scalars, shapes) {
         let body = binary_body(&op, &"v", &literal);
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
     }
-    if let Some(literal) = exprs.scalars.get(node.inputs[0]) {
+    if let Some(literal) = folded_literal(node, 0, &exprs.scalars, shapes) {
         let body = binary_body(&op, &literal, &"v");
         return Result::Ok(`map(${exprs.reference(&node.inputs[1])}, |v| ${body})`);
     }
@@ -841,7 +853,7 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     if !has_bias(node) {
         return Result::Ok(product);
     }
-    if let Some(literal) = exprs.scalars.get(node.inputs[2]) {
+    if let Some(literal) = folded_literal(node, 2, &exprs.scalars, shapes) {
         let scaled = if beta == 1.0 { literal } else { `${literal} * ${float_literal(beta)}` };
         return Result::Ok(`map(&${product}, |v| v + ${scaled})`);
     }

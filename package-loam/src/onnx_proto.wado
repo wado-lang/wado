@@ -15,10 +15,12 @@ use {
     bit_pattern,
     check_element_count,
     constant_without_values,
+    default_opset,
     element_of,
     is_build_time,
     parameters,
     push_element,
+    upgraded,
 } from "./graph.wado";
 
 /// `TensorShapeProto.Dimension`. Wado has no nested declaration, so the path
@@ -476,12 +478,15 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let n of graph.node {
         nodes.push(read_node(&n)?);
     }
+    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [o.domain, o.version]).collect();
+    let opset = default_opset(&imports);
     return Result::Ok(Graph {
         name: graph.name,
         inputs,
         outputs,
         initializers,
         constants,
-        nodes,
+        nodes: upgraded(nodes, opset)?,
+        opset,
     });
 }

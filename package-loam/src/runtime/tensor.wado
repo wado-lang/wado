@@ -515,8 +515,11 @@ pub fn reduce<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>, init: f32, op: fn(f3
 
 /// `reduce` to the mean of the elements along `axes`.
 pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
+    let mut count: f32 = 1.0;
+    for let axis of axes {
+        count *= t.extents[axis] as f32;
+    }
     let sum = reduce(t, axes, 0.0, |x, y| x + y);
-    let count = (t.data.len() / sum.data.len()) as f32;
     return map(&sum, |v| v / count);
 }
 

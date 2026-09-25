@@ -774,6 +774,20 @@ test "a constant with no closure to fold into is a rank-0 literal" {
     assert out.contains("let Y = map(&C, |v| f32::max(v, 0.0));");
 }
 
+test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {
+    let source = `g (float[3] X) => (float[1, 3] Y) <int64[2] S = {1, 1}> {
+        C = ConstantOfShape(S)
+        Y = Add(X, C)
+    }`;
+    let out = emitted(&generate(source, [
+        rule("X", ["A"]),
+        rule("C", ["One", "A"]),
+    ]).unwrap());
+
+    assert out.contains("let C = Tensor::<f32, [One, A]> { data: [(0 as f32)], extents: [1, 1] };");
+    assert out.contains("let Y = zip_suffix_lhs::<[One], [A]>(X, &C, |x, y| x + y);");
+}
+
 test "a constant a closure folds is not bound as well" {
     assert !folded_add(0.5).unwrap().contains("let C");
 }

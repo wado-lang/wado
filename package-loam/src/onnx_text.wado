@@ -18,11 +18,13 @@ use {
     bit_pattern,
     check_element_count,
     constant_without_values,
+    default_opset,
     element_of,
     is_build_time,
     parameters,
     push_element,
     static_extents,
+    upgraded,
 } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
@@ -38,7 +40,38 @@ pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
     let Some(graph) = first_child_of_kind(s, 0, onnx::RK_GRAPH) else {
         return Result::Err("a model without a graph");
     };
-    return read_graph(s, toks, graph);
+    let opset = default_opset(&read_opset_imports(s, toks)?);
+    let read = read_graph(s, toks, graph)?;
+    return Result::Ok(Graph { ..read, nodes: upgraded(read.nodes, opset)?, opset });
+}
+
+/// The `(domain, version)` pairs the model's metadata lists under `opset_import`.
+fn read_opset_imports(s: &onnx::CstStore, toks: &onnx::TokenStream) -> Result<List<[String, i64]>, String> {
+    let mut imports: List<[String, i64]> = [];
+    let Some(metadata) = first_child_of_kind(s, 0, onnx::RK_METADATA) else {
+        return Result::Ok(imports);
+    };
+    for let entry of children_of_kind(s, metadata, onnx::RK_META_ENTRY) {
+        if first_token_text(s, toks, entry) != "opset_import" {
+            continue;
+        }
+        let value = first_child_of_kind(s, entry, onnx::RK_META_VALUE).unwrap();
+        let Some(list) = first_child_of_kind(s, value, onnx::RK_ATOM_LIST) else {
+            return Result::Err("opset_import is not a list");
+        };
+        for let pair of children_of_kind(s, list, onnx::RK_ATOM_PAIR) {
+            let atoms = children_of_kind(s, pair, onnx::RK_ATOM);
+            if atoms.len() != 2 {
+                return Result::Err("an opset_import entry is not `domain : version`");
+            }
+            let text = first_token_text(s, toks, atoms[1]);
+            let Ok(version) = i64::from_str(&text) else {
+                return Result::Err(`opset_import holds '${text}' where a version goes`);
+            };
+            imports.push([quotable_text(s, toks, atoms[0]), version]);
+        }
+    }
+    return Result::Ok(imports);
 }
 
 fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Result<Graph, String> {

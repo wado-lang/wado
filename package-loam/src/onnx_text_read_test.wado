@@ -30,6 +30,26 @@ test "the graph carries its name" {
     assert mlp().name == "mlp";
 }
 
+test "the default domain's opset comes off the model's metadata" {
+    assert mlp().opset == Option::Some(10);
+    assert read("g (float[1] X) => (float[1] Y) { Y = Relu(X) }").unwrap().opset == null;
+}
+
+test "a Concat before opset 4 without an axis reads as the axis 1 it defaulted to" {
+    let g = read(`<ir_version: 3, opset_import: ["" : 3]> g (float[1, 2] X) => (float[1, 4] Y) { Y = Concat(X, X) }`).unwrap(
+    );
+    assert g.nodes[0].attr("axis").unwrap().values == ["1"] as List<String>;
+}
+
+test "arithmetic before opset 7 aligned at an axis stops the build" {
+    let e = read(
+        `<ir_version: 3, opset_import: ["" : 6]> g (float[2, 3] X, float[2] B) => (float[2, 3] Y) {
+            Y = Add <broadcast = 1, axis = 0> (X, B)
+        }`,
+    ).unwrap_err();
+    assert e == "Y = Add: opset 6 aligns the operands at attribute axis, which no later opset does";
+}
+
 test "an input's dtype and dimensions come off its type" {
     let g = mlp();
     assert g.inputs.len() == 1;
