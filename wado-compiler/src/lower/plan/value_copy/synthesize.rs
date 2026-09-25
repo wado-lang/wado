@@ -23,7 +23,7 @@ use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
-use crate::lower::plan::value_copy::array_clone_element_type_arg;
+use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::name::value_copy_helper_name;
 use crate::{hashmap, tir};
 
@@ -93,7 +93,9 @@ struct Collector<'a> {
 
 impl TirRefVisitor for Collector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let Some(t) = copy_value_type_arg(expr) {
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(t) = copy_value_type_arg(func)
+        {
             self.out.insert(t);
         }
         // `array_clone::<T>(arr)` lowers to a `WirInstr::ArrayClone`.
@@ -109,19 +111,6 @@ impl TirRefVisitor for Collector<'_> {
             self.out.insert(t);
         }
         self.walk_expr(expr);
-    }
-}
-
-fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
-    if let TirExprKind::Call { func, .. } = &expr.kind
-        && func.module_source.is_core_builtin()
-        && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
-    {
-        func.monomorph_info
-            .as_ref()
-            .and_then(|mi| mi.impl_type_args.first().copied())
-    } else {
-        None
     }
 }
 
@@ -534,32 +523,20 @@ fn build_list_wrapper_copy(
     span: Span,
 ) -> TirExpr {
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
-    let repr_field = TirField {
-        name: SeqField::Backing.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: raw_array_ty,
-        index: 0,
+    let repr_field = TirField::plain(
+        SeqField::Backing.field_name().to_string(),
+        Visibility::Private,
+        raw_array_ty,
+        0,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
-    let used_field = TirField {
-        name: SeqField::Len.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: TypeTable::I32,
-        index: 1,
+    );
+    let used_field = TirField::plain(
+        SeqField::Len.field_name().to_string(),
+        Visibility::Private,
+        TypeTable::I32,
+        1,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
+    );
     let fields = vec![
         TirStructField {
             name: SeqField::Backing.field_name().to_string(),
@@ -602,19 +579,13 @@ fn build_tuple_copy(
         .iter()
         .enumerate()
         .map(|(idx, elem_ty)| {
-            let field = TirField {
-                name: idx.to_string(),
-                visibility: Visibility::Public,
-                type_id: *elem_ty,
-                index: idx as u32,
+            let field = TirField::plain(
+                idx.to_string(),
+                Visibility::Public,
+                *elem_ty,
+                idx as u32,
                 span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                default_expr: None,
-            };
+            );
             TirStructField {
                 name: field.name.clone(),
                 value: make_field_copy(v_local.clone(), &field, type_table, span),

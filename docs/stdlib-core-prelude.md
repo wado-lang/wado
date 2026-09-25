@@ -120,13 +120,12 @@ Returns the per-field members.
 
 Assembles the struct from its field values.
 
-#### `fn defaults() -> Self::FieldSlots`
+#### `fn default_slot(index: i32) -> Self::FieldSlots`
 
-`#[compiler_item("reflect_struct_defaults")]`
+`#[compiler_item("reflect_struct_default_slot")]`
 
-The declared field defaults (`f: T = expr`), `None` where a field
-declares none. Read per field, so only a slot the wire left empty
-evaluates its default.
+Empty slots but `index`, which holds that field's declared default
+(`f: T = expr`) if it has one. No other field's default is evaluated.
 
 #### `fn empty_slots() -> Self::FieldSlots`
 
@@ -1408,6 +1407,22 @@ Euclidean distance: sqrt(x^2 + y^2)
 
 Floating-point remainder of x/y
 
+#### `pub fn erf(x: f32) -> f32`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
+#### `pub fn erfc(x: f32) -> f32`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f32) -> f32`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f32) -> f32`
+
+Natural logarithm of `|Γ(x)|`
+
 #### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
 
 `x * y + z`, rounded once instead of twice.
@@ -1714,6 +1729,22 @@ Euclidean distance: sqrt(x^2 + y^2)
 #### `pub fn fmod(x: f64, y: f64) -> f64`
 
 Floating-point remainder of x/y
+
+#### `pub fn erf(x: f64) -> f64`
+
+Error function: `(2/√π) ∫₀ˣ e^(-t²) dt`
+
+#### `pub fn erfc(x: f64) -> f64`
+
+Complementary error function: `1 - erf(x)`, accurate where erf is near 1
+
+#### `pub fn gamma(x: f64) -> f64`
+
+Gamma function: `Γ(x)`, which is `(x - 1)!` at a positive integer
+
+#### `pub fn ln_gamma(x: f64) -> f64`
+
+Natural logarithm of `|Γ(x)|`
 
 #### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
 
@@ -3155,6 +3186,11 @@ _Fields are private._
 
 The case's discriminant.
 
+#### `pub fn wire_discriminant(&self) -> i32`
+
+The discriminant a format writes: the case's `#[wire(number = N)]`, or
+its discriminant where it carries none.
+
 #### `pub fn holds(&self, v: &T) -> bool`
 
 Whether `v` is this case.
@@ -3266,6 +3302,10 @@ Whether the field is marked `#[secret]`.
 
 The field's `#[wire(number = N)]`, or `0` where it carries none: a
 field number starts at 1, so zero is the format's own non-number.
+
+#### `pub fn wire_encoding(&self) -> WireEncoding`
+
+The field's `#[wire(encoding = …)]`.
 
 #### `pub fn get(&self, v: &T) -> F`
 

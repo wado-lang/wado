@@ -124,6 +124,46 @@ pub fn generate() {}
 }
 
 #[test]
+fn descriptor_string_keyed_map_is_a_map() {
+    let source = r#"
+use { TreeMap } from "core:collections";
+
+pub struct Options {
+    pub dims: TreeMap<String, i32>,
+}
+
+pub fn generate() {}
+"#;
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let desc = extract_options_descriptor(&sem, &entry(&sem)).unwrap();
+    match &desc.fields[0].ty {
+        OptionsType::Map(value) => assert_matches!(value.as_ref(), OptionsType::I32),
+        other => panic!("expected Map, got {other:?}"),
+    }
+}
+
+#[test]
+fn descriptor_map_keyed_by_other_than_string_errors() {
+    let source = r#"
+use { TreeMap } from "core:collections";
+
+pub struct Options {
+    pub dims: TreeMap<i32, i32>,
+}
+
+pub fn generate() {}
+"#;
+    let host = InMemoryHost::new();
+    let sem = block_on(semantics(source, &host, Some("entry.wado")));
+    let err = extract_options_descriptor(&sem, &entry(&sem)).unwrap_err();
+    assert!(err.iter().any(|d| {
+        d.message
+            .contains("map key type `i32` is not supported in generator options")
+    }));
+}
+
+#[test]
 fn descriptor_missing_options_struct_is_empty() {
     // `Options` is optional: a generator that only exports `generate` gets an
     // empty descriptor rather than an error (WEP §"Options are a typed argument

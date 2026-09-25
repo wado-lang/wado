@@ -1,0 +1,28 @@
+// A user function sharing a `core:builtin` intrinsic's name is the user's,
+// generic or not, and infers the type parameters the intrinsic lacks.
+struct Tagged<E, Tag> {
+    data: List<E>,
+}
+
+struct Row {
+}
+
+fn select<T>(a: T, b: T, c: T) -> T {
+    return c;
+}
+
+fn copy_value<T>(x: T, y: T) -> T {
+    return y;
+}
+
+fn black_box<E, Tag>(flag: &Tagged<bool, Tag>, x: &Tagged<E, Tag>) -> Tagged<E, Tag> {
+    return Tagged { data: if flag.data[0] { x.data } else { [] } };
+}
+
+test "a generic function named like an intrinsic runs its own body" {
+    assert select(1, 2, 3) == 3;
+    assert copy_value("a", "b") == "b";
+    let flag: Tagged<bool, [Row]> = Tagged { data: [true] };
+    let x: Tagged<f32, [Row]> = Tagged { data: [1.0] };
+    assert black_box(&flag, &x).data == [1.0] as List<f32>;
+}

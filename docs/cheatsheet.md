@@ -66,7 +66,7 @@ use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 let out = Compress::compress(bytes);  // requires `with Compress`
 ```
 
-Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-mapping-at-component-boundaries).
+Wado↔CM type correspondence at the boundary is in [the spec](./spec-components.md#type-mapping-at-component-boundaries).
 
 ## Value Semantics
 
@@ -767,7 +767,7 @@ let b = if cond() { 1; } else { 2; }; // ditto
 A named block that `break LABEL` leaves from any depth inside it. Wado's only
 non-local jump: it replaces loop labels, labeled `continue`, and `goto`, and it
 is the block form that carries a value. See
-[the spec](./spec.md#labeled-blocks).
+[the spec](./spec-control-flow.md#labeled-blocks).
 
 The label is required, since an unlabeled `{ ... }` is a struct literal. A
 nested block may reuse a label, and `break` takes the innermost.
@@ -808,7 +808,7 @@ let first_even = find: {
 emits no code. The engine predicts the other side of the branch, and the inliner
 leaves the cold path out of its cost estimate. It is a statement rather than a
 condition wrapper, so it also works in a `match` or `if let` arm, where no
-boolean is available. See [the spec](./spec.md#branch-hints).
+boolean is available. See [the spec](./spec-control-flow.md#branch-hints).
 
 ```wado
 if i >= len {
@@ -1468,7 +1468,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. A parameter may take a default, filled in at the call site. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects or type parameters); see [the spec](./spec-effects.md#default-implementations).
 
 ```wado
 interface Log {
@@ -1596,7 +1596,7 @@ let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
 A literal read as numbers becomes a constant, with no decode loop at startup.
-See [the spec](./spec.md#embedded-data).
+See [the spec](./spec-control-flow.md#embedded-data).
 
 ```wado
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
@@ -1674,7 +1674,7 @@ error. The path functions resolve nothing. See
 use fs from "core:fs";
 use { Preopens } from "core:fs";                 // the effect, re-exported: no wasi import
 
-let text = fs::read_to_string("docs/spec.md")?;  // Result<String, FsError>
+let text = fs::read_to_string("docs/spec-overview.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
 fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
                                                  // (a non-regular file is refused)
@@ -1807,10 +1807,42 @@ let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
 let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 ```
 
+### core:protobuf
+
+The Protocol Buffers wire format, keyed by `#[wire(number = N)]`. A field whose
+default is its type's zero has implicit presence: it is left off the wire while
+it holds that zero. Any other default is always written. Grog generates these
+declarations from a `.proto`. See [`core:protobuf`](./stdlib-core-protobuf.md) and
+[WEP: Grog](./wep-2026-09-22-grog.md).
+
+```wado
+use { to_bytes, from_bytes } from "core:protobuf";
+
+enum Status {
+    #[wire(number = 0)] Unknown,
+    #[wire(number = 5)] Active,         // an enum numbers every case or none
+}
+
+struct Account {
+    #[wire(number = 1)] id: i32 = 0,               // omitted while 0
+    #[wire(number = 2)] #[wire(encoding = "zigzag")] delta: i64 = 0,   // sint64
+    #[wire(number = 3)] #[wire(encoding = "fixed")] hash: u32 = 0,     // fixed32
+    #[wire(number = 4)] balance: Option<i64> = null,  // explicit: Some(0) is written
+    #[wire(number = 5)] status: Status = Status::Unknown,
+}
+
+let bytes = to_bytes(&Account { id: 150 })?;       // [0x08, 0x96, 0x01]
+let back = from_bytes::<Account>(&bytes)?;
+```
+
+Grog, as a Kiln generator, writes `Account` from a `.proto` instead:
+
+```wado
+use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
+```
+
 ### Other core modules
 
-- [`core:protobuf`](./stdlib-core-protobuf.md) — the Protocol Buffers wire
-  format, keyed by `#[wire(number = N)]`
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
@@ -1845,4 +1877,4 @@ and offscreen rendering, and a host of its own in `wado run-webgpu`.
 
 ## See Also
 
-- [Language Specification](./spec.md) - Full language specification
+- [Language Specification](./spec-overview.md) - Full language specification

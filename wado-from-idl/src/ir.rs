@@ -289,4 +289,42 @@ pub enum WadoType {
 
     // References
     Borrow(Box<WadoType>),
+
+    /// `fn mut(params) with effect`, which the host calls back.
+    Callback {
+        params: Vec<WadoType>,
+        effect: Option<String>,
+    },
+}
+
+impl WadoType {
+    /// What a callback export's name calls an argument of this type; `None`
+    /// where the host cannot call a closure back with one.
+    pub fn callback_argument_word(&self) -> Option<&'static str> {
+        match self {
+            Self::Named(_) => Some("handle"),
+            _ => self.primitive_name(),
+        }
+    }
+
+    /// The Wado spelling of a primitive; `None` for any other type.
+    pub fn primitive_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Bool => "bool",
+            Self::Char => "char",
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            _ => return None,
+        })
+    }
 }

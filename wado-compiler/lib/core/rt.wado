@@ -194,6 +194,27 @@ internal fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     return cm_lower_list_u8(arr.internal_raw_data_ref(), 0, len);
 }
 
+global mut CM_CALLBACKS: List<fn()> = [];
+
+/// The `u32` a closure crosses the Component Model boundary as: one key per
+/// closure, held for the life of the instance.
+#[compiler_item("cm_callback_key")]
+internal fn cm_callback_key(callback: fn()) -> u32 {
+    for let mut i = 0; i < CM_CALLBACKS.len(); i += 1 {
+        if builtin::ref_eq(CM_CALLBACKS[i], callback) {
+            return i as u32;
+        }
+    }
+    CM_CALLBACKS.push(callback);
+    return (CM_CALLBACKS.len() - 1) as u32;
+}
+
+/// The closure `key` stands for.
+#[compiler_item("cm_callback")]
+internal fn cm_callback(key: u32) -> fn() {
+    return CM_CALLBACKS[key as i32];
+}
+
 /// Writes escaped string content to a Formatter (for inspect/debug output).
 /// Escapes: " → \", \ → \\, \n → \n, \t → \t, \r → \r.
 /// Does NOT write the surrounding quotes — caller is responsible for those.

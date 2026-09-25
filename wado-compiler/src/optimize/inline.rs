@@ -117,8 +117,7 @@ fn is_cold_path_call(body: &Body, id: ExprId, descriptors: &[FunctionRef]) -> bo
     matches!(
         &body.exprs[id].kind,
         ExprKind::Call { func_id, .. }
-            if callee_descriptor(descriptors, *func_id).builtin_name().as_deref()
-                == Some("builtin::cold_path")
+            if callee_descriptor(descriptors, *func_id).is_builtin_named("cold_path")
     )
 }
 

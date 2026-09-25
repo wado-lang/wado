@@ -1,0 +1,15 @@
+# An attention mask as GPT-2's exporter writes it: an int64 input widened by
+# two unit axes, cast to float, and scaled so a masked key sits at -f32::MAX.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+mask (int64[1, 3] M) => (float[1, 1, 1, 3] Y)
+{
+    A = Constant<value_ints = [1]>()
+    U = Unsqueeze(M, A)
+    B = Constant<value_ints = [2]>()
+    V = Unsqueeze(U, B)
+    C = Cast<to = 1>(V)
+    one = Constant<value_float = 1.0>()
+    D = Sub(one, C)
+    low = Constant<value_float = -3.4028235e38>()
+    Y = Mul(D, low)
+}

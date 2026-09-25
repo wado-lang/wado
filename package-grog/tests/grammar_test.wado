@@ -1,0 +1,73 @@
+// Protobuf's own schemas for every syntax and edition, and ONNX's, parse
+// cleanly. `mise run sync-proto-corpus` copies them.
+use protobuf from "../grammar/Protobuf.g4"
+    with {
+        generator: { module: "lib:gale" },
+    };
+
+/// The first diagnostic as `line:col: message`, so a failing assert shows it.
+fn first_diagnostic(source: String) -> String {
+    let result = protobuf::parse(&source);
+    if result.ok() {
+        return "";
+    }
+    let d = &result.diagnostics[0];
+    return `${d.line}:${d.col}: ${d.message}`;
+}
+
+fn parses(source: String) -> bool {
+    let diagnostic = first_diagnostic(source);
+    assert diagnostic == "";
+    return true;
+}
+
+test "a malformed schema is reported" {
+    assert first_diagnostic("message Foo { int32 x = ; }") != "";
+}
+
+test "every keyword is also a name" {
+    assert parses("syntax = \"proto2\"; message message { optional message message = 1; enum enum { max = 0; } }");
+}
+
+test "descriptor.proto" {
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/descriptor.proto"));
+}
+
+test "the well-known types" {
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/any.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/api.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/duration.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/empty.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/field_mask.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/source_context.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/struct.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/timestamp.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/type.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/wrappers.proto"));
+}
+
+test "the conformance messages" {
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/test_messages_proto2.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/test_messages_proto3.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/conformance/test_protos/test_messages_edition2023.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/editions/golden/test_messages_proto2_editions.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/editions/golden/test_messages_proto3_editions.proto"));
+}
+
+test "protobuf's unit test schemas" {
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_import.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_import_public.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_proto3.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_proto3_optional.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_custom_options.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_no_field_presence.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_features.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/unittest_delimited.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/map_unittest.proto"));
+    assert parses(#include_str("../tests/proto/protobuf/src/google/protobuf/edition_unittest.proto"));
+}
+
+test "onnx.proto" {
+    assert parses(#include_str("../tests/proto/onnx/onnx/onnx.proto"));
+}

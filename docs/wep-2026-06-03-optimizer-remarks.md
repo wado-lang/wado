@@ -71,7 +71,7 @@ current optimizer."
 
 Value semantics is Wado's defining feature: assignment, parameter passing, and
 return all deep-copy the value, and aggregates (structs, tuples, `List<T>`) are
-GC-managed heap objects (spec.md). Two of the optimizer's heaviest jobs exist to
+GC-managed heap objects (`spec-memory.md`). Two of the optimizer's heaviest jobs exist to
 remove the hidden cost of that model — redundant deep copies, and the
 allocations themselves — and most of the time they succeed. The cost that
 remains is invisible at the source: `f(x)` looks free, and a struct literal looks
@@ -116,7 +116,7 @@ statements of the blocks that SROA reconstruction wraps them in, so the remark
 anchors to the enclosing _real_ statement — the `let mut b = a;` that performs the
 copy — rather than descending into those synthesized inner statements. The
 reference escape hatch (`&T` / `&mut T`) is the only construct that shares rather
-than copies (spec.md); naming it as a suggestion is deferred to the
+than copies (`spec-memory.md`); naming it as a suggestion is deferred to the
 read-only-vs-required classification below.
 
 ### Surviving aggregate allocations (failed SROA)

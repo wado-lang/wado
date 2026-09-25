@@ -903,14 +903,17 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     fn check_attributes(&self, module: &Module, module_source: &ModuleSource) {
         for_each_attribute(module, |written| {
-            let Some(fault) = check(written.name, written.args, written.target) else {
+            let Some(fault) = check(&written) else {
                 return;
             };
             let code = match fault {
                 AttributeFault::Unknown => Code::UnknownAttr,
                 AttributeFault::Misplaced { .. }
                 | AttributeFault::Position { .. }
-                | AttributeFault::Arguments { .. } => Code::AttrMisuse,
+                | AttributeFault::Arguments { .. }
+                | AttributeFault::Key { .. }
+                | AttributeFault::Repeated { .. }
+                | AttributeFault::NamePolicy { .. } => Code::AttrMisuse,
             };
             let _ = self.logger.error_in(
                 module_source,

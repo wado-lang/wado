@@ -4,7 +4,7 @@
 //! the manifest no longer declares any. See WEP 2026-04-12 §"Use-site syntax".
 
 use crate::ast::AttrValue;
-use crate::kiln::cache::encode_options_canonical;
+use crate::kiln::cache::{encode_options_canonical, encode_written_options};
 use crate::kiln::options_check::CanonicalOptions;
 use crate::token::Span;
 use std::fmt;
@@ -211,8 +211,7 @@ pub struct Invocation {
     /// driver's typed-encode pass can re-validate against the generator's
     /// `OptionsDescriptor` once it becomes available without re-reading or
     /// re-parsing the source. `None` when no `options` clause was supplied.
-    /// Excluded from [`Invocation::identity_tuple`] — equivalence is decided
-    /// by `options_canonical` alone.
+    /// [`Invocation::identity_tuple`] reads it, since `options` may not be typed yet.
     pub raw_options: Option<AttrValue>,
     /// Span of the inline `options:` key, or of the whole `use` clause when
     /// the clause wrote none: what the driver blames when it re-validates
@@ -235,9 +234,7 @@ impl Invocation {
     }
 
     /// Canonical byte encoding of [`Self::options`], for the invocation cache
-    /// key and dedup identity. Deterministic and injective; not an interchange
-    /// format (nothing decodes it — see
-    /// [`crate::kiln::cache::encode_options_canonical`]).
+    /// key. Nothing decodes it.
     #[must_use]
     pub fn options_canonical(&self) -> Vec<u8> {
         encode_options_canonical(&self.options)
@@ -254,7 +251,7 @@ impl Invocation {
             self.from.as_str(),
             self.inputs.as_slice(),
             self.output_dir.as_str(),
-            self.options_canonical(),
+            encode_written_options(self.raw_options.as_ref()),
         )
     }
 }

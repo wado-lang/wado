@@ -140,7 +140,7 @@ methods; the ref-impl priority and the earlier steps are unchanged):
       parameter still containing an unsubstituted method-level type parameter
       accepts anything.
    3. All survivors naming the same trait instantiation → the existing
-      [specific-impls-win rule](./spec.md#specific-impls-win) picks the impl.
+      [specific-impls-win rule](./spec-traits.md#specific-impls-win) picks the impl.
       Survivors naming distinct instantiations → ambiguity error. No other
       ranking exists — there is no best match, only a unique match.
    4. A unique survivor is selected: its full trait spelling is recorded in the

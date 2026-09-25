@@ -1,0 +1,38 @@
+//! `pytorch-operator/test_operator_flatten`: a `Flatten` at axis 1 over
+//! `float[1, 2, 3, 4]`, checked against the output ONNX ships.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use flatten from "../tests/onnx/pytorch-operator/test_operator_flatten/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["Batch", "Chan", "Row", "Col"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "Flatten reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/output_0.pb"),
+    );
+
+    let got: flatten::Tensor<f32, [flatten::Batch, flatten::Merged<[flatten::Chan, flatten::Row, flatten::Col]>]> = flatten::forward(
+        &flatten::Tensor::<f32, [flatten::Batch, flatten::Chan, flatten::Row, flatten::Col]> {
+            data: x,
+            extents: x_extents,
+        },
+        &flatten::Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

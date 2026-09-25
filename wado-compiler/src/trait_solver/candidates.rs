@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(selected(&found), Some(ImplId(1)));
     }
 
-    /// `spec.md`'s "Specific Impls Win", assembled end to end.
+    /// `spec-traits.md`'s "Specific Impls Win", assembled end to end.
     #[test]
     fn an_impl_for_one_instantiation_outranks_the_head_impl() {
         let p = program(

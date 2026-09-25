@@ -81,67 +81,24 @@ impl FunctionRef {
         }
     }
 
-    /// Get the builtin function name if this is a builtin call.
-    /// Returns the qualified name (e.g., "`builtin::array_len`").
-    ///
-    /// Functions declared in `core:builtin` and functions synthesised
-    /// from wasm-asset exports (`ModuleSource::Wasm`) both go through
-    /// the import-style builtin lowering — they share `#[canonical(...)]`
-    /// metadata in `BuiltinRegistry` and resolve to the same wasm
-    /// import call shape.
-    pub fn builtin_name(&self) -> Option<String> {
-        if self.monomorph_info.is_some() {
-            return None;
-        }
-        if self.module_source.is_builtin() {
-            Some(format!("builtin::{}", self.name))
-        } else {
-            None
-        }
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup::from(self).intrinsic()
+    }
+
+    /// Whether this is the `core:builtin` intrinsic `builtin`.
+    pub fn is_builtin_named(&self, builtin: &str) -> bool {
+        self.intrinsic() == Some(builtin)
     }
 
     /// How this builtin reaches an array element, or `None` when it is not an
     /// element accessor. All three hand back a handle into the array argument;
     /// only `array_get_ref_mut` names a write.
     pub fn array_element_access(&self) -> Option<ArrayElementAccess> {
-        match self
-            .builtin_name()
-            .or_else(|| self.monomorphized_builtin_name())
-            .as_deref()
-        {
-            Some(
-                "builtin::array_get_value"
-                | "builtin::array_get_value_u8"
-                | "builtin::array_get_ref",
-            ) => Some(ArrayElementAccess::Read),
-            Some("builtin::array_get_ref_mut") => Some(ArrayElementAccess::Write),
-            _ => None,
-        }
-    }
-
-    /// Get the monomorphized builtin name if this is a monomorphized builtin function.
-    pub fn monomorphized_builtin_name(&self) -> Option<String> {
-        let generic_name = self
-            .monomorph_info
-            .as_ref()
-            .map(|i| i.generic_name.as_str())?;
-
-        match generic_name {
-            "array_get_value"
-            | "array_get_ref"
-            | "array_get_ref_mut"
-            | "array_set"
-            | "array_new"
-            | "array_len"
-            | "array_copy"
-            | "array_fill"
-            | "array_clone"
-            | "array_clone_prefix"
-            | "array_clone_shallow"
-            | "select"
-            | "copy_value"
-            | "is_uninitialized"
-            | "black_box" => Some(format!("builtin::{generic_name}")),
+        match self.intrinsic() {
+            Some("array_get_value" | "array_get_value_u8" | "array_get_ref") => {
+                Some(ArrayElementAccess::Read)
+            }
+            Some("array_get_ref_mut") => Some(ArrayElementAccess::Write),
             _ => None,
         }
     }
@@ -279,13 +236,6 @@ pub struct MonomorphInfo {
     pub method_type_args: Vec<TypeId>,
     /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
     pub is_blanket: bool,
-}
-
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
 }
 
 /// Global variable declaration in NIR
@@ -714,7 +664,7 @@ pub struct NirStruct {
     pub fields: Vec<NirField>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<ast::NamePolicy>,
 }
 
 #[derive(Debug, Clone)]
@@ -942,6 +892,8 @@ pub struct ClosureFunctor {
 /// These are functions that need to be imported at the Wasm level.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NirImport {
+    /// The module declaring `func_name`.
+    pub module_source: ModuleSource,
     /// Import namespace ("wasi" or "env")
     pub namespace: String,
     /// Canonical name for the import (e.g., "stream-new", "`libm_sin`")

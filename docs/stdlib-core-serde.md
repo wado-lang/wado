@@ -153,11 +153,15 @@ written rather than where the bytes are produced. See
 
 `#[compiler_item("serialize_struct_field")]`
 
-#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, name: S, value: &T) -> Result<(), SerializeError>`
+#### `fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError>`
 
-The same field, with the numeric wire key `#[wire(number = N)]` gave
-it, or `0` where it has none. A format keyed by name drops the number,
-which is what this default does.
+Whether writing `value` needs the field's declared default, which is then
+evaluated and passed to `field_numbered`. A format keyed by name never does.
+
+#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, encoding: WireEncoding, default: &Option<T>, name: S, value: &T) -> Result<(), SerializeError>`
+
+The same field with its `#[wire(...)]` number and encoding, and its
+declared default where `reads_default` asked for it.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
@@ -216,6 +220,11 @@ sequence of `u8` (the historical `List<u8>` behaviour), so a format
 with no distinct byte-string form keeps working unchanged.
 
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
+
+#### `fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+The value an `Option::Some` holds, which a format with explicit
+presence on the wire writes even when it is the zero.
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 
@@ -306,6 +315,11 @@ format keyed by numbers rules out through `WireNumbered`.
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
 `#[compiler_item("deserialize_struct_value")]`
+
+#### `fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError>`
+
+The same value, read as the field's `#[wire(encoding = …)]` says. A
+format that spells an integer one way only drops it.
 
 #### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
@@ -550,3 +564,14 @@ default; `Warn` and `PassThru` both keep the last occurrence.
 #### `Warn`
 
 #### `PassThru`
+
+### `pub enum WireEncoding`
+
+How a numbered format writes an integer field: `#[wire(encoding = "zigzag")]`
+or `"fixed"`, `Plain` where none is written. See WEP 2026-09-22.
+
+#### `Plain`
+
+#### `ZigZag`
+
+#### `Fixed`

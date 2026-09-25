@@ -1,0 +1,12 @@
+// A closure is replaced on assignment, so a `&mut` binding to one inside a
+// larger value would reference a detached copy, and is refused as a scalar's is.
+
+export fn run() {
+    let mut o: Option<fn() -> i32> = Option::Some(|| 1);
+    if let Some(f) = &mut o {
+        *f = || 3;
+    }
+}
+
+__DATA__
+{"compile_error": ":6:17: analysis error: cannot assign: cannot bind 'f' as a mutable reference to a replace-on-assign type (primitive, enum, flags, fn): destructure by value, or take the reference to the whole value", "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]}

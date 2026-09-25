@@ -364,7 +364,7 @@ pub fn build_component(
                 (
                     func_name.clone(),
                     ExportKind::Func,
-                    ctx.core_func_idx(func_name),
+                    ctx.core_func_idx(&wasm_export_label(namespace, func_name)),
                 )
             })
             .collect();
@@ -858,6 +858,15 @@ fn sanitise_wasm_namespace_for_label(namespace: &str) -> String {
         .collect()
 }
 
+/// The core func label of the wasm asset `namespace`'s export `func_name`. Two
+/// assets may export one name, and one may export a name like `realloc`.
+fn wasm_export_label(namespace: &str, func_name: &str) -> String {
+    format!(
+        "wasm-{}.{func_name}",
+        sanitise_wasm_namespace_for_label(namespace)
+    )
+}
+
 /// Embed each imported wasm module referenced by post-DCE TIR imports
 /// (`namespace` prefixed with `"wasm:"`).
 ///
@@ -872,10 +881,6 @@ fn embed_imported_wasm_modules(
     wasm_assets: &IndexMap<String, WasmAsset>,
     strip_names: bool,
 ) {
-    if imported_wasm_uses.is_empty() {
-        return;
-    }
-    let mut seen_aliased_funcs: IndexSet<String> = IndexSet::default();
     for (namespace, used_exports) in imported_wasm_uses {
         let asset = wasm_assets.get(namespace).unwrap_or_else(|| {
             panic!(
@@ -918,14 +923,7 @@ fn embed_imported_wasm_modules(
         ctx.register_core_instance(&instance_label);
 
         for func_name in used_exports {
-            // Two distinct namespaces could in theory export the same name.
-            // The component builder keys core funcs by name, so use a
-            // namespace-qualified label internally and alias under the
-            // export name as well so canonical lowerings can locate it.
-            if !seen_aliased_funcs.insert(func_name.clone()) {
-                continue;
-            }
-            ctx.register_core_func(func_name);
+            ctx.register_core_func(&wasm_export_label(namespace, func_name));
             builder.core_alias_export(
                 Some(func_name),
                 ctx.core_instance_idx(&instance_label),
@@ -1896,7 +1894,11 @@ fn resolve_task_return_valtype(
             }
         }
     }
-    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type)
+    let result = export
+        .cm_result
+        .as_ref()
+        .expect("only a synchronous export returns nothing");
+    cm_export_type_to_valtype(ctx, project, result, result_unit_type)
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
@@ -2137,12 +2139,14 @@ fn emit_world_exports(
                     .iter()
                     .map(|(n, val)| (n.as_str(), *val))
                     .collect();
-                let result_val =
-                    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type);
+                let result_val = export
+                    .cm_result
+                    .as_ref()
+                    .map(|ty| cm_export_type_to_valtype(ctx, project, ty, result_unit_type));
                 enc.function()
                     .async_(export.is_async)
                     .params(param_refs)
-                    .result(Some(result_val));
+                    .result(result_val);
             }
             func_type
         };
@@ -4398,10 +4402,14 @@ fn append_interface_instance_exports(
             // its owner's, and re-exporting it here fails a WIT decode.
             let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
-                for (_, cm_ty) in &export.cm_params {
+                for cm_ty in export
+                    .cm_params
+                    .iter()
+                    .map(|(_, ty)| ty)
+                    .chain(&export.cm_result)
+                {
                     collect_type_items(cm_ty, ctx, project, &mut named);
                 }
-                collect_type_items(&export.cm_result, ctx, project, &mut named);
             }
             type_items.extend(
                 named

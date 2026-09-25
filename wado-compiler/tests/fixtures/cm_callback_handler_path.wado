@@ -1,0 +1,59 @@
+// A closure passed to a `#[cm]` resource method reaches an installed handler as
+// the Wado closure it is, and the handler may call it.
+
+use { println, Stdout } from "core:cli";
+
+#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+resource Target {
+    #[cm("web:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn mut(i32));
+    #[cm("web:demo/target#fire")]
+    #[cm_params("self", "value")]
+    fn fire(&self, value: i32);
+}
+
+#[cm("web:demo/global")]
+interface Demo {
+    #[cm("web:demo/global#target")]
+    fn target() -> Target;
+}
+
+struct Mock {
+    listeners: List<fn mut(i32)>,
+}
+
+impl Demo for Mock {
+    fn target(&mut self) -> Target {
+        resume 0.0 as Target;
+    }
+}
+
+impl Target for Mock {
+    fn listen(&mut self, this: &Target, listener: fn mut(i32)) {
+        self.listeners.push(listener);
+        resume ();
+    }
+
+    fn fire(&mut self, this: &Target, value: i32) {
+        for let mut listener of self.listeners {
+            listener(value);
+        }
+        resume ();
+    }
+}
+
+export fn run() with Stdout {
+    let mut mock = Mock { listeners: [] };
+    let mut seen: List<i32> = [];
+    with &mut mock do {
+        let target = Demo::target();
+        target.listen(|v: i32| seen.push(v));
+        target.fire(1);
+        target.fire(2);
+    };
+    println(`seen=${seen:?}`);
+}
+
+__DATA__
+{"stdout": "seen=[1, 2]\n"}

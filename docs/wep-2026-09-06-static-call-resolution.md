@@ -76,7 +76,7 @@ turbofish is already that trait's argument list — `Take::<i64>::take(&f, 42)`
 pins the list and the receiver argument supplies `Self`. A static has no such
 argument, and the spec's answer for it is not a second turbofish: the receiver
 type is written out and the call's arguments select the impl, `M::make(A {})`
-against `impl Enc<A> for M` beside `impl Enc<B> for M` (`docs/spec.md`, "A
+against `impl Enc<A> for M` beside `impl Enc<B> for M` (`docs/spec-traits.md`, "A
 trait's associated function"). So `Take::<i64>::take()` names no receiver at
 all, and is reported as that rather than as an unknown function.
 

@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -2405,6 +2405,19 @@ impl TypeTable {
         let inner = type_args[0];
         self.is_compiler_item_type(type_id, CompilerItem::Option)
             .then_some(inner)
+    }
+
+    /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
+    /// [`Self::as_option`] is.
+    pub fn as_tree_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
+            return None;
+        };
+        let [key, value] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(type_id, CompilerItem::TreeMap)
+            .then_some((key, value))
     }
 
     /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
@@ -5185,40 +5198,13 @@ impl FunctionRef {
         }
     }
 
-    /// Get the builtin function name if this is a builtin call.
-    /// Returns the qualified name (e.g., "`builtin::array_len`").
-    ///
-    /// Functions declared in `core:builtin` and functions synthesised
-    /// from wasm-asset exports (`ModuleSource::Wasm`) both go through
-    /// the import-style builtin lowering — they share `#[canonical(...)]`
-    /// metadata in `BuiltinRegistry` and resolve to the same wasm
-    /// import call shape.
-    pub fn builtin_name(&self) -> Option<String> {
-        if self.monomorph_info.is_some() {
-            return None;
-        }
-        if self.module_source.is_builtin() {
-            Some(format!("builtin::{}", self.name))
-        } else {
-            None
-        }
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup::from(self).intrinsic()
     }
 
-    /// Get the monomorphized builtin name if this is a monomorphized builtin function.
-    pub fn monomorphized_builtin_name(&self) -> Option<String> {
-        let generic_name = self
-            .monomorph_info
-            .as_ref()
-            .map(|i| i.generic_name.as_str())?;
-
-        match generic_name {
-            "array_get_value" | "array_get_ref" | "array_get_ref_mut" | "array_set"
-            | "array_new" | "array_len" | "array_copy" | "array_fill" | "array_clone"
-            | "array_clone_prefix" | "select" | "copy_value" | "is_uninitialized" | "black_box" => {
-                Some(format!("builtin::{generic_name}"))
-            }
-            _ => None,
-        }
+    /// Whether this is the `core:builtin` intrinsic `builtin`.
+    pub fn is_builtin_named(&self, builtin: &str) -> bool {
+        self.intrinsic() == Some(builtin)
     }
 
     /// Check if this function is monomorphized (instantiated from a generic)
@@ -6163,14 +6149,6 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name. A name
-/// check that only compares `name` silently misses monomorphized builtins.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
-}
-
 /// The value a method call's receiver argument delivers, past the auto-`&` /
 /// `&mut` the elaborator takes of it. Every question about the receiver is about
 /// this value; the reference is only how the callee reaches it.
@@ -6633,6 +6611,16 @@ pub struct DeclarationLookup<'a> {
     pub generic_name: Option<&'a str>,
 }
 
+impl<'a> DeclarationLookup<'a> {
+    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
+    /// declared anywhere else may share the name, a wasm-asset export included.
+    pub fn intrinsic(self) -> Option<&'a str> {
+        self.module_source
+            .is_core_builtin()
+            .then(|| self.generic_name.unwrap_or(self.name))
+    }
+}
+
 impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
     fn from(func: &'a FunctionRef) -> Self {
         Self {
@@ -7055,7 +7043,7 @@ pub struct TirStruct {
     pub fields: Vec<TirField>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 #[derive(Debug, Clone)]
@@ -7080,9 +7068,37 @@ pub struct TirField {
     /// instead of the name. A struct numbers every field or none, so this is
     /// `Some` for all of a struct's fields or for none of them.
     pub serde_number: Option<u32>,
+    /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
+    pub serde_encoding: WireEncoding,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
+}
+
+impl TirField {
+    /// A field the compiler adds itself: no attributes and no default.
+    pub fn plain(
+        name: String,
+        visibility: Visibility,
+        type_id: TypeId,
+        index: u32,
+        span: Span,
+    ) -> Self {
+        Self {
+            name,
+            visibility,
+            type_id,
+            index,
+            span,
+            is_secret: false,
+            wire_name_override: None,
+            serde_default: false,
+            serde_positional: false,
+            serde_number: None,
+            serde_encoding: WireEncoding::Plain,
+            default_expr: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -7099,7 +7115,7 @@ pub struct TirEnum {
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a TIR enum.
@@ -7111,6 +7127,9 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    /// `#[wire(number = N)]` — the discriminant a format writes for this case.
+    /// An enum numbers every case or none.
+    pub wire_number: Option<i32>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -7127,7 +7146,7 @@ pub struct TirFlags {
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A member of a flags type
@@ -7155,7 +7174,7 @@ pub struct TirVariantDecl {
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a variant declaration
@@ -7193,7 +7212,7 @@ pub struct TirNewtype {
     /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
     /// to rename, so this spells the *type's* name on the wire — what a schema
     /// keys its `$defs` entry by.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
     pub span: Span,
 }
 
@@ -7367,22 +7386,6 @@ pub struct ClosureFunctor {
     pub canonical_return: TypeId,
 }
 
-/// External function import from Component Model canonical builtins.
-/// These are functions that need to be imported at the Wasm level.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TirImport {
-    /// Import namespace ("wasi" or "env")
-    pub namespace: String,
-    /// Canonical name for the import (e.g., "stream-new", "`libm_sin`")
-    pub canonical_name: String,
-    /// Internal function name (e.g., "`stream_new`", "`f64_sin`")
-    pub func_name: String,
-    /// Parameter types
-    pub params: Vec<TypeId>,
-    /// Return type
-    pub return_type: TypeId,
-}
-
 /// Tracks a requested instantiation of a generic item.
 /// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
 /// `method_info` names an instance but never decides one: it is left out of
@@ -7437,8 +7440,6 @@ pub struct TirModule {
     pub module_source: ModuleSource,
     /// Shared type table across all modules (enables cross-module type references)
     pub type_table: Rc<RefCell<TypeTable>>,
-    /// External function imports (canonical builtins from wasi/env namespaces)
-    pub imports: Vec<TirImport>,
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
@@ -7479,7 +7480,6 @@ impl TirModule {
         Self {
             module_source,
             type_table: Rc::new(RefCell::new(TypeTable::new())),
-            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
@@ -7508,7 +7508,6 @@ impl TirModule {
         Self {
             module_source,
             type_table,
-            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),

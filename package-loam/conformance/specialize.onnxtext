@@ -1,0 +1,8 @@
+# A symbolic batch a Flatten cannot regroup until the invocation fixes it, and
+# a second output `forward` has no place to return.
+<ir_version: 7, opset_import: [ "" : 13 ]>
+specialize (float[N, 2, 3] X) => (float[N, 6] Y, float[N, 2, 3] Z)
+{
+    Y = Flatten(X)
+    Z = Relu(X)
+}

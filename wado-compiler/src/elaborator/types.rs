@@ -824,7 +824,7 @@ pub enum TypeError {
 
     /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
     /// turbofish is that trait's argument list, so it names no receiver; a
-    /// static's receiver is written out instead (`docs/spec.md`, "A trait's
+    /// static's receiver is written out instead (`docs/spec-traits.md`, "A trait's
     /// associated function").
     StaticNeedsWrittenReceiver {
         trait_name: String,
@@ -1250,6 +1250,14 @@ pub enum TypeError {
     ClosureAtCmBoundary {
         function: String,
         position: String,
+        span: Span,
+    },
+
+    /// A closure an import takes, which the host cannot call back: one taking
+    /// anything but scalars and unrestricted handles, or returning a value.
+    CallbackAtCmBoundary {
+        function: String,
+        param: String,
         span: Span,
     },
 
@@ -2501,6 +2509,17 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::CallbackAtCmBoundary {
+                function,
+                param,
+                span,
+            } => (
+                Code::CmBoundaryType,
+                format!(
+                    "callback parameter '{param}' of `{function}` cannot cross the Component Model boundary: a callback takes only scalars and unrestricted handles, and returns nothing"
+                ),
+                *span,
+            ),
             TypeError::SliceAtCmBoundary {
                 function,
                 position,
@@ -2910,6 +2929,9 @@ pub(super) struct FunctionContext {
     /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
     /// When a variable is in this map, lookups return `*$ref_name` instead of the value.
     pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
+    /// Bindings of an enclosing frame this frame borrows `&mut`, which the
+    /// closure owning it captures `&mut`.
+    pub(super) borrowed_captures: IndexSet<String>,
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
@@ -3179,6 +3201,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
+            borrowed_captures: IndexSet::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
@@ -3260,6 +3283,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
+            borrowed_captures: IndexSet::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
             // Closures inside a handler method body are NOT themselves
