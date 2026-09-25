@@ -628,6 +628,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The variant and case a `Variant::Case(…)` or `ns::Variant::Case(…)`
+    /// callee constructs.
+    fn case_of_callee(
+        &self,
+        callee_kind: &CalleeIdentKind<'_>,
+        receiver_site: Option<ast::AstId>,
+        ident: &ast::IdentExpr,
+    ) -> Option<(VariantInfo, VariantCaseData)> {
+        let (prefix, suffix) = callee_kind.effective_name().split_once("::")?;
+        let (variant_info, case_name) =
+            match self.variant_of_callee(callee_kind, receiver_site, prefix) {
+                Some(variant_info) => (variant_info, suffix),
+                None => {
+                    let (_, case_name) = suffix.split_once("::")?;
+                    self.namespace_alias_source(prefix, ident.id)?;
+                    // `ns::Type::Case` names `Type` with its middle segment, which the
+                    // resolve walk answered for, so the declaration comes from the site.
+                    let def = self.tysys.qualified_owner_decl(ident)?;
+                    (self.tysys.data.variant_cases.get(&def)?, case_name)
+                }
+            };
+        let (_, case_data) = variant_info.case_named(case_name)?;
+        Some((variant_info.clone(), case_data.clone()))
+    }
+
     /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
     /// an instruction immediate, so only a literal naming a lane that exists
     /// can be lowered — anything else reaches codegen as an invalid module.
@@ -991,19 +1016,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // function params (see the hole-pin loop below).
         let mut is_variant_payload = false;
 
-        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
+        // A case payload typed under the turbofish (`Option::Some::<List<u8>>([])`)
+        // or the expected type, so a literal coerces on first resolve.
         if param_types.is_empty()
-            && let Some(pos) = effective_name.find("::")
+            && let Some((variant_info, case_data)) =
+                self.case_of_callee(&callee_kind, receiver_site, ident)
         {
-            let prefix = &effective_name[..pos];
-            let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
-                .cloned()
-                && let Some((_, case_data)) = variant_info.case_named(suffix)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
+            if case_data.has_payload(&self.tysys.type_table.borrow()) {
                 let mut payload_type = case_data.payload;
                 if !type_args.is_empty() {
                     payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
@@ -1458,23 +1477,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
 
-                    // Check if this is a variant construction in the namespace.
-                    // `ns::Type::Case` names `Type` with its middle segment,
-                    // which the resolve walk answered for under the `ns$Type`
-                    // alias — so the declaration comes from the site rather
-                    // than from asking the namespace module about a spelling.
-                    let ns_variant = self
-                        .tysys
-                        .qualified_owner_decl(ident)
-                        .and_then(|def| self.tysys.data.variant_cases.get(&def))
-                        .cloned();
-                    if let Some(variant_info) = ns_variant
-                        && let Some((_, case_data)) = variant_info.case_named(method_name)
+                    if let Some((variant_info, case_data)) =
+                        self.case_of_callee(&callee_kind, receiver_site, ident)
                     {
                         self.record_namespaced_case(ident, case_data.ast_id);
                         return self.construct_variant_case(
                             &variant_info,
-                            case_data,
+                            &case_data,
                             &args,
                             &call.args,
                             &type_args,

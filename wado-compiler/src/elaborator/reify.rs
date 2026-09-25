@@ -7330,11 +7330,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Self::hoist_block(call, prelude);
         }
 
-        // Variant constructor in turbofish form (`Option::<T>::Some(x)`,
-        // `Result::<T, E>::Ok(v)`): annotate's variant-ctor branch in
-        // `resolve_static_method_call` types the expression as the variant
-        // (line 1105+ / 1173+ in method_call.rs), so `recorded_type` is
-        // always the variant instance and reify reads it directly.
+        // Variant constructor in turbofish form (`Option::<T>::Some(x)`): the
+        // walk types it as the variant instance, which `recorded_type` holds.
         let variant_type = recorded_type;
         let (case_index, payload_type) =
             self.variant_case_index_and_payload(recorded_type, &static_call.method);

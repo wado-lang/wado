@@ -16,12 +16,14 @@ fn takes_result(r: Result<i64, String>) -> i64 {
 }
 
 test "a payload case takes the written type" {
-    assert takes_i64(Option::Some::<i64>(1)) == 1 as i64;
-    assert Option::Some::<i64>(1) == Option::<i64>::Some(1);
+    let o = Option::Some::<i64>(1);
+    assert takes_i64(o) == 1 as i64;
+    assert o == Option::<i64>::Some(1);
 }
 
 test "a payload-less case takes the written type" {
-    assert takes_i32(Option::None::<i32>) == -1;
+    let o = Option::None::<i32>;
+    assert takes_i32(o) == -1;
     assert takes_i32(None::<i32>) == -1;
 }
 

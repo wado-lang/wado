@@ -3972,9 +3972,7 @@ let err: Result<i32, String> = Result::Err("fail"); // E from payload, T from an
 
 // Explicit turbofish syntax (always available), on the type or on the case
 let opt2 = Option::<i32>::Some(42);
-let opt3 = Option::Some::<i32>(42);      // the same as opt2
-let none2 = Option::None::<i32>;
-// Option::<i32>::Some::<i32>(42)        // Error: written on both
+let opt3 = Option::Some::<i32>(42);
 
 if let Some(x) = opt {
     println(`Got: ${x}`);
