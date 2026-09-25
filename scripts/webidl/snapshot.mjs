@@ -3,8 +3,9 @@
 // Usage: node snapshot.mjs <output.json>
 //
 // The slice is the interfaces listed below, their partials and included mixins
-// from every spec, and the typedefs and callbacks their members name. `wado-from-idl --webidl`
-// reads the output, so generation never needs the network.
+// from every spec, and the typedefs and callbacks their members name.
+// `wado-from-idl --webidl` reads the output, so generation never needs the
+// network.
 
 import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";

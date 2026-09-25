@@ -138,12 +138,6 @@ struct ResultSlot {
 /// The local a reduced `task return` writes its value into.
 const TASK_RESULT_LOCAL: &str = "$task_result";
 
-/// The copy of an `export async fn` that the export binding calls. Its
-/// `task return` delivers through the CM canonical op, so it returns nothing.
-pub(super) fn task_entry_func_name(export_name: &str) -> String {
-    cm_task_entry_func_name(export_name)
-}
-
 /// Split that copy off, leaving the user's own function to keep a lowering its
 /// Wado callers can use. A `FunctionRef` resolves by name, so the rename is
 /// what points the binding at the copy.
@@ -152,7 +146,7 @@ pub(super) fn split_task_entry(
     export_name: &str,
 ) -> Rc<RefCell<TirFunction>> {
     let mut entry = user_func.borrow().clone();
-    entry.name = task_entry_func_name(export_name);
+    entry.name = cm_task_entry_func_name(export_name);
     entry.return_type = TypeTable::UNIT;
     entry.is_export = false;
     entry.def_id = None;

@@ -36,6 +36,7 @@ pub fn install_rustls_provider_for_tests() {
     });
 }
 
+use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
     TraceSink, set_trace_sink,
@@ -1111,6 +1112,29 @@ pub fn wir_text(path: &Path, source: &str, opt_level: OptLevel) -> String {
     let result = compile_source_with_compiler_options(path, source, options)
         .expect("compilation should succeed");
     wado_compiler::wir_unparse::unparse_wir(result.wir_package.as_ref().expect("wir retained"))
+}
+
+/// The world surface `wado compile` embeds for `source` under `world_fq`: empty
+/// where it compiles to no component, as the CLI's is.
+pub fn world_surface(host: &impl CompilerHost, source: &str, world_fq: &str) -> WorldSurface {
+    match block_on(wado_compiler::dump_with_host_and_world(
+        source,
+        host,
+        Some("entry.wado"),
+        OptLevel::O2,
+        Some(world_fq),
+        None,
+        wado_compiler::OptOverrides::default(),
+        &[],
+        &wado_compiler::param_resolution::ParamInputs::default(),
+        wado_compiler::kiln::InvocationIndex::default(),
+    )) {
+        Ok(dump) => dump
+            .wir_package
+            .map(|pkg| pkg.world_surface)
+            .unwrap_or_default(),
+        Err(_) => WorldSurface::default(),
+    }
 }
 
 /// [`wir_text`], cut to the one function whose header starts with `fn_header`

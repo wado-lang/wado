@@ -212,9 +212,8 @@ impl std::fmt::Display for WitEmitError {
 
 impl std::error::Error for WitEmitError {}
 
-/// Render the WIT text for `sem` under `opts`. `surface` is the faithful
-/// import plan (`NirPackage::imported_cm_interfaces`) computed post-DCE by the
-/// caller, since it is unavailable from `Semantics` alone.
+/// Render the WIT text for `sem` under `opts`. `surface` is the part of the
+/// world only the backend knows, which `Semantics` cannot answer.
 pub fn emit_wit_text(
     sem: &Semantics,
     opts: &WitEmitOptions,

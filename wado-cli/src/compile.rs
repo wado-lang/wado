@@ -150,8 +150,7 @@ pub struct CompileFlags {
     /// Forwarded to `CompilerOptions::lib_interface_export`.
     pub lib_interface_export: bool,
     /// Retain the WIR module in the result. `wado compile` sets it when
-    /// embedding WIT, to read the faithful import plan
-    /// (`world_surface`) without a second compile.
+    /// embedding WIT, to read the world surface without a second compile.
     pub retain_wir: bool,
     /// When `Some`, the compile retains the WIT subset
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`

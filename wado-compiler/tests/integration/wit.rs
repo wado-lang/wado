@@ -4,41 +4,14 @@
 //! Each case asserts the rendered WIT text and re-parses it with `wit-parser`
 //! to confirm the output is syntactically valid WIT.
 
-use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host};
+use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host, world_surface};
 use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::world_registry::WorldSurface;
-use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-/// The WIR-level world surface (`WirPackage::world_surface`) for
-/// `source` under `world_fq`, the faithful world import set the emitter reads.
-fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> WorldSurface {
-    // Tolerant like the CLI's `resolve_world_imports`: a program that does not
-    // compile to a full component (e.g. no world entry point) has no faithful
-    // import set, which is the empty set for the emitter's purposes.
-    match block_on(dump_with_host_and_world(
-        source,
-        host,
-        Some("entry.wado"),
-        OptLevel::O2,
-        Some(world_fq),
-        None,
-        wado_compiler::OptOverrides::default(),
-        &[],
-        &wado_compiler::param_resolution::ParamInputs::default(),
-        wado_compiler::kiln::InvocationIndex::default(),
-    )) {
-        Ok(dump) => dump
-            .wir_package
-            .map(|pkg| pkg.world_surface)
-            .unwrap_or_default(),
-        Err(_) => WorldSurface::default(),
-    }
-}
 
 /// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
-/// emitter the faithful import plan as the CLI does.
+/// emitter the world surface as the CLI does.
 fn emit_world(source: &str, scope: WitScope, world_fq: &str) -> String {
     emit_world_on(&InMemoryHost::new(), source, scope, world_fq)
 }
@@ -55,7 +28,7 @@ fn emit_world_on(
     emit_wit_text(
         &sem,
         &WitEmitOptions { scope },
-        &import_plan(host, source, world_fq),
+        &world_surface(host, source, world_fq),
     )
     .expect("emit_wit_text failed")
 }

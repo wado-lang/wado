@@ -305,7 +305,7 @@ fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<Ti
         sites,
         |tt, expr| {
             let elem = record_stream_read_element(tt, expr)?;
-            Some((record_stream_read_func_name(&tt.base_type_name(elem)), elem))
+            Some((cm_stream_read_func_name(&tt.base_type_name(elem)), elem))
         },
         synthesize_record_stream_read_func,
     )
@@ -348,7 +348,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         .map_or_else(|| pascal_to_kebab(&elem_name), str::to_string);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
-        record_stream_read_func_name(&elem_name),
+        cm_stream_read_func_name(&elem_name),
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
         elem_size,
@@ -1223,11 +1223,6 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     (!is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
-/// The `$cm_stream_read_<record>` helper name for a WASI record element.
-fn record_stream_read_func_name(elem_name: &str) -> String {
-    cm_stream_read_func_name(elem_name)
-}
-
 /// Shared stream-read loop generator. `func_name` / `stream_read_name` /
 /// `payload_ast` / `cm_package` are precomputed by the caller so this body
 /// serves both the WASI-record path ([`synthesize_record_stream_reads`]) and
@@ -1786,7 +1781,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = record_stream_read_element(self.tt, expr)
         {
             let elem_name = self.tt.base_type_name(elem_type_id);
-            let func_name = record_stream_read_func_name(&elem_name);
+            let func_name = cm_stream_read_func_name(&elem_name);
             self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }

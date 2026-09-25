@@ -169,9 +169,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_closure_defaults(closure);
         let expected_fn = self.extract_expected_fn(expected_type);
 
-        // Box each outer `mut` local the body may write, recording a
-        // `MutCapture` so reify replays the `$ref_<var>` materialisation in the
-        // same order, and mark the outer local address-taken.
+        // Reify replays the `MutCapture`s in this order.
         let writes = Self::collect_capture_writes(closure);
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<MutCapture> = Vec::new();

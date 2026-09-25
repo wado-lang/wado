@@ -384,21 +384,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((ty, None))
     }
 
-    /// Walk a callee expression down to its *root place* identifier so
-    /// `(h.f)()`, `(a.b.c.f)()`, `arr[i]()`, and `(arr[i].f)()` all
-    /// resolve to the underlying local binding (`h`, `a`, `arr`).
-    /// Returns `None` for callees whose root is not a binding the
-    /// function context can see — typically a temporary such as a call
-    /// result or a literal. Mirrors `MutatedVarsCollector::root_ident_of_lvalue`.
-    fn place_root_ident(callee: &Expr) -> Option<&ast::IdentExpr> {
-        match callee {
-            Expr::Ident(id) => Some(id),
-            Expr::FieldAccess(fa) => Self::place_root_ident(&fa.expr),
-            Expr::Index(idx) => Self::place_root_ident(&idx.expr),
-            _ => None,
-        }
-    }
-
     /// Enforce Rust's `FnMut` rule: when the callee type is `fn mut`,
     /// the *root* of the place expression must be a mutable place.
     /// A no-op when `fn_is_mut` is false or the root is a temporary
@@ -416,7 +401,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !fn_is_mut {
             return;
         }
-        let Some(root) = Self::place_root_ident(callee) else {
+        let Some(root) = callee.place_root_ident() else {
             return; // Temporary root — no binding to require `mut` on.
         };
         if root.name.contains("::") {

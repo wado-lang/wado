@@ -1117,27 +1117,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if unary.op == UnaryOp::MutRef {
             self.record_mut_borrow(&unary.expr, ctx);
-        }
-        if unary.op == UnaryOp::MutRef
-            && let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx)
-        {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: format!("cannot take &mut of immutable variable '{binding}'"),
-                span: unary.span,
-            });
-        }
-
-        if unary.op == UnaryOp::MutRef
-            && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
-            && self.is_replace_on_assign_place_type(expr_type)
-        {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: format!(
-                    "cannot take a mutable reference to {}",
-                    replace_on_assign_place()
-                ),
-                span: unary.span,
-            });
+            if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!("cannot take &mut of immutable variable '{binding}'"),
+                    span: unary.span,
+                });
+            }
+            if matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
+                && self.is_replace_on_assign_place_type(expr_type)
+            {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!(
+                        "cannot take a mutable reference to {}",
+                        replace_on_assign_place()
+                    ),
+                    span: unary.span,
+                });
+            }
         }
 
         // Unary trait operators (`-x`, `~x`) dispatch through the same

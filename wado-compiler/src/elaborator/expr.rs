@@ -3273,7 +3273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The outer bindings `closure` may write, its nested closures included. A
     /// place names its root ident (`point.x`, `arr[i]` name the root).
     pub(super) fn collect_capture_writes(closure: &ast::ClosureExpr) -> CaptureWrites {
-        let mut collector = MutatedVarsCollector {
+        let mut collector = CaptureWritesCollector {
             writes: CaptureWrites::default(),
             shadowed: Vec::new(),
         };
@@ -5527,28 +5527,20 @@ pub(super) struct CaptureWrites {
 
 /// Records the outer bindings a closure body may write, walking it under its
 /// own binders. Unhandled syntax falls through to `AstVisitor`'s `walk_*`.
-struct MutatedVarsCollector {
+struct CaptureWritesCollector {
     writes: CaptureWrites,
     /// Names bound inside the closure and in scope at this point of the walk. A
     /// write to one names that binding, not the outer one it shadows.
     shadowed: Vec<String>,
 }
 
-impl MutatedVarsCollector {
-    /// Walk an l-value down to its root identifier so `point.x = ...`
-    /// and `arr[i] = ...` count as mutations of `point` / `arr`.
-    fn root_ident_of_lvalue(expr: &ast::Expr) -> Option<&str> {
-        match expr {
-            ast::Expr::Ident(id) => Some(&id.name),
-            ast::Expr::FieldAccess(fa) => Self::root_ident_of_lvalue(&fa.expr),
-            ast::Expr::Index(idx) => Self::root_ident_of_lvalue(&idx.expr),
-            _ => None,
-        }
-    }
-
+impl CaptureWritesCollector {
     /// The outer binding `place` roots at, unless the closure binds that name.
     fn outer_root<'e>(&self, place: &'e ast::Expr) -> Option<&'e str> {
-        Self::root_ident_of_lvalue(place).filter(|name| !self.shadowed.iter().any(|s| s == name))
+        place
+            .place_root_ident()
+            .map(|id| id.name.as_str())
+            .filter(|name| !self.shadowed.iter().any(|s| s == name))
     }
 
     fn record_target(&mut self, target: &ast::Expr) {
@@ -5592,7 +5584,7 @@ impl MutatedVarsCollector {
     }
 }
 
-impl AstVisitor for MutatedVarsCollector {
+impl AstVisitor for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {

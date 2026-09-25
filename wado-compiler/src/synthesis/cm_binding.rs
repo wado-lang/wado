@@ -30,7 +30,10 @@ use crate::component_model::{
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
+use crate::name::{
+    DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
+    to_kebab,
+};
 use crate::package::{Package, test_selected};
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
@@ -41,12 +44,9 @@ use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
 use callback_export::{Callbacks, synthesize_callback_exports};
-pub use export_adapter::export_binding_func_name;
 use export_adapter::{
-    ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
-    synthesize_post_return,
+    ExportBindingEnv, ExportReturnStrategy, synthesize_export_binding, synthesize_post_return,
 };
-pub use import_adapter::binding_func_name;
 use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
@@ -753,7 +753,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             );
             export_adapters.push((
                 export.name.clone(),
-                export_binding_func_name(&export.name),
+                cm_export_func_name(&export.name),
                 adapter,
             ));
 
@@ -764,7 +764,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
             {
                 post_returns.push((
                     export.name.clone(),
-                    post_return_func_name(&export.name),
+                    cm_post_return_func_name(&export.name),
                     post_return,
                 ));
             }
@@ -1235,7 +1235,7 @@ fn generate_test_world_bindings(project: &mut Package) {
     let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs
         .into_iter()
         .map(|(test_name, user_func_rc)| {
-            let binding_name = export_binding_func_name(&test_name);
+            let binding_name = cm_export_func_name(&test_name);
             let adapter = synthesize_export_binding(
                 &test_name,
                 &user_func_rc,

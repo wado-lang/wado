@@ -1,7 +1,7 @@
 //! `wado wit` — emit the WIT text for a Wado program's component contract.
 //!
 //! Renders WIT from the subset one compile retains
-//! (`CompileResult::wit_emit_snapshot`) plus its import plan, so the text
+//! (`CompileResult::wit_emit_snapshot`) plus its world surface, so the text
 //! matches what `wado compile` embeds (issue #1654). See WEP
 //! `wep-2026-05-02-wit-interoperability.md`.
 
@@ -167,7 +167,7 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
 }
 
 /// Compile `input` against a fixed WASI world (or the default), returning its
-/// WIT subset and import plan.
+/// WIT subset and world surface.
 async fn world_snapshot_and_surface(
     input: Option<String>,
     world: Option<String>,
@@ -228,7 +228,7 @@ async fn run_generators(
 }
 
 /// Compile the `[package].lib` entry for the synthesized library world (the
-/// anonymous `root`), returning its WIT subset and import plan.
+/// anonymous `root`), returning its WIT subset and world surface.
 async fn lib_snapshot_and_surface(
     input: Option<String>,
     usage: &str,
@@ -263,7 +263,7 @@ async fn lib_snapshot_and_surface(
     compile_wit_snapshot(&source, &host, &entry_str, options).await
 }
 
-/// Run the compile and pull out the retained WIT subset + import plan.
+/// Run the compile and pull out the retained WIT subset and world surface.
 async fn compile_wit_snapshot(
     source: &str,
     host: &FilesystemCompilerHost,
@@ -284,7 +284,7 @@ async fn compile_wit_snapshot(
     Ok((snapshot, wir_surface(result.wir_package)))
 }
 
-/// The faithful import set from a compiled WIR plan, empty when absent.
+/// The world surface of a compiled WIR plan, empty when absent.
 fn wir_surface(wir_package: Option<wado_compiler::wir::WirPackage>) -> WorldSurface {
     wir_package.map(|pkg| pkg.world_surface).unwrap_or_default()
 }
