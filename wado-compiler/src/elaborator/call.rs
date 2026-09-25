@@ -976,11 +976,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(variant_info) = self
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .cloned()
-                && let Some((_, case_data)) = variant_info
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, c)| c.name == suffix)
+                && let Some((_, case_data)) = variant_info.case_named(suffix)
             {
                 let payload_is_unit = matches!(
                     self.tysys.type_table.borrow().get(case_data.payload),
@@ -1376,78 +1372,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 // Clone needed data to release the borrow on self
                 let variant_info = variant_info.clone();
-                let case_match = variant_info
-                    .cases
-                    .iter()
-                    .enumerate()
-                    .find(|(_, c)| c.name == suffix)
-                    .map(|(i, c)| (i, c.clone()));
-                let prefix_owned = prefix.to_string();
-
-                // Find the case by name
-                if let Some((_case_index, case_data)) = case_match {
-                    self.record_qualified_case(ident, &prefix_owned, case_data.ast_id);
-                    // Each variant case has exactly one payload.
-                    // Unit variants expect 0 args, non-unit variants expect 1 arg.
-                    let payload_is_unit = matches!(
-                        self.tysys.type_table.borrow().get(case_data.payload),
-                        ResolvedType::Unit
+                if let Some((_, case_data)) = variant_info.case_named(suffix) {
+                    self.record_qualified_case(ident, prefix, case_data.ast_id);
+                    return self.construct_variant_case(
+                        &variant_info,
+                        case_data,
+                        &args,
+                        prefix,
+                        expected_type,
+                        call,
                     );
-                    let expected_args = usize::from(!payload_is_unit);
-
-                    if args.len() != expected_args {
-                        let _ = self.emit(TypeError::ArgumentCountMismatch {
-                            expected: expected_args,
-                            found: args.len(),
-                            span: call.span,
-                        });
-                        return TypeTable::ERROR;
-                    }
-
-                    let payload = args.into_iter().next();
-
-                    let variant_type = if variant_info.type_params.is_empty() {
-                        // A generic case's payload type is a parameter
-                        // `infer_variant_type_args` binds from this very
-                        // argument, so only a concrete one has a type to check.
-                        if let Some(payload) = payload {
-                            self.typecheck(payload, case_data.payload, call.span);
-                        }
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .type_id_of_decl(variant_info.defined_at)
-                    } else {
-                        {
-                            let inferred = self.tysys.infer_variant_type_args(
-                                &self.annotate_ctx,
-                                &variant_info,
-                                &case_data,
-                                payload,
-                                expected_type,
-                                &[],
-                            );
-                            self.defer_uninferable_variant(
-                                inferred,
-                                &prefix_owned,
-                                &variant_info,
-                                call.span,
-                            )
-                        }
-                    };
-
-                    // WEP 2026-05-26: record generic
-                    // type args for variant constructors. Non-generic
-                    // variants emit a `Variant` (no type_args) and the
-                    // recording is skipped via the empty-`type_args`
-                    // guard inside `record_generic_instantiation`.
-                    let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                        _ => Vec::new(),
-                    };
-                    self.record_generic_instantiation(call.id, type_args, variant_type);
-
-                    return variant_type;
                 }
                 // If no matching case, check for From<T> synthesis requests
                 else if suffix == "from" && args.len() == 1 {
@@ -1516,66 +1450,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // than from asking the namespace module about a spelling.
                     let ns_variant = self
                         .qualified_owner_decl(ident)
-                        .and_then(|def| self.tysys.all_variant_cases.get(&def))
+                        .and_then(|def| self.tysys.data.variant_cases.get(&def))
                         .cloned();
                     if let Some(variant_info) = ns_variant {
-                        let case_match = variant_info
-                            .cases
-                            .iter()
-                            .enumerate()
-                            .find(|(_, c)| c.name == method_name)
-                            .map(|(i, c)| (i, c.clone()));
-                        if let Some((_case_index, case_data)) = case_match {
+                        if let Some((_, case_data)) = variant_info.case_named(method_name) {
                             self.record_namespaced_case(ident, case_data.ast_id);
-                            let payload_is_unit = matches!(
-                                self.tysys.type_table.borrow().get(case_data.payload),
-                                ResolvedType::Unit
+                            return self.construct_variant_case(
+                                &variant_info,
+                                case_data,
+                                &args,
+                                type_name,
+                                expected_type,
+                                call,
                             );
-                            let expected_args = usize::from(!payload_is_unit);
-                            if args.len() != expected_args {
-                                let _ = self.emit(TypeError::ArgumentCountMismatch {
-                                    expected: expected_args,
-                                    found: args.len(),
-                                    span: call.span,
-                                });
-                                return TypeTable::ERROR;
-                            }
-                            let payload = args.into_iter().next();
-                            let variant_type = if variant_info.type_params.is_empty() {
-                                self.tysys
-                                    .type_table
-                                    .borrow()
-                                    .type_id_of_decl(variant_info.defined_at)
-                            } else {
-                                {
-                                    let inferred = self.tysys.infer_variant_type_args(
-                                        &self.annotate_ctx,
-                                        &variant_info,
-                                        &case_data,
-                                        payload,
-                                        expected_type,
-                                        &[],
-                                    );
-                                    self.defer_uninferable_variant(
-                                        inferred,
-                                        type_name,
-                                        &variant_info,
-                                        call.span,
-                                    )
-                                }
-                            };
-
-                            // Record generic type args for
-                            // namespace-qualified variant ctors.
-                            let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-                                ResolvedType::GenericInstance { type_args, .. } => {
-                                    type_args.clone()
-                                }
-                                _ => Vec::new(),
-                            };
-                            self.record_generic_instantiation(call.id, type_args, variant_type);
-
-                            return variant_type;
                         }
                     }
 
@@ -3689,12 +3576,70 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(sig)
     }
 
-    /// `Type::method()` reaching a value blanket's static, which is indexed
-    /// under the blanket's receiver param and so misses `type_name`'s own
-    /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
-    /// shares this entry rather than falling through to the known-type one.
-    /// `prefix::suffix` answered by a blanket static, or the diagnostic for a
-    /// name that reaches no function at all.
+    /// Whether `found` arguments fit a case carrying `payload`: one, or none
+    /// for a unit payload. Reports the mismatch where they do not.
+    pub(super) fn check_case_arity(&self, payload: TypeId, found: usize, span: Span) -> bool {
+        let payload_is_unit = matches!(
+            self.tysys.type_table.borrow().get(payload),
+            ResolvedType::Unit
+        );
+        let expected = usize::from(!payload_is_unit);
+        if found != expected {
+            let _ = self.emit(TypeError::ArgumentCountMismatch {
+                expected,
+                found,
+                span,
+            });
+        }
+        found == expected
+    }
+
+    /// `Owner::Case(payload)` under a qualified path: the arity check, the
+    /// payload against a concrete case, and the variant instance it builds.
+    fn construct_variant_case(
+        &mut self,
+        variant_info: &VariantInfo,
+        case_data: &VariantCaseData,
+        args: &[TypeId],
+        written_owner: &str,
+        expected_type: Option<TypeId>,
+        call: &ast::CallExpr,
+    ) -> TypeId {
+        if !self.check_case_arity(case_data.payload, args.len(), call.span) {
+            return TypeTable::ERROR;
+        }
+        let payload = args.first().copied();
+        let variant_type = if variant_info.type_params.is_empty() {
+            // A generic case's payload type is a parameter
+            // `infer_variant_type_args` binds from this very argument.
+            if let Some(payload) = payload {
+                self.typecheck(payload, case_data.payload, call.span);
+            }
+            self.tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant_info.defined_at)
+        } else {
+            let inferred = self.tysys.infer_variant_type_args(
+                &self.annotate_ctx,
+                variant_info,
+                case_data,
+                payload,
+                expected_type,
+                &[],
+            );
+            self.defer_uninferable_variant(inferred, written_owner, variant_info, call.span)
+        };
+        let type_args = match self.tysys.type_table.borrow().get(variant_type) {
+            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+            _ => Vec::new(),
+        };
+        self.record_generic_instantiation(call.id, type_args, variant_type);
+        variant_type
+    }
+
+    /// `prefix::suffix` answered by a value blanket's static, indexed under the
+    /// blanket's receiver param, or the diagnostic for a name reaching no function.
     fn blanket_static_or_unknown(
         &mut self,
         prefix: &str,

@@ -289,27 +289,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let namespace_imports = self
             .namespace_imports_in(frame)
             .expect("a module the walk resolves in is one `TraitEnv` indexed");
-        TypeLookup {
-            current_module_source: frame,
-            resolutions: &self.tysys.resolutions,
-            namespace_imports,
-            all_newtypes: &self.tysys.all_newtypes,
-            all_struct_fields: &self.tysys.all_struct_fields,
-            all_variant_cases: &self.tysys.all_variant_cases,
-            all_enum_cases: &self.tysys.all_enum_cases,
-            all_flags_cases: &self.tysys.all_flags_cases,
-            all_resource_types: &self.tysys.all_resource_types,
-            all_generic_newtypes: &self.tysys.all_generic_newtypes,
-            local_struct_fields: &self.sem.decls.local_struct_fields,
-            local_newtypes: &self.sem.decls.local_newtypes,
-            local_enum_cases: &self.sem.decls.local_enum_cases,
-            local_flags_cases: &self.sem.decls.local_flags_cases,
-            local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
-            local_variant_cases: &self.sem.decls.local_variant_cases,
-            anon_struct_fields: &self.sem.decls.anon_struct_fields,
-            fn_local_items: &self.sem.decls.fn_local_items,
-            decls: Some(&self.tysys.trait_env),
-        }
+        self.tysys
+            .type_lookup(frame, namespace_imports, &self.sem.decls)
     }
 
     /// Canonicalize a `<ns>::<member>` reference — one `::`, the prefix a
@@ -1649,14 +1630,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// check deciding whether the pair means a variant at all.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.tysys.type_def(type_id)?;
-        self.tysys.all_variant_cases.get(&def)
+        self.tysys.data.variant_cases.get(&def)
     }
 
     /// The enum `type_id` is, or `None` when it is not one. Asks the type for
     /// its declaration, the way [`Self::variant_of_type`] does.
     pub(super) fn enum_of_type(&self, type_id: TypeId) -> Option<&EnumInfo> {
         let def = self.tysys.type_def(type_id)?;
-        self.tysys.all_enum_cases.get(&def)
+        self.tysys.data.enum_cases.get(&def)
     }
 
     /// The struct `type_id` is an instance of; see [`Self::variant_of_type`].

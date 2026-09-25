@@ -7,13 +7,12 @@ use crate::tir::TypeTable;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamSlot,
-    RealTypeParams, StructFieldInfo, VariantCaseData, VariantInfo,
+    EnumInfo, GenericNewtypeInfo, ParamSlot, RealTypeParams, StructFieldInfo, VariantCaseData,
+    VariantInfo,
 };
 use crate::elaborator::item::{
-    register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
-    register_method_compiler_item, register_trait_compiler_item,
-    register_variant_case_compiler_item, register_variant_compiler_item,
+    register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
+    register_trait_compiler_item, register_variant_compiler_items,
 };
 use crate::name::{FqTypeName, MethodName, RefKind};
 
@@ -49,7 +48,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let module_source = scope.current_module_source.clone();
                     let def = scope.def_of_item(struct_decl.id);
-                    scope.sem.decls.local_struct_fields.insert(
+                    scope.sem.decls.local.struct_fields.insert(
                         def,
                         StructFieldInfo {
                             name: struct_decl.name.clone(),
@@ -85,10 +84,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_table
                             .borrow_mut()
                             .register_decl_type(newtype_decl.id, newtype_id);
-                        self.sem.decls.local_newtypes.insert(def, newtype_id);
+                        self.sem.decls.local.newtypes.insert(def, newtype_id);
                     } else {
                         // Generic newtype: store definition for lazy instantiation
-                        self.sem.decls.local_generic_newtypes.insert(
+                        self.sem.decls.local.generic_newtypes.insert(
                             self.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
                                 type_params: RealTypeParams::of(&newtype_decl.type_params),
@@ -130,127 +129,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let module_source = scope.current_module_source.clone();
                     let def = scope.def_of_item(variant_decl.id);
-                    scope.sem.decls.local_variant_cases.insert(
+                    scope.sem.decls.local.variant_cases.insert(
                         def,
-                        VariantInfo {
-                            name: variant_decl.name.clone(),
-                            module_source: module_source.clone(),
-                            defined_at: variant_decl.id,
-                            type_params: RealTypeParams::of(&variant_decl.type_params),
+                        VariantInfo::of_decl(
+                            module_source.clone(),
+                            variant_decl,
                             cases,
                             type_param_type_ids,
-                        },
+                        ),
                     );
-
-                    register_variant_compiler_item(
+                    register_variant_compiler_items(
                         &scope.tysys.type_table,
-                        &variant_decl.attrs,
-                        variant_decl.id,
-                        &variant_decl.name,
+                        variant_decl,
                         &module_source,
-                        variant_decl.span,
                         scope.logger,
                     );
-
-                    for (case_index, case) in variant_decl.cases.iter().enumerate() {
-                        register_variant_case_compiler_item(
-                            &scope.tysys.type_table,
-                            &case.attrs,
-                            &variant_decl.name,
-                            &case.name,
-                            case_index as u32,
-                            &module_source,
-                            case.span,
-                            scope.logger,
-                        );
-                    }
-
                     drop(scope);
                 }
                 Item::Enum(enum_decl) => {
-                    // Collect enum cases (no field types, just names and indices)
-                    let cases: Vec<EnumCaseData> = enum_decl
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .map(|(index, case)| EnumCaseData {
-                            name: case.name.clone(),
-                            index: index as u32,
-                            ast_id: case.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_enum_cases.insert(
+                    self.sem.decls.local.enum_cases.insert(
                         self.def_of_item(enum_decl.id),
-                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
+                        EnumInfo::of_decl(self.current_module_source.clone(), enum_decl),
                     );
-                    // Mirror the variant / trait paths: register the enum's
-                    // `#[compiler_item("...")]` annotation here so a future
-                    // enum compiler item declared in a lazily-loaded module
-                    // (i.e. one reached only through `module.rs` and not the
-                    // first-pass walk in `orchestration.rs`) still lands in
-                    // the registry.
-                    register_enum_compiler_item(
+                    register_enum_compiler_items(
                         &self.tysys.type_table,
-                        &enum_decl.attrs,
-                        enum_decl.id,
-                        &enum_decl.name,
+                        enum_decl,
                         &self.current_module_source,
-                        enum_decl.span,
                         self.logger,
                     );
-                    for (case_index, case) in enum_decl.cases.iter().enumerate() {
-                        register_enum_case_compiler_item(
-                            &self.tysys.type_table,
-                            &case.attrs,
-                            &enum_decl.name,
-                            &case.name,
-                            case_index as u32,
-                            &self.current_module_source,
-                            case.span,
-                            self.logger,
-                        );
-                    }
                 }
                 Item::Flags(flags_decl) => {
-                    // >32 members has no single-word bitmask representation;
-                    // the diagnostic is emitted in the batch type-collection
-                    // pass (`annotate_modules`). Skip here to avoid the
-                    // `1 << i` overflow while keeping this fact-walk panic-free.
+                    // The batch pass (`annotate_modules`) reports a flags wider than a word.
                     if flags_decl.flags.len() > 32 {
                         continue;
                     }
-                    // Create a distinct Flags type (not a newtype over u32)
-                    let def = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(flags_decl.id)
-                        .expect("a flags declaration has an identity");
-                    let flags_type = self.tysys.type_table.borrow_mut().make_flags(def);
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_decl_type(flags_decl.id, flags_type);
-                    // Add to newtypes so it can be used as a type name
-                    self.sem.decls.local_newtypes.insert(def, flags_type);
-                    // Store member info with bitmask values (1 << index)
-                    let members: Vec<FlagsMemberData> = flags_decl
-                        .flags
-                        .iter()
-                        .enumerate()
-                        .map(|(i, m)| FlagsMemberData {
-                            name: m.name.clone(),
-                            bitmask: 1u32 << i,
-                            ast_id: m.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_flags_cases.insert(
+                    let def = self.def_of_item(flags_decl.id);
+                    self.sem.decls.local.declare_flags(
+                        &self.tysys.type_table,
                         def,
-                        FlagsInfo {
-                            type_id: flags_type,
-                            module_source: self.current_module_source.clone(),
-                            members,
-                        },
+                        self.current_module_source.clone(),
+                        flags_decl,
                     );
                 }
                 Item::Function(func) => {

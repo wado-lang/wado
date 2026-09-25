@@ -819,26 +819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if TypeTable::is_tuple_type(name) {
                     let elems = type_args;
                     if method_name == "len" {
-                        return Some(MethodInfo {
-                            impl_type_bindings: Vec::new(),
-                            method_def: None,
-                            return_type: TypeTable::I32,
-                            self_kind: ast::SelfKind::Ref,
-                            param_types: vec![],
-                            param_is_mut: vec![],
-                            owner: MethodOwner::Receiver,
-                            cm_name: None,
-                            is_ref_impl: false,
-                            method_type_param_ids: vec![],
-                            method_own_params: vec![],
-                            impl_module: None,
-                            from_concrete_impl: false,
-                            param_defaults: vec![],
-                            param_names: vec![],
-                            consumes_self: false,
-                            inherent_visibility: None,
-                            defaults_module: None,
-                        });
+                        return Some(MethodInfo::undeclared(TypeTable::I32));
                     }
                     if method_name == "zip" {
                         let rows: Vec<Vec<TypeId>> = elems
@@ -863,26 +844,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow_mut()
                             .transposed_tuple(base_type_id)
                             .unwrap_or(TypeTable::ERROR);
-                        return Some(MethodInfo {
-                            impl_type_bindings: Vec::new(),
-                            method_def: None,
-                            return_type,
-                            self_kind: ast::SelfKind::Ref,
-                            param_types: vec![],
-                            param_is_mut: vec![],
-                            owner: MethodOwner::Receiver,
-                            cm_name: None,
-                            is_ref_impl: false,
-                            method_type_param_ids: vec![],
-                            method_own_params: vec![],
-                            impl_module: None,
-                            from_concrete_impl: false,
-                            param_defaults: vec![],
-                            param_names: vec![],
-                            consumes_self: false,
-                            inherent_visibility: None,
-                            defaults_module: None,
-                        });
+                        return Some(MethodInfo::undeclared(return_type));
                     }
                     (
                         TypeTable::TUPLE_TYPE_NAME.to_string(),

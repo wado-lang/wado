@@ -283,7 +283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &ParamSlot::list(&struct_decl.type_params),
             &self.tysys.type_table,
         );
-        self.sem.decls.local_struct_fields.insert(
+        self.sem.decls.local.struct_fields.insert(
             def,
             StructFieldInfo {
                 name: mangled_name,
@@ -337,7 +337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
             return;
         };
-        let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
+        let Some(info) = self.sem.decls.local.struct_fields.get_mut(&def) else {
             return;
         };
         info.fields = fields;
@@ -445,7 +445,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
                 return true;
             };
-            self.sem.decls.local_generic_newtypes.insert(
+            self.sem.decls.local.generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
                     type_params: RealTypeParams::of(&newtype_decl.type_params),
@@ -483,7 +483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
             return true;
         };
-        self.sem.decls.local_newtypes.insert(def, type_id);
+        self.sem.decls.local.newtypes.insert(def, type_id);
         self.sem
             .decls
             .fn_local_items

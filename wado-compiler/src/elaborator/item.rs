@@ -175,28 +175,24 @@ fn check_compiler_item_placement<H: CompilerHost>(
     true
 }
 
-/// The `#[compiler_item(...)]` this declaration carries, or `None` when it
-/// carries none or names an item that may not sit on a `kind` declaration.
-fn compiler_item_on<H: CompilerHost>(
+/// Register the `#[compiler_item(...)]` annotation in `attrs`, if any, as
+/// naming the declaration `resolved` describes.
+fn register_annotated<H: CompilerHost>(
+    type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
     kind: CompilerItemKind,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
-) -> Option<CompilerItem> {
-    let item = extract_compiler_item(attrs, span, module_source, logger)?;
-    check_compiler_item_placement(item, kind, module_source, span, logger).then_some(item)
-}
-
-/// Bind `item` to the declaration `resolved` names, reporting a clash.
-fn bind_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    item: CompilerItem,
-    resolved: Resolved,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
+    resolved: impl FnOnce() -> Resolved,
 ) {
+    let Some(item) = extract_compiler_item(attrs, span, module_source, logger) else {
+        return;
+    };
+    if !check_compiler_item_placement(item, kind, module_source, span, logger) {
+        return;
+    }
+    let resolved = resolved();
     if let Err(err) = type_table
         .borrow_mut()
         .compiler_items_mut()
@@ -206,9 +202,10 @@ fn bind_compiler_item<H: CompilerHost>(
     }
 }
 
-/// Register a struct declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_struct_compiler_item<H: CompilerHost>(
+/// Register a named type declaration's `#[compiler_item(...)]` annotation, if any.
+pub(super) fn register_type_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
+    kind: CompilerItemKind,
     attrs: &[Attribute],
     decl: AstId,
     name: &str,
@@ -216,128 +213,126 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Struct, module_source, span, logger)
-    else {
-        return;
-    };
-    let resolved = Resolved::Struct {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+    register_annotated(type_table, attrs, kind, module_source, span, logger, || {
+        let module_source = module_source.clone();
+        let name = name.to_string();
+        match kind {
+            CompilerItemKind::Struct => Resolved::Struct {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::Variant => Resolved::Variant {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::Enum => Resolved::Enum {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::Resource => Resolved::Resource {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::Newtype => Resolved::Newtype {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::BuiltinType => Resolved::BuiltinType {
+                module_source,
+                name,
+                decl,
+            },
+            CompilerItemKind::Trait
+            | CompilerItemKind::Function
+            | CompilerItemKind::Method
+            | CompilerItemKind::TupleFamily
+            | CompilerItemKind::VariantCase
+            | CompilerItemKind::EnumCase => panic!("`{kind:?}` is not a named type declaration"),
+        }
+    });
 }
 
-/// Register a variant declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_variant_compiler_item<H: CompilerHost>(
+/// Register a variant's `#[compiler_item(...)]` annotations: the declaration's
+/// and each case's, the case numbered by its position.
+pub(super) fn register_variant_compiler_items<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    decl: AstId,
-    name: &str,
+    decl: &ast::VariantDecl,
     module_source: &ModuleSource,
-    span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(
-        attrs,
+    register_type_compiler_item(
+        type_table,
         CompilerItemKind::Variant,
+        &decl.attrs,
+        decl.id,
+        &decl.name,
         module_source,
-        span,
+        decl.span,
         logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Variant {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+    );
+    for (case_index, case) in decl.cases.iter().enumerate() {
+        register_annotated(
+            type_table,
+            &case.attrs,
+            CompilerItemKind::VariantCase,
+            module_source,
+            case.span,
+            logger,
+            || Resolved::VariantCase {
+                module_source: module_source.clone(),
+                parent_type: decl.name.clone(),
+                name: case.name.clone(),
+                case_index: case_index as u32,
+            },
+        );
+    }
 }
 
-/// Register an enum declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_enum_compiler_item<H: CompilerHost>(
+/// Register an enum's `#[compiler_item(...)]` annotations, as
+/// [`register_variant_compiler_items`] does a variant's.
+pub(super) fn register_enum_compiler_items<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    decl: AstId,
-    name: &str,
+    decl: &ast::EnumDecl,
     module_source: &ModuleSource,
-    span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Enum, module_source, span, logger)
-    else {
-        return;
-    };
-    let resolved = Resolved::Enum {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a `resource` declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_resource_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    decl: AstId,
-    name: &str,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-        attrs,
-        CompilerItemKind::Resource,
+    register_type_compiler_item(
+        type_table,
+        CompilerItemKind::Enum,
+        &decl.attrs,
+        decl.id,
+        &decl.name,
         module_source,
-        span,
+        decl.span,
         logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Resource {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a `type X = Y;` declaration's `#[compiler_item(...)]` annotation, if any.
-pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    decl: AstId,
-    name: &str,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-        attrs,
-        CompilerItemKind::Newtype,
-        module_source,
-        span,
-        logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Newtype {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+    );
+    for (case_index, case) in decl.cases.iter().enumerate() {
+        register_annotated(
+            type_table,
+            &case.attrs,
+            CompilerItemKind::EnumCase,
+            module_source,
+            case.span,
+            logger,
+            || Resolved::EnumCase {
+                module_source: module_source.clone(),
+                parent_type: decl.name.clone(),
+                name: case.name.clone(),
+                case_index: case_index as u32,
+            },
+        );
+    }
 }
 
 /// Register a trait declaration's `#[compiler_item(...)]` annotation, if any.
 ///
-/// `methods` is the trait's full method list; the elaborator inspects it
-/// to cache the single-method trait's primary method name into the
-/// registry (see [`Resolved::Trait::method_name`]). For multi-method
-/// traits the cache stays `None` and downstream consumers that need a
-/// method name must reach for a dedicated method [`CompilerItem`].
+/// A single-method trait caches its method's name in the registry (see
+/// [`Resolved::Trait::method_name`]); a multi-method trait needs a method item.
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
@@ -349,44 +344,43 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Trait, module_source, span, logger)
-    else {
-        return;
-    };
-    // Single-method traits cache the method's name so the synthesiser
-    // can construct `<Trait>::<method>` calls without hard-coding the
-    // source-side spelling. Multi-method traits leave it unset.
-    let method_name = if methods.len() == 1 {
-        Some(methods[0].name.clone())
-    } else {
-        None
-    };
-    // For each associated type, capture both its source-side name and the
-    // source-side names of all its trait bounds. The synthesiser identifies
-    // assoc types by their bound (a `#[compiler_item("...")]`-registered
-    // trait whose current spelling also comes from the registry), so both
-    // ends stay rename-stable.
-    let assoc_types = assoc_types
-        .iter()
-        .map(|a| TraitAssocType {
-            name: a.name.clone(),
-            bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
-        })
-        .collect();
-    let fq = type_table
-        .borrow()
-        .defs()
-        .of_ast_id(decl)
-        .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
-    let resolved = Resolved::Trait {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-        fq,
-        method_name,
-        assoc_types,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+    register_annotated(
+        type_table,
+        attrs,
+        CompilerItemKind::Trait,
+        module_source,
+        span,
+        logger,
+        || {
+            let method_name = if methods.len() == 1 {
+                Some(methods[0].name.clone())
+            } else {
+                None
+            };
+            // The synthesiser identifies an assoc type by its bound, so both
+            // spellings come from the declaration and stay rename-stable.
+            let assoc_types = assoc_types
+                .iter()
+                .map(|a| TraitAssocType {
+                    name: a.name.clone(),
+                    bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
+                })
+                .collect();
+            let fq = type_table
+                .borrow()
+                .defs()
+                .of_ast_id(decl)
+                .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
+            Resolved::Trait {
+                module_source: module_source.clone(),
+                name: name.to_string(),
+                decl,
+                fq,
+                method_name,
+                assoc_types,
+            }
+        },
+    );
 }
 
 /// Register a free function's `#[compiler_item(...)]` annotation, if any.
@@ -400,20 +394,18 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(
+    register_annotated(
+        type_table,
         attrs,
         CompilerItemKind::Function,
         module_source,
         span,
         logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Function {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+        || Resolved::Function {
+            module_source: module_source.clone(),
+            name: name.to_string(),
+        },
+    );
 }
 
 /// Register an impl-block method's `#[compiler_item(...)]` annotation, if any.
@@ -427,82 +419,20 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Method, module_source, span, logger)
-    else {
-        return;
-    };
-    let resolved = Resolved::Method {
-        module_source: module_source.clone(),
-        owner_type: owner_type.to_string(),
-        owner_head: Some(owner_head.clone()),
-        name: method_name.to_string(),
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a single variant case's `#[compiler_item("...")]` annotation.
-///
-/// `parent_type` is the variant the case belongs to (e.g. `"Option"`).
-/// `case_index` is the zero-based position of the case in its declared
-/// order, which downstream consumers (pattern matching, variant
-/// construction) need in addition to the case name.
-pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    parent_type: &str,
-    case_name: &str,
-    case_index: u32,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
+    register_annotated(
+        type_table,
         attrs,
-        CompilerItemKind::VariantCase,
+        CompilerItemKind::Method,
         module_source,
         span,
         logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::VariantCase {
-        module_source: module_source.clone(),
-        parent_type: parent_type.to_string(),
-        name: case_name.to_string(),
-        case_index,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a single enum case's `#[compiler_item("...")]` annotation.
-/// See [`register_variant_case_compiler_item`] for the shape — same
-/// payload, different parent kind.
-pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    parent_type: &str,
-    case_name: &str,
-    case_index: u32,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-        attrs,
-        CompilerItemKind::EnumCase,
-        module_source,
-        span,
-        logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::EnumCase {
-        module_source: module_source.clone(),
-        parent_type: parent_type.to_string(),
-        name: case_name.to_string(),
-        case_index,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+        || Resolved::Method {
+            module_source: module_source.clone(),
+            owner_type: owner_type.to_string(),
+            owner_head: Some(owner_head.clone()),
+            name: method_name.to_string(),
+        },
+    );
 }
 
 /// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
@@ -514,50 +444,18 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-    let Some(item) = compiler_item_on(
+    register_annotated(
+        type_table,
         attrs,
         CompilerItemKind::TupleFamily,
         module_source,
         span,
         logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::TupleFamily {
-        module_source: module_source.clone(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a named definition-less type (`pub type Array<T>;`) carrying a
-/// `#[compiler_item("...")]` annotation. Binds the builtin type's name and
-/// owning module so the type resolver can map the name to its builtin
-/// `ResolvedType`.
-pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    decl: AstId,
-    name: &str,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-        attrs,
-        CompilerItemKind::BuiltinType,
-        module_source,
-        span,
-        logger,
-    ) else {
-        return;
-    };
-    let resolved = Resolved::BuiltinType {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
+        || Resolved::TupleFamily {
+            module_source: module_source.clone(),
+            decl,
+        },
+    );
 }
 
 /// Everything an impl method's signature resolves against: the impl's
@@ -1512,7 +1410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
             ResolvedType::Variant { .. } => {
-                // The per-case payload types live in `all_variant_cases`; look
+                // The per-case payload types live in `data.variant_cases`; look
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.
                 let payloads: Vec<TypeId> = self
@@ -2218,8 +2116,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .decl_type_params
             .insert(variant_decl.id, type_params);
 
-        register_variant_compiler_item(
+        register_type_compiler_item(
             &self.tysys.type_table,
+            CompilerItemKind::Variant,
             &variant_decl.attrs,
             variant_decl.id,
             &variant_decl.name,

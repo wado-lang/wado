@@ -381,7 +381,7 @@ pub(crate) struct TypeAnnotations {
     pub(crate) method_names: IndexMap<AstId, MethodNames>,
     /// Resolved field types per struct decl `AstId`, in declaration order, as
     /// `resolve_struct` produced them with the type-param scope in place. Reify
-    /// reads these rather than `tysys.all_struct_fields`, which is seeded by the
+    /// reads these rather than `tysys.data.struct_fields`, which is seeded by the
     /// static decl-field pass — that runs before import scopes exist and cannot
     /// follow `pub use` chains, so a field typed by a re-exported decl lands
     /// there as UNKNOWN.

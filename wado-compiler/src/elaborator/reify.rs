@@ -325,6 +325,33 @@ fn build_literal_spread_call(
     )
 }
 
+/// `if !cond { break; }`, a loop's exit test.
+fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
+    let neg_cond = TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Not,
+            expr: Box::new(cond),
+        },
+        TypeTable::BOOL,
+        cond_span,
+    );
+    let break_stmt = TirStmt::new(
+        TirStmtKind::Break {
+            label: None,
+            value: None,
+        },
+        span,
+    );
+    TirStmt::new(
+        TirStmtKind::If {
+            condition: neg_cond,
+            then_block: TirBlock::new(vec![break_stmt], span),
+            else_block: None,
+        },
+        span,
+    )
+}
+
 /// `target = value;` as a statement.
 fn assign_stmt(target: TirExpr, value: TirExpr, span: Span) -> TirStmt {
     let type_id = value.type_id;
@@ -613,30 +640,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// already recorded by annotate and live on
     /// [`ModuleSemantics::bindings`]).
     fn type_lookup(&self) -> TypeLookup<'_> {
-        TypeLookup {
-            current_module_source: &self.current_module_source,
-            resolutions: &self.tysys.resolutions,
-            namespace_imports: &self.sem.imports.namespace_imports,
-            all_newtypes: &self.tysys.all_newtypes,
-            all_struct_fields: &self.tysys.all_struct_fields,
-            all_variant_cases: &self.tysys.all_variant_cases,
-            all_enum_cases: &self.tysys.all_enum_cases,
-            all_flags_cases: &self.tysys.all_flags_cases,
-            all_resource_types: &self.tysys.all_resource_types,
-            all_generic_newtypes: &self.tysys.all_generic_newtypes,
-            local_struct_fields: &self.sem.decls.local_struct_fields,
-            local_newtypes: &self.sem.decls.local_newtypes,
-            local_enum_cases: &self.sem.decls.local_enum_cases,
-            local_flags_cases: &self.sem.decls.local_flags_cases,
-            local_generic_newtypes: &self.sem.decls.local_generic_newtypes,
-            local_variant_cases: &self.sem.decls.local_variant_cases,
-            anon_struct_fields: &self.sem.decls.anon_struct_fields,
-            // A function-local item is reached through the `local_*` tables
-            // above, keyed by declaration — not the per-function tier below,
-            // which annotate clears and reify never repopulates.
-            fn_local_items: &self.sem.decls.fn_local_items,
-            decls: Some(&self.tysys.trait_env),
-        }
+        // A function-local item is reached through the walk's local data
+        // tables, keyed by declaration — not `fn_local_items`, which annotate
+        // clears and reify never repopulates.
+        self.tysys.type_lookup(
+            &self.current_module_source,
+            &self.sem.imports.namespace_imports,
+            &self.sem.decls,
+        )
     }
 
     /// Resolve an effect-name list into [`crate::tir::EffectRef`]s
@@ -937,10 +948,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a `flags F { … }` declaration. The `TypeId` is the one
     /// `annotate_decls` interned via `make_flags`; reify reads it from
-    /// `tysys.all_flags_cases`.
+    /// `tysys.data.flags_cases`.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
         let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
-        let info = self.tysys.all_flags_cases.get(&def)?;
+        let info = self.tysys.data.flags_cases.get(&def)?;
         Some(TirFlags {
             def,
             name: flags_decl.name.clone(),
@@ -991,7 +1002,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_newtype(&self, newtype_decl: &ast::Newtype) -> Option<TirNewtype> {
         let def = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id)?;
         let generic = !newtype_decl.type_params.is_empty();
-        let type_id = self.tysys.all_newtypes.get(&def).copied();
+        let type_id = self.tysys.data.newtypes.get(&def).copied();
         if !generic && type_id.is_none() {
             return None;
         }
@@ -1012,7 +1023,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // ─────────────────────────────────────────────────────────────────
 
     /// Reify a `struct S { … }`. Field types come from
-    /// `tysys.all_struct_fields`; field-default expressions and
+    /// `tysys.data.struct_fields`; field-default expressions and
     /// type-param defaults are read from `ModuleSemantics`.
     fn reify_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         // Single source of truth: `resolve_struct` recorded the per-field
@@ -1114,7 +1125,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Field types and type-param bounds come from
-    /// `sem.decls.local_struct_fields` — the durable fact
+    /// `sem.decls.local.struct_fields` — the durable fact
     /// `resolve_local_struct` recorded under this declaration's own identity.
     /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
     /// expressions are read straight from the AST here, exactly matching
@@ -1126,7 +1137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .resolutions
             .defs()
             .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
+            .and_then(|def| self.sem.decls.local.struct_fields.get(&def))
             .cloned()
         else {
             // `resolve_local_struct` inserts this unconditionally for every
@@ -1191,7 +1202,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         });
     }
 
-    /// The base type comes from `sem.decls.local_newtypes` — the durable
+    /// The base type comes from `sem.decls.local.newtypes` — the durable
     /// fact `resolve_local_newtype` recorded under this declaration's own
     /// identity.
     fn reify_local_newtype(&mut self, newtype_decl: &ast::Newtype) {
@@ -1199,7 +1210,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         };
         let generic = !newtype_decl.type_params.is_empty();
-        let type_id = self.sem.decls.local_newtypes.get(&def).copied();
+        let type_id = self.sem.decls.local.newtypes.get(&def).copied();
         if !generic && type_id.is_none() {
             return;
         }
@@ -1216,7 +1227,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a `variant V<T> { … }` declaration. Cases' payload types
-    /// come from `tysys.all_variant_cases`; the type-param table is
+    /// come from `tysys.data.variant_cases`; the type-param table is
     /// projected from the AST.
     fn reify_variant_decl(&mut self, variant_decl: &ast::VariantDecl) -> TirVariantDecl {
         let def = self
@@ -1225,7 +1236,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .defs()
             .of_ast_id(variant_decl.id)
             .expect("a `variant` declaration is declared");
-        let case_info = self.tysys.all_variant_cases.get(&def);
+        let case_info = self.tysys.data.variant_cases.get(&def);
 
         let cases: Vec<tir::TirVariantCase> = variant_decl
             .cases
@@ -1381,8 +1392,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             };
             // A default is reified at each call site: one reified here would put
             // its value local in this `ctx`, shadowing the parameter at -O0.
-            let local_index =
-                ctx.add_local_at(name.clone(), type_id, param.is_mut, Some(param.id), param.name_span);
+            let local_index = ctx.add_local_at(
+                name.clone(),
+                type_id,
+                param.is_mut,
+                Some(param.id),
+                param.name_span,
+            );
             params.push(TirParam {
                 name,
                 type_id,
@@ -3315,7 +3331,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // The `field_index` and `field_name` on `FieldAccess`
                 // TIR are positional; the elaborator looks them up from
                 // the receiver's struct decl. Reify reads the same
-                // info from `tysys.all_struct_fields` keyed by the
+                // info from `tysys.data.struct_fields` keyed by the
                 // receiver's resolved struct name.
                 let inner = self.reify_expr(&field_access.expr, ctx, None);
                 let (field_index, field_name, field_type) =
@@ -3364,8 +3380,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// restored around the body walk so naked `continue` inside
     /// `while` targets this loop (not an enclosing C-style `for`).
     fn reify_while(&mut self, w: &ast::WhileStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
-        use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
-
         let span = w.span;
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
 
@@ -3373,29 +3387,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Condition::Expr(cond_expr) => {
                 let cond_span = cond_expr.span();
                 let cond_tir = self.reify_condition_expr(cond_expr, ctx);
-                let neg_cond = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(cond_tir),
-                    },
-                    TypeTable::BOOL,
-                    cond_span,
-                );
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let if_break = TirStmt::new(
-                    TirStmtKind::If {
-                        condition: neg_cond,
-                        then_block: TirBlock::new(vec![break_stmt], span),
-                        else_block: None,
-                    },
-                    span,
-                );
+                let if_break = break_unless(cond_tir, cond_span, span);
                 let body_block = self.reify_block(&w.body, ctx, None);
                 let mut stmts = Vec::with_capacity(1 + body_block.stmts.len());
                 stmts.push(if_break);
@@ -4706,8 +4698,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a C-style `for init; cond; update { body }` loop into
     /// the shape `Elaborator::resolve_for` produces.
     fn reify_for(&mut self, f: &ast::ForStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
-        use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
-
         let span = f.span;
         let body_label = for_body_label(ctx.fresh_serial());
 
@@ -4729,29 +4719,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(ast::Condition::Expr(cond_expr)) => {
                 let cond_span = cond_expr.span();
                 let cond_tir = self.reify_expr(cond_expr, ctx, Some(TypeTable::BOOL));
-                let neg_cond = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(cond_tir),
-                    },
-                    TypeTable::BOOL,
-                    cond_span,
-                );
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let if_break = TirStmt::new(
-                    TirStmtKind::If {
-                        condition: neg_cond,
-                        then_block: TirBlock::new(vec![break_stmt], span),
-                        else_block: None,
-                    },
-                    span,
-                );
+                let if_break = break_unless(cond_tir, cond_span, span);
                 let labeled_body = self.reify_for_labeled_body(&body_label, &f.body, ctx);
                 let mut s = vec![if_break, labeled_body];
                 s.extend(self.reify_for_update(f.update.as_ref(), ctx));
@@ -5645,35 +5613,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let element_type = start.type_id;
 
-        // The recorded `expression_types[range.id]` carries the
-        // assembled `GenericInstance` type, but the elaborator's
-        // construction is purely from the prelude's compiler-item
-        // registry — reproduce here so the same `module_source` lands
-        // even if a future inference change made the recorded type
-        // less specific.
-        let item = match range.kind {
-            RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
-        let struct_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .struct_name(item)
-            .to_string();
-
-        let struct_type = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow()
-                .require_compiler_item_def(item);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_generic_instance(def, vec![element_type])
-        };
+        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
 
         let mut fields = vec![
             TirStructField {
@@ -5723,7 +5663,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a named `StructLiteralExpr`. Field types come from
-    /// `tysys.all_struct_fields`; the instance type + `type_args` for
+    /// `tysys.data.struct_fields`; the instance type + `type_args` for
     /// generic structs come from the
     /// `sem.types.generic_instantiations[id]` record. Anonymous
     /// struct literals (`{ x: 1, y: 2 }` with no leading type name)
@@ -7584,7 +7524,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
     /// synthesises the struct from the field shape, gives it a
     /// deterministic `$anon_{x:i32,y:i32}`-style name, and registers
-    /// it on `tysys.type_table` + `sem.decls.local_struct_fields` +
+    /// it on `tysys.type_table` + `sem.decls.local.struct_fields` +
     /// `sem.decls.pending_anonymous_structs`. Reify reproduces the
     /// same name from the reified field types and looks the struct
     /// type up; the registration already happened during annotate so
@@ -8316,83 +8256,45 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Some((owner, spelled)) = self.case_path(ident)
             && let Some((prefix, suffix)) = spelled.split_once("::")
         {
-            if !suffix.contains("::") {
-                let lookup = self.type_lookup();
-                if let Some(variant_info) = owner
-                    .and_then(|owner| lookup.variant_cases_of(owner))
-                    .cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == suffix)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    let variant_type = self
-                        .ann_generic_instantiations(call.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or(recorded_type);
-                    let payload = call.args.first().map(|arg_expr| {
-                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
-                    });
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name,
-                            payload,
-                        },
-                        variant_type,
-                        span,
-                    );
+            // `ns::Type::Case(payload)` reaches its owner through the namespace;
+            // the nullary form is `reify_ident`'s.
+            let (variant_info, case_name) = match suffix.split_once("::") {
+                None => (
+                    owner
+                        .and_then(|owner| self.type_lookup().variant_cases_of(owner))
+                        .cloned(),
+                    suffix,
+                ),
+                Some((_, case_name)) if self.sem.imports.namespace_imports.contains_key(prefix) => {
+                    (
+                        self.qualified_owner_decl(ident)
+                            .and_then(|def| self.tysys.data.variant_cases.get(&def))
+                            .cloned(),
+                        case_name,
+                    )
                 }
-            } else if let Some(inner) = suffix.find("::")
-                && let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
+                Some(_) => (None, suffix),
+            };
+            if let Some(variant_info) = variant_info
+                && let Some((case_index, case_data)) = variant_info.case_named(case_name)
             {
-                // `ns::Type::Case(payload)` — a namespace-imported variant
-                // constructor with a payload. The nullary form is handled
-                // in `reify_ident`; the payload form parses as a `Call`.
-                // The case lives in the namespace's variant table; the
-                // instance type is the call's recorded expression type
-                // (annotate resolved it).
-                let type_name = &suffix[..inner];
-                let case_name = &suffix[inner + 2..];
-                if let Some(variant_info) = self
-                    .qualified_owner_decl(ident)
-                    .and_then(|def| self.tysys.all_variant_cases.get(&def))
-                    .cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == case_name)
-                        .map(|(i, c)| (i, c.clone()))
-                {
-                    let variant_type = self
-                        .ann_generic_instantiations(call.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or(recorded_type);
-                    let payload = call.args.first().map(|arg_expr| {
-                        Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
-                    });
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name,
-                            payload,
-                        },
+                let variant_type = self
+                    .ann_generic_instantiations(call.id)
+                    .map(|gi| gi.instance_type)
+                    .unwrap_or(recorded_type);
+                let payload = call.args.first().map(|arg_expr| {
+                    Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
+                });
+                return TirExpr::new(
+                    TirExprKind::VariantConstruct {
                         variant_type,
-                        span,
-                    );
-                }
-
-                // `ns::Type::method(args)` is handled by the
-                // `static_method_dispatch` early return below — annotate
-                // now records the resolved `FunctionRef` for namespace-
-                // qualified static calls too (see call.rs's ns-static
-                // branch). The fallthrough here is intentional.
-                let _ = (ns_source, type_name, case_name);
+                        case_index: case_index as u32,
+                        case_name: case_data.name.clone(),
+                        payload,
+                    },
+                    variant_type,
+                    span,
+                );
             }
         }
 
@@ -9424,12 +9326,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(variant_info) = owner
                     .and_then(|owner| lookup.variant_cases_of(owner))
                     .cloned()
-                    && let Some((case_index, case_data)) = variant_info
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .find(|(_, c)| c.name == suffix)
-                        .map(|(i, c)| (i, c.clone()))
+                    && let Some((case_index, case_data)) = variant_info.case_named(suffix)
                 {
                     // Only generic variants record an instance type +
                     // type_args; for a non-generic one the bare
@@ -9449,7 +9346,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::VariantConstruct {
                             variant_type,
                             case_index: case_index as u32,
-                            case_name: case_data.name,
+                            case_name: case_data.name.clone(),
                             payload: None,
                         },
                         through_newtype.map_or(variant_type, |(_, named)| named),
@@ -10510,7 +10407,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
                 // Variant patterns appear in `match Some(x) { Some(v) => …
                 // }` etc. The case's payload type lives on
-                // `tysys.all_variant_cases`; reify reads it to give
+                // `tysys.data.variant_cases`; reify reads it to give
                 // sub-patterns the right scrutinee type. The
                 // `variant_name` strips a `Variant::` prefix when
                 // present (the AST keeps the qualified form).
@@ -10829,12 +10726,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             else {
                 return (None, TypeTable::UNKNOWN);
             };
-            let Some((case_index, case_data)) = variant_info
-                .cases
-                .iter()
-                .enumerate()
-                .find(|(_, c)| c.name == case_name)
-            else {
+            let Some((case_index, case_data)) = variant_info.case_named(case_name) else {
                 return (None, TypeTable::UNKNOWN);
             };
             // Extract the variant decl's type-param indices so the

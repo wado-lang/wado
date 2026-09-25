@@ -1045,26 +1045,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let variant_info = lookup_case!(variant_cases_of);
         if let Some(variant_info) = variant_info {
             // Find the case by name
-            if let Some((_case_index, case_data)) = variant_info
-                .cases
-                .iter()
-                .enumerate()
-                .find(|(_, c)| c.name == suffix)
-                .map(|(i, c)| (i, c.clone()))
-            {
+            if let Some((_, case_data)) = variant_info.case_named(suffix) {
                 self.record_qualified_case(ident, prefix, case_data.ast_id);
                 self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
-                // Unit variant - payload must be unit type
-                let payload_is_unit = matches!(
-                    self.tysys.type_table.borrow().get(case_data.payload),
-                    ResolvedType::Unit
-                );
-                if !payload_is_unit {
-                    let _ = self.emit(TypeError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: 0,
-                        span: ident.span,
-                    });
+                if !self.check_case_arity(case_data.payload, 0, ident.span) {
                     return Some(TypeTable::ERROR);
                 }
 
@@ -2095,80 +2079,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 ctx.exit_scope();
 
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    // The chain's result is what the then block and the else
-                    // block agree on, exactly as in the `Condition::Expr` arm.
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => TypeTable::UNIT,
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // An `if let` whose branches are all bare `null` leaves the
-                // type unresolved; report it rather than ICEing in codegen.
-                // When one branch resolved, the other's `null` tail is checked
-                // against it — the sibling's type is what agreement adopted.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same arm-agreement rule as the `Condition::Expr` arm below:
-                // `expected_type = Some(X)` pins `type_id` unconditionally, so
-                // the chain and else blocks could still disagree and a divergent
-                // branch would silently miscompile. Skipped at `Unit`, which is
-                // statement position — the branches drop their values there.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    // `resolve_let_chain_stmts` resolves the then-branch under
-                    // the same `expected_type`, so a mismatch there is already
-                    // diagnosed — and re-checking via `block_result_type` would
-                    // report a spurious "found ()". The else-block is resolved
-                    // independently, so check it directly.
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(else_type, type_id, eb.span);
-                    } else {
-                        // Missing `else` with a non-Unit expected
-                        // type: the implicit `else { () }` cannot
-                        // produce the expected type. See the
-                        // `Condition::Expr` arm for the rationale
-                        // (without this guard the WIR builder
-                        // would produce `(if (result T) ...)`
-                        // without an else and `wasmparser` would
-                        // reject the module at `-O0`).
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the if-let-chain (recorded via
-                // `DesugarKind::IfLetChain`) from the AST. The body walk
-                // ran `resolve_let_chain_stmts` for its fact-recording side
-                // effects (pattern bindings, element resolution) and computed
-                // the result type. Project only the result type.
-                type_id
+                // `resolve_let_chain_stmts` resolved the then block under the
+                // same expectation, so a mismatch there is already diagnosed.
+                self.settle_if_result(if_expr, expected_type, true)
             }
             Condition::Expr(expr) => {
                 // Resolve the condition and both blocks for their facts; reify
@@ -2179,97 +2092,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
-
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-
-                    // `never` is the bottom type: a branch returning `never` is compatible
-                    // with any type, so the result type comes from the non-never branch.
-                    //
-                    // An indefinite branch defers to its sibling's resolved
-                    // type; its tail is patched below.
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => {
-                            if then_type != TypeTable::UNIT {
-                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                                let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: "()".to_string(),
-                                    found: type_name,
-                                    span: if_expr.then_block.span,
-                                });
-                            }
-                            TypeTable::UNIT
-                        }
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // Report any unresolved `null` tail in either branch against
-                // the determined result type — AST mirror of the old
-                // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed indefinite (both branches a bare `null`)
-                // `report_uninferable_result` already fired and the null pass
-                // is skipped.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same rule as `resolve_match_expr`: an if-expression whose
-                // result is consumed needs branches that agree. Inference
-                // diagnoses the `expected_type = None` case, but `Some(X)`
-                // bypasses it and would emit an `(if (result X) …)` whose other
-                // side pushes the wrong type. Skipped at `Unit`.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
-                    } else {
-                        // Without an explicit `else` the implicit branch is `()`,
-                        // which cannot satisfy a non-Unit expected type.
-                        // `type_id` is left as-is: the recorded diagnostic
-                        // aborts before WIR build, so a result-typed `if` with
-                        // no else never reaches `wasmparser`.
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the `If` node from the AST; the
-                // body walk resolved the condition and both blocks for
-                // their fact-recording side effects and ran branch-agreement /
-                // null diagnostics off the AST (`ast_block_result_type`).
-                // Project only the result type.
-                type_id
+                self.settle_if_result(if_expr, expected_type, false)
             }
         }
+    }
+
+    /// The type an `if` yields, its branches walked: the expectation where one
+    /// is settled, else what the branches agree on. A branch that disagrees is
+    /// reported; `then_checked` says the then block was already checked against
+    /// the expectation. Reify rebuilds the node itself from the AST.
+    fn settle_if_result(
+        &mut self,
+        if_expr: &IfExpr,
+        expected_type: Option<TypeId>,
+        then_checked: bool,
+    ) -> TypeId {
+        let expected_type = self.settled_result_expectation(expected_type);
+        let type_id = if let Some(ty) = expected_type {
+            ty
+        } else {
+            let (then_type, else_type) = self.if_branch_types(if_expr);
+            // `never` is the bottom type and an indefinite branch defers to its
+            // sibling, so either takes the other branch's type.
+            match (
+                self.agreed_branch_type(&[then_type, else_type]),
+                &if_expr.else_block,
+            ) {
+                (Some(agreed), _) => agreed,
+                (None, None) => {
+                    if then_type != TypeTable::UNIT {
+                        let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                        let _ = self.emit(TypeError::TypeMismatch {
+                            expected: "()".to_string(),
+                            found: type_name,
+                            span: if_expr.then_block.span,
+                        });
+                    }
+                    TypeTable::UNIT
+                }
+                (None, Some(else_block)) => {
+                    let (then_name, else_name) = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .type_names_for_mismatch(then_type, else_type);
+                    let _ = self.emit(TypeError::TypeMismatch {
+                        expected: then_name,
+                        found: else_name,
+                        span: else_block.span,
+                    });
+                    then_type
+                }
+            }
+        };
+
+        // Both branches a bare `null` leaves the type indefinite, which is
+        // reported instead of the tails.
+        if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
+            let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+            if let Some(eb) = &if_expr.else_block {
+                blocks.push(eb);
+            }
+            self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+        }
+
+        // As in `resolve_match_expr`: a settled expectation pins the type, so
+        // agreement never ran and a divergent branch would emit an
+        // `(if (result X) …)` whose other side pushes the wrong type. Skipped
+        // at `Unit`, statement position, where the branches drop their values.
+        if expected_type.is_some() && type_id != TypeTable::UNIT {
+            if !then_checked {
+                let then_type = self.ast_block_result_type(&if_expr.then_block);
+                self.check_branch_type(then_type, type_id, if_expr.then_block.span);
+            }
+            match &if_expr.else_block {
+                Some(eb) => {
+                    let else_type = self.ast_block_result_type(eb);
+                    self.check_branch_type(else_type, type_id, eb.span);
+                }
+                // The implicit `else { () }` cannot produce a non-Unit type.
+                None => self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span),
+            }
+        }
+        type_id
     }
 
     /// Emit a `TypeMismatch` error when a branch's block-result type
@@ -5472,29 +5377,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let item = match range.kind {
-            RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
-        let struct_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .struct_name(item)
-            .to_string();
-
-        let struct_type = {
-            let def = self
-                .tysys
-                .type_table
-                .borrow()
-                .require_compiler_item_def(item);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .make_generic_instance(def, vec![element_type])
-        };
+        let (struct_name, struct_type) = self.tysys.range_type(range.kind, element_type);
 
         // Mangled name for the resulting `TirExprKind::StructLiteral`.
         // The monomorphizer keys instantiation lookup on this form
