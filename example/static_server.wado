@@ -1,5 +1,14 @@
-//! Serves the files of the directory `wado serve` grants, the way a browser asks
-//! for them: `wado serve --dir <dir> example/static_server.wado`.
+// Static file server — serves the directory `wado serve --dir` grants
+//
+// Compile and run with wado serve:
+//   cargo run --bin wado -- serve --dir example/web-browser example/static_server.wado
+//
+// Endpoints:
+//   GET  /<path>  — the file at <path>, `index.html` for a directory
+//   HEAD /<path>  — the same status and content type, without the body
+//
+// A path that names nothing under the directory, or climbs out of it, is 404.
+// Other methods are 405. For a full-featured service, see http_bin.wado.
 
 use { Request, Response, ErrorCode, FieldValue, Headers, Trailers, StatusCode, Method } from "wasi:http";
 use { Preopens } from "core:fs";
