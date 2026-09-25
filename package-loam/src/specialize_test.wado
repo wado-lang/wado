@@ -1,7 +1,7 @@
 //! Fixing a graph's symbolic extents and choosing its outputs before stage 0.
 
 use { TreeMap } from "core:collections";
-use { Graph } from "./graph.wado";
+use { Graph, ValueInfo } from "./graph.wado";
 use { read } from "./onnx_text.wado";
 use { bind_dims, keep_outputs } from "./specialize.wado";
 
@@ -49,23 +49,13 @@ fn two_heads() -> Graph {
 }
 
 fn names_of(graph: &Graph) -> String {
-    let mut inputs: List<String> = [];
-    for let vi of graph.inputs {
-        inputs.push(vi.name);
-    }
-    let mut initializers: List<String> = [];
-    for let vi of graph.initializers {
-        initializers.push(vi.name);
-    }
-    let mut nodes: List<String> = [];
-    for let node of graph.nodes {
-        nodes.push(node.outputs[0]);
-    }
-    let mut outputs: List<String> = [];
-    for let vi of graph.outputs {
-        outputs.push(vi.name);
-    }
-    return `${inputs.join(",")} ${initializers.join(",")} ${nodes.join(",")} ${outputs.join(",")}`;
+    let nodes: List<String> = graph.nodes.into_iter().map(|node| node.outputs[0]).collect();
+    return `${joined(&graph.inputs)} ${joined(&graph.initializers)} ${nodes.join(",")} ${joined(&graph.outputs)}`;
+}
+
+fn joined(values: &List<ValueInfo>) -> String {
+    let names: List<String> = values.into_iter().map(|vi| vi.name).collect();
+    return names.join(",");
 }
 
 test "keeping one output drops what only the other reads" {

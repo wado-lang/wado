@@ -33,7 +33,10 @@ fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
 
 test "gather_rows looks up one row per index, counting a negative one from the end" {
     let table: Tensor<f32, [Row, Col]> = tensor([3, 2], [0.0, 1.0, 10.0, 11.0, 20.0, 21.0]);
-    let ids: Tensor<i64, [Batch, Inner]> = Tensor { data: [2, 0, -1], extents: [1, 3] };
+    let ids: Tensor<i64, [Batch, Inner]> = Tensor {
+        data: [2, 0, -1],
+        extents: [1, 3],
+    };
 
     let picked: Tensor<f32, [Batch, Inner, Col]> = gather_rows(&table, &ids);
     assert picked.extents == [1, 3, 2] as List<i32>;
@@ -43,7 +46,10 @@ test "gather_rows looks up one row per index, counting a negative one from the e
 #[expect_trap]
 test "gather_rows traps on an index past the table" {
     let table: Tensor<f32, [Row, Col]> = tensor([1, 2], [0.0, 1.0]);
-    let ids: Tensor<i64, [Inner]> = Tensor { data: [1], extents: [1] };
+    let ids: Tensor<i64, [Inner]> = Tensor {
+        data: [1],
+        extents: [1],
+    };
     let _: Tensor<f32, [Inner, Col]> = gather_rows(&table, &ids);
 }
 
@@ -194,6 +200,16 @@ test "transpose2 swaps the two axes and their extents" {
     let back: Tensor<f32, [Row, Col]> = transpose2(&r);
     assert back.data == t.data;
     assert back.extents == t.extents;
+}
+
+test "transpose2 moves an i64 tensor as it moves a float one" {
+    let t: Tensor<i64, [Row, Col]> = Tensor {
+        data: [1, 2, 3, 4, 5, 6],
+        extents: [2, 3],
+    };
+
+    let r: Tensor<i64, [Col, Row]> = transpose2(&t);
+    assert r.data == [1, 4, 2, 5, 3, 6] as List<i64>;
 }
 
 test "map applies one function per element" {

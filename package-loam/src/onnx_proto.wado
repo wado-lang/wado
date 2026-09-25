@@ -220,9 +220,20 @@ pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
     let typed = raw.is_empty();
     let elements = match t.data_type {
         1 => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
-        6 => Elements::Ints(widened(&if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) })),
+        6 => {
+            let values = if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) };
+            Elements::Ints(values.into_iter().map(|v| v as i64).collect());
+        },
         7 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
-        _ => Elements::Bools(if typed { nonzero(&t.int32_data) } else { nonzero(&List::<u8>::from_le_bytes(raw)) }),
+        9 => {
+            let values = if typed {
+                t.int32_data;
+            } else {
+                List::<u8>::from_le_bytes(raw).into_iter().map(|v| v as i32).collect();
+            };
+            Elements::Bools(values.into_iter().map(|v| v != 0).collect());
+        },
+        _ => unreachable(),
     };
     let known = Known { extents: extents_of(t)?, elements };
     if known.len() == 0 && check_element_count(&t.name, 0, &known.extents).is_err() {
@@ -230,22 +241,6 @@ pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
     }
     check_element_count(&t.name, known.len(), &known.extents)?;
     return Result::Ok(Option::Some(known));
-}
-
-fn widened(values: &List<i32>) -> List<i64> {
-    let mut out: List<i64> = [];
-    for let v of *values {
-        out.push(v as i64);
-    }
-    return out;
-}
-
-fn nonzero<T: Eq + Default>(values: &List<T>) -> List<bool> {
-    let mut out: List<bool> = [];
-    for let v of *values {
-        out.push(v != T::default());
-    }
-    return out;
 }
 
 fn extents_of(t: &TensorProto) -> Result<List<i32>, String> {

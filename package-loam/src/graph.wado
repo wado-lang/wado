@@ -48,9 +48,8 @@ pub struct ValueInfo {
     pub data: Option<ByteList> = null,
 }
 
-/// An element type a kernel reaches: the Wado primitive a tensor of it is held
-/// in, the bytes one element takes in a payload, and the primitive the kernels
-/// see it as.
+/// An element type a kernel reaches: the primitive a tensor is held in, its
+/// width in a payload, and the primitive the kernels compute it in.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
@@ -143,6 +142,21 @@ pub struct Attr {
     pub tensor: Option<Known> = null,
 }
 
+impl Attr {
+    /// Every value read as an integer. `Err` is the reason one is not, for the
+    /// caller to name the attribute in.
+    pub fn ints(&self) -> Result<List<i64>, String> {
+        let mut values: List<i64> = [];
+        for let text of self.values {
+            let Ok(v) = i64::from_str(&text) else {
+                return Result::Err(`holds '${text}', which is not an integer`);
+            };
+            values.push(v);
+        }
+        return Result::Ok(values);
+    }
+}
+
 pub struct Node {
     pub op: String,
     pub outputs: List<String>,
@@ -158,6 +172,18 @@ impl Node {
             }
         }
         return null;
+    }
+
+    /// The one integer attribute `name` holds, or `fallback` where it is
+    /// absent. `Err` is the reason, as `Attr::ints` gives it.
+    pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, String> {
+        let Some(a) = self.attr(name) else {
+            return Result::Ok(fallback);
+        };
+        if a.values.len() != 1 {
+            return Result::Err("is a list and the operator reads one value");
+        }
+        return Result::Ok(a.ints()?[0]);
     }
 }
 

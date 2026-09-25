@@ -4,8 +4,9 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { axes_of, fold, reshape_extents, squeezed, unsqueezed } from "./fold.wado";
+use { fold, regrouped_extents } from "./fold.wado";
 use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
+use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, WindowError, ints, window_over } from "./window.wado";
 
@@ -268,9 +269,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             return Result::Err(InferError::Undefined(vi.name));
         };
         shapes[vi.name] = merge_declared(vi, &produced)?;
-        if let Some(element) = element_of(&vi.dtype)
-            && let Some(computed) = primitives.get(vi.name)
-            && element.computed != computed {
+        if let Some(element) = element_of(&vi.dtype) && let Some(computed) = primitives.get(vi.name) && element.computed != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
                 tensor: vi.name,
@@ -284,7 +283,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
 
 /// Whether operand `index` is one the operator reads when the build runs, as
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
-pub fn read_at_build_time(node: &Node, index: i32) -> bool {
+fn read_at_build_time(node: &Node, index: i32) -> bool {
     return index == 1 && (node.op == "Reshape" || node.op == "Unsqueeze" || node.op == "Squeeze");
 }
 
@@ -307,7 +306,7 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
     if op == "Cast" {
         return match int_attr(node, "to", 0)? {
             1 => Result::Ok(Option::Some(KERNEL_ELEMENT)),
-            6 | 7 => Result::Ok(Option::Some("i64")),
+            7 => Result::Ok(Option::Some("i64")),
             9 => Result::Ok(Option::Some("bool")),
             to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
@@ -326,7 +325,7 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
             continue;
         }
         if let Some(p) = primitives.get(input) && p != KERNEL_ELEMENT {
-            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in f32`));
+            return Result::Err(refusal(node, `operand ${input} is ${p}, and ${op} computes in ${KERNEL_ELEMENT}`));
         }
     }
     return Result::Ok(Option::Some(KERNEL_ELEMENT));
@@ -477,9 +476,15 @@ fn infer_node(
     schema: &Schema,
 ) -> Result<Shape, InferError> {
     let op = node.op;
-    if op == "Reshape" {
-        arity(node, 2)?;
-        return reshape(node, &operand_at(node, shapes, 0)?, known, schema);
+    if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
+        if op == "Reshape" {
+            arity(node, 2)?;
+        }
+        let operand = operand_at(node, shapes, 0)?;
+        return match regrouped_extents(node, known, &static_extents_of(node, &operand)?) {
+            Ok(targets) => regrouped(node, &operand, &targets, schema),
+            Err(reason) => Result::Err(refusal(node, reason)),
+        };
     }
     if op == "Flatten" {
         arity(node, 1)?;
@@ -490,34 +495,10 @@ fn infer_node(
         let data = operand_at(node, shapes, 0)?;
         let indices = operand_at(node, shapes, 1)?;
         let axis = gather_axis(node, data.rank())?;
-        let mut axes: List<Axis> = [];
-        for let i of 0..<axis {
-            axes.push(data.axes[i]);
-        }
+        let mut axes = data.axes[0..<axis].to_list();
         axes.extend(&indices.axes);
-        for let i of axis + 1..<data.rank() {
-            axes.push(data.axes[i]);
-        }
+        axes.extend(&data.axes[axis + 1..<data.rank()].to_list());
         return Result::Ok(Shape { axes });
-    }
-    if op == "Unsqueeze" || op == "Squeeze" {
-        let operand = operand_at(node, shapes, 0)?;
-        let input = static_extents_of(node, &operand)?;
-        let axes = match axes_of(node, known, 1, "axes") {
-            Ok(axes) => axes,
-            Err(reason) => return Result::Err(refusal(node, reason)),
-        };
-        let extents = if op == "Squeeze" {
-            squeezed(&input, axes)
-        } else if let Some(axes) = axes {
-            unsqueezed(&input, &axes)
-        } else {
-            Result::Err("axes is absent")
-        };
-        return match extents {
-            Ok(targets) => regrouped(node, &operand, &targets, schema),
-            Err(reason) => Result::Err(refusal(node, reason)),
-        };
     }
     if op == "MaxPool" {
         arity(node, 1)?;
@@ -587,53 +568,18 @@ fn infer_node(
     return Result::Err(InferError::UnknownOperator(op));
 }
 
-/// `Reshape` regroups the operand's axes onto the target shape the build
-/// knows.
-fn reshape(node: &Node, operand: &Shape, known: &TreeMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
-    let target = node.inputs[1];
-    let Some(Known { elements: Ints(written), .. }) = known.get(target) else {
-        return Result::Err(refusal(node, `the target shape ${target} is not an integer tensor the build knows`));
-    };
-    let allow_zero = int_attr(node, "allowzero", 0)? != 0;
-    return match reshape_extents(&written, &static_extents_of(node, operand)?, allow_zero) {
-        Ok(targets) => regrouped(node, operand, &targets, schema),
-        Err(reason) => Result::Err(refusal(node, reason)),
-    };
-}
-
 /// `Flatten` regroups the axes ahead of `axis` into one and the rest into
 /// another, either of which may be empty and so extent 1.
 fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
-    let total = static_count(node, operand)?;
+    let extents = static_extents_of(node, operand)?;
     let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
-    let mut leading = 1;
-    for let i of 0..<axis {
-        leading *= operand.axes[i].static_extent();
-    }
-    return regrouped(node, operand, &[leading, (total / leading as i64) as i32], schema);
-}
-
-/// The operand's element count, which a regrouping reads from static extents.
-fn static_count(node: &Node, operand: &Shape) -> Result<i64, InferError> {
-    let mut total: i64 = 1;
-    for let e of static_extents_of(node, operand)? {
-        total *= e as i64;
-    }
-    return Result::Ok(total);
+    let leading = element_count(&extents[0..<axis].to_list());
+    return regrouped(node, operand, &[leading, element_count(&extents) / leading], schema);
 }
 
 /// Every extent of an operand the operator reads as static.
 fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferError> {
-    let mut extents: List<i32> = [];
-    for let axis of operand.axes {
-        let Static(e) = axis.extent else {
-            return Result::Err(
-                refusal(node, `axis ${axis.name} is ${axis.extent}, and ${node.op} reads static extents`),
-            );
-        };
-        extents.push(e);
-    }
-    return Result::Ok(extents);
+    return operand.static_extents(&node.op).map_err(|reason| refusal(node, reason));
 }
 
 /// The operand's axes regrouped onto `targets`. An axis no regrouping
@@ -684,8 +630,7 @@ fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, wh
 }
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`
-/// reads it again to write the kernel's geometry, so this is where the
-/// attributes are understood rather than in either stage alone.
+/// reads it again to write the kernel's geometry.
 pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Result<Window, InferError> {
     if x.rank() < 3 {
         return Result::Err(refusal(
@@ -693,31 +638,21 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
             `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
         ));
     }
-    let spatial = spatial_extents(node, x)?;
+    let spatial = spatial_extents(&static_extents_of(node, x)?);
     let kernel = if node.op == "Conv" {
         let w = operand_at(node, shapes, 1)?;
         if w.rank() != x.rank() {
             return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
         }
-        spatial_extents(node, &w)?;
+        spatial_extents(&static_extents_of(node, &w)?);
     } else {
         if node.attr("kernel_shape") matches { None } {
             return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
         }
-        window_read(node, ints(node, "kernel_shape", spatial.len(), 1, 1))?;
+        window_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
     };
     let ceil = int_attr(node, "ceil_mode", 0)? != 0;
     return window_read(node, window_over(node, &spatial, kernel, ceil));
-}
-
-/// The extents past a shape's first two, which a window reads as static.
-fn spatial_extents(node: &Node, shape: &Shape) -> Result<List<i32>, InferError> {
-    let extents = static_extents_of(node, shape)?;
-    let mut spatial: List<i32> = [];
-    for let i of 2..<extents.len() {
-        spatial.push(extents[i]);
-    }
-    return Result::Ok(spatial);
 }
 
 fn window_read<T>(node: &Node, read: Result<T, WindowError>) -> Result<T, InferError> {
@@ -805,19 +740,9 @@ fn float_attr(node: &Node, name: String, fallback: f32) -> Result<f32, InferErro
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError> {
-    let Some(text) = single_attr(node, name)? else {
-        return Result::Ok(fallback);
-    };
-    let Ok(value) = i64::from_str(&text) else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, `holds '${text}', which is not an integer`));
-    };
-    return Result::Ok(value);
+    return node.int_attr(name, fallback).map_err(|reason| attribute_error(node, name, reason));
 }
 
-/// `Transpose`'s `perm`: the axis order the output takes. ONNX defaults it to
-/// the reversed order, and `emit` reads it again to pick the kernel, so this
-/// is where the attribute is understood rather than in either stage alone.
 /// The operand axis `Gather` indexes along.
 pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
     return axis_attr(node, 0, rank, rank - 1);
@@ -834,6 +759,8 @@ fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, In
     return Result::Ok(resolved as i32);
 }
 
+/// `Transpose`'s `perm`: the axis order the output takes, which ONNX defaults
+/// to the reversed order. `emit` reads it again to pick the kernel.
 pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
     let Some(attr) = node.attr("perm") else {
         let mut reversed: List<i32> = [];

@@ -179,16 +179,8 @@ fn encode_canonical_value(out: &mut Vec<u8>, v: &CanonicalValue) {
             }
         }
         CanonicalValue::Map(entries) => {
-            assert!(
-                entries.is_sorted_by(|a, b| a.0 < b.0),
-                "kiln: a validated map option is sorted by key"
-            );
             out.push(8);
-            write_len(out, entries.len());
-            for (k, v) in entries {
-                write_str(out, k);
-                encode_canonical_value(out, v);
-            }
+            encode_options_table(out, entries);
         }
     }
 }
@@ -421,6 +413,21 @@ mod tests {
     // these assert the properties the cache key depends on directly on the
     // bytes: determinism, distinctness, `None`-drop, `Some`-transparency, and
     // `-0.0`/`+0.0` collapsing.
+
+    #[test]
+    fn map_options_encode_alike_in_either_key_order() {
+        let map = |entries: [(&str, i64); 2]| {
+            let pairs = entries
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), CanonicalValue::I64(*v)))
+                .collect();
+            opts(vec![("sizes", CanonicalValue::Map(pairs))])
+        };
+        assert_eq!(
+            encode_options_canonical(&map([("small", 1), ("large", 3)])),
+            encode_options_canonical(&map([("large", 3), ("small", 1)])),
+        );
+    }
 
     #[test]
     fn empty_table_equals_empty_options_canonical() {

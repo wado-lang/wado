@@ -48,7 +48,7 @@ use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
-    compose_union_plan, int_literal_cast_operand, int_literal_repr, is_full_float, peel_to_struct,
+    compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
 };
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
 use crate::elaborator::item::extract_compiler_item;
@@ -3143,15 +3143,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return tir;
                 }
                 // `expr as Ty` — emit `Cast` with the recorded target type,
-                // re-typing the same integer literal operand `resolve_cast`
-                // left out of the defaulted range check. annotate propagates
-                // that target to a direct literal operand but not through a
-                // `Neg`, so `-9e15 as i64` would otherwise emit an `i32.const`
-                // that truncates before the cast widens.
-                let retyped = {
-                    let tt = self.tysys.type_table.borrow();
-                    tt.is_integer(target_type) || is_full_float(&tt, target_type)
-                };
+                // re-typing an integer literal operand to the target, as
+                // `resolve_cast` typed it. annotate propagates that target to
+                // a direct literal operand but not through a `Neg`, so
+                // `-9e15 as i64` would otherwise emit an `i32.const` that
+                // truncates before the cast widens.
+                let retyped = self.tysys.type_table.borrow().is_numeric(target_type);
                 let inner = match int_literal_cast_operand(&cast.expr) {
                     Some((lit, _, negated)) if retyped => {
                         let lit_tir = self.reify_literal(lit, target_type, ctx);
@@ -9785,7 +9782,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let inner = self.reify_expr(&cast.expr, ctx, None);
         let source_is_numeric = {
             let tt = self.tysys.type_table.borrow();
-            tt.is_integer(inner.type_id) || tt.is_float(inner.type_id)
+            tt.is_numeric(inner.type_id)
         };
         if !source_is_numeric {
             return Some(TirExpr::new(

@@ -10,18 +10,17 @@ pub struct WindowError {
     pub reason: String,
 }
 
-/// The window `node` slides over the spatial extents `input`, with `kernel` the
-/// extents of one window. `ceil` rounds a partial last step up, as `MaxPool`'s
-/// `ceil_mode` does.
+/// The window of `kernel` extents that `node` slides over the spatial extents
+/// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode` does.
 pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, WindowError> {
     let spatial = input.len();
-    let strides = ints(node, "strides", spatial, 1, 1)?;
-    let dilations = ints(node, "dilations", spatial, 1, 1)?;
+    let strides = ints(node, "strides", spatial, 1)?;
+    let dilations = ints(node, "dilations", spatial, 1)?;
     let mode = match node.attr("auto_pad") {
         Some(a) => a.values[0],
         None => "NOTSET",
     };
-    let mut pads = ints(node, "pads", 2 * spatial, 0, 0)?;
+    let mut pads = ints(node, "pads", 2 * spatial, 0)?;
     let mut output: List<i32> = [];
     for let i of 0..<spatial {
         let reach = dilations[i] * (kernel[i] - 1) + 1;
@@ -60,10 +59,10 @@ pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool
 }
 
 /// An integer list attribute of `count` entries no smaller than `least`, each
-/// `fallback` where the attribute is absent.
-pub fn ints(node: &Node, name: String, count: i32, fallback: i32, least: i32) -> Result<List<i32>, WindowError> {
+/// `least` where the attribute is absent.
+pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i32>, WindowError> {
     let Some(attr) = node.attr(name) else {
-        return Result::Ok(List::<i32>::filled(count, fallback));
+        return Result::Ok(List::<i32>::filled(count, least));
     };
     if attr.values.len() != count {
         return Result::Err(WindowError {

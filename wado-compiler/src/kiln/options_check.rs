@@ -289,7 +289,20 @@ fn apply_default(
         OptionsType::Option(_) => Some(CanonicalValue::None),
         OptionsType::List(_) => Some(CanonicalValue::List(Vec::new())),
         OptionsType::Map(_) => Some(CanonicalValue::Map(Vec::new())),
-        _ => {
+        OptionsType::Bool
+        | OptionsType::I8
+        | OptionsType::I16
+        | OptionsType::I32
+        | OptionsType::I64
+        | OptionsType::U8
+        | OptionsType::U16
+        | OptionsType::U32
+        | OptionsType::U64
+        | OptionsType::F32
+        | OptionsType::F64
+        | OptionsType::String
+        | OptionsType::Enum { .. }
+        | OptionsType::Struct { .. } => {
             diagnostics.push(site.error(format!(
                 "kiln: required options field `{}` of type {} is missing",
                 site.path,
@@ -500,6 +513,38 @@ mod tests {
         let d = only(&err);
         assert!(d.message.contains("`options.entries[0]`"), "{}", d.message);
         assert_eq!(at(d), (FILE, 6, 13));
+    }
+
+    #[test]
+    fn map_field_defaults_to_empty_and_sorts_by_key() {
+        let desc = OptionsDescriptor {
+            fields: vec![field(
+                "sizes",
+                OptionsType::Map(Box::new(OptionsType::I32)),
+                None,
+            )],
+        };
+        let result = validate(&desc, None, anchor()).unwrap();
+        assert_eq!(
+            result.values,
+            vec![("sizes".to_string(), CanonicalValue::Map(vec![]))]
+        );
+        let mut sizes = AttrObject::default();
+        sizes.insert("small".to_string(), entry(AttrValue::Int(1)));
+        sizes.insert("large".to_string(), entry(AttrValue::Int(3)));
+        let mut obj = AttrObject::default();
+        obj.insert("sizes".to_string(), entry(AttrValue::Object(sizes)));
+        let result = validate(&desc, Some(&AttrValue::Object(obj)), anchor()).unwrap();
+        assert_eq!(
+            result.values,
+            vec![(
+                "sizes".to_string(),
+                CanonicalValue::Map(vec![
+                    ("large".to_string(), CanonicalValue::I64(3)),
+                    ("small".to_string(), CanonicalValue::I64(1)),
+                ])
+            )]
+        );
     }
 
     #[test]

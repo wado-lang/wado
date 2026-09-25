@@ -13,9 +13,8 @@ pub struct Axis {
 }
 
 impl Axis {
-    /// One axis standing for `parts`, which a merge produces. Its name is the
-    /// type the generated module spells it with. See WEP 2026-09-20 § "A
-    /// Regrouped Axis Is Named by Its Parts".
+    /// One axis standing for `parts`, named as the generated module spells it.
+    /// See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
     pub fn merged(parts: List<Axis>, extent: i32) -> Axis {
         assert parts.len() >= 2;
         let mut names: List<String> = [];
@@ -65,9 +64,20 @@ impl Shape {
         return self.axes.len();
     }
 
-    /// The same axes in the order `perm` names, which is what `Transpose`
-    /// does. `perm` is a permutation of this shape's rank, which its reader
-    /// has already established.
+    /// Every extent, for an operator that reads them as static. `Err` names
+    /// the first axis that is not, and `reader`.
+    pub fn static_extents(&self, reader: &String) -> Result<List<i32>, String> {
+        let mut extents: List<i32> = [];
+        for let axis of self.axes {
+            let Static(e) = axis.extent else {
+                return Result::Err(`axis ${axis.name} is ${axis.extent}, and ${*reader} reads static extents`);
+            };
+            extents.push(e);
+        }
+        return Result::Ok(extents);
+    }
+
+    /// The same axes in the order `perm` names, as `Transpose` does.
     pub fn permute(&self, perm: &List<i32>) -> Shape {
         assert perm.len() == self.rank();
         let mut axes: List<Axis> = [];
@@ -77,10 +87,8 @@ impl Shape {
         return Shape { axes };
     }
 
-    /// `Reshape` onto `targets`, whose product is this shape's element count,
-    /// every extent being static. An output axis whose boundaries meet a run
-    /// of the operand's parts is that run, merged where it is several; `None`
-    /// is an axis no regrouping determines.
+    /// `Reshape` onto static `targets`: each output axis is the run of parts it
+    /// spans, merged where several, or `None` where no regrouping determines it.
     pub fn regroup(&self, targets: &List<i32>) -> List<Option<Axis>> {
         let parts = self.parts();
         let mut out: List<Option<Axis>> = [];

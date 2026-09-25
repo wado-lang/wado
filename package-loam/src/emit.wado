@@ -4,19 +4,20 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Known, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
-use { Checked, gather_axis, gemm_options, has_bias, read_at_build_time, transpose_perm, window_of } from "./infer.wado";
+use { Graph, Known, Node, element_of, static_extents } from "./graph.wado";
+use { Checked, gather_axis, gemm_options, has_bias, transpose_perm, window_of } from "./infer.wado";
 
-/// A boundary tensor whose element type the kernels have no arithmetic for.
+/// A boundary tensor of an element type no kernel holds.
 pub struct UnmappedDtype {
     pub tensor: String,
     pub dtype: String,
 }
 
-/// A node whose operator stage 0 checks but no kernel computes.
+/// A node stage 0 checks in a form no kernel computes. `reason` names the form.
 pub struct UnimplementedOperator {
     pub node: String,
     pub op: String,
+    pub reason: String,
 }
 
 /// A broadcast the kernels do not cover: one operand's axes must be the
@@ -35,7 +36,7 @@ pub struct NameCollision {
     pub ident: String,
 }
 
-/// A `Constant` reaching an operator that has nowhere to put it. Only a
+/// A folded scalar reaching an operator that has nowhere to put it. Only a
 /// closure an operator already writes folds one, since it allocates no tensor.
 pub struct UnfoldedConstant {
     pub node: String,
@@ -53,7 +54,7 @@ pub variant EmitError {
     Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
     Constant(UnfoldedConstant),
-    /// A graph output a `Constant` produces, which `forward` has no tensor for.
+    /// A graph output the build folded, which `forward` computes nothing for.
     ReturnedConstant(String),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
@@ -61,13 +62,13 @@ pub variant EmitError {
 
 impl Display for UnmappedDtype {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.tensor}: the kernels compute in f32 and this tensor is ${self.dtype}`);
+        f.write_str(`${self.tensor}: no kernel holds ${self.dtype}`);
     }
 }
 
 impl Display for UnimplementedOperator {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.node} = ${self.op}: no kernel for this operator`);
+        f.write_str(`${self.node} = ${self.op}: ${self.reason}`);
     }
 }
 
@@ -102,7 +103,7 @@ impl Display for EmitError {
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             Constant(e) => e.fmt(f),
-            ReturnedConstant(name) => f.write_str(`${name}: a graph cannot return a constant`),
+            ReturnedConstant(name) => f.write_str(`${name}: a graph cannot return a tensor the build folded`),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
         }
     }
@@ -352,7 +353,7 @@ fn emit_embedded(
         w.begin(`${names.get(&vi.name)}: Tensor::<${element}, [${axes}]>`);
         w.line(`data: List::<${element}>::from_le_bytes(${byte_string_literal(&data)}),`);
         // Both readers attach data only to a tensor whose every extent is stated.
-        w.line(`extents: ${int_list(&static_extents(&vi.rank).unwrap())},`);
+        w.line(`extents: ${static_extents(&vi.rank).unwrap()},`);
         w.end_with(",");
     }
     w.end_with(";");
@@ -463,7 +464,11 @@ fn emit_forward(
         builtin::cold_path();
         return Result::Err(EmitError::ReturnedConstant(result));
     }
-    let returned = if converted(checked, held, &result) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
+    let returned = if converted(checked, held, &result) {
+        `narrow(${exprs.reference(&result)})`;
+    } else {
+        exprs.value(&result);
+    };
     w.line(`return ${returned};`);
     w.end();
     return Result::Ok(());
@@ -494,30 +499,21 @@ fn literal_tensors(checked: &Checked) -> List<String> {
 /// gave it.
 fn literal_tensor(checked: &Checked, tensor: &String) -> String {
     let shape = checked.shapes.get(*tensor).unwrap();
-    let mut spelled: List<String> = [];
-    match checked.known.get(*tensor).unwrap().elements {
-        Ints(v) => {
-            for let x of v {
-                spelled.push(`${x}`);
-            }
-        },
+    let data = match checked.known.get(*tensor).unwrap().elements {
+        Ints(v) => `${v}`,
         Floats(v) => {
-            for let x of v {
-                spelled.push(float_literal(x));
-            }
+            let spelled: List<String> = v.into_iter().map(|x| float_literal(x)).collect();
+            `[${spelled.join(", ")}]`;
         },
-        Bools(v) => {
-            for let x of v {
-                spelled.push(`${x}`);
-            }
-        },
-    }
-    let mut extents: List<i32> = [];
-    for let axis of shape.axes {
-        extents.push(axis.static_extent());
-    }
+        Bools(v) => `${v}`,
+    };
     let element = checked.primitives.get(*tensor).unwrap();
-    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: [${spelled.join(", ")}], extents: ${int_list(&extents)} }`;
+    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents_of(&shape)} }`;
+}
+
+/// The extents of a shape stage 0 has shown static.
+fn extents_of(shape: &Shape) -> List<i32> {
+    return shape.axes.into_iter().map(|axis| axis.static_extent()).collect();
 }
 
 /// Whether a boundary tensor is held in something other than what the kernels
@@ -566,14 +562,10 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
         let from = shapes.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
-        let mut extents: List<i32> = [];
-        for let axis of to.axes {
-            extents.push(axis.static_extent());
-        }
         let operand = exprs.reference(&node.inputs[0]);
         let element = checked.primitives.get(node.inputs[0]).unwrap();
         return Result::Ok(
-            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${int_list(&extents)})`,
+            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents_of(&to)})`,
         );
     }
     if op == "Cast" {
@@ -588,7 +580,11 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         };
         if axis != 0 {
             builtin::cold_path();
-            return Result::Err(EmitError::Operator(UnimplementedOperator { node: node.outputs[0], op }));
+            return Result::Err(EmitError::Operator(UnimplementedOperator {
+                node: node.outputs[0],
+                op,
+                reason: `no kernel gathers along axis ${axis}`,
+            }));
         }
         return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
     }
@@ -630,6 +626,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         return Result::Err(EmitError::Operator(UnimplementedOperator {
             node: node.outputs[0],
             op,
+            reason: `no kernel permutes ${perm.len()} axes`,
         }));
     }
     let Some(body) = unary_body(&op) else {
@@ -639,13 +636,11 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
 }
 
-/// A folded scalar is a literal rather than a tensor, so only an operator that
-/// already writes a closure over its other operand has anywhere to put one.
-/// Every other operand position stops the build here rather than at the
-/// lookup that would find no tensor.
+/// A folded scalar is a literal rather than a tensor, so it stops the build in
+/// any operand position without a closure to fold it into.
 fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
     for let [index, input] of node.inputs.into_iter().enumerate() {
-        if read_at_build_time(node, index) || !exprs.scalars.contains_key(input) || folds_constant(node, index, exprs) {
+        if !exprs.scalars.contains_key(input) || folds_constant(node, index, exprs) {
             continue;
         }
         builtin::cold_path();
@@ -680,9 +675,8 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
     ];
 }
 
-/// One binary elementwise node. A one-element `Constant` operand folds into
-/// the closure, so the pass allocates no tensor for it and walks the other
-/// operand once.
+/// One binary elementwise node. A folded scalar operand folds into the closure,
+/// so no tensor is allocated for it and the other operand is walked once.
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
     if let Some(literal) = exprs.scalars.get(node.inputs[1]) {
@@ -711,9 +705,7 @@ fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
         // Stage 0 read the same window and stopped the build there.
         unreachable();
     };
-    let geometry = `&Window { kernel: ${int_list(&window.kernel)}, strides: ${int_list(&window.strides)}, dilations: ${int_list(
-        &window.dilations,
-    )}, pads: ${int_list(&window.pads)}, output: ${int_list(&window.output)} }`;
+    let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${window.pads}, output: ${window.output} }`;
     let input = exprs.reference(&node.inputs[0]);
     if node.op == "MaxPool" {
         return `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`;
@@ -731,19 +723,7 @@ fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 
 /// The axes past a shape's first two, which a window slides over.
 fn spatial_axes(shape: &Shape) -> String {
-    let mut names: List<String> = [];
-    for let i of 2..<shape.rank() {
-        names.push(shape.axes[i].name);
-    }
-    return names.join(", ");
-}
-
-fn int_list(values: &List<i32>) -> String {
-    let mut spelled: List<String> = [];
-    for let v of *values {
-        spelled.push(`${v}`);
-    }
-    return `[${spelled.join(", ")}]`;
+    return axis_names_of(&shape.axes[2..<shape.rank()].to_list()).join(", ");
 }
 
 /// A constant as an expression the generated source spells. Wado has no

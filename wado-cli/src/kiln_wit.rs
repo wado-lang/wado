@@ -81,8 +81,7 @@ fn record_descriptor(
         fields.push(OptionsField {
             name: field.name.clone(),
             ty,
-            // A WIT record carries no defaults; every field is required unless
-            // it is `option<T>`, whose absence resolves to `None`.
+            // A WIT record carries no defaults.
             default: None,
             span: Span::default(),
         });

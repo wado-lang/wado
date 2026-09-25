@@ -38,20 +38,15 @@ pub fn fold(
     let folded = match op.as_str_slice() {
         "Identity" => *x,
         "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
-        "Unsqueeze" => Known {
-            extents: unsqueezed(&x.extents, &axes_of(node, known, 1, "axes")?.ok_or("axes is absent")?)?,
+        "Reshape" | "Unsqueeze" | "Squeeze" => Known {
+            extents: regrouped_extents(node, known, &x.extents)?,
             elements: x.elements,
         },
-        "Squeeze" => Known { extents: squeezed(&x.extents, axes_of(node, known, 1, "axes")?)?, elements: x.elements },
         "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
         "Slice" => slice(x, node, known)?,
         "Cast" => cast(x, int_attr(node, "to", 0)?)?,
         "Range" => range(x, &operands[1], &operands[2])?,
         "ConstantOfShape" => constant_of_shape(node, x)?,
-        "Reshape" => Known {
-            extents: reshape_extents(&ints_of(&operands[1])?, &x.extents, int_attr(node, "allowzero", 0)? != 0)?,
-            elements: x.elements,
-        },
         "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(&op, x, &operands[1])?,
         _ => {
             return Result::Ok(null);
@@ -60,9 +55,24 @@ pub fn fold(
     return Result::Ok(Option::Some(folded));
 }
 
+/// The extents a regrouping gives `input`: `Reshape`'s target, or `input` with
+/// the unit axes `Unsqueeze` adds or `Squeeze` drops.
+pub fn regrouped_extents(node: &Node, known: &TreeMap<String, Known>, input: &List<i32>) -> Result<List<i32>, String> {
+    return match node.op.as_str_slice() {
+        "Reshape" => reshape_extents(
+            &axes_of(node, known, 1, "shape")?.ok_or("the target shape is absent")?,
+            input,
+            int_attr(node, "allowzero", 0)? != 0,
+        ),
+        "Unsqueeze" => unsqueezed(input, &axes_of(node, known, 1, "axes")?.ok_or("axes is absent")?),
+        "Squeeze" => squeezed(input, axes_of(node, known, 1, "axes")?),
+        _ => unreachable(),
+    };
+}
+
 /// A `Reshape` target as ONNX reads it: `0` copies the input's extent at that
 /// position unless `allowzero` is set, and one `-1` is what the rest leave.
-pub fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> Result<List<i32>, String> {
+fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> Result<List<i32>, String> {
     let total = element_count(input) as i64;
     let mut extents: List<i32> = [];
     let mut inferred = -1;
@@ -94,14 +104,11 @@ fn constant(node: &Node) -> Result<Known, String> {
     if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
         return Result::Ok(t);
     }
-    if let Some(a) = node.attr("value_int") {
-        return Result::Ok(Known { extents: [], elements: Elements::Ints([parse_int(&a.values[0])?]) });
+    if node.attr("value_int") matches { Some(_) } {
+        return Result::Ok(Known { extents: [], elements: Elements::Ints([int_attr(node, "value_int", 0)?]) });
     }
     if let Some(a) = node.attr("value_ints") {
-        let mut values: List<i64> = [];
-        for let v of a.values {
-            values.push(parse_int(&v)?);
-        }
+        let values = a.ints().map_err(|reason| `attribute value_ints ${reason}`)?;
         return Result::Ok(Known {
             extents: [values.len()],
             elements: Elements::Ints(values),
@@ -120,16 +127,7 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
     let input = node.inputs[0];
     let extents = match known.get(input) {
         Some(k) => k.extents,
-        None => {
-            let mut static_extents: List<i32> = [];
-            for let axis of shapes.get(input).unwrap().axes {
-                let Static(e) = axis.extent else {
-                    return Result::Err(`axis ${axis.name} is ${axis.extent}, and the build reads static extents`);
-                };
-                static_extents.push(e);
-            }
-            static_extents;
-        },
+        None => shapes.get(input).unwrap().static_extents(&node.op)?,
     };
     let rank = extents.len() as i64;
     let start = clamped(int_attr(node, "start", 0)?, rank, 0, rank);
@@ -154,11 +152,13 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     let rank = data.extents.len();
     let a = axis_index(axis, rank)?;
     let along = data.extents[a];
-    let inner = element_count(&tail(&data.extents, a + 1));
-    let outer = element_count(&head(&data.extents, a));
+    let leading = data.extents[0..<a].to_list();
+    let trailing = data.extents[a + 1..<rank].to_list();
+    let inner = element_count(&trailing);
+    let wanted = ints_of(indices)?;
     let mut picks: List<i32> = [];
-    for let o of 0..<outer {
-        for let index of ints_of(indices)? {
+    for let o of 0..<element_count(&leading) {
+        for let index of wanted {
             let i = if index < 0 { index + along as i64 } else { index };
             if !(0 <= i < along as i64) {
                 return Result::Err(`index ${index} is outside an axis of ${along}`);
@@ -168,15 +168,15 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
             }
         }
     }
-    let mut extents = head(&data.extents, a);
+    let mut extents = leading;
     extents.extend(&indices.extents);
-    extents.extend(&tail(&data.extents, a + 1));
+    extents.extend(&trailing);
     return Result::Ok(Known { extents, elements: picked(&data.elements, &picks) });
 }
 
 /// `Unsqueeze`'s output extents: `input` with a 1 at each of `axes`, which
 /// count the output's axes.
-pub fn unsqueezed(input: &List<i32>, axes: &List<i64>) -> Result<List<i32>, String> {
+fn unsqueezed(input: &List<i32>, axes: &List<i64>) -> Result<List<i32>, String> {
     let rank = input.len() + axes.len();
     let mut inserted = List::<bool>::filled(rank, false);
     for let axis of *axes {
@@ -197,7 +197,7 @@ pub fn unsqueezed(input: &List<i32>, axes: &List<i64>) -> Result<List<i32>, Stri
 
 /// `Squeeze`'s output extents: `input` without the listed axes, each of which
 /// must be 1, or without every 1 where none is listed.
-pub fn squeezed(input: &List<i32>, axes: Option<List<i64>>) -> Result<List<i32>, String> {
+fn squeezed(input: &List<i32>, axes: Option<List<i64>>) -> Result<List<i32>, String> {
     let rank = input.len();
     let mut dropped = List::<bool>::filled(rank, false);
     match axes {
@@ -227,15 +227,16 @@ pub fn squeezed(input: &List<i32>, axes: Option<List<i64>>) -> Result<List<i32>,
 
 fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
     let first = &parts[0];
-    let a = axis_index(axis, first.extents.len())?;
-    let outer = element_count(&head(&first.extents, a));
+    let rank = first.extents.len();
+    let a = axis_index(axis, rank)?;
+    let outer = element_count(&first.extents[0..<a].to_list());
     let mut offsets: List<i32> = [];
     let mut joined = 0;
     let mut along = 0;
     for let p of *parts {
-        if p.extents.len() != first.extents.len()
-            || head(&p.extents, a) != head(&first.extents, a)
-            || tail(&p.extents, a + 1) != tail(&first.extents, a + 1) {
+        if p.extents.len() != rank
+            || p.extents[0..<a] != first.extents[0..<a]
+            || p.extents[a + 1..<rank] != first.extents[a + 1..<rank] {
             return Result::Err(
                 `operands of extents ${first.extents:?} and ${p.extents:?} do not join along axis ${axis}`,
             );
@@ -372,6 +373,9 @@ fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Known, String> {
         },
         [Floats(s), Floats(l), Floats(d)] => {
             let [s, l, d] = [s[0], l[0], d[0]];
+            if d == 0.0 {
+                return Result::Err("delta is 0");
+            }
             let count = f32::max(f32::ceil((l - s) / d), 0.0) as i32;
             let mut values: List<f32> = [];
             for let i of 0..<count {
@@ -517,7 +521,12 @@ fn ints_of(k: &Known) -> Result<List<i64>, String> {
 
 /// The integers an operator reads from operand `index`, or from the attribute
 /// `attr` an opset before 13 wrote them in. `None` where neither is given.
-pub fn axes_of(node: &Node, known: &TreeMap<String, Known>, index: i32, attr: String) -> Result<Option<List<i64>>, String> {
+pub fn axes_of(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    index: i32,
+    attr: String,
+) -> Result<Option<List<i64>>, String> {
     if index < node.inputs.len() && node.inputs[index] != "" {
         let Some(k) = known.get(node.inputs[index]) else {
             return Result::Err(`operand ${node.inputs[index]} is computed at run time, and the build reads it`);
@@ -527,22 +536,11 @@ pub fn axes_of(node: &Node, known: &TreeMap<String, Known>, index: i32, attr: St
     let Some(a) = node.attr(attr) else {
         return Result::Ok(null);
     };
-    let mut values: List<i64> = [];
-    for let v of a.values {
-        values.push(parse_int(&v)?);
-    }
-    return Result::Ok(Option::Some(values));
+    return a.ints().map(|v| Option::Some(v)).map_err(|reason| `attribute ${attr} ${reason}`);
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
-    let Some(a) = node.attr(name) else {
-        return Result::Ok(fallback);
-    };
-    return parse_int(&a.values[0]);
-}
-
-fn parse_int(text: &String) -> Result<i64, String> {
-    return i64::from_str(text).map_err(|_| `'${text}' is not an integer`);
+    return node.int_attr(name, fallback).map_err(|reason| `attribute ${name} ${reason}`);
 }
 
 fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
@@ -551,20 +549,4 @@ fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);
     }
     return Result::Ok(i as i32);
-}
-
-fn head(extents: &List<i32>, end: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let i of 0..<end {
-        out.push(extents[i]);
-    }
-    return out;
-}
-
-fn tail(extents: &List<i32>, start: i32) -> List<i32> {
-    let mut out: List<i32> = [];
-    for let i of start..<extents.len() {
-        out.push(extents[i]);
-    }
-    return out;
 }

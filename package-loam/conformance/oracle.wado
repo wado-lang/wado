@@ -16,9 +16,8 @@ pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
     return [data, extents];
 }
 
-/// How far a generated kernel may sit from the output ONNX ships: a fraction of
-/// the value, or an absolute distance below 1. A transcendental operator parts
-/// the two, and so does a long sum taken in another order, in proportion to it.
+/// How far a kernel may sit from ONNX's output: relative above 1, absolute
+/// below. A transcendental, or a long sum in another order, is where they part.
 pub global TOLERANCE: f32 = 1e-6;
 
 /// `Sqrt` of a negative element is NaN, and the two implementations agreeing

@@ -87,13 +87,6 @@ pub(super) fn int_literal_cast_operand(expr: &Expr) -> Option<(&ast::LiteralExpr
     int_literal_repr(lit).map(|repr| (lit, repr, negated))
 }
 
-/// Whether `target` is `f32` or `f64`, the floats `as` converts to. A half
-/// takes no `as` cast at all.
-pub(super) fn is_full_float(tt: &TypeTable, target: TypeId) -> bool {
-    tt.primitive_head(target)
-        .is_some_and(|p| matches!(p, PrimitiveType::F32 | PrimitiveType::F64))
-}
-
 /// The literal `-NUM` negates, which both range checks read as one literal so
 /// the boundary is the signed minimum.
 pub(super) fn negated_literal(unary: &ast::UnaryExpr) -> Option<&ast::LiteralExpr> {
@@ -3441,10 +3434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // General expression cast (not a literal)
             let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
-            // Check if source type is a numeric type we can convert from
-            if self.tysys.type_table.borrow().is_integer(source_type)
-                || self.tysys.type_table.borrow().is_float(source_type)
-            {
+            if self.tysys.type_table.borrow().is_numeric(source_type) {
                 // Reify emits the two-step form,
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 return target_type;
@@ -3458,9 +3448,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let source_type = match int_literal_cast_operand(&cast.expr) {
             // A float has no bit pattern to write, so the literal converts by
             // value, as `let x: f32 = N;` does.
-            Some(_) if is_full_float(&self.tysys.type_table.borrow(), target_type) => {
+            Some(_) if self.tysys.type_table.borrow().is_float(target_type) => {
                 self.try_coerce_numeric_literal(&cast.expr, target_type)
-                    .expect("a float takes every integer literal");
+                    .expect("a float is a numeric literal target");
                 target_type
             }
             Some((lit, repr, _)) => {

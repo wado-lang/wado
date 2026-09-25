@@ -220,7 +220,9 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
 `;
     let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
 
-    assert out.contains("let Y = reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);");
+    assert out.contains(
+        "let Y = reshape::<f32, [Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);",
+    );
     assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> {");
     // A merged axis is spelled with its parts' markers, never declared itself.
     assert out.contains("pub struct Chan {}");
@@ -335,7 +337,7 @@ g (float[2, 3, 4] X) => (float[4, 3, 2] Y)
 `;
     let e = generate(source, [rule("*", ["A", "B", "C"])]).unwrap_err();
 
-    assert `${e}` == "Y = Transpose: no kernel for this operator";
+    assert `${e}` == "Y = Transpose: no kernel permutes 3 axes";
 }
 
 test "a tensor named as the generated module names something is renamed" {
@@ -424,8 +426,8 @@ g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
 }
 
 test "an element type the kernels cannot compute in names itself" {
-    assert refused_dtype("int32") == "X: the kernels compute in f32 and this tensor is int32";
-    assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
+    assert refused_dtype("int32") == "X: no kernel holds int32";
+    assert refused_dtype("uint8") == "X: no kernel holds uint8";
 }
 
 test "a half precision boundary states its own element type" {
@@ -562,8 +564,11 @@ test "Gather along any axis but the first stops the build" {
     let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
         Y = Gather<axis = 1>(W, I)
     }`;
-    let layout: List<LayoutRule> = [rule("I", ["Pick"]), rule("W", ["Vocab", "Hidden"])];
-    assert `${generate(source, layout).unwrap_err()}` == "Y = Gather: no kernel for this operator";
+    let layout: List<LayoutRule> = [
+        rule("I", ["Pick"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    assert `${generate(source, layout).unwrap_err()}` == "Y = Gather: no kernel gathers along axis 1";
 }
 
 test "a Cast to the element a tensor already has computes nothing" {
@@ -627,5 +632,5 @@ test "a constant is not a value a graph can return" {
         ],
     }).unwrap_err();
 
-    assert `${e}` == "C: a graph cannot return a constant";
+    assert `${e}` == "C: a graph cannot return a tensor the build folded";
 }

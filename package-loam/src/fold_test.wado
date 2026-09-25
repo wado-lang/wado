@@ -65,7 +65,7 @@ test "Shape takes start and end" {
 
 test "Shape of a symbolic extent is refused" {
     let e = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap_err();
-    assert e == "axis A0 is N, and the build reads static extents";
+    assert e == "axis A0 is N, and Shape reads static extents";
 }
 
 test "Gather with a scalar index drops the axis" {
@@ -167,11 +167,9 @@ test "Slice of a bool mask takes the corner the ends name" {
 }
 
 test "Cast turns an extent into a float the scale is computed in" {
-    let k = knowns([
+    let d = folded(node("Cast", ["D"], [attr("to", ["1"])]), knowns([
         ["D", ints([], [8])],
-        ["H", floats([], [0.5])],
-    ]);
-    let d = folded(node("Cast", ["D"], [attr("to", ["1"])]), k);
+    ]));
     assert d == floats([], [8.0]);
     let k2 = knowns([
         ["D", d],
@@ -195,6 +193,15 @@ test "Range counts from start to limit" {
         ["D", ints([], [1])],
     ]);
     assert folded(node("Range", ["S", "L", "D"], []), k) == ints([4], [0, 1, 2, 3]);
+}
+
+test "Range with a zero float delta is refused" {
+    let k = knowns([
+        ["S", floats([], [0.0])],
+        ["L", floats([], [4.0])],
+        ["D", floats([], [0.0])],
+    ]);
+    assert fold(&node("Range", ["S", "L", "D"], []), &k, &runtime([])).unwrap_err() == "delta is 0";
 }
 
 test "ConstantOfShape of an empty shape is a scalar" {

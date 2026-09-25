@@ -24,9 +24,8 @@ pub struct OptionsDescriptor {
 pub struct OptionsField {
     pub name: String,
     pub ty: OptionsType,
-    /// Pre-evaluated default, if the generator's `Options` declaration
-    /// provides a literal default for this field. Fields without a default
-    /// are required in the user's options table.
+    /// The literal default the generator's `Options` declares for this field.
+    /// Without one, a field is required unless it is an `Option`, `List` or map.
     pub default: Option<CanonicalValue>,
     /// Source position in the generator source. Not persisted across the
     /// descriptor-cache boundary — diagnostics emitted against a cached
@@ -245,7 +244,7 @@ fn lower_type(
                 module,
                 field_name,
                 &format!(
-                    "a map option is keyed by `String`, not `{}`",
+                    "map key type `{}` is not supported in generator options; a map option is keyed by `String`",
                     types.type_name(key_id)
                 ),
             );
