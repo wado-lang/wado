@@ -1493,11 +1493,6 @@ pub fn resolve_import(
     resolve_import_with_entry(interner, from_module, import_source, None)
 }
 
-/// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
-/// first: a recorded `(from_module, import_source)` pair resolves to the
-/// invocation's generated entry module under `build/kiln/…`, everything else
-/// falls through to [`resolve_import_with_entry`]. Use this in place of
-/// [`resolve_import`] wherever an index is available.
 /// The file a declaration in `source` is written in, as a [`InvocationIndex`]
 /// keys it and a diagnostic names it. Empty for a source that holds no path.
 #[must_use]
@@ -1510,6 +1505,8 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
     }
 }
 
+/// Resolve an import source, a Kiln invocation's redirect first. The one
+/// resolver the loader, analysis and the elaborator share.
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1543,13 +1540,26 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
+    let relative = import_source.starts_with("./") || import_source.starts_with("../");
     // A relative import inherits the importer's package root.
-    if let ModuleSource::Dependency { pkg, path } = from_module
-        && (import_source.starts_with("./") || import_source.starts_with("../"))
-    {
-        let resolved = resolve_module_path(path, import_source);
-        let pkg = pkg.to_string();
-        return interner.dependency_module(&pkg, &resolved);
+    if relative {
+        match from_module {
+            ModuleSource::Dependency { pkg, path } => {
+                let resolved = resolve_module_path(path, import_source);
+                let pkg = pkg.to_string();
+                return interner.dependency_module(&pkg, &resolved);
+            }
+            ModuleSource::Remote { pkg, url } => {
+                let resolved = resolve_module_path(url, import_source);
+                let pkg = pkg.to_string();
+                return interner.remote_module(&pkg, &resolved);
+            }
+            ModuleSource::Redirected { uri, .. } => {
+                let resolved = resolve_module_path(uri, import_source);
+                return interner.redirected(&resolved, from_module);
+            }
+            _ => {}
+        }
     }
 
     // Dependency name (`use { … } from "router"` / `from "ns:pkg"`): resolve
@@ -1558,10 +1568,7 @@ pub fn resolve_import_with_entry(
     // import from within a dependency must not bind to the consumer's deps. A
     // path dependency is Wado source; a registry dependency is a prebuilt
     // component imported across the CM boundary.
-    if !import_source.starts_with("./")
-        && !import_source.starts_with("../")
-        && !matches!(from_module, ModuleSource::Dependency { .. })
-    {
+    if !relative && !matches!(from_module, ModuleSource::Dependency { .. }) {
         if let Some(dep) = interner.resolve_dependency(import_source) {
             return dep;
         }
@@ -1570,11 +1577,7 @@ pub fn resolve_import_with_entry(
         }
     }
 
-    // Handle relative imports from local modules
-    // For entry points, we don't resolve against the filename - just use the import directly
-    if let ModuleSource::Local { path: from_path } = from_module
-        && (from_path.starts_with("./") || from_path.starts_with("../"))
-    {
+    if relative && let ModuleSource::Local { path: from_path } = from_module {
         let resolved =
             resolve_local_identity(&entry_dir_of(entry_module), from_path, import_source);
         // If this resolves to the entry module's canonical name, return the

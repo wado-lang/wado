@@ -92,7 +92,7 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
 }
 
 /// Reports a default naming a later parameter, in every generic-parameter
-/// list an item declares, local items included.
+/// list an item declares. A body's local items are checked where it is walked.
 struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
 
 impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
@@ -100,6 +100,8 @@ impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
         self.0.report_forward_type_param_defaults(params);
         ast::walk_generic_params(self, params);
     }
+
+    fn visit_block(&mut self, _: &ast::Block) {}
 }
 
 /// The sentence every `#[unavailable]` declaration in the program reports,

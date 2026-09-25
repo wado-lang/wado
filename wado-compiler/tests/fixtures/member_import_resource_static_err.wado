@@ -1,0 +1,11 @@
+// A member import names an interface's operation; a resource's static is not one.
+use { Fields::{new} } from "wasi:http";
+
+export fn run() {
+    let f = new();
+}
+
+__DATA__
+{
+  "compile_error": ":2:16: analysis error: symbol 'Fields::new' not found in module 'wasi:http'"
+}

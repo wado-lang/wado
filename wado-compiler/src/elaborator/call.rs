@@ -542,11 +542,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         .then(|| (decl, operation.to_string()))
     }
 
-    /// The effect or resource `callee_kind` dispatches an operation through.
-    fn operation_decl(&self, callee_kind: &CalleeIdentKind<'_>) -> Option<DefId> {
+    /// The effect or resource `callee_kind` dispatches an operation through,
+    /// with the operation.
+    fn operation_decl(&self, callee_kind: &CalleeIdentKind<'_>) -> Option<(DefId, String)> {
         match callee_kind {
-            CalleeIdentKind::AsIs(ident) => self.dispatched_operation(ident).map(|(decl, _)| decl),
-            CalleeIdentKind::Operation { interface, .. } => Some(*interface),
+            CalleeIdentKind::AsIs(ident) => self.dispatched_operation(ident),
+            CalleeIdentKind::Operation {
+                interface,
+                operation,
+                ..
+            } => Some((*interface, operation.clone())),
             CalleeIdentKind::Rewritten(_)
             | CalleeIdentKind::Case { .. }
             | CalleeIdentKind::AbstractTypeParam { .. } => None,
@@ -851,10 +856,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // First, determine expected parameter types to handle coercion.
-        let operation_decl = self.operation_decl(&callee_kind);
+        let operation = self.operation_decl(&callee_kind);
         let signature = self.lookup_function_signature(
             effective_name,
-            operation_decl,
+            operation.as_ref().map(|(decl, op)| (*decl, op.as_str())),
             callee_kind.callee_site(),
         );
         let signature_known = signature.is_some();
@@ -1644,6 +1649,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if self.report_ambiguous_static(&resolved, method_name, call.span) {
                         return TypeTable::ERROR;
                     }
+                    if !resolved.resolves() {
+                        let _ = self.emit(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
+                    }
                     let method_ref = resolved
                         .found()
                         .map(|callee| callee.method_ref.clone())
@@ -1950,13 +1962,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.defer_or_report_uninferred_fn_type_args(
             &callee,
             &mut type_args,
+            &declared_param_types,
             &args,
             expected_type,
             call.span,
         );
 
-        // Look up function return type
-        let mut return_type = self.lookup_function_return_type(&callee, operation_decl);
+        let mut return_type = self.lookup_function_return_type(
+            &callee,
+            operation.as_ref().map(|(decl, op)| (*decl, op.as_str())),
+        );
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
@@ -2130,8 +2145,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_return_type(
         &mut self,
         callee: &CalleeRef,
-        operation_decl: Option<DefId>,
+        operation: Option<(DefId, &str)>,
     ) -> TypeId {
+        if let Some((decl, operation)) = operation
+            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, operation)
+        {
+            return return_type;
+        }
         let callee_module = callee.module();
         let func_name = callee.name();
         // Handle builtin functions
@@ -2141,15 +2161,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Legacy: builtin::name pattern
         if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
             return self.get_builtin_return_type(builtin_name);
-        }
-
-        // Effect operations are routed here as `CalleeRef::local_namespace`, so
-        // `ModuleSource::Local { path }` matches `is_effect_like()`.
-        if callee_module.is_effect_like()
-            && let Some(decl) = operation_decl
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
         }
 
         if let Some(def) = callee.def()
@@ -2215,9 +2226,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn lookup_function_signature(
         &mut self,
         name: &str,
-        operation_decl: Option<DefId>,
+        operation: Option<(DefId, &str)>,
         callee_site: Option<ast::AstId>,
     ) -> Option<(Vec<TypeId>, Vec<TypeId>)> {
+        // An operation is its declaration's, whatever else the path spells.
+        if let Some((decl, operation)) = operation
+            && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
+        {
+            return Some((params, Vec::new()));
+        }
         // Check for qualified name (Type::method or Effect::operation)
         if let Some(pos) = name.find("::") {
             let prefix = &name[..pos];
@@ -2249,15 +2266,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     sig.decl.param_types.clone(),
                     sig.decl.type_params.iter().map(|(_, id)| *id).collect(),
                 ));
-            }
-
-            // The operation is the path's last segment: a namespace ahead of
-            // the interface stays on `suffix`.
-            if let Some((_, operation)) = name.rsplit_once("::")
-                && let Some(decl) = operation_decl
-                && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
-            {
-                return Some((params, Vec::new()));
             }
 
             // A namespace member's signature lives in that module, which no
@@ -3044,6 +3052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         type_args: &mut Vec<TypeId>,
+        param_types: &[TypeId],
         args: &[TypeId],
         expected_type: Option<TypeId>,
         span: token::Span,
@@ -3052,6 +3061,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let space = RealTypeParams::borrowed(&params);
         let n = space.len();
         if n == 0 {
+            return;
+        }
+        // A value passed for a reference settles nothing, and the argument
+        // check names the missing `&` where this would blame inference.
+        let misses_a_reference = param_types.iter().zip(args).any(|(&param, &arg)| {
+            let settled_value = !matches!(arg, TypeTable::ERROR | TypeTable::UNKNOWN)
+                && !self.type_has_infer_hole(arg);
+            let tt = self.tysys.type_table.borrow();
+            let is_borrow = |t| matches!(tt.get(t), ResolvedType::Ref(_) | ResolvedType::MutRef(_));
+            is_borrow(param) && !is_borrow(arg) && settled_value
+        });
+        if misses_a_reference {
             return;
         }
         // Defaults are already substituted (`fill_defaulted_fn_type_args`), so

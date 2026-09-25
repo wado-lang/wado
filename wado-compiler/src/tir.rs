@@ -3900,17 +3900,13 @@ impl TypeTable {
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
     /// a byte-string literal coerces to.
     pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
-        let head = self.representation_head(id);
-        !matches!(
-            self.get(head),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) && self.as_list(head) == Some(TypeTable::U8)
+        self.list_element(self.representation_head(id)) == Some(TypeTable::U8)
     }
 
     /// Whether `id` is a `List` whose element is still open, which a
     /// byte-string literal settles as `u8`.
     pub fn is_list_of_open_element(&self, id: TypeId) -> bool {
-        self.as_list(id).is_some_and(|element| {
+        self.list_element(id).is_some_and(|element| {
             matches!(
                 self.get(element),
                 ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
@@ -3922,13 +3918,19 @@ impl TypeTable {
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
+            _ => self.list_element(id),
+        }
+    }
+
+    /// The element type of `id` when it is a `List` itself, not a reference to one.
+    pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
             ResolvedType::GenericInstance { def, type_args }
                 if self.def_name(*def) == "List" && type_args.len() == 1 =>
             {
                 Some(type_args[0])
             }
-            // Unwrap references and check the inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
             _ => None,
         }
     }

@@ -1,0 +1,18 @@
+// A value passed where a generic function takes a reference is reported as the
+// missing `&`, not as a type parameter left uninferred.
+fn count<T>(xs: &List<T>) -> i32 {
+    return xs.len();
+}
+
+export fn run() {
+    let a: List<i32> = [1, 2];
+    let _ = count(a);
+    let _ = count(b"abc");
+    assert count(&a) == 2;
+}
+
+__DATA__
+{
+  "compile_error": ":9:19: analysis error: type mismatch: expected '&List<T>', found 'List<i32>'; 10:19: type mismatch: expected '&List<T>', found 'ByteList'",
+  "compile_errors_not_contains": ["cannot infer"]
+}

@@ -27,18 +27,29 @@ impl Host {
     }
 }
 
-export fn run() {}
+export fn run() {
+    struct Local<M = N, N = i32> {
+        v: i32,
+    }
+    if true {
+        struct Nested<P = Q, Q = i32> {
+            v: i32,
+        }
+    }
+}
 
 __DATA__
 {
   "compile_error": "which is declared no earlier than",
-  "compile_error_count": 7,
+  "compile_error_count": 9,
   "compile_errors_contains": [
     "the default for type parameter 'A' names 'B', which is declared no earlier than 'A' itself",
     "the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself",
     "the default for type parameter 'C' names 'D'",
     "the default for type parameter 'E' names 'F'",
     "the default for type parameter 'G' names 'H'",
-    "the default for type parameter 'K' names 'L'"
+    "the default for type parameter 'K' names 'L'",
+    "the default for type parameter 'M' names 'N'",
+    "the default for type parameter 'P' names 'Q'"
   ]
 }

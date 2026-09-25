@@ -1619,18 +1619,13 @@ impl Parser {
                     functions,
                 });
             } else {
-                // Simple import, possibly with alias
-                let alias = if self.check(&TokenKind::As) {
-                    self.advance();
-                    Some(self.consume_ident()?)
-                } else {
-                    None
-                };
+                let (alias, local_span) = self.parse_use_alias(name_span)?;
                 items.push(UseItem::Simple {
                     id: self.alloc_ast_id(),
                     name,
                     name_span,
                     alias,
+                    local_span,
                 });
             }
 
@@ -1646,6 +1641,16 @@ impl Parser {
         Ok(items)
     }
 
+    /// An optional `as alias`, with the span of the name the import binds.
+    fn parse_use_alias(&mut self, name_span: Span) -> ParseResult<(Option<String>, Span)> {
+        if !self.check(&TokenKind::As) {
+            return Ok((None, name_span));
+        }
+        self.advance();
+        let alias_span = self.peek().span;
+        Ok((Some(self.consume_ident()?), alias_span))
+    }
+
     /// Parse simple use items (name or name as alias) for use inside `Effect::`{...}
     fn parse_use_item_simple_list(&mut self) -> ParseResult<Vec<UseItemSimple>> {
         let mut items = vec![];
@@ -1657,17 +1662,13 @@ impl Parser {
         loop {
             let name_span = self.peek().span;
             let name = self.consume_ident()?;
-            let alias = if self.check(&TokenKind::As) {
-                self.advance();
-                Some(self.consume_ident()?)
-            } else {
-                None
-            };
+            let (alias, local_span) = self.parse_use_alias(name_span)?;
             items.push(UseItemSimple {
                 id: self.alloc_ast_id(),
                 name,
                 name_span,
                 alias,
+                local_span,
             });
 
             if !self.check(&TokenKind::Comma) {

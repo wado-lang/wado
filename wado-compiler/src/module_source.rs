@@ -133,7 +133,7 @@ pub struct ModuleSourceInterner {
     /// Module path → its elected package root, so `pkg` is a function of the
     /// path and equal modules agree on their package.
     package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
-    /// Generated module URI → the package of the module that first imported it.
+    /// Generated module URI → the package importing it, one for all its importers.
     redirect_packages: hashmap::IndexMap<InternedStr, PackageId>,
 }
 
@@ -242,11 +242,13 @@ impl ModuleSourceInterner {
     /// A Kiln-generated module, in the package of the module importing it.
     pub fn redirected(&mut self, uri: &str, importer: &ModuleSource) -> ModuleSource {
         let uri = self.intern(uri);
-        let package = self
+        let package = importer.package_id();
+        let first = self
             .redirect_packages
             .entry(uri.clone())
-            .or_insert_with(|| importer.package_id())
-            .clone();
+            .or_insert_with(|| package.clone());
+        // Kiln harvests the root package's invocations only.
+        assert_eq!(*first, package, "`{uri}` is imported from two packages");
         ModuleSource::Redirected { uri, package }
     }
     pub fn wasm(&mut self, path: &str, kind: WasmAssetKind) -> ModuleSource {

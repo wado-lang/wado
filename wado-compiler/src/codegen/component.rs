@@ -146,7 +146,6 @@ pub fn build_component(
     // type can reference the record's index. Shares `lib_type_gen` with
     // `emit_world_exports`, so the export-signature record and the canonical
     // record are one and the same.
-    prebuild_canonical_resource_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
     prebuild_value_named_types(
         &mut builder,
         &mut ctx,
@@ -1511,29 +1510,6 @@ fn canonical_decls(
         intrinsic.for_each_decl(&mut keep);
     }
     out
-}
-
-/// Import the interface defining every resource a canonical names, so `own<r>`
-/// and `resource.drop` have a type to point at where no imported function does.
-fn prebuild_canonical_resource_types(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    project: &NirPackage,
-    canonical_intrinsics: &[CanonicalIntrinsic],
-) {
-    for (def, decl) in canonical_decls(canonical_intrinsics, CmDeclKind::Resource) {
-        if ctx.has_decl_type(def) {
-            continue;
-        }
-        let Some(source) = project
-            .cm_interface_registry
-            .interface_declaring_cm_name(decl.module(), decl.cm_name())
-            .map(str::to_string)
-        else {
-            continue;
-        };
-        import_resource_source(builder, ctx, project, &source);
-    }
 }
 
 /// Define the named types a `Value(Named)` payload references, before the

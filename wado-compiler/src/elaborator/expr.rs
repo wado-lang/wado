@@ -2833,8 +2833,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        self.check_range_overlaps(&classified, span);
-        self.check_unreachable_arms(arms, &classified);
+        let reached = exhaustiveness::reached_arms(
+            &classified.iter().map(|(g, p)| (*g, p)).collect::<Vec<_>>(),
+        );
+        self.check_range_overlaps(&classified, &reached, span);
+        self.check_unreachable_arms(arms, &classified, &reached);
 
         let guardless: Vec<&Pat> = classified
             .iter()
@@ -2996,10 +2999,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report the arms no value reaches. Coverage reads no types, so a
     /// type-pattern arm an earlier narrowing already takes is found by type.
-    fn check_unreachable_arms(&self, arms: &[MatchArm], classified: &[(bool, Pat)]) {
-        let reached = exhaustiveness::reached_arms(
-            &classified.iter().map(|(g, p)| (*g, p)).collect::<Vec<_>>(),
-        );
+    fn check_unreachable_arms(
+        &self,
+        arms: &[MatchArm],
+        classified: &[(bool, Pat)],
+        reached: &[bool],
+    ) {
         let messages: Vec<(Span, String)> = classified
             .iter()
             .enumerate()
@@ -3075,8 +3080,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn exh_literal(&mut self, lit: &Literal, scrutinee_type: TypeId) -> Option<Pat> {
-        // A literal that does not parse was reported where it was lexed or
-        // resolved, and takes no value here.
+        // A literal that does not parse, or is of another kind than the
+        // scrutinee, was reported where it was lexed or resolved.
+        if self.literal_pattern_mismatch(lit, scrutinee_type).is_some() {
+            return None;
+        }
         let value = match lit {
             Literal::Number(repr) if util::is_float_only_literal(repr) => return None,
             Literal::Number(repr) => {
@@ -3213,13 +3221,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn exh_range(
-        &self,
+        &mut self,
         start: &ast::Pattern,
         end: &ast::Pattern,
         kind: ast::RangeKind,
         scrutinee_type: TypeId,
     ) -> Option<Pat> {
         // Bad or empty bounds were reported where the pattern was resolved.
+        for bound in [start, end] {
+            if let ast::Pattern::Literal(lit) = bound
+                && self.literal_pattern_mismatch(lit, scrutinee_type).is_some()
+            {
+                return None;
+            }
+        }
         let is_unsigned = self.exh_is_unsigned(scrutinee_type);
         let start_val = util::range_endpoint_to_i128(start, is_unsigned)?;
         let end_val = util::range_endpoint_to_i128(end, is_unsigned)?;
@@ -3259,7 +3274,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn collect_ranges_from_pattern(pattern: &Pat) -> Vec<(i128, i128)> {
         match pattern {
             Pat::Int { lo, hi, .. } => vec![(*lo, *hi)],
-            Pat::Bool(b) => vec![(i128::from(*b), i128::from(*b))],
             Pat::Or(alts) => alts
                 .iter()
                 .flat_map(Self::collect_ranges_from_pattern)
@@ -3268,11 +3282,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn check_range_overlaps(&self, classified: &[(bool, Pat)], span: Span) {
+    /// Report two reachable guardless arms taking some value in common. An
+    /// arm taking none of its own is unreachable, reported as such.
+    fn check_range_overlaps(&self, classified: &[(bool, Pat)], reached: &[bool], span: Span) {
         let mut ranges: Vec<(i128, i128, usize)> = classified
             .iter()
             .enumerate()
-            .filter(|(_, (guardless, _))| *guardless)
+            .filter(|&(arm, (guardless, _))| *guardless && reached[arm])
             .flat_map(|(arm, (_, pat))| {
                 Self::collect_ranges_from_pattern(pat)
                     .into_iter()
@@ -3974,6 +3990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: struct_lit.span,
             });
         };
+        let mut omitted_hidden: Vec<String> = Vec::new();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
             // A literal that omits no defaulted field walks no default, and
             // the loop below then only reports the required fields it left
@@ -4009,7 +4026,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             struct_field_defaults.get(idx).and_then(Option::clone)
                         else {
                             if hidden_fields.contains_key(expected_name) {
-                                report_hidden(s, expected_name);
+                                omitted_hidden.push(expected_name.clone());
                             } else {
                                 let _ = s.emit(TypeError::MissingField {
                                     struct_name: display_name.clone(),
@@ -4038,6 +4055,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
             );
             fields.sort_by_key(|f| f.field_index);
+        }
+        if !omitted_hidden.is_empty() {
+            let _ = self.emit(TypeError::HiddenFieldsOmitted {
+                struct_name: display_name.clone(),
+                field_names: omitted_hidden,
+                span: struct_lit.span,
+            });
         }
 
         for field_name in hidden_fields.keys() {

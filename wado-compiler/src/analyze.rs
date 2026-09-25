@@ -6,8 +6,8 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{
-    AstId, AstVisitor, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility,
-    WorldExport, cm_import_of, for_each_function, walk_item,
+    AstId, AstVisitor, Function, FunctionSite, GenericParam, Item, Module, UseDecl, UseItem,
+    Visibility, WorldExport, cm_import_of, for_each_function, walk_generic_params, walk_item,
 };
 use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
@@ -60,7 +60,8 @@ fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
 }
 
 /// Every name `module` declares spelled like an expression keyword: an item at
-/// any depth, or an enum, variant or flags member. A member reached by `.` may.
+/// any depth, a type or effect parameter, or an enum, variant or flags member.
+/// A member reached by `.` may.
 fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
     struct Names(Vec<(String, Span)>);
     impl Names {
@@ -72,30 +73,31 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
     }
     impl AstVisitor for Names {
         fn visit_item(&mut self, item: &Item) {
+            let at = item.name_span();
             match item {
-                Item::Function(d) => self.check(&d.name, d.span),
-                Item::Interface(d) => self.check(&d.name, d.span),
-                Item::Struct(d) => self.check(&d.name, d.span),
-                Item::Newtype(d) => self.check(&d.name, d.span),
-                Item::Trait(d) => self.check(&d.name, d.span),
-                Item::Resource(d) => self.check(&d.name, d.span),
-                Item::World(d) => self.check(&d.name, d.span),
-                Item::Global(d) => self.check(&d.name, d.span),
-                Item::BuiltinTypeDecl(d) => self.check(&d.name, d.span),
+                Item::Function(d) => self.check(&d.name, at),
+                Item::Interface(d) => self.check(&d.name, at),
+                Item::Struct(d) => self.check(&d.name, at),
+                Item::Newtype(d) => self.check(&d.name, at),
+                Item::Trait(d) => self.check(&d.name, at),
+                Item::Resource(d) => self.check(&d.name, at),
+                Item::World(d) => self.check(&d.name, at),
+                Item::Global(d) => self.check(&d.name, at),
+                Item::BuiltinTypeDecl(d) => self.check(&d.name, at),
                 Item::Enum(d) => {
-                    self.check(&d.name, d.span);
+                    self.check(&d.name, at);
                     for case in &d.cases {
                         self.check(&case.name, case.name_span);
                     }
                 }
                 Item::Variant(d) => {
-                    self.check(&d.name, d.span);
+                    self.check(&d.name, at);
                     for case in &d.cases {
                         self.check(&case.name, case.name_span);
                     }
                 }
                 Item::Flags(d) => {
-                    self.check(&d.name, d.span);
+                    self.check(&d.name, at);
                     for member in &d.flags {
                         self.check(&member.name, member.name_span);
                     }
@@ -107,6 +109,13 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
                 | Item::Error(_) => {}
             }
             walk_item(self, item);
+        }
+
+        fn visit_generic_params(&mut self, params: &[GenericParam]) {
+            for param in params {
+                self.check(&param.name, param.name_span);
+            }
+            walk_generic_params(self, params);
         }
     }
     let mut names = Names(Vec::new());
@@ -120,8 +129,17 @@ fn keyword_named_declarations(module: &Module) -> Vec<(String, Span)> {
 fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
     match module_source {
         ModuleSource::Core { name } => name.as_str() == "builtin",
+        _ => takes_names_from_elsewhere(module_source),
+    }
+}
+
+/// Whether a module's declarations are a foreign export table's (WIT or a Wasm
+/// asset), which no Wado source spelled.
+fn takes_names_from_elsewhere(module_source: &ModuleSource) -> bool {
+    match module_source {
         ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => true,
-        ModuleSource::Local { .. }
+        ModuleSource::Core { .. }
+        | ModuleSource::Local { .. }
         | ModuleSource::Dependency { .. }
         | ModuleSource::Remote { .. }
         | ModuleSource::EntryPoint { .. }
@@ -893,8 +911,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         for (source, module) in modules {
             self.check_function_declarations(module, source);
-            for (name, span) in keyword_named_declarations(module) {
-                let _ = self.reject_keyword_name(source, &name, span);
+            if !takes_names_from_elsewhere(source) {
+                for (name, span) in keyword_named_declarations(module) {
+                    let _ = self.reject_keyword_name(source, &name, span);
+                }
             }
         }
 
@@ -1093,7 +1113,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         )
     }
 
-    /// Reject a name spelled like a keyword that begins an expression.
+    /// Reject `name` if it is spelled like a keyword that begins an expression.
     fn reject_keyword_name(
         &self,
         module_source: &ModuleSource,
@@ -1124,9 +1144,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         local_name: &str,
         span: Span,
     ) -> Result<(), Bail> {
-        if is_expression_keyword(local_name) {
-            return self.reject_keyword_name(module_source, local_name, span);
-        }
+        self.reject_keyword_name(module_source, local_name, span)?;
         let Some(declared) = self
             .symbols
             .defined_span_in_module(module_source, local_name)
@@ -1206,7 +1224,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 // Register imported symbols
                 for use_item in &use_decl.items {
                     match use_item {
-                        UseItem::Simple { name, alias, .. } => {
+                        UseItem::Simple {
+                            name,
+                            name_span,
+                            alias,
+                            local_span,
+                            ..
+                        } => {
                             if let Some(symbol) =
                                 self.symbols.lookup_in_module(&module_source, name)
                             {
@@ -1216,19 +1240,19 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     from_module_source,
                                     &module_source,
                                     name,
-                                    use_decl.span,
+                                    *name_span,
                                 )?;
                                 self.check_reexport_widening(
                                     from_module_source,
                                     &module_source,
                                     name,
                                     use_decl.visibility,
-                                    use_decl.span,
+                                    *name_span,
                                 )?;
                                 self.reject_import_collision(
                                     from_module_source,
                                     import_name,
-                                    use_decl.span,
+                                    *local_span,
                                 )?;
                                 self.symbols
                                     .register_import(from_module_source, import_name, key);
@@ -1238,7 +1262,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     AnalyzeError::ImportNotFound {
                                         module_source: module_source.clone(),
                                         name: name.clone(),
-                                        span: use_decl.span,
+                                        span: *name_span,
                                     },
                                 )?;
                             }
@@ -1260,14 +1284,14 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         from_module_source,
                                         &module_source,
                                         &lookup_name,
-                                        use_decl.span,
+                                        func_item.name_span,
                                     )?;
                                     self.check_reexport_widening(
                                         from_module_source,
                                         &module_source,
                                         &lookup_name,
                                         use_decl.visibility,
-                                        use_decl.span,
+                                        func_item.name_span,
                                     )?;
                                     // Registered under the bare member name
                                     // like a `Simple` import, so it collides
@@ -1275,7 +1299,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                     self.reject_import_collision(
                                         from_module_source,
                                         import_name,
-                                        use_decl.span,
+                                        func_item.local_span,
                                     )?;
                                     self.symbols.register_import(
                                         from_module_source,
@@ -1288,7 +1312,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                                         AnalyzeError::ImportNotFound {
                                             module_source: module_source.clone(),
                                             name: lookup_name,
-                                            span: use_decl.span,
+                                            span: func_item.name_span,
                                         },
                                     )?;
                                 }

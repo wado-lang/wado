@@ -1,5 +1,5 @@
 // A literal written outside a struct's module cannot set a field hidden from
-// it, so leaving one out says it is private rather than asking for it.
+// it, so leaving one out says the literal cannot build it rather than asking for it.
 use { Secret } from "./sub/internal_field_module.wado";
 
 fn named() -> Secret {
@@ -22,7 +22,6 @@ export fn run() {
 
 __DATA__
 {
-  "compile_error": "field `hidden` of struct `Secret` is private to its defining file",
-  "compile_errors_contains": ["field `repr` of struct `List` is private", "struct 'List' has no field 'a'"],
-  "compile_errors_not_contains": ["missing field"]
+  "compile_error": ":6:12: analysis error: cannot build `Secret` with a literal here: it has fields this module cannot set (`hidden`); call a constructor it provides; 10:12: cannot build `Secret` with a literal here: it has fields this module cannot set (`hidden`); call a constructor it provides; 14:14: struct 'List' has no field 'a'; 14:12: cannot build `List` with a literal here: it has fields this module cannot set (`repr`, `used`); call a constructor it provides",
+  "compile_errors_not_contains": ["missing field", "mark it"]
 }

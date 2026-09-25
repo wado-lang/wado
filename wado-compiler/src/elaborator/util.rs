@@ -93,6 +93,19 @@ pub(super) fn int_literal_range_error(
     }
 }
 
+/// Why `value`, written `shown`, is no value of the integer `target_type`.
+pub(super) fn int_value_range_error(
+    value: i128,
+    shown: &str,
+    target_type: TypeId,
+    type_table: &TypeTable,
+) -> Option<String> {
+    let prim = type_table.primitive_head(target_type)?;
+    let (min, max) = prim.int_range()?;
+    (value < min || value > max)
+        .then(|| format!("literal out of range for `{}`: {shown}", prim.as_str()))
+}
+
 /// Normalize a numeric literal representation: remove underscores and lowercase.
 /// This produces a canonical form for parsing (e.g., `"0x_FF"` → `"0xff"`, `"1E10"` → `"1e10"`).
 pub(super) fn normalize_numeric_literal(repr: &str) -> String {

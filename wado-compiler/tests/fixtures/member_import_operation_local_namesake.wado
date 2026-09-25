@@ -1,0 +1,36 @@
+// A member-imported operation is its interface's, even where a local type
+// spells the interface's name and declares a static of the operation's name.
+use { println, Stdout } from "core:cli";
+use { Greeting as G, Greeting::{hello} } from "./sub/member_import_op_iface.wado";
+
+struct Greeting {}
+
+impl Greeting {
+    fn hello(n: i32) -> i32 {
+        return n;
+    }
+}
+
+struct Loud {}
+
+impl G for Loud {
+    fn hello(name: String) -> String {
+        resume `HELLO ${name}`
+    }
+
+    fn bye() -> String {
+        resume "BYE"
+    }
+}
+
+export fn run() with Stdout {
+    println(hello("x"));
+    let mut h = Loud {};
+    with G => &mut h do {
+        println(hello("y"));
+    }
+    println(`${Greeting::hello(5)}`);
+}
+
+__DATA__
+{"stdout": "hello x\nHELLO y\n5\n"}

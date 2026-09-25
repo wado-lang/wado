@@ -1,0 +1,26 @@
+// A constant pattern matches by value, so its type is the scrutinee's.
+global FLAG: bool = true;
+global ONE: i32 = 1;
+
+fn assoc(x: i8) -> i32 {
+    return match x { u8::MAX => 1, _ => 2 };
+}
+
+fn global_const(x: i32) -> i32 {
+    return match x { FLAG => 1, _ => 2 };
+}
+
+fn through_ref(x: &i32) -> i32 {
+    return match x { ONE => 1, _ => 2 };
+}
+
+export fn run() {
+    let _ = assoc(1) + global_const(1) + through_ref(&1);
+}
+
+__DATA__
+{
+  "compile_error": ":6:22: analysis error: type mismatch: expected 'i8', found 'u8'",
+  "compile_errors_contains": ["type mismatch: expected 'i32', found 'bool'"],
+  "compile_errors_not_contains": ["found '&i32'"]
+}

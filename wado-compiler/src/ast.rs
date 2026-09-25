@@ -1953,6 +1953,8 @@ pub enum UseItem {
         /// Span of just the `name` identifier (narrower than the whole item).
         name_span: Span,
         alias: Option<String>,
+        /// Span of the name this import binds: the alias where one is written.
+        local_span: Span,
     },
     /// Effect with functions: `Effect::{func1, func2}`
     InterfaceFunctions {
@@ -1989,6 +1991,8 @@ pub struct UseItemSimple {
     pub name: String,
     pub name_span: Span,
     pub alias: Option<String>,
+    /// Span of the name this import binds: the alias where one is written.
+    pub local_span: Span,
 }
 
 /// Generic attribute-value tree produced by `with { ... }` clauses.

@@ -206,6 +206,7 @@ impl Builder {
                 name: "TreeMap".to_string(),
                 name_span: syn(),
                 alias: None,
+                local_span: syn(),
             }],
             items_span: Some(syn()),
             attributes: None,

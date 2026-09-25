@@ -21,8 +21,30 @@ fn by_range(x: i8) -> i32 {
     };
 }
 
+fn by_byte(x: i8) -> i32 {
+    return match x {
+        b'\xff' => 1,
+        _ => 2,
+    };
+}
+
+fn by_byte_range(x: i8) -> i32 {
+    return match x {
+        b'\x00'..=b'\x90' => 1,
+        _ => 2,
+    };
+}
+
+fn by_constant_bound(x: i8) -> i32 {
+    return match x {
+        0..=u8::MAX => 1,
+        _ => 2,
+    };
+}
+
 export fn run() {
     let _ = by_literal(1) + by_negative(1) + by_range(1);
+    let _ = by_byte(1) + by_byte_range(1) + by_constant_bound(1);
 }
 
 __DATA__
@@ -30,7 +52,10 @@ __DATA__
   "compile_error": ":5:9: analysis error: invalid pattern: literal out of range for `u8`: 300",
   "compile_errors_contains": [
     "literal out of range for `u16`: -1",
-    "literal out of range for `i8`: 200"
+    "literal out of range for `i8`: 200",
+    "literal out of range for `i8`: b'\\xff'",
+    "literal out of range for `i8`: b'\\x90'",
+    "literal out of range for `i8`: u8::MAX"
   ],
   "compile_errors_not_contains": ["unreachable arm", "non-exhaustive"]
 }

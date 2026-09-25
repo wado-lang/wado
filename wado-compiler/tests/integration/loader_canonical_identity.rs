@@ -8,51 +8,8 @@
 //! the Kiln redirect on that path. Canonical identities collapse both spellings
 //! onto `./gen/parser.wado`.
 
-use std::sync::Mutex;
-
-use crate::common::block_on;
-use indexmap::IndexMap;
-use wado_compiler::{
-    CompilerHost, Diagnostic, LogLevel, ModuleSource, SourceError, kiln::InvocationIndex, load,
-    parse, semantics_of,
-};
-
-struct MapHost {
-    sources: IndexMap<String, String>,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl MapHost {
-    fn new(sources: &[(&str, &str)]) -> Self {
-        Self {
-            sources: sources
-                .iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect(),
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl CompilerHost for MapHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let result = self.sources.get(path).cloned();
-        let path = path.to_string();
-        async move {
-            match result {
-                Some(s) => Ok(s.into_bytes()),
-                None => Err(SourceError::NotFound { path }),
-            }
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
+use crate::common::{MapHost, block_on};
+use wado_compiler::{LogLevel, ModuleSource, kiln::InvocationIndex, load, parse, semantics_of};
 
 #[test]
 fn escape_reentry_import_loads_one_module() {

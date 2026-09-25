@@ -574,7 +574,7 @@ impl SymbolTable {
     }
 
     /// Where an `Owner::member` name reached from `module_source` is declared:
-    /// the owning interface or resource's module, and the member's name there.
+    /// the owning interface's module, and the member's name there.
     fn declared_member(
         &self,
         module_source: &ModuleSource,
@@ -583,7 +583,7 @@ impl SymbolTable {
     ) -> Option<(ModuleSource, String)> {
         let (owner, member) = name.rsplit_once("::")?;
         let owner = self.lookup_in_module_with_visited(module_source, owner, visited)?;
-        matches!(owner.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)).then(|| {
+        matches!(owner.kind, SymbolKind::Effect(_)).then(|| {
             (
                 owner.module_source().clone(),
                 format!("{}::{member}", owner.name),

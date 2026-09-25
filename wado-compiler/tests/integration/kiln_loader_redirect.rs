@@ -2,14 +2,8 @@
 //! `use { X } from "<schema>"` clause to the generator's emitted entry
 //! module.
 
-use std::sync::Mutex;
-
-use crate::common::block_on;
-use indexmap::IndexMap;
-use wado_compiler::{
-    CompilerHost, Diagnostic, LogLevel, Semantics, SourceError, kiln::InvocationIndex, load, parse,
-    semantics_of,
-};
+use crate::common::{MapHost, block_on};
+use wado_compiler::{CompilerHost, LogLevel, Semantics, kiln::InvocationIndex, load, parse, semantics_of};
 
 /// Run the three-stage frontend (parse → load → `semantics_of`) with the
 /// given kiln invocation index. Test-local helper that mirrors the
@@ -39,43 +33,6 @@ fn build_with_invocations(
         .expect("loader should succeed in this fixture");
         semantics_of(loaded, host, LogLevel::default(), true)
     })
-}
-
-struct MapHost {
-    sources: IndexMap<String, String>,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl MapHost {
-    fn new(sources: &[(&str, &str)]) -> Self {
-        Self {
-            sources: sources
-                .iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect(),
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-}
-
-impl CompilerHost for MapHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let result = self.sources.get(path).cloned();
-        let path = path.to_string();
-        async move {
-            match result {
-                Some(s) => Ok(s.into_bytes()),
-                None => Err(SourceError::NotFound { path }),
-            }
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
 }
 
 #[test]
@@ -116,6 +73,54 @@ pub fn greet() {}
     assert!(
         sem.modules.contains_key(&redirected),
         "loader should have loaded the generated entry module, got: {:?}",
+        sem.modules.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn generated_module_imports_its_sibling_relative_to_itself() {
+    let entry = r#"
+use { greet } from "./sample.proto";
+
+export fn run() {
+    greet();
+}
+"#;
+    let generated = r#"
+use { helper } from "./helper.wado";
+pub fn greet() { helper(); }
+"#;
+    let helper = r"
+pub fn helper() {}
+";
+    let host = MapHost::new(&[
+        ("build/kiln/test-invocation/sample.wado", generated),
+        ("build/kiln/test-invocation/helper.wado", helper),
+    ]);
+
+    let mut idx = InvocationIndex::new();
+    idx.insert(
+        "entry.wado",
+        "./sample.proto",
+        "build/kiln/test-invocation/sample.wado",
+    );
+
+    let sem = build_with_invocations(entry, "entry.wado", &host, idx);
+    let diags = host.diagnostics.lock().unwrap().clone();
+    assert!(
+        sem.is_complete(),
+        "semantics did not complete; diagnostics: {:#?}",
+        diags.iter().map(|d| &d.message).collect::<Vec<_>>()
+    );
+
+    let entry_ms = sem.interner.borrow_mut().entry_point("entry.wado");
+    let sibling = sem
+        .interner
+        .borrow_mut()
+        .redirected("build/kiln/test-invocation/helper.wado", &entry_ms);
+    assert!(
+        sem.modules.contains_key(&sibling),
+        "the sibling should load as a generated module, got: {:?}",
         sem.modules.keys().collect::<Vec<_>>()
     );
 }
