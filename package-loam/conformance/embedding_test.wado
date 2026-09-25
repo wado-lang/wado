@@ -1,0 +1,41 @@
+//! Row gathers over an int64 input, and position ids the build folds into a
+//! literal tensor.
+
+use { Batch, Hidden, Seq, Tensor, Weights, forward } from "./embedding.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "pos",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "wte",
+                        axes: ["Vocab", "Hidden"],
+                    },
+                    {
+                        pattern: "wpe",
+                        axes: ["Pos", "Hidden"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "each token's row adds its position's row, and -1 names the last token" {
+    let got: Tensor<f32, [Batch, Seq, Hidden]> = forward(
+        &Tensor::<i64, [Batch, Seq]> {
+            data: [3, 0, -1],
+            extents: [1, 3],
+        },
+        &Weights::embedded(),
+    );
+    assert got.extents == [1, 3, 2];
+    assert got.data == [13.0, 23.5, 30.0, 40.5, 53.0, 63.5];
+}

@@ -1,0 +1,37 @@
+//! An int64 tensor through the layout kernels, and the Cast that makes it a
+//! float.
+
+use { Batch, Head, Key, Query, Tensor, Weights, forward } from "./mask.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "M",
+                        axes: ["Batch", "Key"],
+                    },
+                    {
+                        pattern: "U",
+                        axes: ["Batch", "Head", "Key"],
+                    },
+                    {
+                        pattern: "V",
+                        axes: ["Batch", "Head", "Query", "Key"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "a masked key becomes -f32::MAX and a kept one 0" {
+    let got: Tensor<f32, [Batch, Head, Query, Key]> = forward(
+        &Tensor::<i64, [Batch, Key]> {
+            data: [1, 1, 0],
+            extents: [1, 3],
+        },
+        &Weights {},
+    );
+    assert got.extents == [1, 1, 1, 3];
+    assert got.data == [0.0, 0.0, -f32::MAX];
+}

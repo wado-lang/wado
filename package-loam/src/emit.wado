@@ -4,19 +4,27 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
-use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
+use { Graph, Known, Node, element_of, is_binary_elementwise, static_extents } from "./graph.wado";
+use {
+    Checked,
+    InferError,
+    Refusal,
+    gather_axis,
+    gemm_options,
+    has_bias,
+    is_reduction,
+    reduced_axes,
+    softmax_axis,
+    split_axis,
+    split_parts,
+    transpose_perm,
+    window_of,
+} from "./infer.wado";
 
-/// A boundary tensor whose element type the kernels have no arithmetic for.
+/// A boundary tensor of an element type no kernel holds.
 pub struct UnmappedDtype {
     pub tensor: String,
     pub dtype: String,
-}
-
-/// A node whose operator stage 0 checks but no kernel computes.
-pub struct UnimplementedOperator {
-    pub node: String,
-    pub op: String,
 }
 
 /// A broadcast the kernels do not cover: one operand's axes must be the
@@ -35,39 +43,22 @@ pub struct NameCollision {
     pub ident: String,
 }
 
-/// A `Constant` reaching an operator that has nowhere to put it. Only a
-/// closure an operator already writes folds one, since it allocates no tensor.
-pub struct UnfoldedConstant {
-    pub node: String,
-    pub op: String,
-    pub tensor: String,
-}
-
 pub variant EmitError {
-    /// An axis named as something the generated module already declares. A
-    /// tensor name comes from the model and is renamed; an axis is the
-    /// schema's word, so it is the author's to change.
+    /// An axis named as something the generated module declares. Unlike a
+    /// tensor, it is not renamed: the schema's author chose the word.
     ReservedAxis(String),
     Dtype(UnmappedDtype),
-    Operator(UnimplementedOperator),
+    /// A node stage 0 checks in a form no kernel computes.
+    Refused(Refusal),
     Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
-    Constant(UnfoldedConstant),
-    /// A graph output a `Constant` produces, which `forward` has no tensor for.
-    ReturnedConstant(String),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
 }
 
 impl Display for UnmappedDtype {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.tensor}: the kernels compute in f32 and this tensor is ${self.dtype}`);
-    }
-}
-
-impl Display for UnimplementedOperator {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.node} = ${self.op}: no kernel for this operator`);
+        f.write_str(`${self.tensor}: no kernel holds ${self.dtype}`);
     }
 }
 
@@ -85,12 +76,6 @@ impl Display for NameCollision {
     }
 }
 
-impl Display for UnfoldedConstant {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.node} = ${self.op}: no kernel folds the constant ${self.tensor}`);
-    }
-}
-
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
@@ -98,19 +83,30 @@ impl Display for EmitError {
                 f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
             },
             Dtype(e) => e.fmt(f),
-            Operator(e) => e.fmt(f),
+            Refused(e) => e.fmt(f),
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
-            Constant(e) => e.fmt(f),
-            ReturnedConstant(name) => f.write_str(`${name}: a graph cannot return a constant`),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
         }
     }
 }
 
+impl Error for UnmappedDtype {
+}
+
+impl Error for UnimplementedBroadcast {
+}
+
+impl Error for NameCollision {
+}
+
+impl Error for EmitError {
+}
+
 /// The generated module's source. Every axis the graph mentions becomes a
 /// marker type, so two tensors sharing an axis share one type.
-pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, EmitError> {
+pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
     if graph.outputs.len() != 1 {
         builtin::cold_path();
         return Result::Err(EmitError::OutputCount(graph.outputs.len()));
@@ -124,7 +120,9 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     w.blank();
 
     let axes = axis_names(graph, shapes);
-    let names = Names::of(graph, &axes)?;
+    let scalars = scalar_literals(checked);
+    let literals = literal_tensors(graph, checked, &scalars);
+    let names = Names::of(graph, checked, &literals, &axes)?;
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
     }
@@ -132,13 +130,13 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     w.raw(&RUNTIME);
     w.raw(&GRAPH_BANNER);
 
-    emit_weights(&mut w, graph, shapes, &names, &held);
-    emit_forward(&mut w, graph, shapes, &names, &held)?;
+    emit_weights(&mut w, graph, checked, &names, &held);
+    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals)?;
     return Result::Ok(w.to_string());
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel
-/// reaches stops the build. A node's own output is f32, so only these are kept.
+/// reaches stops the build. A node's own output is held as it is computed.
 fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError> {
     let mut held = TreeMap::<String, String>::new();
     for let declared of [&graph.inputs, &graph.initializers, &graph.outputs] {
@@ -164,7 +162,7 @@ struct Names {
 }
 
 impl Names {
-    fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
+    fn of(graph: &Graph, checked: &Checked, literals: &List<String>, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
@@ -185,7 +183,14 @@ impl Names {
             names.take(&mut taken, &vi.name)?;
         }
         for let node of &graph.nodes {
-            names.take(&mut taken, &node.outputs[0])?;
+            for let output of node.outputs {
+                if !checked.known.contains_key(output) {
+                    names.take(&mut taken, &output)?;
+                }
+            }
+        }
+        for let tensor of *literals {
+            names.take(&mut taken, &tensor)?;
         }
         return Result::Ok(names);
     }
@@ -230,9 +235,8 @@ fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
     return module.contains(*name) || is_reserved(name);
 }
 
-/// The names the generated module binds before it names an axis or a tensor,
-/// beyond the language's own. The runtime's are read out of the runtime itself,
-/// so adding a kernel there cannot leave this behind.
+/// The names the generated module binds beyond the language's own. The
+/// runtime's are read out of the runtime, so a new kernel cannot be missed.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
     for let name of declared_in(&RUNTIME) {
@@ -259,9 +263,7 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
-        // The runtime is one self-contained file, which is what lets the
-        // reserved set be read off it. An import would bind a name from
-        // somewhere this never looks.
+        // An import would bind a name from a file this never reads.
         assert !line.starts_with("use ");
         let mut declaration = line.as_str_slice();
         for let prefix of VISIBILITY_PREFIXES {
@@ -307,21 +309,15 @@ fn sanitize(name: &String) -> String {
 }
 
 /// The graph's initializers, as the struct `forward` reads them from.
-fn emit_weights(
-    w: &mut CodeWriter,
-    graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
-    names: &Names,
-    held: &TreeMap<String, String>,
-) {
+fn emit_weights(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &TreeMap<String, String>) {
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     for let vi of &graph.initializers {
-        weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, held, &vi.name));
+        weights.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
     }
     w.blank();
     w.line("/// The graph's initializers.");
     weights.emit(w);
-    emit_embedded(w, graph, shapes, names, held);
+    emit_embedded(w, graph, &checked.shapes, names, held);
 }
 
 /// `Weights::embedded()`, where the graph carries every initializer's data.
@@ -351,7 +347,8 @@ fn emit_embedded(
         let axes = axis_list(&shapes.get(vi.name).unwrap());
         w.begin(`${names.get(&vi.name)}: Tensor::<${element}, [${axes}]>`);
         w.line(`data: List::<${element}>::from_le_bytes(${byte_string_literal(&data)}),`);
-        w.line(`extents: [${extent_list(&vi.rank)}],`);
+        // Both readers attach data only to a tensor whose every extent is stated.
+        w.line(`extents: ${static_extents(&vi.rank).unwrap()},`);
         w.end_with(",");
     }
     w.end_with(";");
@@ -359,24 +356,12 @@ fn emit_embedded(
     w.end();
 }
 
-/// A tensor's extents as a list literal's elements. Both readers attach data
-/// only to a tensor whose every extent is stated.
-fn extent_list(rank: &Rank) -> String {
-    let mut spelled: List<String> = [];
-    for let e of static_extents(rank).unwrap() {
-        spelled.push(`${e}`);
-    }
-    return spelled.join(", ");
-}
-
 /// What each tensor is called inside `forward`. A graph input arrives as a
-/// reference and everything else as a value, which is the one thing a kernel
-/// call has to know to spell its operands.
+/// reference and everything else as a value.
 struct Operands {
     values: TreeMap<String, String>,
     already_reference: TreeSet<String>,
-    /// A one-element `Constant`, as the literal that replaces it. It allocates
-    /// no tensor: every operator reading one folds it into a closure.
+    /// A folded float of one element, as the literal a closure folds in.
     scalars: TreeMap<String, String>,
 }
 
@@ -402,24 +387,27 @@ impl Operands {
 fn emit_forward(
     w: &mut CodeWriter,
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
+    scalars: TreeMap<String, String>,
+    literals: &List<String>,
 ) -> Result<(), EmitError> {
+    let shapes = &checked.shapes;
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
-        scalars: TreeMap::<String, String>::new(),
+        scalars,
     };
     let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
     let mut widened: List<String> = [];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
-        forward.add_param(ident, `&${tensor_type(shapes, held, &vi.name)}`);
+        forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
         exprs.values[vi.name] = ident;
         exprs.already_reference.insert(vi.name);
-        if converted(&vi.name, held) {
+        if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(${ident});`);
             exprs.already_reference.remove(vi.name);
         }
@@ -427,12 +415,12 @@ fn emit_forward(
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = `weights.${ident}`;
-        if converted(&vi.name, held) {
+        if converted(checked, held, &vi.name) {
             widened.push(`let ${ident} = widen(&weights.${ident});`);
             exprs.values[vi.name] = ident;
         }
     }
-    forward.add_param("weights", "&Weights").set_return_type(tensor_type(shapes, held, &result));
+    forward.add_param("weights", "&Weights").set_return_type(tensor_type(checked, held, &result));
 
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per operator.");
@@ -440,63 +428,189 @@ fn emit_forward(
     for let line of widened {
         w.line(&line);
     }
+    for let tensor of *literals {
+        let ident = names.get(&tensor);
+        w.line(`let ${ident} = ${literal_tensor(checked, &tensor)};`);
+        exprs.values[tensor] = ident;
+    }
     for let node of &graph.nodes {
         let produced = node.outputs[0];
-        if node.op == "Constant" {
-            let Ok(value) = constant_value(node) else {
-                // Stage 0 read the same attribute and stopped the build there.
-                unreachable();
-            };
-            exprs.scalars[produced] = float_literal(value);
+        if checked.known.contains_key(produced) {
             continue;
         }
-        let ident = names.get(&produced);
-        w.line(`let ${ident} = ${node_call(node, shapes, &exprs)?};`);
-        exprs.values[produced] = ident;
+        if is_alias(node, checked) {
+            let source = node.inputs[0];
+            exprs.values[produced] = exprs.values.get(source).unwrap();
+            if exprs.already_reference.contains(source) {
+                exprs.already_reference.insert(produced);
+            }
+            continue;
+        }
+        let calls = if node.op == "Split" {
+            split_calls(node, checked, &exprs);
+        } else {
+            [node_call(node, checked, &exprs, graph.opset)?] as List<String>;
+        };
+        for let [i, call] of calls.into_iter().enumerate() {
+            let output = node.outputs[i];
+            let ident = names.get(&output);
+            w.line(`let ${ident} = ${call};`);
+            exprs.values[output] = ident;
+        }
     }
-    if exprs.scalars.contains_key(result) {
-        builtin::cold_path();
-        return Result::Err(EmitError::ReturnedConstant(result));
-    }
-    let returned = if converted(&result, held) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
+    let returned = if converted(checked, held, &result) {
+        `narrow(${exprs.reference(&result)})`;
+    } else {
+        exprs.value(&result);
+    };
     w.line(`return ${returned};`);
     w.end();
     return Result::Ok(());
 }
 
-/// Whether a boundary tensor is held in something no kernel computes in, so
-/// `forward` converts it on the way past.
-fn converted(tensor: &String, held: &TreeMap<String, String>) -> bool {
-    return held.get(*tensor).unwrap() != KERNEL_ELEMENT;
+/// Every folded float of one element, as the literal a closure folds in.
+fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
+    let mut scalars = TreeMap::<String, String>::new();
+    for let [name, k] of checked.known.entries() {
+        if let Floats(v) = k.elements && v.len() == 1 {
+            scalars[*name] = float_literal(v[0]);
+        }
+    }
+    return scalars;
+}
+
+/// The folded tensors something reads as a tensor, which `forward` binds as
+/// literals: all a kernel reads or the graph returns, save a scalar a closure folds.
+fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> List<String> {
+    let mut tensors: List<String> = [];
+    for let [name, _] of checked.known.entries() {
+        if checked.shapes.contains_key(*name)
+            && (!scalars.contains_key(*name) || read_as_tensor(graph, checked, scalars, name)) {
+            tensors.push(*name);
+        }
+    }
+    return tensors;
+}
+
+/// Whether a folded scalar is returned, or read where no closure folds it.
+fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>, scalar: &String) -> bool {
+    if graph.outputs[0].name == *scalar {
+        return true;
+    }
+    for let node of graph.nodes {
+        if checked.known.contains_key(node.outputs[0]) {
+            continue;
+        }
+        for let [index, input] of node.inputs.into_iter().enumerate() {
+            if input == *scalar && folded_literal(&node, index, scalars, &checked.shapes) matches { None } {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/// A folded tensor spelled out as a `Tensor` literal, under the shape stage 0
+/// gave it.
+fn literal_tensor(checked: &Checked, tensor: &String) -> String {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    let data = match checked.known.get(*tensor).unwrap().elements {
+        Ints(v) => `${v}`,
+        Floats(v) => {
+            let spelled: List<String> = v.into_iter().map(|x| float_literal(x)).collect();
+            `[${spelled.join(", ")}]`;
+        },
+        Bools(v) => `${v}`,
+    };
+    let element = checked.primitives.get(*tensor).unwrap();
+    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents_of(&shape)} }`;
+}
+
+/// The extents of a shape stage 0 has shown static.
+fn extents_of(shape: &Shape) -> List<i32> {
+    return shape.axes.into_iter().map(|axis| axis.static_extent()).collect();
+}
+
+/// Whether a boundary tensor is held in something other than what the kernels
+/// compute it in, so `forward` converts it on the way past.
+fn converted(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> bool {
+    return held.get(*tensor).unwrap() != checked.primitives.get(*tensor).unwrap();
+}
+
+/// Whether a node computes nothing, so its output is another name for its
+/// operand: an `Identity`, or a `Cast` to the primitive the operand has.
+fn is_alias(node: &Node, checked: &Checked) -> bool {
+    let primitives = &checked.primitives;
+    return node.op == "Identity"
+        || node.op == "Cast" && primitives.get(node.inputs[0]) == primitives.get(node.outputs[0]);
 }
 
 /// A tensor's type, as the axis marker types name it. A tensor the boundary
-/// does not declare is one a node produced, which is f32.
-fn tensor_type(shapes: &TreeMap<String, Shape>, held: &TreeMap<String, String>, tensor: &String) -> String {
-    let shape = shapes.get(*tensor).unwrap();
-    let element = held.get(*tensor).unwrap_or(KERNEL_ELEMENT);
+/// does not declare is held in what stage 0 computes it in.
+fn tensor_type(checked: &Checked, held: &TreeMap<String, String>, tensor: &String) -> String {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    let element = match held.get(*tensor) {
+        Some(p) => p,
+        None => checked.primitives.get(*tensor).unwrap(),
+    };
     return `Tensor<${element}, [${axis_list(&shape)}]>`;
 }
 
 fn axis_list(shape: &Shape) -> String {
-    return axis_names_of(&shape.axes).join(", ");
+    return axis_run(shape, 0, shape.rank());
 }
 
-fn axis_names_of(axes: &List<Axis>) -> List<String> {
+/// The names of `shape`'s axes `from..<to`, as a turbofish lists them.
+fn axis_run(shape: &Shape, from: i32, to: i32) -> String {
     let mut names: List<String> = [];
-    for let axis of *axes {
-        names.push(axis.name);
+    for let i of from..<to {
+        names.push(shape.axes[i].name);
     }
-    return names;
+    return names.join(", ");
+}
+
+/// What stage 0 read already: a failure stopped the build there.
+fn settled<T>(read: Result<T, InferError>) -> T {
+    let Ok(value) = read else {
+        unreachable();
+    };
+    return value;
 }
 
 /// One node as the kernel call that computes it. The operand expressions are
 /// already in scope, since a graph's nodes are in topological order.
-fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
+fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64>) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
     let op = node.op;
-    check_constants_fold(node, exprs)?;
+    if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
+        let from = shapes.get(node.inputs[0]).unwrap();
+        let to = shapes.get(node.outputs[0]).unwrap();
+        let operand = exprs.reference(&node.inputs[0]);
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        return Result::Ok(
+            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents_of(&to)})`,
+        );
+    }
+    if op == "Cast" {
+        let from = checked.primitives.get(node.inputs[0]).unwrap();
+        let to = checked.primitives.get(node.outputs[0]).unwrap();
+        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
+    }
+    if op == "Gather" {
+        let axis = settled(gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
+        if axis != 0 {
+            return Result::Err(EmitError::Refused(Refusal::of(node, `no kernel gathers along axis ${axis}`)));
+        }
+        return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
+    }
+    if op == "MaxPool" || op == "Conv" {
+        return Result::Ok(window_call(node, shapes, exprs));
+    }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
+        if left.rank() > 2 && right.rank() == 2 {
+            return Result::Ok(`matmul_shared(${a}, ${b})`);
+        }
         // The kernel's signature is `[..Bs, M, K]` against `[..Bs, K, N]`, so
         // a rank-1 operand and a broadcast batch axis have no call to write.
         if left.rank() < 2 || left.rank() != right.rank() || !batch_axes_agree(&left, &right) {
@@ -505,75 +619,123 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         }
         return Result::Ok(`matmul(${a}, ${b})`);
     }
-    if binary_body(&op, &"x", &"y") matches { Some(_) } {
+    if is_binary_elementwise(&op) {
         return binary_node_call(node, shapes, exprs);
     }
     if op == "Gemm" {
         return gemm_call(node, shapes, exprs);
     }
-    if op == "Transpose" {
-        let a = exprs.reference(&node.inputs[0]);
-        let shape = shapes.get(node.inputs[0]).unwrap();
-        let Ok(perm) = transpose_perm(node, shape.rank()) else {
-            // Stage 0 read the same attribute and stopped the build there.
-            unreachable();
-        };
-        if perm.len() == 2 && perm[0] == 1 {
-            return Result::Ok(`transpose2(${a})`);
+    if op == "Where" {
+        let out = shapes.get(node.outputs[0]).unwrap();
+        let mut operands: List<String> = [];
+        for let tensor of node.inputs {
+            operands.push(lifted(node, &tensor, &out, checked, exprs)?);
         }
-        // A permutation that leaves every axis alone computes the operand.
-        // Every node result is bound as a value, so it is read as one.
+        return Result::Ok(`select(${operands.join(", ")})`);
+    }
+    if op == "Softmax" {
+        let axis = settled(softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank(), opset));
+        return Result::Ok(`softmax(${exprs.reference(&node.inputs[0])}, ${axis})`);
+    }
+    if is_reduction(&op) {
+        return reduction_call(node, checked, exprs);
+    }
+    if op == "Transpose" {
+        let shape = shapes.get(node.inputs[0]).unwrap();
+        let perm = settled(transpose_perm(node, shape.rank()));
+        // Every node result is bound as a value, so the operand is read as one.
         if is_identity(&perm) {
             return Result::Ok(exprs.value(&node.inputs[0]));
         }
-        builtin::cold_path();
-        return Result::Err(EmitError::Operator(UnimplementedOperator {
-            node: node.outputs[0],
-            op,
-        }));
+        let a = exprs.reference(&node.inputs[0]);
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        let to = shapes.get(node.outputs[0]).unwrap();
+        return Result::Ok(`permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
     }
-    if let Some(body) = unary_body(&op) {
-        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
-    }
-    builtin::cold_path();
-    return Result::Err(EmitError::Operator(UnimplementedOperator {
-        node: node.outputs[0],
-        op,
-    }));
+    let Some(body) = unary_body(&op) else {
+        // Stage 0 refuses every operator the kernels lack.
+        unreachable();
+    };
+    return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
 }
 
-/// A `Constant` is a literal rather than a tensor, so only an operator that
-/// already writes a closure over its other operand has anywhere to put one.
-/// Every other operand position stops the build here rather than at the
-/// lookup that would find no tensor.
-fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
-    for let [index, input] of node.inputs.into_iter().enumerate() {
-        if !exprs.scalars.contains_key(input) {
-            continue;
-        }
-        if folds_constant(node, index, exprs) {
-            continue;
-        }
-        builtin::cold_path();
-        return Result::Err(EmitError::Constant(UnfoldedConstant {
-            node: node.outputs[0],
-            op: node.op,
-            tensor: input,
-        }));
+/// A `Split` as one `slice_axis` per output, each cutting the next run.
+fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String> {
+    let shapes = &checked.shapes;
+    let x = shapes.get(node.inputs[0]).unwrap();
+    let parts = settled(split_parts(node, &checked.known, &x));
+    let axis = settled(split_axis(node, x.rank()));
+    let element = checked.primitives.get(node.inputs[0]).unwrap();
+    let pre = axis_run(&x, 0, axis);
+    let post = axis_run(&x, axis + 1, x.rank());
+    let operand = exprs.reference(&node.inputs[0]);
+    let mut calls: List<String> = [];
+    let mut start = 0;
+    for let [i, part] of parts.into_iter().enumerate() {
+        let part_axis = shapes.get(node.outputs[i]).unwrap().axes[axis].name;
+        let turbofish = `::<${element}, [${pre}], ${x.axes[axis].name}, ${part_axis}, [${post}]>`;
+        calls.push(`slice_axis${turbofish}(${operand}, ${axis}, ${start}, ${part})`);
+        start += part;
     }
-    return Result::Ok(());
+    return calls;
 }
 
-/// Whether the operand at `index` is one this operator folds: a binary
-/// elementwise operand whose partner is a tensor, or a `Gemm` bias.
-fn folds_constant(node: &Node, index: i32, exprs: &Operands) -> bool {
+/// An operand as a tensor of `out`'s rank, for a kernel whose operands share
+/// one axis list. A shorter one is lifted under `out`'s leading axes.
+fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    if !shared_axes_agree(&shape, out) {
+        builtin::cold_path();
+        return Result::Err(broadcast_error(node, &shape, out));
+    }
+    let operand = exprs.reference(tensor);
+    if shape.rank() == out.rank() {
+        return Result::Ok(operand);
+    }
+    // The shared axes agree by name, so the lifted operand's are `out`'s.
+    let element = checked.primitives.get(*tensor).unwrap();
+    return Result::Ok(
+        `&lift::<${element}, [${axis_list(&shape)}], [${axis_list(out)}]>(${operand}, ${out.rank()})`,
+    );
+}
+
+/// A `ReduceMean` or `ReduceSum`, whose kernels keep each reduced axis at
+/// extent 1, so one that drops them has no call to write.
+fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+    let x = checked.shapes.get(node.inputs[0]).unwrap();
+    if checked.shapes.get(node.outputs[0]).unwrap().rank() != x.rank() {
+        return Result::Err(EmitError::Refused(Refusal::of(node, "no kernel drops a reduced axis")));
+    }
+    let axes = settled(reduced_axes(node, &checked.known, x.rank()));
+    let a = exprs.reference(&node.inputs[0]);
+    if node.op == "ReduceMean" {
+        return Result::Ok(`reduce_mean(${a}, ${axes})`);
+    }
+    return Result::Ok(`reduce(${a}, ${axes}, 0.0, |x, y| x + y)`);
+}
+
+/// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
+/// arithmetic operand whose partner is a tensor it does not widen. `None` reads it as a tensor.
+fn folded_literal(
+    node: &Node,
+    index: i32,
+    scalars: &TreeMap<String, String>,
+    shapes: &TreeMap<String, Shape>,
+) -> Option<String> {
+    let Some(literal) = scalars.get(node.inputs[index]) else {
+        return null;
+    };
     if node.op == "Gemm" {
-        return index == 2;
+        return if index == 2 { Option::Some(literal) } else { null };
     }
-    if index > 1 || binary_body(&node.op, &"x", &"y") matches { None } {
-        return false;
+    if index > 1 || !is_binary_elementwise(&node.op) {
+        return null;
     }
-    return !exprs.scalars.contains_key(node.inputs[1 - index]);
+    let partner = node.inputs[1 - index];
+    if scalars.contains_key(partner) || shapes[node.inputs[index]].rank() > shapes[partner].rank() {
+        return null;
+    }
+    return Option::Some(literal);
 }
 
 /// A two-operand node's operand expressions and the shapes stage 0 gave them.
@@ -586,26 +748,52 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
     ];
 }
 
-/// One binary elementwise node. A one-element `Constant` operand folds into
-/// the closure, so the pass allocates no tensor for it and walks the other
-/// operand once.
+/// One binary elementwise node. A folded scalar operand folds into the closure,
+/// so no tensor is allocated for it and the other operand is walked once.
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
-    if let Some(literal) = exprs.scalars.get(node.inputs[1]) {
-        let body = binary_body(&op, &"v", &literal).unwrap();
+    if let Some(literal) = folded_literal(node, 1, &exprs.scalars, shapes) {
+        let body = binary_body(&op, &"v", &literal);
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
     }
-    if let Some(literal) = exprs.scalars.get(node.inputs[0]) {
-        let body = binary_body(&op, &literal, &"v").unwrap();
+    if let Some(literal) = folded_literal(node, 0, &exprs.scalars, shapes) {
+        let body = binary_body(&op, &literal, &"v");
         return Result::Ok(`map(${exprs.reference(&node.inputs[1])}, |v| ${body})`);
     }
     let [a, b, left, right] = binary_call(node, shapes, exprs);
-    let body = binary_body(&op, &"x", &"y").unwrap();
+    let body = binary_body(&op, &"x", &"y");
     let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
         builtin::cold_path();
         return Result::Err(broadcast_error(node, &left, &right));
     };
     return Result::Ok(call);
+}
+
+/// A `MaxPool` or `Conv` as its kernel, over the window stage 0 read. Each
+/// spatial axis list is a pack, so the turbofish spells the output's.
+fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> String {
+    let x = shapes.get(node.inputs[0]).unwrap();
+    let y = shapes.get(node.outputs[0]).unwrap();
+    let window = settled(window_of(node, &x, shapes));
+    let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${window.pads}, output: ${window.output} }`;
+    let input = exprs.reference(&node.inputs[0]);
+    if node.op == "MaxPool" {
+        return `max_pool::<${x.axes[0].name}, ${x.axes[1].name}, [${spatial_axes(&x)}], [${spatial_axes(&y)}]>(${input}, ${geometry})`;
+    }
+    let w = shapes.get(node.inputs[1]).unwrap();
+    let turbofish = `::<${x.axes[0].name}, ${x.axes[1].name}, ${w.axes[0].name}, [${spatial_axes(&x)}], [${spatial_axes(
+        &w,
+    )}], [${spatial_axes(&y)}]>`;
+    let weight = exprs.reference(&node.inputs[1]);
+    if has_bias(node) {
+        return `conv_bias${turbofish}(${input}, ${weight}, ${exprs.reference(&node.inputs[2])}, ${geometry})`;
+    }
+    return `conv${turbofish}(${input}, ${weight}, ${geometry})`;
+}
+
+/// The axes past a shape's first two, which a window slides over.
+fn spatial_axes(shape: &Shape) -> String {
+    return axis_run(shape, 2, shape.rank());
 }
 
 /// A constant as an expression the generated source spells. Wado has no
@@ -625,9 +813,8 @@ fn float_literal(value: f32) -> String {
     return `(${value} as f32)`;
 }
 
-/// The kernel that combines two operands elementwise, or `None` where no
-/// kernel broadcasts one against the other. Once the shared axes are one list,
-/// which operand is the shorter decides the kernel.
+/// The kernel that combines two operands elementwise, chosen by which is the
+/// shorter, or `None` where no kernel broadcasts one against the other.
 fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
     if !shared_axes_agree(left, right) {
         return null;
@@ -636,21 +823,17 @@ fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &
         return Option::Some(`zip(${a}, ${b}, |x, y| ${body})`);
     }
     if right.rank() < left.rank() {
-        let turbofish = `::<[${leading_axes(left, right.rank())}], [${axis_list(right)}]>`;
+        let turbofish = `::<[${axis_run(left, 0, left.rank() - right.rank())}], [${axis_list(right)}]>`;
         return Option::Some(`zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`);
     }
-    let turbofish = `::<[${leading_axes(right, left.rank())}], [${axis_list(left)}]>`;
+    let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
     return Option::Some(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
 }
 
-/// `Gemm` is `alpha * A' * B' + beta * C`, which the kernels spell as a
-/// `matmul` under two optional `transpose2`s, a `map` for each scalar that is
-/// not one, and an elementwise add for the bias.
+/// `Gemm`'s `alpha * A' * B' + beta * C`, as a `matmul` under optional
+/// `transpose2`s, a `map` per scalar that is not one, and a bias add.
 fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
-    let Ok([alpha, beta, trans_a, trans_b]) = gemm_options(node) else {
-        // Stage 0 read the same attributes and stopped the build there.
-        unreachable();
-    };
+    let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let a = transposed(&exprs.reference(&node.inputs[0]), trans_a);
     let b = transposed(&exprs.reference(&node.inputs[1]), trans_b);
     let mut product = `matmul(${a}, ${b})`;
@@ -660,7 +843,7 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     if !has_bias(node) {
         return Result::Ok(product);
     }
-    if let Some(literal) = exprs.scalars.get(node.inputs[2]) {
+    if let Some(literal) = folded_literal(node, 2, &exprs.scalars, shapes) {
         let scaled = if beta == 1.0 { literal } else { `${literal} * ${float_literal(beta)}` };
         return Result::Ok(`map(&${product}, |v| v + ${scaled})`);
     }
@@ -703,10 +886,15 @@ fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
-/// 0 lets an extent of 1 stretch to meet the other operand and no kernel does,
-/// so agreeing on the name is not yet agreeing.
+/// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agrees(&right.extent);
+}
+
+/// `same_axis` for an elementwise kernel, which stretches an extent of 1.
+fn stretchable_axis(left: &Axis, right: &Axis) -> bool {
+    return left.name == right.name
+        && (left.extent.agrees(&right.extent) || left.extent.is_one() || right.extent.is_one());
 }
 
 /// Whether the axes the two operands share, aligned from the end as every
@@ -714,7 +902,7 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
 fn shared_axes_agree(left: &Shape, right: &Shape) -> bool {
     let common = i32::min(left.rank(), right.rank());
     for let mut back = 0; back < common; back += 1 {
-        if !same_axis(left.from_end(back), right.from_end(back)) {
+        if !stretchable_axis(left.from_end(back), right.from_end(back)) {
             return false;
         }
     }
@@ -733,41 +921,40 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
     return true;
 }
 
-/// The axes `shape` carries ahead of its last `back`, which is the `..Pre` a
-/// broadcasting kernel's turbofish names.
-fn leading_axes(shape: &Shape, back: i32) -> String {
-    assert back <= shape.rank();
-    let mut pre: List<String> = [];
-    for let mut i = 0; i < shape.rank() - back; i += 1 {
-        pre.push(shape.axes[i].name);
-    }
-    return pre.join(", ");
-}
-
-/// The expression a binary operator's elements combine through, over the
-/// kernel's `x` and `y`.
-fn binary_body(op: &String, lhs: &String, rhs: &String) -> Option<String> {
+/// The expression a binary operator's elements combine through.
+fn binary_body(op: &String, lhs: &String, rhs: &String) -> String {
     if *op == "Add" {
-        return Option::Some(`${lhs} + ${rhs}`);
+        return `${lhs} + ${rhs}`;
     }
     if *op == "Sub" {
-        return Option::Some(`${lhs} - ${rhs}`);
+        return `${lhs} - ${rhs}`;
     }
     if *op == "Mul" {
-        return Option::Some(`${lhs} * ${rhs}`);
+        return `${lhs} * ${rhs}`;
     }
     if *op == "Div" {
-        return Option::Some(`${lhs} / ${rhs}`);
+        return `${lhs} / ${rhs}`;
     }
     if *op == "Pow" {
-        return Option::Some(`f32::pow(${lhs}, ${rhs})`);
+        return `f32::pow(${lhs}, ${rhs})`;
     }
-    return null;
+    // Stage 0 refuses every operator the kernels lack.
+    unreachable();
+}
+
+/// One element `v` of primitive `from` as `to`, as ONNX's `Cast` converts it:
+/// a bool is 1 or 0, and anything nonzero is true.
+fn cast_body(from: &String, to: &String) -> String {
+    if *from == "bool" {
+        return if *to == "i64" { "if v { 1 } else { 0 }" } else { "if v { 1.0 } else { 0.0 }" };
+    }
+    if *to == "bool" {
+        return if *from == "i64" { "v != 0" } else { "v != 0.0" };
+    }
+    return `v as ${to}`;
 }
 
 /// The expression a unary operator maps each element through, over `v`.
-/// `Erf` has no entry: `core:prelude` carries no error function, and an
-/// approximation written here would not meet the conformance tolerance.
 fn unary_body(op: &String) -> Option<String> {
     if *op == "Relu" {
         return Option::Some("f32::max(v, 0.0)");
@@ -777,6 +964,9 @@ fn unary_body(op: &String) -> Option<String> {
     }
     if *op == "Tanh" {
         return Option::Some("f32::tanh(v)");
+    }
+    if *op == "Erf" {
+        return Option::Some("f32::erf(v)");
     }
     if *op == "Exp" {
         return Option::Some("f32::exp(v)");
@@ -808,9 +998,9 @@ fn axis_names(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
         push_axes(&mut names, &mut seen, shapes, &vi.name);
     }
     for let node of &graph.nodes {
-        // `infer` succeeded, and it refuses a node that names any other number.
-        assert node.outputs.len() == 1;
-        push_axes(&mut names, &mut seen, shapes, &node.outputs[0]);
+        for let output of node.outputs {
+            push_axes(&mut names, &mut seen, shapes, &output);
+        }
     }
     return names;
 }
@@ -819,8 +1009,16 @@ fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &Tree
     let Some(shape) = shapes.get(*tensor) else {
         return;
     };
-    for let axis of &shape.axes {
-        if seen.insert(axis.name) {
+    push_markers(names, seen, &shape.axes);
+}
+
+/// A merged axis is spelled with its parts' markers, so the parts are what the
+/// module declares.
+fn push_markers(names: &mut List<String>, seen: &mut TreeSet<String>, axes: &List<Axis>) {
+    for let axis of *axes {
+        if !axis.parts.is_empty() {
+            push_markers(names, seen, &axis.parts);
+        } else if seen.insert(axis.name) {
             names.push(axis.name);
         }
     }

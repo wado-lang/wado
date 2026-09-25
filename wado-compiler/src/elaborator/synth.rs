@@ -295,9 +295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || tt.fq_base_type_name(tt.representation_head(param)) == *head
             }
             ArgClass::IntLit => {
-                tt.is_integer(param)
-                    || tt.is_float(param)
-                    || tt.wide_int_item(tt.representation_head(param)).is_some()
+                tt.is_numeric(param) || tt.wide_int_item(tt.representation_head(param)).is_some()
             }
             ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.is_string(tt.representation_head(param)),

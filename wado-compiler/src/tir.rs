@@ -2402,6 +2402,19 @@ impl TypeTable {
             .then_some(inner)
     }
 
+    /// `TreeMap<K, V>`'s key and value types, keyed by the declaration as
+    /// [`Self::as_option`] is.
+    pub fn as_tree_map(&self, type_id: TypeId) -> Option<(TypeId, TypeId)> {
+        let ResolvedType::GenericInstance { type_args, .. } = self.get(type_id) else {
+            return None;
+        };
+        let [key, value] = type_args[..] else {
+            return None;
+        };
+        self.is_compiler_item_type(type_id, CompilerItem::TreeMap)
+            .then_some((key, value))
+    }
+
     /// `Result<T, E>`'s two arguments, keyed by the declaration the registry
     /// records rather than the spelling `Result` (WEP 2026-08-12). A newtype
     /// over one answers through its representation.
@@ -5179,40 +5192,13 @@ impl FunctionRef {
         }
     }
 
-    /// Get the builtin function name if this is a builtin call.
-    /// Returns the qualified name (e.g., "`builtin::array_len`").
-    ///
-    /// Functions declared in `core:builtin` and functions synthesised
-    /// from wasm-asset exports (`ModuleSource::Wasm`) both go through
-    /// the import-style builtin lowering — they share `#[canonical(...)]`
-    /// metadata in `BuiltinRegistry` and resolve to the same wasm
-    /// import call shape.
-    pub fn builtin_name(&self) -> Option<String> {
-        if self.monomorph_info.is_some() {
-            return None;
-        }
-        if self.module_source.is_builtin() {
-            Some(format!("builtin::{}", self.name))
-        } else {
-            None
-        }
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup::from(self).intrinsic()
     }
 
-    /// Get the monomorphized builtin name if this is a monomorphized builtin function.
-    pub fn monomorphized_builtin_name(&self) -> Option<String> {
-        let generic_name = self
-            .monomorph_info
-            .as_ref()
-            .map(|i| i.generic_name.as_str())?;
-
-        match generic_name {
-            "array_get_value" | "array_get_ref" | "array_get_ref_mut" | "array_set"
-            | "array_new" | "array_len" | "array_copy" | "array_fill" | "array_clone"
-            | "array_clone_prefix" | "select" | "copy_value" | "is_uninitialized" | "black_box" => {
-                Some(format!("builtin::{generic_name}"))
-            }
-            _ => None,
-        }
+    /// Whether this is the `core:builtin` intrinsic `builtin`.
+    pub fn is_builtin_named(&self, builtin: &str) -> bool {
+        self.intrinsic() == Some(builtin)
     }
 
     /// Check if this function is monomorphized (instantiated from a generic)
@@ -6157,14 +6143,6 @@ pub struct MonomorphInfo {
     pub is_blanket: bool,
 }
 
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name. A name
-/// check that only compares `name` silently misses monomorphized builtins.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
-}
-
 /// The value a method call's receiver argument delivers, past the auto-`&` /
 /// `&mut` the elaborator takes of it. Every question about the receiver is about
 /// this value; the reference is only how the callee reaches it.
@@ -6625,6 +6603,16 @@ pub struct DeclarationLookup<'a> {
     pub name: &'a str,
     /// The generic declaration a monomorphized instance came from.
     pub generic_name: Option<&'a str>,
+}
+
+impl<'a> DeclarationLookup<'a> {
+    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
+    /// declared anywhere else may share the name, a wasm-asset export included.
+    pub fn intrinsic(self) -> Option<&'a str> {
+        self.module_source
+            .is_core_builtin()
+            .then(|| self.generic_name.unwrap_or(self.name))
+    }
 }
 
 impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
@@ -7392,22 +7380,6 @@ pub struct ClosureFunctor {
     pub canonical_return: TypeId,
 }
 
-/// External function import from Component Model canonical builtins.
-/// These are functions that need to be imported at the Wasm level.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TirImport {
-    /// Import namespace ("wasi" or "env")
-    pub namespace: String,
-    /// Canonical name for the import (e.g., "stream-new", "`libm_sin`")
-    pub canonical_name: String,
-    /// Internal function name (e.g., "`stream_new`", "`f64_sin`")
-    pub func_name: String,
-    /// Parameter types
-    pub params: Vec<TypeId>,
-    /// Return type
-    pub return_type: TypeId,
-}
-
 /// Tracks a requested instantiation of a generic item.
 /// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
 /// `method_info` names an instance but never decides one: it is left out of
@@ -7462,8 +7434,6 @@ pub struct TirModule {
     pub module_source: ModuleSource,
     /// Shared type table across all modules (enables cross-module type references)
     pub type_table: Rc<RefCell<TypeTable>>,
-    /// External function imports (canonical builtins from wasi/env namespaces)
-    pub imports: Vec<TirImport>,
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
     pub structs: Vec<TirStruct>,
     pub enums: Vec<TirEnum>,
@@ -7504,7 +7474,6 @@ impl TirModule {
         Self {
             module_source,
             type_table: Rc::new(RefCell::new(TypeTable::new())),
-            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),
@@ -7533,7 +7502,6 @@ impl TirModule {
         Self {
             module_source,
             type_table,
-            imports: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
             enums: Vec::new(),

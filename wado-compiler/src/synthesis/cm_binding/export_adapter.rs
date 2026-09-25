@@ -456,13 +456,8 @@ fn lower_to_flat_inner(
 
             result
         }
-        ResolvedType::GenericInstance { def, type_args }
-            if ctx
-                .type_table
-                .borrow()
-                .compiler_item_def(CompilerItem::TreeMap)
-                == Some(*def)
-                && type_args.len() == 2 =>
+        ResolvedType::GenericInstance { .. }
+            if let Some((key, value_type)) = ctx.type_table.borrow().as_tree_map(type_id) =>
         {
             // `map<K, V>` flattens as the `list<tuple<K, V>>` it despecializes to.
             let lower_ctx = LowerContext {
@@ -474,8 +469,8 @@ fn lower_to_flat_inner(
             let (key_ast, value_ast) = {
                 let tt = ctx.type_table.borrow();
                 (
-                    type_id_to_ast_type(type_args[0], &tt, ctx.cm_interface_registry),
-                    type_id_to_ast_type(type_args[1], &tt, ctx.cm_interface_registry),
+                    type_id_to_ast_type(key, &tt, ctx.cm_interface_registry),
+                    type_id_to_ast_type(value_type, &tt, ctx.cm_interface_registry),
                 )
             };
             let (buffer_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(

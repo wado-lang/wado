@@ -1,0 +1,116 @@
+//! What the invocation fixes before stage 0 reads a graph: extents for its
+//! symbolic dimensions, and the outputs `forward` returns.
+
+use { TreeMap, TreeSet } from "core:collections";
+use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+
+/// An invocation option the graph cannot take, and why.
+pub struct OptionConflict {
+    pub option: String,
+    pub reason: String,
+}
+
+impl Display for OptionConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.option}: ${self.reason}`);
+    }
+}
+
+impl Error for OptionConflict {
+}
+
+fn conflict(option: String, reason: String) -> Result<(), OptionConflict> {
+    return Result::Err(OptionConflict { option, reason });
+}
+
+/// Every `dim_param` that `dims` names, made the static extent it gives. A name
+/// the graph never declares fixes nothing, so it is a mistake in the option.
+pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), OptionConflict> {
+    for let [name, extent] of dims.entries() {
+        if *extent < 0 {
+            return conflict("dims", `${name} is ${extent}, and an extent is not negative`);
+        }
+    }
+    let mut bound = TreeSet::<String>::new();
+    for let vi of &mut graph.inputs {
+        bind(vi, dims, &mut bound);
+    }
+    for let vi of &mut graph.outputs {
+        bind(vi, dims, &mut bound);
+    }
+    for let [name, _] of dims.entries() {
+        if !bound.contains(*name) {
+            return conflict("dims", `the graph declares no dimension ${name}`);
+        }
+    }
+    return Result::Ok(());
+}
+
+fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<String>) {
+    let Dims(written) = vi.rank else {
+        return;
+    };
+    let mut fixed: List<Dim> = [];
+    for let d of written {
+        if let Symbol(name) = d && let Some(extent) = dims.get(name) {
+            bound.insert(name);
+            fixed.push(Dim::Static(extent));
+        } else {
+            fixed.push(d);
+        }
+    }
+    vi.rank = Rank::Dims(fixed);
+}
+
+/// The graph cut down to what the outputs `names` lists read, which it returns
+/// in that order. An empty list keeps the graph whole.
+pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), OptionConflict> {
+    if names.is_empty() {
+        return Result::Ok(());
+    }
+    let mut outputs: List<ValueInfo> = [];
+    let mut needed = TreeSet::<String>::new();
+    for let name of *names {
+        let Some(at) = graph.outputs.position(|vi| vi.name == name) else {
+            return conflict("outputs", `the graph declares no output ${name}`);
+        };
+        outputs.push(graph.outputs[at]);
+        needed.insert(name);
+    }
+    graph.outputs = outputs;
+    let mut nodes: List<Node> = [];
+    for let mut i = graph.nodes.len() - 1; i >= 0; i -= 1 {
+        let node = graph.nodes[i];
+        if !produces_any(&node, &needed) {
+            continue;
+        }
+        for let input of node.inputs {
+            needed.insert(input);
+        }
+        nodes.push(node);
+    }
+    nodes.reverse();
+    graph.nodes = nodes;
+    graph.inputs = read_of(&graph.inputs, &needed);
+    graph.initializers = read_of(&graph.initializers, &needed);
+    return Result::Ok(());
+}
+
+fn produces_any(node: &Node, needed: &TreeSet<String>) -> bool {
+    for let output of node.outputs {
+        if needed.contains(output) {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn read_of(declared: &List<ValueInfo>, needed: &TreeSet<String>) -> List<ValueInfo> {
+    let mut kept: List<ValueInfo> = [];
+    for let vi of *declared {
+        if needed.contains(vi.name) {
+            kept.push(vi);
+        }
+    }
+    return kept;
+}
