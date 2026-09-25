@@ -233,6 +233,7 @@ pub struct "EnumCase<wasi:cli/types.wado/ErrorCode>" {
     value: ErrorCode,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<mess_dirty.wado/Color>" {
@@ -240,6 +241,7 @@ pub struct "EnumCase<mess_dirty.wado/Color>" {
     value: Color,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/types.wado/CopyResult>" {
@@ -247,6 +249,15 @@ pub struct "EnumCase<core:prelude/types.wado/CopyResult>" {
     value: CopyResult,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
+}
+
+pub struct "EnumCase<core:prelude/traits.wado/WireEncoding>" {
+    discriminant: i32,
+    value: WireEncoding,
+    case_name: String,
+    wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/traits.wado/CaseStyle>" {
@@ -254,6 +265,7 @@ pub struct "EnumCase<core:prelude/traits.wado/CaseStyle>" {
     value: CaseStyle,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/traits.wado/Ordering>" {
@@ -261,6 +273,7 @@ pub struct "EnumCase<core:prelude/traits.wado/Ordering>" {
     value: Ordering,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/primitive.wado/CharErrorKind>" {
@@ -268,6 +281,7 @@ pub struct "EnumCase<core:prelude/primitive.wado/CharErrorKind>" {
     value: CharErrorKind,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/intparse.wado/FloatErrorKind>" {
@@ -275,6 +289,7 @@ pub struct "EnumCase<core:prelude/intparse.wado/FloatErrorKind>" {
     value: FloatErrorKind,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/intparse.wado/IntErrorKind>" {
@@ -282,6 +297,7 @@ pub struct "EnumCase<core:prelude/intparse.wado/IntErrorKind>" {
     value: IntErrorKind,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/fpfmt.wado/SpecialKind>" {
@@ -289,6 +305,7 @@ pub struct "EnumCase<core:prelude/fpfmt.wado/SpecialKind>" {
     value: SpecialKind,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "EnumCase<core:prelude/format.wado/Alignment>" {
@@ -296,6 +313,7 @@ pub struct "EnumCase<core:prelude/format.wado/Alignment>" {
     value: Alignment,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 pub struct "VariantCase<mess_dirty.wado/Shape,()>" {
@@ -326,6 +344,7 @@ pub struct "StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>"
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<mess_dirty.wado/Wrapper,i32>" {
@@ -335,6 +354,7 @@ pub struct "StructField<mess_dirty.wado/Wrapper,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<mess_dirty.wado/Counter,i32>" {
@@ -344,6 +364,7 @@ pub struct "StructField<mess_dirty.wado/Counter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<mess_dirty.wado/Point,i32>" {
@@ -353,6 +374,7 @@ pub struct "StructField<mess_dirty.wado/Point,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,u32>" {
@@ -362,6 +384,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,u32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wado/Waitable>" {
@@ -371,6 +394,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
@@ -380,6 +404,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>" {
@@ -389,6 +414,7 @@ pub struct "StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.w
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamWrite,i32>" {
@@ -398,6 +424,7 @@ pub struct "StructField<core:prelude/types.wado/StreamWrite,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>" {
@@ -407,6 +434,7 @@ pub struct "StructField<core:prelude/traits.wado/LenientParseError,core:prelude/
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>" {
@@ -416,6 +444,7 @@ pub struct "StructField<core:prelude/traits.wado/ConvertError,core:prelude/strin
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSlice,i32>" {
@@ -425,6 +454,7 @@ pub struct "StructField<core:prelude/string.wado/StrSlice,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSlice,&Array<u8>>" {
@@ -434,6 +464,7 @@ pub struct "StructField<core:prelude/string.wado/StrSlice,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,bool>" {
@@ -443,6 +474,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,i32>" {
@@ -452,6 +484,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>" {
@@ -461,6 +494,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>" {
@@ -470,6 +504,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>" {
@@ -479,6 +514,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,bool>" {
@@ -488,6 +524,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,i32>" {
@@ -497,6 +534,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>" {
@@ -506,6 +544,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,bool>" {
@@ -515,6 +554,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,i32>" {
@@ -524,6 +564,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>" {
@@ -533,6 +574,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,i32>" {
@@ -542,6 +584,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>" {
@@ -551,6 +594,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>"
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIter,i32>" {
@@ -560,6 +604,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>" {
@@ -569,6 +614,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>" {
@@ -578,6 +624,7 @@ pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>" {
@@ -587,6 +634,7 @@ pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/String,i32>" {
@@ -596,6 +644,7 @@ pub struct "StructField<core:prelude/string.wado/String,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/ByteArray>" {
@@ -605,6 +654,7 @@ pub struct "StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,bool>" {
@@ -614,6 +664,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,i32>" {
@@ -623,6 +674,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,u32>" {
@@ -632,6 +684,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,u32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>" {
@@ -641,6 +694,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Error,i32>" {
@@ -650,6 +704,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>" {
@@ -659,6 +714,7 @@ pub struct "StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>" {
@@ -668,6 +724,7 @@ pub struct "StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>" {
@@ -677,6 +734,7 @@ pub struct "StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/in
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/int128.wado/i128,i64>" {
@@ -686,6 +744,7 @@ pub struct "StructField<core:prelude/int128.wado/i128,i64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/int128.wado/i128,u64>" {
@@ -695,6 +754,7 @@ pub struct "StructField<core:prelude/int128.wado/i128,u64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/int128.wado/u128,u64>" {
@@ -704,6 +764,7 @@ pub struct "StructField<core:prelude/int128.wado/u128,u64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/BinaryFormat,i32>" {
@@ -713,6 +774,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/BinaryFormat,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,i32>" {
@@ -722,6 +784,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,u64>" {
@@ -731,6 +794,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,u64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/PmHiLo,u64>" {
@@ -740,6 +804,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/PmHiLo,u64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,i32>" {
@@ -749,6 +814,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,u64>" {
@@ -758,6 +824,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,u64>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>" {
@@ -767,6 +834,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,&mut core:prelude/str
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,i32>" {
@@ -776,6 +844,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,bool>" {
@@ -785,6 +854,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>" {
@@ -794,6 +864,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,core:prelude/format.w
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,char>" {
@@ -803,6 +874,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,char>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" {
@@ -1064,6 +1136,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<u8>,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>" {
@@ -1073,6 +1146,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeExclusive<i32>,i32>" {
@@ -1082,6 +1156,7 @@ pub struct "StructField<core:prelude/range.wado/RangeExclusive<i32>,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
@@ -1091,6 +1166,7 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
@@ -1100,6 +1176,7 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/types.wado/CopyResult>" {
@@ -1109,6 +1186,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/typ
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/list.wado/List<u8>>" {
@@ -1118,6 +1196,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/lis
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
@@ -1127,6 +1206,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" {
@@ -1136,6 +1216,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" 
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,i32>" {
@@ -1145,6 +1226,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,i32>" {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,&Array<u32>>" {
@@ -1154,6 +1236,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u32>,&Array<u32>>
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,i32>" {
@@ -1163,6 +1246,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/S
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -1172,6 +1256,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/S
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>,i32>" {
@@ -1181,6 +1266,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -1190,6 +1276,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,fn mut(u8)->bool>" {
@@ -1199,6 +1286,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -1208,6 +1296,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -1217,6 +1306,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -1226,6 +1316,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -1235,6 +1326,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -1244,6 +1336,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -1253,6 +1346,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -1262,6 +1356,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>,bool>" {
@@ -1271,6 +1366,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -1280,6 +1376,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -1289,6 +1386,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,fn mut(char)->bool>" {
@@ -1298,6 +1396,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1307,6 +1406,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1316,6 +1416,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1325,6 +1426,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1334,6 +1436,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1343,6 +1446,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1352,6 +1456,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1361,6 +1466,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIter>,bool>" {
@@ -1370,6 +1476,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1379,6 +1486,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1388,6 +1496,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,fn mut([i32,char])->bool>" {
@@ -1397,6 +1506,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1406,6 +1516,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1415,6 +1526,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1424,6 +1536,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1433,6 +1546,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1442,6 +1556,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1451,6 +1566,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1460,6 +1576,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIndicesIter>,bool>" {
@@ -1469,6 +1586,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1478,6 +1596,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1487,6 +1606,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1496,6 +1616,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1505,6 +1626,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1514,6 +1636,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1523,6 +1646,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1532,6 +1656,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1541,6 +1666,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1550,6 +1676,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1559,6 +1686,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitIter>,bool>" {
@@ -1568,6 +1696,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1577,6 +1706,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1586,6 +1716,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1595,6 +1726,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1604,6 +1736,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1613,6 +1746,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1622,6 +1756,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1631,6 +1766,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1640,6 +1776,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1649,6 +1786,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1658,6 +1796,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitNIter>,bool>" {
@@ -1667,6 +1806,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1676,6 +1816,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1685,6 +1826,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1694,6 +1836,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1703,6 +1846,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1712,6 +1856,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1721,6 +1866,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1730,6 +1876,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1739,6 +1886,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1748,6 +1896,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1757,6 +1906,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>,bool>" {
@@ -1766,6 +1916,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1775,6 +1926,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1784,6 +1936,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1793,6 +1946,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1802,6 +1956,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1811,6 +1966,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1820,6 +1976,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1829,6 +1986,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1838,6 +1996,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1847,6 +2006,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1856,6 +2016,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrLinesIter>,bool>" {
@@ -1865,6 +2026,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1874,6 +2036,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1883,6 +2046,7 @@ pub struct "StructField<core:prelude/traits.wado/IterStepBy<core:prelude/string.
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,fn mut(char)->char>" {
@@ -1892,6 +2056,7 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,core:prelude/string.wado/StrCharIter>" {
@@ -1901,6 +2066,7 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>,fn(i32)->core:prelude/types.wado/Result<(),()>>" {
@@ -1910,6 +2076,7 @@ pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>,i32>" {
@@ -1919,6 +2086,7 @@ pub struct "StructField<core:prelude/types.wado/AsyncCall<core:prelude/types.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,i32>" {
@@ -1928,6 +2096,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -1937,6 +2106,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/stri
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>,i32>" {
@@ -1946,6 +2116,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/slice.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>,core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" {
@@ -1955,6 +2126,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/slice.wad
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>" {
@@ -1990,6 +2162,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/typ
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>,i32>" {
@@ -1999,6 +2172,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>,core:prelude/string.wado/String>" {
@@ -2008,6 +2182,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: WireEncoding,
 }
 
 pub struct "VariantCase<core:prelude/types.wado/Option<i32>,()>" {
@@ -2101,6 +2276,10 @@ pub struct "Box<core:prelude/types.wado/Option<T>>" {
 
 pub struct "Box<core:prelude/types.wado/Result<T,E>>" {
     value: Result<T, E>,
+}
+
+pub struct "Box<core:prelude/traits.wado/WireEncoding>" {
+    value: WireEncoding,
 }
 
 pub struct "Box<mess_dirty.wado/Shape>" {
@@ -2563,6 +2742,10 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyl
     value: Option<CaseStyle>,
 }
 
+pub struct "Box<core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>>" {
+    value: Option<WireEncoding>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<mess_dirty.wado/Color>>" {
     value: Option<Color>,
 }
@@ -2683,6 +2866,12 @@ pub enum CaseStyle {
     Pascal,
     Kebab,
     ScreamingKebab,
+}
+
+pub enum WireEncoding {
+    Plain,
+    ZigZag,
+    Fixed,
 }
 
 pub enum CopyResult {
@@ -10209,6 +10398,44 @@ pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>"(self: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/CaseStyle>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>$core:prelude/traits.wado/WireEncoding"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>>, index: i32) -> WireEncoding {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>$core:prelude/traits.wado/WireEncoding"(payload: WireEncoding, index: i32) -> Option<WireEncoding> {
+    return match index {
+        0 => Option<WireEncoding>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>$()"(v: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>$()"(payload: (), index: i32) -> Option<WireEncoding> {
+    return match index {
+        1 => Option<WireEncoding>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>"(self: Box<core:prelude/types.wado/Option<core:prelude/traits.wado/WireEncoding>>) -> i32 {
     return $variant_tag(self.value);
 }
 
