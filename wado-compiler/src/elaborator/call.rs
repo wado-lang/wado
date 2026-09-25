@@ -652,6 +652,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Record the receiver segment of `Type::member` as a type name, as written
+    /// where it is the only prefix, else under the `effective` name it reached.
+    fn record_receiver_reference(&mut self, ident: &ast::IdentExpr, effective: &str) {
+        match ident.segments.as_slice() {
+            [receiver, _] => self.record_type_name_reference(receiver.id, &receiver.name),
+            [first, ..] => self.record_item_reference_by_name(first.id, effective),
+            [] => {}
+        }
+    }
+
     /// The impl's own type, where `ident` is a `Self::Case` path.
     pub(super) fn self_case_receiver(&self, ident: &ast::IdentExpr) -> Option<TypeId> {
         match ident.segments.as_slice() {
@@ -1192,14 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Static method call (Type::method). Static methods are
             // registered with mangled names "Type::method".
             else if self.is_static_method_at(receiver_site, prefix, suffix) {
-                // Record the receiver-type segment (prefix) as a reference to
-                // the type's decl. After `Self::` / `T::` rewriting, `prefix`
-                // is the concrete type name and the segment's AstId is the
-                // `Self` / `T` token — the edge correctly resolves clicks on
-                // `Self` to the concrete type's decl.
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
+                self.record_receiver_reference(ident, prefix);
                 // Record the method segment (suffix) as a reference to the
                 // declaration this call resolves to. The impl selection knows
                 // which one answered — two conversion impls on a type declare
@@ -1486,9 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.flags_members_through_newtype(receiver_site, prefix)
                 && matches!(suffix, "none" | "all")
             {
-                if let Some(prefix_seg) = ident.segments.first() {
-                    self.record_item_reference_by_name(prefix_seg.id, prefix);
-                }
+                self.record_receiver_reference(ident, prefix);
                 // Reify rebuilds the flags `none()` / `all()`
                 // constant from the AST + flags info; the body walk
                 // projects only the result type.

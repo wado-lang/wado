@@ -1,0 +1,20 @@
+// An arm naming a case whose payload has no value is unreachable, whatever
+// spells the payload type.
+
+type Void = !;
+
+fn f(r: Result<i32, !>) -> i32 {
+    return match r { Ok(v) => v, Err(_) => 0 };
+}
+
+fn g(x: Option<Void>) -> i32 {
+    return match x { None => 1, Some(_) => 2 };
+}
+
+test {
+    assert f(Ok(1)) == 1;
+    assert g(null) == 1;
+}
+
+__DATA__
+{"compile_error": ":7:34: invalid pattern: unreachable: no `Result<i32, !>` is a `Err`, whose payload `!` has no value\n:11:33: invalid pattern: unreachable: no `Option<Void>` is a `Some`, whose payload `Void` has no value", "compile_error_count": 2}

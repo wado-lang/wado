@@ -540,7 +540,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
             [prefix, case, ..] => {
-                self.record_item_reference_by_name(prefix.id, type_name);
+                self.record_type_name_reference(prefix.id, type_name);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
             [_] => unreachable!("a qualified path has two or more segments"),
@@ -570,16 +570,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
-    /// otherwise.
+    /// otherwise. `Self` lands on the declaration of the type it stands for.
     pub(in crate::elaborator) fn record_type_name_reference(&mut self, use_id: AstId, name: &str) {
-        if let Some(decl_id) = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(name)
-            .and_then(|b| b.decl)
-        {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        if let Some(decl_id) = trait_ctx.type_params.get(name).and_then(|b| b.decl) {
             self.record_reference(use_id, decl_id);
+        } else if name == "Self" {
+            if let Some(def) = trait_ctx.self_type.and_then(|ty| self.tysys.type_def(ty)) {
+                let node = self.tysys.resolutions.defs().ast_id(def);
+                self.insert_reference(use_id, node);
+            }
         } else {
             self.record_item_reference_by_name(use_id, name);
         }

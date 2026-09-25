@@ -1,0 +1,25 @@
+// A case whose payload has no value holds no value either, so a match need
+// not cover it: `None` alone covers an `Option<!>`, `Ok` alone a `Result<T, !>`.
+
+type Void = !;
+
+fn ok_only(r: Result<i32, !>) -> i32 {
+    return match r { Ok(v) => v };
+}
+
+fn ok_only_through_newtype(r: Result<i32, Void>) -> i32 {
+    return match r { Ok(v) => v };
+}
+
+test "None covers an Option<!>" {
+    let x = null;
+    assert (match x { None => 1 }) == 1;
+}
+
+test "Ok covers a Result whose error has no value" {
+    assert ok_only(Ok(3)) == 3;
+    assert ok_only_through_newtype(Ok(4)) == 4;
+}
+
+__DATA__
+{"test": {}}

@@ -2879,6 +2879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|c| Case {
                     name: c.name.clone(),
                     has_payload: false,
+                    inhabited: true,
                 })
                 .collect();
             let index = cases.iter().position(|c| c.name == name)?;
@@ -2889,27 +2890,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
-        let (index, case) = variant_info.case_named(name)?;
+        let (index, _) = variant_info.case_named(name)?;
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(scrutinee_type)
+            .unwrap_or_default();
+        let payload_types: Vec<TypeId> = variant_info
+            .cases
+            .iter()
+            .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
+            .collect();
         let cases: Rc<[Case]> = {
             let tt = self.tysys.type_table.borrow();
             variant_info
                 .cases
                 .iter()
-                .map(|c| Case {
+                .zip(&payload_types)
+                .map(|(c, &payload_type)| Case {
                     name: c.name.clone(),
                     has_payload: c.has_payload(&tt),
+                    inhabited: !tt.is_never(payload_type),
                 })
                 .collect()
         };
+        // A case no value reaches was reported where its pattern was resolved.
+        if !cases[index].inhabited {
+            return None;
+        }
         let payload = match payload.filter(|_| cases[index].has_payload) {
-            Some(p) => {
-                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
-                Some(Box::new(self.exh_pattern(p, payload_type)?))
-            }
+            Some(p) => Some(Box::new(self.exh_pattern(p, payload_types[index])?)),
             None => None,
         };
         Some(Pat::Case {
@@ -3475,7 +3486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Record use→def reference for the struct type name.
         if let (Some(name_id), Some(written)) = (struct_lit.name_id, name.as_ref()) {
-            self.record_item_reference_by_name(name_id, written);
+            self.record_type_name_reference(name_id, written);
         }
 
         // Which declaration the written name means is the resolve pass's

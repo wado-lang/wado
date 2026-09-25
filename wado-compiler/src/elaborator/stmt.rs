@@ -1901,11 +1901,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     }
                 };
-                if payload_type == TypeTable::NEVER {
-                    let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
+                if self.tysys.type_table.borrow().is_never(payload_type) {
+                    let [scrutinee_name, payload_name] = [scrutinee_type, payload_type]
+                        .map(|t| self.tysys.type_table.borrow().type_name(t));
                     let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
-                            "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `!` has no value"
+                            "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `{payload_name}` has no value"
                         ),
                         span: *span,
                     });
