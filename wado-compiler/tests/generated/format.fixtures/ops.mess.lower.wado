@@ -2533,6 +2533,8 @@ pub fn error_context_debug_message(handle: i32, outptr: i32);
 
 pub fn call_indirect_stderr_write_via_stream(rx: i32) -> i32;
 
+pub fn f64_abs(x: f64) -> f64;
+
 pub fn f64_floor(x: f64) -> f64;
 
 pub fn i8x16_eq(a: v128, b: v128) -> v128;
@@ -3117,11 +3119,7 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     if (exp < 0) {
         buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"-", used: 1 });
     }
-    let abs_exp: i32 = if (exp < 0) {
-        -exp;
-    } else {
-        exp;
-    };
+    let abs_exp: i32 = "core::prelude/primitive.wado::i32::abs"(exp);
     if (abs_exp < 10) {
         buf."core:prelude/string.wado/String::push"("core::prelude/primitive.wado::char::from_u32_unchecked"((48 + abs_exp as u32)));
     } else {
@@ -3685,14 +3683,6 @@ fn count_digits_u64(val: u64) -> i32 {
     return 20;
 }
 
-fn abs_to_u64(val: i64) -> u64 {
-    return if (val < 0) {
-        (0 - val);
-    } else {
-        val;
-    } as u64;
-}
-
 pub fn char::from_u32_unchecked(value: u32) -> char {
     return core::builtin::i32_as_char(value as i32);
 }
@@ -3719,9 +3709,17 @@ pub fn i32::min(a: i32, b: i32) -> i32 {
     return "core::builtin::core/builtin/select<i32>"((a < b), a, b);
 }
 
+pub fn i32::abs(x: i32) -> i32 {
+    return if (x < 0) {
+        -x;
+    } else {
+        x;
+    };
+}
+
 fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
     let is_negative: bool = (self.value < 0);
-    let abs_val: u64 = "core::prelude/primitive.wado::abs_to_u64"(self.value as i64);
+    let abs_val: u64 = "core::prelude/primitive.wado::i64::abs"(self.value as i64) as u64;
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(is_negative, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
@@ -3731,10 +3729,18 @@ fn i32::fmt_into(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_decimal(f);
 }
 
+pub fn i64::abs(x: i64) -> i64 {
+    return if (x < 0) {
+        -x;
+    } else {
+        x;
+    };
+}
+
 fn i64::fmt_decimal(self: Box<i64>, f: &mut Formatter) {
     let value: i64 = self.value;
     let is_negative: bool = (value < 0);
-    let abs_val: u64 = "core::prelude/primitive.wado::abs_to_u64"(value);
+    let abs_val: u64 = "core::prelude/primitive.wado::i64::abs"(value) as u64;
     let digit_count: i32 = "core::prelude/primitive.wado::count_digits_u64"(abs_val);
     let offset: i32 = f."core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(is_negative, String { repr: packed"", used: 0 }, digit_count);
     "core::prelude/primitive.wado::write_decimal_digits"(f.buf."core:prelude/string.wado/String::internal_raw_bytes_mut"(), offset, abs_val, digit_count);
@@ -3815,11 +3821,7 @@ fn f64::inspect_into(self: Box<f64>, f: &mut Formatter) {
         "core::prelude/primitive.wado::fmt_float_special"(f, is_neg, kind, String { repr: packed"0.0", used: 3 });
         return;
     }
-    let abs_f: f64 = if is_neg {
-        -value;
-    } else {
-        value;
-    };
+    let abs_f: f64 = "core::prelude/primitive.wado::f64::abs"(value);
     let result: FormatResult = "core::prelude/fpfmt.wado::short"(abs_f);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
@@ -3867,11 +3869,7 @@ fn f64::fmt_fixed(self: Box<f64>, precision: i32, f: &mut Formatter) {
         f."core:prelude/format.wado/Formatter::apply_padding"(mark);
         return;
     }
-    let abs_f: f64 = if is_neg {
-        -value;
-    } else {
-        value;
-    };
+    let abs_f: f64 = "core::prelude/primitive.wado::f64::abs"(value);
     let result: FormatResult = "core::prelude/fpfmt.wado::fixed_width_for_prec"(abs_f, precision);
     let d: u64 = result.digits;
     let p: i32 = result.exponent;
@@ -3880,6 +3878,10 @@ fn f64::fmt_fixed(self: Box<f64>, precision: i32, f: &mut Formatter) {
     "core::prelude/primitive.wado::fmt_float_sign"(f, is_neg);
     "core::prelude/fpfmt.wado::write_decimal_prec"(f.buf, d, p, n_digits, precision);
     f."core:prelude/format.wado/Formatter::apply_padding"(mark);
+}
+
+pub fn f64::abs(x: f64) -> f64 {
+    return core::builtin::f64_abs(x);
 }
 
 pub fn f64::to_bits(self: Box<f64>) -> u64 {
