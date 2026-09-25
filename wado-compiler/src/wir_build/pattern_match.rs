@@ -366,9 +366,19 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
+        // Walking the arms last to first only ever shallows the nesting, so one
+        // stack of placeholders serves every arm, trimmed as the walk goes.
+        let base_labels = self.label_stack.len();
+        let deepest = if_depths.last().copied().unwrap_or(0);
+        self.label_stack.extend((0..deepest).map(|_| LabelEntry {
+            label: None,
+            is_loop_break: false,
+            is_loop_continue: false,
+        }));
         for (reverse_idx, arm) in arms.iter().rev().enumerate() {
             let source_idx = arms.len() - 1 - reverse_idx;
             let if_nesting = if_depths[source_idx];
+            self.label_stack.truncate(base_labels + if_nesting as usize);
 
             // Translate the body in two parts — the binding writes and the body
             // proper — so a guarded branch can place each write at exactly one
@@ -377,13 +387,6 @@ impl FunctionTranslator<'_, '_> {
             // redundant `_n = i; if guard { _n = i; … }` no later pass cleans up.
             let mut bindings = Vec::new();
             let body = {
-                for _ in 0..if_nesting {
-                    self.label_stack.push(LabelEntry {
-                        label: None,
-                        is_loop_break: false,
-                        is_loop_continue: false,
-                    });
-                }
                 self.emit_pattern_bindings(
                     arm.pattern,
                     &scrut_local_name,
@@ -411,9 +414,6 @@ impl FunctionTranslator<'_, '_> {
                 };
                 // Note: `translate_expr` already appends `unreachable` for
                 // `never`-typed arm bodies, so no extra push is needed here.
-                for _ in 0..if_nesting {
-                    self.label_stack.pop();
-                }
                 body
             };
             let body_instrs: Vec<WirInstr> = bindings
@@ -447,8 +447,13 @@ impl FunctionTranslator<'_, '_> {
                 // exactly one tree depth. A nested two-`If` form would clone it
                 // into both `else` branches at depths differing by one, and break
                 // depths are baked in at translation. Also avoids a 2^N blowup.
-                let guard_expr = self.translate_operand(*guard);
                 let pattern_is_trivially_true = matches!(&condition, WirInstr::I32Const(1));
+                // The guard is in the arm's own condition, outside its `If`, and
+                // inside the pattern test's `If` where there is one.
+                let guard_nesting = if_nesting - u32::from(pattern_is_trivially_true);
+                self.label_stack
+                    .truncate(base_labels + guard_nesting as usize);
+                let guard_expr = self.translate_operand(*guard);
                 let folded_condition = if pattern_is_trivially_true {
                     // Pattern always matches: bindings are safe to emit
                     // unconditionally, so the condition is just `bindings; guard`.
@@ -490,6 +495,7 @@ impl FunctionTranslator<'_, '_> {
                 );
             }
         }
+        self.label_stack.truncate(base_labels);
 
         let mut seq = declare_and_set_local(scrut_local_name, scrut_wir_type, scrut).to_vec();
         seq.push(result);

@@ -62,7 +62,9 @@
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
 (typeRef (IDENTIFIER) @type)
+(typeRef "resume" @type)
 (genericParam (IDENTIFIER) @type)
+(genericParam "resume" @type)
 ; `.method()`, and `.field` with a field's name wherever it is declared or
 ; written. A member name is a name whichever word it is, `self` and `Self`
 ; included, and `memberName` accepts ~47 of them. The whole rule carries the
@@ -118,6 +120,11 @@
 (identifier "do" @variable)
 (identifier "task" @variable)
 (identifier "extends" @variable)
+; `resume` declares a name wherever no expression begins.
+(typeName "resume" @type)
+(withItem "resume" @type)
+(name "resume" @variable)
+(bindingName "resume" @variable)
 
 ; Operators, matching the compiler's `is_highlight_operator` set. `&` / `|`
 ; (references, unions, closure params) and `::` / `?` / `..` / `...` double as

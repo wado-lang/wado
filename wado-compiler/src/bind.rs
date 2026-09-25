@@ -15,6 +15,7 @@ use crate::ast::{
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
 use crate::module_source::ModuleSource;
+use crate::syntax::{expression_keyword_name_message, is_expression_keyword};
 use crate::token::Span;
 
 /// Binding information for a local variable
@@ -64,6 +65,9 @@ pub enum BindError {
 
     /// Variable used before it was definitely initialized
     UseBeforeInit { name: String, span: Span },
+
+    /// A binding spelled like a keyword that begins an expression
+    KeywordName { name: String, span: Span },
 }
 
 /// How the names a pattern binds enter the current scope.
@@ -107,6 +111,11 @@ impl From<BindError> for Diagnostic {
             BindError::UseBeforeInit { name, span } => (
                 Code::UninitializedVariable,
                 format!("'{name}' is used before initialization"),
+                *span,
+            ),
+            BindError::KeywordName { name, span } => (
+                Code::InvalidSyntax,
+                expression_keyword_name_message(name),
                 *span,
             ),
         };
@@ -1211,6 +1220,12 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         is_reactive: bool,
         span: Span,
     ) -> Result<(), Bail> {
+        if is_expression_keyword(name) {
+            return self.emit(BindError::KeywordName {
+                name: name.to_string(),
+                span,
+            });
+        }
         // Shared borrow (not `last_mut`) so it ends before `emit` takes `&self`.
         if let Some(first) = self
             .scopes

@@ -1,0 +1,17 @@
+// A namespaced path naming nothing is reported as written, and a call to a
+// static the namespaced type does not declare is reported, not compiled.
+use g from "./sub/member_import_op_iface.wado";
+use w from "wasi:http";
+
+export fn run() {
+    let a = g::nothing;
+    let b = g::Greeting::hello;
+    g::Greeting::nothing();
+    w::Fields::nope();
+    let s: String = g::Nothing {};
+}
+
+__DATA__
+{
+  "compile_error": ":7:13: analysis error: unknown identifier 'g::nothing'; 8:13: `g::Greeting::hello` is an operation: call it rather than read it as a value; 9:5: unknown function 'g::Greeting::nothing'; 10:5: unknown function 'w::Fields::nope'; 11:21: unknown type 'g::Nothing'"
+}

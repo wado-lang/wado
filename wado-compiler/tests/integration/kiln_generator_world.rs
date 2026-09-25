@@ -12,56 +12,11 @@
 //! See WEP 2026-04-12 §"Options are a typed argument in each generator's own
 //! world".
 
-use std::sync::Mutex;
-
-use crate::common::{block_on, install_dev_stdlib};
-use indexmap::IndexMap;
+use crate::common::{MapHost, block_on};
 use wado_compiler::{
-    Code, CompileResult, CompilerHost, CompilerOptions, Diagnostic, LogLevel, Severity,
-    SourceError, compile_with_options, wir::ImportKind,
+    Code, CompileResult, CompilerOptions, Diagnostic, LogLevel, Severity, compile_with_options,
+    wir::ImportKind,
 };
-
-struct MapHost {
-    sources: IndexMap<String, String>,
-    diagnostics: Mutex<Vec<Diagnostic>>,
-}
-
-impl MapHost {
-    fn new(sources: &[(&str, &str)]) -> Self {
-        install_dev_stdlib();
-        Self {
-            sources: sources
-                .iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect(),
-            diagnostics: Mutex::new(Vec::new()),
-        }
-    }
-
-    fn diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.lock().unwrap().clone()
-    }
-}
-
-impl CompilerHost for MapHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, SourceError>> + Send {
-        let result = self.sources.get(path).cloned();
-        let path = path.to_string();
-        async move {
-            match result {
-                Some(s) => Ok(s.into_bytes()),
-                None => Err(SourceError::NotFound { path }),
-            }
-        }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
 
 fn kiln_options() -> CompilerOptions {
     // The revision-3 typed-request adapter produces a valid component, so no

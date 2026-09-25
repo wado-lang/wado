@@ -1603,16 +1603,13 @@ struct Rebind<'t> {
 
 impl<'t> Rebind<'t> {
     fn new(func: &NirFunction, type_table: &'t TypeTable) -> Self {
-        let box_name = type_table
-            .compiler_items()
-            .struct_name(CompilerItem::Box)
-            .to_string();
         let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
         let boxes = local_types
             .iter()
             .filter_map(|&declared| match type_table.get(declared) {
                 ResolvedType::Struct { def, type_args }
-                    if type_table.struct_head_name(*def) == box_name && type_args.len() == 1 =>
+                    if type_table.is_compiler_struct(*def, CompilerItem::Box)
+                        && type_args.len() == 1 =>
                 {
                     Some((
                         declared,

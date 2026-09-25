@@ -83,65 +83,65 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:comparison_chain_no_short_circuit.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "comparison_chain_no_short_circuit.wado/run"() with Stdout {
-    let $m0_1: i32;
+    let $m1_2: i32;
     let a: bool;
-    let $m0_3: i32;
-    let $local_5: ref "core:prelude/string.wado//String";
-    let $local_6: ref "core:prelude/format.wado//Formatter";
+    let $m1_5: i32;
+    let $local_7: ref "core:prelude/string.wado//String";
+    let $local_8: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
-    let text_20: ref "core:prelude/string.wado//String";
-    let new_used_31: i32;
-    let start_32: i32;
-    let text_39: ref "core:prelude/string.wado//String";
-    let new_used_50: i32;
-    let start_51: i32;
+    let text_22: ref "core:prelude/string.wado//String";
+    let new_used_33: i32;
+    let start_34: i32;
+    let text_41: ref "core:prelude/string.wado//String";
+    let new_used_52: i32;
+    let start_53: i32;
     let packed: i64;
-    let rx_59: i32;
-    let tx_60: i32;
-    $m0_1 = black_box(-1);
-    a = (0 <= $m0_1) & ($m0_1 < 10);
-    $m0_3 = black_box(5);
-    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
-    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-    text_20 = (if a -> ref "core:prelude/string.wado//String" {
+    let rx_61: i32;
+    let tx_62: i32;
+    $m1_2 = black_box(-1);
+    a = (0 <= $m1_2) & ($m1_2 < 10);
+    $m1_5 = black_box(5);
+    $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
+    $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
+    text_22 = (if a -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     let $arg_spill_1: ref "core:prelude/string.wado//String";
-    $arg_spill_1 = $local_6.buf;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, text_20.repr, text_20.used);
-    new_used_31 = $local_5.used + 1;
-    if @unlikely(new_used_31 > builtin::array_len($local_5.repr)) {
+    $arg_spill_1 = $local_8.buf;
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, text_22.repr, text_22.used);
+    new_used_33 = $local_7.used + 1;
+    if @unlikely(new_used_33 > builtin::array_len($local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_31);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_33);
     }
-    start_32 = $local_5.used;
-    $local_5.used = new_used_31;
-    builtin::array_copy<u8>($local_5.repr, start_32, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
-    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-    text_39 = (if (0 <= $m0_3) & ($m0_3 < 10) -> ref "core:prelude/string.wado//String" {
+    start_34 = $local_7.used;
+    $local_7.used = new_used_33;
+    builtin::array_copy<u8>($local_7.repr, start_34, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
+    $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
+    text_41 = (if (0 <= $m1_5) & ($m1_5 < 10) -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     let $arg_spill_3: ref "core:prelude/string.wado//String";
-    $arg_spill_3 = $local_6.buf;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_3, text_39.repr, text_39.used);
-    new_used_50 = $local_5.used + 1;
-    if @unlikely(new_used_50 > builtin::array_len($local_5.repr)) {
+    $arg_spill_3 = $local_8.buf;
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_3, text_41.repr, text_41.used);
+    new_used_52 = $local_7.used + 1;
+    if @unlikely(new_used_52 > builtin::array_len($local_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_50);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_52);
     }
-    start_51 = $local_5.used;
-    $local_5.used = new_used_50;
-    builtin::array_copy<u8>($local_5.repr, start_51, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
-    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_6.buf);
-    rx_59 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_60 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "comparison_chain_no_short_circuit.wado/$cm_binding__Stdout_write_via_stream"(rx_59);
-    "core:rt/write_string_to_stream"(tx_60, $local_5.repr, $local_5.used);
+    start_53 = $local_7.used;
+    $local_7.used = new_used_52;
+    builtin::array_copy<u8>($local_7.repr, start_53, global:comparison_chain_no_short_circuit.wado::$const_obj_0, 0, 1);
+    $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(2, $local_8.buf);
+    rx_61 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_62 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "comparison_chain_no_short_circuit.wado/$cm_binding__Stdout_write_via_stream"(rx_61);
+    "core:rt/write_string_to_stream"(tx_62, $local_7.repr, $local_7.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 

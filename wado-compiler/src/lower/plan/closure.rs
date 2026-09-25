@@ -125,7 +125,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
 /// `0` otherwise. Used to convert a 0-based call-site argument index into
 /// the corresponding 0-based parameter / local index inside the callee.
 fn self_param_offset(callee: &TirFunction) -> u32 {
-    u32::from(callee.params.first().is_some_and(|p| p.name == "self"))
+    u32::from(callee.takes_self())
 }
 
 /// Build the canonical signature string for a closure, e.g.

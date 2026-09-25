@@ -1419,13 +1419,10 @@ impl TypeTable {
     /// instance or as the monomorphized struct its declaration heads.
     #[must_use]
     pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
-        let Some(head) = self.compiler_item_def(item) else {
-            return false;
-        };
         match self.get(ty) {
-            ResolvedType::GenericInstance { def, .. } => *def == head,
+            ResolvedType::GenericInstance { def, .. } => self.is_compiler_item(*def, item),
             ResolvedType::Struct { def, type_args } => {
-                !type_args.is_empty() && def.decl() == Some(head)
+                !type_args.is_empty() && self.is_compiler_struct(*def, item)
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -1687,6 +1684,19 @@ impl TypeTable {
         self.compiler_items
             .decl(item)
             .and_then(|ast| self.defs.of_ast_id(ast))
+    }
+
+    /// Whether `def` is the declaration `item` names.
+    #[must_use]
+    pub fn is_compiler_item(&self, def: DefId, item: CompilerItem) -> bool {
+        self.compiler_item_def(item) == Some(def)
+    }
+
+    /// Whether `head` is the struct `item` names.
+    #[must_use]
+    pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {
+        head.decl()
+            .is_some_and(|def| self.is_compiler_item(def, item))
     }
 
     /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
@@ -2354,7 +2364,7 @@ impl TypeTable {
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "AsyncCall"
+            && self.is_compiler_item(*def, CompilerItem::AsyncCall)
             && type_args.len() == 1
         {
             return Some(type_args[0]);
@@ -3988,6 +3998,23 @@ impl TypeTable {
         self.representation_head(a) == self.representation_head(b)
     }
 
+    /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
+    /// a byte-string literal coerces to.
+    pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
+        self.list_element(self.representation_head(id)) == Some(TypeTable::U8)
+    }
+
+    /// Whether `id` is a `List` whose element is still open, which a
+    /// byte-string literal settles as `u8`.
+    pub fn is_list_of_open_element(&self, id: TypeId) -> bool {
+        self.list_element(id).is_some_and(|element| {
+            matches!(
+                self.get(element),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
+            )
+        })
+    }
+
     /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
     /// newtype over either) reads from little-endian data; `None` for the rest.
     pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
@@ -4008,13 +4035,19 @@ impl TypeTable {
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
+            _ => self.list_element(id),
+        }
+    }
+
+    /// The element type of `id` when it is a `List` itself, not a reference to one.
+    pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
+        match self.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if self.def_name(*def) == "List" && type_args.len() == 1 =>
+                if self.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
             {
                 Some(type_args[0])
             }
-            // Unwrap references and check the inner type
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.as_list(*inner),
             _ => None,
         }
     }
@@ -6885,6 +6918,12 @@ impl TirFunction {
         self.method_info.is_some()
     }
 
+    /// Whether the first parameter is the `self` receiver.
+    #[inline]
+    pub fn takes_self(&self) -> bool {
+        self.params.first().is_some_and(TirParam::is_self)
+    }
+
     /// Returns true if this is a trait method (implements a trait)
     #[inline]
     pub fn is_trait_method(&self) -> bool {
@@ -6982,6 +7021,14 @@ pub struct TirParam {
     /// them — reads `false` here whatever the type says, and must ask the type.
     pub is_mut_ref: bool,
     pub span: Span,
+}
+
+impl TirParam {
+    /// Whether this is the `self` receiver.
+    #[must_use]
+    pub fn is_self(&self) -> bool {
+        self.name == "self"
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,26 @@
+// A tag takes the template by value: a `&T` parameter is a tag fault on every
+// call path, though no argument is written for the diagnostic to point at.
+fn by_ref<T: ReflectTemplate>(t: &T) -> i32 {
+    return 1;
+}
+
+struct Q {}
+
+impl Q {
+    fn by_ref<T: ReflectTemplate>(t: &T) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let x = 1;
+    let _ = by_ref`a ${x}`;
+    let _ = Q::by_ref`b ${x}`;
+}
+
+__DATA__
+{
+    "compile_error": "a template tag's parameter must be bound by `ReflectTemplate`, not `&T`",
+    "compile_error_count": 2,
+    "compile_errors_not_contains": ["$tmpl$", "type mismatch"]
+}

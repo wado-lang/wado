@@ -202,22 +202,28 @@ fn main() {
     // subcommand can reach the stdlib before it is there.
     wado_lsp::host::install_dev_stdlib();
 
-    // The compiler is recursive-descent end to end (parser, type resolution,
-    // TIR/NIR/WIR walks), so compiling a large generated source — e.g. a Gale
-    // parser for a deeply nested grammar — recurses deeply. The default 2 MiB
-    // tokio worker/blocking-thread stack overflows on such inputs (observed
-    // compiling `package-gale`'s driver tests). Raise the per-thread stack so
-    // these legitimately-deep compiles complete. `RUST_MIN_STACK` only governs
-    // the main thread, not tokio's pool, so set it on the builder explicitly.
+    // The compiler recurses as deep as the source nests, so every thread that
+    // compiles gets this stack: the pool's, and the one `block_on` runs on.
+    const STACK_SIZE: usize = 64 * 1024 * 1024;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .thread_stack_size(64 * 1024 * 1024)
+        .thread_stack_size(STACK_SIZE)
         .build()
         .unwrap_or_else(|e| {
             eprintln!("Error: failed to create tokio runtime: {e}");
             process::exit(1);
         });
-    let outcome = runtime.block_on(async_main());
+    let driver = std::thread::Builder::new()
+        .name("main".to_string())
+        .stack_size(STACK_SIZE)
+        .spawn(move || runtime.block_on(async_main()))
+        .unwrap_or_else(|e| {
+            eprintln!("Error: failed to start the driver thread: {e}");
+            process::exit(1);
+        });
+    let outcome = driver
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
     outcome.exit();
 }
 

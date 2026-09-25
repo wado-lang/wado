@@ -18,9 +18,10 @@ use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
-    ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
-    TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable, positional_substitution,
+    MonomorphInfo, ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr,
+    TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
+    positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -978,7 +979,7 @@ fn build_resource_fallback_call(
         .cm_name
         .clone()
         .expect("build_resource_fallback_call: caller checked op.cm_name.is_some()");
-    let is_instance = op.params.first().is_some_and(|p| p.name == "self");
+    let is_instance = op.params.first().is_some_and(TirParam::is_self);
 
     // Trait/resource type args list, derived from the dispatch label
     // (e.g. label "Stream<u8>" → ["u8"]). The label encodes the
@@ -2195,38 +2196,44 @@ fn build_handler_op_closure(
         })
         .collect();
 
-    // Body: $h.<E>::<op>(<args>)
-    let receiver = TirExpr::new(
-        TirExprKind::Capture {
-            index: 0,
-            name: h_name.to_string(),
-        },
-        handler_type,
-        span,
-    );
-    // Reuse the exact mangled name + `method_info` reify registered. For a
-    // generic impl this is the template; the monomorphizer instantiates it
-    // from the receiver's type args like any user-written method call.
     let target = impl_info
         .methods
         .get(&op.name)
         .expect("caller checked impl_info.methods.contains_key(&op.name)");
+    // The mangled name and `method_info` reify registered: for a generic impl,
+    // the template.
+    let template = FunctionRef {
+        module_source: impl_info.impl_module.clone(),
+        name: target.mangled_name.clone(),
+        monomorph_info: None,
+        method_info: Some(target.method_info.clone()),
+    };
     let method_ret = impl_method_return_type(op, &type_table.borrow());
-    let method_call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source: impl_info.impl_module.clone(),
-                name: target.mangled_name.clone(),
-                monomorph_info: None,
-                method_info: Some(target.method_info.clone()),
+    let call_kind = if target.takes_self {
+        // `$h.<op>(<args>)`, which the monomorphizer instantiates from `$h`'s type.
+        let receiver = TirExpr::new(
+            TirExprKind::Capture {
+                index: 0,
+                name: h_name.to_string(),
             },
-            vec![],
-            arg_call_args,
-        ),
-        method_ret,
-        span,
-    );
+            handler_type,
+            span,
+        );
+        TirExprKind::method_call(Box::new(receiver), template, vec![], arg_call_args)
+    } else {
+        TirExprKind::Call {
+            func: Box::new(static_handler_method_ref(
+                template,
+                target,
+                handler_type,
+                &type_table.borrow(),
+            )),
+            type_args: vec![],
+            args: arg_call_args,
+            has_receiver: false,
+        }
+    };
+    let method_call = TirExpr::new(call_kind, method_ret, span);
 
     let closure_ret = op.return_type;
     let body = if op.is_async {
@@ -2235,11 +2242,15 @@ fn build_handler_op_closure(
         method_call
     };
 
-    let captures = vec![TirCapture {
-        name: h_name.to_string(),
-        source: CaptureSource::Local(h_local_index),
-        type_id: handler_type,
-    }];
+    let captures = if target.takes_self {
+        vec![TirCapture {
+            name: h_name.to_string(),
+            source: CaptureSource::Local(h_local_index),
+            type_id: handler_type,
+        }]
+    } else {
+        Vec::new()
+    };
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
@@ -2260,6 +2271,35 @@ fn build_handler_op_closure(
         func_type,
         span,
     )
+}
+
+/// The static call target of a handler method that declares no `self`: its
+/// `template`, instantiated at the handler type's own arguments.
+fn static_handler_method_ref(
+    template: FunctionRef,
+    target: &HandlerMethodTarget,
+    handler_type: TypeId,
+    tt: &TypeTable,
+) -> FunctionRef {
+    let type_args = tt
+        .nominal_type_args(deref_type(tt, handler_type))
+        .unwrap_or_default();
+    if type_args.is_empty() {
+        return template;
+    }
+    let arg_names: Vec<FqTypeName> = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
+    let method_info = target.method_info.with_struct_type_args(&arg_names);
+    FunctionRef {
+        module_source: template.module_source,
+        name: method_info.to_mangled_name(),
+        monomorph_info: Some(MonomorphInfo {
+            generic_name: target.mangled_name.clone(),
+            impl_type_args: type_args,
+            method_type_args: Vec::new(),
+            is_blanket: false,
+        }),
+        method_info: Some(method_info),
+    }
 }
 
 /// Build the `|<op_params>| { unreachable() }` stub for an operation the
@@ -3100,6 +3140,7 @@ struct HandlerImplInfo {
 struct HandlerMethodTarget {
     mangled_name: String,
     method_info: LocalMethodName,
+    takes_self: bool,
 }
 
 /// Build the `HandlerImplKey -> HandlerImplInfo` map from every TIR function
@@ -3156,6 +3197,7 @@ fn build_handler_impl_index(
                 HandlerMethodTarget {
                     mangled_name: func.name.clone(),
                     method_info: method_info.clone(),
+                    takes_self: func.takes_self(),
                 },
             );
         }

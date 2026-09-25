@@ -5488,6 +5488,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
+        let Some(newtype) = self
+            .ann_coercions(struct_lit.id)
+            .filter(|choice| choice.kind == CoercionKind::StructNewtype)
+            .map(|choice| choice.target_type)
+        else {
+            return self.reify_struct_literal_as(struct_lit, ctx, recorded_type);
+        };
+        let base = self.tysys.type_table.borrow().representation_head(newtype);
+        let built = self.reify_struct_literal_as(struct_lit, ctx, base);
+        cast_to_newtype(built, Some(newtype), struct_lit.span)
+    }
+
+    fn reify_struct_literal_as(
+        &mut self,
+        struct_lit: &ast::StructLiteralExpr,
+        ctx: &mut FunctionContext,
+        recorded_type: TypeId,
+    ) -> TirExpr {
+        use crate::tir::{TirExprKind, TirStructField};
+
         // A recorded `key_value_coercions[struct_lit.id]` means the literal
         // builds an `Array<[K, V]>` for the target's `From`.
         if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
@@ -5895,7 +5915,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { def, .. } if tt.def_name(*def) == "Result"
+                    ResolvedType::GenericInstance { def, .. }
+                        if tt.is_compiler_item(*def, CompilerItem::Result)
                 ),
             )
         };
@@ -6197,8 +6218,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a comparison chain `a < b < c …` into `(a < $m0) & ($m0 < c) …`
-    /// in a block binding each middle term once.
+    /// Reify a comparison chain `a < b < c …` into
+    /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
     fn reify_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -6214,34 +6235,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let cmp0 = &chain.comparisons[0];
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
+        let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
+        let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
 
-        // Bind first middle to `$m0`.
-        let m0_type = right0_tir.type_id;
-        let m0_name = "$m0".to_string();
-        let m0_index = ctx.add_local(m0_name.clone(), m0_type, false, None);
-        stmts.push(TirStmt::new(
-            TirStmtKind::Let {
-                name: m0_name.clone(),
-                local_index: m0_index,
-                is_mut: false,
-                is_reactive: false,
-                type_id: m0_type,
-                value: right0_tir,
-                skip_value_copy: false,
-            },
-            chain.span,
-        ));
-        let m0_ref = TirExpr::new(
-            TirExprKind::Local {
-                index: m0_index,
-                name: m0_name,
-            },
-            m0_type,
-            chain.span,
-        );
-
-        let mut acc_tir = self.chain_comparison(cmp0.op, first_tir, m0_ref.clone(), cmp0.op_span);
-        let mut prev_tir = m0_ref;
+        let mut acc_tir =
+            self.chain_comparison(cmp0.op, first_ref, right0_ref.clone(), cmp0.op_span);
+        let mut prev_tir = right0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
         for idx in 1..chain.comparisons.len() {
@@ -6250,29 +6249,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right_tir = if idx == last_idx {
                 raw_right
             } else {
-                let m_type = raw_right.type_id;
-                let m_name = format!("$m{idx}");
-                let m_index = ctx.add_local(m_name.clone(), m_type, false, None);
-                stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: m_name.clone(),
-                        local_index: m_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: m_type,
-                        value: raw_right,
-                        skip_value_copy: false,
-                    },
-                    chain.span,
-                ));
-                TirExpr::new(
-                    TirExprKind::Local {
-                        index: m_index,
-                        name: m_name,
-                    },
-                    m_type,
-                    chain.span,
-                )
+                Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
             };
             let next_prev = right_tir.clone();
             let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
@@ -6293,6 +6270,39 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::Block(TirBlock::new(stmts, chain.span)),
             TypeTable::BOOL,
             chain.span,
+        )
+    }
+
+    /// `let $mK = value;` pushed onto `stmts`, answered by a read of `$mK`.
+    fn bind_chain_operand(
+        idx: usize,
+        value: TirExpr,
+        stmts: &mut Vec<TirStmt>,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let type_id = value.type_id;
+        let name = format!("$m{idx}");
+        let local_index = ctx.add_local(name.clone(), type_id, false, None);
+        stmts.push(TirStmt::new(
+            TirStmtKind::Let {
+                name: name.clone(),
+                local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id,
+                value,
+                skip_value_copy: false,
+            },
+            span,
+        ));
+        TirExpr::new(
+            TirExprKind::Local {
+                index: local_index,
+                name,
+            },
+            type_id,
+            span,
         )
     }
 

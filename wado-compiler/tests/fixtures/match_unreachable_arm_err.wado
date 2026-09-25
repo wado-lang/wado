@@ -1,0 +1,52 @@
+// An arm is unreachable when the guardless arms before it take every value it
+// matches: after a catch-all, a case already named, or a product whose every
+// shape was spelled out. A guarded arm covers nothing, so what follows it stays
+// reachable.
+enum Color { Red, Green, Blue }
+
+fn after_catch_all(o: Option<i32>) -> i32 {
+    return match o {
+        _ => 0,
+        Some(x) => x,
+    };
+}
+
+fn case_named_twice(c: Color) -> i32 {
+    return match c {
+        Red | Green => 1,
+        Blue => 2,
+        Green => 3,
+    };
+}
+
+fn product_spelled_out(p: [bool, bool]) -> i32 {
+    return match p {
+        [true, _] => 1,
+        [false, _] => 2,
+        [_, true] => 3,
+    };
+}
+
+fn range_covered(n: u8) -> i32 {
+    return match n {
+        0..=100 => 1,
+        101..=255 => 2,
+        _ => 3,
+    };
+}
+
+fn after_guard(o: Option<i32>) -> i32 {
+    return match o {
+        Some(x) && x > 1 => x,
+        Some(x) => x,
+        None => 0,
+    };
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "unreachable arm: the arms before it take every value it matches",
+  "compile_error_count": 4
+}

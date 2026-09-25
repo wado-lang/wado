@@ -1,0 +1,18 @@
+// A member-imported operation is its interface's, even where a local variant
+// spells the interface's name and declares a case of the operation's name.
+use { println, Stdout } from "core:cli";
+use { Greeting::{bye} } from "./sub/member_import_op_iface.wado";
+
+variant Greeting {
+    bye(i32),
+    other,
+}
+
+export fn run() with Stdout {
+    println(bye());
+    let g = Greeting::bye(1);
+    assert g matches { bye(1) };
+}
+
+__DATA__
+{"stdout": "bye\n"}
