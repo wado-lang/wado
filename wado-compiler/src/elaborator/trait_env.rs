@@ -2765,6 +2765,26 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
     }
 }
 
+/// A value blanket's receiver parameter as written: `T: Limit + Mark`, or bare
+/// `T`. Neither of two tied blankets has a name, so this is what names each.
+pub(super) fn receiver_as_written(header: &ImplHeader) -> String {
+    let Type::Named(receiver) = &header.ty else {
+        unreachable!("a value blanket's target is its bare parameter");
+    };
+    let bounds: Vec<&str> = header
+        .type_params
+        .iter()
+        .find(|p| p.name == receiver.name)
+        .into_iter()
+        .flat_map(|p| p.bounds.iter().map(|b| b.name.as_str()))
+        .collect();
+    if bounds.is_empty() {
+        receiver.name.clone()
+    } else {
+        format!("{}: {}", receiver.name, bounds.join(" + "))
+    }
+}
+
 /// The written form of `ty`, for a diagnostic saying what the programmer
 /// wrote (WEP 2026-08-12 §9).
 ///

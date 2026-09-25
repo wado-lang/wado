@@ -3683,9 +3683,6 @@ pub(super) struct TraitMethodMatch {
     /// [`Self::blanket_type_param`] as a binder named by its block, so two
     /// blankets of one trait are two templates whatever letter each spells.
     pub(super) blanket_binder: Option<FqTypeName>,
-    /// The receiver parameter's bounds as source writes them (`T: Limit`) —
-    /// what an ambiguity names two blankets by, neither having a name.
-    pub(super) blanket_bounds: Option<String>,
     /// The type that has the impl, as the receiver form its methods were
     /// defined under. Not the receiver's when found through the newtype chain.
     pub(super) impl_struct_fq: FqTypeName,

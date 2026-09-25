@@ -2621,6 +2621,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         };
         if self.check_and_register_bound(type_arg, trait_) {
+            let tied = self.tysys.solver.as_ref().map_or_else(Vec::new, |bridge| {
+                bridge.tied_through_bound(&self.tysys, &self.annotate_ctx, &self.type_lookup(), type_arg, trait_)
+            });
+            self.report_tied_impls(&tied, type_arg, span);
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);
@@ -3195,7 +3199,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             impl_module_source,
             blanket_type_param: None,
             blanket_binder: None,
-            blanket_bounds: None,
             impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
             ref_impl_target: None,

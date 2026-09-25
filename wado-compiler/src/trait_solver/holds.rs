@@ -411,7 +411,7 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
 
 /// Whether the impl answers a bound writing `args`: at every position each side
 /// says its written argument, or the trait's default at `ty` where it wrote none.
-fn answers_args(
+pub(super) fn answers_args(
     program: &Program,
     def: &ImplDef,
     ty: &SolverType,

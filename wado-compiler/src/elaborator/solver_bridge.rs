@@ -12,7 +12,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
@@ -1368,6 +1368,32 @@ impl SolverBridge {
     ) -> Option<bool> {
         let q = self.question(tysys, ctx, scope, type_id, asked)?;
         Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
+    }
+
+    /// The impls the order ties for a bound `answer` holds: a bound reaches
+    /// them as a call does, so neither may win by declaration order.
+    pub(super) fn tied_through_bound(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Vec<Option<DefId>> {
+        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
+            return Vec::new();
+        };
+        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
+        match rank(&found) {
+            Selection::AmbiguousBlankets(live) => {
+                live.iter().map(|&i| self.impl_def_of(found[i].impl_)).collect()
+            }
+            Selection::None
+            | Selection::One(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::Overloaded(_)
+            | Selection::Duplicated(_) => Vec::new(),
+        }
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in

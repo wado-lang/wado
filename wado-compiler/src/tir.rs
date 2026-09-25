@@ -3746,9 +3746,24 @@ impl TypeTable {
                     self.intern(ResolvedType::Reactive(new_inner))
                 }
             }
-            // Primitives, Unit, Never, Unknown, Error, Struct, Enum, Variant,
-            // Resource, Newtype, Flags — name-only or already-erased; no
-            // embedded type params.
+            ResolvedType::Newtype {
+                def,
+                type_args,
+                base_type,
+            } => {
+                let new_args: Vec<TypeId> = type_args
+                    .iter()
+                    .map(|&a| self.subst_rec(a, substitution, vars, projections))
+                    .collect();
+                if new_args == type_args {
+                    type_id
+                } else {
+                    let new_base = self.subst_rec(base_type, substitution, vars, projections);
+                    self.make_newtype_instance(def, new_args, new_base)
+                }
+            }
+            // Primitives, Unit, Never, Unknown, Error, Enum, Variant, Resource,
+            // Flags name no parameter; a `Struct` is a monomorphized instance.
             _ => type_id,
         }
     }
@@ -4079,23 +4094,7 @@ impl TypeTable {
     pub fn contains_unknown(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::Unknown => true,
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_unknown(*inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params.iter().any(|p| self.contains_unknown(*p))
-                    || self.contains_unknown(*return_type)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_unknown(*t))
-            }
-            _ => false,
+            _ => self.any_constituent(id, &mut |t| self.contains_unknown(t)),
         }
     }
 
@@ -4105,25 +4104,7 @@ impl TypeTable {
     /// mean "diverges" compare against [`Self::NEVER`].
     pub fn contains_never_arg(&self, id: TypeId) -> bool {
         fn mentions(tt: &TypeTable, id: TypeId) -> bool {
-            if id == TypeTable::NEVER {
-                return true;
-            }
-            match tt.get(id) {
-                ResolvedType::BuiltinArray(inner)
-                | ResolvedType::Ref(inner)
-                | ResolvedType::MutRef(inner)
-                | ResolvedType::Reactive(inner) => mentions(tt, *inner),
-                ResolvedType::Function {
-                    params,
-                    return_type,
-                    ..
-                } => params.iter().any(|p| mentions(tt, *p)) || mentions(tt, *return_type),
-                ResolvedType::GenericInstance { type_args, .. }
-                | ResolvedType::GenericResource { type_args, .. } => {
-                    type_args.iter().any(|t| mentions(tt, *t))
-                }
-                _ => false,
-            }
+            id == TypeTable::NEVER || tt.any_constituent(id, &mut |t| mentions(tt, t))
         }
         id != TypeTable::NEVER && mentions(self, id)
     }
@@ -4152,25 +4133,13 @@ impl TypeTable {
     /// The walk both of the above are, differing only in whether a declared
     /// pack counts as a hole.
     fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
-        let holds = |&t: &TypeId| self.contains_hole(t, packs_count);
         match self.get(id) {
             ResolvedType::TypePack { .. } => packs_count,
             ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => holds(inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => params.iter().any(holds) || holds(return_type),
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(holds),
-            _ => false,
+            _ => self.any_constituent(id, &mut |t| self.contains_hole(t, packs_count)),
         }
     }
 
@@ -4192,27 +4161,12 @@ impl TypeTable {
                     self.collect_pack_names(*elem, out);
                 }
             }
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.collect_pack_names(*inner, out),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                for p in params {
-                    self.collect_pack_names(*p, out);
-                }
-                self.collect_pack_names(*return_type, out);
+            _ => {
+                self.any_constituent(id, &mut |t| {
+                    self.collect_pack_names(t, out);
+                    false
+                });
             }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                for t in type_args {
-                    self.collect_pack_names(*t, out);
-                }
-            }
-            _ => {}
         }
     }
 
@@ -4243,25 +4197,13 @@ impl TypeTable {
     }
 
     fn mentions_slot(&self, id: TypeId, through: Through) -> bool {
-        let mentions = |inner: &TypeId| self.mentions_slot(*inner, through);
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => match through {
-                Through::Projection => mentions(param_id),
+                Through::Projection => self.mentions_slot(*param_id, through),
                 Through::ProjectionStops => false,
             },
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => mentions(inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => params.iter().any(mentions) || mentions(return_type),
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(mentions),
-            _ => false,
+            _ => self.any_constituent(id, &mut |t| self.mentions_slot(t, through)),
         }
     }
 
@@ -4296,22 +4238,31 @@ impl TypeTable {
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => true,
+            _ => self.any_constituent(id, &mut |t| self.contains_type_param(t)),
+        }
+    }
+
+    /// Whether `f` holds of any type `id` is built over, through the
+    /// constructors a use site substitutes into (`Self::subst_rec`).
+    fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+        match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_type_param(*inner),
+            | ResolvedType::Reactive(inner) => f(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|p| self.contains_type_param(*p))
-                    || self.contains_type_param(*return_type)
-            }
+            } => params.iter().any(|&p| f(p)) || f(*return_type),
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_type_param(*t))
-            }
+            | ResolvedType::GenericResource { type_args, .. }
+            | ResolvedType::Newtype { type_args, .. } => type_args.iter().any(|&t| f(t)),
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_type_bindings,
+                ..
+            } => f(*param_id) || assoc_type_bindings.iter().any(|(_, t)| f(*t)),
             _ => false,
         }
     }
@@ -4333,25 +4284,7 @@ impl TypeTable {
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::AssocTypeProjection { .. } => true,
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_assoc_type_projection(*inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params
-                    .iter()
-                    .any(|p| self.contains_assoc_type_projection(*p))
-                    || self.contains_assoc_type_projection(*return_type)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.contains_assoc_type_projection(*t)),
-            _ => false,
+            _ => self.any_constituent(id, &mut |t| self.contains_assoc_type_projection(t)),
         }
     }
 
@@ -4373,35 +4306,7 @@ impl TypeTable {
             ResolvedType::TypeParam { index: i, .. } | ResolvedType::TypePack { index: i, .. } => {
                 *i == index
             }
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_type_param_index(*inner, index),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params
-                    .iter()
-                    .any(|p| self.contains_type_param_index(*p, index))
-                    || self.contains_type_param_index(*return_type, index)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.contains_type_param_index(*t, index)),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_type_bindings,
-                ..
-            } => {
-                self.contains_type_param_index(*param_id, index)
-                    || assoc_type_bindings
-                        .iter()
-                        .any(|(_, t)| self.contains_type_param_index(*t, index))
-            }
-            _ => false,
+            _ => self.any_constituent(id, &mut |t| self.contains_type_param_index(t, index)),
         }
     }
 
@@ -4414,76 +4319,21 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => allowed.contains(&id),
             ResolvedType::InferVar(_) => false,
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.type_params_all_in(*inner, allowed),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params.iter().all(|p| self.type_params_all_in(*p, allowed))
-                    && self.type_params_all_in(*return_type, allowed)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .all(|t| self.type_params_all_in(*t, allowed)),
-            ResolvedType::AssocTypeProjection {
-                param_id,
-                assoc_type_bindings,
-                ..
-            } => {
-                self.type_params_all_in(*param_id, allowed)
-                    && assoc_type_bindings
-                        .iter()
-                        .all(|(_, t)| self.type_params_all_in(*t, allowed))
-            }
-            _ => true,
+            _ => !self.any_constituent(id, &mut |t| !self.type_params_all_in(t, allowed)),
         }
     }
 
     /// Whether `id` is an inference variable or is built over one — through the
     /// constructors a use site instantiates and substitutes through.
     ///
-    /// A declared head answers `false` whatever it carries: a `Struct`, a
-    /// `Newtype`, a pack's mapped element, and the bindings a projection carries
-    /// to be answered are not what a use site is still waiting on. Reading them
-    /// as such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
+    /// A pack's mapped element and the bindings a projection carries to be
+    /// answered are not what a use site is still waiting on. Reading them as
+    /// such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => true,
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_infer_var(*inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params.iter().any(|p| self.contains_infer_var(*p))
-                    || self.contains_infer_var(*return_type)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_infer_var(*t))
-            }
-            ResolvedType::Struct { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::AssocTypeProjection { .. }
-            | ResolvedType::Primitive(_)
-            | ResolvedType::Unit
-            | ResolvedType::Never
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Variant { .. }
-            | ResolvedType::TypeParam { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => false,
+            ResolvedType::AssocTypeProjection { .. } => false,
+            _ => self.any_constituent(id, &mut |t| self.contains_infer_var(t)),
         }
     }
 

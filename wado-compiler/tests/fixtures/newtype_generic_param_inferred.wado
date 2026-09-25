@@ -1,0 +1,17 @@
+// A parameter typed by a generic newtype settles the newtype's argument from
+// the call, as a generic struct's does.
+use { println, Stdout } from "core:cli";
+
+type Bag<T> = List<T>;
+
+fn count<T>(a: Bag<T>) -> i32 {
+    return (a as List<T>).len();
+}
+
+export fn run() with Stdout {
+    let x: Bag<i32> = [1, 2];
+    println(`${count(x)} ${count::<i32>(x)}`);
+}
+
+__DATA__
+{"stdout": "2 2\n"}

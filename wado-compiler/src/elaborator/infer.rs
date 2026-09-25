@@ -125,6 +125,18 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_args,
             },
+        )
+        | (
+            ResolvedType::Newtype {
+                def: expected_def,
+                type_args: expected_args,
+                ..
+            },
+            ResolvedType::Newtype {
+                def: actual_def,
+                type_args: actual_args,
+                ..
+            },
         ) if expected_def == actual_def && expected_args.len() == actual_args.len() => {
             for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
                 unify(type_table, exp_arg, act_arg, bindings);

@@ -28,7 +28,7 @@ use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
-use super::trait_env::{ImplHeader, TraitEnv, written_type_source};
+use super::trait_env::{ImplHeader, TraitEnv, receiver_as_written, written_type_source};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
     MethodOwner, TypeError, TypeLookup,
@@ -1536,8 +1536,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Rank 3, which the order decided: the report only names what it found.
         match &order {
             Some(Ordered::AmbiguousBlankets(defs)) => {
-                self.report_ambiguous_value_blankets(&found_traits, &receiver_display, span);
-                self.report_ambiguous_head_impls(defs, receiver_type_id, span);
+                let receiver = receiver_type_id.expect("the order answers a receiver it can say");
+                self.report_tied_impls(defs, receiver, span);
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
@@ -1805,21 +1805,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
-        // The receiver as the impl writes it: `T: Limit + Mark`, or bare `T`.
-        let blanket_bounds = is_blanket_type_param.then(|| {
-            let bounds: Vec<&str> = header
-                .type_params
-                .iter()
-                .find(|p| p.name == impl_struct_name)
-                .into_iter()
-                .flat_map(|p| p.bounds.iter().map(|b| b.name.as_str()))
-                .collect();
-            if bounds.is_empty() {
-                impl_struct_name.clone()
-            } else {
-                format!("{impl_struct_name}: {}", bounds.join(" + "))
-            }
-        });
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
@@ -1947,7 +1932,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
-                blanket_bounds: blanket_bounds.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
                 ref_impl_target,
@@ -1991,7 +1975,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module_source,
                     blanket_type_param,
                     blanket_binder,
-                    blanket_bounds,
                     impl_struct_fq,
                     is_blanket_ref_impl,
                     ref_impl_target,
@@ -2005,61 +1988,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Name the value blankets among what the order tied at rank 3
-    /// (`docs/wep-2026-09-01-trait-resolution.md`). Only a value blanket has a
-    /// binder to name it by: a tie among impls with none — two variadic impls
-    /// of one trait — is coherence's, rejected where the second is written
-    /// (WEP 2026-03-14 §5 Rule 2).
-    fn report_ambiguous_value_blankets(
-        &mut self,
-        tied: &[TraitMethodMatch],
-        receiver_display: &str,
-        span: Span,
-    ) {
-        let binders: IndexSet<&FqTypeName> = tied
-            .iter()
-            .filter_map(|m| m.blanket_binder.as_ref())
-            .collect();
-        if binders.len() < 2 {
-            return;
-        }
-        let _ = self.emit(TypeError::AmbiguousValueBlankets {
-            trait_name: tied[0].trait_name.to_display(),
-            receiver: receiver_display.to_string(),
-            bounds: tied
-                .iter()
-                .filter_map(|m| m.blanket_bounds.clone())
-                .collect(),
-            span,
-        });
-    }
-
-    /// Report a tie between impls generic over the receiver's head, each binding
-    /// the head's arguments rather than a bound's subject.
-    fn report_ambiguous_head_impls(
-        &mut self,
-        tied: &[Option<DefId>],
-        receiver_type_id: Option<TypeId>,
-        span: Span,
-    ) {
+    /// Report a tie the order left among one trait's impls
+    /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
+    /// their bounds and impls generic over the receiver's head by their targets.
+    /// A tie among impls with neither — two variadic impls of one trait — is
+    /// coherence's, rejected where the second is written (WEP 2026-03-14 §5 Rule 2).
+    pub(super) fn report_tied_impls(&mut self, tied: &[Option<DefId>], receiver: TypeId, span: Span) {
         let env = Arc::clone(&self.tysys.trait_env);
-        let heads: Vec<&ImplHeader> = tied
+        let (blankets, heads): (Vec<&ImplHeader>, Vec<&ImplHeader>) = tied
             .iter()
             .flatten()
             .collect::<IndexSet<_>>()
             .into_iter()
             .map(|def| &env.impl_headers[def])
-            .filter(|header| !matches!(header.ty, Type::Named(_)))
-            .collect();
-        let ([first, _, ..], Some(receiver)) = (heads.as_slice(), receiver_type_id) else {
-            return;
-        };
-        let _ = self.emit(TypeError::AmbiguousHeadImpls {
-            trait_name: first.trait_head_name().unwrap_or_default().to_string(),
-            receiver: self.tysys.type_id_to_string(receiver),
-            targets: heads.iter().map(|h| written_type_source(&h.ty)).collect(),
-            span,
-        });
+            .partition(|header| matches!(header.ty, Type::Named(_)));
+        let receiver = self.tysys.type_id_to_string(receiver);
+        if let [first, _, ..] = blankets.as_slice() {
+            let _ = self.emit(TypeError::AmbiguousValueBlankets {
+                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                receiver: receiver.clone(),
+                bounds: blankets.iter().map(|h| receiver_as_written(h)).collect(),
+                span,
+            });
+        }
+        if let [first, _, ..] = heads.as_slice() {
+            let _ = self.emit(TypeError::AmbiguousHeadImpls {
+                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                receiver,
+                targets: heads.iter().map(|h| written_type_source(&h.ty)).collect(),
+                span,
+            });
+        }
     }
 
     /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
