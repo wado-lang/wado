@@ -540,6 +540,23 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     assert out.contains("zip(X, Z, |x, y| x + y)");
 }
 
+test "a MatMul against one matrix shares it across the batch" {
+    let source = `
+g (float[1, 4, 8] X) => (float[1, 4, 16] Y)
+<float[8, 16] W>
+{
+    Y = MatMul(X, W)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Embed"]),
+        rule("W", ["Embed", "Vocab"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("let Y = matmul_shared(X, &weights.W);");
+}
+
 test "a MatMul batch axis that stretches names both operands" {
     let source = `
 g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)

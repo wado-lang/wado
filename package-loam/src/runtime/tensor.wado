@@ -29,22 +29,43 @@ pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..B
     let batch = element_count(&extents);
     extents.push(rows);
     extents.push(cols);
+    return Tensor { data: products(&a.data, &b.data, batch, rows, inner, cols, inner * cols), extents };
+}
 
+/// `matmul` with one matrix on the right, shared by every batch element, as a
+/// language model's head multiplies each position by one weight.
+pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [..Bs, M, N]> {
+    let ra = a.extents.len();
+    assert ra >= 2 && b.extents.len() == 2;
+    let rows = a.extents[ra - 2];
+    let inner = a.extents[ra - 1];
+    let cols = b.extents[1];
+    assert inner == b.extents[0];
+    let mut extents = a.extents[0..<ra - 2].to_list();
+    let batch = element_count(&extents);
+    extents.push(rows);
+    extents.push(cols);
+    return Tensor { data: products(&a.data, &b.data, batch, rows, inner, cols, 0), extents };
+}
+
+/// `batch` matrix products of `rows x inner` by `inner x cols`, row-major. The
+/// right operand's matrix for batch element `s` starts at `s * b_step`.
+fn products(a: &List<f32>, b: &List<f32>, batch: i32, rows: i32, inner: i32, cols: i32, b_step: i32) -> List<f32> {
     let mut out = List::<f32>::filled(batch * rows * cols, 0.0);
     for let mut s = 0; s < batch; s += 1 {
         let a_base = s * rows * inner;
-        let b_base = s * inner * cols;
+        let b_base = s * b_step;
         let out_base = s * rows * cols;
         for let mut r = 0; r < rows; r += 1 {
             for let mut k = 0; k < inner; k += 1 {
-                let lhs = a.data[a_base + r * inner + k];
+                let lhs = a[a_base + r * inner + k];
                 for let mut c = 0; c < cols; c += 1 {
-                    out[out_base + r * cols + c] += lhs * b.data[b_base + k * cols + c];
+                    out[out_base + r * cols + c] += lhs * b[b_base + k * cols + c];
                 }
             }
         }
     }
-    return Tensor { data: out, extents };
+    return out;
 }
 
 /// `Gather` along axis 0: the row of `data` each index names, as an embedding

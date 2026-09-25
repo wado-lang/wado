@@ -8,6 +8,7 @@ use {
     lift,
     map,
     matmul,
+    matmul_shared,
     max_pool,
     narrow,
     permute,
@@ -76,6 +77,15 @@ test "matmul runs one matrix per batch element" {
     let c: Tensor<f32, [Batch, Row, Col]> = matmul(&a, &b);
     assert c.extents == [2, 1, 1] as List<i32>;
     assert c.data == [3.0, 14.0] as List<f32>;
+}
+
+test "matmul_shared multiplies every batch element by one matrix" {
+    let a: Tensor<f32, [Batch, Row, Inner]> = tensor([2, 1, 2], [1.0, 2.0, 3.0, 4.0]);
+    let b: Tensor<f32, [Inner, Col]> = tensor([2, 1], [1.0, 10.0]);
+
+    let c: Tensor<f32, [Batch, Row, Col]> = matmul_shared(&a, &b);
+    assert c.extents == [2, 1, 1] as List<i32>;
+    assert c.data == [21.0, 43.0] as List<f32>;
 }
 
 test "zip pairs two tensors of one shape" {

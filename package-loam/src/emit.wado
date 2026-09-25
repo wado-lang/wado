@@ -610,6 +610,9 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
+        if left.rank() > 2 && right.rank() == 2 {
+            return Result::Ok(`matmul_shared(${a}, ${b})`);
+        }
         // The kernel's signature is `[..Bs, M, K]` against `[..Bs, K, N]`, so
         // a rank-1 operand and a broadcast batch axis have no call to write.
         if left.rank() < 2 || left.rank() != right.rank() || !batch_axes_agree(&left, &right) {
