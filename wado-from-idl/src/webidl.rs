@@ -759,16 +759,17 @@ impl Lowering<'_> {
         let params = arguments
             .iter()
             .map(|arg| {
-                let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
-                match ty {
-                    _ if arg.variadic => Err(format!("callback argument `{}`: variadic", arg.name)),
-                    WadoType::Named(_) => Ok(ty),
-                    _ if ty.primitive_name().is_some() => Ok(ty),
-                    _ => Err(format!(
-                        "callback argument `{}`: neither a scalar nor a handle",
-                        arg.name
-                    )),
+                if arg.variadic {
+                    return Err(format!("callback argument `{}`: variadic", arg.name));
                 }
+                let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
+                if matches!(ty, WadoType::Named(_)) || ty.primitive_name().is_some() {
+                    return Ok(ty);
+                }
+                Err(format!(
+                    "callback argument `{}`: neither a scalar nor a handle",
+                    arg.name
+                ))
             })
             .collect::<std::result::Result<_, _>>()?;
         Ok(WadoType::Callback {

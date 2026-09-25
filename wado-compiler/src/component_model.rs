@@ -725,6 +725,13 @@ impl CmFunctionInfo {
         format!("{}#{}", self.interface_path, self.wasi_func_name)
     }
 
+    /// The declared closure type of parameter `i`, when it takes one.
+    pub fn callback_at(&self, i: usize) -> Option<&Type> {
+        self.callbacks
+            .iter()
+            .find_map(|(at, closure)| (*at == i).then_some(closure))
+    }
+
     /// The CM parameter names and every type's [`CmInterfaceRegistry::type_key`],
     /// a closure's as declared rather than as its key.
     fn signature_key(
@@ -736,8 +743,7 @@ impl CmFunctionInfo {
             .iter()
             .enumerate()
             .map(|(i, (_, cm_name, ty))| {
-                let declared = self.callbacks.iter().find(|(at, _)| *at == i);
-                let ty = declared.map_or(ty, |(_, closure)| closure);
+                let ty = self.callback_at(i).unwrap_or(ty);
                 (cm_name.as_str(), registry.type_key(ty))
             })
             .collect();

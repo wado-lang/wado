@@ -784,11 +784,7 @@ impl CallRewriteWalker<'_> {
         param_offset: usize,
     ) {
         for (i, arg) in args.enumerate() {
-            if !func_info
-                .callbacks
-                .iter()
-                .any(|(at, _)| *at == i + param_offset)
-            {
+            if func_info.callback_at(i + param_offset).is_none() {
                 continue;
             }
             // A diverging argument never reaches the call.
@@ -892,7 +888,6 @@ impl CallRewriteWalker<'_> {
                 if let Some(info) = wasi_func {
                     self.key_callbacks(info, args.iter_mut().map(|a| &mut a.expr), 0);
                 }
-                // Check if this is a streaming async function
                 let is_streaming =
                     wasi_func.is_some_and(|f| !f.is_async && f.has_streaming_param());
 
@@ -944,11 +939,9 @@ impl CallRewriteWalker<'_> {
                     }
                 }
 
-                // Rewrite to call the binding function
                 **func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
                 *type_args = vec![];
 
-                // Recurse into args
                 for arg in args {
                     self.rewrite_expr(&mut arg.expr);
                 }
@@ -983,12 +976,10 @@ impl CallRewriteWalker<'_> {
                 }
             }
             if let Some(adapter_rc) = adapters.get(&qualified) {
-                // Check if this is a streaming async function
-                let is_streaming = cm_interface_registry
-                    .get_function(&qualified)
-                    .is_some_and(|f| !f.is_async && f.has_streaming_param());
+                let wasi_func = cm_interface_registry.get_function(&qualified);
+                let is_streaming =
+                    wasi_func.is_some_and(|f| !f.is_async && f.has_streaming_param());
 
-                // Extract receiver and args before replacing
                 let (taken_receiver, mut taken_args) = if let TirExprKind::Call {
                     args,
                     has_receiver: true,
@@ -1001,7 +992,7 @@ impl CallRewriteWalker<'_> {
                 } else {
                     unreachable!()
                 };
-                if let Some(info) = cm_interface_registry.get_function(&qualified) {
+                if let Some(info) = wasi_func {
                     self.key_callbacks(info, taken_args.iter_mut().map(|a| &mut a.expr), 1);
                 }
 
@@ -1028,10 +1019,9 @@ impl CallRewriteWalker<'_> {
                     );
                     // Remaining params: the i-th arg corresponds to WASI param
                     // index i+1 (WASI params include self at index 0).
-                    let method_func = cm_interface_registry.get_function(&qualified);
                     for (i, arg) in taken_args.iter().enumerate() {
                         let wasi_param_idx = i + 1;
-                        let is_gc_passthrough = method_func.is_some_and(|f| {
+                        let is_gc_passthrough = wasi_func.is_some_and(|f| {
                             wasi_param_idx < f.params.len()
                                 && is_gc_passthrough_param(
                                     &f.params[wasi_param_idx].2,
@@ -1052,7 +1042,7 @@ impl CallRewriteWalker<'_> {
                     // and the recursive replacement can produce TypeId mismatches for
                     // complex return types like [Stream<T>, Future<Result<_, E>>].
                     if !adapter.is_cm_binding
-                        && let Some(func_info) = cm_interface_registry.get_function(&qualified)
+                        && let Some(func_info) = wasi_func
                     {
                         let call_args: Vec<TirExpr> =
                             taken_args.iter().map(|a| a.expr.clone()).collect();
@@ -1074,7 +1064,7 @@ impl CallRewriteWalker<'_> {
                 // Flatten call site args to match the binding's flat CM params.
                 // For method calls, self is the first param; remaining args may need flattening.
                 let taken_exprs: Vec<TirExpr> = taken_args.into_iter().map(|a| a.expr).collect();
-                let flat_taken_args = match cm_interface_registry.get_function(&qualified) {
+                let flat_taken_args = match wasi_func {
                     Some(func_info) => flatten_call_site_args(
                         func_info,
                         &taken_exprs,
@@ -1086,8 +1076,6 @@ impl CallRewriteWalker<'_> {
                     None => taken_exprs,
                 };
 
-                // Retarget the call targeting the binding
-                // Prepend receiver to args
                 let mut all_args = vec![taken_receiver];
                 all_args.extend(flat_taken_args);
 
@@ -1104,7 +1092,6 @@ impl CallRewriteWalker<'_> {
                     has_receiver: false,
                 };
 
-                // Recurse into args of the new Call
                 if let TirExprKind::Call { args, .. } = &mut expr.kind {
                     for arg in args {
                         self.rewrite_expr(&mut arg.expr);
@@ -1121,10 +1108,8 @@ impl CallRewriteWalker<'_> {
             // Keyed as the registry declares it — `Resource::method`, no module.
             let func_name = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
             if let Some(adapter_rc) = adapters.get(&func_name) {
-                // Look up WASI function info to flatten args at the call site
                 let wasi_func_info = cm_interface_registry.get_function(&func_name).cloned();
 
-                // Extract args before replacing
                 let mut taken_args = if let TirExprKind::Call { args, .. } = &mut expr.kind {
                     std::mem::take(args)
                         .into_iter()
@@ -1219,7 +1204,6 @@ impl CallRewriteWalker<'_> {
                     has_receiver: false,
                 };
 
-                // Recurse into args of the new Call
                 if let TirExprKind::Call { args, .. } = &mut expr.kind {
                     for arg in args {
                         self.rewrite_expr(&mut arg.expr);
