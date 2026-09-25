@@ -23,7 +23,7 @@ and a program keeps them in lists, struct fields and closures. The bindings ther
 does not use CM resources for them. Each object crosses as an `f64` index into a
 table the glue owns, and nothing ever releases an entry: every object the
 program has seen stays alive for the life of the page
-([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md), "Known gap").
+([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md), "Lifecycle").
 
 What the spec offers instead:
 
@@ -122,9 +122,8 @@ add a concrete consumer and the cost of the workaround.
 
 ### Recursive reentrance
 
-[Web § Callbacks](./wep-2026-04-01-web.md#callbacks) records that
-`dispatch_event` in a browser traps, because the listener runs during the
-import call and reenters the component.
+`dispatch_event` runs its listeners during the import call, so the listener
+reenters the component ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)).
 
 The spec no longer forbids this. component-model#650 (2026-05-21) and #705
 (2026-08-28) removed the `may_enter` flag and its trap. Concurrency.md,
@@ -139,9 +138,8 @@ documented API.
   path panics instead, see "wasmtime" below.
 - jco does not yet, see "jco" below.
 
-The web bindings' known gap is therefore jco's, and
-[Research: Callbacks across the CM Boundary](./research-cm-boundary-callbacks.md)
-describes the rule the spec has since dropped.
+The failure the web bindings record under jco is therefore jco's, not the
+spec's.
 
 ### Exceptions from the host
 
