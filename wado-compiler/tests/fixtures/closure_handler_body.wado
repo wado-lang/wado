@@ -19,11 +19,11 @@ impl Log for Sink {
 
 export fn run() with Stdout {
     let mut parenthesized = Sink {};
-    let one = || (with Log => &mut parenthesized do { Log::emit(`hi`); });
+    let mut one = || (with Log => &mut parenthesized do { Log::emit(`hi`); });
     one();
 
     let mut blocked = Sink {};
-    let two = || {
+    let mut two = || {
         with Log => &mut blocked do {
             Log::emit(`hi`);
             Log::emit(`there`);

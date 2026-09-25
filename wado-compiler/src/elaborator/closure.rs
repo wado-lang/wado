@@ -256,6 +256,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
+        // A `&mut` borrow of a capture writes it as an assignment does, but only
+        // the walk knows which method receivers are `&mut self`.
+        for var_name in std::mem::take(&mut closure_ctx.borrowed_captures) {
+            if assigned_names.contains(&var_name) {
+                continue;
+            }
+            let Some(local) = ctx.lookup(&var_name).cloned() else {
+                any_mutating_capture |= ctx.binding(&var_name).is_some_and(|b| b.is_mut);
+                ctx.borrowed_captures.insert(var_name);
+                continue;
+            };
+            // An immutable one is already reported as the borrow's error.
+            if !local.is_mut {
+                continue;
+            }
+            any_mutating_capture = true;
+            let ref_type = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .make_mut_ref(local.type_id);
+            let ref_name = capture_ref_name(&var_name);
+            let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
+            ctx.address_taken_locals.insert(local.index);
+            closure_ctx.redirect_capture(&var_name, &ref_name, ref_type, ref_index);
+            mut_captures.push(MutCapture {
+                var_name,
+                ref_name,
+                inner_type: local.type_id,
+                ref_type,
+            });
+        }
+
         // The source each capture reads from belongs to this walk alone: reify
         // resolves it again against its own frame, so recording it would be a
         // second answer to one question.

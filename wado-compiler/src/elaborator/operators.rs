@@ -1115,6 +1115,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         };
 
+        if unary.op == UnaryOp::MutRef {
+            self.record_mut_borrow(&unary.expr, ctx);
+        }
         if unary.op == UnaryOp::MutRef
             && let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx)
         {

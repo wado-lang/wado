@@ -1701,8 +1701,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_ast: Option<&ast::Expr>,
         method_name: &str,
         span: Span,
-        ctx: &FunctionContext,
+        ctx: &mut FunctionContext,
     ) {
+        if let Some(place) = receiver_ast {
+            self.record_mut_borrow(place, ctx);
+        }
         let immutable = match self.tysys.type_table.borrow().get(receiver) {
             ResolvedType::Ref(_) => true,
             ResolvedType::MutRef(_) => false,
@@ -1766,6 +1769,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
     /// any nesting of those. A reference step ends the walk; `&T` is
     /// [`Self::place_roots_at_immutable_ref`]'s to report.
+    /// Record that `place` is borrowed `&mut` here. One rooted at a binding of an
+    /// enclosing frame is written through, so the closure must capture it `&mut`.
+    pub(super) fn record_mut_borrow(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
+        let root = match place {
+            ast::Expr::Ident(id) => &id.name,
+            ast::Expr::FieldAccess(fa) => return self.record_mut_borrow(&fa.expr, ctx),
+            ast::Expr::Index(ix) => return self.record_mut_borrow(&ix.expr, ctx),
+            _ => return,
+        };
+        if ctx.lookup(root).is_some() {
+            return;
+        }
+        let Some(binding) = ctx.binding(root) else {
+            return;
+        };
+        let is_reference = matches!(
+            self.tysys.type_table.borrow().get(binding.type_id),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        );
+        if !is_reference {
+            ctx.borrowed_captures.insert(root.clone());
+        }
+    }
+
     pub(super) fn place_roots_at_immutable_binding(
         &self,
         expr: &ast::Expr,

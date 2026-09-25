@@ -2677,6 +2677,9 @@ pub(super) struct FunctionContext {
     /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
     /// When a variable is in this map, lookups return `*$ref_name` instead of the value.
     pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
+    /// Bindings of an enclosing frame this frame borrows `&mut`, which the
+    /// closure owning it captures `&mut`.
+    pub(super) borrowed_captures: IndexSet<String>,
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
@@ -2772,6 +2775,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
+            borrowed_captures: IndexSet::default(),
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
@@ -2853,6 +2857,7 @@ impl FunctionContext {
             active_labels: Vec::new(),
             function_name,
             deref_overrides: IndexMap::default(),
+            borrowed_captures: IndexSet::default(),
             outer_box_types,
             closure_defaults: IndexMap::default(),
             // Closures inside a handler method body are NOT themselves
@@ -3073,6 +3078,50 @@ impl FunctionContext {
         self.captured_vars
             .insert(name.to_string(), CaptureSlot { index, reach });
         index
+    }
+
+    /// Point the slot `name` holds at `ref_name`, the enclosing frame's local
+    /// `ref_index` boxing it, as a deref override would have from the start.
+    pub(super) fn redirect_capture(
+        &mut self,
+        name: &str,
+        ref_name: &str,
+        ref_type: TypeId,
+        ref_index: u32,
+    ) {
+        let reach = OuterReach::ParentLocal(ref_index);
+        let Some(position) = self.captured_vars.get_index_of(name) else {
+            unreachable!(
+                "in {}: `{name}` is borrowed, so it holds a slot",
+                self.function_name
+            )
+        };
+        let slots = std::mem::take(&mut self.captured_vars);
+        self.captured_vars = slots
+            .into_iter()
+            .enumerate()
+            .map(|(i, (slot_name, slot))| {
+                if i == position {
+                    (
+                        ref_name.to_string(),
+                        CaptureSlot {
+                            index: slot.index,
+                            reach,
+                        },
+                    )
+                } else {
+                    (slot_name, slot)
+                }
+            })
+            .collect();
+        let local = LocalVar {
+            type_id: ref_type,
+            index: ref_index,
+            is_mut: false,
+            defining_ast_id: None,
+        };
+        self.outer_locals
+            .insert(ref_name.to_string(), OuterBinding { local, reach });
     }
 
     /// Open this frame's environment with the slots annotate settled on, in its
