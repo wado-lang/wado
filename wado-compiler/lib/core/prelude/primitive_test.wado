@@ -652,7 +652,22 @@ test "clamp reaches each integer type's extremes" {
 }
 
 test "integer abs is the magnitude, and MIN wraps to itself" {
-    // Opaque inputs keep the negation a runtime one at every optimization level.
+    assert i8::abs(-5) == 5;
+    assert i8::abs(i8::MIN) == i8::MIN;
+    assert i16::abs(-300) == 300;
+    assert i16::abs(i16::MIN) == i16::MIN;
+    assert i32::abs(-7) == 7;
+    assert i32::abs(7) == 7;
+    assert i32::abs(0) == 0;
+    assert i32::abs(i32::MIN) == i32::MIN;
+    assert i64::abs(-9_000_000_000) == 9_000_000_000;
+    assert i64::abs(i64::MIN) == i64::MIN;
+    assert i128::abs(-170141183460469231731687303715884105727) == i128::MAX;
+    assert i128::abs(i128::MIN) == i128::MIN;
+    assert i128::abs(42) == 42;
+}
+
+test "integer abs of an opaque value negates at run time" {
     assert i8::abs(builtin::black_box(-5)) == 5;
     assert i8::abs(builtin::black_box(i8::MIN)) == i8::MIN;
     assert i16::abs(builtin::black_box(-300)) == 300;
