@@ -1368,20 +1368,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
-                let Some((head, type_name_matches)) = self.struct_pattern_head(
+                let head = self.struct_pattern_head(
                     type_name.as_deref(),
                     *type_name_id,
                     type_id,
                     *pat_span,
-                ) else {
-                    return;
-                };
+                );
 
-                // Resolve each field pattern
                 for field in fields {
-                    let (_field_index, field_type) =
-                        self.lookup_field_type(type_id, &field.field_name, field.span);
-                    if type_name_matches {
+                    let field_type = match head {
+                        Some(_) => self.lookup_field_type(type_id, &field.field_name, field.span).1,
+                        None => TypeTable::ERROR,
+                    };
+                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
                         self.check_field_visibility(
                             type_id,
                             &field.field_name,
@@ -1400,7 +1399,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
-                if !has_rest {
+                if let Some((head, _)) = head
+                    && !has_rest
+                {
                     self.report_unlisted_struct_fields(head, fields, *pat_span);
                 }
             }
@@ -2050,20 +2051,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let (scrutinee_type, ref_binding) =
                     self.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let Some((head, type_name_matches)) = self.struct_pattern_head(
+                let head = self.struct_pattern_head(
                     type_name.as_deref(),
                     *type_name_id,
                     scrutinee_type,
                     *pat_span,
-                ) else {
-                    return Vec::new();
-                };
+                );
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
-                    let (_field_index, field_type) =
-                        self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
-                    if type_name_matches {
+                    let field_type = match head {
+                        Some(_) => {
+                            self.lookup_field_type(scrutinee_type, &field.field_name, field.span)
+                                .1
+                        }
+                        None => TypeTable::ERROR,
+                    };
+                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
                         self.check_field_visibility(
                             scrutinee_type,
                             &field.field_name,
@@ -2080,7 +2084,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
-                if !has_rest {
+                if let Some((head, _)) = head
+                    && !has_rest
+                {
                     self.report_unlisted_struct_fields(head, fields, *pat_span);
                 }
                 field_bindings
