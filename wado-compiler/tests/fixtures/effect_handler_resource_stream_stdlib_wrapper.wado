@@ -47,12 +47,6 @@ impl StreamWritable<u8> for MockStream {
         }
         resume StreamWrite { count: count, result: CopyResult::Completed }
     }
-    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
-        let _ = this;
-        let count = data.len();
-        self.log.extend_from_slice(data);
-        resume StreamWrite { count: count, result: CopyResult::Completed }
-    }
     fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         let _ = this;
         self.log.extend_from_slice(data);

@@ -126,16 +126,21 @@ the loop over `read` itself.
 what it offers, and a reader may take a short prefix, so offering the whole rest
 would make the loop quadratic.
 
-`write_raw_all` is the same loop for elements already in one array, and it is a
-`#[cm]` member rather than Wado. A loop in Wado cannot hold a linear-memory
-pointer, so it would lower the view again on every copy. `core:rt` lowers it
-once and advances the pointer, each copy capped at the Canonical ABI's
-`2^28 - 1`. A file write is the case that needs it: wasmtime's filesystem
-stream takes 8 KiB per copy. Being a primitive, it is also what a handler for
-`StreamWritable<u8>` claims to capture `println`, rather than `write_raw`.
+`write_raw_all` is the same loop for elements already in one array, without the
+value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A
+loop in Wado cannot hold a linear-memory pointer, so it would lower the view
+again on every copy. `core:rt` lowers it once and advances the pointer, each
+copy capped at the Canonical ABI's `2^28 - 1`. A file write is the case that
+needs it: wasmtime's filesystem stream takes 8 KiB per copy. Being a primitive,
+it is also what a handler for `StreamWritable<u8>` claims to capture `println`.
 
-`write_raw` and `write_raw_all` hand the backing array to the canonical as it
-stands, which lines up with the CM buffer only for bytes. A wider element is a
+A view has no single-copy write. A caller looping over one would lower the rest
+again on every copy, which is the quadratic write above. A single copy matters
+only to a caller doing other work between copies, and `BLOCKED` is not
+reachable yet (see Known gaps).
+
+`write_raw_all` hands the backing array to the canonical as it stands, which
+lines up with the CM buffer only for bytes. A wider element is a
 diagnostic naming `write_all`, not a lowering: `cm_binding_function`'s stream
 arms are the hand-written `u8` path, and the rewriter checks the element rather
 than trusting that everything else was parameterized above it.
@@ -226,7 +231,7 @@ Neutral:
   `cancel_write` remain unreachable — see
   [Async Canonical Options](./wep-2026-07-25-async-stream-canonical.md). This is
   what a Go-style channel needs and does not have yet.
-- A non-byte `write_raw` has no lowering. `synthesize_lower_list_to_buffer` reads
+- A non-byte `write_raw_all` has no lowering. `synthesize_lower_list_to_buffer` reads
   its length and elements through `List` alone, so nothing sources them from a
   slice.
 - `STREAM_CHUNK_ELEMENTS` is 4096 for every payload, where the call sites this

@@ -665,8 +665,6 @@ pub enum CompilerItem {
     CmStreamReadU8,
     /// `core:rt::cm_stream_write_u8`.
     CmStreamWriteU8,
-    /// `core:rt::cm_stream_write_raw_u8`.
-    CmStreamWriteRawU8,
     /// `core:rt::cm_stream_write_raw_all_u8`.
     CmStreamWriteRawAllU8,
     /// `core:rt::cm_error_context_new`.
@@ -900,7 +898,6 @@ impl CompilerItem {
         Self::CmCopyResult,
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
-        Self::CmStreamWriteRawU8,
         Self::CmStreamWriteRawAllU8,
         Self::CmErrorContextNew,
         Self::CmErrorContextDebugMessage,
@@ -1072,7 +1069,6 @@ impl CompilerItem {
             Self::CmCopyResult => "cm_copy_result",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
-            Self::CmStreamWriteRawU8 => "cm_stream_write_raw_u8",
             Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
             Self::CmErrorContextNew => "cm_error_context_new",
             Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
@@ -1168,7 +1164,6 @@ impl CompilerItem {
             | Self::CmCopyResult
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
-            | Self::CmStreamWriteRawU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
@@ -1431,7 +1426,6 @@ impl CompilerItem {
             | Self::CmCopyResult
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
-            | Self::CmStreamWriteRawU8
             | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage

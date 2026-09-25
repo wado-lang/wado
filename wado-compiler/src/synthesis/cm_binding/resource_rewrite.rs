@@ -1640,7 +1640,6 @@ fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
     Some(match cm_name {
         "stream-read" => CompilerItem::CmStreamReadU8,
         "stream-write" => CompilerItem::CmStreamWriteU8,
-        "stream-write-raw" => CompilerItem::CmStreamWriteRawU8,
         "stream-write-raw-all" => CompilerItem::CmStreamWriteRawAllU8,
         "error-context-new" => CompilerItem::CmErrorContextNew,
         "error-context-debug-message" => CompilerItem::CmErrorContextDebugMessage,
@@ -2042,7 +2041,6 @@ mod cm_binding_tests {
         ("stream-new", None),
         ("stream-read", Some("internal cm_stream_read_u8")),
         ("stream-write", Some("internal cm_stream_write_u8")),
-        ("stream-write-raw", Some("internal cm_stream_write_raw_u8")),
         (
             "stream-write-raw-all",
             Some("internal cm_stream_write_raw_all_u8"),
