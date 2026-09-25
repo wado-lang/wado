@@ -208,7 +208,7 @@ This requires:
 - [x] Validate return type compatibility
 - [x] Produce clear error messages for type mismatches
 
-`validate_world_signature_compatibility` decides all of it in one place. The arity has to match, and then every type has to lower to the same flat CM values as the world's — the criterion the adapters already read the boundary by, so a program it rejects is one whose adapter would have read the boundary's words against a layout that is not theirs. `flat_types_from_ast_type` flattens the world's declared type and `flat_types_from_type_id` the export's own; the two are compared as sequences.
+`validate_world_signature_compatibility` decides all of it in one place. The arity has to match, and then every type has to lower to the same flat CM values as the world's — the criterion the adapters already read the boundary by, so a program it rejects is one whose adapter would have read the boundary's words against a layout that is not theirs. `CmInterfaceRegistry::cm_flatten` flattens the world's declared type and `flat_types_from_type_id` the export's own; the two are compared as sequences.
 
 Flat shapes alone are too coarse for one case: `i32` and `Result<(), ()>` both flatten to a single `i32`, so a world declaring a `Result` needs the export to return one as well. Unit stands in only where the world's `Ok` payload is itself unit, which is all the `Ok(())` wrap fills — `wasi:cli/command`'s `Result<(), ()>` takes it, `wasi:http/service`'s `Result<Response, ErrorCode>` does not. The rule holds for `async` exports as well as sync ones.
 

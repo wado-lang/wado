@@ -1,12 +1,17 @@
 //! A library export taking or returning an unrestricted handle. The handle is
 //! an `f64` on both sides of the boundary, bare and inside an `option`.
 
-use wado_compiler::OptLevel;
+use std::path::Path;
+
 use wado_compiler::ast::HandleClasses;
+use wado_compiler::{CompilerOptions, OptLevel};
 use wasmtime::Store;
 use wasmtime::component::{Component, Val};
 
-use crate::common::{WasiState, compile_lib_world, engine, lib_func, limit_store, linker, runtime};
+use crate::common::{
+    WasiState, compile_lib_world, compile_source_with_compiler_options, engine, lib_func,
+    limit_store, linker, runtime,
+};
 
 const LIB_WORLD_FQ: &str = "test:handles/handles@0.1.0";
 
@@ -29,13 +34,42 @@ export fn echo(n: Option<Node>) -> Option<Node> {
 }
 "#;
 
+/// The same exports over a handle another module declares, imported under an
+/// alias.
+const IMPORTED_SOURCE: &str = r#"
+use { Node as Handle } from "./sub/lib_unrestricted_handle_node.wado";
+
+export fn make(x: f64) -> Handle {
+    return x as Handle;
+}
+
+export fn take(n: Handle) -> f64 {
+    return n as f64;
+}
+
+export fn echo(n: Option<Handle>) -> Option<Handle> {
+    return n;
+}
+"#;
+
 /// Class 1, index 7.
 const HANDLE: f64 = HandleClasses::STRIDE + 7.0;
 
-fn handles_cross_as_f64(opt_level: OptLevel) {
+fn compile_imported(opt_level: OptLevel) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level,
+        lib_world: Some(LIB_WORLD_FQ.to_string()),
+        ..Default::default()
+    };
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lib.wado");
+    compile_source_with_compiler_options(&path, IMPORTED_SOURCE, options)
+        .expect("library failed to compile")
+        .wasm
+}
+
+fn handles_cross_as_f64(wasm: &[u8]) {
     let engine = engine();
-    let wasm = compile_lib_world(SOURCE, LIB_WORLD_FQ, opt_level, None);
-    let component = Component::new(engine, &wasm).expect("component failed to load");
+    let component = Component::new(engine, wasm).expect("component failed to load");
 
     runtime().block_on(async {
         let linker = linker(engine).expect("build linker");
@@ -64,10 +98,20 @@ fn handles_cross_as_f64(opt_level: OptLevel) {
 
 #[test]
 fn handles_cross_as_f64_o0() {
-    handles_cross_as_f64(OptLevel::O0);
+    handles_cross_as_f64(&compile_lib_world(SOURCE, LIB_WORLD_FQ, OptLevel::O0, None));
 }
 
 #[test]
 fn handles_cross_as_f64_o2() {
-    handles_cross_as_f64(OptLevel::O2);
+    handles_cross_as_f64(&compile_lib_world(SOURCE, LIB_WORLD_FQ, OptLevel::O2, None));
+}
+
+#[test]
+fn imported_handles_cross_as_f64_o0() {
+    handles_cross_as_f64(&compile_imported(OptLevel::O0));
+}
+
+#[test]
+fn imported_handles_cross_as_f64_o2() {
+    handles_cross_as_f64(&compile_imported(OptLevel::O2));
 }

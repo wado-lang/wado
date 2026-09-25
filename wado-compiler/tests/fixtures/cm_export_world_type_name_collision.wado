@@ -1,0 +1,14 @@
+// `core:fs` loads `wasi:filesystem`, which declares an `ErrorCode` too. The
+// world's `ErrorCode` is the one its own module names.
+use { Request, Response, ErrorCode, Headers, Trailers } from "wasi:http";
+use { Preopens } from "core:fs";
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> {
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [response, _tx_future] = Response::new(Headers::new(), null, trailers_future);
+    task return Result::<Response, ErrorCode>::Ok(response);
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+__DATA__
+{"wasi:http/service": {"status": 200}}
