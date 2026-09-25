@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790325685513,
+  "lastUpdate": 1790332233068,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59677,6 +59677,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/20edf112edc9803599f8aa0c1270d6678c8b5a7b"
         },
         "date": 1790325684746,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "708e9cec71323cd8029e9368baa7644f6a71b7c0",
+          "message": "Merge pull request #2157 from wado-lang/claude/cool-franklin-4b46b2\n\nfix(compiler): every #2143 bug fixed; unreachable arms and out-of-range patterns reported, four crashes gone",
+          "timestamp": "2026-09-25T19:04:48+09:00",
+          "tree_id": "e57a29b0e7394921632c19193c2ad24bc724a38d",
+          "url": "https://github.com/wado-lang/wado/commit/708e9cec71323cd8029e9368baa7644f6a71b7c0"
+        },
+        "date": 1790332232072,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
