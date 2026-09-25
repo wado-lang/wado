@@ -224,6 +224,18 @@ impl BuiltinRegistry {
                 let inner_id = Self::resolve_type(inner, type_params, type_table);
                 type_table.borrow_mut().make_mut_ref(inner_id)
             }
+            Type::Function(f) => {
+                assert!(f.effects.is_empty(), "core:builtin writes an effectful fn type");
+                let params = f
+                    .params
+                    .iter()
+                    .map(|t| Self::resolve_type(t, type_params, type_table))
+                    .collect();
+                let return_type = Self::resolve_type(&f.return_type, type_params, type_table);
+                type_table
+                    .borrow_mut()
+                    .make_function_with_mut(f.is_mut, params, return_type, Vec::new())
+            }
             other => panic!("core:builtin writes an unsupported type: {other:?}"),
         }
     }
