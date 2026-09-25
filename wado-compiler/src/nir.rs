@@ -1017,9 +1017,6 @@ pub struct NirModule {
     /// Generic struct definitions (before monomorphization)
     /// Key: (struct name, module source)
     pub generic_structs: IndexMap<(String, ModuleSource), NirStruct>,
-    /// Generic function definitions (before monomorphization)
-    /// Key: (module source, function name).
-    pub generic_functions: IndexMap<(ModuleSource, String), Rc<RefCell<NirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: IndexSet<InstantiationKey>,
     /// Closure metadata for optimization (populated by lower phase).
@@ -1052,7 +1049,6 @@ impl NirModule {
             function_strings: IndexMap::default(),
             function_method_info: IndexMap::default(),
             generic_structs: IndexMap::default(),
-            generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
         }
@@ -1085,7 +1081,6 @@ impl NirModule {
             function_strings: IndexMap::default(),
             function_method_info: IndexMap::default(),
             generic_structs: IndexMap::default(),
-            generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
             closure_functors: Vec::new(),
         }

@@ -87,22 +87,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .fq_receiver_of_impl(type_id, self.impl_is_concrete_instantiation(&header.ty))
     }
 
-    /// Whether `impl_ty` is written at an instantiation other than the one
-    /// `receiver_args` settle; `false` while any of them is still open.
+    /// Whether `header`'s target pins a position to other than what
+    /// `receiver_args` settle there; `false` while any of them is still open.
+    /// A bare static call passes the block's binder values instead, which
+    /// match no target, so a partly generic block is judged only by arguments
+    /// that cannot be those.
     pub(super) fn impl_at_other_instantiation(
         &self,
-        impl_ty: &Type,
+        header: &ImplHeader,
         receiver_args: &[TypeId],
     ) -> bool {
         let settled = {
             let table = self.tysys.type_table.borrow();
             receiver_args.iter().all(|&arg| table.is_concrete(arg))
         };
+        let judged = self.impl_is_concrete_instantiation(&header.ty)
+            || receiver_args.len() != header.type_params.len();
         settled
-            && self.impl_is_concrete_instantiation(impl_ty)
+            && judged
             && !self
                 .tysys
-                .trait_impl_type_args_match(impl_ty, receiver_args)
+                .trait_impl_type_args_match(&header.ty, receiver_args)
     }
 }
 

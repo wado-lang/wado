@@ -59,6 +59,100 @@ fn generic_function_key(
     )
 }
 
+/// Every generic function template, reached by the key a call site spells.
+///
+/// Generic impls on one head name their methods alike (`impl<T> Pair<T, i32>`
+/// and `impl<T> Pair<T, i64>` both emit `Pair::f`), so a key reaches one
+/// template per block, and the receiver's arguments choose among them.
+#[derive(Default, Clone)]
+pub(crate) struct Templates {
+    by_key: IndexMap<GenericFunctionKey, Vec<Rc<RefCell<TirFunction>>>>,
+}
+
+impl Templates {
+    /// Register `func_rc`, replacing an earlier registration of its block.
+    fn insert(&mut self, func_rc: &Rc<RefCell<TirFunction>>) {
+        let func = func_rc.borrow();
+        let key = generic_function_key(func.is_method(), &func.module_source, &func.name);
+        let block = |f: &TirFunction| f.impl_origin.as_ref().map(|o| o.def);
+        let group = self.by_key.entry(key).or_default();
+        match group
+            .iter()
+            .position(|t| block(&t.borrow()) == block(&func))
+        {
+            Some(at) => group[at] = Rc::clone(func_rc),
+            None => group.push(Rc::clone(func_rc)),
+        }
+        assert!(
+            group.len() == 1 || group.iter().all(|t| t.borrow().impl_origin.is_some()),
+            "templates sharing `{}` must each come from a generic impl block",
+            func.name
+        );
+    }
+
+    fn contains(&self, key: &GenericFunctionKey) -> bool {
+        self.by_key.contains_key(key)
+    }
+
+    /// Every template `key` reaches, whatever its receiver.
+    fn named(&self, key: &GenericFunctionKey) -> &[Rc<RefCell<TirFunction>>] {
+        self.by_key.get(key).map_or(&[], Vec::as_slice)
+    }
+
+    /// The one template `key` names for a receiver with `impl_args`.
+    fn get(
+        &self,
+        key: &GenericFunctionKey,
+        impl_args: &[TypeId],
+        type_table: &TypeTable,
+    ) -> Option<&Rc<RefCell<TirFunction>>> {
+        let mut reaching = self.named(key).iter().filter(|t| {
+            t.borrow()
+                .impl_origin
+                .as_ref()
+                .is_none_or(|origin| origin.reaches(impl_args, type_table))
+        });
+        let found = reaching.next();
+        reaching.next().is_none().then_some(found).flatten()
+    }
+
+    /// The template `key` names when only one block declares it, for a call
+    /// whose arguments are the block's binder values rather than the receiver's.
+    fn sole(&self, key: &GenericFunctionKey) -> Option<&Rc<RefCell<TirFunction>>> {
+        match self.named(key) {
+            [only] => Some(only),
+            _ => None,
+        }
+    }
+
+    /// [`Self::get`], else [`Self::sole`]: the template `key` names in one
+    /// module, whichever kind of arguments the call carries.
+    fn resolve(
+        &self,
+        key: &GenericFunctionKey,
+        impl_args: &[TypeId],
+        type_table: &TypeTable,
+    ) -> Option<&Rc<RefCell<TirFunction>>> {
+        self.get(key, impl_args, type_table)
+            .or_else(|| self.sole(key))
+    }
+
+    fn keys(&self) -> impl Iterator<Item = &GenericFunctionKey> {
+        self.by_key.keys()
+    }
+
+    /// The templates with a body, which a transitive scan may instantiate.
+    fn with_bodies(&self) -> Self {
+        let mut out = Self::default();
+        for func_rc in self.by_key.values().flatten() {
+            if func_rc.borrow().body.is_some() {
+                out.insert(func_rc);
+            }
+        }
+        out
+    }
+}
+
 use crate::flat_package::FlatPackage;
 use crate::tir::{
     MonomorphInfo, ResolvedType, TirFunction, TirModule, TirStruct, TypeId, TypeTable,
@@ -69,21 +163,15 @@ use state::Monomorphizer;
 /// Instantiate every generic the linked package reaches, and hand back the
 /// session so a pass that adds bodies later can resume it.
 pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
+    let mut generic_functions = Templates::default();
+    for func_rc in &flat.functions {
+        let func = func_rc.borrow();
+        if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+            generic_functions.insert(func_rc);
+        }
+    }
     let mut session = Monomorphization {
-        generic_functions: flat
-            .functions
-            .iter()
-            .filter_map(|func_rc| {
-                let func = func_rc.borrow();
-                if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-                    let key =
-                        generic_function_key(func.is_method(), &func.module_source, &func.name);
-                    Some((key, Rc::clone(func_rc)))
-                } else {
-                    None
-                }
-            })
-            .collect(),
+        generic_functions,
         // Keyed by `(name, module_source)`, so same-named generic structs from
         // different modules coexist.
         generic_structs: flat
@@ -103,7 +191,7 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
 /// and remembers its instances here, so a second run must resume rather than start.
 pub struct Monomorphization {
     monomorphizer: Monomorphizer,
-    generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
+    generic_functions: Templates,
     generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
     /// How many leading `flat.functions` a previous run already read call sites
     /// from. It left them rewritten to mangled instance names, and such a call
@@ -303,7 +391,7 @@ impl Monomorphizer {
     fn monomorphize_with_externals(
         &mut self,
         mut module: TirModule,
-        external_generic_functions: &IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>>,
+        external_generic_functions: &Templates,
         external_generic_structs: &IndexMap<(String, ModuleSource), TirStruct>,
         scanned_functions: usize,
     ) -> TirModule {
@@ -372,19 +460,14 @@ impl Monomorphizer {
 
         // Phase 7: Collect all generic function definitions
         // Include both local functions AND external generic functions from other modules
-        let mut generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> =
-            external_generic_functions.clone();
+        let mut generic_functions = external_generic_functions.clone();
 
         for func_rc in &module.functions {
             let func = func_rc.borrow();
             if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-                let key = generic_function_key(func.is_method(), &func.module_source, &func.name);
-                generic_functions.insert(key, Rc::clone(func_rc));
+                generic_functions.insert(func_rc);
             }
         }
-
-        // Store in module for later phases
-        module.generic_functions.clone_from(&generic_functions);
 
         // Hand the same registry to the monomorphizer: variadic-for-of
         // expansion reads it to tell a callee's method type params from its
@@ -407,12 +490,7 @@ impl Monomorphizer {
         //
         // For transitive scanning, exclude bodyless functions (builtins like array_new,
         // array_set, etc.) which are codegen intrinsics and must not be re-monomorphized.
-        let scannable_generic_functions: IndexMap<GenericFunctionKey, Rc<RefCell<TirFunction>>> =
-            generic_functions
-                .iter()
-                .filter(|(_, f)| f.borrow().body.is_some())
-                .map(|(k, v)| (k.clone(), Rc::clone(v)))
-                .collect();
+        let scannable_generic_functions = generic_functions.with_bodies();
 
         // Unified instantiation loop.
         // Process functions and structs together until fixpoint. Function instantiation
@@ -440,7 +518,11 @@ impl Monomorphizer {
                     // making the literal `(module_source, name)` lookup total: a
                     // miss is a producer bug, surfaced as the panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
-                    let generic_func = generic_functions.get(&lookup_key);
+                    let generic_func = generic_functions.resolve(
+                        &lookup_key,
+                        &key.impl_type_args,
+                        &module.type_table.borrow(),
+                    );
                     // No fallback: every queue producer above (in
                     // `func_inst::collect_function_instantiation_sites`)
                     // reads `module_source` straight off the matched

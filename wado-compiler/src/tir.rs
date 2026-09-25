@@ -6195,6 +6195,90 @@ pub struct TirGlobal {
     pub span: Span,
 }
 
+/// A generic `impl` block, as a template emitted from it reaches its receivers.
+/// Blocks on one head name their methods alike, so the block is what tells two
+/// templates of one name apart.
+#[derive(Debug, Clone)]
+pub struct ImplOrigin {
+    pub def: DefId,
+    /// The arguments the target writes, a binder as its own `TypeParam`.
+    pub target_args: Vec<TypeId>,
+}
+
+impl ImplOrigin {
+    /// Whether a receiver with these type arguments reaches the block: each
+    /// position the target pins is that argument, and a binder written twice
+    /// takes one argument. A target writing no position pins none.
+    pub fn reaches(&self, receiver_args: &[TypeId], type_table: &TypeTable) -> bool {
+        if self.target_args.is_empty() {
+            return true;
+        }
+        let mut bound = IndexMap::default();
+        binds_all(type_table, &self.target_args, receiver_args, &mut bound)
+    }
+}
+
+/// Whether each of `args` is what the matching `written` spells, a binder at
+/// any depth standing for one type throughout.
+fn binds_all(
+    tt: &TypeTable,
+    written: &[TypeId],
+    args: &[TypeId],
+    bound: &mut IndexMap<u32, FqTypeName>,
+) -> bool {
+    written.len() == args.len()
+        && written
+            .iter()
+            .zip(args)
+            .all(|(&w, &a)| binds(tt, w, a, bound))
+}
+
+fn binds(
+    tt: &TypeTable,
+    written: TypeId,
+    arg: TypeId,
+    bound: &mut IndexMap<u32, FqTypeName>,
+) -> bool {
+    match (tt.get(written), tt.get(arg)) {
+        (ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. }, _) => {
+            let arg = tt.fq_type_name(arg);
+            *bound.entry(*index).or_insert_with(|| arg.clone()) == arg
+        }
+        (ResolvedType::Ref(w), ResolvedType::Ref(a))
+        | (ResolvedType::MutRef(w), ResolvedType::MutRef(a))
+        | (ResolvedType::Reactive(w), ResolvedType::Reactive(a))
+        | (ResolvedType::BuiltinArray(w), ResolvedType::BuiltinArray(a)) => {
+            binds(tt, *w, *a, bound)
+        }
+        (
+            ResolvedType::Function {
+                is_mut: w_mut,
+                params: w_params,
+                return_type: w_ret,
+                effects: w_effects,
+            },
+            ResolvedType::Function {
+                is_mut: a_mut,
+                params: a_params,
+                return_type: a_ret,
+                effects: a_effects,
+            },
+        ) => {
+            w_mut == a_mut
+                && w_effects == a_effects
+                && binds_all(tt, w_params, a_params, bound)
+                && binds(tt, *w_ret, *a_ret, bound)
+        }
+        _ => match (tt.generic_type_args(written), tt.generic_type_args(arg)) {
+            (Some(w), Some(a)) => {
+                tt.fq_base_type_name(written).head() == tt.fq_base_type_name(arg).head()
+                    && binds_all(tt, &w, &a, bound)
+            }
+            _ => tt.fq_type_name(written) == tt.fq_type_name(arg),
+        },
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirFunction {
     pub name: String,
@@ -6216,6 +6300,9 @@ pub struct TirFunction {
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
+    /// The generic `impl` block a method template was emitted into. `None`
+    /// for anything else, instances included.
+    pub impl_origin: Option<ImplOrigin>,
     /// If this function was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
     /// Parsed method info for methods (None for free functions)
@@ -6733,6 +6820,7 @@ impl TirFunction {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            impl_origin: None,
             monomorph_info: None,
             method_info: None,
             params: Vec::new(),
@@ -7292,11 +7380,6 @@ pub struct TirModule {
     /// Generic struct definitions (before monomorphization)
     /// Key: (struct name, module source)
     pub generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
-    /// Generic function definitions (before monomorphization)
-    /// Key: (module source, function name). `module_source` is the function
-    /// body's home module; two generics that share a mangled name in
-    /// different modules are kept distinct by this pair.
-    pub generic_functions: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
     /// Requested instantiations (populated during resolution, processed in lower)
     pub instantiation_requests: IndexSet<InstantiationKey>,
 }
@@ -7323,7 +7406,6 @@ impl TirModule {
             data_section: None,
             wasm_module: None,
             generic_structs: IndexMap::default(),
-            generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
         }
     }
@@ -7352,7 +7434,6 @@ impl TirModule {
             data_section: None,
             wasm_module: None,
             generic_structs: IndexMap::default(),
-            generic_functions: IndexMap::default(),
             instantiation_requests: IndexSet::default(),
         }
     }

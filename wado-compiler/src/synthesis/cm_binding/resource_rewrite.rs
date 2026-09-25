@@ -688,6 +688,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![
@@ -921,6 +922,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![
@@ -1154,6 +1156,7 @@ fn synthesize_future_read_func(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![TirParam {
@@ -1543,6 +1546,7 @@ fn synthesize_stream_read_func(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![

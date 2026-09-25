@@ -83,7 +83,7 @@ impl Monomorphizer {
             .and_then(LocalMethodName::trait_decl);
         if let Some(trait_) = trait_decl {
             for candidate in struct_candidates {
-                if let Some(impl_module) = self.functions.trait_env.impl_module_for(
+                for impl_module in self.functions.trait_env.impl_modules_for(
                     candidate.as_receiver(),
                     trait_,
                     type_module_hint,

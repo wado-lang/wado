@@ -933,6 +933,7 @@ fn build_dispatch_wrapper_function(
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params,

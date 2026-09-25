@@ -21,7 +21,7 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::state::Monomorphizer;
-use super::{generic_function_key, module_source_for_trait_impl};
+use super::{Templates, generic_function_key, module_source_for_trait_impl};
 use crate::defs::DefId;
 use crate::monomorphize::{dispatch_receiver_head, dispatch_receiver_name};
 use crate::name::{DeclName, FqTraitName, MangledName};
@@ -342,47 +342,79 @@ fn blanket_receiver_satisfies(
 /// call site's module — and falling back to `TraitEnv::impl_module_for` for a
 /// cross-module trait impl, or to `type_module_hint` for an inherent method,
 /// which lives with its receiver type. Returns the template alone, not its
-/// module: the caller decides where the concrete copy lands.
-fn lookup_template_with_trait_fallback<'a, V>(
-    generic_functions: &'a IndexMap<(ModuleSource, String), V>,
+/// module: the caller decides where the concrete copy lands. `impl_args`
+/// choose among the blocks a name reaches when they are the receiver's; a
+/// static call on a bare receiver passes the block's binder values instead,
+/// which choose nothing, and takes the one template its name reaches.
+fn lookup_template_with_trait_fallback<'a>(
+    generic_functions: &'a Templates,
     trait_env: &TraitEnv,
     module_hint: &ModuleSource,
     name: &str,
+    impl_args: &[TypeId],
     info: Option<&LocalMethodName>,
     struct_candidates: &[ReceiverCandidate],
     type_module_hint: Option<&ModuleSource>,
-    blanket_receiver: Option<(TypeId, &TypeTable)>,
-) -> Option<&'a V> {
-    if let Some(v) = generic_functions.get(&(module_hint.clone(), name.to_string())) {
-        return Some(v);
-    }
+    blanket_receiver: Option<TypeId>,
+    type_table: &TypeTable,
+) -> Option<&'a Rc<RefCell<TirFunction>>> {
+    let modules = template_modules(
+        trait_env,
+        module_hint,
+        info,
+        struct_candidates,
+        type_module_hint,
+        blanket_receiver,
+        type_table,
+    );
+    let key = |module: &ModuleSource| (module.clone(), name.to_string());
+    modules
+        .iter()
+        .find_map(|m| generic_functions.get(&key(m), impl_args, type_table))
+        .or_else(|| modules.iter().find_map(|m| generic_functions.sole(&key(m))))
+}
+
+/// The modules a template may live in, most specific first: `module_hint`,
+/// then the trait's impl modules for a trait method or the receiver type's
+/// module for an inherent one.
+fn template_modules<'m>(
+    trait_env: &'m TraitEnv,
+    module_hint: &'m ModuleSource,
+    info: Option<&LocalMethodName>,
+    struct_candidates: &[ReceiverCandidate],
+    type_module_hint: Option<&'m ModuleSource>,
+    blanket_receiver: Option<TypeId>,
+    type_table: &TypeTable,
+) -> Vec<&'m ModuleSource> {
+    let mut modules = vec![module_hint];
     if let Some(trait_) = info.and_then(LocalMethodName::trait_decl) {
         for candidate in struct_candidates {
-            if let Some(impl_module) =
-                trait_env.impl_module_for(candidate.as_receiver(), trait_, type_module_hint)
-                && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
-            {
-                return Some(v);
-            }
+            modules.extend(trait_env.impl_modules_for(
+                candidate.as_receiver(),
+                trait_,
+                type_module_hint,
+            ));
         }
         // A blanket impl is keyed by no receiver, so the candidates above miss
         // it: `bytes.into_iter()` reaches the prelude's blanket by trait.
         if let Some(impl_module) = trait_env.blanket_impl_module_for_trait(trait_, type_module_hint)
-            && blanket_receiver_satisfies(trait_env, trait_, impl_module, blanket_receiver)
-            && let Some(v) = generic_functions.get(&(impl_module.clone(), name.to_string()))
+            && blanket_receiver_satisfies(
+                trait_env,
+                trait_,
+                impl_module,
+                blanket_receiver.map(|id| (id, type_table)),
+            )
         {
-            return Some(v);
+            modules.push(impl_module);
         }
-        None
     } else if let Some(type_module) = type_module_hint {
         // Inherent methods: the impl block lives in the receiver type's own
         // module (`impl<T> List<T> { fn len ... }`). Newtypes peel through
         // their base via `receiver_module_hint`, so this picks up
         // `List::len` even when called as `MyArray<i32>::len`.
-        generic_functions.get(&(type_module.clone(), name.to_string()))
-    } else {
-        None
+        modules.push(type_module);
     }
+    modules
 }
 
 /// Collects function instantiation sites by traversing TIR with `TirRefVisitor`.
@@ -393,7 +425,7 @@ fn lookup_template_with_trait_fallback<'a, V>(
 /// need custom handling.
 pub(super) struct InstantiationCollector<'a> {
     pub mono: &'a mut Monomorphizer,
-    pub generic_functions: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+    pub generic_functions: &'a Templates,
     pub type_table: &'a mut TypeTable,
 }
 
@@ -802,7 +834,7 @@ impl<F: FnMut(&mut TypeId)> TirMutVisitor for ReturnTypeSlots<F> {
 struct MethodTypeArgInferer<'a> {
     type_table: &'a TypeTable,
     binding_local: u32,
-    templates: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+    templates: &'a Templates,
 }
 
 impl MethodTypeArgInferer<'_> {
@@ -810,8 +842,9 @@ impl MethodTypeArgInferer<'_> {
     /// functions are registered as templates, so a miss is a definite "no".
     fn callee_is_method_generic(&self, func: &FunctionRef) -> bool {
         self.templates
-            .get(&(func.module_source.clone(), func.name.clone()))
-            .is_some_and(|t| t.borrow().has_real_type_params())
+            .named(&(func.module_source.clone(), func.name.clone()))
+            .iter()
+            .any(|t| t.borrow().has_real_type_params())
     }
 }
 
@@ -886,7 +919,7 @@ impl Monomorphizer {
     pub fn collect_function_instantiation_sites(
         &mut self,
         module: &TirModule,
-        generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+        generic_functions: &Templates,
         scanned: usize,
     ) {
         let mut type_table = module.type_table.borrow_mut();
@@ -987,7 +1020,7 @@ impl Monomorphizer {
     /// on a sibling blanket of the same trait.
     fn queue_monomorph_instantiation(
         &mut self,
-        generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+        generic_functions: &Templates,
         module_source: &ModuleSource,
         info: &LocalMethodName,
         monomorph: &MonomorphInfo,
@@ -1017,10 +1050,12 @@ impl Monomorphizer {
                 &self.functions.trait_env,
                 module_source,
                 &generic_method_name,
+                &monomorph.impl_type_args,
                 Some(info),
                 &receiver_candidates(Some(info), &[]),
                 None,
-                blanket_receiver.map(|id| (id, &*type_table)),
+                blanket_receiver,
+                type_table,
             ) else {
                 continue;
             };
@@ -1084,7 +1119,7 @@ impl Monomorphizer {
     pub fn collect_func_instantiation_sites_in_expr(
         &mut self,
         expr: &TirExpr,
-        generic_functions: &IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
+        generic_functions: &Templates,
         type_table: &mut TypeTable,
     ) {
         match &expr.kind {
@@ -1097,7 +1132,7 @@ impl Monomorphizer {
                 let qualified_func_key =
                     generic_function_key(func.is_method(), &func.module_source, &func.name);
                 // Check if this is a call to a generic function with explicit type args
-                if !type_args.is_empty() && generic_functions.contains_key(&qualified_func_key) {
+                if !type_args.is_empty() && generic_functions.contains(&qualified_func_key) {
                     let key = InstantiationKey {
                         def: None,
                         name: qualified_func_key.1,
@@ -1222,10 +1257,12 @@ impl Monomorphizer {
                                 &self.functions.trait_env,
                                 &method_func.module_source,
                                 full_method_name,
+                                &[],
                                 info_ref,
                                 &candidates,
                                 receiver_module.as_ref(),
-                                Some((receiver.type_id, type_table)),
+                                Some(receiver.type_id),
+                                type_table,
                             ) {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
@@ -1316,10 +1353,12 @@ impl Monomorphizer {
                                             &self.functions.trait_env,
                                             &method_func.module_source,
                                             generic_method_name,
+                                            &impl_type_args,
                                             info_ref,
                                             &candidates,
                                             receiver_module.as_ref(),
-                                            Some((receiver.type_id, type_table)),
+                                            Some(receiver.type_id),
+                                            type_table,
                                         )
                                     {
                                         let generic_func = generic_func_rc.borrow();
@@ -1426,10 +1465,12 @@ impl Monomorphizer {
                             &self.functions.trait_env,
                             &method_func.module_source,
                             generic_method_name,
+                            &impl_type_args,
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
-                            Some((receiver.type_id, type_table)),
+                            Some(receiver.type_id),
+                            type_table,
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             // A true ref blanket (`impl<T> Inspect for &T`) needs
@@ -1554,10 +1595,12 @@ impl Monomorphizer {
                             &self.functions.trait_env,
                             &method_func.module_source,
                             &generic_method_name,
+                            &impl_type_args,
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
-                            Some((receiver.type_id, type_table)),
+                            Some(receiver.type_id),
+                            type_table,
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             if impl_type_args.len() >= generic_func.impl_type_params.len() {
@@ -1603,10 +1646,12 @@ impl Monomorphizer {
                         &self.functions.trait_env,
                         &method_func.module_source,
                         &mono.generic_name,
+                        &mono.impl_type_args,
                         info_ref,
                         &candidates,
                         receiver_module.as_ref(),
-                        Some((receiver.type_id, type_table)),
+                        Some(receiver.type_id),
+                        type_table,
                     )
                     .map(Rc::clone)
                 } else {
@@ -1745,10 +1790,12 @@ impl Monomorphizer {
                             &self.functions.trait_env,
                             &method_func.module_source,
                             &generic_name,
+                            &impl_type_args,
                             info_ref,
                             &candidates,
                             receiver_module.as_ref(),
-                            Some((receiver.type_id, type_table)),
+                            Some(receiver.type_id),
+                            type_table,
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
@@ -1786,7 +1833,7 @@ impl Monomorphizer {
             } => {
                 if !type_args.is_empty() {
                     let qualified_func_key = generic_function_key(false, module_source, name);
-                    if generic_functions.contains_key(&qualified_func_key) {
+                    if generic_functions.contains(&qualified_func_key) {
                         let key = InstantiationKey {
                             def: None,
                             name: qualified_func_key.1,
@@ -1906,6 +1953,41 @@ impl Monomorphizer {
             Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
             None => module_source_for_trait_impl(type_table, tid),
         }
+    }
+
+    /// The module of the generic trait impl whose template `receiver`'s
+    /// arguments reach. A generic impl need not live beside its receiver's
+    /// type, and impls pinning different arguments may live apart.
+    fn generic_impl_module(
+        &self,
+        type_table: &TypeTable,
+        receiver: TypeId,
+        info: &LocalMethodName,
+        type_module: Option<&ModuleSource>,
+    ) -> Option<ModuleSource> {
+        let trait_ = info.trait_decl()?;
+        let (_, args) = self.struct_info_for_method(
+            receiver,
+            type_table,
+            &info.method_name,
+            info.trait_name.as_ref(),
+        )?;
+        let name = MethodName::format_local(
+            &dispatch_receiver_head(type_table, receiver),
+            info.trait_name.as_ref(),
+            &info.method_name,
+        );
+        self.functions
+            .trait_env
+            .impl_modules_for(ImplReceiver::Of(info.receiver()), trait_, type_module)
+            .into_iter()
+            .find(|module| {
+                self.functions
+                    .templates
+                    .get(&((*module).clone(), name.clone()), &args, type_table)
+                    .is_some()
+            })
+            .cloned()
     }
 
     /// Whether an operator on `id` lowers to a scalar instruction rather than
@@ -2098,6 +2180,7 @@ impl Monomorphizer {
             is_export: generic.is_export, // Inherit from generic
             type_params: vec![],          // Concrete function has no type params
             impl_type_params: vec![],     // Already monomorphized, no impl type params
+            impl_origin: None,
             monomorph_info: Some(MonomorphInfo {
                 generic_name: generic.name.clone(),
                 impl_type_args: key.impl_type_args.clone(),
@@ -3630,6 +3713,14 @@ impl Monomorphizer {
             .functions
             .impl_module(&new_info, receiver_module.as_ref());
         let concrete_module = concrete_impl_module
+            .or_else(|| {
+                self.generic_impl_module(
+                    type_table,
+                    receiver_type_id,
+                    &new_info,
+                    receiver_module.as_ref(),
+                )
+            })
             .or_else(|| blanket_module.clone())
             .or(receiver_module);
 
@@ -3770,7 +3861,19 @@ impl Monomorphizer {
         };
         let resolved_module = self
             .functions
-            .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
+            .impl_module(&new_info, receiver_hint.as_ref())
+            .or_else(|| {
+                self.generic_impl_module(
+                    type_table,
+                    receiver_type_id,
+                    &new_info,
+                    receiver_hint.as_ref(),
+                )
+            })
+            .or_else(|| {
+                self.functions
+                    .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
+            })
             .unwrap_or(module_source);
         *method_func = FunctionRef {
             module_source: resolved_module,

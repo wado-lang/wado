@@ -1880,11 +1880,6 @@ fn snapshot_tir_modules(
                 .iter()
                 .map(|f| Rc::new(RefCell::new(f.borrow().clone())))
                 .collect();
-            m.generic_functions = m
-                .generic_functions
-                .iter()
-                .map(|(key, f)| (key.clone(), Rc::new(RefCell::new(f.borrow().clone()))))
-                .collect();
             (k.clone(), m)
         })
         .collect()

@@ -8,12 +8,12 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::{ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::monomorphize::dispatch_receiver_name;
+use crate::monomorphize::{Templates, dispatch_receiver_name};
 use crate::name::{
     DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, RefKind,
     mangle_generic_name,
 };
-use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TirTypeParam, TypeId, TypeTable};
+use crate::tir::{InstantiationKey, ResolvedType, TirTypeParam, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -59,7 +59,7 @@ pub(super) struct FuncInstState {
     /// is the answer "this callee is not generic" — which is what the
     /// post-variadic-expansion type-arg inference needs in order to tell a
     /// method type param from an ordinary parameter.
-    pub templates: Rc<IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>>,
+    pub templates: Rc<Templates>,
     /// Per module, the names written impls already define. An impl for one
     /// instantiation (`impl Tag for Box_<i32>`) emits exactly the function a
     /// template instantiation would, which is what lets the specific impl win
@@ -177,7 +177,7 @@ impl Monomorphizer {
                 instantiated_homes: IndexSet::default(),
                 pending: Vec::new(),
                 trait_env,
-                templates: Rc::new(IndexMap::default()),
+                templates: Rc::new(Templates::default()),
                 concrete_names: IndexMap::default(),
             },
             current_impl_type_param_count: 0,

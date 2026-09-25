@@ -1388,6 +1388,32 @@ impl TraitEnv {
         pick_module_union(ast, syn, type_module)
     }
 
+    /// Every module defining `impl <trait_> for <receiver>`, the one
+    /// [`Self::impl_module_for`] picks first. Generic impls pinning different
+    /// arguments may live in different modules, and the receiver's arguments,
+    /// not the receiver's head, choose among them.
+    pub(crate) fn impl_modules_for(
+        &self,
+        receiver: ImplReceiver<'_>,
+        trait_: DefId,
+        type_module: Option<&ModuleSource>,
+    ) -> Vec<&ModuleSource> {
+        let ast = self.trait_impl_modules.get(receiver, trait_);
+        let syn = self
+            .synthesised
+            .as_ref()
+            .and_then(|s| s.trait_impl_modules.get(receiver, trait_));
+        let mut modules: Vec<&ModuleSource> = pick_module_union(ast, syn, type_module)
+            .into_iter()
+            .collect();
+        for module in ast.into_iter().chain(syn).flatten() {
+            if !modules.contains(&module) {
+                modules.push(module);
+            }
+        }
+        modules
+    }
+
     /// Every impl entry whose target *head* matches `receiver`, across all
     /// declaring modules. The keyed lookups are exact; this is the widened
     /// form for callers that cannot canonicalise — monomorphize and synthesis

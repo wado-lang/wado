@@ -3012,7 +3012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let header = &env.impl_headers[key];
             header.is_trait_impl()
                 && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
-                && !self.impl_at_other_instantiation(&header.ty, receiver_args)
+                && !self.impl_at_other_instantiation(header, receiver_args)
         });
         keys
     }

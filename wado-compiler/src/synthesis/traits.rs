@@ -242,6 +242,7 @@ fn make_trait_method(
         is_async: false,
         type_params: Vec::new(),
         impl_type_params,
+        impl_origin: None,
         monomorph_info: None,
         method_info: Some(method_info),
         params,

@@ -480,6 +480,7 @@ fn field_schema_method_fn(
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
+        impl_origin: None,
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
             type_name.clone(),

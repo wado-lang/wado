@@ -24,10 +24,10 @@ use crate::name::{
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
-    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
-    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, ImplOrigin, LocalFrame, ResolvedType, TirBinaryOp, TirBlock,
+    TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
+    TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -1335,6 +1335,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_async: func.is_async,
             type_params,
             impl_type_params: vec![],
+            impl_origin: None,
             monomorph_info: None,
             method_info: None,
             params,
@@ -1435,6 +1436,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // agrees with method dispatch's `from_concrete_impl` (and is not fooled
         // by a param named like a known type). Methods become concrete fns.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
+        let origin = self.impl_origin(impl_block);
 
         impl_block
             .methods
@@ -1443,9 +1445,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if self.is_dead_item(method.id) {
                     return None;
                 }
-                self.reify_method(method, &facts, concrete_owner.as_ref())
+                self.reify_method(method, &facts, concrete_owner.as_ref(), &origin)
             })
             .collect()
+    }
+
+    fn impl_origin(&self, impl_block: &ast::ImplBlock) -> ImplOrigin {
+        let def = self.tysys.resolutions.defs().def_at(impl_block.id);
+        let sig = self
+            .tysys
+            .signatures
+            .impl_sig(def)
+            .expect("the decl pass records every impl block's declaration facts");
+        ImplOrigin {
+            def,
+            target_args: sig.target_type_args.clone(),
+        }
     }
 
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
@@ -1494,6 +1509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(_, body)| std::rc::Rc::clone(body))
             .collect();
         let trait_module = trait_sig.module.clone();
+        let origin = self.impl_origin(impl_block);
 
         let trait_items: &'a [ast::Item] = self
             .loaded_modules
@@ -1524,7 +1540,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 std::mem::replace(&mut self.current_module_source, trait_module.clone());
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
-            let tir_func_opt = self.reify_method(default_method, &facts, concrete_owner.as_ref());
+            let tir_func_opt =
+                self.reify_method(default_method, &facts, concrete_owner.as_ref(), &origin);
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
@@ -1569,6 +1586,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
         concrete_owner: Option<&FqTypeName>,
+        origin: &ImplOrigin,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::LocalMethodName;
@@ -1712,6 +1730,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_export: false,
             is_async: func.is_async,
             type_params,
+            impl_origin: (!impl_type_params.is_empty()).then(|| origin.clone()),
             impl_type_params,
             monomorph_info: None,
             method_info: Some(method_info),
@@ -1790,6 +1809,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_async: false,
             type_params: vec![],
             impl_type_params: vec![],
+            impl_origin: None,
             monomorph_info: None,
             method_info: None,
             params: vec![],
