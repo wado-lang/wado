@@ -1,7 +1,12 @@
 // A case whose payload has no value holds no value either, so a match need
 // not cover it: `None` alone covers an `Option<!>`, `Ok` alone a `Result<T, !>`.
+// A payload holding a `!` anywhere has no value, nor does one holding itself.
 
 type Void = !;
+struct Stuck { never: Void, flag: bool }
+struct Loop { again: Loop }
+variant Gone { A([!, bool]), B(Stuck) }
+struct Node { next: Option<Node> }
 
 fn ok_only(r: Result<i32, !>) -> i32 {
     return match r { Ok(v) => v };
@@ -9,6 +14,22 @@ fn ok_only(r: Result<i32, !>) -> i32 {
 
 fn ok_only_through_newtype(r: Result<i32, Void>) -> i32 {
     return match r { Ok(v) => v };
+}
+
+fn ok_only_through_aggregates(r: Result<i32, [bool, Stuck]>) -> i32 {
+    return match r { Ok(v) => v };
+}
+
+fn ok_only_through_self(r: Result<i32, Loop>) -> i32 {
+    return match r { Ok(v) => v };
+}
+
+fn ok_only_through_empty_variant(r: Result<i32, Gone>) -> i32 {
+    return match r { Ok(v) => v };
+}
+
+fn node_is_inhabited(r: Result<i32, Node>) -> i32 {
+    return match r { Ok(v) => v, Err(_) => 0 };
 }
 
 test "None covers an Option<!>" {
@@ -19,6 +40,10 @@ test "None covers an Option<!>" {
 test "Ok covers a Result whose error has no value" {
     assert ok_only(Ok(3)) == 3;
     assert ok_only_through_newtype(Ok(4)) == 4;
+    assert ok_only_through_aggregates(Ok(5)) == 5;
+    assert ok_only_through_self(Ok(6)) == 6;
+    assert ok_only_through_empty_variant(Ok(7)) == 7;
+    assert node_is_inhabited(Err(Node { next: null })) == 0;
 }
 
 __DATA__

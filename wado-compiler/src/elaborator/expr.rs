@@ -14,7 +14,8 @@ use crate::name::{
     FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
 };
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -2745,6 +2746,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Each case's payload type of the variant `ty`, typed at this instance.
+    fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let variant_info = self.tysys.variant_of_type(ty)?;
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(ty)
+            .unwrap_or_default();
+        Some(
+            variant_info
+                .cases
+                .iter()
+                .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
+                .collect(),
+        )
+    }
+
+    /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
+    pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
+        self.is_uninhabited_within(ty, &mut Vec::new())
+    }
+
+    /// `open` holds the types being asked about further out. One met again inside
+    /// itself has no finite value, so it answers `true`.
+    fn is_uninhabited_within(&self, ty: TypeId, open: &mut Vec<TypeKey>) -> bool {
+        let (head, key, elems) = {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(ty);
+            if tt.is_never(head) {
+                return true;
+            }
+            (head, tt.type_key(head), tt.as_tuple(head))
+        };
+        if open.contains(&key) {
+            return true;
+        }
+        open.push(key);
+        let answer = if let Some(elems) = elems {
+            elems.iter().any(|&t| self.is_uninhabited_within(t, open))
+        } else if let Some(fields) = self.struct_field_types(head) {
+            fields
+                .iter()
+                .any(|&(_, t)| self.is_uninhabited_within(t, open))
+        } else if let Some(payloads) = self.case_payload_types(head) {
+            payloads.iter().all(|&t| self.is_uninhabited_within(t, open))
+        } else {
+            false
+        };
+        open.pop();
+        answer
+    }
+
     /// Report the arms no value reaches. Coverage reads no types, so a
     /// type-pattern arm an earlier narrowing already takes is found by type.
     fn check_unreachable_arms(
@@ -2868,30 +2922,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
         let (index, _) = variant_info.case_named(name)?;
-        let type_args = self
-            .tysys
-            .type_table
-            .borrow()
-            .nominal_type_args(scrutinee_type)
-            .unwrap_or_default();
-        let payload_types: Vec<TypeId> = variant_info
+        let payload_types = self.case_payload_types(scrutinee_type)?;
+        let cases: Rc<[Case]> = variant_info
             .cases
             .iter()
-            .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
-            .collect();
-        let cases: Rc<[Case]> = {
-            let tt = self.tysys.type_table.borrow();
-            variant_info
-                .cases
-                .iter()
-                .zip(&payload_types)
-                .map(|(c, &payload_type)| Case {
+            .zip(&payload_types)
+            .map(|(c, &payload_type)| {
+                let has_payload = c.has_payload(&self.tysys.type_table.borrow());
+                Case {
                     name: c.name.clone(),
-                    has_payload: c.has_payload(&tt),
-                    inhabited: !tt.is_never(payload_type),
-                })
-                .collect()
-        };
+                    has_payload,
+                    inhabited: !self.is_uninhabited(payload_type),
+                }
+            })
+            .collect();
         // A case no value reaches was reported where its pattern was resolved.
         if !cases[index].inhabited {
             return None;

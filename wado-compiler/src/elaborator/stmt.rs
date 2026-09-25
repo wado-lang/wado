@@ -1894,7 +1894,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     }
                 };
-                if self.tysys.type_table.borrow().is_never(payload_type) {
+                if self.is_uninhabited(payload_type) {
                     let [scrutinee_name, payload_name] = [scrutinee_type, payload_type]
                         .map(|t| self.tysys.type_table.borrow().type_name(t));
                     let _ = self.emit(TypeError::InvalidPattern {

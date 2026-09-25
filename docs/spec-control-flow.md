@@ -414,7 +414,9 @@ match opt {
 ```
 
 A case whose payload type has no value needs no arm, since nothing constructs
-it. An arm naming one is unreachable, and is the same error:
+it. An arm naming one is unreachable, and is the same error. A type has no value
+when it is `!`, when a tuple element or struct field of it has none, or when
+every case of a variant has a payload with none:
 
 ```wado
 let r: Result<i32, !> = Ok(1);

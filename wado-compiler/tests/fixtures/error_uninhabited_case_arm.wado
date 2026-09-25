@@ -11,10 +11,15 @@ fn g(x: Option<Void>) -> i32 {
     return match x { None => 1, Some(_) => 2 };
 }
 
+fn h(x: Option<[bool, !]>) -> i32 {
+    return match x { None => 1, Some(_) => 2 };
+}
+
 test {
     assert f(Ok(1)) == 1;
     assert g(null) == 1;
+    assert h(null) == 1;
 }
 
 __DATA__
-{"compile_error": ":7:34: analysis error: invalid pattern: unreachable: no `Result<i32, !>` is a `Err`, whose payload `!` has no value; 11:33: invalid pattern: unreachable: no `Option<Void>` is a `Some`, whose payload `Void` has no value"}
+{"compile_error": ":7:34: analysis error: invalid pattern: unreachable: no `Result<i32, !>` is a `Err`, whose payload `!` has no value; 11:33: invalid pattern: unreachable: no `Option<Void>` is a `Some`, whose payload `Void` has no value; 15:33: invalid pattern: unreachable: no `Option<[bool, !]>` is a `Some`, whose payload `[bool, !]` has no value"}
