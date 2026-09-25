@@ -121,6 +121,8 @@
 (identifier "task" @variable)
 (identifier "extends" @variable)
 ; `resume` declares a name wherever no expression begins.
+(typeName "resume" @type)
+(withItem "resume" @type)
 (name "resume" @variable)
 (bindingName "resume" @variable)
 

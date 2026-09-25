@@ -115,6 +115,11 @@ bindingName
     | 'resume'
     ;
 
+// The name a type declaration introduces.
+typeName
+    : name
+    ;
+
 paramList
     : param (',' param)* ','?
     ;
@@ -143,7 +148,7 @@ withItem
     ;
 
 structDecl
-    : 'struct' name genericParams? '{' fieldList? '}'
+    : 'struct' typeName genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -155,7 +160,7 @@ fieldDecl
     ;
 
 enumDecl
-    : 'enum' name '{' enumCaseList? '}'
+    : 'enum' typeName '{' enumCaseList? '}'
     ;
 
 enumCaseList
@@ -167,7 +172,7 @@ enumCase
     ;
 
 flagsDecl
-    : 'flags' name '{' flagsCaseList? '}'
+    : 'flags' typeName '{' flagsCaseList? '}'
     ;
 
 flagsCaseList
@@ -179,7 +184,7 @@ flagsCase
     ;
 
 variantDecl
-    : 'variant' name genericParams? '{' variantCaseList? '}'
+    : 'variant' typeName genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -191,11 +196,11 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' name genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
+    : 'trait' typeName genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
     ;
 
 interfaceDecl
-    : 'interface' name genericParams? '{' traitMember* '}'
+    : 'interface' typeName genericParams? '{' traitMember* '}'
     ;
 
 worldDecl
@@ -208,7 +213,7 @@ worldItem
     ;
 
 resourceDecl
-    : 'resource' name genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
+    : 'resource' typeName genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember
