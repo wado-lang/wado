@@ -1152,6 +1152,79 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
+    /// The struct a struct pattern destructures, and whether its written name
+    /// is that struct. A scrutinee that is no struct is reported and has none;
+    /// a newtype's head is its base's, since it inherits the fields it wraps.
+    fn struct_pattern_head(
+        &self,
+        type_name: Option<&str>,
+        type_name_id: Option<AstId>,
+        scrutinee: TypeId,
+        span: Span,
+    ) -> Option<(StructDef, bool)> {
+        let head = {
+            let tt = self.tysys.type_table.borrow();
+            match tt.get(tt.reflect_structure_head(scrutinee)) {
+                ResolvedType::Struct { def, .. } => Some(*def),
+                _ => None,
+            }
+        };
+        let Some(head) = head else {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: "struct type".to_string(),
+                found: self.tysys.type_table.borrow().type_name(scrutinee),
+                span,
+            });
+            return None;
+        };
+        let name_matches = type_name.is_none_or(|written| {
+            let matches = self.pattern_qualifier_matches(type_name_id, head);
+            if !matches {
+                let (expected, found) = self.pattern_mismatch_names(type_name_id, written, scrutinee);
+                let _ = self.emit(TypeError::PatternTypeMismatch {
+                    expected,
+                    found,
+                    span,
+                });
+            }
+            matches
+        });
+        Some((head, name_matches))
+    }
+
+    /// Report the fields of `head` a struct pattern without `..` leaves out.
+    fn report_unlisted_struct_fields(
+        &self,
+        head: StructDef,
+        fields: &[StructPatternField],
+        span: Span,
+    ) {
+        let Some(struct_info) = self.lookup_struct_fields_of(head) else {
+            return;
+        };
+        let missing: Vec<_> = struct_info
+            .fields
+            .iter()
+            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
+            .map(|(name, _, _)| name.clone())
+            .collect();
+        if missing.is_empty() {
+            return;
+        }
+        let _ = self.emit(TypeError::PatternTypeMismatch {
+            expected: format!(
+                "all fields (missing: {}), or use `..` to ignore remaining fields",
+                missing.join(", ")
+            ),
+            found: format!(
+                "pattern with {} of {} fields",
+                fields.len(),
+                struct_info.fields.len()
+            ),
+            span,
+        });
+    }
+
     /// Whether a struct pattern's qualifier names the scrutinee's own head.
     ///
     /// Declaration against declaration, never spelling against spelling. A
@@ -1295,43 +1368,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (type_id, ref_binding) = self.peel_scrutinee_refs(type_id, ref_binding);
-                // Every lookup below asks the scrutinee's head, which an
-                // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling. A newtype's head
-                // is its base's: it inherits the fields it wraps.
-                let struct_head = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(tt.reflect_structure_head(type_id)) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    }
-                };
-
-                let type_name_matches = match (type_name, struct_head) {
-                    (Some(written), Some(head)) => {
-                        let matches = self.pattern_qualifier_matches(*type_name_id, head);
-                        if !matches {
-                            let (expected, found) =
-                                self.pattern_mismatch_names(*type_name_id, written, type_id);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected,
-                                found,
-                                span: *pat_span,
-                            });
-                        }
-                        matches
-                    }
-                    _ => true,
-                };
-
-                if struct_head.is_none() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "struct type".to_string(),
-                        found: self.tysys.type_table.borrow().type_name(type_id),
-                        span: *pat_span,
-                    });
+                let Some((head, type_name_matches)) = self.struct_pattern_head(
+                    type_name.as_deref(),
+                    *type_name_id,
+                    type_id,
+                    *pat_span,
+                ) else {
                     return;
-                }
+                };
 
                 // Resolve each field pattern
                 for field in fields {
@@ -1356,37 +1400,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
-                // Exhaustiveness check: without `..`, all fields must be listed
-                if !has_rest
-                    && let Some(head) = struct_head
-                    && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                {
-                    let total_fields = struct_info.fields.len();
-                    if fields.len() != total_fields {
-                        let missing: Vec<_> = struct_info
-                            .fields
-                            .iter()
-                            .filter(|(name, _, _)| !fields.iter().any(|f| f.field_name == *name))
-                            .map(|(name, _, _)| name.clone())
-                            .collect();
-                        if !missing.is_empty() {
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                        }
-                    }
+                if !has_rest {
+                    self.report_unlisted_struct_fields(head, fields, *pat_span);
                 }
-
-                let _ = has_rest;
             }
             ast::Pattern::Typed {
                 id,
@@ -2034,25 +2050,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let (scrutinee_type, ref_binding) =
                     self.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let mut type_name_matches = true;
-                if let Some(expected_name) = type_name {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { def, .. } = resolved
-                        && !self.pattern_qualifier_matches(*type_name_id, def)
-                    {
-                        let (expected, found) = self.pattern_mismatch_names(
-                            *type_name_id,
-                            expected_name,
-                            scrutinee_type,
-                        );
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected,
-                            found,
-                            span: *pat_span,
-                        });
-                        type_name_matches = false;
-                    }
-                }
+                let Some((head, type_name_matches)) = self.struct_pattern_head(
+                    type_name.as_deref(),
+                    *type_name_id,
+                    scrutinee_type,
+                    *pat_span,
+                ) else {
+                    return Vec::new();
+                };
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
@@ -2075,44 +2080,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
-                // Exhaustiveness check
                 if !has_rest {
-                    let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    };
-                    if let Some(head) = struct_head
-                        && let Some(struct_info) = self.lookup_struct_fields_of(head)
-                    {
-                        let total_fields = struct_info.fields.len();
-                        if fields.len() != total_fields {
-                            let missing: Vec<_> = struct_info
-                                .fields
-                                .iter()
-                                .filter(|(name, _, _)| {
-                                    !fields.iter().any(|f| f.field_name == *name)
-                                })
-                                .map(|(name, _, _)| name.clone())
-                                .collect();
-                            if !missing.is_empty() {
-                                let _ = self.emit(TypeError::PatternTypeMismatch {
-                                        expected: format!(
-                                            "all fields (missing: {}), or use `..` to ignore remaining fields",
-                                            missing.join(", ")
-                                        ),
-                                        found: format!(
-                                            "pattern with {} of {} fields",
-                                            fields.len(),
-                                            total_fields
-                                        ),
-                                        span: *pat_span,
-                                    });
-                            }
-                        }
-                    }
+                    self.report_unlisted_struct_fields(head, fields, *pat_span);
                 }
-
-                let _ = has_rest;
                 field_bindings
             }
             Pattern::Or(alternatives) => {

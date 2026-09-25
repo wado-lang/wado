@@ -148,7 +148,10 @@ fn lower_to_flat_inner(
             }]
         }
         ResolvedType::Struct { def, .. }
-            if ctx.type_table.borrow().struct_head_name(*def) == names.string =>
+            if ctx
+                .type_table
+                .borrow()
+                .is_compiler_struct(*def, CompilerItem::String) =>
         {
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
@@ -175,7 +178,8 @@ fn lower_to_flat_inner(
         }
         ResolvedType::Unit => vec![],
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.array && type_args.len() == 1 =>
+            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::List)
+                && type_args.len() == 1 =>
         {
             // List<T> flat ABI: (ptr: i32, len: i32) pointing at
             // `len * cm_size(T)` bytes of linear memory with `cm_align(T)`
@@ -357,7 +361,8 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.option && type_args.len() == 1 =>
+            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::Option)
+                && type_args.len() == 1 =>
         {
             // Option<T> → disc(i32) + flat(T)
             let inner_type_id = type_args[0];
@@ -488,7 +493,8 @@ fn lower_to_flat_inner(
             ]
         }
         ResolvedType::GenericInstance { def, type_args }
-            if ctx.type_table.borrow().def_name(*def) == names.result && type_args.len() == 2 =>
+            if ctx.type_table.borrow().is_compiler_item(*def, CompilerItem::Result)
+                && type_args.len() == 2 =>
         {
             // Result<T, E> → disc(i32) + join(flat(T), flat(E)). disc 0 = Ok,
             // 1 = Err. The active arm's payload lowers into the shared joined
@@ -650,7 +656,10 @@ fn lower_to_flat_inner(
                 .collect()
         }
         ResolvedType::Struct { def, type_args }
-            if ctx.type_table.borrow().struct_head_name(*def) != names.string =>
+            if !ctx
+                .type_table
+                .borrow()
+                .is_compiler_struct(*def, CompilerItem::String) =>
         {
             let name = &ctx.type_table.borrow().struct_head_name(*def);
             // Struct: concatenation of field flat types

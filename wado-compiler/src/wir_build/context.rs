@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{StructName, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, NirFunction};
@@ -759,17 +760,13 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Struct { def, type_args } => {
-                let decl_name = &type_table.struct_head_name(*def);
-                let module_source = &type_table.struct_head_module(*def).clone();
                 // The WIR struct map is keyed on the rendered spelling: each
                 // instantiation is its own struct type.
-                let _ = decl_name;
                 let name = &type_table.struct_rendered_name(*def, type_args);
-                // String is always at ModuleSource::string().
-                let lookup_module = if name == "String" {
+                let lookup_module = if type_table.is_compiler_struct(*def, CompilerItem::String) {
                     ModuleSource::string()
                 } else {
-                    module_source.clone()
+                    type_table.struct_head_module(*def).clone()
                 };
                 let lookup_name = StructName::new(lookup_module, name.clone());
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
@@ -780,7 +777,7 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance { def, type_args }
-                if type_table.def_name(*def) == "List" && type_args.len() == 1 =>
+                if type_table.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
             {
                 let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {

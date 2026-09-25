@@ -1390,7 +1390,6 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
             ));
             analysis.callees.insert(method_id);
         }
-        ResolvedType::Struct { def, .. } if type_table.struct_head_name(*def) == "String" => {}
         _ => {}
     }
 }

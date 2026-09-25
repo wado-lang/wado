@@ -10,8 +10,10 @@ use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
+use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
+use heck::ToSnakeCase;
 use std::fmt;
 use std::hash::Hash;
 
@@ -1443,6 +1445,22 @@ pub fn validate_module_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// An IDL identifier as the `snake_case` name Wado declares it under: a keyword
+/// the parser does not take as a name (`match`, `resume`) gets a trailing `_`.
+#[must_use]
+pub fn wado_identifier(idl_name: &str) -> String {
+    let snake = idl_name.to_snake_case();
+    let keyword = KEYWORDS
+        .iter()
+        .chain(CONTEXTUAL_KEYWORDS)
+        .any(|(keyword, _)| *keyword == snake);
+    if keyword && !NAME_KEYWORDS.contains(&snake.as_str()) {
+        format!("{snake}_")
+    } else {
+        snake
+    }
+}
+
 /// `true` for an opaque module identifier that is not a filesystem path and
 /// must never be normalized: a reserved namespace (`core:`, `wasi:`, `web:`) or
 /// a remote URI (`http://` / `https://`).
@@ -1478,30 +1496,36 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
 /// canonical from the project root — base `./sub/main.wado` with relative
 /// `../lib.wado` gives `./lib.wado`.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
-    // Handle special module prefixes - they don't need resolution
     if has_special_prefix(relative) {
         return relative.to_string();
     }
-
-    // Get the directory of the base path
-    let base_dir = get_parent_path(base);
-
-    // Join the base directory with the relative path
-    let joined = if base_dir.is_empty() {
-        relative.to_string()
-    } else if let Some(stripped) = relative.strip_prefix("./") {
-        // ./foo from ./sub/ becomes ./sub/foo
-        format!("{base_dir}/{stripped}")
-    } else if relative.starts_with("../") {
-        // ../foo from ./sub/ needs parent resolution
-        format!("{base_dir}/{relative}")
-    } else {
-        // bare name like "foo.wado" - treat as relative to base dir
-        format!("{base_dir}/{relative}")
+    let (origin, base_path) = split_uri_origin(base);
+    let joined = match base_path.rfind('/') {
+        Some(pos) => format!("{}/{relative}", &base_path[..pos]),
+        None => relative.to_string(),
     };
+    format!("{origin}{}", normalize(&joined))
+}
 
-    // Normalize the result to resolve . and ..
-    normalize_module_path(&joined)
+/// Split a URI's `scheme:` and `//authority` off its path. A one-letter scheme is
+/// a Windows drive, which stays with the path.
+fn split_uri_origin(path: &str) -> (&str, &str) {
+    let Some(colon) = path.find(':') else {
+        return ("", path);
+    };
+    let scheme = &path[..colon];
+    let is_scheme = scheme.len() > 1
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    if !is_scheme {
+        return ("", path);
+    }
+    let after_scheme = &path[colon + 1..];
+    let origin_len = match after_scheme.strip_prefix("//") {
+        Some(authority) => colon + 3 + authority.find('/').unwrap_or(authority.len()),
+        None => colon + 1,
+    };
+    path.split_at(origin_len)
 }
 
 /// Canonicalize a resolved local module identity to the unique minimal form for
@@ -2476,6 +2500,28 @@ mod tests {
             resolve_module_path("/abs/My Project/sub/main.wado", "../eval.wado"),
             "/abs/My Project/eval.wado"
         );
+    }
+
+    #[test]
+    fn test_resolve_against_a_uri_or_root() {
+        assert_eq!(
+            resolve_module_path("file:///abs/gen/x.wado", "./h.wado"),
+            "file:///abs/gen/h.wado"
+        );
+        assert_eq!(
+            resolve_module_path("https://host/a/b.wado", "../c.wado"),
+            "https://host/c.wado"
+        );
+        assert_eq!(
+            resolve_module_path("kiln:/abs/gen/x.wado", "../h.wado"),
+            "kiln:/abs/h.wado"
+        );
+        assert_eq!(
+            resolve_module_path("core:json/value.wado", "./parse.wado"),
+            "core:json/parse.wado"
+        );
+        assert_eq!(resolve_module_path("/x.wado", "./c.wado"), "/c.wado");
+        assert_eq!(resolve_module_path("C:/a/x.wado", "./c.wado"), "C:/a/c.wado");
     }
 
     #[test]

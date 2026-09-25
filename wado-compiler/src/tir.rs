@@ -1689,6 +1689,18 @@ impl TypeTable {
             .and_then(|ast| self.defs.of_ast_id(ast))
     }
 
+    /// Whether `def` is the declaration `item` names.
+    #[must_use]
+    pub fn is_compiler_item(&self, def: DefId, item: CompilerItem) -> bool {
+        self.compiler_item_def(item) == Some(def)
+    }
+
+    /// Whether `head` is the struct `item` names.
+    #[must_use]
+    pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {
+        head.decl().is_some_and(|def| self.is_compiler_item(def, item))
+    }
+
     /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
     /// — for the items the compiler requires to be registered.
     #[must_use]
@@ -2354,7 +2366,7 @@ impl TypeTable {
     /// If `type_id` is a `AsyncCall<T>` `GenericInstance`, return `T`.
     pub fn as_async_call(&self, type_id: TypeId) -> Option<TypeId> {
         if let ResolvedType::GenericInstance { def, type_args } = self.get(type_id)
-            && self.def_name(*def) == "AsyncCall"
+            && self.is_compiler_item(*def, CompilerItem::AsyncCall)
             && type_args.len() == 1
         {
             return Some(type_args[0]);
@@ -4034,7 +4046,7 @@ impl TypeTable {
     pub fn list_element(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if self.def_name(*def) == "List" && type_args.len() == 1 =>
+                if self.is_compiler_item(*def, CompilerItem::List) && type_args.len() == 1 =>
             {
                 Some(type_args[0])
             }

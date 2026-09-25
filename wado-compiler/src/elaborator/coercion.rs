@@ -455,11 +455,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_string_or_template {
             let is_string_newtype = {
                 let tt = self.tysys.type_table.borrow();
-                let string_struct_name = tt.compiler_struct_name(CompilerItem::String);
-                tt.newtype_representation(target_type).is_some_and(|base| {
-                    matches!(tt.get(base), ResolvedType::Struct { def, .. }
-                        if tt.struct_head_name(*def) == string_struct_name)
-                })
+                tt.newtype_representation(target_type)
+                    .is_some_and(|base| tt.is_string(base))
             };
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.

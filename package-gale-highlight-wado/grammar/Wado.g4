@@ -33,11 +33,11 @@ itemKind
     ;
 
 globalDecl
-    : 'global' 'mut'? IDENTIFIER ':' typeRef '=' expression ';'
+    : 'global' 'mut'? name ':' typeRef '=' expression ';'
     ;
 
 typeAliasDecl
-    : 'type' identifier genericParams? ('=' typeRef)? ';'
+    : 'type' bindingName genericParams? ('=' typeRef)? ';'
     | 'type' typeRef ';'
     ;
 
@@ -74,7 +74,7 @@ useDecl
 
 importGroup
     : '{' importList? '}'
-    | IDENTIFIER
+    | name
     | '_'
     ;
 
@@ -83,8 +83,8 @@ importList
     ;
 
 importItem
-    : IDENTIFIER '::' '{' importList? '}'
-    | IDENTIFIER ('as' IDENTIFIER)?
+    : name '::' '{' importList? '}'
+    | name ('as' name)?
     ;
 
 functionDecl
@@ -92,7 +92,7 @@ functionDecl
     ;
 
 funcSig
-    : identifier genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
+    : bindingName genericParams? '(' paramList? ')' returnType? withClause? (block | ';')
     ;
 
 identifier
@@ -103,13 +103,25 @@ identifier
     | 'test' | 'do' | 'task' | 'extends'
     ;
 
+// A declared or type name. The compiler lexes `resume` as a name and refuses it
+// only once bound; it is `resume value` only where an expression begins.
+name
+    : IDENTIFIER
+    | 'resume'
+    ;
+
+bindingName
+    : identifier
+    | 'resume'
+    ;
+
 paramList
     : param (',' param)* ','?
     ;
 
 param
     : selfParam
-    | attribute* 'mut'? identifier ':' typeRef ('=' expression)?
+    | attribute* 'mut'? bindingName ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -126,12 +138,12 @@ withClause
     ;
 
 withItem
-    : IDENTIFIER
+    : name
     | '_'
     ;
 
 structDecl
-    : 'struct' IDENTIFIER genericParams? '{' fieldList? '}'
+    : 'struct' name genericParams? '{' fieldList? '}'
     ;
 
 fieldList
@@ -143,7 +155,7 @@ fieldDecl
     ;
 
 enumDecl
-    : 'enum' IDENTIFIER '{' enumCaseList? '}'
+    : 'enum' name '{' enumCaseList? '}'
     ;
 
 enumCaseList
@@ -151,11 +163,11 @@ enumCaseList
     ;
 
 enumCase
-    : attribute* IDENTIFIER ('=' expression)?
+    : attribute* name ('=' expression)?
     ;
 
 flagsDecl
-    : 'flags' IDENTIFIER '{' flagsCaseList? '}'
+    : 'flags' name '{' flagsCaseList? '}'
     ;
 
 flagsCaseList
@@ -163,11 +175,11 @@ flagsCaseList
     ;
 
 flagsCase
-    : attribute* IDENTIFIER
+    : attribute* name
     ;
 
 variantDecl
-    : 'variant' IDENTIFIER genericParams? '{' variantCaseList? '}'
+    : 'variant' name genericParams? '{' variantCaseList? '}'
     ;
 
 variantCaseList
@@ -175,28 +187,28 @@ variantCaseList
     ;
 
 variantCase
-    : attribute* IDENTIFIER ('(' typeRef (',' typeRef)* ')')?
+    : attribute* name ('(' typeRef (',' typeRef)* ')')?
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
+    : 'trait' name genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
     ;
 
 interfaceDecl
-    : 'interface' IDENTIFIER genericParams? '{' traitMember* '}'
+    : 'interface' name genericParams? '{' traitMember* '}'
     ;
 
 worldDecl
-    : 'world' IDENTIFIER '{' worldItem* '}'
+    : 'world' name '{' worldItem* '}'
     ;
 
 worldItem
-    : 'import' IDENTIFIER ';'
-    | 'export' ('async'? 'fn' identifier genericParams? '(' paramList? ')' returnType? | IDENTIFIER) ';'
+    : 'import' name ';'
+    | 'export' ('async'? 'fn' bindingName genericParams? '(' paramList? ')' returnType? | name) ';'
     ;
 
 resourceDecl
-    : 'resource' IDENTIFIER genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
+    : 'resource' name genericParams? ('extends' typeRef)? ('{' resourceMember* '}' | ';')
     ;
 
 resourceMember
@@ -208,7 +220,7 @@ traitMember
     ;
 
 traitMemberBody
-    : 'type' IDENTIFIER (':' traitBounds)? ';'
+    : 'type' name (':' traitBounds)? ';'
     | functionDecl
     ;
 
@@ -221,14 +233,14 @@ implMember
     ;
 
 implMemberBody
-    : 'type' IDENTIFIER '=' typeRef ';'
+    : 'type' name '=' typeRef ';'
     | '..' ('trap' | 'forward')
     | 'export' 'async'? 'fn' funcSig
     | ('pub' | 'internal')? implPubMember
     ;
 
 implPubMember
-    : 'const' IDENTIFIER ':' typeRef '=' expression ';'
+    : 'const' name ':' typeRef '=' expression ';'
     | 'fn' funcSig
     ;
 
@@ -239,7 +251,7 @@ genericParams
     ;
 
 genericParam
-    : '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
+    : '..'? 'effect'? name (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
@@ -253,7 +265,12 @@ typeRef
     | '(' (typeRef (',' typeRef)*)? ')'
     | '[' (typeElement (',' typeElement)*)? ']'
     | 'fn' 'mut'? '(' (typeRef (',' typeRef)*)? ')' returnType? withClause?
-    | path typeArgs?
+    | typePath typeArgs?
+    ;
+
+// A type's path. Only `path`, which an expression can begin with, leaves `resume` out.
+typePath
+    : (name | 'Self') ('::' name)*
     ;
 
 typeElement
@@ -604,7 +621,7 @@ closureParamList
     ;
 
 closureParam
-    : attribute* 'mut'? ('_' | identifier) closureParamType?
+    : attribute* 'mut'? ('_' | bindingName) closureParamType?
     ;
 
 closureParamType
@@ -645,7 +662,7 @@ patternRange
 
 patternPrimary
     : '_'
-    | 'mut'? identifier
+    | 'mut'? bindingName
     | literal
     | '-' INTEGER
     | 'mut'? patternPath ('(' (pattern (',' pattern)*)? ')')?

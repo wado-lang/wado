@@ -2037,17 +2037,14 @@ impl FunctionTranslator<'_, '_> {
                 let tt = self.base.type_table.borrow();
                 // The marker's `&T` argument may already be lowered to `Box<V>`.
                 let peeled = tt.peel_refs(arg_ty);
-                let box_name = tt
-                    .compiler_items()
-                    .struct_name(CompilerItem::Box)
-                    .to_string();
                 let unboxed = self
                     .base
                     .box_plan
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
                         tir::ResolvedType::Struct { def, type_args }
-                            if !type_args.is_empty() && tt.struct_head_name(*def) == box_name =>
+                            if !type_args.is_empty()
+                                && tt.is_compiler_struct(*def, CompilerItem::Box) =>
                         {
                             self.base
                                 .struct_fields_map

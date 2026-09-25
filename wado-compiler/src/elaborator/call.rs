@@ -86,6 +86,28 @@ impl ArgSite {
             .get(i)
             .map_or(Self::Template(call_span), |arg| Self::Written(arg.span()))
     }
+
+    /// The argument's type mismatch. A template's is the tag's parameter at
+    /// fault, since no source spells the template's type.
+    pub(super) fn mismatch(self, expected: String, found: String) -> TypeError {
+        match self {
+            Self::Written(span) => TypeError::TypeMismatch {
+                expected,
+                found,
+                span,
+            },
+            Self::Template(span) => TypeError::TagParamNotTemplate {
+                param: expected,
+                span,
+            },
+        }
+    }
+
+    pub(super) fn span(self) -> Span {
+        match self {
+            Self::Written(span) | Self::Template(span) => span,
+        }
+    }
 }
 
 pub(super) fn arg_sites_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<ArgSite> {
@@ -2027,7 +2049,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
-        if !self.report_value_for_reference(&callee, &declared_param_types, &call.args, &args) {
+        if !self.report_value_for_reference(
+            &callee,
+            &declared_param_types,
+            &call.args,
+            &args,
+            call.span,
+        ) {
             self.defer_or_report_uninferred_fn_type_args(
                 &callee,
                 &mut type_args,
@@ -3093,6 +3121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         arg_exprs: &[ast::Expr],
         args: &[TypeId],
+        call_span: Span,
     ) -> bool {
         if self.lookup_function_type_params(callee).is_empty() {
             return false;
@@ -3109,11 +3138,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         for &i in &mismatched {
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected: self.tysys.type_id_to_string(param_types[i]),
-                found: self.tysys.type_id_to_string(args[i]),
-                span: arg_exprs[i].span(),
-            });
+            let _ = self.emit(ArgSite::of(arg_exprs, i, call_span).mismatch(
+                self.tysys.type_id_to_string(param_types[i]),
+                self.tysys.type_id_to_string(args[i]),
+            ));
         }
         !mismatched.is_empty()
     }

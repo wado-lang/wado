@@ -1,0 +1,18 @@
+// A struct pattern needs a struct to destructure, in a `match` arm as in a
+// `let`, even when it names no field to look up.
+export fn run() {
+    let x = builtin::black_box(5);
+    let n = match x {
+        {} && false => 1,
+        _ => 0,
+    };
+    if let { a } = x {
+        let _ = a;
+    }
+}
+
+__DATA__
+{
+    "compile_error": ":6:9: type error: pattern type mismatch: expected struct type, found i32",
+    "compile_error_count": 2
+}

@@ -1,0 +1,14 @@
+// A type another module names `String` is not the prelude's, so a newtype over
+// it takes no string literal.
+use m from "./sub/newtype_over_foreign_string_dep.wado";
+
+type Name = m::String;
+
+export fn run() {
+    let n: Name = "hi";
+}
+
+__DATA__
+{
+    "compile_error": ":8:19: type error: type mismatch: expected 'Name', found 'String'"
+}

@@ -21,10 +21,6 @@ pub(super) fn unify(
     actual: TypeId,
     bindings: &mut IndexMap<TypeId, TypeId>,
 ) {
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
     let expected_type = type_table.borrow().get(expected).clone();
     let actual_type = type_table.borrow().get(actual).clone();
 
@@ -146,7 +142,7 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if type_table.borrow().def_name(*def) == list_name
+        ) if type_table.borrow().is_compiler_item(*def, CompilerItem::List)
             && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
