@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility, turbofish_on_both, wire_numbers_of};
+use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -541,8 +541,10 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A turbofish on a case reached through `Self`, which already names them.
-    SelfCaseTurbofish {
+    /// A turbofish on a case whose prefix names a type (`Self`, a newtype),
+    /// which already carries its arguments.
+    PrefixCarriesTypeArgs {
+        prefix: String,
         case: String,
         span: Span,
     },
@@ -1602,13 +1604,20 @@ impl TypeError {
                 case,
                 span,
             } => (
-                Code::ArityMismatch,
-                turbofish_on_both(&unalias_namespace_member(type_name), case),
+                // What the parser reports for the same spelling with no call.
+                Code::InvalidSyntax,
+                format!(
+                    "type arguments are written on both `{}` and `{case}`; write them on one",
+                    unalias_namespace_member(type_name)
+                ),
                 *span,
             ),
-            TypeError::SelfCaseTurbofish { case, span } => (
-                Code::ArityMismatch,
-                format!("`Self` already names its type arguments; remove the turbofish from `{case}`"),
+            TypeError::PrefixCarriesTypeArgs { prefix, case, span } => (
+                Code::InvalidSyntax,
+                format!(
+                    "`{}` already names its type arguments; remove the turbofish from `{case}`",
+                    unalias_namespace_member(prefix)
+                ),
                 *span,
             ),
             TypeError::SurplusTypeArguments {

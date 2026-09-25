@@ -20,7 +20,6 @@ use crate::ast::{
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
-    turbofish_on_both,
 };
 use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
@@ -4093,7 +4092,9 @@ impl Parser {
                 None => head.name.clone(),
             };
             return Err(ParseError {
-                message: turbofish_on_both(&owner, &method),
+                message: format!(
+                    "type arguments on both `{owner}` and `{method}` need a static method call; a case takes them on one"
+                ),
                 span: head.span.merge(&method_span),
             });
         }

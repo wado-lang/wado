@@ -464,12 +464,6 @@ pub trait AstVisitor: Sized {
     }
 }
 
-/// The diagnostic for type arguments written on both a type and its member.
-#[must_use]
-pub fn turbofish_on_both(owner: &str, member: &str) -> String {
-    format!("type arguments are written on both `{owner}` and `{member}`; write them on one")
-}
-
 /// The head name a type spells, or `None` for a shape with no nameable head.
 #[must_use]
 pub fn type_head_name(ty: &Type) -> Option<&str> {
@@ -3207,6 +3201,11 @@ impl IdentExpr {
     /// qualifies it — the `ns` of `ns::Color::Red`.
     pub fn owner_index(&self) -> Option<usize> {
         self.segments.len().checked_sub(2)
+    }
+
+    /// The path's last segment, or the bare name: `Red` in `Color::Red` and in `Red`.
+    pub fn case_name(&self) -> &str {
+        self.segments.last().map_or(&self.name, |seg| &seg.name)
     }
 }
 

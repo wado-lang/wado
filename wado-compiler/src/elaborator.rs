@@ -529,30 +529,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record use→def edges for a case path: the `Type` prefix by name, the
-    /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
-    pub(super) fn record_qualified_case(
-        &mut self,
-        ident: &IdentExpr,
-        type_name: &str,
-        case_ast_id: AstId,
-    ) {
+    /// Record what a case path names: its `owner` for reify, and use→def edges
+    /// for the case and a lone prefix. A namespace path's leading segments are
+    /// the import's edges.
+    pub(super) fn record_case_path(&mut self, ident: &IdentExpr, owner: DefId, case_ast_id: AstId) {
+        self.record_case_owner(ident.id, owner);
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
-            [prefix, case, ..] => {
-                self.record_type_name_reference(prefix.id, type_name);
+            [prefix, case] => {
+                self.record_type_name_reference(prefix.id, &prefix.name);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
-            [_] => unreachable!("a qualified path has two or more segments"),
-        }
-    }
-
-    /// Record the suffix (`Case`) segment of a `ns::Type::Case`
-    /// namespace-qualified case path. The leading `ns` and `Type`
-    /// segments are left to existing namespace-import edges.
-    pub(super) fn record_namespaced_case(&mut self, ident: &IdentExpr, case_ast_id: AstId) {
-        if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_def(seg.id, case_ast_id);
+            [.., case] => self.record_reference_to_def(case.id, case_ast_id),
         }
     }
 
@@ -1359,8 +1347,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.assign_places.insert(key, place);
     }
 
-    /// Record that the case path at `site`, which does not name its type, is a
-    /// case of `owner`.
+    /// Record that the case construction at `site` is a case of `owner`.
     pub(super) fn record_case_owner(&mut self, site: AstId, owner: DefId) {
         self.sem.types.case_owners.insert(site, owner);
     }

@@ -23,7 +23,7 @@ use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, TypeError, VarRef};
+use super::types::{FunctionContext, TypeError, VarRef, newtype_member_owner};
 use super::tysys::TypeSystem;
 use super::util;
 use super::util::parse_i128_literal;
@@ -290,15 +290,24 @@ enum CalleeIdentKind<'a> {
     },
 }
 
-/// What a case path names its variant with.
-#[derive(Clone, Copy)]
-enum CasePrefix {
-    /// `Variant::Case`, or a bare `Case` the expected type supplied.
-    Type,
-    /// `ns::Variant::Case`.
-    Namespace,
-    /// `Self::Case`, `Self` being this type.
-    OfSelf(TypeId),
+/// The declaration a case path's prefix names, through any newtype.
+pub(super) struct CaseOwner {
+    pub(super) def: DefId,
+    /// The newtype the prefix names, which the value takes.
+    pub(super) named: Option<TypeId>,
+    /// The type arguments a prefix naming a type carries (`Self`, a bound
+    /// parameter, a newtype); a declaration's come from the turbofish.
+    pub(super) carried: Option<Vec<TypeId>>,
+}
+
+impl CaseOwner {
+    /// The type a case value reached through this owner has.
+    pub(super) fn named_or(&self, constructed: TypeId) -> TypeId {
+        match self.named {
+            Some(named) if constructed != TypeTable::ERROR => named,
+            _ => constructed,
+        }
+    }
 }
 
 /// A case construction as the source wrote it.
@@ -635,8 +644,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
     }
 
-    /// The variant a `Variant::Case(...)` callee constructs: the one the walk
-    /// answered for a bare case, else the one `prefix` names at its site.
+    /// The variant a `Variant::name(...)` callee's prefix names: the one the
+    /// walk answered for a bare case, else the one `prefix` names at its site.
     fn variant_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
@@ -645,10 +654,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<&VariantInfo> {
         match callee_kind {
             CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
-            CalleeIdentKind::Operation { .. }
-            | CalleeIdentKind::AbstractTypeParam { .. }
-            | CalleeIdentKind::Rewritten(_) => None,
-            CalleeIdentKind::AsIs(_) => self.lookup_variant_cases_at(receiver_site, prefix),
+            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => None,
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+                self.lookup_variant_cases_at(receiver_site, prefix)
+            }
         }
     }
 
@@ -662,81 +671,97 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The impl's own type, where `ident` is a `Self::Case` path.
-    pub(super) fn self_case_receiver(&self, ident: &ast::IdentExpr) -> Option<TypeId> {
-        match ident.segments.as_slice() {
-            [head, _] if head.name == "Self" => self.annotate_ctx.trait_ctx.self_type,
-            _ => None,
+    /// What the prefix of the qualified case path `ident` names.
+    pub(super) fn case_owner_of_path(&self, ident: &ast::IdentExpr) -> Option<CaseOwner> {
+        let owner = ident.owner_segment()?;
+        if let [head, _] = ident.segments.as_slice()
+            && head.name == "Self"
+        {
+            return self.case_owner_of_type(self.annotate_ctx.trait_ctx.self_type?);
+        }
+        let def = self
+            .type_lookup()
+            .declaration_at(Some(owner.id), &owner.name)?;
+        Some(self.case_owner_of_decl(def))
+    }
+
+    /// The owner the declaration `def` names: itself, or a newtype's base.
+    pub(super) fn case_owner_of_decl(&self, def: DefId) -> CaseOwner {
+        match newtype_member_owner(&self.type_lookup(), &self.tysys, def) {
+            // A generic newtype's base spells the newtype's own parameters,
+            // which the turbofish writes.
+            Some((base, newtype)) if self.bare_generic_type_arity(def).is_some_and(|n| n > 0) => {
+                CaseOwner {
+                    def: base,
+                    named: Some(newtype),
+                    carried: None,
+                }
+            }
+            Some((_, newtype)) => self
+                .case_owner_of_type(newtype)
+                .expect("a newtype reaching members names their declaration"),
+            None => CaseOwner {
+                def,
+                named: None,
+                carried: None,
+            },
         }
     }
 
-    /// The type arguments `Self` writes for a case reached through it, which
-    /// leaves no room for a turbofish on the case. Records the owner for reify.
-    pub(super) fn self_case_written(
-        &mut self,
-        ident: &ast::IdentExpr,
-        receiver: TypeId,
-        turbofish: &[ast::Type],
-        span: Span,
-    ) -> Option<Vec<TypeId>> {
-        let [_, case] = ident.segments.as_slice() else {
-            unreachable!("`self_case_receiver` matched two segments")
-        };
-        if !turbofish.is_empty() {
-            let _ = self.emit(TypeError::SelfCaseTurbofish {
-                case: case.name.clone(),
-                span,
-            });
-            return None;
-        }
-        let owner = self
-            .tysys
-            .type_def(receiver)
-            .expect("a case's owner is nominal");
-        self.record_case_owner(ident.id, owner);
+    /// The owner the type `ty` names, with the arguments it carries.
+    pub(super) fn case_owner_of_type(&self, ty: TypeId) -> Option<CaseOwner> {
         let table = self.tysys.type_table.borrow();
-        Some(match table.get(receiver) {
-            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-            _ => Vec::new(),
+        let structure = table.reflect_structure_head(ty);
+        Some(CaseOwner {
+            def: self.tysys.type_def(structure)?,
+            named: matches!(table.get_unerased(ty), ResolvedType::Newtype { .. }).then_some(ty),
+            carried: Some(table.nominal_type_args(structure).unwrap_or_default()),
         })
     }
 
-    /// The variant and case a `Variant::Case(…)`, `ns::Variant::Case(…)` or
-    /// `Self::Case(…)` callee constructs, and what names the variant.
+    /// The type arguments a case path writes: those its prefix carries, which
+    /// leave no room for a turbofish, else the turbofish's.
+    pub(super) fn case_written(
+        &mut self,
+        owner: &CaseOwner,
+        [prefix, case]: [&str; 2],
+        turbofish: &[ast::Type],
+        span: Span,
+    ) -> Option<Vec<TypeId>> {
+        match &owner.carried {
+            None => Some(self.resolve_turbofish_args(turbofish)),
+            Some(carried) if turbofish.is_empty() => Some(carried.clone()),
+            Some(_) => {
+                let _ = self.emit(TypeError::PrefixCarriesTypeArgs {
+                    prefix: prefix.to_string(),
+                    case: case.to_string(),
+                    span,
+                });
+                None
+            }
+        }
+    }
+
+    /// The owner and case a case callee constructs: a bare `Case(…)` the
+    /// expected type supplied, or a qualified path whose prefix names a variant.
     fn case_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
-        receiver_site: Option<ast::AstId>,
         ident: &ast::IdentExpr,
-    ) -> Option<(VariantInfo, VariantCaseData, CasePrefix)> {
-        if let Some(receiver) = self.self_case_receiver(ident) {
-            let variant_info = self.tysys.variant_of_type(receiver)?;
-            let (_, case_data) = variant_info.case_named(&ident.segments[1].name)?;
-            return Some((
-                variant_info.clone(),
-                case_data.clone(),
-                CasePrefix::OfSelf(receiver),
-            ));
-        }
-        let (prefix, suffix) = callee_kind.effective_name().split_once("::")?;
-        let (variant_info, case_name, named_by) = if let Some(variant_info) =
-            self.variant_of_callee(callee_kind, receiver_site, prefix)
-        {
-            (variant_info, suffix, CasePrefix::Type)
-        } else {
-            let (_, case_name) = suffix.split_once("::")?;
-            self.namespace_alias_source(prefix, ident.id)?;
-            // `ns::Type::Case` names `Type` with its middle segment, which the
-            // resolve walk answered for, so the declaration comes from the site.
-            let def = self.tysys.qualified_owner_decl(ident)?;
-            (
-                self.tysys.data.variant_cases.get(&def)?,
-                case_name,
-                CasePrefix::Namespace,
-            )
+    ) -> Option<(CaseOwner, VariantInfo, VariantCaseData)> {
+        let owner = match callee_kind {
+            CalleeIdentKind::Case { owner, .. } => self.case_owner_of_decl(*owner),
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+                self.case_owner_of_path(ident)?
+            }
+            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => {
+                return None;
+            }
         };
-        let (_, case_data) = variant_info.case_named(case_name)?;
-        Some((variant_info.clone(), case_data.clone(), named_by))
+        let variant = self.type_lookup().variant_cases_of(owner.def)?.clone();
+        let (_, case) = variant.case_named(ident.case_name())?;
+        let case = case.clone();
+        Some((owner, variant, case))
     }
 
     /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
@@ -1028,49 +1053,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
-        if let Some((variant, case_data, named_by)) =
-            self.case_of_callee(&callee_kind, receiver_site, ident)
-        {
-            let (owner, _) = effective_name
+        if let Some((owner, variant, case_data)) = self.case_of_callee(&callee_kind, ident) {
+            self.record_case_path(ident, owner.def, case_data.ast_id);
+            // A bare case is spelled by the type that supplied it.
+            let spelled = if ident.segments.is_empty() {
+                effective_name
+            } else {
+                ident.name.as_str()
+            };
+            let (prefix, case_name) = spelled
                 .rsplit_once("::")
                 .expect("a case callee is qualified");
-            let written = match named_by {
-                CasePrefix::Namespace => {
-                    self.record_namespaced_case(ident, case_data.ast_id);
-                    self.resolve_turbofish_args(&call.type_args)
-                }
-                CasePrefix::Type => {
-                    let (prefix, _) = effective_name
-                        .split_once("::")
-                        .expect("a case callee is qualified");
-                    self.record_qualified_case(ident, prefix, case_data.ast_id);
-                    self.resolve_turbofish_args(&call.type_args)
-                }
-                CasePrefix::OfSelf(receiver) => {
-                    self.record_qualified_case(ident, "Self", case_data.ast_id);
-                    let Some(written) =
-                        self.self_case_written(ident, receiver, &call.type_args, call.span)
-                    else {
-                        return self.resolve_args_without_callee(&call.args, ctx);
-                    };
-                    written
-                }
+            let Some(written) =
+                self.case_written(&owner, [prefix, case_name], &call.type_args, call.span)
+            else {
+                return self.resolve_args_without_callee(&call.args, ctx);
             };
             let case = CaseSite {
                 variant: &variant,
                 case: &case_data,
                 written: &written,
-                owner,
+                owner: prefix,
                 site: call.id,
                 span: call.span,
             };
-            return self.resolve_case_construction(
+            let constructed = self.resolve_case_construction(
                 &case,
                 &call.args,
                 given_args,
                 expected_type,
                 ctx,
             );
+            return owner.named_or(constructed);
         }
 
         // First, determine expected parameter types to handle coercion.
@@ -3158,8 +3172,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Group flat turbofish type args into one variadic pack: `ids::<i32, bool>()`
-    /// fills `..T` with `[i32, bool]`. Returns whether it reported instead.
+    /// Fit flat turbofish type args to `declared`, grouping them into one
+    /// variadic pack: `ids::<i32, bool>()` fills `..T` with `[i32, bool]`.
+    /// Returns whether it reported instead.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
         callee_name: &str,
@@ -3168,17 +3183,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
     ) -> bool {
         let real = RealTypeParams::borrowed(declared);
-        let mut packs = real
+        let packs: Vec<usize> = real
             .iter()
             .enumerate()
             .filter(|(_, p)| p.is_pack)
-            .map(|(i, _)| i);
-        let Some(pack_pos) = packs.next() else {
-            return false;
+            .map(|(i, _)| i)
+            .collect();
+        let pack_pos = match packs.as_slice() {
+            [] => {
+                return self.reject_surplus_turbofish(
+                    callee_name,
+                    real.len(),
+                    type_args.len(),
+                    span,
+                );
+            }
+            [pack_pos] => *pack_pos,
+            _ => return self.reject_unspelled_pack_args(callee_name, &real, type_args, span),
         };
-        if packs.next().is_some() {
-            return self.reject_unspelled_pack_args(callee_name, &real, type_args, span);
-        }
         if type_args.len() <= real.len() {
             return false;
         }
@@ -3217,16 +3239,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Each pack spelled and still too many. With one pack the surplus is
         // instead what that pack absorbs, which is why this lives here.
-        if type_args.len() > real.len() {
-            let _ = self.emit(TypeError::SurplusTypeArguments {
-                name: callee_name.to_string(),
-                expected: real.len(),
-                found: type_args.len(),
-                span,
-            });
-            return true;
+        self.reject_surplus_turbofish(callee_name, real.len(), type_args.len(), span)
+    }
+
+    /// Report a turbofish naming `found` type arguments where `expected` slots
+    /// take them, returning whether it did.
+    pub(super) fn reject_surplus_turbofish(
+        &mut self,
+        callee_name: &str,
+        expected: usize,
+        found: usize,
+        span: token::Span,
+    ) -> bool {
+        if found <= expected {
+            return false;
         }
-        false
+        let _ = self.emit(TypeError::SurplusTypeArguments {
+            name: callee_name.to_string(),
+            expected,
+            found,
+            span,
+        });
+        true
     }
 
     /// Settle to the empty pack every pack slot this site left nothing over
@@ -3622,11 +3656,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_binding: None,
             },
         );
-        let payload: Vec<TypeId> = [case.case.payload]
-            .into_iter()
-            .filter(|_| case.case.has_payload(&self.tysys.type_table.borrow()))
-            .collect();
-        let payload = self.instantiate_types(&payload, &inst);
+        let has_payload = case.case.has_payload(&self.tysys.type_table.borrow());
+        let payload = if has_payload {
+            vec![self.instantiate_type(case.case.payload, &inst)]
+        } else {
+            Vec::new()
+        };
         let mut args = match given_args {
             Some(args) => args,
             None => self.resolve_args_against_params(raw_args, ctx, &payload, Some(&inst)),

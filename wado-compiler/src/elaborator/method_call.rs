@@ -1563,40 +1563,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // A static call's head carries a turbofish, so only a generic variant builds a
-        // case here (`Result::<i32, String>::Ok(42)`). A spelling naming a trait asks for none.
-        let written_args = match self.tysys.type_table.borrow().get(target_type_id) {
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
-            _ => None,
-        };
+        // `Result::<i32, String>::Ok(42)`: the head is a type carrying its
+        // arguments. A spelling naming a trait asks for no case.
         if required_trait.is_none()
-            && let Some(written) = written_args
-            && let Some(variant) = self.tysys.variant_of_type(target_type_id).cloned()
+            && let Some(owner) = self.case_owner_of_type(target_type_id)
+            && let Some(variant) = self.type_lookup().variant_cases_of(owner.def).cloned()
             && let Some((_, case_data)) = variant.case_named(&static_call.method)
         {
+            let mut head = String::new();
+            unparse_type_into(&static_call.target_type, &mut head);
+            let head = head.split('<').next().expect("split yields one piece");
             if !static_call.type_args.is_empty() {
                 let _ = self.emit(TypeError::CaseTurbofishOnBoth {
-                    type_name: variant.name.clone(),
+                    type_name: head.to_string(),
                     case: static_call.method.clone(),
                     span: static_call.span,
                 });
                 return self.resolve_args_without_callee(&static_call.args, ctx);
             }
+            self.record_case_owner(static_call.id, owner.def);
+            let written = owner.carried.clone().expect("a type carries its arguments");
             let case = CaseSite {
                 variant: &variant,
                 case: case_data,
                 written: &written,
-                owner: &variant.name,
+                owner: head,
                 site: static_call.id,
                 span: static_call.span,
             };
-            return self.resolve_case_construction(
+            let constructed = self.resolve_case_construction(
                 &case,
                 &static_call.args,
                 None,
                 expected_type,
                 ctx,
             );
+            return owner.named_or(constructed);
         }
 
         // Literal preselect for a static call (WEP 2026-07-31 phase 4): choose
@@ -1691,8 +1693,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Not folded into `lookup_static_method_param_types`: variant
-        // constructors need its answer to stay empty.
         {
             // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
             // does; the namespace is the head's question, not the list's.

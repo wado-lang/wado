@@ -1,0 +1,26 @@
+// A turbofish naming more type arguments than the callee declares is an
+// arity error, on a call and on a value alike.
+
+fn id<T>(x: T) -> T { return x; }
+fn one() -> i32 { return 1; }
+global G: i32 = 1;
+struct P { x: i32 }
+impl P {
+    fn mk() -> P { return P { x: 1 }; }
+    fn get(&self) -> i32 { return self.x; }
+}
+
+export fn run() {
+    let a = id::<i32, bool>(1);
+    let b = one::<i32>();
+    let c = P::mk::<i32>();
+    let p = P { x: 1 };
+    let d = p.get::<i32>();
+    let x = 1;
+    let e = x::<i32>;
+    let f = || x::<_>;
+    let g = G::<i32>;
+}
+
+__DATA__
+{"compile_error": ":14:13: arity mismatch: `id` takes 1 type argument, but 2 were supplied\n:15:13: arity mismatch: `one` takes no type arguments, but 1 was supplied\n:16:13: arity mismatch: `mk` takes no type arguments, but 1 was supplied\n:18:13: arity mismatch: `get` takes no type arguments, but 1 was supplied\n:20:13: arity mismatch: `x` takes no type arguments, but 1 was supplied\n:21:16: arity mismatch: `x` takes no type arguments, but 1 was supplied\n:22:13: arity mismatch: `G` takes no type arguments, but 1 was supplied", "compile_error_count": 7}

@@ -34,7 +34,7 @@ use super::coercion::{
 };
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
-use super::types::{FunctionContext, TypeLookup};
+use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::{Identity, TypeSystem};
 use super::util;
 use crate::ast::RangeKind;
@@ -490,20 +490,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// A `Type::Case` identifier as the declaration owning the case and the
-    /// spelling: `Color::Red` at its own segments, `Red` or `Self::Red` as annotate read it.
-    fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<DefId>, String)> {
-        if let Some(owner) = self.ann_case_owner(ident.id) {
-            let case = ident.segments.last().map_or(&ident.name, |seg| &seg.name);
-            return Some((Some(owner), self.tysys.qualified_case(owner, case)));
-        }
-        let (prefix, _) = ident.name.split_once("::")?;
-        let owner = self
-            .type_lookup()
-            .declaration_at(ident.owner_segment().map(|seg| seg.id), prefix);
-        Some((owner, ident.name.clone()))
-    }
-
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -581,10 +567,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Recorded type of an expression, reporting an indefinite one as absent
     /// so the node falls back to its `expected_type`.
-    ///
-    /// The body walk records indefinite types for its own AST analyses;
-    /// building with one reifies a bare `null` as an `Option` nothing inhabits
-    /// and fails WIR validation.
     fn ann_expression_types(&self, id: AstId) -> Option<tir::TypeId> {
         let raw = self.ann_recorded_expression_type(id)?;
         (!self.tysys.type_table.borrow().is_indefinite(raw)).then_some(raw)
@@ -2779,7 +2761,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let recorded_type = self
             .ann_expression_types(expr.id())
             .or(expected_type)
-            .or_else(|| self.ann_recorded_expression_type(expr.id()))
+            .or_else(|| {
+                self.ann_recorded_expression_type(expr.id())
+                    .filter(|&t| self.tysys.type_table.borrow().contains_never_arg(t))
+            })
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
 
@@ -7332,25 +7317,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Self::hoist_block(call, prelude);
         }
 
-        // Variant constructor in turbofish form (`Option::<T>::Some(x)`): the
-        // walk types it as the variant instance, which `recorded_type` holds.
-        let variant_type = recorded_type;
-        let (case_index, payload_type) =
-            self.variant_case_index_and_payload(recorded_type, &static_call.method);
-        if let Some(case_index) = case_index {
-            let payload = static_call
-                .args
-                .first()
-                .map(|a| Box::new(self.reify_expr(a, ctx, Some(payload_type))));
-            return TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type,
-                    case_index,
-                    case_name: static_call.method.clone(),
-                    payload,
-                },
-                variant_type,
+        // Variant constructor in turbofish form (`Option::<T>::Some(x)`).
+        if let Some(owner) = self.ann_case_owner(static_call.id) {
+            return self.reify_case_construction(
+                owner,
+                &static_call.method,
+                static_call.id,
+                &static_call.args,
+                recorded_type,
                 static_call.span,
+                ctx,
             );
         }
 
@@ -7717,46 +7693,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // ctor there too, but that shape would lower to a
         // `Call` against a function that doesn't exist.
         if let ast::Expr::Ident(ident) = &call.callee
-            && let Some((owner, spelled)) = self.case_path(ident)
-            && let Some((prefix, suffix)) = spelled.split_once("::")
+            && let Some(owner) = self.ann_case_owner(ident.id)
         {
-            // `ns::Type::Case(payload)` reaches its owner through the namespace;
-            // the nullary form is `reify_ident`'s.
-            let (owner, case_name) = match suffix.split_once("::") {
-                None => (owner, suffix),
-                Some((_, case_name)) if self.sem.imports.namespace_imports.contains_key(prefix) => {
-                    (self.tysys.qualified_owner_decl(ident), case_name)
-                }
-                Some(_) => (None, suffix),
-            };
-            let names_case = owner
-                .and_then(|owner| self.type_lookup().variant_cases_of(owner))
-                .and_then(|info| info.case_named(case_name))
-                .is_some();
-            if names_case {
-                let variant_type = self
-                    .ann_generic_instantiations(call.id)
-                    .map(|gi| gi.instance_type)
-                    .unwrap_or(recorded_type);
-                let (case_index, payload_type) =
-                    self.variant_case_index_and_payload(variant_type, case_name);
-                let case_index = resolved_case_index(case_index, case_name);
-                let case_name = case_name.to_string();
-                let payload = call
-                    .args
-                    .first()
-                    .map(|arg_expr| Box::new(self.reify_expr(arg_expr, ctx, Some(payload_type))));
-                return TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type,
-                        case_index,
-                        case_name,
-                        payload,
-                    },
-                    variant_type,
-                    span,
-                );
-            }
+            return self.reify_case_construction(
+                owner,
+                ident.case_name(),
+                call.id,
+                &call.args,
+                recorded_type,
+                span,
+                ctx,
+            );
         }
 
         // Static-method / builtin dispatch (`Type::method(args)`,
@@ -8675,14 +8622,77 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // 5. Free function reference — the ident names a function in
+        // 5. A case path: variant, enum or flags, in `resolve_qualified_case`'s
+        //    order. The path's recorded type is the newtype its prefix named,
+        //    or the case's own type.
+        if let Some(owner) = self.ann_case_owner(ident.id) {
+            let case_name = ident.case_name();
+            let lookup = self.type_lookup();
+            if let Some(variant_info) = lookup.variant_cases_of(owner)
+                && let Some((case_index, case_data)) = variant_info.case_named(case_name)
+            {
+                let case_name = case_data.name.clone();
+                // A payload-less case carries no value to infer from, so
+                // annotate can only record the decl's own `V<T>`. In a
+                // struct-literal field the caller knows the substituted
+                // `V<i32>`; prefer it over the unresolved record.
+                let recorded_variant_type = self.constructed_variant_type(ident.id, variant_info);
+                let variant_type = self
+                    .tysys
+                    .resolved_variant_type(recorded_variant_type, expected_type)
+                    .unwrap_or(recorded_variant_type);
+                let is_named = matches!(
+                    self.tysys.type_table.borrow().get_unerased(recorded_type),
+                    ResolvedType::Newtype { .. }
+                );
+                return TirExpr::new(
+                    TirExprKind::VariantConstruct {
+                        variant_type,
+                        case_index: u32::try_from(case_index).expect("case index fits u32"),
+                        case_name,
+                        payload: None,
+                    },
+                    if is_named { recorded_type } else { variant_type },
+                    ident.span,
+                );
+            }
+            if let Some(enum_info) = lookup.enum_cases_of(owner)
+                && let Some(case_data) = enum_info.find_case(case_name)
+            {
+                let enum_type = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .type_id_of_decl(enum_info.defined_at);
+                return TirExpr::new(
+                    TirExprKind::EnumConstruct {
+                        enum_type,
+                        case_index: case_data.index,
+                        case_name: case_data.name.clone(),
+                    },
+                    recorded_type,
+                    ident.span,
+                );
+            }
+            let member = lookup
+                .flags_members_of(owner)
+                .and_then(|flags| flags.members.iter().find(|m| m.name == case_name))
+                .expect("a case owner declares the case annotate resolved");
+            return TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: u64::from(member.bitmask),
+                    repr: member.bitmask.to_string(),
+                },
+                recorded_type,
+                ident.span,
+            );
+        }
+
+        // 6. Free function reference — the ident names a function in
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
-        //    instantiation's type_args when present. A case whose type the
-        //    path does not name (`None`, `Self::None`) is the case below.
-        let is_unnamed_case = self.ann_case_owner(ident.id).is_some();
-        if !is_unnamed_case
-            && self
+        //    instantiation's type_args when present.
+        if self
                 .sem
                 .decls
                 .function_return_types
@@ -8702,7 +8712,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.span,
             );
         }
-        if !is_unnamed_case && let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
+        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id) {
             let (import_src, original_name) = {
                 let defs = self.tysys.resolutions.defs();
                 (defs.module(def).clone(), defs.name(def).to_string())
@@ -8726,7 +8736,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // 5b. Imported free function reference resolved through the symbol
+        // 6b. Imported free function reference resolved through the symbol
         //     table (covers namespace-import functions, whose `ns$fn` aliases
         //     name functions rather than types). Mirrors annotate's
         //     `resolve_func_ref_ident` → `lookup_func_ast_for_ref` and emits a
@@ -8748,103 +8758,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 recorded_type,
                 ident.span,
             );
-        }
-
-        // 6. Qualified case path `Type::Case`. Variant / enum / flags
-        //    are checked in the same priority order as
-        //    `Elaborator::resolve_ident`. The
-        //    namespace-import form `ns::Type::Case` (two `::`
-        //    separators) is handled by a dedicated branch in the
-        //    elaborator that resolves the namespace alias first.
-        if let Some((owner, spelled)) = self.case_path(ident)
-            && let Some((_, suffix)) = spelled.split_once("::")
-        {
-            // Two-segment qualified path is "Type::Case". Anything with
-            // a further `::` is `ns::Type::Case` (namespace path) —
-            // defer to a later branch.
-            if !suffix.contains("::") {
-                let lookup = self.type_lookup();
-
-                // A newtype reaches its base's members and keeps its own type:
-                // `C::Green` is the implicit `Color::Green as C`.
-                let through_newtype =
-                    owner.and_then(|def| newtype_member_owner(&lookup, &self.tysys, def));
-                let owner = through_newtype.map(|(base, _)| base).or(owner);
-
-                // Variant case.
-                if let Some(variant_info) = owner
-                    .and_then(|owner| lookup.variant_cases_of(owner))
-                    .cloned()
-                    && let Some((case_index, case_data)) = variant_info.case_named(suffix)
-                {
-                    // Only generic variants record an instance type +
-                    // type_args; for a non-generic one the bare
-                    // `recorded_type` already names the right `Variant`.
-                    // A payload-less case carries no value to infer from, so
-                    // annotate can only record the decl's own `V<T>`. In a
-                    // struct-literal field the caller knows the substituted
-                    // `V<i32>`; prefer it over the unresolved record.
-                    let recorded_variant_type = self
-                        .ann_generic_instantiations(ident.id)
-                        .map(|gi| gi.instance_type)
-                        .unwrap_or(recorded_type);
-                    let variant_type = self
-                        .tysys
-                        .resolved_variant_type(recorded_variant_type, expected_type)
-                        .unwrap_or(recorded_variant_type);
-                    return TirExpr::new(
-                        TirExprKind::VariantConstruct {
-                            variant_type,
-                            case_index: case_index as u32,
-                            case_name: case_data.name.clone(),
-                            payload: None,
-                        },
-                        through_newtype.map_or(variant_type, |(_, named)| named),
-                        ident.span,
-                    );
-                }
-
-                // Enum case.
-                if let Some(enum_info) =
-                    owner.and_then(|owner| lookup.enum_cases_of(owner)).cloned()
-                    && let Some(case_data) = enum_info.find_case(suffix).cloned()
-                {
-                    let enum_type = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .type_id_of_decl(enum_info.defined_at);
-                    return TirExpr::new(
-                        TirExprKind::EnumConstruct {
-                            enum_type,
-                            case_index: case_data.index,
-                            case_name: case_data.name,
-                        },
-                        through_newtype.map_or(enum_type, |(_, named)| named),
-                        ident.span,
-                    );
-                }
-
-                // Flags member.
-                if let Some(flags_info) = owner
-                    .and_then(|owner| lookup.flags_members_of(owner))
-                    .cloned()
-                    && let Some(member) = flags_info
-                        .members
-                        .iter()
-                        .find(|m| m.name == suffix)
-                        .cloned()
-                {
-                    return TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(member.bitmask),
-                            repr: member.bitmask.to_string(),
-                        },
-                        through_newtype.map_or(flags_info.type_id, |(_, named)| named),
-                        ident.span,
-                    );
-                }
-            }
         }
 
         // No remaining recognised ident kind — the elaborator would
@@ -10120,6 +10033,72 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_type: scrutinee_type,
             fields: tir_fields,
             has_rest,
+        }
+    }
+
+    /// The case `case_name` of `owner` that annotate resolved at `site`, built
+    /// as the instance it recorded there, with `args` as its payload.
+    fn reify_case_construction(
+        &mut self,
+        owner: DefId,
+        case_name: &str,
+        site: AstId,
+        args: &[ast::Expr],
+        recorded_type: TypeId,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let (variant_type, case_index, declared_payload) = {
+            let variant = self
+                .type_lookup()
+                .variant_cases_of(owner)
+                .expect("annotate records a variant as a construction's owner");
+            let (index, case) = variant
+                .case_named(case_name)
+                .expect("annotate resolved the case");
+            (
+                self.constructed_variant_type(site, variant),
+                u32::try_from(index).expect("case index fits u32"),
+                case.payload,
+            )
+        };
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(variant_type)
+            .unwrap_or_default();
+        let payload_type = self.tysys.substitute_type_params(declared_payload, &type_args);
+        let payload = args
+            .first()
+            .map(|arg| Box::new(self.reify_expr(arg, ctx, Some(payload_type))));
+        // A newtype prefix (`W::J(1)`) keeps its type, which annotate recorded.
+        let is_named = matches!(
+            self.tysys.type_table.borrow().get_unerased(recorded_type),
+            ResolvedType::Newtype { .. }
+        );
+        TirExpr::new(
+            TirExprKind::VariantConstruct {
+                variant_type,
+                case_index,
+                case_name: case_name.to_string(),
+                payload,
+            },
+            if is_named { recorded_type } else { variant_type },
+            span,
+        )
+    }
+
+    /// The variant instance a case construction at `site` builds. Only a
+    /// generic variant records one; any other is its declaration's type.
+    fn constructed_variant_type(&self, site: AstId, variant: &VariantInfo) -> TypeId {
+        match self.ann_generic_instantiations(site) {
+            Some(instantiation) => instantiation.instance_type,
+            None => self
+                .tysys
+                .type_table
+                .borrow()
+                .type_id_of_decl(variant.defined_at),
         }
     }
 
