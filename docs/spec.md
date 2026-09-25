@@ -2898,6 +2898,16 @@ let e = Result::Err::<i32, String>("x");
 let n: Option<i32> = None::<i32>;       // a bare case, where its type is known
 ```
 
+A newtype over a variant names its base's cases, and the value takes the
+newtype. A generic newtype's arguments are inferred as the variant's would be:
+
+```wado
+type Opt<T> = Option<T>;
+let a = Opt::Some(1);                   // Opt<i32>
+let b: Opt<i64> = Opt::None;            // the annotation settles T
+let c = Opt::<i64>::Some(1);
+```
+
 #### Scope of inference
 
 | Site                   | Forward (from values) | Backward (from expected type) |

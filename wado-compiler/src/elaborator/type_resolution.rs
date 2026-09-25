@@ -519,16 +519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let expected = params.iter().filter(|p| !p.is_effect).count();
-        if args.len() <= expected {
-            return false;
-        }
-        let _ = self.emit(TypeError::TypeArgumentCount {
-            name: name.to_string(),
-            expected,
-            found: args.len(),
-            span,
-        });
-        true
+        self.reject_surplus_turbofish(name, expected, args.len(), span)
     }
 
     /// The type arguments an application of `def` supplies, each slot the site
@@ -718,7 +709,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The instance of the generic newtype `def` over `type_args`. Its base is a
     /// type the declaration wrote, so it resolves against the arguments.
-    pub(super) fn generic_newtype_instance(&mut self, def: DefId, type_args: Vec<TypeId>) -> TypeId {
+    pub(super) fn generic_newtype_instance(
+        &mut self,
+        def: DefId,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
         let gn_info = self
             .lookup_generic_newtype_of_decl(def)
             .cloned()

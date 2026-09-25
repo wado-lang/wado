@@ -7,8 +7,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method,
-    unalias_namespace_member,
+    FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method, unalias_namespace_member,
 };
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
@@ -17,6 +16,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::answers_last;
 use super::expr::BareCase;
 use super::infer::{InferCtx, unify};
+use super::infer_hole::uninferable_type_param;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
@@ -746,7 +746,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .map(|&t| {
                             let t = self.apply_infer_holes(t);
-                            if self.type_has_infer_hole(t) { TypeTable::UNKNOWN } else { t }
+                            if self.type_has_infer_hole(t) {
+                                TypeTable::UNKNOWN
+                            } else {
+                                t
+                            }
                         })
                         .collect(),
                 )
@@ -813,13 +817,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(&bound) = bindings.get(&hole) {
                     return bound;
                 }
-                self.attach_infer_var_diag(
-                    hole,
-                    span,
-                    format!(
-                        "cannot infer type parameter of newtype `{prefix}`; add a turbofish (`{prefix}::<...>::…`) or a type annotation"
-                    ),
-                );
+                self.attach_infer_var_diag(hole, span, uninferable_type_param("newtype", &prefix));
                 hole
             })
             .collect();
