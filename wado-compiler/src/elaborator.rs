@@ -529,9 +529,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record what a case path names: its `owner` for reify, and use→def edges
-    /// for the case and a lone prefix. A namespace path's leading segments are
-    /// the import's edges.
+    /// Record a case path's `owner` for reify, and its use→def edges; a namespace
+    /// path's leading segments are the import's.
     pub(super) fn record_case_path(&mut self, ident: &IdentExpr, owner: DefId, case_ast_id: AstId) {
         self.record_case_owner(ident.id, owner);
         match ident.segments.as_slice() {

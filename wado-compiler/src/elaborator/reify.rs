@@ -8600,14 +8600,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
-        // 4b. Primitive associated constant (`i32::MAX`, `u8::MIN`, …) that
-        //     is not in `associated_constants`. This happens when reify is
-        //     walking a swapped-in callee module (a default-argument
-        //     expression — e.g. `max_output: i32 = i32::MAX`) whose
-        //     `ModuleSemantics` came from the stdlib snapshot, which does
-        //     not rehydrate `associated_constants`. The value is a compile
-        //     -time constant of the named primitive type, so emit it as a
-        //     typed integer literal directly.
+        // 4b. `i32::MAX` in a foreign default argument: the stdlib snapshot
+        //     does not rehydrate `associated_constants`.
         if let Some((prefix, suffix)) = ident.name.split_once("::")
             && !suffix.contains("::")
             && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
@@ -8622,9 +8616,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // 5. A case path: variant, enum or flags, in `resolve_qualified_case`'s
-        //    order. The path's recorded type is the newtype its prefix named,
-        //    or the case's own type.
+        // 5. A case path, in `resolve_qualified_case`'s order. Its recorded type
+        //    is the newtype its prefix named, or the case's own.
         if let Some(owner) = self.ann_case_owner(ident.id) {
             let case_name = ident.case_name();
             let lookup = self.type_lookup();

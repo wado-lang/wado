@@ -518,17 +518,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A type application writing more arguments than the head declares.
-    SurplusTypeArguments {
+    /// A type application or turbofish writing other than the head's arity.
+    TypeArgumentCount {
         name: String,
-        expected: usize,
-        found: usize,
-        span: Span,
-    },
-
-    /// A case path's turbofish naming other than its type's parameter count.
-    CaseTurbofishArity {
-        type_name: String,
         expected: usize,
         found: usize,
         span: Span,
@@ -1396,16 +1388,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Turbofish (`name::<T, ...>`) supplied the wrong number of type
-    /// arguments for a generic function reference. The function declares
-    /// `expected` type parameters; the user supplied `found`.
-    GenericFunctionRefArgCountMismatch {
-        name: String,
-        expected: usize,
-        found: usize,
-        span: Span,
-    },
-
     /// A bare reference to a generic function was used in a position with
     /// an expected `fn(...)` type, but the parameter counts disagree —
     /// the user almost certainly mis-counted arguments rather than mis-
@@ -1581,24 +1563,6 @@ impl TypeError {
                 },
                 *span,
             ),
-            TypeError::CaseTurbofishArity {
-                type_name,
-                expected,
-                found,
-                span,
-            } => (
-                Code::ArityMismatch,
-                format!(
-                    "`{}` takes {}, the turbofish supplies {found}",
-                    unalias_namespace_member(type_name),
-                    match expected {
-                        0 => "no type arguments".to_string(),
-                        1 => "1 type argument".to_string(),
-                        n => format!("{n} type arguments"),
-                    }
-                ),
-                *span,
-            ),
             TypeError::CaseTurbofishOnBoth {
                 type_name,
                 case,
@@ -1620,30 +1584,23 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::SurplusTypeArguments {
+            TypeError::TypeArgumentCount {
                 name,
                 expected,
                 found,
                 span,
             } => (
                 Code::ArityMismatch,
-                {
-                    // Surplus, so a declared parameter puts `found` at two or
-                    // more and only the `expected == 0` wording needs "was".
-                    debug_assert!(found > expected);
-                    let name = unalias_namespace_member(name);
-                    if *expected == 0 {
-                        format!(
-                            "`{name}` takes no type arguments, but {found} {} supplied",
-                            if *found == 1 { "was" } else { "were" },
-                        )
-                    } else {
-                        format!(
-                            "`{name}` takes {expected} type argument{}, but {found} were supplied",
-                            if *expected == 1 { "" } else { "s" },
-                        )
-                    }
-                },
+                format!(
+                    "`{}` takes {}, but {found} {} supplied",
+                    unalias_namespace_member(name),
+                    match expected {
+                        0 => "no type arguments".to_string(),
+                        1 => "1 type argument".to_string(),
+                        n => format!("{n} type arguments"),
+                    },
+                    if *found == 1 { "was" } else { "were" },
+                ),
                 *span,
             ),
             TypeError::UnknownFunction { name, span } => (
@@ -2667,19 +2624,6 @@ impl TypeError {
                         "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
                     )
                 },
-                *span,
-            ),
-            TypeError::GenericFunctionRefArgCountMismatch {
-                name,
-                expected,
-                found,
-                span,
-            } => (
-                Code::GenericFunctionRef,
-                format!(
-                    "wrong number of type arguments for generic function '{}': expected {expected}, found {found}",
-                    unalias_namespace_member(name)
-                ),
                 *span,
             ),
             TypeError::GenericFunctionRefArityMismatch {

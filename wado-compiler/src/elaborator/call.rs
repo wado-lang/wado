@@ -6,14 +6,17 @@ use std::cell::RefCell;
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method};
+use crate::name::{
+    FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method,
+    unalias_namespace_member,
+};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::answers_last;
 use super::expr::BareCase;
-use super::infer::InferCtx;
+use super::infer::{InferCtx, unify};
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
@@ -35,6 +38,7 @@ use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::escape::unescape_bytes;
+use crate::hashmap::IndexMap;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 
@@ -295,19 +299,12 @@ pub(super) struct CaseOwner {
     pub(super) def: DefId,
     /// The newtype the prefix names, which the value takes.
     pub(super) named: Option<TypeId>,
-    /// The type arguments a prefix naming a type carries (`Self`, a closed
-    /// newtype); a declaration's come from the turbofish.
+    /// The type arguments a prefix naming a type carries (`Self`, a newtype);
+    /// a declaration's come from the turbofish.
     pub(super) carried: Option<Vec<TypeId>>,
-}
-
-impl CaseOwner {
-    /// The type a case value reached through this owner has.
-    pub(super) fn named_or(&self, constructed: TypeId) -> TypeId {
-        match self.named {
-            Some(named) if constructed != TypeTable::ERROR => named,
-            _ => constructed,
-        }
-    }
+    /// A generic newtype's parameters, as the holes `carried` is written over.
+    /// The turbofish answers them where it names them.
+    pub(super) newtype_holes: Vec<TypeId>,
 }
 
 /// A case construction as the source wrote it.
@@ -672,7 +669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What the prefix of the qualified case path `ident` names.
-    pub(super) fn case_owner_of_path(&self, ident: &ast::IdentExpr) -> Option<CaseOwner> {
+    pub(super) fn case_owner_of_path(&mut self, ident: &ast::IdentExpr) -> Option<CaseOwner> {
         let owner = ident.owner_segment()?;
         if let [head, _] = ident.segments.as_slice()
             && head.name == "Self"
@@ -682,30 +679,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let def = self
             .type_lookup()
             .declaration_at(Some(owner.id), &owner.name)?;
-        Some(self.case_owner_of_decl(def))
+        self.case_owner_of_decl(def)
     }
 
     /// The owner the declaration `def` names: itself, or a newtype's base.
-    pub(super) fn case_owner_of_decl(&self, def: DefId) -> CaseOwner {
-        match newtype_member_owner(&self.type_lookup(), &self.tysys, def) {
-            // A generic newtype's base spells the newtype's own parameters,
-            // which the turbofish writes.
-            Some((base, newtype)) if self.bare_generic_type_arity(def).is_some_and(|n| n > 0) => {
-                CaseOwner {
-                    def: base,
-                    named: Some(newtype),
-                    carried: None,
-                }
-            }
-            Some((_, newtype)) => self
-                .case_owner_of_type(newtype)
-                .expect("a newtype reaching members names their declaration"),
-            None => CaseOwner {
-                def,
-                named: None,
-                carried: None,
-            },
+    pub(super) fn case_owner_of_decl(&mut self, def: DefId) -> Option<CaseOwner> {
+        if let Some(info) = self.lookup_generic_newtype_of_decl(def) {
+            let names: Vec<String> = info.type_params.iter().map(|p| p.name.clone()).collect();
+            let holes: Vec<TypeId> = names
+                .iter()
+                .map(|name| self.mint_infer_var_named(name))
+                .collect();
+            let instance = self.generic_newtype_instance(def, holes.clone());
+            return Some(CaseOwner {
+                newtype_holes: holes,
+                ..self.case_owner_of_type(instance)?
+            });
         }
+        if let Some((_, newtype)) = newtype_member_owner(&self.type_lookup(), &self.tysys, def) {
+            return self.case_owner_of_type(newtype);
+        }
+        Some(CaseOwner {
+            def,
+            named: None,
+            carried: None,
+            newtype_holes: Vec::new(),
+        })
     }
 
     /// The owner the type `ty` names, with the arguments it carries.
@@ -716,6 +715,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def: self.tysys.type_def(structure)?,
             named: table.is_newtype(ty).then_some(ty),
             carried: Some(table.nominal_type_args(structure).unwrap_or_default()),
+            newtype_holes: Vec::new(),
         })
     }
 
@@ -730,6 +730,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<Vec<TypeId>> {
         match &owner.carried {
             None => Some(self.resolve_turbofish_args(turbofish)),
+            Some(carried) if !owner.newtype_holes.is_empty() => {
+                let carried = carried.clone();
+                let args = self.resolve_turbofish_args(turbofish);
+                let holes = owner.newtype_holes.clone();
+                if self.reject_surplus_turbofish(prefix, holes.len(), args.len(), span) {
+                    return None;
+                }
+                for (&hole, &arg) in holes.iter().zip(&args) {
+                    self.solve_infer_var(hole, arg);
+                }
+                // An argument the turbofish left open is the construction's to infer.
+                Some(
+                    carried
+                        .iter()
+                        .map(|&t| {
+                            let t = self.apply_infer_holes(t);
+                            if self.type_has_infer_hole(t) { TypeTable::UNKNOWN } else { t }
+                        })
+                        .collect(),
+                )
+            }
             Some(carried) if turbofish.is_empty() => Some(carried.clone()),
             Some(_) => {
                 let _ = self.emit(TypeError::PrefixCarriesTypeArgs {
@@ -742,15 +763,78 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The value a case construction reached through `owner` makes. A newtype
+    /// prefix hands its base the expected type and takes back the constructed one.
+    pub(super) fn construct_through_case_owner(
+        &mut self,
+        owner: &CaseOwner,
+        prefix: &str,
+        span: Span,
+        expected: Option<TypeId>,
+        construct: impl FnOnce(&mut Self, Option<TypeId>) -> TypeId,
+    ) -> TypeId {
+        let Some(named) = owner.named else {
+            return construct(self, expected);
+        };
+        let (newtype_def, base) = {
+            let table = self.tysys.type_table.borrow();
+            let ResolvedType::Newtype { def, .. } = table.get_unerased(named) else {
+                unreachable!("`named` is a newtype");
+            };
+            (*def, table.reflect_structure_head(named))
+        };
+        let expected = expected.map(|ty| {
+            let table = self.tysys.type_table.borrow();
+            match table.get_unerased(ty) {
+                ResolvedType::Newtype { def, .. } if *def == newtype_def => {
+                    table.reflect_structure_head(ty)
+                }
+                _ => ty,
+            }
+        });
+        let constructed = construct(self, expected);
+        if constructed == TypeTable::ERROR {
+            return constructed;
+        }
+        if owner.newtype_holes.is_empty() {
+            return named;
+        }
+        let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
+        unify(&self.tysys.type_table, base, constructed, &mut bindings);
+        let prefix = unalias_namespace_member(prefix);
+        let args = owner
+            .newtype_holes
+            .iter()
+            .map(|&hole| {
+                let solved = self.apply_infer_holes(hole);
+                if solved != hole {
+                    return solved;
+                }
+                if let Some(&bound) = bindings.get(&hole) {
+                    return bound;
+                }
+                self.attach_infer_var_diag(
+                    hole,
+                    span,
+                    format!(
+                        "cannot infer type parameter of newtype `{prefix}`; add a turbofish (`{prefix}::<...>::…`) or a type annotation"
+                    ),
+                );
+                hole
+            })
+            .collect();
+        self.generic_newtype_instance(newtype_def, args)
+    }
+
     /// The owner and case a case callee constructs: a bare `Case(…)` the
     /// expected type supplied, or a qualified path whose prefix names a variant.
     fn case_of_callee(
-        &self,
+        &mut self,
         callee_kind: &CalleeIdentKind<'_>,
         ident: &ast::IdentExpr,
     ) -> Option<(CaseOwner, VariantInfo, VariantCaseData)> {
         let owner = match callee_kind {
-            CalleeIdentKind::Case { owner, .. } => self.case_owner_of_decl(*owner),
+            CalleeIdentKind::Case { owner, .. } => self.case_owner_of_decl(*owner)?,
             CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
                 self.case_owner_of_path(ident)?
             }
@@ -1077,9 +1161,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 site: call.id,
                 span: call.span,
             };
-            let constructed =
-                self.resolve_case_construction(&case, &call.args, given_args, expected_type, ctx);
-            return owner.named_or(constructed);
+            return self.construct_through_case_owner(
+                &owner,
+                prefix,
+                call.span,
+                expected_type,
+                |e, expected| {
+                    e.resolve_case_construction(&case, &call.args, given_args, expected, ctx)
+                },
+            );
         }
 
         // First, determine expected parameter types to handle coercion.
@@ -2084,6 +2174,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         pad_with_defaults: bool,
         given_args: Option<&[TypeId]>,
     ) -> TypeId {
+        // A function value is already instantiated, so a turbofish has no slot.
+        if let Expr::Ident(ident) = &call.callee {
+            let _ = self.reject_surplus_turbofish(&ident.name, 0, call.type_args.len(), call.span);
+        }
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args.to_vec(),
             None => call
@@ -3252,7 +3346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if found <= expected {
             return false;
         }
-        let _ = self.emit(TypeError::SurplusTypeArguments {
+        let _ = self.emit(TypeError::TypeArgumentCount {
             name: callee_name.to_string(),
             expected,
             found,

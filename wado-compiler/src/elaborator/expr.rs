@@ -834,7 +834,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                 })
             });
-            return self.value_without_turbofish(ident, assoc.ty);
+            if !ident.type_args_on_prefix {
+                return self.value_without_turbofish(ident, assoc.ty);
+            }
+            let owner_type =
+                self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
+            return if owner_type == TypeTable::ERROR {
+                TypeTable::ERROR
+            } else {
+                assoc.ty
+            };
         }
 
         // A case name without parentheses: `Color::Red`, or a bare `Red`.
@@ -1004,8 +1013,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         let fits = found == 0 || found == expected;
         if !fits {
-            let _ = self.emit(TypeError::CaseTurbofishArity {
-                type_name: type_name.to_string(),
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: type_name.to_string(),
                 expected,
                 found,
                 span,
@@ -1030,7 +1039,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (self.case_owner_of_path(ident)?, ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
-                BareCase::Of { owner, spelled } => (self.case_owner_of_decl(owner), spelled),
+                BareCase::Of { owner, spelled } => (self.case_owner_of_decl(owner)?, spelled),
                 BareCase::NeedsContext => return Some(TypeTable::ERROR),
                 BareCase::None => return None,
             }
@@ -1060,8 +1069,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 site: ident.id,
                 span: ident.span,
             };
-            let variant_type = self.construct_variant_case(&case, &[], &[], expected_type);
-            return Some(owner.named_or(variant_type));
+            return Some(self.construct_through_case_owner(
+                &owner,
+                prefix,
+                ident.span,
+                expected_type,
+                |e, expected| e.construct_variant_case(&case, &[], &[], expected),
+            ));
         }
 
         let (case_ast_id, case_type) = if let Some(enum_info) = enum_info
@@ -1090,7 +1104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(TypeTable::ERROR);
         }
         // Reify rebuilds the `EnumConstruct` or the flags constant. Not an l-value.
-        Some(owner.named_or(case_type))
+        Some(owner.named.unwrap_or(case_type))
     }
 
     /// What the bare `ident` is as a case: a type name may be omitted only
@@ -1200,7 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
             if ident.type_args.len() != real_type_param_count {
-                let _ = self.emit(TypeError::GenericFunctionRefArgCountMismatch {
+                let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
                     expected: real_type_param_count,
                     found: ident.type_args.len(),

@@ -1563,37 +1563,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        // `Result::<i32, String>::Ok(42)`: the head is a type carrying its
-        // arguments. A spelling naming a trait asks for no case.
+        // `Result::<i32, String>::Ok(42)`: the head's arguments are the
+        // turbofish of `Result::Ok`. A spelling naming a trait asks for no case.
         if required_trait.is_none()
-            && let Some(owner) = self.case_owner_of_type(target_type_id)
+            && let Some(head) = &head
+            && let Some(def) = self
+                .type_lookup()
+                .declaration_at(Some(head.site), &head.name)
+            && let Some(owner) = self.case_owner_of_decl(def)
             && let Some(variant) = self.type_lookup().variant_cases_of(owner.def).cloned()
             && let Some((_, case_data)) = variant.case_named(&static_call.method)
         {
-            let mut head = String::new();
-            unparse_type_into(&static_call.target_type, &mut head);
-            let head = head.split('<').next().expect("split yields one piece");
+            let spelled = unalias_namespace_member(&head.name);
             if !static_call.type_args.is_empty() {
                 let _ = self.emit(TypeError::CaseTurbofishOnBoth {
-                    type_name: head.to_string(),
+                    type_name: head.name.clone(),
                     case: static_call.method.clone(),
                     span: static_call.span,
                 });
                 return self.resolve_args_without_callee(&static_call.args, ctx);
             }
             self.record_case_owner(static_call.id, owner.def);
-            let written = owner.carried.clone().expect("a type carries its arguments");
+            let Some(written) = self.case_written(
+                &owner,
+                [&spelled, &static_call.method],
+                head.args,
+                static_call.span,
+            ) else {
+                return self.resolve_args_without_callee(&static_call.args, ctx);
+            };
             let case = CaseSite {
                 variant: &variant,
                 case: case_data,
                 written: &written,
-                owner: head,
+                owner: &spelled,
                 site: static_call.id,
                 span: static_call.span,
             };
-            let constructed =
-                self.resolve_case_construction(&case, &static_call.args, None, expected_type, ctx);
-            return owner.named_or(constructed);
+            return self.construct_through_case_owner(
+                &owner,
+                &spelled,
+                static_call.span,
+                expected_type,
+                |e, expected| {
+                    e.resolve_case_construction(&case, &static_call.args, None, expected, ctx)
+                },
+            );
         }
 
         // Literal preselect for a static call (WEP 2026-07-31 phase 4): choose
