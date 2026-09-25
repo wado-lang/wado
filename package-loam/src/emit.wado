@@ -599,12 +599,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64
     if op == "Gather" {
         let axis = settled(gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
         if axis != 0 {
-            builtin::cold_path();
-            return Result::Err(EmitError::Refused(Refusal {
-                node: node.outputs[0],
-                op,
-                reason: `no kernel gathers along axis ${axis}`,
-            }));
+            return Result::Err(EmitError::Refused(Refusal::of(node, `no kernel gathers along axis ${axis}`)));
         }
         return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
     }
@@ -709,12 +704,7 @@ fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &
 fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
     let x = checked.shapes.get(node.inputs[0]).unwrap();
     if checked.shapes.get(node.outputs[0]).unwrap().rank() != x.rank() {
-        builtin::cold_path();
-        return Result::Err(EmitError::Refused(Refusal {
-            node: node.outputs[0],
-            op: node.op,
-            reason: "no kernel drops a reduced axis",
-        }));
+        return Result::Err(EmitError::Refused(Refusal::of(node, "no kernel drops a reduced axis")));
     }
     let axes = settled(reduced_axes(node, &checked.known, x.rank()));
     let a = exprs.reference(&node.inputs[0]);

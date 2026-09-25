@@ -1,6 +1,6 @@
-use { EmitError, GRAPH_BANNER, emit } from "./emit.wado";
+use { EmitError, GRAPH_BANNER, NameCollision, UnimplementedBroadcast, UnmappedDtype, emit } from "./emit.wado";
 use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
-use { infer } from "./infer.wado";
+use { Refusal, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
@@ -461,6 +461,18 @@ g (float[2, 4, 8] X) => (float[2, 4] Y)
     let e = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap_err();
 
     assert `${e}` == "Y = ReduceMean: no kernel drops a reduced axis";
+    assert e matches { Refused(Refusal { op: "ReduceMean", .. }) };
+}
+
+fn is_error<E: Error>() {
+}
+
+test "every error emit reports is an Error" {
+    is_error::<EmitError>();
+    is_error::<Refusal>();
+    is_error::<UnmappedDtype>();
+    is_error::<UnimplementedBroadcast>();
+    is_error::<NameCollision>();
 }
 
 test "a Transpose of any rank spells both axis orders" {
@@ -719,7 +731,9 @@ test "Gather along any axis but the first stops the build" {
         rule("I", ["Pick"]),
         rule("W", ["Vocab", "Hidden"]),
     ];
-    assert `${generate(source, layout).unwrap_err()}` == "Y = Gather: no kernel gathers along axis 1";
+    let e = generate(source, layout).unwrap_err();
+    assert `${e}` == "Y = Gather: no kernel gathers along axis 1";
+    assert e matches { Refused(Refusal { node: "Y", .. }) };
 }
 
 test "a Cast to the element a tensor already has computes nothing" {

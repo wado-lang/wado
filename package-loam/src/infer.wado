@@ -97,11 +97,20 @@ pub struct OutputCountConflict {
     pub given: i32,
 }
 
-/// A node whose operands or target this Loam cannot act on, and why.
+/// A node this Loam cannot act on, and why: stage 0's shape algebra, or the
+/// kernels emit writes.
 pub struct Refusal {
     pub node: String,
     pub op: String,
     pub reason: String,
+}
+
+impl Refusal {
+    /// `node` refused for `reason`, named as every diagnostic names a node.
+    pub fn of(node: &Node, reason: String) -> Refusal {
+        builtin::cold_path();
+        return Refusal { node: node_name(node), op: node.op, reason };
+    }
 }
 
 pub variant InferError {
@@ -832,8 +841,7 @@ fn agree_at(node: &Node, left: &Axis, right: &Axis) -> Result<(), InferError> {
 }
 
 fn refusal(node: &Node, reason: String) -> InferError {
-    builtin::cold_path();
-    return InferError::Refused(Refusal { node: node_name(node), op: node.op, reason });
+    return InferError::Refused(Refusal::of(node, reason));
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
