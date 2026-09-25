@@ -2234,7 +2234,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     decls: scope.sem.decls.clone(),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
-                let ((), mut populated) = util::replaced(
+                let ((), populated) = util::replaced(
                     &mut *scope,
                     |elab| &mut elab.sem,
                     synthetic,
@@ -2253,12 +2253,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                // A body walk's only decl-level write is an anonymous struct.
-                scope
-                    .sem
-                    .decls
-                    .pending_anonymous_structs
-                    .append(&mut populated.decls.pending_anonymous_structs);
+                // The walk started from the impl module's decls, so its own are theirs
+                // plus what it minted: an anonymous shape's fields and its declaration.
+                scope.sem.decls = populated.decls.clone();
                 scope
                     .sem
                     .default_method_semantics
