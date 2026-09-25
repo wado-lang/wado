@@ -5,7 +5,17 @@ use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Known, Node, element_of, static_extents } from "./graph.wado";
-use { Checked, gather_axis, gemm_options, has_bias, transpose_perm, window_of } from "./infer.wado";
+use {
+    Checked,
+    gather_axis,
+    gemm_options,
+    has_bias,
+    is_reduction,
+    reduced_axes,
+    softmax_axis,
+    transpose_perm,
+    window_of,
+} from "./infer.wado";
 
 /// A boundary tensor of an element type no kernel holds.
 pub struct UnmappedDtype {
@@ -602,6 +612,16 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     if op == "Gemm" {
         return gemm_call(node, shapes, exprs);
     }
+    if op == "Softmax" {
+        let Ok(axis) = softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank()) else {
+            // Stage 0 read the same attribute and stopped the build there.
+            unreachable();
+        };
+        return Result::Ok(`softmax(${exprs.reference(&node.inputs[0])}, ${axis})`);
+    }
+    if is_reduction(&op) {
+        return reduction_call(node, checked, exprs);
+    }
     if op == "Transpose" {
         let a = exprs.reference(&node.inputs[0]);
         let shape = shapes.get(node.inputs[0]).unwrap();
@@ -609,26 +629,43 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
             // Stage 0 read the same attribute and stopped the build there.
             unreachable();
         };
-        if perm.len() == 2 && perm[0] == 1 {
-            return Result::Ok(`transpose2(${a})`);
-        }
         // A permutation that leaves every axis alone computes the operand.
         // Every node result is bound as a value, so it is read as one.
         if is_identity(&perm) {
             return Result::Ok(exprs.value(&node.inputs[0]));
         }
-        builtin::cold_path();
-        return Result::Err(EmitError::Operator(UnimplementedOperator {
-            node: node.outputs[0],
-            op,
-            reason: `no kernel permutes ${perm.len()} axes`,
-        }));
+        let element = checked.primitives.get(node.inputs[0]).unwrap();
+        let to = shapes.get(node.outputs[0]).unwrap();
+        return Result::Ok(`permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
     }
     let Some(body) = unary_body(&op) else {
         // Stage 0 refuses every operator the kernels lack.
         unreachable();
     };
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+}
+
+/// A `ReduceMean` or `ReduceSum`, whose kernels keep each reduced axis at
+/// extent 1, so one that drops them has no call to write.
+fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+    let x = checked.shapes.get(node.inputs[0]).unwrap();
+    if checked.shapes.get(node.outputs[0]).unwrap().rank() != x.rank() {
+        builtin::cold_path();
+        return Result::Err(EmitError::Operator(UnimplementedOperator {
+            node: node.outputs[0],
+            op: node.op,
+            reason: "no kernel drops a reduced axis",
+        }));
+    }
+    let Ok(axes) = reduced_axes(node, &checked.known, x.rank()) else {
+        // Stage 0 read the same axes and stopped the build there.
+        unreachable();
+    };
+    let a = exprs.reference(&node.inputs[0]);
+    if node.op == "ReduceMean" {
+        return Result::Ok(`reduce_mean(${a}, ${axes})`);
+    }
+    return Result::Ok(`reduce(${a}, ${axes}, 0.0, |x, y| x + y)`);
 }
 
 /// Whether the operand at `index` is one this operator folds into a closure: a

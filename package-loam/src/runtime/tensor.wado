@@ -139,28 +139,47 @@ fn stretched_zip<Axes>(
 ) -> Tensor<f32, Axes> {
     let extents = broadcast_extents(&a_extents, &b_extents).unwrap();
     let rank = extents.len();
-    let a_strides = stretched_strides(&a_extents, rank);
-    let b_strides = stretched_strides(&b_extents, rank);
+    let a_carries = carries(&stretched_strides(&a_extents, rank), &extents);
+    let b_carries = carries(&stretched_strides(&b_extents, rank), &extents);
     let count = element_count(&extents);
     let mut out = List::<f32>::with_capacity(count);
     let mut index = List::<i32>::filled(rank, 0);
     let mut at_a = 0;
     let mut at_b = 0;
-    for let mut n = 0; n < count; n += 1 {
+    for let _ of 0..<count {
         out.push(op(a[at_a], b[at_b]));
-        for let mut axis = rank - 1; axis >= 0; axis -= 1 {
-            index[axis] += 1;
-            at_a += a_strides[axis];
-            at_b += b_strides[axis];
-            if index[axis] < extents[axis] {
-                break;
-            }
-            at_a -= a_strides[axis] * extents[axis];
-            at_b -= b_strides[axis] * extents[axis];
-            index[axis] = 0;
+        let axis = advance(&mut index, &extents);
+        if axis >= 0 {
+            at_a += a_carries[axis];
+            at_b += b_carries[axis];
         }
     }
     return Tensor { data: out, extents };
+}
+
+/// Moves a row-major `index` over `extents` one position on and returns the
+/// axis that advanced, every later one having wrapped to 0; -1 past the end.
+fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
+    for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
+        index[axis] += 1;
+        if index[axis] < extents[axis] {
+            return axis;
+        }
+        index[axis] = 0;
+    }
+    return -1;
+}
+
+/// How far an offset stepping by `strides` moves when `advance` names each
+/// axis: that axis's stride, less the span every later axis wound back.
+fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
+    let mut carry = List::<i32>::filled(extents.len(), 0);
+    let mut unwound = 0;
+    for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
+        carry[axis] = strides[axis] - unwound;
+        unwound += strides[axis] * (extents[axis] - 1);
+    }
+    return carry;
 }
 
 /// The extents two operands broadcast to under ONNX's rule, or `None` where an
@@ -332,19 +351,91 @@ fn tap_offset(input: &List<i32>, window: &Window, at: i32, tap: i32) -> i32 {
 }
 
 pub fn transpose2<E, A, B>(t: &Tensor<E, [A, B]>) -> Tensor<E, [B, A]> {
-    assert t.extents.len() == 2;
-    let rows = t.extents[0];
-    let cols = t.extents[1];
+    return permute(t, [1, 0]);
+}
+
+/// The elements with input axis `perm[i]` moved to output axis `i`. The caller
+/// spells `Out`, since each order of three or more axes is its own signature.
+pub fn permute<E, In, Out>(t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
+    let rank = t.extents.len();
+    assert perm.len() == rank;
+    let mut in_strides = List::<i32>::filled(rank, 1);
+    for let mut axis = rank - 2; axis >= 0; axis -= 1 {
+        in_strides[axis] = in_strides[axis + 1] * t.extents[axis + 1];
+    }
+    let mut extents: List<i32> = [];
+    let mut strides: List<i32> = [];
+    for let p of perm {
+        extents.push(t.extents[p]);
+        strides.push(in_strides[p]);
+    }
+    let steps = carries(&strides, &extents);
     let mut out = List::<E>::with_capacity(t.data.len());
-    for let mut c = 0; c < cols; c += 1 {
-        for let mut r = 0; r < rows; r += 1 {
-            out.push(t.data[r * cols + c]);
+    let mut index = List::<i32>::filled(rank, 0);
+    let mut at = 0;
+    for let _ of 0..<t.data.len() {
+        out.push(t.data[at]);
+        let axis = advance(&mut index, &extents);
+        if axis >= 0 {
+            at += steps[axis];
         }
     }
-    return Tensor {
-        data: out,
-        extents: [cols, rows],
-    };
+    return Tensor { data: out, extents };
+}
+
+/// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum. The
+/// lane's maximum is subtracted first, so no exponential overflows.
+pub fn softmax<Axes>(t: &Tensor<f32, Axes>, axis: i32) -> Tensor<f32, Axes> {
+    let extent = t.extents[axis];
+    let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
+    let mut out = t.data;
+    let lanes = if extent == 0 { 0 } else { t.data.len() / extent };
+    for let lane of 0..<lanes {
+        let base = lane / inner * extent * inner + lane % inner;
+        let mut max = -f32::INFINITY;
+        for let k of 0..<extent {
+            max = f32::max(max, t.data[base + k * inner]);
+        }
+        let mut sum: f32 = 0.0;
+        for let k of 0..<extent {
+            let e = f32::exp(t.data[base + k * inner] - max);
+            out[base + k * inner] = e;
+            sum += e;
+        }
+        for let k of 0..<extent {
+            out[base + k * inner] /= sum;
+        }
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+/// The elements folded through `op` from `init` along each of `axes`, which
+/// stay in the result at extent 1.
+pub fn reduce<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>, init: f32, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
+    let rank = t.extents.len();
+    let mut extents = t.extents;
+    for let axis of axes {
+        extents[axis] = 1;
+    }
+    let steps = carries(&stretched_strides(&extents, rank), &t.extents);
+    let mut out = List::<f32>::filled(element_count(&extents), init);
+    let mut index = List::<i32>::filled(rank, 0);
+    let mut at = 0;
+    for let v of t.data {
+        out[at] = op(out[at], v);
+        let axis = advance(&mut index, &t.extents);
+        if axis >= 0 {
+            at += steps[axis];
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
+/// `reduce` to the mean of the elements along `axes`.
+pub fn reduce_mean<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>) -> Tensor<f32, Axes> {
+    let sum = reduce(t, axes, 0.0, |x, y| x + y);
+    let count = (t.data.len() / sum.data.len()) as f32;
+    return map(&sum, |v| v / count);
 }
 
 pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {

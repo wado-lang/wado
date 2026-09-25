@@ -325,7 +325,7 @@ g (float[2, 3] X) => (float[3, 2] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert out.contains("transpose2(");
+    assert out.contains("let Y = permute::<f32, [A, B], [B, A]>(X, [1, 0]);");
 }
 
 test "a Transpose that moves no axis is its operand" {
@@ -338,22 +338,72 @@ g (float[2, 3] X) => (float[2, 3] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert !emitted(&out).contains("transpose2(");
+    assert !emitted(&out).contains("permute");
     // Every node result is bound as a value, so the operand is read as one.
     assert out.contains("let Y = *X;");
 }
 
-test "a Transpose no kernel covers names itself" {
+test "Softmax lowers to the kernel along its axis" {
     let source = `
-g (float[2, 3, 4] X) => (float[4, 3, 2] Y)
-<>
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
 {
-    Y = Transpose <perm = [2, 1, 0]> (X)
+    Y = Softmax <axis = -1> (X)
 }
 `;
-    let e = generate(source, [rule("*", ["A", "B", "C"])]).unwrap_err();
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
 
-    assert `${e}` == "Y = Transpose: no kernel permutes 3 axes";
+    assert out.contains("let Y = softmax(X, 2);");
+}
+
+test "a layer norm's mean stretches back over the axis it reduced" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4, 8] Y)
+{
+    M = ReduceMean <axes = [-1]> (X)
+    Y = Sub(X, M)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let M = reduce_mean(X, [2]);");
+    assert out.contains("let Y = zip(X, &M, |x, y| x - y);");
+}
+
+test "ReduceSum folds its axes through an add" {
+    let source = `
+g (float[2, 4, 8] X) => (float[1, 4, 1] Y)
+{
+    Y = ReduceSum <axes = [0, 2]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap();
+
+    assert out.contains("let Y = reduce(X, [0, 2], 0.0, |x, y| x + y);");
+}
+
+test "a reduction that drops its axes names itself" {
+    let source = `
+g (float[2, 4, 8] X) => (float[2, 4] Y)
+{
+    Y = ReduceMean <axes = [-1], keepdims = 0> (X)
+}
+`;
+    let e = generate(source, [rule("X", ["Batch", "Seq", "Embed"])]).unwrap_err();
+
+    assert `${e}` == "Y = ReduceMean: no kernel drops a reduced axis";
+}
+
+test "a Transpose of any rank spells both axis orders" {
+    let source = `
+g (float[1, 4, 2, 3] X) => (float[1, 2, 3, 4] Y)
+<>
+{
+    Y = Transpose <perm = [0, 2, 3, 1]> (X)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Seq", "Head", "Dim"])]).unwrap();
+
+    assert out.contains("let Y = permute::<f32, [Batch, Seq, Head, Dim], [Batch, Head, Dim, Seq]>(X, [0, 2, 3, 1]);");
 }
 
 test "a tensor named as the generated module names something is renamed" {

@@ -543,7 +543,7 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
     return node.int_attr(name, fallback).map_err(|reason| `attribute ${name} ${reason}`);
 }
 
-fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
+pub fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
     let i = if axis < 0 { axis + rank as i64 } else { axis };
     if !(0 <= i < rank as i64) {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);

@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { fold, regrouped_extents } from "./fold.wado";
+use { axes_of, axis_index, fold, regrouped_extents } from "./fold.wado";
 use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
 use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
@@ -284,7 +284,8 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
 /// Whether operand `index` is one the operator reads when the build runs, as
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
 fn read_at_build_time(node: &Node, index: i32) -> bool {
-    return index == 1 && (node.op == "Reshape" || node.op == "Unsqueeze" || node.op == "Squeeze");
+    return index == 1
+        && (node.op == "Reshape" || node.op == "Unsqueeze" || node.op == "Squeeze" || is_reduction(&node.op));
 }
 
 /// The operators whose kernel moves elements without computing on them, so
@@ -564,6 +565,26 @@ fn infer_node(
         arity(node, 1)?;
         return operand_at(node, shapes, 0);
     }
+    if op == "Softmax" {
+        arity(node, 1)?;
+        let x = operand_at(node, shapes, 0)?;
+        softmax_axis(node, x.rank())?;
+        return Result::Ok(x);
+    }
+    if is_reduction(&op) {
+        let x = operand_at(node, shapes, 0)?;
+        let reduced = reduced_axes(node, known, x.rank())?;
+        let keep = int_attr(node, "keepdims", 1)? != 0;
+        let mut axes: List<Axis> = [];
+        for let [i, axis] of x.axes.into_iter().enumerate() {
+            if !reduced.contains(&i) {
+                axes.push(axis);
+            } else if keep {
+                axes.push(Axis { name: axis.name, extent: Extent::Static(1) });
+            }
+        }
+        return Result::Ok(Shape { axes });
+    }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
 }
@@ -746,6 +767,34 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError>
 /// The operand axis `Gather` indexes along.
 pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
     return axis_attr(node, 0, rank, rank - 1);
+}
+
+pub fn softmax_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    return axis_attr(node, -1, rank, rank - 1);
+}
+
+pub fn is_reduction(op: &String) -> bool {
+    return *op == "ReduceMean" || *op == "ReduceSum";
+}
+
+/// The axes a reduction folds, resolved against `rank`. Naming none folds every
+/// axis, unless `noop_with_empty_axes` makes it fold none.
+pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> Result<List<i32>, InferError> {
+    let written = axes_of(node, known, 1, "axes").map_err(|reason| refusal(node, reason))?;
+    let listed: List<i64> = written.unwrap_or([]);
+    let mut axes: List<i32> = [];
+    if listed.is_empty() {
+        if int_attr(node, "noop_with_empty_axes", 0)? == 0 {
+            for let i of 0..<rank {
+                axes.push(i);
+            }
+        }
+        return Result::Ok(axes);
+    }
+    for let a of listed {
+        axes.push(axis_index(a, rank).map_err(|reason| refusal(node, reason))?);
+    }
+    return Result::Ok(axes);
 }
 
 /// The `axis` attribute, where a negative one counts from `rank` and the

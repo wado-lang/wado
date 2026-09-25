@@ -380,6 +380,53 @@ test "a perm naming the wrong number of axes stops the build" {
     assert `${e}` == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
 }
 
+fn rows() -> List<LayoutRule> {
+    return [rule("X", ["Batch", "Seq", "Embed"])];
+}
+
+test "Softmax keeps its operand's shape" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = -1> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
+}
+
+test "a Softmax axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = 3> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap_err() == "Y = Softmax: attribute axis is 3, outside rank 3";
+}
+
+test "a reduction that keeps its axes leaves each at extent 1 under its name" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [-1]> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=1";
+}
+
+test "a reduction that drops its axes removes them" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 8] Y) {
+        A = Constant <value_ints = [1]> ()
+        Y = ReduceSum <keepdims = 0> (X, A)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Embed=8";
+}
+
+test "a reduction naming no axes reduces every axis" {
+    let source = `g (float[2, 4, 8] X) => (float[1, 1, 1] Y) {
+        Y = ReduceMean(X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=1,Seq=1,Embed=1";
+}
+
+test "a reduction axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [3]> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap_err() == "Y = ReduceMean: axis 3 is outside rank 3";
+}
+
 fn nchw() -> List<LayoutRule> {
     return [rule("X", ["Batch", "Chan", "Row", "Col"])];
 }

@@ -9,8 +9,12 @@ use {
     matmul,
     max_pool,
     narrow,
+    permute,
+    reduce,
+    reduce_mean,
     reshape,
     sigmoid_f32,
+    softmax,
     transpose2,
     widen,
     zip,
@@ -210,6 +214,41 @@ test "transpose2 moves an i64 tensor as it moves a float one" {
 
     let r: Tensor<i64, [Col, Row]> = transpose2(&t);
     assert r.data == [1, 4, 2, 5, 3, 6] as List<i64>;
+}
+
+test "softmax normalizes each lane along the axis" {
+    let t: Tensor<f32, [Row, Col]> = tensor([2, 2], [0.0, 0.0, 1.0, -f32::INFINITY]);
+
+    let along_cols = softmax(&t, 1);
+    assert along_cols.data == [0.5, 0.5, 1.0, 0.0] as List<f32>;
+    let along_rows = softmax(&t, 0);
+    // Each lane's maximum is subtracted first, so column 0 is [e^-1, 1] scaled.
+    let a = f32::exp(-1.0);
+    assert along_rows.data == [a / (a + 1.0), 1.0, 1.0 / (a + 1.0), 0.0] as List<f32>;
+}
+
+test "reduce folds the named axes to extent 1" {
+    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [
+        0.0, 1.0, 2.0, 10.0, 11.0, 12.0, 100.0, 101.0, 102.0, 110.0, 111.0, 112.0,
+    ]);
+
+    let rows = reduce(&t, [1], 0.0, |x, y| x + y);
+    assert rows.extents == [2, 1, 3] as List<i32>;
+    assert rows.data == [10.0, 12.0, 14.0, 210.0, 212.0, 214.0] as List<f32>;
+    let mean = reduce_mean(&t, [0, 2]);
+    assert mean.extents == [1, 2, 1] as List<i32>;
+    assert mean.data == [51.0, 61.0] as List<f32>;
+}
+
+test "permute puts input axis perm[i] at output axis i" {
+    // Element (b, r, c) holds 100b + 10r + c.
+    let t: Tensor<f32, [Batch, Row, Col]> = tensor([2, 2, 3], [
+        0.0, 1.0, 2.0, 10.0, 11.0, 12.0, 100.0, 101.0, 102.0, 110.0, 111.0, 112.0,
+    ]);
+
+    let r = permute::<f32, [Batch, Row, Col], [Col, Batch, Row]>(&t, [2, 0, 1]);
+    assert r.extents == [3, 2, 2] as List<i32>;
+    assert r.data == [0.0, 10.0, 100.0, 110.0, 1.0, 11.0, 101.0, 111.0, 2.0, 12.0, 102.0, 112.0] as List<f32>;
 }
 
 test "map applies one function per element" {
