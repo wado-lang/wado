@@ -2215,11 +2215,8 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Translate a call's operands, receiver first, erasing unit-typed
-    /// parameters while preserving every argument's evaluation and its
-    /// left-to-right order: a unit argument that still evaluates joins the
-    /// prelude, and every non-unit argument to its left spills to a temp. Returns
-    /// `(prelude, call_args)` — wrap with [`Self::wrap_call_with_prelude`].
+    /// The `(prelude, values)` of a call's arguments or a literal's fields, the
+    /// `()` ones erased but still run in order; wrap with [`Self::wrap_call_with_prelude`].
     pub(super) fn translate_args_erasing_unit(
         &mut self,
         ordered: &[Operand],
