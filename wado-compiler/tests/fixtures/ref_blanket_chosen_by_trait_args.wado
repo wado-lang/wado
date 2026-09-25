@@ -1,0 +1,21 @@
+// `Eq` has two `&T` blankets, `Eq for &T` and `Eq<String> for &T`; a generic
+// call reaching one through a reference picks by the trait's arguments.
+use { println, Stdout } from "core:cli";
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn not_unit<S: AsStrSlice>(s: S) -> bool {
+    return s != String::from("()");
+}
+
+export fn run() with Stdout {
+    let a: String = "()";
+    let x: List<i32> = [1, 2];
+    let z: List<i32> = [3];
+    println(`${same(&a, &a)} ${same(&x, &x)} ${same(&x, &z)} ${not_unit(&a)} ${not_unit(&"x")}`);
+}
+
+__DATA__
+{"stdout": "true true false false true\n"}

@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, RefKind, mangle_generic_name};
@@ -26,9 +26,9 @@ use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
     ranked_value_blanket, trait_call_template,
 };
+use crate::tir;
 use crate::tir::TemplateId;
 use crate::token::Span;
-use crate::{name, tir};
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.
 pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {
@@ -2265,24 +2265,18 @@ impl Monomorphizer {
         let Some(trait_) = trait_fq.canonical() else {
             return false;
         };
-        if !self
-            .functions
-            .trait_env
-            .has_universal_ref_blanket(trait_, is_mut)
-        {
+        let Some(blanket) = self.functions.trait_env.universal_ref_blanket(
+            trait_,
+            &type_table.fq_type_name(self_tid),
+            is_mut,
+            trait_fq.args(),
+        ) else {
             return false;
-        }
+        };
         let ref_kind = if is_mut {
             RefKind::Mut
         } else {
             RefKind::Shared
-        };
-        let Some(ref_module) = self.functions.trait_env.impl_module_for(
-            ImplReceiver::Of(&name::Receiver::Ref(ref_kind)),
-            trait_,
-            None,
-        ) else {
-            return false;
         };
         // Mirror the template ref arm (`method_call_info_for_type`): the call
         // name carries the shape + inner type; `call_rewrite` resolves it to the
@@ -2306,14 +2300,9 @@ impl Monomorphizer {
         let template = self
             .functions
             .trait_env
-            .universal_ref_blanket(trait_, is_mut)
-            .and_then(|blanket| {
-                self.functions
-                    .trait_env
-                    .method_template(blanket.def, &info.method_name)
-            });
+            .method_template(blanket.def, &info.method_name);
         *method_func = FunctionRef {
-            module_source: ref_module.clone(),
+            module_source: blanket.module.clone(),
             name: ref_info.to_mangled_name(),
             template,
             monomorph_info: Some(MonomorphInfo {

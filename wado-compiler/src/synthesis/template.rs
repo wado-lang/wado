@@ -1028,9 +1028,13 @@ fn method_call_info_for_type(
                     is_blanket: true,
                 }),
                 impl_module: ModuleSource::format(),
-                template: trait_name.canonical().and_then(|trait_| {
-                    trait_method_template(ctx.trait_env, trait_, method_name, type_id, &tt.borrow())
-                }),
+                template: trait_method_template(
+                    ctx.trait_env,
+                    trait_name,
+                    method_name,
+                    type_id,
+                    &tt.borrow(),
+                ),
             }
         }
         _ => {
@@ -1060,11 +1064,12 @@ fn method_call_info_for_type(
 /// a blanket, else a newtype's base's; `None` where a derived body answers.
 pub(crate) fn trait_method_template(
     trait_env: &TraitEnv,
-    trait_: DefId,
+    trait_name: &FqTraitName,
     method: &str,
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<TemplateId> {
+    let trait_ = trait_name.canonical()?;
     if let Some(template) = trait_env.answering_template(
         &tt.impl_receiver_key(receiver),
         Some(trait_),
@@ -1074,8 +1079,12 @@ pub(crate) fn trait_method_template(
         return Some(template);
     }
     let blanket = match tt.get(receiver) {
-        ResolvedType::Ref(_) => trait_env.universal_ref_blanket(trait_, false),
-        ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(trait_, true),
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(
+            trait_,
+            &tt.fq_type_name(receiver),
+            matches!(tt.get(receiver), ResolvedType::MutRef(_)),
+            trait_name.args(),
+        ),
         // A newtype inherits its base's answer before any blanket but one
         // keyed on its own reflected shape (WEP 2026-09-01).
         ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
@@ -1097,7 +1106,7 @@ pub(crate) fn trait_method_template(
     }
     match tt.get(receiver) {
         ResolvedType::Newtype { base_type, .. } => {
-            trait_method_template(trait_env, trait_, method, *base_type, tt)
+            trait_method_template(trait_env, trait_name, method, *base_type, tt)
         }
         _ => None,
     }
@@ -1115,9 +1124,10 @@ pub(crate) fn trait_call_template(
     if tt.receiver_head_awaits_substitution(receiver) {
         return None;
     }
-    info.trait_decl()
-        .and_then(|trait_| {
-            trait_method_template(trait_env, trait_, &info.method_name, receiver, tt)
+    info.trait_name
+        .as_ref()
+        .and_then(|trait_name| {
+            trait_method_template(trait_env, trait_name, &info.method_name, receiver, tt)
         })
         .or_else(|| Some(TemplateId::derived(home.clone(), info)))
 }
@@ -1135,8 +1145,10 @@ pub(crate) fn method_template_at(
     } else {
         tt.peel_refs(receiver)
     };
-    match info.trait_decl() {
-        Some(trait_) => trait_method_template(trait_env, trait_, &info.method_name, receiver, tt),
+    match &info.trait_name {
+        Some(trait_name) => {
+            trait_method_template(trait_env, trait_name, &info.method_name, receiver, tt)
+        }
         None => inherent_method_template(trait_env, &info.method_name, receiver, tt),
     }
 }

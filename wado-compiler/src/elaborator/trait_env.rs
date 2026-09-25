@@ -1532,26 +1532,28 @@ impl TraitEnv {
         values.next()
     }
 
-    /// Whether `trait_name` has a *universal* ref blanket
-    /// `impl<T: Bound> Trait for &T` (`is_mut` selects `&mut T`) — the inner is a
-    /// bare type param, so it applies to every reference. Distinguished from a
-    /// shape ref impl (`impl<T> IntoIterator for &List<T>`), whose inner is a
-    /// concrete/parametric type. Callers route a `&<pointee>` type-param dispatch
-    /// through the universal blanket only when one exists.
-    pub(crate) fn has_universal_ref_blanket(&self, trait_: DefId, is_mut: bool) -> bool {
-        self.universal_ref_blanket(trait_, is_mut).is_some()
-    }
-
-    /// The universal ref blanket [`Self::has_universal_ref_blanket`] asks about.
+    /// The universal ref blanket (`impl<T> Trait for &T`) answering
+    /// `trait_<wanted>` on `receiver`. `Eq` has two: `Eq for &T`, `Eq<String> for &T`.
     pub(crate) fn universal_ref_blanket(
         &self,
         trait_: DefId,
+        receiver: &name::FqTypeName,
         is_mut: bool,
+        wanted: &[name::FqTypeName],
     ) -> Option<&BlanketImpl> {
-        self.blanket_impls
-            .get(&trait_)?
-            .iter()
-            .find(|b| b.receiver == BlanketReceiver::Ref { is_mut })
+        let defaults = &self.decl_header_of(&trait_)?.default_args;
+        let default_at = |index: usize| Some(defaults.get(index)?.as_ref()?.at(receiver));
+        self.blanket_impls.get(&trait_)?.iter().find(|b| {
+            let written = self.impl_headers[&b.def].trait_arg_ids();
+            b.receiver == BlanketReceiver::Ref { is_mut }
+                && (0..defaults.len()).all(|i| {
+                    let want = wanted.get(i).cloned().or_else(|| default_at(i));
+                    match (written.get(i).cloned().or_else(|| default_at(i)), want) {
+                        (Some(written), Some(want)) => written.mentions_binder() || written == want,
+                        (written, want) => written.is_none() && want.is_none(),
+                    }
+                })
+        })
     }
 
     /// The blanket impl block `def` declares, if it is one.
