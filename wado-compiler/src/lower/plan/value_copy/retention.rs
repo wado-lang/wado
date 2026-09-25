@@ -914,21 +914,18 @@ impl RefCarrying<'_> {
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
-                let payloads = self
-                    .type_table
-                    .variant_template_cases(def)
-                    .map(|cases| cases.iter().map(|(_, _, payload)| *payload).collect());
-                match payloads {
-                    Some(payloads) => {
-                        let (from_cases, cyclic) = self.any(payloads, open);
-                        if from_cases {
-                            return (true, cyclic);
-                        }
-                        let (from_args, more) = self.any(type_args, open);
-                        (from_args, cyclic | more)
-                    }
-                    None => self.any(type_args, open),
-                }
+                // A payload that is one of the template's parameters is the
+                // argument there; any other still reads its parameters as unknown.
+                let payloads = self.type_table.variant_template_cases(def).map(|cases| {
+                    cases
+                        .iter()
+                        .map(|&(_, _, payload)| match self.type_table.get(payload) {
+                            ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
+                            _ => payload,
+                        })
+                        .collect()
+                });
+                self.any(payloads.unwrap_or(type_args), open)
             }
             ResolvedType::Variant { def } => {
                 let def = *def;
