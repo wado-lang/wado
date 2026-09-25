@@ -742,19 +742,12 @@ fn annotate_lib_export_sources(
     registry: &component_model::CmInterfaceRegistry,
     resolutions: &resolve::Resolutions,
     world: &mut world_registry::WorldInfo,
-    entry_module: Option<&ast::Module>,
-    submodule_type_names: &hashmap::IndexSet<String>,
+    lib_type_names: &hashmap::IndexSet<String>,
 ) {
-    let mut local_type_names: hashmap::IndexSet<String> = entry_module
-        .map(|module| module.items.iter().filter_map(lib_type_decl_name).collect())
-        .unwrap_or_default();
-    // Types defined in submodules but reached through the facade's exported
-    // signatures are lib-local too (registered via `register_lib_local_items`).
-    local_type_names.extend(submodule_type_names.iter().cloned());
     for export in &mut world.exports {
         let types = export.params.iter_mut().map(|(_, ty)| ty);
         for ty in types.chain(export.return_type.as_mut()) {
-            annotate_lib_type_sources(registry, resolutions, ty, &world.fq_name, &local_type_names);
+            annotate_lib_type_sources(registry, resolutions, ty, &world.fq_name, lib_type_names);
         }
     }
 }
@@ -1370,15 +1363,21 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // Tag nested user types inside each submodule decl's own fields, so a type
-    // like `HeadingInfo` reached only through `RenderResult.headings` resolves
-    // against the same lib-local registration as the fields the lift/lower reads.
-    // The CM registry answers which interface each reference site names; a
-    // `--lib` compile has one because annotate completed.
+    // The entry module's own named types are registered into the CM interface
+    // registry below, from this copy (`sem` is destructured before then). Its
+    // decls and the submodules' have their fields tagged here, so a type like
+    // `HeadingInfo` reached only through `RenderResult.headings` resolves
+    // against the same registration as the fields the lift/lower reads. A
+    // `--lib` compile has a CM registry because annotate completed.
+    let mut lib_entry_module = synth_world_fq
+        .as_ref()
+        .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
     let cm_registry = sem.cm_interface_registry().zip(sem.resolutions());
     if let (Some(fq), Some((registry, resolutions))) = (synth_world_fq.as_ref(), cm_registry) {
-        for (_, decl) in &mut lib_surface.submodule_type_decls {
-            tag_lib_local_decl_fields(registry, resolutions, decl, fq, &lib_type_names);
+        let entry_items = lib_entry_module.iter_mut().flat_map(|m| m.items.iter_mut());
+        let submodule_items = lib_surface.submodule_type_decls.iter_mut().map(|(_, d)| d);
+        for item in entry_items.chain(submodule_items) {
+            tag_lib_local_decl_fields(registry, resolutions, item, fq, &lib_type_names);
         }
     }
 
@@ -1394,13 +1393,7 @@ fn compile_after_load<H: CompilerHost>(
                     &lib_surface.submodule_exports,
                     options.lib_interface_export,
                 );
-                annotate_lib_export_sources(
-                    registry,
-                    resolutions,
-                    &mut world,
-                    entry,
-                    &lib_type_names,
-                );
+                annotate_lib_export_sources(registry, resolutions, &mut world, &lib_type_names);
                 world
             });
 
@@ -1518,20 +1511,6 @@ fn compile_after_load<H: CompilerHost>(
             return Err(Bail);
         }
     }
-
-    // Capture the entry module so its own named types can be registered into
-    // the CM interface registry (cloned before `sem` is destructured below).
-    let lib_entry_module =
-        synth_world_fq
-            .as_ref()
-            .zip(cm_registry)
-            .and_then(|(fq, (registry, resolutions))| {
-                let mut module = sem.modules.get(&sem.entry_module_source).cloned()?;
-                for item in &mut module.items {
-                    tag_lib_local_decl_fields(registry, resolutions, item, fq, &lib_type_names);
-                }
-                Some(module)
-            });
 
     let semantics::Semantics {
         entry_module_source,
