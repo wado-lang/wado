@@ -1415,7 +1415,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &variant_info,
                         case_data,
                         &args,
-                        &[],
+                        &call.args,
+                        &type_args,
                         prefix,
                         expected_type,
                         call.id,
@@ -1475,7 +1476,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &variant_info,
                             case_data,
                             &args,
-                            &[],
+                            &call.args,
+                            &type_args,
                             type_name,
                             expected_type,
                             call.id,
@@ -3545,42 +3547,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found == expected
     }
 
-    /// `Owner::Case` or `Owner::Case(payload)` under a qualified path: the arity
-    /// check, the payload against a concrete case, and the variant instance it builds.
+    /// `Owner::Case` or `Owner::Case(payload)`, the turbofish written on the type
+    /// or on the case: the arity checks, the payload against the instantiated
+    /// case, and the variant instance it builds.
     pub(super) fn construct_variant_case(
         &mut self,
         variant_info: &VariantInfo,
         case_data: &VariantCaseData,
         args: &[TypeId],
-        turbofish: &[ast::Type],
+        raw_args: &[Expr],
+        explicit: &[TypeId],
         written_owner: &str,
         expected_type: Option<TypeId>,
         site: AstId,
         span: Span,
     ) -> TypeId {
-        if !self.check_case_arity(case_data, args.len(), span) {
+        if !self.check_case_arity(case_data, args.len(), span)
+            || !self.check_case_turbofish_arity(
+                explicit.len(),
+                written_owner,
+                variant_info.type_params.len(),
+                span,
+            )
+        {
             return TypeTable::ERROR;
         }
         let payload = args.first().copied();
         let variant_type = if variant_info.type_params.is_empty() {
-            // Only a concrete case has a payload type to check; a generic one
-            // binds it from this argument.
-            if let Some(payload) = payload {
-                self.typecheck(payload, case_data.payload, span);
-            }
             self.tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(variant_info.defined_at)
         } else {
-            let explicit: Vec<TypeId> = turbofish.iter().map(|t| self.resolve_type(t)).collect();
             let inferred = self.tysys.infer_variant_type_args(
                 &self.annotate_ctx,
                 variant_info,
                 case_data,
                 payload,
                 expected_type,
-                &explicit,
+                explicit,
             );
             self.defer_uninferable_variant(inferred, written_owner, variant_info, span)
         };
@@ -3590,6 +3595,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .nominal_type_args(variant_type)
             .unwrap_or_default();
+        if let Some(payload) = payload {
+            let declared = self
+                .tysys
+                .substitute_type_params(case_data.payload, &type_args);
+            self.typecheck(payload, declared, raw_args.first().map_or(span, Expr::span));
+        }
         self.record_generic_instantiation(site, type_args, variant_type);
         variant_type
     }

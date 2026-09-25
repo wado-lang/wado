@@ -1,0 +1,9 @@
+// The payload is checked against the case's type under the written arguments.
+
+test "unreachable: the payload does not fit the turbofish" {
+    let o = Option::Some::<String>(1);
+    assert o matches { Some(_) };
+}
+
+__DATA__
+{"compile_error": ":4:36: analysis error: type mismatch: expected 'String', found 'i32'", "compile_error_count": 1}

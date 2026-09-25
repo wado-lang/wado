@@ -1,0 +1,9 @@
+// A turbofish after the case name must name exactly the variant's parameters.
+
+test "unreachable: `Option` takes one type argument" {
+    let o = Option::Some::<i64, bool>(1);
+    assert o matches { Some(_) };
+}
+
+__DATA__
+{"compile_error": "`Option` takes 1 type argument, the turbofish supplies 2", "compile_error_count": 1}

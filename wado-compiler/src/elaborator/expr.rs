@@ -983,27 +983,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
-    /// the declaring type's parameters; an enum or a flags type declares none.
-    fn check_case_turbofish_arity(
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`, `Maybe::Just::<i32>`)
+    /// must name exactly the declaring type's parameters; an enum or a flags type declares none.
+    pub(super) fn check_case_turbofish_arity(
         &mut self,
-        ident: &ast::IdentExpr,
+        found: usize,
         type_name: &str,
         expected: usize,
-    ) {
-        if ident.type_args.is_empty() || ident.type_args.len() == expected {
-            return;
+        span: Span,
+    ) -> bool {
+        let fits = found == 0 || found == expected;
+        if !fits {
+            let _ = self.emit(TypeError::CaseTurbofishArity {
+                type_name: type_name.to_string(),
+                expected,
+                found,
+                span,
+            });
         }
-        let expected_text = match expected {
-            0 => "no type arguments".to_string(),
-            1 => "1 type argument".to_string(),
-            n => format!("{n} type arguments"),
-        };
-        let found = ident.type_args.len();
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
-            span: ident.span,
-        });
+        fits
     }
 
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
@@ -1049,14 +1047,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some((_, case_data)) = variant_info.case_named(suffix)
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
             // A payload-less case has no payload to infer from, so the
             // turbofish is the only source besides the expected type.
+            let explicit = self.resolve_turbofish_args(&ident.type_args);
             let variant_type = self.construct_variant_case(
                 &variant_info,
                 case_data,
                 &[],
-                &ident.type_args,
+                &[],
+                &explicit,
                 prefix,
                 expected_type,
                 ident.id,
@@ -1074,7 +1073,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(case_data) = enum_info.find_case(suffix).cloned()
         {
             self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
+            self.check_case_turbofish_arity(ident.type_args.len(), prefix, 0, ident.span);
             let enum_type = self
                 .tysys
                 .type_table
@@ -1096,7 +1095,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
         {
             self.record_qualified_case(ident, prefix, member.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
+            self.check_case_turbofish_arity(ident.type_args.len(), prefix, 0, ident.span);
             return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
         }
         None

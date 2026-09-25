@@ -1,0 +1,9 @@
+// A written argument is not overridden by the expected type.
+
+test "unreachable: the turbofish and the annotation disagree" {
+    let r: Result<i32, String> = Result::Ok::<i64, String>(1);
+    assert r.is_ok();
+}
+
+__DATA__
+{"compile_error": ":4:34: analysis error: type mismatch: expected 'Result<i32, String>', found 'Result<i64, String>'", "compile_error_count": 1}

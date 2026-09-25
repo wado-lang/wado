@@ -526,6 +526,21 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A case path's turbofish naming other than its type's parameter count.
+    CaseTurbofishArity {
+        type_name: String,
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
+    /// A variant's type arguments written on both its type and its case.
+    CaseTurbofishOnBoth {
+        type_name: String,
+        case: String,
+        span: Span,
+    },
+
     /// Unknown function
     UnknownFunction {
         name: String,
@@ -1556,6 +1571,34 @@ impl TypeError {
                         if *expected == 1 { "" } else { "s" },
                     )
                 },
+                *span,
+            ),
+            TypeError::CaseTurbofishArity {
+                type_name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::ArityMismatch,
+                format!(
+                    "`{type_name}` takes {}, the turbofish supplies {found}",
+                    match expected {
+                        0 => "no type arguments".to_string(),
+                        1 => "1 type argument".to_string(),
+                        n => format!("{n} type arguments"),
+                    }
+                ),
+                *span,
+            ),
+            TypeError::CaseTurbofishOnBoth {
+                type_name,
+                case,
+                span,
+            } => (
+                Code::ArityMismatch,
+                format!(
+                    "type arguments are written on both `{type_name}` and its case `{case}`; write them on one"
+                ),
                 *span,
             ),
             TypeError::SurplusTypeArguments {

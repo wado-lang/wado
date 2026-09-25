@@ -1889,9 +1889,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Option::Some and Option::None are handled by the generic variant
-        // construction path below (line ~686). No special case needed.
-
         // A case, a flags member and a variant constructor are the receiver's
         // own declarations. A spelling that names a trait asks for none of
         // them — the same rule the resolution applies to its candidates.
@@ -1939,71 +1936,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A static call's head carries a turbofish, so only a generic variant builds a
         // case here (`Result::<i32, String>::Ok(42)`); no match falls through to lookup.
-        let is_generic_instance = matches!(
-            self.tysys.type_table.borrow().get(target_type_id),
-            ResolvedType::GenericInstance { .. }
-        );
+        let written_args = match self.tysys.type_table.borrow().get(target_type_id) {
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
+            _ => None,
+        };
         if builds_own_case
-            && is_generic_instance
+            && let Some(explicit) = written_args
             && let Some(variant_info) = self.tysys.variant_of_type(target_type_id).cloned()
             && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
         {
-            if !self.check_case_arity(case_data, args.len(), static_call.span) {
+            if !static_call.type_args.is_empty() {
+                let _ = self.emit(TypeError::CaseTurbofishOnBoth {
+                    type_name: variant_info.name.clone(),
+                    case: static_call.method.clone(),
+                    span: static_call.span,
+                });
                 return TypeTable::ERROR;
             }
-
-            // Refine `_` placeholders in the turbofish (`Result::<_, MyErr>::Ok(7)`):
-            // infer those slots from the payload while the explicit args stay pinned.
-            let explicit_args = self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_type_args(target_type_id)
-                .unwrap_or_default();
-            let result_type = if explicit_args.contains(&TypeTable::UNKNOWN) {
-                let inferred = self.tysys.infer_variant_type_args(
-                    &self.annotate_ctx,
-                    &variant_info,
-                    case_data,
-                    args.first().copied(),
-                    None,
-                    &explicit_args,
-                );
-                self.defer_uninferable_variant(
-                    inferred,
-                    &variant_info.name,
-                    &variant_info,
-                    static_call.span,
-                )
-            } else {
-                target_type_id
-            };
-
-            // Check payload type against the variant case's payload
-            // type, substituted with the (possibly refined) type args.
-            if !args.is_empty() {
-                let result_args = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_type_args(result_type);
-                let expected_payload = match result_args {
-                    Some(args_vec) => Some(
-                        self.tysys
-                            .substitute_type_params(case_data.payload, &args_vec),
-                    ),
-                    None => param_types.first().copied(),
-                };
-                if let Some(expected_type) = expected_payload {
-                    let span = static_call
-                        .args
-                        .first()
-                        .map_or(static_call.span, Expr::span);
-                    self.typecheck(args[0], expected_type, span);
-                }
-            }
-
-            return result_type;
+            return self.construct_variant_case(
+                &variant_info,
+                case_data,
+                &args,
+                &static_call.args,
+                &explicit,
+                &variant_info.name,
+                None,
+                static_call.id,
+                static_call.span,
+            );
         }
 
         // Handle From<T>::from calls resolved via bodyless `impl From<T> for Type;`

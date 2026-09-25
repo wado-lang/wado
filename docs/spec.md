@@ -2865,6 +2865,16 @@ let t = Tagged::<String> { tag: 7 };    // T names no field
 let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
 ```
 
+On a variant, the turbofish may follow the case name instead, as in Rust. It
+means the same thing and names every parameter. Writing one on both the type
+and the case is an error.
+
+```wado
+let a = Option::Some::<i64>(1);         // Option::<i64>::Some(1)
+let e = Result::Err::<i32, String>("x");
+let n: Option<i32> = None::<i32>;       // a bare case, where its type is known
+```
+
 #### Scope of inference
 
 | Site                   | Forward (from values) | Backward (from expected type) |
@@ -3960,8 +3970,11 @@ let none: Option<i32> = Option::None;    // T=i32 from annotation
 let ok: Result<i32, String> = Result::Ok(42);      // T from payload, E from annotation
 let err: Result<i32, String> = Result::Err("fail"); // E from payload, T from annotation
 
-// Explicit turbofish syntax (always available)
+// Explicit turbofish syntax (always available), on the type or on the case
 let opt2 = Option::<i32>::Some(42);
+let opt3 = Option::Some::<i32>(42);      // the same as opt2
+let none2 = Option::None::<i32>;
+// Option::<i32>::Some::<i32>(42)        // Error: written on both
 
 if let Some(x) = opt {
     println(`Got: ${x}`);
