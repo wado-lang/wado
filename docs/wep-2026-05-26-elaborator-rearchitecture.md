@@ -873,7 +873,7 @@ resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
 global's declared type in that global's own module scope.
 
 The reads that remain are also fail-safe where the contract is fail-loud: 66
-`unwrap_or*` defaults against 48 `.expect`s. Most are legitimately optional
+`unwrap_or*` defaults against 43 `.expect`s. Most are legitimately optional
 ("this node has no coercion"), but the ones that are not silently change
 emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
@@ -923,7 +923,7 @@ constructor that the decl pass and `TypeSystem::type_lookup` both call.
 ### The walker still carries the compilation unit
 
 A walker method that reads nothing but `TypeSystem` answers on `TypeSystem`,
-which has 203 methods to the walker's 745. The walker's 185 `&self` methods
+which has 204 methods to the walker's 747. The walker's 186 `&self` methods
 read the module's facts or the scope, or emit a diagnostic, so none of them
 moves without a carrier for that state.
 
