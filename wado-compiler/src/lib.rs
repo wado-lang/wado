@@ -680,11 +680,9 @@ fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
 /// signatures, one direct world export per exported function with parameter and
 /// return types taken straight from the AST.
 fn synthesize_lib_world_info(
-    registry: &component_model::CmInterfaceRegistry,
     fq: &str,
     entry_module: Option<&ast::Module>,
     reexports: &[world_registry::WorldExportInfo],
-    submodule_type_names: &hashmap::IndexSet<String>,
     force_interface_export: bool,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
@@ -731,10 +729,25 @@ fn synthesize_lib_world_info(
         }
     }
 
-    // Tag the entry module's own named types in the export signatures with the
-    // library's default-interface FQ, matching `register_lib_local_decls`, so
-    // the lift/lower machinery resolves them like WASI types. Only the module's
-    // own declarations — types from other interfaces keep their source.
+    WorldInfo {
+        fq_name: fq.to_string(),
+        exports,
+        imports: Vec::new(),
+    }
+}
+
+/// Answer the interface each named type in `world`'s export signatures names,
+/// so the lift/lower machinery resolves them like WASI types.
+fn annotate_lib_export_sources(
+    registry: &component_model::CmInterfaceRegistry,
+    resolutions: &resolve::Resolutions,
+    world: &world_registry::WorldInfo,
+    entry_module: Option<&ast::Module>,
+    submodule_type_names: &hashmap::IndexSet<String>,
+) {
+    use crate::ast::Item;
+
+    let fq = world.fq_name.as_str();
     let mut local_type_names: hashmap::IndexSet<String> = entry_module
         .map(|module| {
             module
@@ -754,32 +767,25 @@ fn synthesize_lib_world_info(
     // Types defined in submodules but reached through the facade's exported
     // signatures are lib-local too (registered via `register_lib_local_items`).
     local_type_names.extend(submodule_type_names.iter().cloned());
-    for export in &exports {
+    for export in &world.exports {
         for (_, ty) in &export.params {
-            annotate_lib_local_sources(registry, ty, fq, &local_type_names);
+            annotate_lib_local_sources(registry, resolutions, ty, fq, &local_type_names);
         }
         if let Some(ty) = export.return_type.as_ref() {
-            annotate_lib_local_sources(registry, ty, fq, &local_type_names);
+            annotate_lib_local_sources(registry, resolutions, ty, fq, &local_type_names);
         }
-    }
-
-    WorldInfo {
-        fq_name: fq.to_string(),
-        exports,
-        imports: Vec::new(),
     }
 }
 
-/// Answer `fq` for every user named type in `ty` (recursing through
-/// containers), so the CM lift/lower machinery resolves library-local records /
-/// variants / enums / flags / newtypes against the package's default-interface
-/// registration. CM primitives and the unit type are left untouched.
+/// Answer the interface every user named type in `ty` names: `fq` for a
+/// library-local one, else the one its declaring module registers.
 ///
 /// The registry's answer table is first-writer-wins, so an already-resolved
 /// reference — a shared `core:kiln/types` record — keeps its own interface,
 /// which the CM lift/lower needs to find its fields.
 fn annotate_lib_local_sources(
     registry: &component_model::CmInterfaceRegistry,
+    resolutions: &resolve::Resolutions,
     ty: &ast::Type,
     fq: &str,
     local_type_names: &hashmap::IndexSet<String>,
@@ -789,20 +795,26 @@ fn annotate_lib_local_sources(
         Type::Named(named) => {
             if local_type_names.contains(&named.name) {
                 registry.set_source_interface(named.id, fq.to_string());
+            } else if let Some(def) = resolutions.declared(named.id) {
+                let defs = resolutions.defs();
+                if let Some(source) = registry.interface_declaring(defs.module(def), defs.name(def))
+                {
+                    registry.set_source_interface(named.id, source.to_string());
+                }
             }
         }
         Type::Generic(g) => {
             for arg in &g.args {
-                annotate_lib_local_sources(registry, arg, fq, local_type_names);
+                annotate_lib_local_sources(registry, resolutions, arg, fq, local_type_names);
             }
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                annotate_lib_local_sources(registry, elem, fq, local_type_names);
+                annotate_lib_local_sources(registry, resolutions, elem, fq, local_type_names);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            annotate_lib_local_sources(registry, inner, fq, local_type_names);
+            annotate_lib_local_sources(registry, resolutions, inner, fq, local_type_names);
         }
         _ => {}
     }
@@ -816,6 +828,7 @@ fn annotate_lib_local_sources(
 /// registered type's own fields.
 fn tag_lib_local_decl_fields(
     registry: &component_model::CmInterfaceRegistry,
+    resolutions: &resolve::Resolutions,
     item: &ast::Item,
     fq: &str,
     local_type_names: &hashmap::IndexSet<String>,
@@ -824,18 +837,24 @@ fn tag_lib_local_decl_fields(
     match item {
         Item::Struct(d) => {
             for field in &d.fields {
-                annotate_lib_local_sources(registry, &field.ty, fq, local_type_names);
+                annotate_lib_local_sources(registry, resolutions, &field.ty, fq, local_type_names);
             }
         }
         Item::Variant(d) => {
             for case in &d.cases {
                 if let Some(payload) = case.payload.as_ref() {
-                    annotate_lib_local_sources(registry, payload, fq, local_type_names);
+                    annotate_lib_local_sources(
+                        registry,
+                        resolutions,
+                        payload,
+                        fq,
+                        local_type_names,
+                    );
                 }
             }
         }
         Item::Newtype(d) => {
-            annotate_lib_local_sources(registry, &d.ty, fq, local_type_names);
+            annotate_lib_local_sources(registry, resolutions, &d.ty, fq, local_type_names);
         }
         _ => {}
     }
@@ -1384,27 +1403,28 @@ fn compile_after_load<H: CompilerHost>(
     // against the same lib-local registration as the fields the lift/lower reads.
     // The CM registry answers which interface each reference site names; a
     // `--lib` compile has one because annotate completed.
-    let cm_registry = sem.cm_interface_registry();
-    if let (Some(fq), Some(registry)) = (synth_world_fq.as_ref(), cm_registry) {
+    let cm_registry = sem.cm_interface_registry().zip(sem.resolutions());
+    if let (Some(fq), Some((registry, resolutions))) = (synth_world_fq.as_ref(), cm_registry) {
         for (_, decl) in &lib_surface.submodule_type_decls {
-            tag_lib_local_decl_fields(registry, decl, fq, &lib_type_names);
+            tag_lib_local_decl_fields(registry, resolutions, decl, fq, &lib_type_names);
         }
     }
 
-    let mut lib_world_info = synth_world_fq
-        .as_ref()
-        .zip(cm_registry)
-        .map(|(fq, registry)| {
-            let entry = sem.modules.get(&sem.entry_module_source);
-            synthesize_lib_world_info(
-                registry,
-                fq,
-                entry,
-                &lib_surface.submodule_exports,
-                &lib_type_names,
-                options.lib_interface_export,
-            )
-        });
+    let mut lib_world_info =
+        synth_world_fq
+            .as_ref()
+            .zip(cm_registry)
+            .map(|(fq, (registry, resolutions))| {
+                let entry = sem.modules.get(&sem.entry_module_source);
+                let world = synthesize_lib_world_info(
+                    fq,
+                    entry,
+                    &lib_surface.submodule_exports,
+                    options.lib_interface_export,
+                );
+                annotate_lib_export_sources(registry, resolutions, &world, entry, &lib_type_names);
+                world
+            });
 
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
@@ -1421,7 +1441,7 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     if is_kiln_generator
-        && let Some(kiln_registry) = cm_registry
+        && let Some((kiln_registry, resolutions)) = cm_registry
         && let Some(world) = lib_world_info.as_mut()
     {
         // `generate` and the optional `probe` are the generator world's
@@ -1442,6 +1462,7 @@ fn compile_after_load<H: CompilerHost>(
             for (_, ty) in &export.params {
                 annotate_lib_local_sources(
                     kiln_registry,
+                    resolutions,
                     ty,
                     kiln::import_check::KILN_TYPES_INTERFACE,
                     &kiln_shared,
@@ -1450,6 +1471,7 @@ fn compile_after_load<H: CompilerHost>(
             if let Some(ty) = export.return_type.as_ref() {
                 annotate_lib_local_sources(
                     kiln_registry,
+                    resolutions,
                     ty,
                     kiln::import_check::KILN_TYPES_INTERFACE,
                     &kiln_shared,
@@ -2586,8 +2608,7 @@ impl std::error::Error for CompileError {}
 #[cfg(test)]
 mod lib_world_tests {
     use super::synthesize_lib_world_info;
-    use crate::component_model::CmInterfaceRegistry;
-    use crate::{hashmap, parse};
+    use crate::parse;
 
     #[test]
     fn synthesizes_one_export_per_export_fn() {
@@ -2597,14 +2618,7 @@ fn helper(x: u32) -> u32 { return x; }
 export fn id_bool(v: bool) -> bool { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info(
-            &CmInterfaceRegistry::new(),
-            "wado:mylib/mylib@0.1.0",
-            Some(&module),
-            &[],
-            &hashmap::IndexSet::default(),
-            false,
-        );
+        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", Some(&module), &[], false);
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
         assert!(world.imports.is_empty());
@@ -2622,14 +2636,7 @@ export fn id_bool(v: bool) -> bool { return v; }
 
     #[test]
     fn empty_when_no_entry_module() {
-        let world = synthesize_lib_world_info(
-            &CmInterfaceRegistry::new(),
-            "wado:x/x@0.1.0",
-            None,
-            &[],
-            &hashmap::IndexSet::default(),
-            false,
-        );
+        let world = synthesize_lib_world_info("wado:x/x@0.1.0", None, &[], false);
         assert!(world.exports.is_empty());
     }
 
@@ -2644,14 +2651,7 @@ export fn id_u32(v: u32) -> u32 { return v; }
 export fn id_points(v: List<Point>) -> List<Point> { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info(
-            &CmInterfaceRegistry::new(),
-            "wado:geo/geo@0.1.0",
-            Some(&module),
-            &[],
-            &hashmap::IndexSet::default(),
-            false,
-        );
+        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", Some(&module), &[], false);
         assert!(
             world
                 .exports
@@ -2670,14 +2670,7 @@ export fn id_list(v: List<u8>) -> List<u8> { return v; }
 export fn id_opt(v: Option<String>) -> Option<String> { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info(
-            &CmInterfaceRegistry::new(),
-            "wado:c/c@0.1.0",
-            Some(&module),
-            &[],
-            &hashmap::IndexSet::default(),
-            false,
-        );
+        let world = synthesize_lib_world_info("wado:c/c@0.1.0", Some(&module), &[], false);
         assert!(
             world.exports.iter().all(|e| e.from_interface_fq.is_none()),
             "primitive containers do not force an interface",

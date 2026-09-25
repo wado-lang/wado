@@ -20,8 +20,13 @@ const $handles = new Map();
 function $handle(object) {
   let handle = $handles.get(object);
   if (handle === undefined) {
-    const [, cls] = $CLASSES.find(([name]) => object instanceof globalThis[name]);
-    handle = cls * $STRIDE + $objects.push(object) - 1;
+    const entry = $CLASSES.find(
+      ([name]) => globalThis[name] !== undefined && object instanceof globalThis[name],
+    );
+    if (entry === undefined) {
+      throw new TypeError(`${object} is an instance of no interface this package declares`);
+    }
+    handle = entry[1] * $STRIDE + $objects.push(object) - 1;
     $handles.set(object, handle);
   }
   return handle;
@@ -30,6 +35,10 @@ function $handle(object) {
 const $object = (handle) => $objects[handle % $STRIDE];
 const $some = (f) => (value) => (value === undefined ? undefined : f(value));
 const $nullable = (f) => (value) => (value === null ? undefined : f(value));
+const $someObject = $some($object);
+const $nullableHandle = $nullable($handle);
+const $someNumber = $some(Number);
+const $nullableBigInt = $nullable(BigInt);
 
 export const eventTarget = {
   new() {
@@ -48,13 +57,13 @@ export const event = {
     return $object(self).type;
   },
   target(self) {
-    return $nullable($handle)($object(self).target);
+    return $nullableHandle($object(self).target);
   },
   srcElement(self) {
-    return $nullable($handle)($object(self).srcElement);
+    return $nullableHandle($object(self).srcElement);
   },
   currentTarget(self) {
-    return $nullable($handle)($object(self).currentTarget);
+    return $nullableHandle($object(self).currentTarget);
   },
   eventPhase(self) {
     return $object(self).eventPhase;
@@ -117,31 +126,31 @@ export const node = {
     return $object(self).isConnected;
   },
   ownerDocument(self) {
-    return $nullable($handle)($object(self).ownerDocument);
+    return $nullableHandle($object(self).ownerDocument);
   },
   getRootNode(self) {
     return $handle($object(self).getRootNode());
   },
   parentNode(self) {
-    return $nullable($handle)($object(self).parentNode);
+    return $nullableHandle($object(self).parentNode);
   },
   parentElement(self) {
-    return $nullable($handle)($object(self).parentElement);
+    return $nullableHandle($object(self).parentElement);
   },
   hasChildNodes(self) {
     return $object(self).hasChildNodes();
   },
   firstChild(self) {
-    return $nullable($handle)($object(self).firstChild);
+    return $nullableHandle($object(self).firstChild);
   },
   lastChild(self) {
-    return $nullable($handle)($object(self).lastChild);
+    return $nullableHandle($object(self).lastChild);
   },
   previousSibling(self) {
-    return $nullable($handle)($object(self).previousSibling);
+    return $nullableHandle($object(self).previousSibling);
   },
   nextSibling(self) {
-    return $nullable($handle)($object(self).nextSibling);
+    return $nullableHandle($object(self).nextSibling);
   },
   nodeValue(self) {
     return $object(self).nodeValue;
@@ -162,16 +171,16 @@ export const node = {
     return $handle($object(self).cloneNode(subtree));
   },
   isEqualNode(self, otherNode) {
-    return $object(self).isEqualNode($some($object)(otherNode));
+    return $object(self).isEqualNode($someObject(otherNode));
   },
   isSameNode(self, otherNode) {
-    return $object(self).isSameNode($some($object)(otherNode));
+    return $object(self).isSameNode($someObject(otherNode));
   },
   compareDocumentPosition(self, other) {
     return $object(self).compareDocumentPosition($object(other));
   },
   contains(self, other) {
-    return $object(self).contains($some($object)(other));
+    return $object(self).contains($someObject(other));
   },
   lookupPrefix(self, namespace) {
     return $object(self).lookupPrefix(namespace);
@@ -183,7 +192,7 @@ export const node = {
     return $object(self).isDefaultNamespace(namespace);
   },
   insertBefore(self, node, child) {
-    return $handle($object(self).insertBefore($object(node), $some($object)(child)));
+    return $handle($object(self).insertBefore($object(node), $someObject(child)));
   },
   appendChild(self, node) {
     return $handle($object(self).appendChild($object(node)));
@@ -297,7 +306,7 @@ export const element = {
     return $object(self).hasAttributeNS(namespace, localName);
   },
   closest(self, selectors) {
-    return $nullable($handle)($object(self).closest(selectors));
+    return $nullableHandle($object(self).closest(selectors));
   },
   matches(self, selectors) {
     return $object(self).matches(selectors);
@@ -306,7 +315,7 @@ export const element = {
     return $object(self).webkitMatchesSelector(selectors);
   },
   insertAdjacentElement(self, where, element) {
-    return $nullable($handle)($object(self).insertAdjacentElement(where, $object(element)));
+    return $nullableHandle($object(self).insertAdjacentElement(where, $object(element)));
   },
   insertAdjacentText(self, where, data) {
     $object(self).insertAdjacentText(where, data);
@@ -345,25 +354,25 @@ export const element = {
     return $object(self).hasPointerCapture(pointerId);
   },
   firstElementChild(self) {
-    return $nullable($handle)($object(self).firstElementChild);
+    return $nullableHandle($object(self).firstElementChild);
   },
   lastElementChild(self) {
-    return $nullable($handle)($object(self).lastElementChild);
+    return $nullableHandle($object(self).lastElementChild);
   },
   childElementCount(self) {
     return $object(self).childElementCount;
   },
   moveBefore(self, node, child) {
-    $object(self).moveBefore($object(node), $some($object)(child));
+    $object(self).moveBefore($object(node), $someObject(child));
   },
   querySelector(self, selectors) {
-    return $nullable($handle)($object(self).querySelector(selectors));
+    return $nullableHandle($object(self).querySelector(selectors));
   },
   previousElementSibling(self) {
-    return $nullable($handle)($object(self).previousElementSibling);
+    return $nullableHandle($object(self).previousElementSibling);
   },
   nextElementSibling(self) {
-    return $nullable($handle)($object(self).nextElementSibling);
+    return $nullableHandle($object(self).nextElementSibling);
   },
   remove(self) {
     $object(self).remove();
@@ -375,10 +384,10 @@ export const element = {
     $object(self).role = value;
   },
   ariaActiveDescendantElement(self) {
-    return $nullable($handle)($object(self).ariaActiveDescendantElement);
+    return $nullableHandle($object(self).ariaActiveDescendantElement);
   },
   setAriaActiveDescendantElement(self, value) {
-    $object(self).ariaActiveDescendantElement = $some($object)(value);
+    $object(self).ariaActiveDescendantElement = $someObject(value);
   },
   ariaAtomic(self) {
     return $object(self).ariaAtomic;
@@ -657,10 +666,10 @@ export const htmlElement = {
     $object(self).containerTimingIgnore = value;
   },
   scrollParent(self) {
-    return $nullable($handle)($object(self).scrollParent);
+    return $nullableHandle($object(self).scrollParent);
   },
   offsetParent(self) {
-    return $nullable($handle)($object(self).offsetParent);
+    return $nullableHandle($object(self).offsetParent);
   },
   offsetTop(self) {
     return $object(self).offsetTop;
@@ -1116,10 +1125,10 @@ export const htmlInputElement = {
     $object(self).capture = value;
   },
   popoverTargetElement(self) {
-    return $nullable($handle)($object(self).popoverTargetElement);
+    return $nullableHandle($object(self).popoverTargetElement);
   },
   setPopoverTargetElement(self, value) {
-    $object(self).popoverTargetElement = $some($object)(value);
+    $object(self).popoverTargetElement = $someObject(value);
   },
   popoverTargetAction(self) {
     return $object(self).popoverTargetAction;
@@ -1131,10 +1140,10 @@ export const htmlInputElement = {
 
 export const document = {
   elementFromPoint(self, x, y) {
-    return $nullable($handle)($object(self).elementFromPoint(x, y));
+    return $nullableHandle($object(self).elementFromPoint(x, y));
   },
   scrollingElement(self) {
-    return $nullable($handle)($object(self).scrollingElement);
+    return $nullableHandle($object(self).scrollingElement);
   },
   new() {
     return $handle(new globalThis.Document());
@@ -1161,7 +1170,7 @@ export const document = {
     return $object(self).contentType;
   },
   documentElement(self) {
-    return $nullable($handle)($object(self).documentElement);
+    return $nullableHandle($object(self).documentElement);
   },
   createElement(self, localName, options) {
     return $handle($object(self).createElement(localName, options));
@@ -1221,10 +1230,10 @@ export const document = {
     $object(self).dir = value;
   },
   body(self) {
-    return $nullable($handle)($object(self).body);
+    return $nullableHandle($object(self).body);
   },
   setBody(self, value) {
-    $object(self).body = $some($object)(value);
+    $object(self).body = $someObject(value);
   },
   open(self, unused1, unused2) {
     return $handle($object(self).open(unused1, unused2));
@@ -1314,34 +1323,34 @@ export const document = {
     return $object(self).prerendering;
   },
   getElementById(self, elementId) {
-    return $nullable($handle)($object(self).getElementById(elementId));
+    return $nullableHandle($object(self).getElementById(elementId));
   },
   fullscreenElement(self) {
-    return $nullable($handle)($object(self).fullscreenElement);
+    return $nullableHandle($object(self).fullscreenElement);
   },
   activeElement(self) {
-    return $nullable($handle)($object(self).activeElement);
+    return $nullableHandle($object(self).activeElement);
   },
   pictureInPictureElement(self) {
-    return $nullable($handle)($object(self).pictureInPictureElement);
+    return $nullableHandle($object(self).pictureInPictureElement);
   },
   pointerLockElement(self) {
-    return $nullable($handle)($object(self).pointerLockElement);
+    return $nullableHandle($object(self).pointerLockElement);
   },
   firstElementChild(self) {
-    return $nullable($handle)($object(self).firstElementChild);
+    return $nullableHandle($object(self).firstElementChild);
   },
   lastElementChild(self) {
-    return $nullable($handle)($object(self).lastElementChild);
+    return $nullableHandle($object(self).lastElementChild);
   },
   childElementCount(self) {
     return $object(self).childElementCount;
   },
   moveBefore(self, node, child) {
-    $object(self).moveBefore($object(node), $some($object)(child));
+    $object(self).moveBefore($object(node), $someObject(child));
   },
   querySelector(self, selectors) {
-    return $nullable($handle)($object(self).querySelector(selectors));
+    return $nullableHandle($object(self).querySelector(selectors));
   },
   createNsResolver(self, nodeResolver) {
     return $handle($object(self).createNSResolver($object(nodeResolver)));
@@ -1413,7 +1422,7 @@ export const window = {
     return $object(self).devicePixelRatio;
   },
   event(self) {
-    return $nullable($handle)($object(self).event);
+    return $nullableHandle($object(self).event);
   },
   document(self) {
     return $handle($object(self).document);
@@ -1449,7 +1458,7 @@ export const window = {
     return $object(self).length;
   },
   frameElement(self) {
-    return $nullable($handle)($object(self).frameElement);
+    return $nullableHandle($object(self).frameElement);
   },
   originAgentCluster(self) {
     return $object(self).originAgentCluster;

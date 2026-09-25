@@ -11,6 +11,9 @@ use crate::glue;
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
+/// The interface of the functions handing out the first handle.
+const GLOBAL_INTERFACE: &str = "global";
+
 /// The file `snapshot.mjs` writes: the slice's definitions, in webidl2's shape.
 #[derive(Deserialize)]
 pub struct Snapshot {
@@ -242,11 +245,23 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     reject_overrides(&merged, &resources)?;
 
     let mut module = WadoModule::new(snapshot.package.clone(), snapshot.webref.clone());
-    if let Some((effect, members)) = lowering.global_effect(&merged, &resources)? {
-        for (function, member) in effect.functions.iter().zip(members) {
-            js.insert(function.cm_attr.clone(), member);
-        }
-        module.interfaces.push(effect);
+    if let Some(bindings) = lowering.global_effect(&merged, &resources)? {
+        let functions = bindings
+            .into_iter()
+            .map(|(function, member)| {
+                js.insert(function.cm_attr.clone(), member);
+                function
+            })
+            .collect();
+        module.interfaces.push(WadoInterface {
+            name: to_upper_camel_case(&snapshot.package),
+            doc_comment: Some(format!(
+                "The `web:{}` entry points, which hand out the first handle.",
+                snapshot.package
+            )),
+            cm_interface: lowering.interface_path(GLOBAL_INTERFACE),
+            functions,
+        });
     }
     let interfaces = resources
         .iter()
@@ -654,14 +669,13 @@ impl Lowering<'_> {
         })
     }
 
-    /// The effect handing out the first handle: the `[Global]` interface, and
-    /// each of its read-only attributes typed as another slice resource. Each
-    /// function comes with its JavaScript half, in order.
+    /// The functions handing out the first handle: the `[Global]` interface, and
+    /// each of its read-only attributes typed as another slice resource.
     fn global_effect(
         &self,
         merged: &IndexMap<&str, Merged<'_>>,
         resources: &IndexMap<&str, WadoResource>,
-    ) -> Result<Option<(WadoInterface, Vec<JsMember>)>> {
+    ) -> Result<Option<Vec<(WadoFunction, JsMember)>>> {
         let mut globals = merged.iter().filter(|(_, iface)| iface.global);
         let Some((name, global)) = globals.next() else {
             return Ok(None);
@@ -669,7 +683,7 @@ impl Lowering<'_> {
         if let Some((second, _)) = globals.next() {
             bail!("a package has one `[Global]` interface; the slice has `{name}` and `{second}`");
         }
-        let path = self.interface_path("global");
+        let path = self.interface_path(GLOBAL_INTERFACE);
         let accessor = |wado_name: String, kebab: &str, ty: &str| {
             function(
                 wado_name,
@@ -679,12 +693,10 @@ impl Lowering<'_> {
             )
         };
         let global_type = to_upper_camel_case(name);
-        let mut functions = vec![accessor(
-            to_wado_identifier(name),
-            &to_kebab_case(name),
-            &global_type,
+        let mut bindings = vec![(
+            accessor(to_wado_identifier(name), &to_kebab_case(name), &global_type),
+            JsMember::Global,
         )];
-        let mut members = vec![JsMember::Global];
         let methods: IndexSet<&str> = resources[name]
             .methods
             .iter()
@@ -702,21 +714,14 @@ impl Lowering<'_> {
             {
                 let wado_name = to_wado_identifier(name);
                 if methods.contains(wado_name.as_str()) {
-                    functions.push(accessor(wado_name, &to_kebab_case(name), &ty));
-                    members.push(JsMember::GlobalGet(name.clone()));
+                    bindings.push((
+                        accessor(wado_name, &to_kebab_case(name), &ty),
+                        JsMember::GlobalGet(name.clone()),
+                    ));
                 }
             }
         }
-        let effect = WadoInterface {
-            name: to_upper_camel_case(self.package),
-            doc_comment: Some(format!(
-                "The `web:{}` entry points, which hand out the first handle.",
-                self.package
-            )),
-            cm_interface: path,
-            functions,
-        };
-        Ok(Some((effect, members)))
+        Ok(Some(bindings))
     }
 }
 

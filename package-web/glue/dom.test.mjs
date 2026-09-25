@@ -45,12 +45,13 @@ test("an element that is no input does not narrow to one", async () => {
 
 test("one object crosses as one handle, tagged with its nearest class", async () => {
   const { global, document: documentGlue } = await import(glue);
-  install('<div id="div"></div><p id="p"></p>');
+  install('<div id="div"></div><p id="p"></p><input id="input">');
   assert.equal(global.document(), global.document());
 
   const handleOf = (id) => documentGlue.getElementById(global.document(), id);
   const classOf = (handle) => Math.floor(handle / 2 ** 37);
   assert.equal(classOf(handleOf("div")), classOf(handleOf("p")));
+  assert.notEqual(classOf(handleOf("input")), classOf(handleOf("div")));
   assert.notEqual(handleOf("div"), handleOf("p"));
   assert.equal(handleOf("div"), handleOf("div"));
 });

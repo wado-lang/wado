@@ -334,8 +334,7 @@ fn run_directory_mode(
 }
 
 /// Generate `<output-dir>/<package>.wado` and `<glue-dir>/<package>.js` from a
-/// `WebIDL` snapshot: one module per package, since its resources reference each
-/// other in both directions.
+/// `WebIDL` snapshot, one module per package.
 fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> Result<()> {
     let json = fs::read_to_string(snapshot_path)
         .with_context(|| format!("Failed to read {}", snapshot_path.display()))?;

@@ -19,8 +19,13 @@ const $handles = new Map();
 function $handle(object) {
   let handle = $handles.get(object);
   if (handle === undefined) {
-    const [, cls] = $CLASSES.find(([name]) => object instanceof globalThis[name]);
-    handle = cls * $STRIDE + $objects.push(object) - 1;
+    const entry = $CLASSES.find(
+      ([name]) => globalThis[name] !== undefined && object instanceof globalThis[name],
+    );
+    if (entry === undefined) {
+      throw new TypeError(`${object} is an instance of no interface this package declares`);
+    }
+    handle = entry[1] * $STRIDE + $objects.push(object) - 1;
     $handles.set(object, handle);
   }
   return handle;
@@ -29,6 +34,10 @@ function $handle(object) {
 const $object = (handle) => $objects[handle % $STRIDE];
 const $some = (f) => (value) => (value === undefined ? undefined : f(value));
 const $nullable = (f) => (value) => (value === null ? undefined : f(value));
+const $someObject = $some($object);
+const $nullableHandle = $nullable($handle);
+const $someNumber = $some(Number);
+const $nullableBigInt = $nullable(BigInt);
 "#;
 
 /// Names JavaScript does not take as a parameter in a module, which is strict code.
@@ -195,39 +204,60 @@ fn to_guest(ty: &WadoType, value: &str) -> String {
     apply(conversion(ty).map(|(_, to_guest)| to_guest), value)
 }
 
-fn apply(function: Option<String>, value: &str) -> String {
+fn apply(function: Option<&str>, value: &str) -> String {
     function.map_or_else(|| value.to_string(), |f| format!("{f}({value})"))
 }
 
 /// The functions converting a `ty` to the DOM and back, where jco's own form
-/// differs: a handle for an object, a `BigInt` for a 64-bit integer. A `None`
-/// crosses as `undefined`, which the DOM reads as `null` or an omitted argument.
-fn conversion(ty: &WadoType) -> Option<(String, String)> {
+/// differs. A `None` crosses as `undefined`, which the DOM reads as `null`.
+fn conversion(ty: &WadoType) -> Option<(&'static str, &'static str)> {
     match ty {
-        WadoType::Named(_) => Some(("$object".to_string(), "$handle".to_string())),
-        WadoType::Borrow(inner) => conversion(inner),
-        WadoType::I64 | WadoType::U64 => Some(("Number".to_string(), "BigInt".to_string())),
-        WadoType::Option(inner) => conversion(inner).map(|(to_dom, to_guest)| {
-            (format!("$some({to_dom})"), format!("$nullable({to_guest})"))
-        }),
-        WadoType::Bool
-        | WadoType::I8
-        | WadoType::I16
-        | WadoType::I32
-        | WadoType::U8
-        | WadoType::U16
-        | WadoType::U32
-        | WadoType::F32
-        | WadoType::F64
-        | WadoType::String => None,
-        WadoType::Char
-        | WadoType::I128
-        | WadoType::U128
-        | WadoType::Result { .. }
-        | WadoType::List(_)
-        | WadoType::TreeMap(..)
-        | WadoType::Tuple(_)
-        | WadoType::Stream(_)
-        | WadoType::Future(_) => unreachable!("the WebIDL frontend lowers to no {ty:?}"),
+        WadoType::Option(inner) => Conversion::of(inner).map(|c| c.functions(true)),
+        ty => Conversion::of(ty).map(|c| c.functions(false)),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Conversion {
+    Handle,
+    BigInt,
+}
+
+impl Conversion {
+    fn of(ty: &WadoType) -> Option<Self> {
+        match ty {
+            WadoType::Named(_) => Some(Self::Handle),
+            WadoType::Borrow(inner) => Self::of(inner),
+            WadoType::I64 | WadoType::U64 => Some(Self::BigInt),
+            WadoType::Bool
+            | WadoType::I8
+            | WadoType::I16
+            | WadoType::I32
+            | WadoType::U8
+            | WadoType::U16
+            | WadoType::U32
+            | WadoType::F32
+            | WadoType::F64
+            | WadoType::String => None,
+            WadoType::Option(_)
+            | WadoType::Char
+            | WadoType::I128
+            | WadoType::U128
+            | WadoType::Result { .. }
+            | WadoType::List(_)
+            | WadoType::TreeMap(..)
+            | WadoType::Tuple(_)
+            | WadoType::Stream(_)
+            | WadoType::Future(_) => unreachable!("the WebIDL frontend lowers to no {ty:?} here"),
+        }
+    }
+
+    const fn functions(self, optional: bool) -> (&'static str, &'static str) {
+        match (self, optional) {
+            (Self::Handle, false) => ("$object", "$handle"),
+            (Self::Handle, true) => ("$someObject", "$nullableHandle"),
+            (Self::BigInt, false) => ("Number", "BigInt"),
+            (Self::BigInt, true) => ("$someNumber", "$nullableBigInt"),
+        }
     }
 }

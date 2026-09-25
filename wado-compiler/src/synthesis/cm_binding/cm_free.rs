@@ -290,9 +290,8 @@ pub(super) fn synthesize_free_cm_flat(
     free_flat(&cm_shape(ty, ctx), 0, slots, next_local, locals)
 }
 
-/// Free the buffers of a value occupying `slots[base..]`, mirroring the slot
-/// order `flatten_export_type` assigns: fields end to end, a variant's cases
-/// joined onto the slots right after its discriminant.
+/// Free the buffers of a value occupying `slots[base..]`, in the slot order
+/// `CmInterfaceRegistry::cm_flatten` assigns.
 fn free_flat(
     shape: &CmShape,
     base: usize,

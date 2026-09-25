@@ -2,7 +2,10 @@
 # Compile src/main.wado and bundle it with jco's browser shims into build/.
 set -e -o pipefail
 
-command -v node >/dev/null || exec mise exec -- "$0" "$@"
+if ! command -v node >/dev/null; then
+  [ -z "${WADO_MISE_EXEC:-}" ] || { echo "error: node not found, even under mise" >&2; exit 1; }
+  WADO_MISE_EXEC=1 exec mise exec -- "$0" "$@"
+fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"

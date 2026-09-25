@@ -32,7 +32,8 @@ for (const [file, bytes] of Object.entries(files)) {
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, bytes);
 }
-for (const file of glue) {
+const entry = new TextDecoder().decode(files[`${name}.js`]);
+for (const file of glue.filter((file) => entry.includes(`./web-${file}`))) {
   await copyFile(join(glueDir, file), join(outDir, `web-${file}`));
 }
 await writeFile(join(outDir, "package.json"), '{"type":"module"}\n');
