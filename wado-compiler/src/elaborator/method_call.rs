@@ -873,8 +873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if !subst_ctx.is_empty() {
-            return_type =
-                subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+            return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
         }
 
         // Deferred-inference solve point: a hole that flowed in from an
@@ -905,7 +904,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             expected_param_types
                 .iter()
-                .map(|&t| subst_ctx.substitute(t, &mut self.tysys.type_table.borrow_mut()))
+                .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
                 .collect()
         };
         if !method_type_args.is_empty() {
@@ -2148,8 +2147,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let method_params = self.qualified_method_own_slots(&struct_name, &static_call.method);
             let subst_ctx = SubstitutionContext::new().bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
-                return_type =
-                    subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+                return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
             }
         }
 
@@ -3244,7 +3242,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !impl_type_args.is_empty() || !method_type_args.is_empty() {
             let mut combined = impl_type_args.to_vec();
             combined.extend_from_slice(method_type_args);
-            return_type = self.tysys.substitute_type_params(return_type, &combined);
+            return_type = self.substitute_in_frame(return_type, &combined);
         }
 
         if let Some((newtype_id, base_type_id, _)) = newtype_dispatch

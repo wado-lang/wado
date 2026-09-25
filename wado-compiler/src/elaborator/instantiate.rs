@@ -6,7 +6,7 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, SubstitutionContext, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -111,6 +111,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .substitute_type_params(ty, &inst.subst)
+    }
+
+    /// `type_id` with each `TypeParam { index: i }` replaced by `type_args[i]`,
+    /// read at this frame: a projection the substitution reaches is answered.
+    pub(super) fn substitute_in_frame(&mut self, type_id: TypeId, type_args: &[TypeId]) -> TypeId {
+        let substituted = self.tysys.substitute_type_params(type_id, type_args);
+        self.answer_frame_projections(substituted)
+    }
+
+    /// [`Self::substitute_in_frame`] for a substitution bound by name.
+    pub(super) fn substitute_ctx_in_frame(
+        &mut self,
+        subst: &SubstitutionContext,
+        type_id: TypeId,
+    ) -> TypeId {
+        let substituted = subst.substitute(type_id, &mut self.tysys.type_table.borrow_mut());
+        self.answer_frame_projections(substituted)
     }
 
     /// [`Self::instantiate_type`] over a signature's parameter list.

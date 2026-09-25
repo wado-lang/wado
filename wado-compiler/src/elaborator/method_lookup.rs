@@ -3173,7 +3173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         if !subst.is_empty() {
-            return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+            return_type = self.substitute_ctx_in_frame(&subst, return_type);
         }
 
         let defaults: Vec<(String, Option<ast::Expr>)> = method_param_names

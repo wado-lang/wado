@@ -264,7 +264,14 @@ impl Invocation {
     #[must_use]
     pub fn identity_tuple(
         &self,
-    ) -> (&GeneratorModule, &str, &str, &[InvocationPath], &str, Vec<u8>) {
+    ) -> (
+        &GeneratorModule,
+        &str,
+        &str,
+        &[InvocationPath],
+        &str,
+        Vec<u8>,
+    ) {
         (
             &self.module,
             &self.invoked_as,

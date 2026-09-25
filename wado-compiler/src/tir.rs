@@ -4310,27 +4310,40 @@ impl TypeTable {
     /// Whether `id` (recursively) mentions an associated-type projection
     /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
+        !self.assoc_type_projections(id).is_empty()
+    }
+
+    /// Every associated-type projection `id` mentions, outermost first.
+    pub fn assoc_type_projections(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.collect_assoc_type_projections(id, &mut out);
+        out
+    }
+
+    fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
         match self.get(id) {
-            ResolvedType::AssocTypeProjection { .. } => true,
+            ResolvedType::AssocTypeProjection { .. } => out.push(id),
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_assoc_type_projection(*inner),
+            | ResolvedType::Reactive(inner) => self.collect_assoc_type_projections(*inner, out),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } => {
-                params
-                    .iter()
-                    .any(|p| self.contains_assoc_type_projection(*p))
-                    || self.contains_assoc_type_projection(*return_type)
+                for &p in params {
+                    self.collect_assoc_type_projections(p, out);
+                }
+                self.collect_assoc_type_projections(*return_type, out);
             }
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.contains_assoc_type_projection(*t)),
-            _ => false,
+            | ResolvedType::GenericResource { type_args, .. } => {
+                for &t in type_args {
+                    self.collect_assoc_type_projections(t, out);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -4420,6 +4433,7 @@ impl TypeTable {
     /// `Newtype`, a pack's mapped element, and the bindings a projection carries
     /// to be answered are not what a use site is still waiting on. Reading them
     /// as such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
+    /// A projection's base is: `?T::Value` waits on `?T`.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => true,

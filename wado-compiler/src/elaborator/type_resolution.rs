@@ -2,8 +2,9 @@
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, SlotProjections, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -1193,6 +1194,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })?;
         let resolved = self.in_bound_frame(&scoped, &space, |e| e.resolve_type(&written));
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
+    }
+
+    /// `ty` with each projection over this frame's parameters answered by its
+    /// bounds: a use site handing `C` to `T` in `&T::Value` reads `C::Value`.
+    pub(super) fn answer_frame_projections(&mut self, ty: TypeId) -> TypeId {
+        let asked: Vec<(u32, String, DefId, String)> = {
+            let table = self.tysys.type_table.borrow();
+            table
+                .assoc_type_projections(ty)
+                .into_iter()
+                .filter_map(|p| {
+                    let ResolvedType::AssocTypeProjection {
+                        param_id,
+                        owning_trait,
+                        assoc_name,
+                        ..
+                    } = table.get(p)
+                    else {
+                        unreachable!("assoc_type_projections answers projections");
+                    };
+                    let ResolvedType::TypeParam { index, name } = table.get(*param_id) else {
+                        return None;
+                    };
+                    Some((*index, name.clone(), *owning_trait, assoc_name.clone()))
+                })
+                .collect()
+        };
+        let mut answers = SlotProjections::default();
+        for (slot, base_name, trait_, assoc) in asked {
+            if let Some(answer) = self.frame_projection_of_trait(&base_name, trait_, &assoc) {
+                answers.entry(slot).or_default().push((assoc, answer));
+            }
+        }
+        if answers.is_empty() {
+            return ty;
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .substitute_type_params_with(ty, &IndexMap::default(), &answers)
     }
 
     /// What `bounds` say the bounded type's own associated types are, as this

@@ -1484,8 +1484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type =
-                                self.tysys.substitute_type_params(*ftype, &type_args);
+                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -2875,7 +2874,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
                     _ => Vec::new(),
                 };
-                let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
+                let payload_type = self.substitute_in_frame(case.payload, &type_args);
                 Some(Box::new(self.exh_pattern(p, payload_type)?))
             }
             None => None,
@@ -3853,7 +3852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if type_args.is_empty() {
                             *type_id
                         } else {
-                            self.tysys.substitute_type_params(*type_id, &type_args)
+                            self.substitute_in_frame(*type_id, &type_args)
                         }
                     })
                 else {

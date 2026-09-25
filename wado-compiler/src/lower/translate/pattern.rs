@@ -915,7 +915,15 @@ impl<'a> PatternLowerer<'a> {
                 name, local_index, ..
             } => {
                 let mut stmts = Vec::new();
-                self.emit_binding_let(name, *local_index, false, value, span, type_table, &mut stmts);
+                self.emit_binding_let(
+                    name,
+                    *local_index,
+                    false,
+                    value,
+                    span,
+                    type_table,
+                    &mut stmts,
+                );
                 stmts.push(TirStmt::new(TirStmtKind::Expr(continuation), span));
                 let block = TirBlock::new(stmts, span);
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)

@@ -1006,7 +1006,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let mut payload_type = case_data.payload;
                 if !type_args.is_empty() {
-                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
+                    payload_type = self.substitute_in_frame(payload_type, &type_args);
                 } else if let Some(expected) = expected_type {
                     // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
                     let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
@@ -1334,7 +1334,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         combined_type_args.extend_from_slice(&method_type_args);
                         raw_param_types
                             .iter()
-                            .map(|&t| self.tysys.substitute_type_params(t, &combined_type_args))
+                            .map(|&t| self.substitute_in_frame(t, &combined_type_args))
                             .collect()
                     };
                 self.recoerce_literal_args(&call.args, &mut args, &substituted);
@@ -1698,7 +1698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         param_types
                             .iter()
-                            .map(|&t| self.tysys.substitute_type_params(t, &method_type_args))
+                            .map(|&t| self.substitute_in_frame(t, &method_type_args))
                             .collect()
                     };
                     self.recoerce_literal_args(&call.args, &mut args, &checked);
@@ -1901,7 +1901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // If we have explicit type args, substitute type parameters in the return type
         if !type_args.is_empty() {
-            return_type = self.tysys.substitute_type_params(return_type, &type_args);
+            return_type = self.substitute_in_frame(return_type, &type_args);
         }
 
         // WEP 2026-05-26: record the inferred /
@@ -1924,7 +1924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             declared_param_types
                 .iter()
-                .map(|&param| self.tysys.substitute_type_params(param, &type_args))
+                .map(|&param| self.substitute_in_frame(param, &type_args))
                 .collect()
         };
         // Looked up before padding and recorded below, so reify pads from the
@@ -2914,7 +2914,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(default_ty) = defaults[i]
             {
                 let snapshot = type_args.clone();
-                type_args[i] = self.tysys.substitute_type_params(default_ty, &snapshot);
+                type_args[i] = self.substitute_in_frame(default_ty, &snapshot);
             }
         }
     }
