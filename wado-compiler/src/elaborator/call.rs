@@ -306,18 +306,6 @@ impl CalleeIdentKind<'_> {
         }
     }
 
-    /// The variant a bare case call constructs; `None` for every other shape,
-    /// whose receiver is read from its own segment.
-    fn case_owner(&self) -> Option<DefId> {
-        match self {
-            Self::Case { owner, .. } => Some(*owner),
-            Self::AsIs(_)
-            | Self::Rewritten(_)
-            | Self::Operation { .. }
-            | Self::AbstractTypeParam { .. } => None,
-        }
-    }
-
     /// The reference site of the callee itself, which says which declaration a
     /// bare `name(…)` means. `Rewritten` is synthesised from an already-resolved
     /// `Self::` / `T::` prefix, so no walk saw it.
@@ -656,9 +644,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_site: Option<ast::AstId>,
         prefix: &str,
     ) -> Option<&VariantInfo> {
-        match callee_kind.case_owner() {
-            Some(owner) => self.type_lookup().variant_cases_of(owner),
-            None => self.lookup_variant_cases_at(receiver_site, prefix),
+        match callee_kind {
+            CalleeIdentKind::Case { owner, .. } => self.type_lookup().variant_cases_of(*owner),
+            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => None,
+            CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
+                self.lookup_variant_cases_at(receiver_site, prefix)
+            }
         }
     }
 
@@ -942,9 +933,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver_site = callee_kind.receiver_site();
         // Only a static method has a visibility of its own to check: a case's is
         // its type's, and an imported operation's `use` checked its own.
-        if callee_kind.case_owner().is_none()
-            && !matches!(callee_kind, CalleeIdentKind::Operation { .. })
-            && let Some((struct_name, _)) = effective_name.rsplit_once("::")
+        if !matches!(
+            callee_kind,
+            CalleeIdentKind::Case { .. } | CalleeIdentKind::Operation { .. }
+        ) && let Some((struct_name, _)) = effective_name.rsplit_once("::")
         {
             let receiver = self.impl_target_at(receiver_site, struct_name);
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);

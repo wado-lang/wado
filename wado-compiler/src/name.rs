@@ -1501,6 +1501,7 @@ pub fn resolve_module_path(base: &str, relative: &str) -> String {
     let (origin, base_path) = split_uri_origin(base);
     let joined = match base_path.rfind('/') {
         Some(pos) => format!("{}/{relative}", &base_path[..pos]),
+        None if origin.contains("//") => format!("/{relative}"),
         None => relative.to_string(),
     };
     format!("{origin}{}", normalize(&joined))
@@ -2507,6 +2508,10 @@ mod tests {
         assert_eq!(
             resolve_module_path("core:json/value.wado", "./parse.wado"),
             "core:json/parse.wado"
+        );
+        assert_eq!(
+            resolve_module_path("https://host:8080", "./c.wado"),
+            "https://host:8080/c.wado"
         );
         assert_eq!(resolve_module_path("/x.wado", "./c.wado"), "/c.wado");
         assert_eq!(
