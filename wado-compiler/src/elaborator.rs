@@ -2221,17 +2221,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 })
                 .unwrap_or_default();
 
-            // A default method's body is foreign AST owned by the trait module,
-            // and one `AstId` serves N impls, so each needs its own
-            // `ModuleSemantics` snapshot on `default_method_semantics` or the
-            // synthesis would overwrite its own per-node facts. `decls` and
-            // `imports` are cloned from the impl module for name resolution.
+            // One default body serves every impl taking it, so each impl records its
+            // per-node facts apart; declarations stay the impl module's own.
             for default_method in &default_methods {
                 let synthetic = ModuleSemantics {
                     bindings: ModuleBindings::default(),
                     imports: scope.sem.imports.clone(),
                     types: TypeAnnotations::default(),
-                    decls: scope.sem.decls.clone(),
+                    decls: std::mem::take(&mut scope.sem.decls),
                     default_method_semantics: hashmap::IndexMap::default(),
                 };
                 let ((), populated) = util::replaced(
@@ -2253,8 +2250,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                // The walk started from the impl module's decls, so its own are theirs
-                // plus what it minted: an anonymous shape's fields and its declaration.
                 scope.sem.decls = populated.decls.clone();
                 scope
                     .sem
