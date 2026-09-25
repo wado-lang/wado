@@ -2671,19 +2671,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return inferred;
         }
 
-        // Fast path: current-module cache (populated during item resolution).
-        let cached = if let (Some(tp), Some(rp)) = (
-            self.sem
-                .decls
-                .generic_function_params
-                .get(func_name)
-                .cloned(),
-            self.sem
-                .decls
-                .generic_function_resolved_param_types
-                .get(func_name)
-                .cloned(),
-        ) {
+        // Fast path: current-module cache (populated during item resolution),
+        // keyed by name, so only for a callee this module declares.
+        let declared_here = callee.module() == &self.current_module_source;
+        let cached = if declared_here
+            && let (Some(tp), Some(rp)) = (
+                self.sem
+                    .decls
+                    .generic_function_params
+                    .get(func_name)
+                    .cloned(),
+                self.sem
+                    .decls
+                    .generic_function_resolved_param_types
+                    .get(func_name)
+                    .cloned(),
+            ) {
             let decl_return = self
                 .sem
                 .decls
