@@ -1,0 +1,78 @@
+//! A sliding window's geometry, which `Conv` and `MaxPool` share: the
+//! attributes ONNX gives both, and the output extents they imply.
+
+use { AttrError, Node } from "./graph.wado";
+pub use { Window } from "./runtime/tensor.wado";
+
+/// The window of `kernel` extents that `node` slides over the spatial extents
+/// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode` does.
+pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, AttrError> {
+    let spatial = input.len();
+    let strides = ints(node, "strides", spatial, 1)?;
+    let dilations = ints(node, "dilations", spatial, 1)?;
+    let mode = match node.attr("auto_pad") {
+        Some(a) => a.values[0],
+        None => "NOTSET",
+    };
+    let mut pads = ints(node, "pads", 2 * spatial, 0)?;
+    let mut output: List<i32> = [];
+    for let i of 0..<spatial {
+        let reach = dilations[i] * (kernel[i] - 1) + 1;
+        if mode == "SAME_UPPER" || mode == "SAME_LOWER" {
+            let out = (input[i] + strides[i] - 1) / strides[i];
+            let total = i32::max((out - 1) * strides[i] + reach - input[i], 0);
+            let upper = if mode == "SAME_UPPER" { total / 2 } else { total - total / 2 };
+            pads[i] = upper;
+            pads[spatial + i] = total - upper;
+            output.push(out);
+            continue;
+        }
+        if mode == "VALID" {
+            pads[i] = 0;
+            pads[spatial + i] = 0;
+        } else if mode != "NOTSET" {
+            return Result::Err(AttrError { attr: "auto_pad", reason: `is ${mode}, which ONNX does not define` });
+        }
+        let span = input[i] + pads[i] + pads[spatial + i] - reach;
+        if span < 0 {
+            return Result::Err(
+                AttrError {
+                    attr: "kernel_shape",
+                    reason: `reaches ${reach} along spatial axis ${i}, past the ${input[i] + pads[i] + pads[spatial + i]} the padded input holds`,
+                },
+            );
+        }
+        let mut out = if ceil { (span + strides[i] - 1) / strides[i] } else { span / strides[i] } + 1;
+        // A last window that would start in the trailing pad covers no input.
+        if ceil && (out - 1) * strides[i] >= input[i] + pads[i] {
+            out -= 1;
+        }
+        output.push(out);
+    }
+    return Result::Ok(Window { kernel, strides, dilations, pads, output });
+}
+
+/// An integer list attribute of `count` entries no smaller than `least`, each
+/// `least` where the attribute is absent.
+pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i32>, AttrError> {
+    let Some(attr) = node.attr(name) else {
+        return Result::Ok(List::<i32>::filled(count, least));
+    };
+    if attr.values.len() != count {
+        return Result::Err(AttrError {
+            attr: name,
+            reason: `holds ${attr.values.len()} values and the operator reads ${count}`,
+        });
+    }
+    let mut values: List<i32> = [];
+    for let text of attr.values {
+        let Ok(v) = i32::from_str(&text) else {
+            return Result::Err(AttrError { attr: name, reason: `holds '${text}', which is not an integer` });
+        };
+        if v < least {
+            return Result::Err(AttrError { attr: name, reason: `holds ${v}, below ${least}` });
+        }
+        values.push(v);
+    }
+    return Result::Ok(values);
+}

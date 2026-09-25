@@ -1311,8 +1311,10 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     {
                         continue;
                     }
-                    if field_idx < tir_struct.fields.len() {
-                        let field_type_id = tir_struct.fields[field_idx].type_id;
+                    // A field is found by name: an erased `()` field shifts positions.
+                    if let Some(tir_field) = tir_struct.fields.iter().find(|f| f.name == field.name)
+                    {
+                        let field_type_id = tir_field.type_id;
                         let wir_type = ctx.type_id_to_wir_type_pending(type_table, field_type_id);
                         if !is_abstract_ref(&wir_type) {
                             // Make struct fields non-nullable (same as register_struct).
@@ -1331,14 +1333,24 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                         type_args: elements,
                         ..
                     } = type_table.get(type_id)
+<<<<<<< HEAD
                         && type_table.is_tuple(type_id)
                         && field_idx < elements.len()
+||||||| 014361be8
+                        && TypeTable::is_tuple_type(type_table.def_name(*def))
+                        && field_idx < elements.len()
+=======
+                        && TypeTable::is_tuple_type(type_table.def_name(*def))
+>>>>>>> origin/main
                     {
                         // Check if this tuple maps to the same WIR type
                         if let Some(wir_tid) = ctx.tuple_type_map.get(elements)
                             && wir_tid.index() == u32::try_from(wir_idx).unwrap_or(u32::MAX)
                         {
-                            let elem_type_id = elements[field_idx];
+                            let elem_type_id = elements[field
+                                .name
+                                .parse::<usize>()
+                                .expect("a tuple field is named by its element index")];
                             let wir_type =
                                 ctx.type_id_to_wir_type_pending(type_table, elem_type_id);
                             if !is_abstract_ref(&wir_type) {

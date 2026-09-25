@@ -1,0 +1,200 @@
+//! Text in, text out: a tiny GPT-2 continues a prompt one greedy token at a
+//! time. Its weights are random, so the continuation is noise, but the same
+//! noise onnxruntime picks.
+//!
+//!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
+//!
+//! The graph is compiled for a fixed context. A shorter sequence is padded on
+//! the right: attention is causal, so no real position reads the padding.
+
+use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
+use { from_string } from "core:json";
+use { tiny } from "./gpt2_tokenizer.wado";
+use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                // `sequence_length` is CONTEXT.
+                dims: { batch_size: 1, sequence_length: 32 },
+                outputs: ["logits"],
+                layout: [
+                    {
+                        pattern: "input_ids",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "attention_mask",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "transformer.wte.weight",
+                        axes: ["Vocab", "Embed"],
+                    },
+                    {
+                        pattern: "transformer.wpe.weight",
+                        axes: ["Pos", "Embed"],
+                    },
+                    {
+                        pattern: "*ln_1.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*ln_2.*",
+                        axes: ["Embed"],
+                    },
+                    {
+                        pattern: "*c_attn.weight",
+                        axes: ["Embed", "Qkv"],
+                    },
+                    {
+                        pattern: "*c_attn.bias",
+                        axes: ["Qkv"],
+                    },
+                    {
+                        pattern: "*attn.c_proj.weight",
+                        axes: ["(Head Dim)", "Embed"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.weight",
+                        axes: ["Embed", "Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_fc.bias",
+                        axes: ["Inner"],
+                    },
+                    {
+                        pattern: "*mlp.c_proj.weight",
+                        axes: ["Inner", "Embed"],
+                    },
+                    {
+                        pattern: "onnx::MatMul_1588",
+                        axes: ["Embed", "Vocab"],
+                    },
+                    {
+                        pattern: "/transformer/Reshape_1_output_0",
+                        axes: ["Batch", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_4_output_0",
+                        axes: ["Batch", "Head", "Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_5_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                    {
+                        pattern: "*/c_attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Qkv"],
+                    },
+                    {
+                        pattern: "*/c_proj/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/c_fc/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Inner"],
+                    },
+                    {
+                        pattern: "*/attn/Split_output_*",
+                        axes: ["Batch", "Seq", "Embed"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_1_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Reshape_2_output_0",
+                        axes: ["Batch", "Seq", "Head", "Dim"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_4_output_0",
+                        axes: ["Batch", "Head", "Seq", "Seq"],
+                    },
+                ],
+            },
+        },
+    };
+
+global CONTEXT: i32 = 32;
+global STEPS: i32 = 8;
+
+/// `prompt` extended by `steps` tokens, each the one the model ranks first.
+fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
+    assert !prompt.is_empty() && prompt.len() + steps <= CONTEXT;
+    let mut ids = *prompt;
+    for let _ of 0..<steps {
+        let mut input: List<i64> = [];
+        let mut mask: List<i64> = [];
+        for let i of 0..<CONTEXT {
+            let real = i < ids.len();
+            input.push(if real { ids[i] as i64 } else { 0 });
+            mask.push(if real { 1 } else { 0 });
+        }
+        let logits = gpt2::forward(
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+                data: input,
+                extents: [1, CONTEXT],
+            },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+                data: mask,
+                extents: [1, CONTEXT],
+            },
+            weights,
+        );
+        let vocab = logits.extents[2];
+        let row = (ids.len() - 1) * vocab;
+        let mut best = 0;
+        for let v of 1..<vocab {
+            if logits.data[row + v] > logits.data[row + best] {
+                best = v;
+            }
+        }
+        ids.push(best);
+    }
+    return ids;
+}
+
+export fn run() with (Stdout, Stderr, Environment) {
+    let mut prompt = args().join(" ");
+    if prompt.is_empty() {
+        prompt = "Hello, my name is";
+    }
+    let tokenizer = tiny();
+    let ids = tokenizer.encode(&prompt);
+    if ids.is_empty() || ids.len() + STEPS > CONTEXT {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${CONTEXT - STEPS}`);
+        return;
+    }
+    println(tokenizer.decode(&greedy(&ids, STEPS, &gpt2::Weights::embedded())));
+}
+
+struct Generated {
+    prompt: String,
+    ids: List<i32>,
+    generated: List<i32>,
+    text: String,
+}
+
+struct Oracle {
+    generate: List<Generated>,
+}
+
+#[timeout_ms(30000)]
+test "each prompt continues with the tokens onnxruntime picks greedily" {
+    let tokenizer = tiny();
+    let weights = gpt2::Weights::embedded();
+    let oracle = from_string::<Oracle>(#include_str("../tests/models/tiny-gpt2/generate.json")).unwrap();
+    for let case of oracle.generate {
+        assert tokenizer.encode(&case.prompt) == case.ids;
+        let mut want = case.ids;
+        want.extend(&case.generated);
+        let got = greedy(&case.ids, case.generated.len(), &weights);
+        assert got == want;
+        assert tokenizer.decode(&got) == case.text;
+    }
+}

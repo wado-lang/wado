@@ -9,6 +9,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::{
     CompilerItem, CompilerItemKind, RegisterError, Resolved, parse_compiler_item_attrs,
 };
+use crate::component_model::wado_primitive_name_to_cm;
 use crate::hashmap::IndexSet;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
@@ -1236,6 +1237,52 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_contains_closure_inner(&type_table, type_id, &mut visited)
     }
 
+    /// Diagnose a closure in parameter `param` of the import `function`. A bare
+    /// closure crosses as a callback, which the host calls with scalars and handles.
+    pub(super) fn check_import_param_closure(
+        &mut self,
+        function: &str,
+        param: &str,
+        type_id: TypeId,
+        span: Span,
+    ) {
+        let callback = match self.tysys.type_table.borrow().get(type_id) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => Some((params.clone(), *return_type)),
+            _ => None,
+        };
+        let Some((params, return_type)) = callback else {
+            if self.type_contains_closure(type_id) {
+                let _ = self.emit(TypeError::ClosureAtCmBoundary {
+                    function: function.to_string(),
+                    position: format!("parameter '{param}'"),
+                    span,
+                });
+            }
+            return;
+        };
+        let tt = self.tysys.type_table.borrow();
+        let crosses = |ty: TypeId| {
+            tt.is_unrestricted_handle(ty)
+                || matches!(
+                    tt.get(tt.representation_head(ty)),
+                    ResolvedType::Primitive(p) if wado_primitive_name_to_cm(p.as_str()).is_some()
+                )
+        };
+        let admitted = return_type == TypeTable::UNIT && params.iter().all(|&p| crosses(p));
+        drop(tt);
+        if !admitted {
+            let _ = self.emit(TypeError::CallbackAtCmBoundary {
+                function: function.to_string(),
+                param: param.to_string(),
+                span,
+            });
+        }
+    }
+
     /// Whether `type_id` is, or contains anywhere within it, a `Slice<T>` — a
     /// reference view, which has no Component Model representation. A nested
     /// one degrades just as loudly as a top-level one, so the search reaches
@@ -1747,6 +1794,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
             scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
+            // The bare `#[cm("...")]` payload, unsplit on `#`, recorded on the
+            // signature so every call site reads the same one.
+            let cm_name = method.attrs.iter().find_map(Attribute::cm_identifier);
+            if cm_name.is_some() {
+                for param in &params {
+                    scope.check_import_param_closure(
+                        &method.name,
+                        &param.name,
+                        param.type_id,
+                        param.span,
+                    );
+                }
+                if scope.type_contains_closure(return_type) {
+                    let _ = scope.emit(TypeError::ClosureAtCmBoundary {
+                        function: method.name.clone(),
+                        position: "return type".to_string(),
+                        span: method.span,
+                    });
+                }
+            }
             if method.is_async
                 && scope
                     .tysys
@@ -1760,10 +1827,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span: method.span,
                 });
             }
-            // The bare `#[cm("...")]` payload, unsplit on `#`, recorded on the
-            // signature so every call site reads the same one.
-            let cm_name = method.attrs.iter().find_map(Attribute::cm_identifier);
-
             let self_kind = if self_type.is_some() {
                 method
                     .params
@@ -2156,8 +2219,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut param_types = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let type_id = scope.resolve_type(&param.ty);
-            // Closures cannot cross the Component Model boundary.
-            if crosses_cm_boundary && scope.type_contains_closure(type_id) {
+            if func.is_cm_import() {
+                scope.check_import_param_closure(&func.name, &param.name, type_id, param.span);
+            } else if func.is_export && scope.type_contains_closure(type_id) {
                 let _ = scope.emit(TypeError::ClosureAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),

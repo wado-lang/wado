@@ -847,15 +847,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             } else {
                 BuiltinRegistry::build_from_stdlib(&type_table)
             };
-            // Fold in `#[canonical(...)]` no-body declarations from
-            // loader-synthesised wasm-asset modules so calls into a
-            // wat/wasm asset's exports lower through the same TirImport
-            // path as `core:builtin` declarations.  Stdlib wasm assets
-            // (e.g. `core:libm.wat`) are already in
+            // Stdlib wasm assets (e.g. `core:libm.wat`) are already in
             // `snapshot.state.tysys.builtin_registry`.
             for (ms, module) in modules {
-                if matches!(ms, ModuleSource::Wasm { .. }) && !stdlib_set.contains(ms) {
-                    registry.register_wasm_module(module, &type_table);
+                if ms.is_wasm_asset() && !stdlib_set.contains(ms) {
+                    registry.register_wasm_module(ms, module, &type_table);
                 }
             }
             registry

@@ -1,0 +1,147 @@
+//! MNIST-12 from the ONNX Model Zoo, compiled ahead of time with the weights it
+//! carries, classifying digits drawn below as white strokes on black.
+//!
+//! Every axis is named below, so each convolution's channels, each window's
+//! grid, and the flattened features the last layer contracts all check at
+//! build time.
+//!
+//!     wado run package-loam/example/mnist.wado
+
+use { println, Stdout } from "core:cli";
+use mnist from "../tests/models/mnist-12/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "Input3",
+                        axes: ["Batch", "Gray", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Parameter5",
+                        axes: ["Feat1", "Gray", "K1Row", "K1Col"],
+                    },
+                    {
+                        pattern: "Parameter6",
+                        axes: ["Feat1", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Convolution28_Output_0",
+                        axes: ["Batch", "Feat1", "Row", "Col"],
+                    },
+                    {
+                        pattern: "Pooling66_Output_0",
+                        axes: ["Batch", "Feat1", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Parameter87",
+                        axes: ["Feat2", "Feat1", "K2Row", "K2Col"],
+                    },
+                    {
+                        pattern: "Parameter88",
+                        axes: ["Feat2", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Convolution110_Output_0",
+                        axes: ["Batch", "Feat2", "Row2", "Col2"],
+                    },
+                    {
+                        pattern: "Pooling160_Output_0",
+                        axes: ["Batch", "Feat2", "Row3", "Col3"],
+                    },
+                    {
+                        pattern: "Parameter193",
+                        axes: ["Feat2", "Row3", "Col3", "Digit"],
+                    },
+                    {
+                        pattern: "Parameter194",
+                        axes: ["Batch", "Digit"],
+                    },
+                ],
+            },
+        },
+    };
+
+global SEVEN: List<String> = [
+    "............................", "............................", "............................",
+    "............................", ".......##############.......", ".......##############.......",
+    "...................###......", "..................###.......", "..................###.......",
+    ".................###........", ".................###........", "................###.........",
+    "................###.........", "...............###..........", "...............###..........",
+    "..............###...........", "..............###...........", ".............###............",
+    ".............###............", "............###.............", "............###.............",
+    "...........###..............", "...........###..............", "............................",
+    "............................", "............................", "............................",
+    "............................",
+];
+
+global ZERO: List<String> = [
+    "............................", "............................", "............................",
+    "............................", "..........########..........", "........############........",
+    ".......####......####.......", "......####........####......", "......###..........###......",
+    ".....###............###.....", ".....###............###.....", ".....###............###.....",
+    ".....###............###.....", ".....###............###.....", ".....###............###.....",
+    ".....###............###.....", ".....###............###.....", "......###..........###......",
+    "......####........####......", ".......####......####.......", "........############........",
+    "..........########..........", "............................", "............................",
+    "............................", "............................", "............................",
+    "............................",
+];
+
+global ONE: List<String> = [
+    "............................", "............................", "............................",
+    "............................", ".............###............", "............####............",
+    "...........#####............", ".............###............", ".............###............",
+    ".............###............", ".............###............", ".............###............",
+    ".............###............", ".............###............", ".............###............",
+    ".............###............", ".............###............", ".............###............",
+    ".............###............", ".............###............", ".............###............",
+    "...........#######..........", "............................", "............................",
+    "............................", "............................", "............................",
+    "............................",
+];
+
+/// A drawn digit as the model reads one: white strokes on black, in `[0, 1]`.
+fn image_of(rows: &List<String>) -> mnist::Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> {
+    let mut data: List<f32> = [];
+    for let row of *rows {
+        assert row.len() == rows.len();
+        for let c of row.chars() {
+            data.push(if c == '#' { 1.0 } else { 0.0 });
+        }
+    }
+    return mnist::Tensor {
+        data,
+        extents: [
+            1, 1, rows.len(),
+            rows.len(),
+        ],
+    };
+}
+
+fn classify(image: &mnist::Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]>) -> i32 {
+    let logits = mnist::forward(image, &mnist::Weights::embedded());
+    let mut best = 0;
+    for let [digit, v] of logits.data.into_iter().enumerate() {
+        if v > logits.data[best] {
+            best = digit;
+        }
+    }
+    return best;
+}
+
+export fn run() with Stdout {
+    for let digit of [&SEVEN, &ZERO, &ONE] {
+        for let row of *digit {
+            println(row);
+        }
+        println(`predicted: ${classify(&image_of(digit))}`);
+    }
+}
+
+test "each drawn digit is classified as the digit it is" {
+    assert classify(&image_of(&SEVEN)) == 7;
+    assert classify(&image_of(&ZERO)) == 0;
+    assert classify(&image_of(&ONE)) == 1;
+}

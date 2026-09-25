@@ -4,6 +4,12 @@
 pub resource EventTarget {
     #[cm("web:dom/event-target#new")]
     fn new() -> EventTarget;
+    #[cm("web:dom/event-target#add-event-listener")]
+    #[cm_params("self", "type", "callback", "options")]
+    fn add_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool>);
+    #[cm("web:dom/event-target#remove-event-listener")]
+    #[cm_params("self", "type", "callback", "options")]
+    fn remove_event_listener(&self, type: String, callback: fn mut(Event) with Dom, options: Option<bool>);
     #[cm("web:dom/event-target#dispatch-event")]
     #[cm_params("self", "event")]
     fn dispatch_event(&self, event: Event) -> bool;
@@ -1468,6 +1474,12 @@ pub resource Window extends EventTarget {
     #[cm("web:dom/window#clear-interval")]
     #[cm_params("self", "id")]
     fn clear_interval(&self, id: Option<i32>);
+    #[cm("web:dom/window#queue-microtask")]
+    #[cm_params("self", "callback")]
+    fn queue_microtask(&self, callback: fn mut() with Dom);
+    #[cm("web:dom/window#request-animation-frame")]
+    #[cm_params("self", "callback")]
+    fn request_animation_frame(&self, callback: fn mut(f64) with Dom) -> u32;
     #[cm("web:dom/window#cancel-animation-frame")]
     #[cm_params("self", "handle")]
     fn cancel_animation_frame(&self, handle: u32);

@@ -1,0 +1,21 @@
+// A wasm-asset export sharing a `core:builtin` intrinsic's name is the asset's
+// function: an intrinsic is one `core:builtin` declares, never a name alone.
+use { cold_path, count, black_box, i32_clz, select } from "./sub/wasm_import_builtin_names.wat" with { type: "wat" };
+
+test "an export named like cold_path is called" {
+    cold_path();
+    cold_path();
+    assert count() == 2;
+}
+
+test "exports named like value intrinsics run their own body" {
+    assert black_box(1) == 101;
+    assert i32_clz(1) == 1;
+    assert select(1, 2, 3) == 6;
+}
+
+test "the intrinsics keep their own signatures beside the exports" {
+    assert builtin::select(true, 1.5, 2.5) == 1.5;
+    assert builtin::black_box("s") == "s";
+    assert builtin::i32_clz(1) == 31;
+}

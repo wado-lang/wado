@@ -21,7 +21,6 @@ use crate::synthesis::common::{
     synth_span,
 };
 
-use super::lift::tree_map_instance;
 use super::types::{
     LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
     cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
@@ -858,9 +857,12 @@ pub(super) fn synthesize_lower_map_to_buffer(
     let pair_size = layout.size as i32;
     let pair_align = layout.align as i32;
 
-    let (map_type_id, key_tid, value_tid) =
-        tree_map_instance(&ctx.type_table.borrow(), value.type_id)
-            .expect("a `map` lower is handed a `TreeMap<K, V>`");
+    let map_type_id = value.type_id;
+    let (key_tid, value_tid) = ctx
+        .type_table
+        .borrow()
+        .as_tree_map(map_type_id)
+        .expect("a `map` lower is handed a `TreeMap<K, V>`");
 
     let (
         map_head,

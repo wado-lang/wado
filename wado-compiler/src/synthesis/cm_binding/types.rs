@@ -769,13 +769,18 @@ fn check_cm_boundary_representable_inner(
                         recurse(a, Slot::Optional, visited)?;
                     }
                     Ok(())
+<<<<<<< HEAD
                 } else if item == Some(CompilerItem::TreeMap) {
+||||||| 014361be8
+                } else if type_table
+                    .compiler_item_def(CompilerItem::TreeMap)
+                    .is_some_and(|tree_map| tree_map == *def)
+                {
+=======
+                } else if let Some((key, value)) = type_table.as_tree_map(type_id) {
+>>>>>>> origin/main
                     // `map<K, V>`: the key comes from the CM's `keytype`
                     // subset, the value from any representable valtype.
-                    let [key, value] = type_args.as_slice() else {
-                        panic!("`TreeMap` is declared with two type parameters");
-                    };
-                    let (key, value) = (*key, *value);
                     if let Some(reason) = map_key_rejection(type_table, key) {
                         return Err(reason);
                     }

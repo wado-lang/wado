@@ -20,6 +20,7 @@ use crate::wir::{
     WirStructType, WirType, WirTypeDef, WirTypeId,
 };
 use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name};
+use crate::world_registry::WorldSurface;
 use crate::{nir, tir};
 
 /// Base offset for defined function `WirFuncId` indices.
@@ -1146,7 +1147,7 @@ impl<'a> WirContext<'a> {
             dead_global_indices,
             needed_canonicals,
             // Resolved by `build_wir_package` once `needed_canonicals` is final.
-            imported_cm_interfaces: Vec::new(),
+            world_surface: WorldSurface::default(),
             import_plan: Vec::new(),
             defined_func_base: DEFINED_FUNC_BASE,
             trait_bound_violations,

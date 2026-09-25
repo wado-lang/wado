@@ -5,7 +5,13 @@ use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
+<<<<<<< HEAD
 use crate::name::{FqTypeName, LocalMethodName};
+||||||| 014361be8
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
+=======
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
+>>>>>>> origin/main
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -17,8 +23,8 @@ use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::synthesis::template::has_reflect_kind;
 use crate::synthesis::traits::{
-    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
-    REFLECT_MEMBERS_ASSOC,
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
+    REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
 };
 use crate::{hashmap, tir};
 
@@ -569,22 +575,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn reflect_pack_bound_ty(
         &mut self,
         type_param_name: &str,
+<<<<<<< HEAD
         trait_: CompilerItem,
+||||||| 014361be8
+        reflect_trait_name: &str,
+=======
+        reflect_trait: CompilerItem,
+>>>>>>> origin/main
         assoc_name: &str,
     ) -> Option<TypeId> {
+<<<<<<< HEAD
         let trait_def = self
             .tysys
             .type_table
             .borrow()
             .compiler_items()
             .trait_def(trait_)?;
+||||||| 014361be8
+=======
+        let trait_ = self.tysys.compiler_trait_def(reflect_trait)?;
+>>>>>>> origin/main
         let pack_ast = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(type_param_name)?
             .iter()
+<<<<<<< HEAD
             .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
+||||||| 014361be8
+            .filter(|b| b.name == reflect_trait_name)
+=======
+            .filter(|b| self.tysys.resolutions.declared(b.id) == Some(trait_))
+>>>>>>> origin/main
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)
             .find_map(|assoc| match &assoc.ty {
@@ -1147,11 +1170,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn map_bound_pack(
         &mut self,
         type_param_name: &str,
+<<<<<<< HEAD
         trait_: CompilerItem,
+||||||| 014361be8
+        reflect_trait_name: &str,
+=======
+        reflect_trait: CompilerItem,
+>>>>>>> origin/main
         assoc_name: &str,
         elem: impl FnOnce(&mut TypeTable, &PackHead) -> TypeId,
     ) -> Option<TypeId> {
+<<<<<<< HEAD
         let pack_tuple = self.reflect_pack_bound_ty(type_param_name, trait_, assoc_name)?;
+||||||| 014361be8
+        let pack_tuple =
+            self.reflect_pack_bound_ty(type_param_name, reflect_trait_name, assoc_name)?;
+=======
+        let pack_tuple = self.reflect_pack_bound_ty(type_param_name, reflect_trait, assoc_name)?;
+>>>>>>> origin/main
         let mut tt = self.tysys.type_table.borrow_mut();
         let elems = tt.as_tuple(pack_tuple)?;
         let head = elems.iter().find_map(|&e| match tt.get(e) {
@@ -1180,11 +1216,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
+<<<<<<< HEAD
         trait_: CompilerItem,
+||||||| 014361be8
+        reflect_trait_name: &str,
+=======
+        reflect_trait: CompilerItem,
+>>>>>>> origin/main
         assoc_name: &str,
         member_struct_item: CompilerItem,
     ) -> Option<TypeId> {
+<<<<<<< HEAD
         self.map_bound_pack(type_param_name, trait_, assoc_name, |tt, head| {
+||||||| 014361be8
+        self.map_bound_pack(
+            type_param_name,
+            reflect_trait_name,
+            assoc_name,
+            |tt, head| {
+                let def = tt.require_compiler_item_def(member_struct_item);
+                let elem_param = tt.make_type_param(head.name.clone(), head.index);
+                tt.make_generic_instance(def, vec![self_ty, elem_param])
+            },
+        )
+=======
+        self.map_bound_pack(type_param_name, reflect_trait, assoc_name, |tt, head| {
+>>>>>>> origin/main
             let def = tt.require_compiler_item_def(member_struct_item);
             let elem_param = tt.make_type_param(head.name.clone(), head.index);
             tt.make_generic_instance(def, vec![self_ty, elem_param])
@@ -1420,6 +1477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !subject_is_type_param {
             return Some(self.scalar_concrete_members_ty(spec, self_ty));
         }
+<<<<<<< HEAD
         let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name) else {
             let trait_name = self
                 .tysys
@@ -1428,6 +1486,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compiler_items()
                 .trait_name(spec.trait_item)
                 .to_string();
+||||||| 014361be8
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(spec.trait_item)
+            .to_string();
+        let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name, &trait_name)
+        else {
+=======
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_name(spec.trait_item)
+            .to_string();
+        let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name) else {
+>>>>>>> origin/main
             let method = &static_call.method;
             let assoc = spec.members_assoc;
             let _ = self.emit(TypeError::UnknownFunction {
@@ -1453,16 +1531,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        use crate::synthesis::traits::{
-            REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
-            REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
-        };
         if matches!(
             self.tysys.type_table.borrow().get(subject),
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
         ) {
             return None;
         }
+<<<<<<< HEAD
         let spec = match self.tysys.on_bound_of(trait_)? {
             OnBoundTrait::ReflectTemplate => {
                 let holes = self.tysys.reflect_template_holes(subject)?;
@@ -1526,9 +1601,132 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | OnBoundTrait::RefMut
             | OnBoundTrait::Inspect => return None,
         };
+||||||| 014361be8
+        let (struct_trait, variant_trait, enum_trait, flags_trait, template_trait) = {
+            let tt = self.tysys.type_table.borrow();
+            let items = tt.compiler_items();
+            (
+                items.trait_name(CompilerItem::ReflectStruct).to_string(),
+                items.trait_name(CompilerItem::ReflectVariant).to_string(),
+                items.trait_name(CompilerItem::ReflectEnum).to_string(),
+                items.trait_name(CompilerItem::ReflectFlags).to_string(),
+                items.trait_name(CompilerItem::ReflectTemplate).to_string(),
+            )
+        };
+        if trait_name == template_trait {
+            let holes = self.tysys.reflect_template_holes(subject)?;
+            return match assoc_name {
+                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectTemplateHole,
+                    subject,
+                    &holes,
+                )),
+                _ => None,
+            };
+        }
+        if trait_name == struct_trait {
+            let members = self.reflect_struct_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_FIELD_TYPES_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_FIELD_SLOTS_ASSOC => {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
+                    Some(tt.make_tuple(slots))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectStructField,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if trait_name == variant_trait {
+            let members = self.reflect_variant_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_CASE_PAYLOADS_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectVariantCase,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+=======
+        let kind = self.tysys.on_bound_of(trait_)?;
+        if kind == OnBoundTrait::ReflectTemplate {
+            let holes = self.tysys.reflect_template_holes(subject)?;
+            return match assoc_name {
+                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectTemplateHole,
+                    subject,
+                    &holes,
+                )),
+                _ => None,
+            };
+        }
+        if kind == OnBoundTrait::ReflectStruct {
+            let members = self.reflect_struct_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_FIELD_TYPES_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_FIELD_SLOTS_ASSOC => {
+                    let mut tt = self.tysys.type_table.borrow_mut();
+                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
+                    Some(tt.make_tuple(slots))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectStructField,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+        if kind == OnBoundTrait::ReflectVariant {
+            let members = self.reflect_variant_subject(subject)?.member_types;
+            return match assoc_name {
+                REFLECT_CASE_PAYLOADS_ASSOC => {
+                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                }
+                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                    CompilerItem::ReflectVariantCase,
+                    subject,
+                    &members,
+                )),
+                _ => None,
+            };
+        }
+>>>>>>> origin/main
         if assoc_name != REFLECT_MEMBERS_ASSOC {
             return None;
         }
+<<<<<<< HEAD
+||||||| 014361be8
+        let spec = if trait_name == enum_trait {
+            ScalarReflectSpec::ENUM
+        } else if trait_name == flags_trait {
+            ScalarReflectSpec::FLAGS
+        } else {
+            return None;
+        };
+=======
+        let spec = if kind == OnBoundTrait::ReflectEnum {
+            ScalarReflectSpec::ENUM
+        } else if kind == OnBoundTrait::ReflectFlags {
+            ScalarReflectSpec::FLAGS
+        } else {
+            return None;
+        };
+>>>>>>> origin/main
         let subject_ty = self.tysys.type_table.borrow().get(subject).clone();
         if !spec.subject_matches(&subject_ty) {
             return None;

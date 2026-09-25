@@ -1,0 +1,93 @@
+//! Fixing a graph's symbolic extents and choosing its outputs before stage 0.
+
+use { TreeMap } from "core:collections";
+use { Graph, ValueInfo } from "./graph.wado";
+use { read } from "./onnx_text.wado";
+use { OptionConflict, bind_dims, keep_outputs } from "./specialize.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "an option the graph cannot take is an Error" {
+    is_error::<OptionConflict>();
+}
+
+fn dims_of(graph: &Graph, tensor: String) -> String {
+    for let declared of [&graph.inputs, &graph.outputs] {
+        for let vi of *declared {
+            if vi.name == tensor {
+                return `${vi.rank:?}`;
+            }
+        }
+    }
+    unreachable();
+}
+
+fn relu() -> Graph {
+    return read("g (float[N, 4] X) => (float[N, 4] Y) { Y = Relu(X) }").unwrap();
+}
+
+test "a bound dimension becomes static on every tensor declaring it" {
+    let mut graph = relu();
+    bind_dims(&mut graph, &({ N: 2 } as TreeMap<String, i32>)).unwrap();
+    assert dims_of(&graph, "X") == "Rank::Dims([Dim::Static(2), Dim::Static(4)])";
+    assert dims_of(&graph, "Y") == "Rank::Dims([Dim::Static(2), Dim::Static(4)])";
+}
+
+test "a dimension the graph never declares stops the build" {
+    let mut graph = relu();
+    let e = bind_dims(&mut graph, &({ M: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert e.option == "dims";
+    assert `${e}` == "dims: the graph declares no dimension M";
+}
+
+test "a negative extent stops the build" {
+    let mut graph = relu();
+    assert `${bind_dims(&mut graph, &({ N: -1 } as TreeMap<String, i32>)).unwrap_err()}` == "dims: N is -1, and an extent is not negative";
+}
+
+fn two_heads() -> Graph {
+    return read(
+        `g (float[4] X, float[4] U) => (float[4] Y, float[4] Z) <float[4] A, float[4] B> {
+            S = Add(X, A)
+            Y = Relu(S)
+            T = Mul(S, B)
+            Z = Add(T, U)
+        }`,
+    ).unwrap();
+}
+
+fn names_of(graph: &Graph) -> String {
+    let nodes: List<String> = graph.nodes.into_iter().map(|node| node.outputs[0]).collect();
+    return `${joined(&graph.inputs)} ${joined(&graph.initializers)} ${nodes.join(",")} ${joined(&graph.outputs)}`;
+}
+
+fn joined(values: &List<ValueInfo>) -> String {
+    let names: List<String> = values.into_iter().map(|vi| vi.name).collect();
+    return names.join(",");
+}
+
+test "keeping one output drops what only the other reads" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &["Y"]).unwrap();
+    assert names_of(&graph) == "X A S,Y Y";
+}
+
+test "the kept outputs take the order the option lists" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &["Z", "Y"]).unwrap();
+    assert names_of(&graph) == "X,U A,B S,Y,T,Z Z,Y";
+}
+
+test "no outputs listed keeps the graph whole" {
+    let mut graph = two_heads();
+    keep_outputs(&mut graph, &[]).unwrap();
+    assert names_of(&graph) == "X,U A,B S,Y,T,Z Y,Z";
+}
+
+test "an output the graph does not declare stops the build" {
+    let mut graph = two_heads();
+    let e = keep_outputs(&mut graph, &["S"]).unwrap_err();
+    assert e.option == "outputs";
+    assert `${e}` == "outputs: the graph declares no output S";
+}

@@ -12,7 +12,7 @@ directory itself, so a walk has a root case.
 ```wado
 use fs from "core:fs";
 
-let source = match fs::read_to_string("docs/spec.md") {
+let source = match fs::read_to_string("docs/spec-overview.md") {
     Ok(s) => s,
     Err(e) => {
         eprintln(`error: ${e}`);

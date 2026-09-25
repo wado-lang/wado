@@ -4,6 +4,7 @@
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::FqTraitName;
+use crate::tir::DeclarationLookup;
 
 /// Identity of a free function callee. `Declared` carries the module and name
 /// its one constructor reads off the table, so TIR emission needs none at hand;
@@ -66,6 +67,15 @@ impl CalleeRef {
         match self {
             Self::Declared { name, .. } | Self::Rendered { name, .. } => name,
         }
+    }
+
+    pub fn intrinsic(&self) -> Option<&str> {
+        DeclarationLookup {
+            module_source: self.module(),
+            name: self.name(),
+            generic_name: None,
+        }
+        .intrinsic()
     }
 }
 

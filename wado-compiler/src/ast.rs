@@ -2102,24 +2102,14 @@ pub enum UseItem {
         interface_name: String,
         /// Span of the interface name identifier — where the item starts.
         name_span: Span,
+        /// The whole item, through its closing `}`.
+        span: Span,
         functions: Vec<UseItemSimple>,
     },
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String, name_span: Span },
-}
-
-impl UseItem {
-    /// Where the item starts in source. `None` for the forms that *are* the
-    /// whole import list (`use _`, `use name`), which have no gap to sit in.
-    pub fn start(&self) -> Option<usize> {
-        match self {
-            UseItem::Simple { name_span, .. } => Some(name_span.start),
-            UseItem::InterfaceFunctions { name_span, .. } => Some(name_span.start),
-            UseItem::Wildcard | UseItem::Namespace { .. } => None,
-        }
-    }
 }
 
 /// Simple use item (used within effect function imports)
@@ -2145,8 +2135,16 @@ pub enum AttrValue {
     Int(i64),
     Float(f64),
     Bool(bool),
-    Array(Vec<AttrValue>),
+    Array(Vec<AttrItem>),
     Object(AttrObject),
+}
+
+/// One element of an attribute array, with the span of its value, which is
+/// what places a comment between two elements.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttrItem {
+    pub span: Span,
+    pub value: AttrValue,
 }
 
 /// An attribute object's entries, in parse order, each keyed by its name.
@@ -2163,6 +2161,7 @@ pub fn attr_value<'a>(object: &'a AttrObject, key: &str) -> Option<&'a AttrValue
 #[derive(Debug, Clone, PartialEq)]
 pub struct AttrEntry {
     pub key_span: Span,
+    pub value_span: Span,
     pub value: AttrValue,
 }
 
@@ -2184,15 +2183,6 @@ impl AttrValue {
             _ => None,
         }
     }
-
-    /// Borrow the inner array, if this is a [`AttrValue::Array`].
-    #[must_use]
-    pub fn as_array(&self) -> Option<&[AttrValue]> {
-        match self {
-            AttrValue::Array(a) => Some(a.as_slice()),
-            _ => None,
-        }
-    }
 }
 
 /// Import attributes for `with { ... }` clause.
@@ -2206,6 +2196,8 @@ impl AttrValue {
 pub struct ImportAttributes {
     /// Top-level key/value entries, in parse order.
     pub entries: AttrObject,
+    /// The braces, `{` through `}`.
+    pub span: Span,
 }
 
 impl ImportAttributes {
@@ -2881,6 +2873,17 @@ pub struct RangeExpr {
 }
 
 impl Expr {
+    /// The binding a field and index chain roots at: `x` of `x.f[i]`. `None`
+    /// where it roots in a temporary.
+    pub fn place_root_ident(&self) -> Option<&IdentExpr> {
+        match self {
+            Expr::Ident(id) => Some(id),
+            Expr::FieldAccess(fa) => fa.expr.place_root_ident(),
+            Expr::Index(idx) => idx.expr.place_root_ident(),
+            _ => None,
+        }
+    }
+
     /// Returns the [`AstId`] for this expression.
     ///
     /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,

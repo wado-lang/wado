@@ -1,0 +1,28 @@
+//! A folded output is returned as the literal the build wrote for it.
+
+use { Feat, Tensor, Weights, forward } from "./folded.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Feat"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "a folded scalar output comes back as a rank-0 tensor" {
+    let got: Tensor<f32, []> = forward(
+        &Tensor::<f32, [Feat]> {
+            data: [1.0, 2.0],
+            extents: [2],
+        },
+        &Weights {},
+    );
+    assert got.extents == [];
+    assert got.data == [0.5];
+}

@@ -53,7 +53,7 @@ interior references. It is not free, only element-free: a view is an ordinary
 value-semantic struct, so assigning one copies its three fields like any other.
 What it never copies is what it points at, however long that is.
 
-Two consequences are normative and belong in `docs/spec.md`. Both are
+Two consequences are normative and belong in the specification. Both are
 memory-safe under GC, and element access through a view is always a value copy.
 
 - Snapshot — a view keeps referring to the buffer it was created from, so a
@@ -311,5 +311,5 @@ declaration, no overloading, no implicit conversion" binds hardest.
 - [ ] Lower `Slice<T>` through the canonical ABI and map it in `wit_emit`, then
       narrow the definition-site error to lifting positions only.
 - [ ] The `wado-from-idl` `AsSlice` wrapper.
-- [ ] Document `Array<T>` and `Slice<T>` in `docs/spec.md` (CM type mapping,
+- [ ] Document `Array<T>` and `Slice<T>` in `docs/spec-*.md` (CM type mapping,
       snapshot/aliasing rules) and the cheatsheet.

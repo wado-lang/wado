@@ -412,13 +412,7 @@ fn collect_array_clone_element_types(
             // builtin like `array_clone` has no per-`T` record, so the
             // descriptor's `monomorph_info` is generic — only the node knows `T`).
             let func = callee_descriptor(descriptors, *func_id);
-            if func.module_source.is_core_builtin()
-                && (nir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
-                    || nir::matches_builtin(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                        "array_clone_prefix",
-                    ))
+            if matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix"))
                 && let Some(elem) = type_args.first().copied()
             {
                 out.insert(elem);
@@ -465,9 +459,14 @@ fn resolve_imports(
         }
     }
 
-    let is_builtin_func =
-        |f: &FreeFunctionName| f.module_source.is_builtin() || f.name.starts_with("builtin::");
+    let reaches_intrinsic = |prefix: &str| {
+        reachable.iter().any(|func_id| {
+            matches!(func_id, FunctionId::Free(f)
+                if f.module_source.is_core_builtin() && f.name.starts_with(prefix))
+        })
+    };
 
+<<<<<<< HEAD
     // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
     // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.
     for (interface, builtin) in [
@@ -482,16 +481,58 @@ fn resolve_imports(
         {
             used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
         }
+||||||| 014361be8
+    // Mark an ambient stdio function used when its `log_*` (panic /
+    // assert-diagnostic) builtin is reachable and the world provides that
+    // stream's sink — each stream gated on its own interface. In a sink-less
+    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
+    // which keys off the `func_map` this populates, so the two stay in
+    // agreement per stream and a purely-computational component stays
+    // import-free.
+    if project.provides_ambient_stdio_sink("Stdout")
+        && reachable.iter().any(|func_id| {
+            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+                name.starts_with("call_indirect_stdout")
+            })
+        })
+    {
+        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
+    }
+    if project.provides_ambient_stdio_sink("Stderr")
+        && reachable.iter().any(|func_id| {
+            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
+                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
+                name.starts_with("call_indirect_stderr")
+            })
+        })
+    {
+        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
+=======
+    // Mark an ambient stdio function used when its `log_*` (panic /
+    // assert-diagnostic) builtin is reachable and the world provides that
+    // stream's sink — each stream gated on its own interface. In a sink-less
+    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
+    // which keys off the `func_map` this populates, so the two stay in
+    // agreement per stream and a purely-computational component stays
+    // import-free.
+    if project.provides_ambient_stdio_sink("Stdout") && reaches_intrinsic("call_indirect_stdout") {
+        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
+    }
+    if project.provides_ambient_stdio_sink("Stderr") && reaches_intrinsic("call_indirect_stderr") {
+        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
+>>>>>>> origin/main
     }
 
     // Collect imports using registry lookup instead of hard-coded match
     let mut imports: IndexSet<NirImport> = IndexSet::default();
 
-    let add_import_by_name = |imports: &mut IndexSet<NirImport>, name: &str| {
-        if let Some(info) = project.builtin_registry.get(name)
+    let add_import = |imports: &mut IndexSet<NirImport>, source: &ModuleSource, name: &str| {
+        if let Some(info) = project.builtin_registry.get(source, name)
             && let Some(canonical_name) = &info.canonical_name
         {
             imports.insert(NirImport {
+                module_source: source.clone(),
                 namespace: info.namespace.clone(),
                 canonical_name: canonical_name.clone(),
                 func_name: name.to_string(),
@@ -504,15 +545,14 @@ fn resolve_imports(
     // Map reachable builtin function calls to imports via registry lookup
     for func_id in reachable {
         if let FunctionId::Free(f) = func_id
-            && is_builtin_func(f)
+            && f.module_source.is_builtin()
         {
-            let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-            add_import_by_name(&mut imports, name);
+            add_import(&mut imports, &f.module_source, &f.name);
         }
     }
 
     // realloc is always needed for memory management
-    add_import_by_name(&mut imports, "realloc");
+    add_import(&mut imports, &ModuleSource::builtin(), "realloc");
 
     // No `task-return` here: WIR translation types each delivery's canon from
     // the flat args at its own call site.
@@ -1952,7 +1992,7 @@ fn lazy_guard_global(
         return None;
     };
     let callee = callee_descriptor(descriptors, *func_id);
-    if !(callee.module_source.is_core_builtin() && callee.name == "is_uninitialized") {
+    if !callee.is_builtin_named("is_uninitialized") {
         return None;
     }
     let [arg] = args.as_slice() else {
@@ -2014,10 +2054,7 @@ impl GlobalGuards<'_> {
             return false;
         };
         (self.inert_functions.contains(func_id)
-            || callee_descriptor(self.descriptors, *func_id)
-                .builtin_name()
-                .as_deref()
-                == Some("builtin::cold_path"))
+            || callee_descriptor(self.descriptors, *func_id).is_builtin_named("cold_path"))
             && args
                 .iter()
                 .all(|arg| is_pure_nontrapping_operand_typed(body, arg.expr, Some(self.types)))

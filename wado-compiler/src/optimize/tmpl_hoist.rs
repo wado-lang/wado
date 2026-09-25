@@ -36,11 +36,9 @@ use cranelift_entity::EntityRef;
 /// callee ids, so each match is an integer `func_id` compare rather than a name
 /// read off the call node, plus the stdlib struct names the literals carry.
 ///
-/// Each callee is resolved by exact identity — its compiler item, or the
-/// builtin descriptor (`builtin_name` / `monomorphized_builtin_name`, the
-/// mechanism `loop_version_bce` uses for `builtin::array_set`) — never by
-/// substring, so a same-named user function is never captured. Builtins are
-/// *sets* over every monomorphized instance.
+/// Each callee is resolved by exact identity — its compiler item, or
+/// `FunctionRef::intrinsic` — never by name, so a same-named user function is
+/// never captured. Builtins are *sets* over every monomorphized instance.
 pub(super) struct TmplIdents {
     /// The stdlib `String::with_capacity` (the pre-lowered template init).
     with_capacity: IndexSet<FuncId>,
@@ -67,13 +65,14 @@ impl TmplIdents {
                 with_capacity.insert(id);
             }
             let descriptor = FunctionRef::from_resolved(&f, f.module_source.clone());
-            let builtin = descriptor
-                .builtin_name()
-                .or_else(|| descriptor.monomorphized_builtin_name());
-            if builtin.as_deref() == Some("builtin::array_new") {
-                array_new.insert(id);
-            } else if builtin.as_deref() == Some("builtin::ref.as_non_null") {
-                ref_as_non_null.insert(id);
+            match descriptor.intrinsic() {
+                Some("array_new") => {
+                    array_new.insert(id);
+                }
+                Some("ref.as_non_null") => {
+                    ref_as_non_null.insert(id);
+                }
+                _ => {}
             }
         }
         Self {

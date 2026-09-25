@@ -1,6 +1,6 @@
 //! An item reaches no further than the declarations its signature names.
 //!
-//! See `docs/spec.md`, "Signature reach".
+//! See `docs/spec-modules.md`, "Signature reach".
 
 use crate::ast::{
     AstId, AstVisitor, Block, EffectName, Function, GenericParam, ImplBlock, Item, Module,

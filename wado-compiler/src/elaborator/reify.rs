@@ -2419,7 +2419,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let is_marker = |s: &TirStmt| {
             matches!(&s.kind, TirStmtKind::Expr(e)
                 if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if func.builtin_name().as_deref() == Some("builtin::cold_path")))
+                    if func.is_builtin_named("cold_path")))
         };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes the rest of its block cold, which is where `block_cut`
@@ -2877,7 +2877,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, span)
+                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
@@ -2907,15 +2907,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
                     return tir;
                 }
-                // `expr as Ty` — emit `Cast` with the recorded target type,
-                // re-typing the same integer literal operand `resolve_cast`
-                // left out of the defaulted range check. annotate propagates
-                // that target to a direct literal operand but not through a
-                // `Neg`, so `-9e15 as i64` would otherwise emit an `i32.const`
-                // that truncates before the cast widens.
-                let target_is_int = self.tysys.type_table.borrow().is_integer(target_type);
+                // annotate types a direct literal operand as the target but not
+                // one under a `Neg`: `-9e15 as i64` would truncate as `i32.const`.
+                let numeric_target = self.tysys.type_table.borrow().is_numeric(target_type);
                 let inner = match int_literal_cast_operand(&cast.expr) {
-                    Some((lit, _, negated)) if target_is_int => {
+                    Some((lit, _, negated)) if numeric_target => {
                         let lit_tir = self.reify_literal(lit, target_type, ctx);
                         if negated {
                             TirExpr::new(
@@ -3075,6 +3071,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
                     ctx.address_taken_locals.insert(*index);
+                }
+                // A reborrow names the storage its operand already references;
+                // borrowing the deref would box a copy of a scalar.
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: referent,
+                    } = &inner.kind
+                    && self.tysys.type_table.borrow().type_key(referent.type_id)
+                        == self.tysys.type_table.borrow().type_key(recorded_type)
+                {
+                    return *referent.clone();
                 }
                 TirExpr::new(
                     TirExprKind::Unary {
@@ -6582,6 +6590,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
+        recorded_type: TypeId,
         span: Span,
     ) -> TirExpr {
         let mut elements: Vec<TirExpr> = Vec::new();
@@ -6707,7 +6716,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             } else {
                 let resolved = self.reify_expr(elem, ctx, None);
-                elem_types.push(resolved.type_id);
+                // A diverging element takes the type the tuple is expected to hold
+                // there, and stays `!` where nothing expects one.
+                let table = self.tysys.type_table.borrow();
+                let elem_type = match table.as_tuple(recorded_type) {
+                    Some(expected) if table.is_never(resolved.type_id) => {
+                        expected[elem_types.len()]
+                    }
+                    _ => resolved.type_id,
+                };
+                drop(table);
+                elem_types.push(elem_type);
                 elements.push(resolved);
             }
         }
@@ -7692,8 +7711,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
     /// `builtin::array_new_data`, or `List::from_le_bytes` over a prelude impl.
     fn reads_le_bytes(&self, func: &tir::FunctionRef, result: TypeId) -> bool {
-        if func.module_source.is_builtin() {
-            return func.name == ARRAY_NEW_DATA;
+        if let Some(intrinsic) = func.intrinsic() {
+            return intrinsic == ARRAY_NEW_DATA;
         }
         if !self.reads_prelude_le_bytes(result) {
             return false;
@@ -8956,7 +8975,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let inner = self.reify_expr(&cast.expr, ctx, None);
         let source_is_numeric = {
             let tt = self.tysys.type_table.borrow();
-            tt.is_integer(inner.type_id) || tt.is_float(inner.type_id)
+            tt.is_numeric(inner.type_id)
         };
         if !source_is_numeric {
             return Some(TirExpr::new(

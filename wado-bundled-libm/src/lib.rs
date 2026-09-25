@@ -160,6 +160,28 @@ pub extern "C" fn libm_round(x: f64) -> f64 {
     libm::round(x)
 }
 
+// Special functions (f64)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erf(x: f64) -> f64 {
+    libm::erf(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erfc(x: f64) -> f64 {
+    libm::erfc(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_tgamma(x: f64) -> f64 {
+    libm::tgamma(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_lgamma(x: f64) -> f64 {
+    libm::lgamma(x)
+}
+
 // Trigonometric functions (f32)
 
 #[unsafe(no_mangle)]
@@ -307,6 +329,28 @@ pub extern "C" fn libm_fmaf(x: f32, y: f32, z: f32) -> f32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn libm_roundf(x: f32) -> f32 {
     libm::roundf(x)
+}
+
+// Special functions (f32)
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erff(x: f32) -> f32 {
+    libm::erff(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_erfcf(x: f32) -> f32 {
+    libm::erfcf(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_tgammaf(x: f32) -> f32 {
+    libm::tgammaf(x)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn libm_lgammaf(x: f32) -> f32 {
+    libm::lgammaf(x)
 }
 
 #[cfg(target_arch = "wasm32")]

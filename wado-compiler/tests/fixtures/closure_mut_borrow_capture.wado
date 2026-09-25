@@ -1,0 +1,46 @@
+// A capture borrowed `&mut`, or indexed before a `&mut self` method, is written
+// in place. A write through a reference it holds leaves it alone: that is `fn`.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) {
+    *x += 1;
+}
+
+fn call(mut f: fn mut()) {
+    f();
+}
+
+fn call_plain(f: fn()) {
+    f();
+}
+
+struct Holder {
+    r: &mut List<i32>,
+}
+
+export fn run() with Stdout {
+    let mut n = 0;
+    let mut f = || bump(&mut n);
+    f();
+    f();
+    let mut outer = || {
+        let mut inner = || bump(&mut n);
+        inner();
+    };
+    outer();
+    call(|| call(|| bump(&mut n)));
+    println(`n=${n}`);
+
+    let mut grid: List<List<i32>> = [[]];
+    call(|| grid[0].push(3));
+    println(`grid=${grid:?}`);
+
+    let mut xs: List<i32> = [];
+    let mut h = Holder { r: &mut xs };
+    call_plain(|| h.r.push(1));
+    println(`xs=${xs:?}`);
+}
+
+__DATA__
+{"stdout": "n=4\ngrid=[[3]]\nxs=[1]\n"}

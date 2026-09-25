@@ -206,8 +206,8 @@ fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{AttrEntry, AttrObject, AttrValue};
     use crate::kiln::invocation::{DeclSite, GeneratorModule};
-    use crate::kiln::options::{CanonicalValue, OptionsDescriptor};
     use crate::kiln::options_check::CanonicalOptions;
     use crate::token::Span;
 
@@ -326,10 +326,16 @@ mod tests {
     fn dedup_rejects_conflicting_duplicates() {
         let a1 = inv("a", "s.proto", &[], "build/kiln/a");
         let mut a2 = inv("a", "s.proto", &[], "build/kiln/a");
-        a2.options = CanonicalOptions {
-            descriptor: OptionsDescriptor::default(),
-            values: vec![("k".to_string(), CanonicalValue::Bool(true))],
-        };
+        let mut written = AttrObject::default();
+        written.insert(
+            "k".to_string(),
+            AttrEntry {
+                key_span: Span::default(),
+                value_span: Span::default(),
+                value: AttrValue::Bool(true),
+            },
+        );
+        a2.raw_options = Some(AttrValue::Object(written));
         let err = build_plan(vec![a1, a2]).unwrap_err();
         match err {
             PlanError::DuplicateGenerator { from, sites } => {

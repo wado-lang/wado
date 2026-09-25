@@ -12,8 +12,8 @@ use crate::cm_abi;
 use crate::component_model::{CmVariantCase, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField,
-    TypeId, TypeTable,
+    TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStructField, TypeId,
+    TypeTable,
 };
 
 use crate::synthesis::common::{
@@ -836,18 +836,6 @@ pub(super) fn synthesize_lift_list(
     local_ref(result_local, "$result", array_type_id)
 }
 
-/// `(TreeMap<K, V>, K, V)` when `tid` is a `TreeMap<K, V>`, else `None`.
-pub(super) fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
-    let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
-        return None;
-    };
-    let is_tree_map = tt.is_compiler_item(*def, CompilerItem::TreeMap);
-    match type_args.as_slice() {
-        [key, value] if is_tree_map => Some((tid, *key, *value)),
-        _ => None,
-    }
-}
-
 /// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
 /// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
 pub(super) fn synthesize_lift_map(
@@ -867,14 +855,15 @@ pub(super) fn synthesize_lift_map(
 
     let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign, templates) = {
         let mut tt = ctx.type_table.borrow_mut();
-        let (map_type_id, key_tid, value_tid) =
-            if let Some(found) = override_map_ty.and_then(|tid| tree_map_instance(&tt, tid)) {
-                found
-            } else {
-                let key_tid = ctx.cm_type_id(key_ty, &mut tt);
-                let value_tid = ctx.cm_type_id(value_ty, &mut tt);
-                (tt.make_tree_map(key_tid, value_tid), key_tid, value_tid)
-            };
+        let (map_type_id, key_tid, value_tid) = if let Some(tid) = override_map_ty
+            && let Some((key_tid, value_tid)) = tt.as_tree_map(tid)
+        {
+            (tid, key_tid, value_tid)
+        } else {
+            let key_tid = ctx.cm_type_id(key_ty, &mut tt);
+            let value_tid = ctx.cm_type_id(value_ty, &mut tt);
+            (tt.make_tree_map(key_tid, value_tid), key_tid, value_tid)
+        };
         let map_head = tt.compiler_struct_fq_name(CompilerItem::TreeMap);
         let items = tt.compiler_items();
         let map_source = items.require_struct(CompilerItem::TreeMap).0.clone();

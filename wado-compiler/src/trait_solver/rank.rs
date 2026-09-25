@@ -4,7 +4,7 @@
 use super::program::{ImplId, SolverType, TraitDeclId};
 
 /// How much of the general case an impl's target covers, least first. Rank 2
-/// keeps the least general, which is `spec.md`'s "Specific Impls Win" and
+/// keeps the least general, which is `spec-traits.md`'s "Specific Impls Win" and
 /// "a concrete impl beats a blanket" at once.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Generality {
@@ -253,7 +253,7 @@ mod tests {
         );
     }
 
-    /// `spec.md`'s "Specific Impls Win": `impl Tag for Box_<i32>` beside
+    /// `spec-traits.md`'s "Specific Impls Win": `impl Tag for Box_<i32>` beside
     /// `impl<T> Tag for Box_<T>` is the same rank one level finer.
     #[test]
     fn rank2_prefers_one_instantiation_over_the_head_impl() {

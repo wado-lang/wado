@@ -1,0 +1,16 @@
+// A closure crosses as a `u32` key, but a binding taking a closure and one
+// taking a `u32` still differ: a call finds its binding by name alone.
+
+use { Dom as ADom } from "./sub/cm_same_binding_callback_a.wado";
+use { Dom as BDom } from "./sub/cm_same_binding_callback_key_b.wado";
+
+export fn run() with (ADom, BDom) {
+    ADom::f(|| {});
+    BDom::f(7);
+}
+
+__DATA__
+{
+  "compile_error": "two `Dom::f` bind `web:a/global#f` with different signatures: make them agree",
+  "compile_error_codes": ["DUPLICATE_DEFINITION"]
+}

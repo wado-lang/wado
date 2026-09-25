@@ -139,10 +139,10 @@ The main documentation site is [wado-lang.org](https://wado-lang.org). You can a
 
 - [Design Philosophy](docs/design-philosophy.md) — why Wado is the way it is
 - [Cheatsheet](docs/cheatsheet.md) — quick syntax reference
-- [Language Specification](docs/spec.md) — full language reference
+- [Language Specification](docs/spec-overview.md) — full language reference
 - [Compiler Architecture](docs/compiler.md) — the phases from source to Wasm
 - [Benchmarks](benchmark/README.md) — performance vs C, JavaScript, and others
-- [Other Documentation](docs) — WEPs, research notes, and more
+- [Other Documentation](docs/README.md) — WEPs, research notes, and more
 
 ## Development
 

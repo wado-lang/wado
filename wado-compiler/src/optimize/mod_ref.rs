@@ -735,15 +735,11 @@ fn leaf_effect<'a>(
     declarations: &'a BuiltinDeclarations,
 ) -> (FnEffect, Option<Builtin<'a>>) {
     let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
-    let Some(qualified) = fref
-        .builtin_name()
-        .or_else(|| fref.monomorphized_builtin_name())
-    else {
+    let Some(intrinsic) = fref.intrinsic() else {
         return (FnEffect::opaque(), None);
     };
-    let bare = qualified.strip_prefix("builtin::").unwrap_or(&qualified);
     if registry
-        .get(bare)
+        .intrinsic(intrinsic)
         .is_some_and(|info| info.canonical_name.is_some())
     {
         return (FnEffect::opaque(), None);

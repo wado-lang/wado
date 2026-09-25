@@ -1,0 +1,192 @@
+test "f64 round breaks ties away from zero" {
+    assert f64::round(2.5) == 3.0;
+    assert f64::round(-2.5) == -3.0;
+    assert f64::round(0.5) == 1.0;
+    assert f64::round(-0.5) == -1.0;
+
+    // round_ties_even breaks the same ties toward the even neighbour.
+    assert f64::round_ties_even(2.5) == 2.0;
+    assert f64::round_ties_even(-2.5) == -2.0;
+    assert f64::round_ties_even(0.5) == 0.0;
+
+    // Away from a tie the two agree.
+    assert f64::round(2.4) == 2.0;
+    assert f64::round_ties_even(2.4) == 2.0;
+    assert f64::round(2.6) == 3.0;
+    assert f64::round_ties_even(2.6) == 3.0;
+}
+
+test "f64 trigonometric" {
+    assert f64::sin(0.0) == 0.0;
+    assert 0.99 < f64::sin(f64::PI / 2.0) < 1.01;
+
+    assert f64::cos(0.0) == 1.0;
+    assert -0.01 < f64::cos(f64::PI / 2.0) < 0.01;
+
+    assert f64::tan(0.0) == 0.0;
+
+    assert f64::asin(0.0) == 0.0;
+    assert 1.57 < f64::asin(1.0) < 1.58;
+
+    assert f64::acos(1.0) == 0.0;
+    assert 1.57 < f64::acos(0.0) < 1.58;
+
+    assert f64::atan(0.0) == 0.0;
+    assert 0.78 < f64::atan(1.0) < 0.79;
+
+    assert 0.78 < f64::atan2(1.0, 1.0) < 0.79;
+}
+
+test "f64 hyperbolic" {
+    assert f64::sinh(0.0) == 0.0;
+    assert f64::cosh(0.0) == 1.0;
+    assert f64::tanh(0.0) == 0.0;
+    assert f64::asinh(0.0) == 0.0;
+    assert f64::acosh(1.0) == 0.0;
+    assert f64::atanh(0.0) == 0.0;
+}
+
+test "f64 exponential and logarithmic" {
+    assert f64::exp(0.0) == 1.0;
+    assert 2.71 < f64::exp(1.0) < 2.72;
+
+    assert f64::exp2(0.0) == 1.0;
+    assert f64::exp2(3.0) == 8.0;
+
+    assert f64::exp10(0.0) == 1.0;
+    assert f64::exp10(3.0) == 1000.0;
+    assert f64::exp10(-2.0) == 0.01;
+
+    assert f64::expm1(0.0) == 0.0;
+
+    assert f64::ln(1.0) == 0.0;
+    assert 0.99 < f64::ln(f64::E) < 1.01;
+
+    assert f64::log2(1.0) == 0.0;
+    assert f64::log2(8.0) == 3.0;
+
+    assert f64::log10(1.0) == 0.0;
+    assert f64::log10(100.0) == 2.0;
+
+    assert f64::ln1p(0.0) == 0.0;
+}
+
+test "f64 power functions" {
+    assert f64::pow(2.0, 3.0) == 8.0;
+    assert f64::cbrt(8.0) == 2.0;
+    assert f64::cbrt(27.0) == 3.0;
+    assert f64::hypot(3.0, 4.0) == 5.0;
+    assert f64::fmod(7.0, 3.0) == 1.0;
+}
+
+test "f64 mul_add" {
+    assert f64::mul_add(2.0, 3.0, 4.0) == 10.0;
+    assert f64::mul_add(-2.0, 3.0, 4.0) == -2.0;
+    assert f64::mul_add(0.0, 0.0, 1.5) == 1.5;
+
+    // One rounding, not two: the naive form lands elsewhere.
+    assert f64::mul_add(0.1, 0.1, -0.01) == 9.020562075079397e-19;
+    assert 0.1 * 0.1 - 0.01 == 1.734723475976807e-18;
+
+    // The naive form cancels to zero; the fused form keeps the product's tail.
+    let x = 1234567890.123;
+    let y = 1.0000000001;
+    assert f64::mul_add(x, y, -(x * y)) == 8.268968492995062e-8;
+
+    assert f64::mul_add(f64::NAN, 1.0, 1.0).is_nan();
+    assert f64::mul_add(f64::INFINITY, 2.0, 1.0) == f64::INFINITY;
+}
+
+test "f64 error functions" {
+    assert f64::erf(0.0) == 0.0;
+    assert f64::erf(0.5) == 0.5204998778130465;
+    assert f64::erf(-0.5) == -0.5204998778130465;
+    assert f64::erf(f64::INFINITY) == 1.0;
+
+    assert f64::erfc(0.5) == 0.4795001221869535;
+    // Far out in the tail, where `1 - erf(x)` has already cancelled to zero.
+    assert f64::erfc(10.0) == 2.088487583762545e-45;
+    assert 1.0 - f64::erf(10.0) == 0.0;
+}
+
+test "f64 gamma functions" {
+    assert f64::gamma(5.0) == 24.0;
+    assert f64::gamma(0.5) == f64::sqrt(f64::PI);
+    assert f64::gamma(-0.5) < 0.0;
+
+    assert f64::ln_gamma(10.0) == 12.80182748008147;
+    assert f64::ln_gamma(-0.5) == f64::ln(-f64::gamma(-0.5));
+}
+
+test "f32 round breaks ties away from zero" {
+    assert f32::round(2.5) == 3.0;
+    assert f32::round(-2.5) == -3.0;
+    assert f32::round(0.5) == 1.0;
+
+    // round_ties_even breaks the same ties toward the even neighbour.
+    assert f32::round_ties_even(2.5) == 2.0;
+    assert f32::round_ties_even(-2.5) == -2.0;
+    assert f32::round_ties_even(0.5) == 0.0;
+}
+
+test "f32 trigonometric" {
+    assert f32::sin(0.0) == 0.0;
+    assert f32::cos(0.0) == 1.0;
+    assert f32::tan(0.0) == 0.0;
+    assert f32::acos(1.0) == 0.0;
+    assert f32::atan(0.0) == 0.0;
+}
+
+test "f32 hyperbolic" {
+    assert f32::sinh(0.0) == 0.0;
+    assert f32::cosh(0.0) == 1.0;
+    assert f32::tanh(0.0) == 0.0;
+    assert f32::asinh(0.0) == 0.0;
+    assert f32::acosh(1.0) == 0.0;
+    assert f32::atanh(0.0) == 0.0;
+}
+
+test "f32 exponential and logarithmic" {
+    assert f32::exp(0.0) == 1.0;
+    assert f32::exp2(3.0) == 8.0;
+    assert f32::exp10(3.0) == 1000.0;
+    assert f32::expm1(0.0) == 0.0;
+    assert f32::ln(1.0) == 0.0;
+    assert f32::log2(8.0) == 3.0;
+    assert f32::log10(1000.0) == 3.0;
+    assert f32::ln1p(0.0) == 0.0;
+}
+
+test "f32 power functions" {
+    assert f32::pow(2.0, 10.0) == 1024.0;
+    assert f32::pow(3.0, 3.0) == 27.0;
+    assert f32::cbrt(27.0) == 3.0;
+    assert f32::hypot(3.0, 4.0) == 5.0;
+    assert f32::fmod(7.0, 3.0) == 1.0;
+}
+
+test "f32 mul_add" {
+    assert f32::mul_add(2.0, 3.0, 4.0) == 10.0;
+    assert f32::mul_add(-2.0, 3.0, 4.0) == -2.0;
+
+    // One rounding, not two: the naive form lands elsewhere.
+    assert f32::mul_add(0.1, 0.1, -0.01) == 5.2154064e-10;
+    let tenth: f32 = 0.1;
+    let hundredth: f32 = 0.01;
+    assert tenth * tenth - hundredth == 9.313226e-10;
+
+    assert f32::mul_add(f32::NAN, 1.0, 1.0).is_nan();
+    assert f32::mul_add(f32::INFINITY, 2.0, 1.0) == f32::INFINITY;
+}
+
+test "f32 error functions" {
+    assert f32::erf(0.0) == 0.0;
+    assert f32::erf(0.5) == 0.5204999;
+    assert f32::erf(-0.5) == -0.5204999;
+    assert f32::erfc(0.5) == 0.47950011;
+}
+
+test "f32 gamma functions" {
+    assert f32::gamma(5.0) == 24.0;
+    assert f32::ln_gamma(10.0) == 12.801827;
+}

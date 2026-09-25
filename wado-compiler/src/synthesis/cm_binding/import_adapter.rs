@@ -1,8 +1,5 @@
-//! Import-side CM adapter synthesis: a `$cm_binding__<iface>_<method>` TIR
-//! function per referenced WASI import, lowering Wado-typed args to the flat CM
-//! ABI, performing the `cm_raw_call`, and lifting the result back for a sync
-//! import. An async one returns an `AsyncCall<T>` the caller `wait()`s on. The
-//! driver enters at [`binding_func_name`] and [`synthesize_adapter`].
+//! Import-side CM adapters: one TIR function per referenced import, calling it
+//! through the flat CM ABI. A sync import returns the lifted result, an async one an `AsyncCall<T>`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,7 +8,7 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -37,16 +34,6 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
 use crate::name::{FqTypeName, cm_wrap_async_func_name};
 use crate::tir;
-
-/// Build the binding function name for a WASI import.
-pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_binding__{interface_name}_{method_name}")
-}
-
-/// Per-import lift function name. Pointed to by `AsyncCall<T>::__cm_lift`.
-fn lift_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_lift__{interface_name}_{method_name}")
-}
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:
 /// the user-visible `$cm_binding__*` adapter, plus any auxiliaries (for
@@ -531,7 +518,7 @@ pub(super) fn synthesize_adapter(
     };
 
     let binding = make_binding_function(
-        binding_func_name(&func_info.interface_name, &func_info.method_name),
+        cm_binding_func_name(&func_info.interface_name, &func_info.method_name),
         builder.params,
         adapter_return_type,
         block(builder.body_stmts),
@@ -1212,7 +1199,7 @@ impl<'a> AdapterBuilder<'a> {
 
         // Per-import lift function: `AsyncCall<T>::wait` calls back
         // through this `FuncRef` to materialise the result.
-        let lift_fn_name = lift_func_name(&func_info.interface_name, &func_info.method_name);
+        let lift_fn_name = cm_lift_func_name(&func_info.interface_name, &func_info.method_name);
         let lift_fn = synthesize_async_lift_function(
             lift_fn_name.clone(),
             func_info,

@@ -311,4 +311,4 @@ These have no direct Rust counterpart but are useful in Wado:
 - [ ] Phase 3: Remove deprecated aliases
 - [ ] Update `docs/cheatsheet.md`
 - [ ] Update `docs/stdlib-core-prelude.md` (auto-generated)
-- [ ] Update `docs/spec.md`
+- [ ] Update `docs/spec-*.md`

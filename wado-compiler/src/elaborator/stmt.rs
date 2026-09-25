@@ -11,6 +11,7 @@ use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
+use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
@@ -1035,18 +1036,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(type_id)),
             RefBinding::MutRef => {
-                let is_scalar = |ty: &ResolvedType| {
-                    matches!(ty, ResolvedType::Primitive(_) | ResolvedType::Enum { .. })
-                };
-                let (bound, base) = {
-                    let tt = self.tysys.type_table.borrow();
-                    let base = tt.representation_head(type_id);
-                    (tt.get(type_id).clone(), tt.get(base).clone())
-                };
-                if is_scalar(&bound) || is_scalar(&base) {
+                if self.tysys.is_replace_on_assign_place_type(type_id) {
                     let _ = self.emit(TypeError::CannotAssign {
                         message: format!(
-                            "cannot bind '{name}' as a mutable reference to a primitive: \
+                            "cannot bind '{name}' as a mutable reference to {REPLACE_ON_ASSIGN_TYPE}: \
                              destructure by value, or take the reference to the whole value"
                         ),
                         span,

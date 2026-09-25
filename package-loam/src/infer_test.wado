@@ -1,13 +1,59 @@
-//! Stage 0 over a two-layer MLP: what it proves, and what it stops the build
-//! for.
+//! What stage 0 proves of a graph, and what it stops the build for.
 
 use { Extent } from "./extent.wado";
-use { infer } from "./infer.wado";
+use {
+    AttributeConflict,
+    AxisCountConflict,
+    Checked,
+    DeclaredConflict,
+    DeclaredElementConflict,
+    DeclaredRankConflict,
+    InferError,
+    NodeConflict,
+    OperandCountConflict,
+    OperandRankConflict,
+    OutputCountConflict,
+    Refusal,
+    UnnamedTensor,
+    infer,
+} from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
+use { ExtentConflict } from "./shape.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "every error stage 0 reports is an Error" {
+    is_error::<InferError>();
+    is_error::<Refusal>();
+    is_error::<UnnamedTensor>();
+    is_error::<AxisCountConflict>();
+    is_error::<NodeConflict>();
+    is_error::<ExtentConflict>();
+    is_error::<OperandCountConflict>();
+    is_error::<OutputCountConflict>();
+    is_error::<OperandRankConflict>();
+    is_error::<AttributeConflict>();
+    is_error::<DeclaredRankConflict>();
+    is_error::<DeclaredConflict>();
+    is_error::<DeclaredElementConflict>();
+}
 
 fn rule(pattern: String, axes: List<String>) -> LayoutRule {
     return LayoutRule { pattern, axes };
+}
+
+/// `Y`'s axes after stage 0, as `name=extent` pairs, or the build error.
+fn y_axes(source: String, layout: List<LayoutRule>) -> Result<String, String> {
+    let graph = read(&source).unwrap();
+    return match infer(&graph, &Schema { layout }) {
+        Ok(Checked { shapes, .. }) => {
+            let axes: List<String> = shapes["Y"].axes.into_iter().map(|a| `${a.name}=${a.extent}`).collect();
+            Result::Ok(axes.join(","));
+        },
+        Err(e) => Result::Err(`${e}`),
+    };
 }
 
 /// The MLP's schema. `Hidden` names an output axis on the first layer and an
@@ -37,14 +83,7 @@ fn mlp(hidden_in_w2: i32) -> String {
 }
 
 fn infer_mlp(hidden_in_w2: i32) -> Result<String, String> {
-    let graph = read(&mlp(hidden_in_w2)).unwrap();
-    return match infer(&graph, &mlp_schema()) {
-        Ok(shapes) => {
-            let y = shapes["Y"];
-            Result::Ok(`${y.axes[0].name}=${y.axes[0].extent},${y.axes[1].name}=${y.axes[1].extent}`);
-        },
-        Err(e) => Result::Err(`${e}`),
-    };
+    return y_axes(mlp(hidden_in_w2), mlp_schema().layout);
 }
 
 test "a consistent MLP infers its output shape" {
@@ -57,14 +96,14 @@ test "an extent mismatch between the layers names both extents" {
 
 test "a symbolic batch axis flows through both layers" {
     let graph = read(&mlp(64)).unwrap();
-    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
     assert shapes["H"].axes[0].extent.agrees(&Extent::Symbol("N"));
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
 }
 
 test "a bias broadcasts against the batch axis ahead of it" {
     let graph = read(&mlp(64)).unwrap();
-    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
     assert shapes["HB"].rank() == 2;
     assert shapes["HB"].axes[1].name == "Hidden";
 }
@@ -89,14 +128,14 @@ test "a pattern naming the wrong number of axes stops the build" {
 test "an operator with no shape rule stops the build naming it" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {
-            Y = Conv(X)
+            Y = LpNormalization(X)
         }`,
     ).unwrap();
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
     let e = infer(&graph, &schema).unwrap_err();
-    assert `${e}` == "Conv: no shape rule for this operator";
+    assert `${e}` == "LpNormalization: no shape rule for this operator";
 }
 
 test "a wildcard pattern reaches every tensor" {
@@ -108,7 +147,7 @@ test "a wildcard pattern reaches every tensor" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["X"].axes[0].name == "A";
 }
 
@@ -124,7 +163,7 @@ test "an earlier pattern overrides a later one" {
             rule("*", ["A", "B"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["layers.0.weight"].axes[0].name == "First";
 }
 
@@ -140,7 +179,7 @@ test "an unknown dimension takes its axis's name as its symbol" {
             rule("W", ["In", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
@@ -157,6 +196,72 @@ test "an operator given too few operands stops the build rather than trapping" {
     assert `${e}` == "Y = Add: reads 2 operands and was given 1";
 }
 
+test "a node the build folds, given too few operands, stops the build rather than trapping" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        S = Shape(X)
+        G = Gather(S)
+        Y = Relu(X)
+    }`;
+    assert y_axes(source, [rule("*", ["A"])]).unwrap_err() == "G = Gather: reads 2 operands and was given 1";
+}
+
+test "a node the build folds, reading an undefined tensor, stops the build" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        S = Shape(Missing)
+        Y = Relu(X)
+    }`;
+    assert y_axes(source, [rule("*", ["A"])]).unwrap_err() == "Missing: no graph input, initializer or node defines this";
+}
+
+test "Unsqueeze listing an axis twice stops the build rather than trapping" {
+    let source = `g (float[3] X) => (float[1, 1, 3] Y) {
+        A = Constant<value_ints = [0, 0]>()
+        Y = Unsqueeze(X, A)
+    }`;
+    assert y_axes(source, [rule("X", ["C"])]).unwrap_err() == "Y = Unsqueeze: axis 0 is listed twice";
+}
+
+test "Slice given more starts than axes stops the build rather than trapping" {
+    let source = `g (float[2, 3] X) => (float[2, 3] Y) <int64[2] B = {0, 0}, int64[2] E = {1, 1}, int64[1] P = {0}> {
+        S = Shape(X)
+        T = Slice(S, B, E, P)
+        Y = Relu(X)
+    }`;
+    let e = y_axes(source, [rule("*", ["A", "B"])]).unwrap_err();
+    assert e == "T = Slice: 2 starts, 2 ends, 1 axes and 2 steps do not pair up";
+}
+
+test "a Constant written as value_floats folds" {
+    let source = `g (float[2] X) => (float[2] Y) {
+        C = Constant<value_floats = [0.5, 2.0]>()
+        Y = Mul(X, C)
+    }`;
+    assert y_axes(source, [rule("*", ["A"])]).unwrap() == "A=2";
+}
+
+test "Flatten of a tensor with no elements keeps the extents on each side" {
+    let source = `g (float[0, 3, 4] X) => (float[0, 12] Y) {
+        Y = Flatten <axis = 1> (X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["A", "B", "C"]),
+        rule("Y", ["A", "BC"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "A=0,BC=12";
+}
+
+test "a folded tensor of one element keeps its rank" {
+    let source = `g (float[3] X) => (float[1, 3] Y) <int64[2] S = {1, 1}> {
+        C = ConstantOfShape(S)
+        Y = Add(X, C)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["A"]),
+        rule("C", ["One", "A"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "One=1,A=3";
+}
+
 test "a node naming several outputs stops the build rather than trapping" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {
@@ -168,6 +273,59 @@ test "a node naming several outputs stops the build rather than trapping" {
     };
     let e = infer(&graph, &schema).unwrap_err();
     assert `${e}` == "Y = Relu: produces one output and names 2";
+}
+
+test "a weight's merged axis, written as its parts, contracts with a regrouped activation" {
+    let source = `g (float[1, 4, 2, 8] X) => (float[1, 4, 6] Y) <float[16, 6] W, int64[3] S = {1, 4, 16}> {
+        R = Reshape(X, S)
+        Y = MatMul(R, W)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq", "Head", "Dim"]),
+        rule("W", ["(Head Dim)", "Out"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=1,Seq=4,Out=6";
+}
+
+test "regrouping a merged axis the layout wrote stops the build, its parts having no extents" {
+    let source = `g (float[16, 6] W) => (float[2, 8, 6] Y) <int64[3] S = {2, 8, 6}> {
+        Y = Reshape(W, S)
+    }`;
+    let e = y_axes(source, [rule("W", ["(Head Dim)", "Out"])]).unwrap_err();
+    assert e == "Y = Reshape: axis Head is ?, and Reshape reads static extents";
+}
+
+fn qkv() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Seq", "Qkv"]),
+        rule("?", ["Batch", "Seq", "Embed"]),
+    ];
+}
+
+test "Split cuts an axis into parts the outputs' layout names" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [8, 8, 8]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source, qkv()).unwrap() == "Batch=1,Seq=4,Embed=8";
+}
+
+test "Split with no sizes cuts equal parts, the last taking what remains" {
+    let source = `g (float[1, 4, 23] X) => (float[1, 4, 7] V) {
+        Q, Y, V = Split<axis = -1>(X)
+    }`;
+    let graph = read(&source).unwrap();
+    let shapes = infer(&graph, &Schema { layout: qkv() }).unwrap().shapes;
+    assert shapes["Y"].axes[2].extent.agrees(&Extent::Static(8));
+    assert shapes["V"].axes[2].extent.agrees(&Extent::Static(7));
+}
+
+test "Split sizes that miss the axis's extent stop the build" {
+    let source = `g (float[1, 4, 24] X) => (float[1, 4, 8] Y) {
+        S = Constant<value_ints = [8, 8, 4]>()
+        Q, Y, V = Split<axis = 2>(X, S)
+    }`;
+    assert y_axes(source, qkv()).unwrap_err() == "Q = Split: the parts sum to 20, and axis 2 is 24";
 }
 
 test "a scalar operand to MatMul stops the build rather than trapping" {
@@ -224,7 +382,7 @@ test "a declared symbolic name need not be the one the schema gave the axis" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
@@ -237,7 +395,7 @@ test "a declared static extent settles an axis the nodes left symbolic" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
     // Only the declared output is settled; the input keeps what it stated.
     assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
@@ -252,7 +410,7 @@ test "a declared `?` claims nothing about the produced extent" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
 }
 
@@ -283,7 +441,7 @@ test "Gemm contracts the axis its transpose flags leave facing" {
             rule("Y", ["Batch", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "Batch";
     assert shapes["Y"].axes[1].name == "Out";
 }
@@ -301,7 +459,7 @@ test "Gemm without its C operand is the product alone" {
             rule("Y", ["Batch", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
 }
 
@@ -331,7 +489,7 @@ test "Transpose reorders the axes its perm names" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "B";
     assert shapes["Y"].axes[1].name == "A";
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(3));
@@ -346,7 +504,7 @@ test "Transpose with no perm reverses the axes, as ONNX defaults it" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "B";
 }
 
@@ -374,6 +532,348 @@ test "a perm naming the wrong number of axes stops the build" {
     };
     let e = infer(&graph, &schema).unwrap_err();
     assert `${e}` == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
+}
+
+fn rows() -> List<LayoutRule> {
+    return [rule("X", ["Batch", "Seq", "Embed"])];
+}
+
+test "Softmax keeps its operand's shape" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = -1> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
+}
+
+test "a Softmax axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = 3> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap_err() == "Y = Softmax: attribute axis is 3, outside rank 3";
+}
+
+test "Softmax before opset 13 normalizing past one axis stops the build" {
+    let source = `<ir_version: 7, opset_import: ["" : 11]>
+    g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax(X)
+    }`;
+    let e = y_axes(source, rows()).unwrap_err();
+    assert e == "Y = Softmax: opset 11 normalizes axes 1 to 2 as one, and Loam normalizes along one axis";
+}
+
+test "Softmax before opset 13 along the last axis is the one-axis Softmax" {
+    let source = `<ir_version: 7, opset_import: ["" : 11]>
+    g (float[2, 4, 8] X) => (float[2, 4, 8] Y) {
+        Y = Softmax <axis = 2> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=8";
+}
+
+test "a reduction that keeps its axes leaves each at extent 1 under its name" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [-1]> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Seq=4,Embed=1";
+}
+
+test "a reduction that drops its axes removes them" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 8] Y) {
+        A = Constant <value_ints = [1]> ()
+        Y = ReduceSum <keepdims = 0> (X, A)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=2,Embed=8";
+}
+
+test "a reduction naming no axes reduces every axis" {
+    let source = `g (float[2, 4, 8] X) => (float[1, 1, 1] Y) {
+        Y = ReduceMean(X)
+    }`;
+    assert y_axes(source, rows()).unwrap() == "Batch=1,Seq=1,Embed=1";
+}
+
+test "a reduction axis outside the operand stops the build" {
+    let source = `g (float[2, 4, 8] X) => (float[2, 4, 1] Y) {
+        Y = ReduceMean <axes = [3]> (X)
+    }`;
+    assert y_axes(source, rows()).unwrap_err() == "Y = ReduceMean: axis 3 is outside rank 3";
+}
+
+fn nchw() -> List<LayoutRule> {
+    return [rule("X", ["Batch", "Chan", "Row", "Col"])];
+}
+
+test "Reshape merges adjacent axes into one named by its parts" {
+    let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {1, 256}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source, nchw()).unwrap() == "Batch=1,Merged<[Chan, Row, Col]>=256";
+}
+
+test "Reshape reads 0 as the input's extent and -1 as what remains" {
+    let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {0, -1}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source, nchw()).unwrap() == "Batch=1,Merged<[Chan, Row, Col]>=256";
+}
+
+test "a Reshape target the graph computes from Shape folds at build time" {
+    // An exporter's spelling of `x.view(x.size(0), -1)`.
+    let source = `g (float[2, 3, 4] X) => (float[2, 12] Y) <int64[1] M = {-1}> {
+        S = Shape(X)
+        I = Constant<value_int = 0>()
+        B = Gather(S, I)
+        A = Constant<value_ints = [0]>()
+        U = Unsqueeze(B, A)
+        T = Concat<axis = 0>(U, M)
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Row", "Col"])]).unwrap() == "Batch=2,Merged<[Row, Col]>=12";
+}
+
+/// An attention mask as an exporter writes it: an int64 input reshaped and
+/// widened by two unit axes before it becomes a float.
+global MASK: String = `g (int64[1, 4] M) => (float[1, 1, 1, 4] Y) <int64[2] T = {1, -1}> {
+    R = Reshape(M, T)
+    A = Constant<value_ints = [1]>()
+    U = Unsqueeze(R, A)
+    B = Constant<value_ints = [2]>()
+    V = Unsqueeze(U, B)
+    Y = Cast<to = 1>(V)
+}`;
+
+fn mask_layout() -> List<LayoutRule> {
+    return [
+        rule("M", ["Batch", "Key"]),
+        rule("U", ["Batch", "Head", "Key"]),
+        rule("V", ["Batch", "Head", "Query", "Key"]),
+    ];
+}
+
+test "an int64 input keeps its element until Cast makes it a float" {
+    let graph = read(&MASK).unwrap();
+    let checked = infer(&graph, &Schema { layout: mask_layout() }).unwrap();
+    assert checked.primitives["R"] == "i64";
+    assert checked.primitives["V"] == "i64";
+    assert checked.primitives["Y"] == "f32";
+    assert y_axes(MASK, mask_layout()).unwrap() == "Batch=1,Head=1,Query=1,Key=4";
+}
+
+test "arithmetic on an int64 tensor stops the build" {
+    let source = `g (int64[4] M) => (int64[4] Y) {
+        Y = Add(M, M)
+    }`;
+    assert y_axes(source, [rule("M", ["Key"])]).unwrap_err() == "Y = Add: operand M is i64, and Add computes in f32";
+}
+
+test "Where broadcasts its three operands and takes its branches' element" {
+    let source = `g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y) <float S> {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Head", "Query", "Key"]),
+        rule("X", ["Batch", "Head", "Query", "Key"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=2,Head=3,Query=4,Key=4";
+}
+
+test "a Where condition other than bool stops the build" {
+    let source = `g (float[4] M, float[4] X) => (float[4] Y) {
+        Y = Where(M, X, X)
+    }`;
+    assert y_axes(source, [rule("*", ["Key"])]).unwrap_err() == "Y = Where: operand M is f32, and Where selects with bool";
+}
+
+test "Where between two element types stops the build" {
+    let source = `g (float[4] M, float[4] X, int64[4] I) => (float[4] Y) {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, I)
+    }`;
+    assert y_axes(source, [rule("*", ["Key"])]).unwrap_err() == "Y = Where: operand X is f32 and I is i64, and Where returns one of them";
+}
+
+test "Gather along axis 0 puts the indices' axes where the row's was" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Batch", "Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=1,Seq=4,Hidden=8";
+}
+
+test "Gather indexing with floats stops the build" {
+    let source = `g (float[4] I) => (float[4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Gather: operand I is f32, and Gather indexes with i64";
+}
+
+test "an output declared as an element other than the one computed stops the build" {
+    let source = `g (int64[4] M) => (float[4] Y) {
+        Y = Identity(M)
+    }`;
+    assert y_axes(source, [rule("M", ["Key"])]).unwrap_err() == "Y: declared float and computed in i64";
+}
+
+test "Shape of a symbolic extent stops the build" {
+    let source = `g (float[N, 3] X) => (float[N, 3] Y) {
+        S = Shape(X)
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Col"])]).unwrap_err() == "S = Shape: axis Batch is N, and Shape reads static extents";
+}
+
+test "Reshape splits a merged axis back into its parts" {
+    let source = `g (float[2, 3, 4] X) => (float[2, 3, 4] Y) <int64[2] F = {2, 12}, int64[3] S = {2, 3, 4}> {
+        M = Reshape(X, F)
+        Y = Reshape(M, S)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Row", "Col"])]).unwrap() == "Batch=2,Row=3,Col=4";
+}
+
+test "Reshape drops an extent-1 axis it merges past" {
+    let source = `g (float[2, 16, 1, 1] X) => (float[2, 16] Y) <int64[2] S = {2, 16}> {
+        Y = Reshape(X, S)
+    }`;
+    assert y_axes(source, nchw()).unwrap() == "Batch=2,Chan=16";
+}
+
+test "Flatten merges the axes on each side of its axis" {
+    let source = `g (float[2, 16, 4, 4] X) => (float[2, 256] Y) {
+        Y = Flatten <axis = 1> (X)
+    }`;
+    assert y_axes(source, nchw()).unwrap() == "Batch=2,Merged<[Chan, Row, Col]>=256";
+}
+
+test "Flatten at axis 0 puts a new unit axis first" {
+    let source = `g (float[2, 3] X) => (float[1, 6] Y) {
+        Y = Flatten <axis = 0> (X)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Row", "Col"]),
+        rule("Y", ["One", "Cells"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "One=1,Merged<[Row, Col]>=6";
+}
+
+test "an axis no regrouping determines stops the build without a layout" {
+    let source = `g (float[2, 12] X) => (float[2, 3, 4] Y) <int64[3] S = {2, 3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    let e = y_axes(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
+    assert e == "Y = Reshape: axis 1 regroups none of the operand's axes, so a layout pattern must name Y's";
+}
+
+test "an axis no regrouping determines takes the output's layout name" {
+    let source = `g (float[2, 12] X) => (float[2, 1, 3, 4] Y) <int64[4] S = {2, 1, 3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Wide"]),
+        rule("Y", ["Batch", "One", "Three", "Four"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=2,One=1,Three=3,Four=4";
+}
+
+test "a Reshape target computed at run time stops the build" {
+    let source = `g (float[2, 12] X, float[2] S) => (float[24] Y) {
+        Y = Reshape(X, S)
+    }`;
+    let e = y_axes(source, [
+        rule("X", ["Batch", "Wide"]),
+        rule("S", ["Two"]),
+    ]).unwrap_err();
+    assert e == "Y = Reshape: operand S is computed at run time, and the build reads it";
+}
+
+test "a Reshape target that changes the element count stops the build" {
+    let source = `g (float[2, 12] X) => (float[5, 5] Y) <int64[2] S = {5, 5}> {
+        Y = Reshape(X, S)
+    }`;
+    let e = y_axes(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
+    assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
+}
+
+test "a Reshape over a symbolic extent stops the build" {
+    let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[3] S = {0, 3, 4}> {
+        Y = Reshape(X, S)
+    }`;
+    let e = y_axes(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
+    assert e == "Y = Reshape: axis Batch is N, and Reshape reads static extents";
+}
+
+fn pooled() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("Y", ["Batch", "Chan", "PRow", "PCol"]),
+    ];
+}
+
+test "MaxPool names its window's output axes from the output's layout" {
+    let source = `g (float[1, 3, 7, 7] X) => (float[1, 3, 4, 4] Y) {
+        Y = MaxPool <kernel_shape = [3, 3], strides = [2, 2], pads = [1, 1, 1, 1]> (X)
+    }`;
+    assert y_axes(source, pooled()).unwrap() == "Batch=1,Chan=3,PRow=4,PCol=4";
+}
+
+test "MaxPool rounds its output extent up under ceil_mode" {
+    let source = `g (float[1, 1, 5, 5] X) => (float[1, 1, 3, 3] Y) {
+        Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2], ceil_mode = 1> (X)
+    }`;
+    assert y_axes(source, pooled()).unwrap() == "Batch=1,Chan=1,PRow=3,PCol=3";
+}
+
+test "a window's output axis stops the build without a layout" {
+    let source = `g (float[1, 3, 7, 7] X) => (float[1, 3, 3, 3] Y) {
+        Y = MaxPool <kernel_shape = [2, 2], strides = [2, 2]> (X)
+    }`;
+    let e = y_axes(source, nchw()).unwrap_err();
+    assert e == "Y = MaxPool: axis 2 is a window's output, so a layout pattern must name Y's";
+}
+
+fn convolved() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("W", ["Out", "Chan", "KRow", "KCol"]),
+        rule("B", ["Out"]),
+        rule("Y", ["Batch", "Out", "Row", "Col"]),
+    ];
+}
+
+test "Conv under SAME_UPPER keeps the spatial extents" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 28, 28] Y) <float[8, 1, 5, 5] W> {
+        Y = Conv <kernel_shape = [5, 5], auto_pad = "SAME_UPPER"> (X, W)
+    }`;
+    assert y_axes(source, convolved()).unwrap() == "Batch=1,Out=8,Row=28,Col=28";
+}
+
+test "Conv reads its kernel off the weight and its bias checks against the output channels" {
+    let source = `g (float[2, 3, 7, 5] X) => (float[2, 4, 5, 4] Y) <float[4, 3, 3, 2] W, float[4] B> {
+        Y = Conv (X, W, B)
+    }`;
+    assert y_axes(source, convolved()).unwrap() == "Batch=2,Out=4,Row=5,Col=4";
+}
+
+test "Conv whose weight reads another channel count stops the build" {
+    let source = `g (float[1, 1, 28, 28] X) => (float[1, 8, 24, 24] Y) <float[8, 2, 5, 5] W> {
+        Y = Conv (X, W)
+    }`;
+    let e = y_axes(source, convolved()).unwrap_err();
+    assert e == "Y = Conv: axis Chan is 1 on the left and 2 on the right";
+}
+
+test "Conv over several groups stops the build" {
+    let source = `g (float[1, 2, 8, 8] X) => (float[1, 2, 6, 6] Y) <float[2, 1, 3, 3] W> {
+        Y = Conv <group = 2> (X, W)
+    }`;
+    let e = y_axes(source, convolved()).unwrap_err();
+    assert e == "Y = Conv: attribute group is 2, and only a single group is read";
 }
 
 test "a node reading an undefined tensor stops the build" {

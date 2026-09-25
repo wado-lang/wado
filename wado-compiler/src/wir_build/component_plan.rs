@@ -9,7 +9,9 @@ use crate::hashmap::IndexMap;
 use crate::name::{INTERNAL_PREFIX, kebab_export_name};
 use crate::package::test_selected;
 use crate::tir::TirTest;
-use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
+use crate::world_registry::{
+    CALLBACK_INTERFACE, CallbackExport, WorldExportInfo, WorldInfo, WorldRegistry,
+};
 
 /// Plan for the Component Model structure.
 ///
@@ -25,6 +27,8 @@ pub struct ComponentPlan {
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
     pub test_exports: Vec<TestExportPlan>,
+    /// The callbacks among [`Self::world_exports`].
+    pub callback_exports: Vec<CallbackExport>,
 }
 
 /// A world export to create at the component boundary.
@@ -48,8 +52,8 @@ pub struct WorldExportPlan {
     /// carry their raw Wado types in [`Self::param_types`] instead and let
     /// codegen build the CM types via [`crate::component_model::CmTypeGen`].
     pub cm_params: Vec<(String, CmExportType)>,
-    /// CM-resolved return type at the component boundary.
-    pub cm_result: CmExportType,
+    /// CM-resolved return type at the component boundary; `None` returns nothing.
+    pub cm_result: Option<CmExportType>,
     /// Raw Wado parameter types `(name, type)` for `--lib` exports; empty for
     /// the WASI worlds (which use [`Self::cm_params`]). The lib export path
     /// defines its own CM value types top-level from these, so it never goes
@@ -172,13 +176,14 @@ pub fn build_component_plan(
     cm_interface_registry: &CmInterfaceRegistry,
     lib_world: Option<&WorldInfo>,
     is_lib_world: bool,
+    callback_exports: &[CallbackExport],
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
     let world_exports = if is_test_world {
         vec![]
     } else {
-        build_world_export_plans(
+        let mut plans = build_world_export_plans(
             target_world,
             export_binding_names,
             post_return_binding_names,
@@ -186,7 +191,9 @@ pub fn build_component_plan(
             cm_interface_registry,
             lib_world,
             is_lib_world,
-        )
+        );
+        plans.extend(callback_exports.iter().map(callback_export_plan));
+        plans
     };
 
     // Build test exports (only when targeting the test world)
@@ -222,6 +229,29 @@ pub fn build_component_plan(
     ComponentPlan {
         world_exports,
         test_exports,
+        callback_exports: callback_exports.to_vec(),
+    }
+}
+
+/// A callback export lifts synchronously and returns nothing.
+fn callback_export_plan(export: &CallbackExport) -> WorldExportPlan {
+    WorldExportPlan {
+        name: export.core_func.clone(),
+        cm_export_name: export.cm_name.clone(),
+        core_func_name: export.core_func.clone(),
+        is_async: false,
+        cm_params: export
+            .params
+            .iter()
+            .map(|(name, ty)| (name.clone(), CmExportType::Primitive((*ty).to_string())))
+            .collect(),
+        cm_result: None,
+        param_types: Vec::new(),
+        result_type: None,
+        from_interface_fq: Some(CALLBACK_INTERFACE.to_string()),
+        sync_lift: true,
+        post_return_core_name: None,
+        is_lib: false,
     }
 }
 
@@ -269,7 +299,7 @@ fn build_world_export_plans(
             let (cm_params, cm_result, param_types, result_type) = if is_lib_world {
                 (
                     Vec::new(),
-                    CmExportType::Unit,
+                    Some(CmExportType::Unit),
                     export.params.clone(),
                     export.return_type.clone(),
                 )
@@ -288,13 +318,19 @@ fn build_world_export_plans(
                         )
                     })
                     .collect();
-                let cm_result = export
-                    .return_type
-                    .as_ref()
-                    .map(|ty| {
-                        resolve_cm_export_type(ty, cm_interface_registry, world_namespace_prefix)
-                    })
-                    .unwrap_or(CmExportType::Unit);
+                let cm_result = Some(
+                    export
+                        .return_type
+                        .as_ref()
+                        .map(|ty| {
+                            resolve_cm_export_type(
+                                ty,
+                                cm_interface_registry,
+                                world_namespace_prefix,
+                            )
+                        })
+                        .unwrap_or(CmExportType::Unit),
+                );
                 (cm_params, cm_result, Vec::new(), None)
             };
 

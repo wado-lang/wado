@@ -722,9 +722,8 @@ fn validate_rel_output_path(p: &str) -> Result<PathBuf, ExecuteError> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedGenerator {
     pub wasm: Vec<u8>,
-    /// `None` when the generator has no `pub struct Options` (or the
-    /// provider can't introspect it); [`typed_encode_options`] then
-    /// falls back to the provisional TOML encoding.
+    /// `None` without a `pub struct Options` or, prebuilt, without WIT to read
+    /// it from; [`typed_encode_options`] then encodes the provisional TOML.
     pub descriptor: Option<OptionsDescriptor>,
     /// Hex SHA-256 of the generator's transitive `.wado` closure. The
     /// empty string is a valid value (providers that can't compute
