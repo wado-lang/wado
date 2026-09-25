@@ -779,21 +779,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 several => Some(Err(several.len())),
             }
         };
-        // A newtype over a literal-constructible type is built through its
-        // representation and cast back.
-        let (found, output_type, needs_newtype_cast) =
-            if let Some(found) = resolve(self, target_type) {
-                (found, target_type, false)
-            } else {
-                let base_type = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .newtype_representation(target_type)?;
-                (resolve(self, base_type)?, base_type, true)
-            };
+        // A newtype is built through the first link of its chain that takes the
+        // literal, and cast back.
+        let mut link = target_type;
+        let found = loop {
+            if let Some(found) = resolve(self, link) {
+                break found;
+            }
+            link = self.tysys.type_table.borrow().get_newtype_base(link)?;
+        };
         match found {
-            Ok(info) => Some((info, output_type, needs_newtype_cast)),
+            Ok(info) => Some((info, link, link != target_type)),
             Err(count) => {
                 let type_name = self.tysys.type_table.borrow().type_name(target_type);
                 let _ = self.emit(TypeError::AmbiguousLiteralConversion {

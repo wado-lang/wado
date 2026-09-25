@@ -2011,6 +2011,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_method_call` uses — so operator dispatch and a direct call
         // apply identical `check_assignable` rules and cannot diverge. Mismatches
         // accumulate in the logger rather than early-returning, as method calls do.
+        // An impl read on a link below the receiver answers in the receiver's
+        // type, as a method call does (WEP 2026-01-29).
+        let receiver_head = self.tysys.get_base_type(receiver);
+        let return_type = match resolved.impl_type_id {
+            Some(link) if link != receiver_head => {
+                self.tysys
+                    .substitute_newtype_in_type(resolved.return_type, link, receiver_head)
+            }
+            _ => resolved.return_type,
+        };
+
         let mut wrap_flags: Vec<bool> = Vec::with_capacity(args.len());
         for (&(arg, arg_span), &param_ty) in args.iter().zip(resolved.param_types.iter()) {
             let wrap = matches!(
@@ -2109,7 +2120,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     method_def: resolved.method_def,
                     self_kind: resolved.self_kind,
                     arg_ref_wraps: wrap_flags,
-                    return_type: resolved.return_type,
+                    return_type,
                     needs_deref: false,
                 },
             );
@@ -2118,7 +2129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the overloaded operator's method call from the
         // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
         // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
-        resolved.return_type
+        return_type
     }
 }
 
