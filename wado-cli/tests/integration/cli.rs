@@ -642,8 +642,43 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
-/// `wado run` hands the guest its arguments with no program name before them,
-/// and `core:args::from_env` parses every one.
+/// `args()` starts with the program `wado run` was given, never `wado` itself.
+#[test]
+fn test_run_args_start_with_the_program() {
+    wado()
+        .args([
+            "run",
+            "wado-cli/tests/fixtures/run_args.wado",
+            "--",
+            "-x",
+            "y",
+        ])
+        .assert()
+        .success()
+        .stdout(r#"["wado-cli/tests/fixtures/run_args.wado", "-x", "y"]"#.to_owned() + "\n");
+}
+
+/// `example/cat.wado` prints every file it is given, in order, and not itself.
+#[test]
+fn test_run_cat_prints_each_file() {
+    let hello = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../example/hello.wado"
+    ))
+    .unwrap();
+    wado()
+        .args([
+            "run",
+            "example/cat.wado",
+            "example/hello.wado",
+            "example/hello.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(hello.repeat(2));
+}
+
+/// `core:args::from_env` parses what follows the program name.
 #[test]
 fn test_run_args_reach_from_env() {
     wado()

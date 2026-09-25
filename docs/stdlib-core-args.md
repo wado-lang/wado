@@ -78,7 +78,7 @@ subcommand dispatch and tests inject a `List<String>` directly.
 
 ### `pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment`
 
-Parse the process arguments (`core:cli::args()`) into `T`.
+Parse the process arguments after the program name (`core:cli::args()`) into `T`.
 
 ## Structs
 

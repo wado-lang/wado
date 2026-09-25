@@ -1650,7 +1650,8 @@ use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
 use { args, env } from "core:cli";
 
 println("hello");
-for let arg of args() { println(`arg: ${arg}`); }
+// The program name, then its arguments; never the runner (`wado run`)
+for let arg of args().into_iter().skip(1) { println(`arg: ${arg}`); }
 if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ```
 

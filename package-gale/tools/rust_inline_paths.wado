@@ -250,7 +250,7 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let argv = args();
+    let argv = args().into_iter().skip(1).collect();
     let paths = collect_paths(&argv, ".rs");
     let update = argv.into_iter().any(|a| a == "--update");
     let check = argv.into_iter().any(|a| a == "--check");

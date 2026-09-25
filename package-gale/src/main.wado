@@ -52,7 +52,7 @@ variant Command {
 impl Deserialize for Command;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let argv = args();
+    let argv = args().into_iter().skip(1).collect();
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
             apply_log_level(&g.log_level);

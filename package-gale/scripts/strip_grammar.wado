@@ -10,11 +10,11 @@ use { strip_action_bodies } from "../src/g4/action_strip.wado";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let arguments = args();
-    if arguments.len() != 1 {
+    if arguments.len() != 2 {
         eprintln("usage: strip_grammar <path/to/Grammar.g4>");
         exit(1);
     }
-    let content = match fs::read_to_string(&arguments[0]) {
+    let content = match fs::read_to_string(&arguments[1]) {
         Ok(text) => text,
         Err(e) => {
             eprintln(`strip_grammar: ${e}`);

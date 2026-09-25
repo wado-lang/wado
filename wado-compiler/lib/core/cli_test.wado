@@ -120,7 +120,12 @@ test "env answers None for a name nothing sets" {
     assert env("WADO_CLI_TEST_UNSET_0f3a9c") matches { None };
 }
 
-test "args and cwd answer without trapping" {
-    let _ = args();
+test "args starts with the program, which here is this file" {
+    let argv = args();
+    assert argv.len() == 1;
+    assert argv[0].ends_with("cli_test.wado");
+}
+
+test "cwd answers without trapping" {
     let _ = cwd();
 }

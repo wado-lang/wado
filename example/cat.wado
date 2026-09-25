@@ -17,12 +17,12 @@ use { Stdin } from "wasi:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin) {
-    let arguments = args();
+    let paths = args().into_iter().skip(1).collect();
 
-    if arguments.len() == 0 {
+    if paths.is_empty() {
         // No arguments: read from stdin and write to stdout
         let [stdin_stream, _done] = Stdin::read_via_stream();
-        Stdout::write_via_stream(stdin_stream);
+        copy_to_stdout(stdin_stream);
         return;
     }
 
@@ -34,8 +34,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin) {
     }
     let root = dirs[0].0;
 
-    for let mut i = 0; i < arguments.len(); i = i + 1 {
-        cat_file(&root, arguments[i]);
+    for let path of paths {
+        cat_file(&root, path);
     }
 }
 
@@ -49,8 +49,15 @@ fn cat_file(dir: &Descriptor, path: String) with (Stdout, Stderr) {
 
     if let Ok(file) = open_result {
         let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-        Stdout::write_via_stream(read_stream);
+        copy_to_stdout(read_stream);
     } else {
         eprintln(`cat: ${path}: cannot open file`);
     }
+}
+
+// The host copies the stream, so wait for it: returning first would cut it off.
+fn copy_to_stdout(data: Stream<u8>) with Stdout {
+    let copied = Stdout::write_via_stream(data);
+    let _ = copied.read();
+    copied.drop();
 }

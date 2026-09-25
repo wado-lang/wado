@@ -93,6 +93,7 @@ fn host(args: &Args, gpu: Gpu) -> Result<Host> {
     let mut builder = WasiCtx::builder();
     builder.inherit_stdio().inherit_env();
 
+    builder.arg(args.input.to_string_lossy());
     builder.args(&args.program_args);
 
     for dir in &args.preopens {

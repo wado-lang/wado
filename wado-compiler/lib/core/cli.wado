@@ -15,7 +15,7 @@ use { drop_cli_write_future, write_string_to_stream } from "core:rt";
 #[synopsis]
 test {
     println("Hello, Wado!");
-    for let arg of args() {
+    for let arg of args().into_iter().skip(1) {
         println(`arg: ${arg}`);
     }
     if let Some(home) = env("HOME") {
@@ -81,7 +81,8 @@ pub fn env(name: String) -> Option<String> with Environment {
     return null;
 }
 
-/// Returns all command-line arguments.
+/// The command line: the program name, then its arguments. A runner that
+/// starts the program (`wado run`) is not part of it.
 pub fn args() -> List<String> with Environment {
     return Environment::get_arguments();
 }

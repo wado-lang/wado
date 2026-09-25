@@ -31,7 +31,7 @@ impl Deserialize for Options;
 /// page shell to display it (see `example/standalone.wado` for a starting
 /// point). `highlight` is a grammar's fragment renderer.
 ///
-///     run_cli(my_grammar::highlight, args());
+///     run_cli(my_grammar::highlight, args().into_iter().skip(1).collect());
 pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with (Stderr, Preopens, MonotonicClock) {
     let opts = match parse_args::<Options>(args) {
         Ok(o) => o,

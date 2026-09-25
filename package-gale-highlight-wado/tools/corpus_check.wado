@@ -14,7 +14,7 @@ use fs from "core:fs";
 use { Preopens } from "core:fs";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args(), ".wado");
+    let paths = collect_paths(&args().into_iter().skip(1).collect(), ".wado");
 
     let mut bad = 0;
     for let arg of &paths {

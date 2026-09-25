@@ -207,6 +207,17 @@ fn startup_announces_no_build_artifact() {
     );
 }
 
+/// A service's `args()` is its program name alone, as `wado run` would start it.
+#[test]
+fn args_hold_the_program_name() {
+    let (_guard, port, _stderr) = start_serve("serve_args.wado", &[]);
+    let (status, body) = http_get(port, "/", Duration::from_secs(10));
+    assert_eq!(status, 200);
+    let program = fixture_path("serve_args.wado");
+    let expected = format!("\r\n[{:?}]\r\n", program.to_string_lossy());
+    assert!(body.contains(&expected), "body: {body:?}");
+}
+
 /// A guest stuck in pure wasm past `--timeout` should trap (via
 /// `set_epoch_deadline`) and the client should see a 504 — not a connection
 /// drop, not a 500, not a hang.
