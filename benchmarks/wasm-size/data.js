@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790293982542,
+  "lastUpdate": 1790306945963,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59501,6 +59501,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/be2e0cf4ef762b96da2d91d5393991a84ba8c75e"
         },
         "date": 1790293981750,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6703,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46d6721ee60299cadabc86f68b5f6459f53079f7",
+          "message": "Merge pull request #2153 from wado-lang/claude/quirky-wright-a1g68t\n\nperf(gale): run the package-gale tests in ~30% less wall time by compiling the generator once",
+          "timestamp": "2026-09-25T12:04:10+09:00",
+          "tree_id": "3250eb310b613b5889b2155916d6d6163c897531",
+          "url": "https://github.com/wado-lang/wado/commit/46d6721ee60299cadabc86f68b5f6459f53079f7"
+        },
+        "date": 1790306945364,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
