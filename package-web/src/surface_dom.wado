@@ -196,12 +196,8 @@ impl SurfaceDom {
         return class_of(&self.nodes[index].content) * HANDLE_CLASS_STRIDE + index as f64;
     }
 
-    fn index(&self, node: Node) -> i32 {
-        return self.target_index(node);
-    }
-
     // Every event target is a node here, the window included.
-    fn target_index(&self, target: EventTarget) -> i32 {
+    fn index(&self, target: EventTarget) -> i32 {
         let handle = target as f64;
         let index = f64::fmod(handle, HANDLE_CLASS_STRIDE) as i32;
         assert index < self.nodes.len() && self.handle(index) == handle;
@@ -450,7 +446,7 @@ impl EventTarget for SurfaceDom {
         options: Option<bool>,
     ) {
         self.listeners.push(Listener {
-            target: self.target_index(*this),
+            target: self.index(*this),
             type,
             capture: options.unwrap_or(false),
             callback,
@@ -459,7 +455,7 @@ impl EventTarget for SurfaceDom {
     }
 
     fn dispatch_event(&mut self, this: &EventTarget, event: Event) -> bool {
-        let target = self.target_index(*this);
+        let target = self.index(*this);
         self.events[self.event_index(event)].target = target;
         let path = self.event_path(target);
         for let mut i = path.len() - 1; i >= 0; i -= 1 {

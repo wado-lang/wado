@@ -1342,7 +1342,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Diagnose a closure in parameter `param` of the import `function`. A bare
-    /// closure crosses as a callback, which the host can only call with scalars.
+    /// closure crosses as a callback, which the host calls with scalars and handles.
     pub(super) fn check_import_param_closure(
         &mut self,
         function: &str,

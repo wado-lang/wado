@@ -244,18 +244,9 @@ fn callback(params: &[WadoType], key: &str) -> String {
 fn argument_word(ty: &WadoType) -> &'static str {
     match ty {
         WadoType::Named(_) => "handle",
-        WadoType::F64 => "f64",
-        WadoType::Bool => "bool",
-        WadoType::I8 => "i8",
-        WadoType::I16 => "i16",
-        WadoType::I32 => "i32",
-        WadoType::I64 => "i64",
-        WadoType::U8 => "u8",
-        WadoType::U16 => "u16",
-        WadoType::U32 => "u32",
-        WadoType::U64 => "u64",
-        WadoType::F32 => "f32",
-        _ => unreachable!("the WebIDL frontend admits no {ty:?} callback argument"),
+        _ => ty.primitive_name().unwrap_or_else(|| {
+            unreachable!("the WebIDL frontend admits no {ty:?} callback argument")
+        }),
     }
 }
 

@@ -90,7 +90,7 @@ where
     let call = instance
         .get_export_index(&mut *store, Some(&interface), name)
         .unwrap_or_else(|| panic!("the callback interface exports `{name}`"));
-    Ok(instance.get_typed_func(store, &call)?)
+    Ok(instance.get_typed_func(store, call)?)
 }
 
 /// Instantiate `DECLARATIONS` followed by `run`, hand `body` the instance, and

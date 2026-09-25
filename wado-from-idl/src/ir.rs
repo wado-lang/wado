@@ -296,3 +296,26 @@ pub enum WadoType {
         effect: Option<String>,
     },
 }
+
+impl WadoType {
+    /// The Wado spelling of a primitive; `None` for any other type.
+    pub fn primitive_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Self::Bool => "bool",
+            Self::Char => "char",
+            Self::I8 => "i8",
+            Self::I16 => "i16",
+            Self::I32 => "i32",
+            Self::I64 => "i64",
+            Self::I128 => "i128",
+            Self::U8 => "u8",
+            Self::U16 => "u16",
+            Self::U32 => "u32",
+            Self::U64 => "u64",
+            Self::U128 => "u128",
+            Self::F32 => "f32",
+            Self::F64 => "f64",
+            _ => return None,
+        })
+    }
+}

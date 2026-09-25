@@ -20,6 +20,7 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
 
+use super::callback_export::erased_callback_type;
 use super::import_adapter::is_gc_passthrough_param;
 use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
 use crate::name::FqTypeName;
@@ -787,10 +788,7 @@ impl CallRewriteWalker<'_> {
                 continue;
             }
             self.callbacks.insert(arg.type_id);
-            let erased =
-                self.type_table
-                    .borrow_mut()
-                    .make_function(vec![], TypeTable::UNIT, vec![]);
+            let erased = erased_callback_type(&mut self.type_table.borrow_mut());
             let closure = std::mem::replace(
                 arg,
                 TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),

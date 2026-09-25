@@ -46,9 +46,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Ind
                 wado,
             ));
         }
-        let erased = type_table
-            .borrow_mut()
-            .make_function(vec![], TypeTable::UNIT, vec![]);
+        let erased = erased_callback_type(&mut type_table.borrow_mut());
         let callee = cast(
             internal_call(
                 "cm_callback",
@@ -104,6 +102,11 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Ind
         .functions
         .extend(functions);
     project.callback_exports = exports.into_values().collect();
+}
+
+/// The `fn()` the `core:rt` registry holds every callback as.
+pub(super) fn erased_callback_type(type_table: &mut TypeTable) -> TypeId {
+    type_table.make_function(vec![], TypeTable::UNIT, vec![])
 }
 
 fn closure_params(type_table: &TypeTable, closure: TypeId) -> Vec<TypeId> {

@@ -762,18 +762,8 @@ impl Lowering<'_> {
                 let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
                 match ty {
                     _ if arg.variadic => Err(format!("callback argument `{}`: variadic", arg.name)),
-                    WadoType::Named(_)
-                    | WadoType::Bool
-                    | WadoType::I8
-                    | WadoType::I16
-                    | WadoType::I32
-                    | WadoType::I64
-                    | WadoType::U8
-                    | WadoType::U16
-                    | WadoType::U32
-                    | WadoType::U64
-                    | WadoType::F32
-                    | WadoType::F64 => Ok(ty),
+                    WadoType::Named(_) => Ok(ty),
+                    _ if ty.primitive_name().is_some() => Ok(ty),
                     _ => Err(format!(
                         "callback argument `{}`: neither a scalar nor a handle",
                         arg.name

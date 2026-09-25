@@ -1766,9 +1766,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         replaces_on_assign(table.get(base))
     }
 
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
-    /// any nesting of those. A reference step ends the walk; `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report.
     /// Record that `place` is borrowed `&mut` here. One rooted at a binding of an
     /// enclosing frame is written through, so the closure must capture it `&mut`.
     pub(super) fn record_mut_borrow(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
@@ -1793,6 +1790,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
+    /// any nesting of those. A reference step ends the walk; `&T` is
+    /// [`Self::place_roots_at_immutable_ref`]'s to report.
     pub(super) fn place_roots_at_immutable_binding(
         &self,
         expr: &ast::Expr,
