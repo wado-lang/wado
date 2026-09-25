@@ -5,7 +5,7 @@ use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind, UNIT_TYPE_NAME};
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TemplateId, TupleSlot, TypeId,
     TypeTable,
@@ -288,10 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ModuleSource::of_primitive(*prim),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
-            ResolvedType::Unit => (
-                TypeTable::UNIT_TYPE_NAME.to_string(),
-                ModuleSource::primitive(),
-            ),
+            ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), ModuleSource::primitive()),
             // Enum types - use enum name and its defining module
             // Enum, generic resource, newtype and flags are all named by the
             // declaration they carry.
@@ -978,26 +975,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
 
-        // A bound on a parameter answers from no block, so its instance decides
-        // the template.
-        let template = match (dispatched_method_def, dispatched_impl_block) {
-            (Some(def), Some(block)) => Some(TemplateId::Declared {
-                def,
-                block: Some(block),
-            }),
-            (Some(_), None) => None,
-            (None, _) => trait_impl_module_source
-                .clone()
-                .map(|module| TemplateId::Synthesized {
-                    module,
-                    name: MethodName::format_local(
-                        &base_struct_name,
-                        trait_name.as_ref(),
-                        method_name,
-                    ),
-                }),
-        };
-
         // Build monomorph_info for method calls on generic types or with method type args
         let monomorph_info = if from_concrete_impl {
             // A method from a concrete instantiation impl (`impl List<u8>`) is a
@@ -1071,6 +1048,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_info.is_type_param_receiver = is_type_param_receiver;
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;
+
+        // A bound on a parameter answers from no block, so its instance decides
+        // the template.
+        let template = match (dispatched_method_def, dispatched_impl_block) {
+            (Some(def), Some(block)) => Some(TemplateId::in_block(def, block)),
+            (Some(_), None) => None,
+            (None, _) => trait_impl_module_source
+                .clone()
+                .map(|module| TemplateId::derived(module, &method_info)),
+        };
 
         // `module_source` is the body's home module. The body lives:
         //   1. In the trait-impl block's module for cross-module trait impls
@@ -1836,11 +1823,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // against what `Type::<i32>::method()` spelled.
         let mut static_type_bindings = declaring_impl
             .map(|id| {
-                let impl_sig = self.tysys.signatures.impl_sig(id);
                 let args = self
                     .receiver_declaring_args(Some(target_type_id), &[])
                     .unwrap_or_default();
-                slot_type_bindings(&self.tysys.type_table, &impl_sig.target_type_args, &args)
+                let table = &self.tysys.type_table;
+                slot_type_bindings(table, table.borrow().impl_target_args(id), &args)
             })
             .unwrap_or_default();
         // The static's own slots, as the turbofish spelled them, as the block
@@ -2406,7 +2393,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let generic_name =
             MethodName::format_local(&receiver_name, trait_name_opt.as_ref(), &static_call.method);
         let template = match &selected {
-            Some(r) => self.static_template(r, || generic_name.clone()),
+            Some(r) => self.static_template(r, &receiver_name),
             None => declaration.map(|def| self.declared_template(def)),
         };
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
@@ -3358,35 +3345,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .signatures
             .method_sig(selected?.method_id?)?
             .declaring_impl?;
-        let sig = self.tysys.signatures.impl_sig(impl_def);
         let table = self.tysys.type_table.borrow();
-        let open = sig
-            .target_type_args
+        let open = table
+            .impl_target_args(impl_def)
             .iter()
             .any(|&arg| table.contains_type_param(arg));
         (!open).then_some(impl_def)
     }
 
-    /// What a static call instantiates: the selected declaration in its block,
-    /// else the derived `derived_name`; `None` where the instance decides.
+    /// What a static call on `receiver` instantiates: the selected declaration
+    /// in its block, else the derived body; `None` where the instance decides.
     pub(super) fn static_template(
         &self,
         selected: &StaticMethodRef,
-        derived_name: impl FnOnce() -> String,
+        receiver: &FqTypeName,
     ) -> Option<TemplateId> {
         let Some(def) = selected.method_id else {
-            return Some(TemplateId::Synthesized {
-                module: selected.module.clone(),
-                name: derived_name(),
-            });
+            let info = LocalMethodName::new(
+                receiver.clone(),
+                selected.trait_name.clone(),
+                selected.method_name.clone(),
+            );
+            return Some(TemplateId::derived(selected.module.clone(), &info));
         };
         let block = selected
             .supplying_block
             .or_else(|| self.tysys.signatures.method_sig(def)?.declaring_impl)?;
-        Some(TemplateId::Declared {
-            def,
-            block: Some(block),
-        })
+        Some(TemplateId::in_block(def, block))
     }
 
     /// What a call of the written declaration `def` instantiates.
@@ -3406,20 +3391,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &self,
         selected: Option<&StaticMethodRef>,
     ) -> Option<FqTypeName> {
-        let sig = self
-            .tysys
-            .signatures
-            .impl_sig(self.concrete_impl_of(selected)?);
-        if sig.target_type_args.is_empty() {
+        let impl_def = self.concrete_impl_of(selected)?;
+        let table = self.tysys.type_table.borrow();
+        let written = table.impl_target_args(impl_def);
+        if written.is_empty() {
             return None;
         }
-        let table = self.tysys.type_table.borrow();
-        let args: Vec<FqTypeName> = sig
-            .target_type_args
-            .iter()
-            .map(|&arg| table.fq_type_name(arg))
-            .collect();
-        Some(sig.target_fq.clone().with_args(args))
+        let args: Vec<FqTypeName> = written.iter().map(|&arg| table.fq_type_name(arg)).collect();
+        let target_fq = &self.tysys.signatures.impl_sig(impl_def).target_fq;
+        Some(target_fq.clone().with_args(args))
     }
 
     /// Whether only the argument can fill this parameter — a blanket, whose
@@ -3678,7 +3658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = newtype_id;
         }
 
-        let template = self.static_template(&method_ref, || final_mangled_name.clone());
+        let template = self.static_template(&method_ref, &receiver_fq);
         let monomorph_info = if impl_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {

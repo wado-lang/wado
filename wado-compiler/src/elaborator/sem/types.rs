@@ -9,7 +9,7 @@ use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, MethodName, Receiver};
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, Receiver};
 use crate::tir;
 use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
 
@@ -591,12 +591,7 @@ pub(crate) struct FromCallFacts {
     /// Module that hosts the `impl From<From> for Target` block (or
     /// the auto-derived synthesis site).
     pub(crate) module_source: ModuleSource,
-    /// `MethodName::format_local(target_name, Some(from_trait), "from")` —
-    /// the mangled `Target^From<From>::from` name the monomorphizer
-    /// keys on.
-    pub(crate) mangled_name: String,
-    /// `type_name(target_type)` — the call's struct prefix
-    /// (`LocalMethodName::struct_name` / `base_struct_name`).
+    /// The receiver the call's method name is built from.
     pub(crate) target_name: FqTypeName,
     /// `fq_type_name(from_type)` — the conversion source type, used to build
     /// `LocalMethodName::trait_name`'s `From<…>` form.
@@ -628,8 +623,6 @@ pub(crate) struct LiteralCallee {
     /// Type-arg names parallel to `type_arg_ids`, kept structured.
     pub(crate) type_arg_names: Vec<FqTypeName>,
     pub(crate) method: &'static str,
-    /// `Target^Trait::method`'s mangled name.
-    pub(crate) mangled_name: String,
 }
 
 impl LiteralCallee {
@@ -642,11 +635,16 @@ impl LiteralCallee {
             .iter()
             .map(|&t| tt.fq_type_name(t))
             .collect();
-        let target = self
-            .target_base_name
-            .clone()
-            .with_args(self.type_arg_names.clone());
-        self.mangled_name = MethodName::format_local(&target, Some(&self.trait_name), self.method);
+    }
+
+    /// The called method, the target's arguments spelled in.
+    pub(crate) fn method_info(&self) -> LocalMethodName {
+        LocalMethodName::new(
+            self.target_base_name.clone(),
+            Some(self.trait_name.clone()),
+            self.method.to_string(),
+        )
+        .with_struct_type_args(&self.type_arg_names)
     }
 }
 

@@ -77,7 +77,11 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     let copy_result = type_table
         .borrow_mut()
         .make_compiler_enum(CompilerItem::CopyResult);
-    internal_call("cm_copy_result", vec![packed], copy_result)
+    internal_call(
+        CompilerItem::CmCopyResult.attr_name(),
+        vec![packed],
+        copy_result,
+    )
 }
 
 /// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
@@ -447,7 +451,7 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
             .collect();
-        return if TypeTable::is_tuple_type(&name) {
+        return if tt.is_tuple_def(*def) {
             ast::Type::Tuple(args)
         } else {
             ast::Type::Generic(GenericType {
@@ -748,7 +752,7 @@ fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirS
             stmts: vec![expr_stmt(assign(
                 local_ref(status_idx, status_name, TypeTable::I32),
                 internal_call(
-                    "cm_await_blocked",
+                    CompilerItem::CmAwaitBlocked.attr_name(),
                     vec![local_ref(handle_idx, "handle", TypeTable::I32)],
                     TypeTable::I32,
                 ),
@@ -1886,21 +1890,20 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     else {
         return;
     };
-    let (canonical, helper, item) = if is_future {
+    let (canonical, item) = if is_future {
         let payload = classify_future_payload(tt, payload_tid);
         (
             CanonicalIntrinsic::FutureNew(payload),
-            "cm_future_pair",
             CompilerItem::CmFuturePair,
         )
     } else {
         let payload = classify_stream_payload(tt, payload_tid);
         (
             CanonicalIntrinsic::StreamNew(payload),
-            "cm_stream_pair",
             CompilerItem::CmStreamPair,
         )
     };
+    let helper = item.attr_name();
     let template = tt.compiler_items().require_template(item);
     let result_type = expr.type_id;
     let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);

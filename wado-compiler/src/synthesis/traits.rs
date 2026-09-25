@@ -3321,33 +3321,16 @@ fn generate_flags_from_bits_fn(
     )
 }
 
-/// Threading of trait-impl knowledge through the synthesis sub-passes.
-///
-/// `trait_env` exposes the AST-layer (and any prior synthesis-layer) impls
-/// already known to the project; `pending` is the in-progress dedup set
-/// that grows as each sub-pass adds new impls. Together they let a
-/// sub-pass answer "is `impl <trait> for <type>` already in the project?"
-/// without re-scanning TIR per call.
+/// What the synthesis sub-passes know of trait impls: the project's, and the
+/// ones this pass has added so far.
 pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     pub(crate) trait_env: &'env TraitEnv,
-    /// In-progress dedup of `(type_name, module, trait_name)` triples. Module
-    /// is part of the key so that two same-name structs from different
-    /// modules each get their own auto-derived impl — without the module
-    /// component, the second derivation would be silently skipped and the
-    /// receiver type from the second module would dispatch to the first
-    /// module's impl.
+    /// The `(head, module, trait)` impls this pass has added.
     pub(crate) pending: &'pend mut SynthRequests,
-    /// `(type_name, module, trait_name)` triples that a real `T: Eq` /
-    /// `T: Ord` bound or explicit marker actually demanded (WEP
-    /// 2026-06-25-trait-derivation), snapshotted from
-    /// `TypeTable::bound_driven_synth_requests` before this pass starts.
-    /// Gates `generate_enum_trait_impls` / `generate_struct_eq_ord_impls` /
-    /// `generate_variant_eq_impls` — an impl is emitted only for a pair
-    /// recorded here, not for every declared type. Default / Inspect /
-    /// Display stay unconditional.
+    /// The `(head, module, trait)` impls a bound or marker demanded, which gate
+    /// the `Eq` / `Ord` derives.
     pub(crate) requested: &'req SynthRequests,
-    /// Module currently being synthesised. Auto-derived impls live in this
-    /// module by convention.
+    /// The module being synthesised, which the derived impls live in.
     pub(crate) module: ModuleSource,
     /// Every `core:prelude/{traits,format}` symbol this pass touches, resolved
     /// once through the [`CompilerItem`] registry.
@@ -3358,56 +3341,24 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
 }
 
 impl SynthesisCtx<'_, '_, '_> {
-    /// `true` when this pass already recorded `<trait> for <head>` in the
-    /// current module. The in-pass record is module-scoped, so two modules'
-    /// same-named declarations each get their own derived impl.
-    pub(crate) fn pending_has_head(&self, head: &TypeHead, trait_key: &DefId) -> bool {
+    /// Whether this pass added `<trait> for <head>` in the current module: the
+    /// only record an instantiation has, since the impl indexes hold declarations.
+    pub(crate) fn pending_has(&self, head: &TypeHead, trait_key: &DefId) -> bool {
         self.pending
             .contains(&(head.clone(), self.module.clone(), *trait_key))
     }
 
-    /// Note that this synthesis pass added `impl <trait> for <receiver>` in the
-    /// current module. Used for in-pass dedup only; the canonical synthesis
-    /// layer is rebuilt by `collect_synthesised_impls` after
-    /// `synthesize_traits` returns.
+    /// Note that this pass added `impl <trait> for <receiver>` in the current module.
     pub(crate) fn record_impl(&mut self, receiver: &FqTypeName, trait_key: &DefId) {
         self.pending
-            .insert((Self::key(receiver), self.module.clone(), *trait_key));
+            .insert((receiver.head().clone(), self.module.clone(), *trait_key));
     }
 
-    /// The in-pass dedup key of a receiver: its head — the declaration where
-    /// one names it, the rendering where none does. Two same-named
-    /// declarations are two keys, in one module or across two.
-    fn key(receiver: &FqTypeName) -> TypeHead {
-        receiver.head().clone()
-    }
-
-    /// `true` when this pass already emitted `<trait> for <instance>`.
-    ///
-    /// Only the in-pass record can answer: an instantiation is not a
-    /// declaration, so the impl indexes — which hold declarations — have no
-    /// entry that could match it, whatever key one built.
-    pub(crate) fn instance_has_impl(&self, instance: &TypeHead, trait_key: &DefId) -> bool {
-        self.pending_has_head(instance, trait_key)
-    }
-
-    /// `true` when some `T: <trait>` bound (or an explicit marker) in the
-    /// project actually demanded `impl <trait> for <receiver>` in the current
-    /// module — see [`Self::requested`]. Only consulted for the `Eq` / `Ord`
-    /// sub-passes; the other auto-derives stay unconditional.
+    /// Whether a bound or marker demanded `impl <trait> for <receiver>` in the
+    /// current module.
     pub(crate) fn is_requested(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
         self.requested
-            .contains(&(Self::key(receiver), self.module.clone(), *trait_key))
-    }
-
-    /// The receiver `head` indexes under in [`TraitEnv`].
-    fn receiver(&self, head: &FqTypeName) -> Receiver {
-        Receiver::Type(head.clone())
-    }
-
-    /// `true` when this pass already emitted `<trait_name> for <type_name>`.
-    fn pending_has(&self, receiver: &FqTypeName, trait_key: &DefId) -> bool {
-        self.pending_has_head(receiver.head(), trait_key)
+            .contains(&(receiver.head().clone(), self.module.clone(), *trait_key))
     }
 
     /// Whether an impl with methods covers every instance of `receiver` within
@@ -3418,19 +3369,21 @@ impl SynthesisCtx<'_, '_, '_> {
         trait_key: &DefId,
         scope: ImplScope,
     ) -> bool {
-        let type_key = self.receiver(receiver);
+        let pending = self.pending_has(receiver.head(), trait_key);
         let Some(trait_) = self.trait_env.trait_def(trait_key) else {
-            return self.pending_has(receiver, trait_key);
+            return pending;
         };
         let module = match scope {
             ImplScope::CurrentModule => Some(&self.module),
             ImplScope::AnyModule => None,
         };
-        self.trait_env
-            .has_covering_methodful_impl_by_receiver(&type_key, trait_, module, |block| {
-                !self.partial_impls.contains(&block)
-            })
-            || self.pending_has(receiver, trait_key)
+        pending
+            || self.trait_env.has_covering_methodful_impl_by_receiver(
+                &Receiver::Type(receiver.clone()),
+                trait_,
+                module,
+                |block| !self.partial_impls.contains(&block),
+            )
     }
 
     /// Module-scoped methodful check, for the `Eq` / `Ord` / `Default`
@@ -3456,17 +3409,6 @@ impl SynthesisCtx<'_, '_, '_> {
 enum ImplScope {
     CurrentModule,
     AnyModule,
-}
-
-/// The module declaring a shape's base (`Stream` for `Stream<u8>`), which names
-/// its synthesized impls. `None` for a shape with no declaration to point at.
-fn shape_declaring_module(tt: &TypeTable, resolved: &ResolvedType) -> Option<ModuleSource> {
-    match resolved {
-        ResolvedType::GenericInstance { def, .. } | ResolvedType::GenericResource { def, .. } => {
-            Some(tt.def_module(*def).clone())
-        }
-        _ => None,
-    }
 }
 
 /// Resolve type parameter definitions into `TypeIds`.
@@ -3993,56 +3935,39 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     // included, over `ReflectNewtype`. What remains has no reflection:
     // parameterized types, resources, and `fn(..)` dispatch stubs.
 
-    // Parameterized types (tuples, generic resources). `Fn` signatures are
-    // handled separately below via `collect_canonical_fn_signatures` because
-    // their dispatch stubs are keyed by `(arity, return_type)`, not `TypeId`.
+    // Tuples inspect through their variadic impl in `core:prelude/tuple.wado`,
+    // and `Fn` signatures through `collect_canonical_fn_signatures` below.
     let span = synth_span();
-    for (type_id, _base_name, type_arg_names) in collect_parameterized_types(&tt) {
+    for (type_id, def, type_arg_names) in collect_generic_resource_instances(&tt) {
+        // The stub belongs to the module declaring the resource, emitted there once.
+        if *tt.def_module(def) != module_source {
+            continue;
+        }
         let mangled = tt.fq_type_name(type_id).to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
-        if ctx.instance_has_impl(&instance, &inspect_fq.canonical().expect(KEYED)) {
+        if ctx.pending_has(&instance, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(type_id);
-        let resolved = tt.get(type_id).clone();
-        match resolved {
-            ResolvedType::GenericInstance { def, .. }
-                if TypeTable::is_tuple_type(tt.def_name(def)) =>
-            {
-                // Tuple Inspect is provided by variadic impl in core:prelude/tuple.wado
-            }
-            _ => {
-                // One name is one function: the stub belongs to the module
-                // declaring the shape's base, emitted once, there.
-                // A shape with no declaration (a tuple, a reference, a `Fn`)
-                // has no module to be named by, so it keeps a copy per using
-                // module — the same reason the `Fn` arm below does.
-                let shape_module = match shape_declaring_module(&tt, &resolved) {
-                    Some(m) if m != module_source => continue,
-                    Some(m) => m,
-                    None => module_source.clone(),
-                };
-                let type_name = tt.type_name(type_id);
-                generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
-                    &tt.fq_base_type_name(type_id),
-                    &type_arg_names,
-                    &type_name,
-                    type_id,
-                    ref_type,
-                    fmt_type,
-                    string_type,
-                    ctx.trait_env,
-                    &shape_module,
-                    &mut tt,
-                    span,
-                    &inspect_fq,
-                    &inspect_method,
-                    &write_str,
-                    &lower_hex_fq,
-                    &lower_hex_method,
-                ))));
-            }
-        }
+        let type_name = tt.type_name(type_id);
+        generated.push(Rc::new(RefCell::new(generate_opaque_inspect_fn(
+            &tt.fq_base_type_name(type_id),
+            &type_arg_names,
+            &type_name,
+            type_id,
+            ref_type,
+            fmt_type,
+            string_type,
+            ctx.trait_env,
+            &module_source,
+            &mut tt,
+            span,
+            &inspect_fq,
+            &inspect_method,
+            &write_str,
+            &lower_hex_fq,
+            &lower_hex_method,
+        ))));
     }
 
     for (name, rspan, def) in &resource_infos {
@@ -4078,7 +4003,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     for sig in collect_canonical_fn_signatures(&tt) {
         let mangled = sig.receiver.to_mangled();
         let instance = TypeHead::instance(&module_source, &mangled);
-        if ctx.instance_has_impl(&instance, &inspect_fq.canonical().expect(KEYED)) {
+        if ctx.pending_has(&instance, &inspect_fq.canonical().expect(KEYED)) {
             continue;
         }
         let ref_type = tt.make_ref(sig.repr_type_id);
@@ -4432,29 +4357,16 @@ fn resolve_impl_module_via_env(
     type_module.unwrap_or_else(|| fallback.clone())
 }
 
-/// Collect the parameterized types needing Inspect/Display impls — the kinds
-/// whose codegen genuinely depends on the distinct `TypeId`, tuples and resource
-/// handles included. `ResolvedType::Function` is deliberately absent — its
-/// stubs are keyed by the type's own spelling, so use
-/// [`collect_canonical_fn_signatures`] instead.
-fn collect_parameterized_types(tt: &TypeTable) -> Vec<(TypeId, String, Vec<FqTypeName>)> {
+/// Every concrete generic resource instance, with its declaration and arguments:
+/// each one needs its own opaque `Inspect`.
+fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(tt.def_name(*def)) =>
+            ResolvedType::GenericResource { def, type_args }
+                if type_args.iter().all(|t| tt.is_concrete(*t)) =>
             {
-                if !type_args.iter().all(|e| tt.is_concrete(*e)) {
-                    return None;
-                }
-                let args = type_args.iter().map(|e| tt.fq_type_name(*e)).collect();
-                Some((id, TypeTable::TUPLE_TYPE_NAME.to_string(), args))
-            }
-            ResolvedType::GenericResource { def, type_args } => {
-                if !type_args.iter().all(|t| tt.is_concrete(*t)) {
-                    return None;
-                }
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
-                Some((id, tt.def_name(*def).to_string(), args))
+                Some((id, *def, args))
             }
             _ => None,
         })

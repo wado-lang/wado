@@ -762,16 +762,17 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Struct { def, type_args } => {
-                let module_source = &type_table.struct_head_module(*def).clone();
-                // The WIR struct map is keyed on the rendered spelling: each
-                // instantiation is its own struct type.
-                let name = &type_table.struct_rendered_name(*def, type_args);
                 let lookup_module = if type_table.is_string(type_id) {
                     ModuleSource::string()
                 } else {
-                    module_source.clone()
+                    type_table.struct_head_module(*def).clone()
                 };
-                let lookup_name = StructName::new(lookup_module, name.clone());
+                // The WIR struct map is keyed on the rendered spelling: each
+                // instantiation is its own struct type.
+                let lookup_name = StructName::new(
+                    lookup_module,
+                    type_table.struct_rendered_name(*def, type_args),
+                );
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "struct `{lookup_name}`"

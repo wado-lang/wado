@@ -18,6 +18,7 @@ use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_query::assoc_const_owner;
@@ -521,7 +522,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let resolved = self.resolve_type(annotated_type);
             self.reject_unresolved_annotation(annotated_type);
-            let target_type = if Self::first_infer_span(annotated_type).is_some() {
+            let target_type = if first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
                 resolved

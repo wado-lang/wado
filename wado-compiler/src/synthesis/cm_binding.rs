@@ -28,10 +28,12 @@ use crate::component_model::{
 };
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
-use crate::module_source::{CmNamespace, ModuleSource};
+use crate::module_source::ModuleSource;
 use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
 use crate::package::{Package, test_selected};
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
+use crate::tir::{
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
+};
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
@@ -50,23 +52,15 @@ use task_return::{
     assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
     split_task_entry,
 };
-use type_fixup::{
-    collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
-};
+use type_fixup::{collect_effect_calls_in_block, rewrite_calls_in_block};
 use types::{Boundary, Slot, flat_types_from_ast_type, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
 
-/// Build a `(module_source, name)` set for every effect/resource declared in
-/// the loaded TIR modules. The CM binding synthesizer uses this to attach the
-/// owning effect to each generated binding using the same `module_source` the
-/// elaborator assigns to user-written `with E` clauses.
-///
-/// Keying by `(module_source, name)` (rather than name alone) prevents
-/// collisions when two modules declare an effect or resource with the same
-/// name — `lookup_effect_owner` selects the canonical WASI module.
+/// Every effect and resource the TIR modules declare, as `(module, name)`: the
+/// candidates [`lookup_effect_owner`] picks a binding's owner from.
 fn effect_owner_module_sources(
     modules: &IndexMap<ModuleSource, TirModule>,
 ) -> IndexSet<(ModuleSource, String)> {
@@ -500,57 +494,36 @@ fn generate_import_adapters(project: &mut Package) {
     }
 
     let entry_type_table = entry_type_table(project);
-    // Map effect/resource name → defining module source. Used to attach the
-    // canonical owner as an effect on each generated binding so the
-    // checker's `(module_source, name)` identity matches user-written
-    // `with E` clauses (which the elaborator also canonicalises to the
-    // defining module).
     let owner_sources = effect_owner_module_sources(&project.tir_modules);
-    // Keyed by the qualified `interface::method` effect name — the same key
-    // call sites are rewritten against.
     let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
-    // Auxiliary functions returned alongside an adapter (e.g. the
-    // per-import `$cm_lift__*` for async imports). Not used for
-    // call-site rewriting, but added to the entry module so they
-    // participate in monomorphize / lower / DCE like normal functions.
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for qualified_name in &seen_effects {
-        let func_info = project
-            .cm_interface_registry
+        let registry = &project.cm_interface_registry;
+        let func_info = registry
             .get_function(qualified_name)
-            .expect("the collector records only a registered CM function")
-            .clone();
-        let owner_module = lookup_effect_owner(
-            &owner_sources,
-            &func_info.interface_name,
-            &func_info.package,
-        )
-        // A world-level import declares no owner: a placeholder in its own
-        // namespace, `Wasi` where it names none.
-        .unwrap_or_else(|| {
-            let namespace =
-                CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
-            project
-                .interner
-                .borrow_mut()
-                .binding(namespace, &func_info.package)
+            .expect("the collector records only a registered CM function");
+        // An operation on `E`, effect or resource alike, requires `with E`; a
+        // world function belongs to no interface and requires nothing.
+        let effect = (!registry.is_world_import_function(qualified_name)).then(|| {
+            let module_source = lookup_effect_owner(
+                &owner_sources,
+                &func_info.interface_name,
+                &func_info.package,
+            )
+            .expect("an interface function's effect is declared");
+            EffectRef::Concrete {
+                name: func_info.interface_name.clone(),
+                module_source,
+            }
         });
         let produced = synthesize_adapter(
-            &func_info,
-            &project.cm_interface_registry,
+            func_info,
+            registry,
             &entry_type_table,
             &project.interner,
-            &owner_module,
+            effect,
             &entry_source,
         );
-        // A world function has no interface, so no capability effect: drop the
-        // empty one the shared synthesizer pushed.
-        if project
-            .cm_interface_registry
-            .is_world_import_function(qualified_name)
-        {
-            produced.adapter.borrow_mut().effects.clear();
-        }
         auxiliary_functions.extend(produced.auxiliary);
         adapters.insert(qualified_name.clone(), produced.adapter);
     }
@@ -566,10 +539,8 @@ fn generate_import_adapters(project: &mut Package) {
         entry_module.functions.push(aux);
     }
 
-    // Rewrite effect-like call nodes to target adapters. Call sites
-    // are keyed by qualified `interface::method` name, exactly how
-    // `adapters` is keyed. `applied_returns` spans all modules so call
-    // sites that disagree on a shared adapter's return type are caught.
+    // Spans all modules, so call sites disagreeing on a shared adapter's
+    // return type are caught.
     let mut applied_returns: IndexMap<usize, TypeId> = IndexMap::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
@@ -583,17 +554,6 @@ fn generate_import_adapters(project: &mut Package) {
                     &entry_type_table,
                     &mut applied_returns,
                 );
-            }
-            // Sync locals with any Let stmts that were updated by the rewrite
-            // (e.g., streaming binding calls changing the let binding type to i32).
-            if !func.locals.is_empty() {
-                let mut updates = Vec::new();
-                if let Some(body) = &func.body {
-                    collect_local_type_updates(body, &func.locals, &mut updates);
-                }
-                for (idx, type_id) in updates {
-                    func.locals[idx].type_id = type_id;
-                }
             }
         }
     }

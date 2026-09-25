@@ -21,7 +21,7 @@ use crate::tir::{
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
 use crate::tir::StructDef;
 
@@ -293,7 +293,7 @@ pub fn cm_type_to_type_id(
             "f64" => TypeTable::F64,
             "bool" => TypeTable::BOOL,
             "char" => TypeTable::CHAR,
-            TypeTable::UNIT_TYPE_NAME => TypeTable::UNIT,
+            UNIT_TYPE_NAME => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
             //
             // The type's own `source_interface` leads: a package holds several
@@ -671,13 +671,22 @@ fn check_cm_boundary_representable_inner(
                     type_table.type_name(type_id)
                 ))
             }
-            // Scalars, plain discriminants, bitflags, and plain resource
-            // handles lower to an i32 handle identically in every world.
             R::Unit if slot == Slot::Value => Err(
                 "`()` has no Component Model representation here — it stands only where a \
                  type may be absent: a function result, a `Result` arm or a case payload"
                     .to_string(),
             ),
+            R::Enum { def } | R::Flags { def } | R::Variant { def }
+                if declares_no_case(*def, tir_modules) =>
+            {
+                Err(format!(
+                    "`{}` declares no case, and an empty enum, flags or variant has no \
+                     Component Model representation — add at least one",
+                    type_table.type_name(type_id)
+                ))
+            }
+            // Scalars, plain discriminants, bitflags, and plain resource
+            // handles lower to an i32 handle identically in every world.
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
                 Ok(())
             }
@@ -1044,7 +1053,7 @@ fn flatten_export_type_inner(
             "i64" | "u64" => out.push(cm_abi::CmValType::I64),
             "f32" => out.push(cm_abi::CmValType::F32),
             "f64" => out.push(cm_abi::CmValType::F64),
-            TypeTable::UNIT_TYPE_NAME => {}
+            UNIT_TYPE_NAME => {}
             _ => {
                 // Check if it's a variant type defined in TIR modules
                 if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
@@ -1211,7 +1220,7 @@ fn flat_types_from_type_id_inner(
             }
         }
         ResolvedType::GenericInstance { def, type_args } => {
-            if TypeTable::is_tuple_type(type_table.def_name(*def)) {
+            if type_table.is_tuple_def(*def) {
                 for &elem in type_args {
                     flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
                 }
@@ -1277,6 +1286,24 @@ pub(super) fn variant_decl_of(
         .flat_map(|module| &module.variants)
         .find(|variant| variant.def == def)
         .cloned()
+}
+
+/// Whether the enum, flags or variant `def` declares no case at all.
+fn declares_no_case(def: DefId, tir_modules: &IndexMap<ModuleSource, TirModule>) -> bool {
+    tir_modules.values().any(|module| {
+        module
+            .enums
+            .iter()
+            .any(|e| e.def == def && e.cases.is_empty())
+            || module
+                .flags
+                .iter()
+                .any(|f| f.def == def && f.members.is_empty())
+            || module
+                .variants
+                .iter()
+                .any(|v| v.def == def && v.cases.is_empty())
+    })
 }
 
 /// The struct declaration `def` names, at `type_args` where the module holds
@@ -1496,7 +1523,7 @@ pub(super) fn type_id_to_ast_type(
             // The tuple family is a `GenericInstance`, but its CM surface is a
             // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
             // the tuple arm rather than the generic catch-all.
-            if TypeTable::is_tuple_type(name) {
+            if type_table.is_tuple_def(*def) {
                 Type::Tuple(args)
             } else {
                 Type::Generic(GenericType {

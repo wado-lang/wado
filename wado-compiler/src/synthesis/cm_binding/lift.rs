@@ -28,8 +28,7 @@ use super::types::{
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
-use crate::name::FqTypeName;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName, UNIT_TYPE_NAME};
 use crate::tir::CallArg;
 use crate::tir::FunctionRef;
 use crate::tir::StructDef;
@@ -139,7 +138,11 @@ fn synthesize_lift_inner(
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                return internal_call("memory_to_gc_string", vec![ptr, len], string_type_id);
+                return internal_call(
+                    CompilerItem::MemoryToGcString.attr_name(),
+                    vec![ptr, len],
+                    string_type_id,
+                );
             }
             match named_name {
                 "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
@@ -159,9 +162,7 @@ fn synthesize_lift_inner(
                 }
                 "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
                 // Unit occupies no memory, so there is nothing to load.
-                TypeTable::UNIT_TYPE_NAME => {
-                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
-                }
+                UNIT_TYPE_NAME => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
                 _ => {
                     // A non-CM reference falls through to the i32-handle default.
                     if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {

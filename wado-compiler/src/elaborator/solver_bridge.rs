@@ -6,7 +6,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead};
+use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
@@ -330,7 +330,7 @@ impl Lowering {
             ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
-            ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
+            ResolvedType::Unit => decl(DeclKey::Builtin(UNIT_TYPE_NAME.into()), vec![]),
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 type_args,
@@ -400,7 +400,7 @@ impl Lowering {
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
-            ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
+            ResolvedType::Never => decl(DeclKey::Builtin(NEVER_TYPE_NAME.into()), vec![]),
             // A projection on a rigid parameter, satisfying what its trait
             // declares of the associated type.
             ResolvedType::AssocTypeProjection {

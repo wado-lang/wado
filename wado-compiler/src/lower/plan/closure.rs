@@ -1303,7 +1303,7 @@ impl ClosureLowerer {
             is_export: false,                // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),
-            impl_origin: callee.impl_origin.clone(),
+            impl_origin: callee.impl_origin,
             monomorph_info: callee.monomorph_info.clone(),
             method_info: specialized_method_info,
             params: new_params,

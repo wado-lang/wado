@@ -106,7 +106,7 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
-                let is_tuple = TypeTable::is_tuple_type(type_table.def_name(def));
+                let is_tuple = type_table.is_tuple_def(def);
                 // Lowered by codegen as they are, never as a monomorphized struct.
                 if is_tuple || type_table.is_list(type_id) {
                     let new_args: Vec<TypeId> = type_args
@@ -259,7 +259,7 @@ impl Monomorphizer {
                 // recursively through `self.substitute_type` so that
                 // nested `GenericInstance`s inside the tuple still get
                 // their monomorphized-struct rewrite.
-                if TypeTable::is_tuple_type(&name) {
+                if type_table.is_tuple_def(def) {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match type_table.get(e).clone() {
@@ -289,9 +289,7 @@ impl Monomorphizer {
                                     // `[..Case<T, P>]` yields `Case<T, P_k>`, a
                                     // pack-independent `..F::method()` repeats `R`.
                                     Some(elem) => {
-                                        let pack_elems = type_table
-                                            .as_tuple(pack_type)
-                                            .unwrap_or_else(|| vec![pack_type]);
+                                        let pack_elems = type_table.elem_types_or_self(pack_type);
                                         // The element binding must not reach a
                                         // splice position nested in `elem`: one
                                         // still spells the whole pack, so it
@@ -309,11 +307,7 @@ impl Monomorphizer {
                                         self.restore_pack_splice(index, displaced);
                                     }
                                     None => {
-                                        if let Some(pack_elems) = type_table.as_tuple(pack_type) {
-                                            new_elems.extend_from_slice(&pack_elems);
-                                        } else {
-                                            new_elems.push(pack_type);
-                                        }
+                                        new_elems.extend(type_table.elem_types_or_self(pack_type));
                                     }
                                 }
                             }

@@ -234,68 +234,67 @@ impl MemberTables {
     }
 }
 
-/// Walk a type recursively, collecting every resource (`Resource` or
-/// `GenericResource`) reference as an `EffectRef::Concrete`.
-///
-/// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `List<T>`,
-/// function types, refs, newtypes, struct fields, variant case payloads).
-/// Uses `visited` to stop at cycles (e.g. recursive struct types).
-fn collect_resource_refs(
-    type_id: TypeId,
-    tt: &TypeTable,
-    members: &MemberTables,
-    out: &mut IndexSet<EffectRef>,
-    visited: &mut TypeSet,
-) {
-    if !visited.insert(type_id) {
-        return;
-    }
-    let ty = tt.get(type_id);
-    if let Some((def, type_args)) = resource_handle(ty) {
-        // A `resource Child extends Parent` value is usable wherever the
-        // parent is, so holding it holds every ancestor too.
-        out.extend(resource_chain_effects(tt, def));
-        for ta in type_args {
-            collect_resource_refs(*ta, tt, members, out, visited);
+/// What collecting the resources a type references reads.
+struct ResourceScan<'a> {
+    tt: &'a TypeTable,
+    resolutions: &'a Resolutions,
+    members: &'a MemberTables,
+}
+
+impl ResourceScan<'_> {
+    /// Collect into `out` the effect of every resource `type_id` references,
+    /// through containers, signatures and members. `visited` stops at a cycle.
+    fn collect(&self, type_id: TypeId, out: &mut IndexSet<EffectRef>, visited: &mut TypeSet) {
+        if !visited.insert(type_id) {
+            return;
         }
-        return;
-    }
-    match ty {
-        ResolvedType::GenericInstance { type_args, .. } => {
+        let ty = self.tt.get(type_id);
+        if let Some((def, type_args)) = resource_handle(ty) {
+            // A `resource Child extends Parent` value is usable wherever the
+            // parent is, so holding it holds every ancestor too.
+            out.extend(resource_chain_effects(self.tt, self.resolutions, def));
             for ta in type_args {
-                collect_resource_refs(*ta, tt, members, out, visited);
+                self.collect(*ta, out, visited);
             }
-            for member in members.of(type_id, tt) {
-                collect_resource_refs(member, tt, members, out, visited);
+            return;
+        }
+        match ty {
+            ResolvedType::GenericInstance { type_args, .. } => {
+                for ta in type_args {
+                    self.collect(*ta, out, visited);
+                }
+                for member in self.members.of(type_id, self.tt) {
+                    self.collect(member, out, visited);
+                }
             }
-        }
-        ResolvedType::Ref(t)
-        | ResolvedType::MutRef(t)
-        | ResolvedType::Reactive(t)
-        | ResolvedType::BuiltinArray(t) => {
-            collect_resource_refs(*t, tt, members, out, visited);
-        }
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => {
-            for p in params {
-                collect_resource_refs(*p, tt, members, out, visited);
+            ResolvedType::Ref(t)
+            | ResolvedType::MutRef(t)
+            | ResolvedType::Reactive(t)
+            | ResolvedType::BuiltinArray(t) => {
+                self.collect(*t, out, visited);
             }
-            collect_resource_refs(*return_type, tt, members, out, visited);
-        }
-        ResolvedType::Newtype { base_type, .. } => {
-            collect_resource_refs(*base_type, tt, members, out, visited);
-        }
-        ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-            for member in members.of(type_id, tt) {
-                collect_resource_refs(member, tt, members, out, visited);
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    self.collect(*p, out, visited);
+                }
+                self.collect(*return_type, out, visited);
             }
+            ResolvedType::Newtype { base_type, .. } => {
+                self.collect(*base_type, out, visited);
+            }
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+                for member in self.members.of(type_id, self.tt) {
+                    self.collect(member, out, visited);
+                }
+            }
+            // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
+            // AssocTypeProjection, Unknown, Error — no resource refs.
+            _ => {}
         }
-        // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
-        // AssocTypeProjection, Unknown, Error — no resource refs.
-        _ => {}
     }
 }
 
@@ -309,10 +308,15 @@ fn resource_handle(ty: &ResolvedType) -> Option<(DefId, &[TypeId])> {
 }
 
 /// The effects of resource `def` and every resource it extends, nearest first.
-fn resource_chain_effects(tt: &TypeTable, def: DefId) -> impl Iterator<Item = EffectRef> + '_ {
-    tt.resource_chain(def).map(|ancestor| EffectRef::Concrete {
-        name: tt.def_name(ancestor).to_string(),
-        module_source: tt.def_module(ancestor).clone(),
+fn resource_chain_effects<'a>(
+    tt: &'a TypeTable,
+    resolutions: &'a Resolutions,
+    def: DefId,
+) -> impl Iterator<Item = EffectRef> + 'a {
+    tt.resource_chain(def).map(|ancestor| {
+        resolutions
+            .effect_decl(ancestor)
+            .expect("a resource is an effect")
     })
 }
 
@@ -882,8 +886,13 @@ fn check_function_effects_sem(
         .unwrap_or_default()
         .into_iter()
         .collect();
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions: index.resolutions,
+        members: index.members,
+    };
     if let Some(ann) = annotations {
-        add_signature_resources(ann, caller_key, &sem.types, index.members, &mut current);
+        add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     // A handler method holds the effect it handles: `E::op()` from inside
     // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
@@ -895,7 +904,7 @@ fn check_function_effects_sem(
     // `Stream`, etc.
     let mut current = expand_through_closure(&current, index.closure);
     if let Some(ann) = annotations {
-        add_narrowed_resources(body, ann, &sem.types, index.closure, &mut current);
+        add_narrowed_resources(body, ann, &scan, index.closure, &mut current);
     }
 
     // Parameter name → type id (aligned with the recorded signature types),
@@ -929,7 +938,12 @@ fn build_propagation_closure_sem(
     state: &AnnotateState,
     members: &MemberTables,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
-    let type_table = &sem.types;
+    let resolutions = &*state.tysys.resolutions;
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions,
+        members,
+    };
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
 
     for (src, module) in &sem.modules {
@@ -937,9 +951,9 @@ fn build_propagation_closure_sem(
             continue;
         };
         for item in &module.items {
-            let (decl_id, decl_name, is_resource) = match item {
-                Item::Interface(decl) => (decl.id, &decl.name, false),
-                Item::Resource(decl) => (decl.id, &decl.name, true),
+            let (decl_id, is_resource) = match item {
+                Item::Interface(decl) => (decl.id, false),
+                Item::Resource(decl) => (decl.id, true),
                 _ => continue,
             };
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
@@ -948,26 +962,13 @@ fn build_propagation_closure_sem(
             let mut refs: IndexSet<EffectRef> = IndexSet::default();
             for op in ops {
                 for param in &op.params {
-                    collect_resource_refs(
-                        param.type_id,
-                        type_table,
-                        members,
-                        &mut refs,
-                        &mut TypeSet::default(),
-                    );
+                    scan.collect(param.type_id, &mut refs, &mut TypeSet::default());
                 }
-                collect_resource_refs(
-                    op.return_type,
-                    type_table,
-                    members,
-                    &mut refs,
-                    &mut TypeSet::default(),
-                );
+                scan.collect(op.return_type, &mut refs, &mut TypeSet::default());
             }
-            let key = EffectRef::Concrete {
-                name: decl_name.clone(),
-                module_source: src.clone(),
-            };
+            let key = resolutions
+                .effect_decl(resolutions.defs().def_at(decl_id))
+                .expect("an interface or resource is an effect");
             if is_resource {
                 // Holding `with R` already implies `R` — drop the self-reference.
                 refs.shift_remove(&key);
@@ -1034,35 +1035,26 @@ fn expand_through_closure(
     out
 }
 
-/// Union into `out` the resources that appear in a function's signature —
-/// parameter types, the return type, and the async task-return type — so a
-/// signature that already exposes a resource does not also require an explicit
-/// `with R`.
-///
-/// Resources nested inside a type's own members are followed via `members`;
-/// direct and container-nested ones (`Option<R>`, `List<R>`, `&R`,
-/// `fn() -> R`) are too.
+/// Union into `out` the resources a function's signature exposes, which it
+/// then holds without a `with R`: params, return and async task return.
 fn add_signature_resources(
     annotations: &TypeAnnotations,
     fn_key: AstId,
-    type_table: &TypeTable,
-    members: &MemberTables,
+    scan: &ResourceScan<'_>,
     out: &mut IndexSet<EffectRef>,
 ) {
     let mut visited = TypeSet::default();
-    for &type_id in annotations
+    let params = annotations
         .fn_param_types
         .get(&fn_key)
         .into_iter()
-        .flatten()
-    {
-        collect_resource_refs(type_id, type_table, members, out, &mut visited);
-    }
-    if let Some(&return_type) = annotations.fn_return_types.get(&fn_key) {
-        collect_resource_refs(return_type, type_table, members, out, &mut visited);
-    }
-    if let Some(&task_return) = annotations.function_task_returns.get(&fn_key) {
-        collect_resource_refs(task_return, type_table, members, out, &mut visited);
+        .flatten();
+    let results = [
+        annotations.fn_return_types.get(&fn_key),
+        annotations.function_task_returns.get(&fn_key),
+    ];
+    for &type_id in params.chain(results.into_iter().flatten()) {
+        scan.collect(type_id, out, &mut visited);
     }
 }
 
@@ -1071,7 +1063,7 @@ fn add_signature_resources(
 fn add_narrowed_resources(
     body: &Block,
     annotations: &TypeAnnotations,
-    type_table: &TypeTable,
+    scan: &ResourceScan<'_>,
     closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
     held: &mut IndexSet<EffectRef>,
 ) {
@@ -1081,17 +1073,18 @@ fn add_narrowed_resources(
         .0
         .into_iter()
         .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
-        .filter_map(|&target| resource_handle(type_table.get(target)).map(|(def, _)| def))
+        .filter_map(|&target| resource_handle(scan.tt.get(target)).map(|(def, _)| def))
         .collect();
+    let chain = |target| resource_chain_effects(scan.tt, scan.resolutions, target);
     // A grant expands through the closure, which may hold another target's ancestor.
     loop {
         let pending = targets.len();
         targets.retain(|&target| {
-            let narrows_held = resource_chain_effects(type_table, target)
+            let narrows_held = chain(target)
                 .skip(1)
                 .any(|ancestor| held.contains(&ancestor));
             if narrows_held {
-                let granted = resource_chain_effects(type_table, target).collect();
+                let granted = chain(target).collect();
                 held.extend(expand_through_closure(&granted, closure));
             }
             !narrows_held

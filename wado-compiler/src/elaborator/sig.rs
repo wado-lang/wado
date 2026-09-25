@@ -13,7 +13,7 @@ use super::sem::decls::FunctionSig;
 use crate::ast;
 use crate::ast::{SelfKind, Visibility};
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, SlotProjections};
+use crate::tir::SlotProjections;
 
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]
@@ -375,10 +375,8 @@ impl MethodSig {
                 if arg == TypeTable::UNKNOWN {
                     continue;
                 }
-                if let ResolvedType::TypeParam { index, .. }
-                | ResolvedType::TypePack { index, .. } = table.get(*slot)
-                {
-                    substitution.insert(*index, arg);
+                if let Some(index) = table.param_slot(*slot) {
+                    substitution.insert(index, arg);
                 }
             }
         }
@@ -446,14 +444,8 @@ impl TraitSig {
 /// method it declares, and a use site reads them without naming a method.
 #[derive(Clone, Debug)]
 pub(crate) struct ImplSig {
-    /// The impl target as a whole, its reference included, a slot appearing as
-    /// its own `TypeParam` / `TypePack`.
-    pub(crate) target: TypeId,
-    /// The impl target's type arguments (`K`, `V` in `impl … for Map<K, V>`).
-    /// A slot appears as its own `TypeParam` / `TypePack`, so aligning a
-    /// receiver's arguments against this list says which slot each fills.
-    /// Empty when the target is not generic.
-    pub(crate) target_type_args: Vec<TypeId>,
+    /// The block, whose target the [`TypeTable`] records.
+    pub(crate) def: DefId,
     /// The trait reference's type arguments (`K` in `impl Index<K> for …`),
     /// resolved against the same slots. Empty for an inherent impl.
     pub(crate) trait_type_args: Vec<TypeId>,
@@ -515,7 +507,7 @@ impl ImplSig {
     ) -> IndexMap<u32, TypeId> {
         let table = type_table.borrow();
         let mut slots = IndexMap::default();
-        for (&declared, &concrete) in self.target_type_args.iter().zip(receiver_args) {
+        for (&declared, &concrete) in table.impl_target_args(self.def).iter().zip(receiver_args) {
             if let Some(bound) = table.bind_type_params(&[declared], &[concrete]) {
                 for (slot, ty) in bound {
                     slots.entry(slot).or_insert(ty);
@@ -532,7 +524,7 @@ impl ImplSig {
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        let positions = self.target_type_args.len();
+        let positions = type_table.borrow().impl_target_args(self.def).len();
         if positions == 0 || receiver_args.len() < positions {
             return None;
         }
@@ -702,9 +694,12 @@ mod tests {
     /// concrete `u8` position binds nothing, so `V` keeps its own slot.
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
+        let def = DefId::for_test(1);
+        table
+            .borrow_mut()
+            .record_impl_target(def, TypeTable::UNKNOWN, vec![TypeTable::U8, v]);
         ImplSig {
-            target: TypeTable::UNKNOWN,
-            target_type_args: vec![TypeTable::U8, v],
+            def,
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),
             target_fq: FqTypeName::builtin("Map"),

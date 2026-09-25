@@ -26,7 +26,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::FqTypeName;
+use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
 use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
@@ -433,7 +433,7 @@ impl TypeSystem {
             ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_name(def),
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.type_table.borrow().def_name(def).to_string();
-                if TypeTable::is_tuple_type(&name) {
+                if self.type_table.borrow().is_tuple_def(def) {
                     let parts: Vec<String> = type_args
                         .iter()
                         .map(|&t| self.type_id_to_string(t))
@@ -488,8 +488,8 @@ impl TypeSystem {
                 assoc_name,
                 ..
             } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
-            ResolvedType::Unit => TypeTable::UNIT_TYPE_NAME.to_string(),
-            ResolvedType::Never => "!".to_string(),
+            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),
         }

@@ -5,7 +5,7 @@ use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -384,10 +384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(trait_name.clone()),
             method.to_string(),
         );
-        let template = tir::TemplateId::Synthesized {
-            module: module_source.clone(),
-            name: method_info.to_mangled_name(),
-        };
+        let template = tir::TemplateId::derived(module_source.clone(), &method_info);
         let monomorph_info = if type_args.is_empty() {
             None
         } else {
@@ -1385,20 +1382,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .fq_base_type_name(structure_ty);
-        let name = MethodName::format_local(&receiver, Some(&trait_name), &method);
+        let method_info = LocalMethodName::new(receiver, Some(trait_name), method.clone());
         let func_ref = FunctionRef {
-            template: Some(tir::TemplateId::Synthesized {
-                module: module_source.clone(),
-                name: name.clone(),
-            }),
-            module_source,
-            name,
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                receiver,
-                Some(trait_name),
-                method.clone(),
+            template: Some(tir::TemplateId::derived(
+                module_source.clone(),
+                &method_info,
             )),
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info: None,
+            method_info: Some(method_info),
         };
         self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
 

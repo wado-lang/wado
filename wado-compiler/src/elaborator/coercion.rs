@@ -955,7 +955,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default(),
             type_arg_names: Vec::new(),
             method,
-            mangled_name: String::new(),
         };
         callee.remangle(&self.tysys.type_table.borrow());
         callee

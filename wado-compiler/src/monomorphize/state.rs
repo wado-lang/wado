@@ -213,8 +213,8 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
-    /// Queue a function instantiation unless its body is; a body is its mangled
-    /// name, since one type can reach it under two `TypeId`s.
+    /// Queue a function instantiation unless its body already is. A body is its
+    /// module and mangled name, since one type can reach it under two `TypeId`s.
     pub fn try_queue_function(
         &mut self,
         key: InstantiationKey,

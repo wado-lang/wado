@@ -14,9 +14,9 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, closure_call_method_name,
-    closure_call_name, closure_functor_type, is_fn_type_name, mangle_generic_name,
-    mangle_local_trait_method, mangle_method_generic,
+    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, UNIT_TYPE_NAME,
+    closure_call_method_name, closure_call_name, closure_functor_type, is_fn_type_name,
+    mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -466,32 +466,20 @@ fn resolve_imports(
     let is_builtin_func =
         |f: &FreeFunctionName| f.module_source.is_builtin() || f.name.starts_with("builtin::");
 
-    // Mark an ambient stdio function used when its `log_*` (panic /
-    // assert-diagnostic) builtin is reachable and the world provides that
-    // stream's sink — each stream gated on its own interface. In a sink-less
-    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
-    // which keys off the `func_map` this populates, so the two stay in
-    // agreement per stream and a purely-computational component stays
-    // import-free.
-    if project.provides_ambient_stdio_sink("Stdout")
-        && reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-                name.starts_with("call_indirect_stdout")
+    // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
+    // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.
+    for (interface, builtin) in [
+        ("Stdout", "call_indirect_stdout_write_via_stream"),
+        ("Stderr", "call_indirect_stderr_write_via_stream"),
+    ] {
+        if project.provides_ambient_stdio_sink(interface)
+            && reachable.iter().any(|func_id| {
+                matches!(func_id, FunctionId::Free(f) if is_builtin_func(f)
+                    && f.name.strip_prefix("builtin::").unwrap_or(&f.name) == builtin)
             })
-        })
-    {
-        used_wasi_functions.insert(operation_key("Stdout", "write_via_stream"));
-    }
-    if project.provides_ambient_stdio_sink("Stderr")
-        && reachable.iter().any(|func_id| {
-            matches!(func_id, FunctionId::Free(f) if is_builtin_func(f) && {
-                let name = f.name.strip_prefix("builtin::").unwrap_or(&f.name);
-                name.starts_with("call_indirect_stderr")
-            })
-        })
-    {
-        used_wasi_functions.insert(operation_key("Stderr", "write_via_stream"));
+        {
+            used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
+        }
     }
 
     // Collect imports using registry lookup instead of hard-coded match
@@ -1066,9 +1054,9 @@ impl<'a> DceWalker<'a> {
                 // actually defined on the inner type (e.g., i32^Ord::cmp, not
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
-                let boxed = def.decl().is_some_and(|d| {
-                    self.type_table.compiler_item_def(CompilerItem::Box) == Some(d)
-                });
+                let boxed = def
+                    .decl()
+                    .is_some_and(|d| self.type_table.is_compiler_item_def(d, CompilerItem::Box));
                 if boxed && let Some(info) = func.method_info.clone() {
                     let original_method_id = FunctionId::Method(MethodName::new(
                         func.module_source.clone(),
@@ -1121,19 +1109,17 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::Unit => {
-                // `()` methods: `().to_string()`, `().fmt(&f)`, etc.
                 let method_id = FunctionId::Method(MethodName::new(
                     ModuleSource::primitive(),
-                    FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
+                    FqTypeName::builtin(UNIT_TYPE_NAME),
                     trait_name,
                     method_name,
                 ));
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.type_table.def_name(def)) =>
+                if self.type_table.is_tuple_def(def) =>
             {
-                // Tuple method call: synthesized with struct_name `"[]<f64,f64>"`.
                 let elements: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.type_table.fq_type_name(*t))
@@ -1378,7 +1364,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
         ResolvedType::Unit => {
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
-                FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
+                FqTypeName::builtin(UNIT_TYPE_NAME),
                 None,
                 "to_string".to_string(),
             ));

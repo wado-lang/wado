@@ -235,8 +235,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
             let func = f.borrow();
             if func
                 .impl_origin
-                .as_ref()
-                .is_some_and(|origin| !tt.impl_covers_every_instance(origin.def))
+                .is_some_and(|block| !tt.impl_covers_every_instance(block))
             {
                 return None;
             }

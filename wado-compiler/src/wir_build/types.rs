@@ -339,13 +339,8 @@ fn register_struct(
 
     ctx.struct_type_map.insert(struct_name, type_id.clone());
 
-    // Also register under the qualified-args mangle so that lookups
-    // through `mangle_type_name(GenericInstance)` (which threads
-    // `mangle_type_arg_for_generic` through its args, see bug-2 fix)
-    // resolve to this same struct. The monomorphizer's
-    // `instantiation_name` keeps producing the unqualified form so that
-    // method dispatch / `current_impl_struct_name` keep working; this
-    // alias bridges the two name forms in the WIR layer only.
+    // A `GenericInstance` mangles its arguments qualified, while the
+    // monomorphizer names the struct unqualified; alias the one to the other.
     if let Some(ref mono) = tir_struct.monomorph_info {
         let qualified_args: Vec<String> = mono
             .impl_type_args
@@ -516,7 +511,7 @@ fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
     s.monomorph_info.is_some()
         && s.def
             .decl()
-            .is_some_and(|def| type_table.compiler_item_def(CompilerItem::Box) == Some(def))
+            .is_some_and(|def| type_table.is_compiler_item_def(def, CompilerItem::Box))
 }
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {

@@ -118,7 +118,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the handler value expression in the outer scope.
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler);
+        // A handler's `impl Effect for T` is indexed by `T`, not `&T`.
+        let handler_type = self.tysys.through_ref(handler);
 
         // Trait/resource type args at this `with E => h do` site (e.g.
         // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
@@ -232,7 +233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         next_bundle_group: &mut u32,
     ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.handler_underlying_type(handler);
+        let handler_type = self.tysys.through_ref(handler);
 
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
@@ -410,13 +411,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => self.tysys.type_table.borrow().type_name(handler_type),
         }
-    }
-
-    /// Strip a single leading `&` / `&mut` layer to reach the type that the
-    /// handler value points at. The handler's `impl Effect for T` block is
-    /// indexed by `T`, not `&T`.
-    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
-        self.tysys.pointee_of(type_id).unwrap_or(type_id)
     }
 
     /// Annotate `resume value`, which yields `()` — at source level it is

@@ -10,7 +10,9 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{
+    DeclName, FqTypeName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
+};
 use crate::tir::{
     FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
 };
@@ -1539,9 +1541,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a generic instance names a declaration")
                     .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if TypeTable::is_tuple_type(&name)
-                    && let Ok(index) = field_name.parse::<usize>()
-                {
+                let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
+                if is_tuple && let Ok(index) = field_name.parse::<usize>() {
                     match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
                     {
                         Ok(elem) => return (index as u32, elem),
@@ -1740,7 +1741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        let base_type_id = self.tysys.pointee_of(expr_type).unwrap_or(expr_type);
+        let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1748,7 +1749,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             type_args: ref elements,
         } = base_type
-            && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
+            && self.tysys.type_table.borrow().is_tuple_def(def)
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -2004,7 +2005,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
+        let base_type_id = self.tysys.through_ref(recv_type);
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -2177,7 +2178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             if then_type != TypeTable::UNIT {
                                 let type_name = self.tysys.type_table.borrow().type_name(then_type);
                                 let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: TypeTable::UNIT_TYPE_NAME.to_string(),
+                                    expected: UNIT_TYPE_NAME.to_string(),
                                     found: type_name,
                                     span: if_expr.then_block.span,
                                 });
@@ -3721,11 +3722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let substitution: hashmap::IndexMap<u32, TypeId> = params
                     .iter()
                     .zip(args.iter())
-                    .filter_map(|(param, arg)| match tt.get(*param) {
-                        ResolvedType::TypeParam { index, .. }
-                        | ResolvedType::TypePack { index, .. } => Some((*index, *arg)),
-                        _ => None,
-                    })
+                    .filter_map(|(param, arg)| Some((tt.param_slot(*param)?, *arg)))
                     .collect();
                 fields
                     .into_iter()
@@ -4649,10 +4646,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
-                let index = match table.get(decl_param) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => *index,
-                    _ => continue,
+                let Some(index) = table.param_slot(decl_param) else {
+                    continue;
                 };
                 !decl_field_types
                     .iter()
@@ -4920,13 +4915,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // arity `|F|`, expanded at monomorphization.
                     elem_types.push(mapped);
                 } else {
-                    let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
-                    if let ResolvedType::GenericInstance {
-                        def,
-                        type_args: inner_elems,
-                    } = spread_type
-                        && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
-                    {
+                    let spread_elems = self.tysys.type_table.borrow().as_tuple(spread_type_id);
+                    if let Some(inner_elems) = spread_elems {
                         // A concrete tuple spread expands inline to one element
                         // per field.
                         elem_types.extend(inner_elems);
@@ -5191,27 +5181,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
 
-        // `From<SourceType>` as the trait segment disambiguates several `From`
-        // impls on one target type.
-        let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
-
-        // The block that provides the `From` impl, and where its body lives.
         let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
-        // The receiver the method name is built from — the same value reify
-        // puts on the call's `method_info`, so the two cannot drift.
         let target_receiver = match impl_def {
             Some(def) => self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type),
             None => self.tysys.fq_receiver_head(target_type),
         };
-        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
 
-        let key = caller_id;
         self.sem.types.from_call_facts.insert(
-            key,
+            caller_id,
             FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
                 module_source,
-                mangled_name: method_name,
                 target_name: target_receiver,
                 from_name,
                 from_trait_name,

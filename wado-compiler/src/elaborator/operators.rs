@@ -1386,13 +1386,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        let base = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
-        let table = self.tysys.type_table.borrow();
-        matches!(
-            table.get(base),
-            ResolvedType::GenericInstance { def, .. }
-                if TypeTable::is_tuple_type(table.def_name(*def))
-        )
+        let base = self.tysys.through_ref(recv_type);
+        self.tysys.type_table.borrow().is_tuple(base)
     }
 
     /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
@@ -1469,7 +1464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Get base type (unwrap reference if needed)
-            let base_type_id = self.tysys.pointee_of(indexed_type).unwrap_or(indexed_type);
+            let base_type_id = self.tysys.through_ref(indexed_type);
 
             // Check for IndexAssign trait implementation
             // Arrays now use IndexAssign trait like other types
@@ -1986,7 +1981,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
             // the expected type is the parameter type itself.
             let expected = if wrap {
-                let referent = self.tysys.pointee_of(param_ty).unwrap_or(param_ty);
+                let referent = self.tysys.through_ref(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -2040,16 +2035,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let template = match resolved.method_def {
             _ if resolved.is_type_param_receiver => None,
             Some(def) => Some(match resolved.impl_def {
-                Some(block) => TemplateId::Declared {
-                    def,
-                    block: Some(block),
-                },
+                Some(block) => TemplateId::in_block(def, block),
                 None => self.declared_template(def),
             }),
-            None => Some(TemplateId::Synthesized {
-                module: module_source.clone(),
-                name: mangled_method_name.clone(),
-            }),
+            None => Some(TemplateId::derived(module_source.clone(), &method_info)),
         };
         let function_ref = FunctionRef {
             module_source,

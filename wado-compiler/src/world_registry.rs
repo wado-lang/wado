@@ -382,7 +382,7 @@ mod tests {
     };
     use crate::attribute::CM;
     use crate::component_model::CmInterfaceRegistry;
-    use crate::tir::TypeTable;
+    use crate::name::UNIT_TYPE_NAME;
     use crate::token::Span;
 
     fn make_span() -> Span {
@@ -411,10 +411,7 @@ mod tests {
                 is_async: true,
                 params: vec![],
                 params_span: make_span(),
-                return_type: Some(result_return(
-                    TypeTable::UNIT_TYPE_NAME,
-                    TypeTable::UNIT_TYPE_NAME,
-                )),
+                return_type: Some(result_return(UNIT_TYPE_NAME, UNIT_TYPE_NAME)),
                 span: make_span(),
             })],
             span: make_span(),
@@ -600,10 +597,7 @@ mod tests {
             name: "run".to_string(),
             is_async: true,
             params: vec![],
-            return_type: Some(result_return(
-                TypeTable::UNIT_TYPE_NAME,
-                TypeTable::UNIT_TYPE_NAME,
-            )),
+            return_type: Some(result_return(UNIT_TYPE_NAME, UNIT_TYPE_NAME)),
             from_interface_fq: Some("wasi:http/run@1.0.0".to_string()),
             reexport_origin: None,
         });

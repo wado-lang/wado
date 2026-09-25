@@ -31,7 +31,7 @@ pub(super) fn unify(
                 mapped_elem: None, ..
             },
             ResolvedType::GenericInstance { def, .. },
-        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*def)) => {
+        ) if type_table.borrow().is_tuple_def(*def) => {
             bindings.entry(expected).or_insert(actual);
         }
         // Direct type parameter mapping.
@@ -57,8 +57,8 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*expected_def))
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
+        ) if type_table.borrow().is_tuple_def(*expected_def)
+            && type_table.borrow().is_tuple_def(*actual_def)
             && expected_elems
                 .iter()
                 .any(|e| type_table.borrow().is_type_pack(*e)) =>
@@ -134,7 +134,7 @@ pub(super) fn unify(
                 type_args: actual_elems,
             },
         ) if type_table.borrow().is_list(expected)
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
+            && type_table.borrow().is_tuple_def(*actual_def)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

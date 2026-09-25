@@ -8,9 +8,10 @@ use crate::tir::{
     TirExprKind, TirFunction, TypeId, TypeTable,
 };
 
+use crate::synthesis::template::blanket_impl_args;
+
 use super::state::Monomorphizer;
 use super::{Templates, generic_function_name};
-use crate::synthesis::template::blanket_impl_args;
 
 /// What a call site says about the instance it reaches.
 struct CallSite<'a> {
@@ -98,10 +99,7 @@ impl Monomorphizer {
         if impl_type_args.len() < scalar_params {
             return None;
         }
-        let method_type_args = method_args_at(&template, &site, type_table);
-        if template.has_real_type_params() && method_type_args.is_empty() {
-            return None;
-        }
+        let method_type_args = method_args_at(&template, &site, type_table)?;
         Some(InstantiationKey {
             def: None,
             name: generic_function_name(
@@ -159,7 +157,7 @@ impl Monomorphizer {
         let receiver_is_tuple = template
             .method_info
             .as_ref()
-            .is_some_and(|info| TypeTable::is_tuple_type(&info.struct_name()));
+            .is_some_and(|info| info.receiver().is_tuple());
         if receiver_is_tuple {
             return site
                 .receiver
@@ -204,7 +202,7 @@ impl Monomorphizer {
                 let slot = sources
                     .iter()
                     .position(|source| matches!(source, BlanketParamSource::Receiver))
-                    .unwrap_or(0);
+                    .expect("a value blanket's receiver is one of its type parameters");
                 let from_record = recorded.and_then(|args| match args {
                     [only] => Some(*only),
                     _ => args.get(slot).copied(),
@@ -232,31 +230,32 @@ impl Monomorphizer {
 
 /// Whether `outer` is a newtype whose chain of bases passes `inner`.
 fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -> bool {
+    let inner = type_table.type_key(inner);
     let mut link = outer;
-    while link != inner {
+    while type_table.type_key(link) != inner {
         let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
             return false;
         };
         link = *base_type;
     }
-    outer != inner
+    link != outer
 }
 
-/// The method arguments `template` instantiates under at `site`: what the call
-/// spells, else what its dispatch recorded, else what its arguments show.
+/// The method arguments `template` instantiates under at `site`: spelled, else
+/// recorded, else shown by its arguments; `None` while one stays open.
 fn method_args_at(
     template: &TirFunction,
     site: &CallSite<'_>,
     type_table: &TypeTable,
-) -> Vec<TypeId> {
+) -> Option<Vec<TypeId>> {
     if !template.has_real_type_params() {
-        return Vec::new();
+        return Some(Vec::new());
     }
     if !site.type_args.is_empty() {
-        return site.type_args.to_vec();
+        return Some(site.type_args.to_vec());
     }
     if let Some(recorded) = site.monomorph.filter(|m| !m.method_type_args.is_empty()) {
-        return recorded.method_type_args.clone();
+        return Some(recorded.method_type_args.clone());
     }
     let receiver_slots = usize::from(site.receiver.is_some());
     let mut bound: IndexMap<u32, TypeId> = IndexMap::default();
@@ -278,6 +277,5 @@ fn method_args_at(
             let ty = *bound.get(&(offset + param.index))?;
             Some(type_table.as_box(ty).unwrap_or(ty))
         })
-        .collect::<Option<Vec<_>>>()
-        .unwrap_or_default()
+        .collect()
 }

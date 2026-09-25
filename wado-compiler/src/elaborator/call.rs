@@ -1652,7 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .substitute_type_params(return_type, &combined_type_args);
                     }
 
-                    let template = self.static_template(&method_ref, || final_mangled.clone());
+                    let template = self.static_template(&method_ref, &receiver);
                     let monomorph_info = if combined_type_args.is_empty() {
                         None
                     } else {
@@ -3476,10 +3476,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The slot a declared type parameter's `TypeId` holds.
     pub(super) fn declared_slot(&self, id: TypeId) -> u32 {
-        match self.tysys.type_table.borrow().get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => *index,
-            other => panic!("a declared slot is a type parameter, found {other:?}"),
-        }
+        let table = self.tysys.type_table.borrow();
+        table.param_slot(id).unwrap_or_else(|| {
+            panic!(
+                "a declared slot is a type parameter, found {:?}",
+                table.get(id)
+            )
+        })
     }
 
     /// The declaring block's slots filled with `values` (one per declared
@@ -3495,11 +3498,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(values)
             .map(|(&slot, &value)| (slot, value))
             .collect();
-        let target: &[TypeId] = match sig.declaring_impl {
-            Some(def) => &self.tysys.signatures.impl_sig(def).target_type_args,
-            None => &[],
-        };
         let mut table = self.tysys.type_table.borrow_mut();
+        let target = match sig.declaring_impl {
+            Some(def) => table.impl_target_args(def).to_vec(),
+            None => Vec::new(),
+        };
         let mut out: Vec<TypeId> = target
             .iter()
             .map(|&arg| table.substitute_type_params(arg, &slots))

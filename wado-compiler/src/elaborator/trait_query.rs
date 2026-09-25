@@ -8,7 +8,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, Receiver, RefKind, TypeHead};
+use crate::name::{FqTypeName, Receiver, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -39,6 +39,7 @@ use crate::elaborator::trait_env::{
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::FqTraitName;
 use crate::resolve::{Resolution, Resolutions};
+use crate::synthesis::template::written_impl_reaches;
 use crate::tir::{SlotProjections, TraitRef};
 
 /// Proof that a bound was asked and answered no. Its field is private here, so
@@ -1354,9 +1355,8 @@ impl TypeSystem {
             && wanted.is_empty()
             && let Some((_, module_source)) = nominal
         {
-            let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-            let serde_blocked = tr.is_serde()
-                && self.has_real_trait_impl_for_type(ctx, scope, Some(type_id), &receiver, decl);
+            let serde_blocked =
+                tr.is_serde() && self.has_real_trait_impl_for_type(ctx, scope, type_id, decl);
             if !serde_blocked
                 && self.structural_conformance(ctx, scope, resolved, tr, trait_)
                     == StructuralConformance::Holds
@@ -1531,7 +1531,7 @@ impl TypeSystem {
             }
             // `()` names no declaring module, so an `impl Trait for ()` is
             // indexed under the builtin spelling the unit type mangles as.
-            ResolvedType::Unit => (FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME), None),
+            ResolvedType::Unit => (FqTypeName::builtin(UNIT_TYPE_NAME), None),
             ResolvedType::Flags { .. } => {
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
                 if self.find_trait_impl_for_subject(
@@ -1584,26 +1584,23 @@ impl TypeSystem {
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
-        subject: Option<TypeId>,
-        type_key: &Receiver,
+        type_id: TypeId,
         trait_: DefId,
     ) -> bool {
         let table = self.type_table.borrow();
-        let reaches = |block| subject.is_none_or(|ty| table.impl_reaches_instance(block, ty));
-        let written = self
-            .trait_env
-            .methodful_impls_by_receiver(type_key, trait_)
-            .any(reaches);
+        if written_impl_reaches(&self.trait_env, trait_, type_id, &table) {
+            return true;
+        }
+        let receiver = table.impl_receiver_key(type_id);
         drop(table);
-        written
-            || self.blanket_trait_impl_applies(
-                ctx,
-                scope,
-                subject,
-                type_key,
-                trait_,
-                NewtypePeel::Follow,
-            )
+        self.blanket_trait_impl_applies(
+            ctx,
+            scope,
+            Some(type_id),
+            &receiver,
+            trait_,
+            NewtypePeel::Follow,
+        )
     }
 
     /// Whether a bound writing `wanted` selects the header — see
@@ -2355,15 +2352,9 @@ impl TypeSystem {
     /// A pack is instantiated with the tuple that carries its elements, so the
     /// bound is checked element-wise. A non-tuple argument is a pack of one.
     pub(super) fn pack_elements(&self, type_arg: TypeId) -> Vec<TypeId> {
-        match self.type_table.borrow().get(type_arg) {
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.type_table.borrow().def_name(*def)) =>
-            {
-                type_args.clone()
-            }
-            _ => vec![type_arg],
-        }
+        self.type_table.borrow().elem_types_or_self(type_arg)
     }
+
     /// Whether what the receiver substitutes for an `impl` block's parameters
     /// satisfies their bounds: `impl<T: Ord> List<T>` wants an `Ord` element.
     pub(super) fn check_impl_block_bounds(

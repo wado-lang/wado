@@ -19,15 +19,15 @@ use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
-    DeclPath, FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD, Receiver,
+    DeclPath, FqTypeName, IDENTITY_TEST_METHOD, INTERNAL_PREFIX, NARROWING_TEST_METHOD,
     global_init_function, global_name,
 };
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, ImplOrigin, LocalFrame, ResolvedType, TirBinaryOp, TirBlock,
-    TirEnum, TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
-    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
-    TirVariantDecl, TypeId, TypeTable, transpose_tuple_expr,
+    self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
+    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
+    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
+    TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -218,27 +218,21 @@ pub(super) struct ReifyAssertSlot {
 fn literal_callee_ref(callee: &LiteralCallee) -> tir::FunctionRef {
     use crate::tir::{FunctionRef, MonomorphInfo};
 
+    let method_info = callee.method_info();
     FunctionRef {
         module_source: callee.impl_module_source.clone(),
-        name: callee.mangled_name.clone(),
+        name: method_info.to_mangled_name(),
         template: callee.method_def.map(|def| TemplateId::Declared {
             def,
             block: callee.impl_def,
         }),
         monomorph_info: (!callee.type_arg_ids.is_empty()).then(|| MonomorphInfo {
-            generic_name: format!("{}::{}", callee.target_base_name, callee.method),
+            generic_name: MethodName::format_local(&callee.target_base_name, None, callee.method),
             impl_type_args: callee.type_arg_ids.clone(),
             method_type_args: vec![],
             is_blanket: false,
         }),
-        method_info: Some(
-            LocalMethodName::new(
-                callee.target_base_name.clone(),
-                Some(callee.trait_name.clone()),
-                callee.method.to_string(),
-            )
-            .with_struct_type_args(&callee.type_arg_names),
-        ),
+        method_info: Some(method_info),
     }
 }
 
@@ -1455,17 +1449,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if self.is_dead_item(method.id) {
                     return None;
                 }
-                self.reify_method(method, &facts, concrete_owner.as_ref(), &origin)
+                self.reify_method(method, &facts, concrete_owner.as_ref(), origin)
             })
             .collect()
     }
 
-    fn impl_origin(&self, impl_block: &ast::ImplBlock) -> ImplOrigin {
-        let def = self.tysys.resolutions.defs().def_at(impl_block.id);
-        ImplOrigin {
-            def,
-            target_args: self.tysys.signatures.impl_sig(def).target_type_args.clone(),
-        }
+    fn impl_origin(&self, impl_block: &ast::ImplBlock) -> DefId {
+        self.tysys.resolutions.defs().def_at(impl_block.id)
     }
 
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
@@ -1546,7 +1536,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let saved_module_items = std::mem::replace(&mut self.current_module_items, trait_items);
 
             let tir_func_opt =
-                self.reify_method(default_method, &facts, concrete_owner.as_ref(), &origin);
+                self.reify_method(default_method, &facts, concrete_owner.as_ref(), origin);
 
             self.current_module_items = saved_module_items;
             self.current_module_source = saved_module_source;
@@ -1591,7 +1581,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
         concrete_owner: Option<&FqTypeName>,
-        origin: &ImplOrigin,
+        origin: DefId,
     ) -> Option<TirFunction> {
         use crate::ast::SelfKind;
         use crate::name::LocalMethodName;
@@ -1735,7 +1725,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_export: false,
             is_async: func.is_async,
             type_params,
-            impl_origin: Some(origin.clone()),
+            impl_origin: Some(origin),
             impl_type_params,
             monomorph_info: None,
             method_info: Some(method_info),
@@ -6128,11 +6118,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ResolvedType::Unknown
                 )
             })
-            .unwrap_or_else(|| {
-                self.tysys
-                    .pointee_of(dispatch.return_type)
-                    .unwrap_or(dispatch.return_type)
-            })
+            .unwrap_or_else(|| self.tysys.through_ref(dispatch.return_type))
     }
 
     /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
@@ -6531,7 +6517,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let converted_err = if need_from_conversion {
-            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
+            self.reify_from_call(outer_err_type, e_expr, span, qm_id)
         } else {
             e_expr
         };
@@ -6811,7 +6797,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
             let base = receiver.type_id;
-            let unwrapped = self.tysys.pointee_of(base).unwrap_or(base);
+            let unwrapped = self.tysys.through_ref(base);
             self.tysys.type_table.borrow().as_tuple(unwrapped)
         };
         if let Some(elems) = &tuple_elems
@@ -7104,7 +7090,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// pack to, read off the parameter's own concrete type. The caller it is
     /// spliced into may be one nothing instantiates, so this is the last chance.
     fn settle_packs_in_default(&mut self, expr: &mut TirExpr, expected: TypeId) {
-        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
+        use crate::tir::TirExprKind;
 
         let TirExprKind::TupleLiteral { elements } = &mut expr.kind else {
             return;
@@ -7122,14 +7108,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         {
             return;
         }
-        let ResolvedType::GenericInstance { def, type_args } =
-            self.tysys.type_table.borrow().get(expected).clone()
-        else {
+        let Some(type_args) = self.tysys.type_table.borrow().as_tuple(expected) else {
             return;
         };
-        if !TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) {
-            return;
-        }
         let after = elements.len() - at - 1;
         if type_args.len() < at + after {
             return;
@@ -7156,9 +7137,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{
-            ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
-        };
+        use crate::tir::{ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 
         let mut elements: Vec<TirExpr> = Vec::new();
         let mut elem_types: Vec<TypeId> = Vec::new();
@@ -7239,7 +7218,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     def,
                     type_args: inner_elems,
                 } = spread_type
-                    && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
+                    && self.tysys.type_table.borrow().is_tuple_def(def)
                 {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
@@ -7501,45 +7480,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
-        from_type: TypeId,
         value: TirExpr,
         span: Span,
         caller_id: AstId,
     ) -> TirExpr {
-        use crate::name::LocalMethodName;
         use crate::tir::{CallArg, FunctionRef, TirExprKind};
 
-        let _ = from_type;
         let facts = self.ann_from_call_facts(caller_id).expect(
             "resolve_from_call records FromCallFacts at every site reify hits — \
                  ?-op, Type::from(x), and Type::<…>::from(x)",
         );
         let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
+        let method_info =
+            LocalMethodName::new(facts.target_name, Some(from_trait), "from".to_string());
 
         TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
                     template: Some(match facts.method_def {
                         Some(def) => self.tysys.signatures.declared_template(def),
-                        None => TemplateId::Synthesized {
-                            module: facts.module_source.clone(),
-                            name: facts.mangled_name.clone(),
-                        },
+                        None => TemplateId::derived(facts.module_source.clone(), &method_info),
                     }),
                     module_source: facts.module_source,
-                    name: facts.mangled_name,
+                    name: method_info.to_mangled_name(),
                     monomorph_info: None,
-                    method_info: Some(LocalMethodName {
-                        receiver: Receiver::Type(facts.target_name),
-                        struct_type_args: Vec::new(),
-                        trait_name: Some(from_trait),
-                        trait_type_args: vec![],
-                        method_name: "from".to_string(),
-                        method_type_args: vec![],
-                        is_type_param_receiver: false,
-                        is_ref_impl: false,
-                        cm_name: None,
-                    }),
+                    method_info: Some(method_info),
                 }),
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],
@@ -8441,44 +8406,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
-        // `Type::from(x)` with no explicit `From` impl — reflexive and
-        // newtype conversions. Production's `resolve_call` handles these
-        // inline and records no `static_method_dispatch`,
-        // tagging the reflexive case with `NewtypeFromCollapse`; reify must
-        // reproduce the same three shapes (otherwise it falls through to an
-        // unresolvable `Type::from` `Call`). Only reached when a user `From`
-        // impl coexists, since that routes `from` through the static-call
-        // path while the builtin reflexive/newtype conversion stays implicit.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
-            && &ident.name[pos + 2..] == "from"
-            && !ident.name[pos + 2..].contains("::")
-            && call.args.len() == 1
-        {
+        // `Type::from(x)` resolved inline, with no `static_method_dispatch`:
+        // a bodyless `impl From<X> for Type;` (shared with the `?` operator),
+        // or a reflexive or newtype conversion.
+        if self.ann_from_call_facts(call.id).is_some() {
             let arg = self.reify_expr(&call.args[0], ctx, None);
-            let arg_type = arg.type_id;
-
-            // Bodyless `impl From<X> for Type;` marker impl — production
-            // synthesizes a `From::from` call inline via
-            // `resolve_from_call` and records `FromCallFacts`
-            // under `call.id`. Reify reuses `reify_from_call` so both the
-            // ?-op path and this static-call path emit identical TIR.
-            if self.ann_from_call_facts(call.id).is_some() {
-                return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
+            return self.reify_from_call(recorded_type, arg, span, call.id);
+        }
+        match self.ann_desugars(call.id) {
+            Some(DesugarKind::NewtypeFromCollapse) => {
+                return self.reify_expr(&call.args[0], ctx, None);
             }
-
-            // Reflexive: `T::from(T_val)` — identity, return the argument.
-            // Annotate tags the call with `NewtypeFromCollapse`; reify
-            // recognises it and emits the argument's TIR directly.
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromCollapse) {
-                return arg;
-            }
-
-            // Newtype→Base: `Base::from(Newtype_val)`. Annotate records
-            // `NewtypeFromUnwrap` on the call and lowers to a `Cast` to
-            // the base type; reify replays the shape using the recorded
-            // expression type (which is the base type).
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromUnwrap) {
+            Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
+                let arg = self.reify_expr(&call.args[0], ctx, None);
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
@@ -8488,25 +8428,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
             }
-
-            // Base→Newtype: `Newtype::from(Base_val)`. Annotate records
-            // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
-            // newtype; reify replays the shape using the recorded
-            // expression type (which is the newtype).
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromWrap) {
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: recorded_type,
-                    },
-                    recorded_type,
-                    span,
-                );
-            }
-
-            // Not a reflexive/newtype `from` — fall through to the generic
-            // call handling below, which reifies args itself; `arg` here is
-            // dropped (no side effects: `reify_expr` is pure TIR shaping).
+            _ => {}
         }
 
         // Indirect call: the callee is a value rather than a named function.
@@ -9042,14 +8964,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // struct-fields lookup below misses and the `(0, …)` fallback
                 // would collapse every `t.N` onto field 0. Resolve the numeric
                 // field name into the element index directly.
-                let name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(receiver_type)
-                    .map(|(n, _)| n)
-                    .unwrap_or_default();
-                if TypeTable::is_tuple_type(&name)
+                let is_tuple = self.tysys.type_table.borrow().is_tuple(receiver_type);
+                if is_tuple
                     && let Ok(index) = field_name.parse::<usize>()
                     && let Ok(elem) = Elaborator::<H>::tuple_literal_index_type(
                         &self.tysys.type_table,

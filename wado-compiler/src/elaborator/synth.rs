@@ -270,11 +270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             bindings
                 .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
+                .filter_map(|(&slot, &filled)| Some((tt.param_slot(slot)?, filled)))
                 .collect()
         };
         let filled = self

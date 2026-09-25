@@ -114,10 +114,11 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
                         settled_pack: Some(settled),
                         ..
                     } => {
-                        let index = match self.type_table.borrow().get(pack_type_id) {
-                            ResolvedType::TypePack { index, .. } => *index,
-                            _ => return None,
-                        };
+                        let index = self
+                            .type_table
+                            .borrow()
+                            .param_slot(pack_type_id)
+                            .expect("an expansion names its pack before substitution");
                         Some(IndexMap::from_iter([(index, settled)]))
                     }
                     _ => None,
@@ -999,9 +1000,10 @@ impl Monomorphizer {
         }
         // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) sits
         // past the receiver's positions, and is read out of the argument there.
-        if let Some(origin) = &generic.impl_origin
-            && let Some(positions) = key.impl_type_args.get(..origin.target_args.len())
-            && let Some(bound) = type_table.bind_type_params(&origin.target_args, positions)
+        if let Some(block) = generic.impl_origin
+            && let written = type_table.impl_target_args(block)
+            && let Some(positions) = key.impl_type_args.get(..written.len())
+            && let Some(bound) = type_table.bind_type_params(written, positions)
         {
             for (slot, ty) in bound {
                 substitution.entry(slot).or_insert(ty);
@@ -1882,15 +1884,12 @@ impl Monomorphizer {
                         {
                             // Expand type pack: for each concrete type in the pack,
                             // clone the expression and substitute with per-element types.
-                            let pack_index = match type_table.get(pack_type_id) {
-                                ResolvedType::TypePack { index, .. } => *index,
-                                _ => 0,
-                            };
+                            let pack_index = type_table
+                                .param_slot(pack_type_id)
+                                .expect("an expansion names its pack before substitution");
                             let concrete_pack =
                                 self.substitute_type(pack_type_id, substitution, type_table);
-                            let pack_elems = type_table
-                                .as_tuple(concrete_pack)
-                                .unwrap_or_else(|| vec![concrete_pack]);
+                            let pack_elems = type_table.elem_types_or_self(concrete_pack);
                             for &elem_type in &pack_elems {
                                 let mut elem_call = call_expr.as_ref().clone();
                                 // A `return` here exits the *enclosing* function,
@@ -3074,9 +3073,7 @@ impl Monomorphizer {
                             .as_tuple(bind_type)
                             .unwrap_or_else(|| vec![TypeTable::I32, elem_type])
                     } else {
-                        type_table
-                            .as_tuple(elem_type)
-                            .unwrap_or_else(|| vec![elem_type])
+                        type_table.elem_types_or_self(elem_type)
                     };
 
                     // The body_pack_type is the individual field type (e.g., [i32, i32] → i32).
@@ -3527,9 +3524,7 @@ impl Monomorphizer {
             // The destructure reads off the concrete binding, so it is rebuilt
             // rather than substituted: splicing the pack through the pair type
             // would widen `[i32, ..T]` into the whole tuple.
-            let pair_fields = type_table
-                .as_tuple(bind_type)
-                .unwrap_or_else(|| vec![bind_type]);
+            let pair_fields = type_table.elem_types_or_self(bind_type);
             // `index_local` is the sub-binding that reads field 0 — the
             // `.enumerate()` index — which a wildcard (`[_, v]`) leaves absent.
             let mut index_local: Option<u32> = None;
@@ -3805,9 +3800,7 @@ fn try_lower_comparison(
                 type_table.nominal_head(left.type_id).map(|(_, m)| m),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = &type_table.def_name(*def).to_string();
-                let module_source = &type_table.def_module(*def).clone();
-                if TypeTable::is_tuple_type(name) {
+                if type_table.is_tuple_def(*def) {
                     // Tuple Eq/Ord are provided by variadic impls in core:prelude/tuple.wado
                     // and already lowered to method calls by the elaborator.
                     return None;
@@ -3818,7 +3811,7 @@ fn try_lower_comparison(
                     .iter()
                     .map(|&t| type_table.fq_type_name(t))
                     .collect();
-                (args, Some(module_source.clone()))
+                (args, Some(type_table.def_module(*def).clone()))
             }
             _ => return None,
         };

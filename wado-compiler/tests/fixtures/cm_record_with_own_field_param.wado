@@ -1,0 +1,39 @@
+// A `#[cm]` record holding an `own<t>` field, as an import parameter: the field
+// is the resource's own handle, not an `own` of that handle.
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#slot")]
+struct Slot {
+    #[cm("device")]
+    device: Device,
+    #[cm("index")]
+    index: u32,
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+    #[cm("wasi:demo/gfx@0.1.0#pick")]
+    #[cm_params("slot")]
+    fn pick(slot: Slot) -> u32;
+}
+
+export fn run() with (Gfx, Device) {
+    let _ = Gfx::pick(Slot { device: Gfx::get_device(), index: 3 });
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(own "], "count": 1 },
+    { "contains": ["(own 0)"], "count": 1 },
+    { "contains": ["(field \"device\" 1)"], "count": 1 }
+  ]
+}

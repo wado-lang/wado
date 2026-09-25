@@ -125,15 +125,6 @@ use {
     lenient_float_preprocess,
 } from "core:prelude/intparse.wado";
 
-/// Copy bytes from linear memory to a new GC array (internal helper)
-fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
-    let mut arr: Array<u8> = builtin::array_new(len);
-    for let mut i = 0; i < len; i += 1 {
-        builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
-    }
-    return arr;
-}
-
 // These write formatted values directly to a Formatter's buffer,
 // avoiding intermediate GC String allocations in the common case.
 

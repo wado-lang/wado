@@ -15,7 +15,7 @@ use crate::elaborator::item::{
     register_method_compiler_item, register_trait_compiler_item,
     register_variant_case_compiler_item, register_variant_compiler_item,
 };
-use crate::name::{FqTypeName, MethodName, RefKind};
+use crate::name::{FqTypeName, MethodName, RefKind, TUPLE_TYPE_NAME, UNIT_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
@@ -420,9 +420,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .to_string(),
             Type::Tuple(elems) => {
                 if elems.is_empty() {
-                    TypeTable::UNIT_TYPE_NAME.to_string()
+                    UNIT_TYPE_NAME.to_string()
                 } else {
-                    TypeTable::TUPLE_TYPE_NAME.to_string()
+                    TUPLE_TYPE_NAME.to_string()
                 }
             }
             Type::Function(func_type) => {

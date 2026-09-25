@@ -818,6 +818,12 @@ impl Receiver {
         matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder { .. }))
     }
 
+    /// Whether this receiver is the built-in tuple.
+    #[must_use]
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Tuple))
+    }
+
     /// The name an `impl` header writes its target as — no module, no type
     /// arguments.
     ///
@@ -1179,24 +1185,6 @@ impl LocalMethodName {
                 self.method_name
             ),
             None => format!("{receiver}::{}", self.method_name),
-        }
-    }
-
-    /// Replace the type `old` with `new` throughout this method's identity — the
-    /// receiver and its type arguments, not the rendered `name`, which a
-    /// monomorphized call overwrites from its own key.
-    ///
-    /// The trait is left alone: a CM type swap changes the receiver, not the
-    /// trait it implements.
-    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
-        if let Receiver::Type(fq) = &self.receiver {
-            self.receiver = Receiver::Type(fq.substitute(old, new));
-        }
-        for arg in &mut self.struct_type_args {
-            *arg = arg.substitute(old, new);
-        }
-        for arg in &mut self.method_type_args {
-            *arg = arg.substitute(old, new);
         }
     }
 
@@ -1751,19 +1739,18 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))
 }
 
-/// The head name of a tuple type. Name formats live here, so
-/// [`crate::tir::TypeTable::TUPLE_TYPE_NAME`] reads it from this one place.
+/// The head name of a tuple type, which no Wado identifier can spell.
 pub const TUPLE_TYPE_NAME: &str = "[]";
 
 /// The name of the unit type: its source spelling.
 pub const UNIT_TYPE_NAME: &str = "()";
 
-/// A name in the *declaration* namespace: what source writes, what an `impl`
-/// header spells, what every by-name declaration lookup keys on — as opposed to
-/// a mangled name, which carries the declaring module and which no such lookup
-/// stores. Deliberately no `Deref`, `AsRef<str>` or `From<String>`: substituting
-/// one namespace for the other is the defect this type exists to stop compiling.
+/// The name of the never type: its source spelling.
+pub const NEVER_TYPE_NAME: &str = "!";
 
+/// A name as source and an `impl` header spell it, which by-name declaration
+/// lookups key on; unlike a mangled name, it carries no module.
+// No `Deref`, `AsRef<str>` or `From<String>`: mixing the two namespaces must not compile.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DeclName(String);
 
@@ -2540,7 +2527,7 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
         || PrimitiveType::is_primitive_name(head)
         || matches!(
             head,
-            UNIT_TYPE_NAME | "!" | "Array" | TUPLE_TYPE_NAME | "Fn"
+            UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Array" | TUPLE_TYPE_NAME | "Fn"
         )
 }
 

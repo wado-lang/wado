@@ -40,14 +40,12 @@ use crate::token::Span;
 use crate::{format_spec, tir};
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once
-/// through the [`CompilerItem`] registry so a stdlib rename does not reach
-/// here.
+/// through the [`CompilerItem`] registry.
 #[derive(Clone, Debug)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
-    /// `formatter` prefixed by its declaring module — the form a function name
-    /// embeds. The bare `formatter` stays for type-table lookups, which key a
-    /// struct by its simple name plus module.
+    /// `formatter` qualified by its declaring module, as a function name
+    /// embeds it.
     pub formatter_fq: FqTypeName,
     /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
@@ -169,12 +167,8 @@ pub fn expand_templates(
     }
 }
 
-/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
-/// tagged template shape in `module`: `match index { k => <hole k rendered
-/// through its specifier into f's buffer> }`. `Hole::fmt`'s body carries a
-/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
-/// Each arm is the interpolation the untagged template would emit for that
-/// hole, so the two forms cannot render differently.
+/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
+/// template shape in `module`, each arm the untagged interpolation of hole `index`.
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -381,11 +375,8 @@ impl FuncLocalAlloc {
     }
 }
 
-/// Rewrites every `TemplateString` in a body into its expanded block.
-///
-/// Traversal goes through [`TirOptVisitor`], whose walk is exhaustive over
-/// `TirExprKind`, so a node added later cannot silently skip a template — which
-/// reaches `lower::translate`'s `unreachable!`, not a diagnostic.
+/// Rewrites every `TemplateString` in a body into its expanded block, through
+/// the exhaustive [`TirOptVisitor`] walk so no node kind skips one.
 struct TemplateExpander<'a> {
     alloc: FuncLocalAlloc,
     ctx: &'a TemplateCtx<'a>,
@@ -1238,23 +1229,16 @@ fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerIt
     )
 }
 
-/// Whether a blanket derives *over reflection* — at least one of its
-/// receiver-param bounds is a `Reflect*` trait. Being a claimable kind is not
-/// the same question: a newtype satisfies every non-reflect bound its base
-/// does, so without this an `impl<I: Iterator> IntoIterator for I` would claim
-/// a newtype over a list and name a per-type impl nothing mints.
+/// Whether a blanket derives over reflection: one of its receiver-param bounds
+/// is a `Reflect*` trait.
 pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) -> bool {
     bounds
         .iter()
         .any(|bound| reflect_bound_item(bound, tt).is_some())
 }
 
-/// Whether `type_id` itself satisfies a blanket impl's receiver-param `bounds`
-/// — what a newtype's base satisfies is [`ranked_value_blanket`]'s question, one
-/// chain link at a time. A kind bound holds when the receiver is that kind, the
-/// identity root `Reflect` for any kind, and `ReflectNewtype` for a newtype.
-/// Any other bound is treated as satisfiable — deciding one needs the
-/// elaborator's trait query, which monomorphization has no access to.
+/// Whether `type_id` itself is the reflection kind a blanket's `bounds` ask for.
+/// Any other bound reads as held: only the elaborator's trait query decides one.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
@@ -1284,12 +1268,8 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
     tt.nominal_head(type_id).map(|(_, m)| m)
 }
 
-/// Resolve a `type_id.trait::method()` dispatch to a blanket impl when no
-/// per-type impl provides it but a blanket does and the receiver satisfies the
-/// blanket's receiver-param bound. Shared by template expansion and the
-/// auto-derive body synthesizer so both route blanket-derived calls (e.g. a
-/// newtype's `Inspect` delegating to a `ReflectStruct`-derived base struct)
-/// identically. Returns the blanket dispatch info and its home module.
+/// The blanket a `type_id.trait::method()` call dispatches to where no written
+/// impl reaches the receiver, with the blanket's module and method template.
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
@@ -1304,14 +1284,8 @@ pub(crate) fn blanket_dispatch_for(
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
-    // Param and pack projections must come from the same blanket, or the
-    // template name would name one kind and the args another.
-    // The receiver itself, no peel: this asks which blanket *owns* the
-    // receiver's method, and rank 2 answers at the receiver. Admitting the
-    // base's bound here would hand a newtype over a struct to the
-    // `ReflectStruct` derive, losing the ` as Name` tag its own
-    // `ReflectNewtype` derive writes. The peel belongs to the pack projection,
-    // where the question is what the base's structure is, not whose impl this is.
+    // The receiver unpeeled: a newtype's own `ReflectNewtype` derive owns its
+    // method, not the base's `ReflectStruct` one, which drops its ` as Name`.
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
@@ -1340,15 +1314,8 @@ pub(crate) fn blanket_dispatch_for(
     ))
 }
 
-/// The type args a value blanket's instance keys on for `receiver`: its
-/// parameters in declaration order — the receiver at the slot the impl gave it,
-/// each other projected off the receiver through the bound that names it. Every
-/// projection is recorded on the receiver, since substituting a pack needs a
-/// mutable table and later readers hold a shared borrow.
-///
-/// `None` when a projection cannot be resolved: a blanket that projects a
-/// parameter the receiver cannot supply does not apply, and a partial list
-/// would key the instance under an argument shape the template never declared.
+/// The type args a value blanket's instance keys on for `receiver`, each projection
+/// recorded on it; `None` where one does not resolve, so the blanket does not apply.
 pub(crate) fn blanket_impl_args(
     trait_env: &TraitEnv,
     blanket: &BlanketImpl,
@@ -1377,10 +1344,8 @@ pub(crate) fn blanket_impl_args(
     Some(args)
 }
 
-/// When no concrete or synthesized impl provides `trait_name` for `type_id` but
-/// a blanket impl does (e.g. the `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>
-/// Inspect for T` struct derive), route the call through the blanket — the same
-/// shape the `&T` / `&mut T` arms above build for the ref blankets.
+/// The call through the value blanket providing `local_name` where no written
+/// impl does, as the ref-blanket arms build theirs.
 fn blanket_method_call_info(
     local_name: &LocalMethodName,
     type_id: TypeId,
@@ -1388,9 +1353,6 @@ fn blanket_method_call_info(
     ctx: &TemplateCtx,
 ) -> Option<MethodCallInfo> {
     let trait_name = local_name.trait_name.as_ref()?;
-    // A bodyless conformance marker (`impl Inspect for Point;`) registers in
-    // the impl index but provides no method — under the blanket regime it means
-    // "derive via the blanket", so route unless a real methodful impl exists.
     let (monomorph_info, blanket_module, template) = blanket_dispatch_for(
         ctx.trait_env,
         type_id,

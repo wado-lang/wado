@@ -351,7 +351,7 @@ fn needs_copy_in_env(
             if is_box {
                 return false;
             }
-            if TypeTable::is_tuple_type(type_table.def_name(*def)) {
+            if type_table.is_tuple_def(*def) {
                 // Empty tuples are unit-shaped; non-empty tuples need
                 // element-wise deep copy.
                 return !type_args.is_empty();

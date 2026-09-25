@@ -19,7 +19,7 @@ use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
+    FqTraitName, FqTypeName, LocalMethodName, NEVER_TYPE_NAME, RefKind, TEMPLATE_SHAPE_PREFIX,
     TypeHead, TypeNameInfo, UNIT_TYPE_NAME, format_type_name, mangle_builtin_array_type,
     mangle_generic_name, mangle_local_item_name, mangle_tuple_type,
 };
@@ -214,7 +214,7 @@ impl SubstitutionContext {
                 type_table.make_mut_ref(new_inner)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let splices_packs = TypeTable::is_tuple_type(type_table.def_name(def));
+                let splices_packs = type_table.is_tuple_def(def);
                 let mut new_args: Vec<TypeId> = Vec::new();
                 for &arg in &type_args {
                     // A pack in a tuple stands for the elements it took, not
@@ -675,18 +675,18 @@ struct GenericAssocTypeKey {
 /// [`AssocAnswers`] picks between them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
-    receiver: AssocReceiver,
+    receiver: InstanceKey,
     trait_decl: DefId,
     assoc_name: String,
 }
 
-/// A receiver as the associated-type registry keys it: a declaration and its
-/// arguments, one type whether read as the instance or as the monomorphized struct.
+/// A type keyed by its declaration and arguments: one key whether read as the
+/// instance or as the monomorphized struct, which [`TypeKey`] keeps apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum AssocReceiver {
-    Nominal(DefId, Vec<AssocReceiver>),
-    Ref(Box<AssocReceiver>),
-    MutRef(Box<AssocReceiver>),
+pub enum InstanceKey {
+    Nominal(DefId, Vec<InstanceKey>),
+    Ref(Box<InstanceKey>),
+    MutRef(Box<InstanceKey>),
     /// The interned slot of the unerased type: a newtype keeps its own impls.
     Other(TypeId),
 }
@@ -933,8 +933,8 @@ impl TypeTable {
     /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
     pub fn primitive_by_name(name: &str) -> Option<TypeId> {
         match name {
-            Self::UNIT_TYPE_NAME => Some(Self::UNIT),
-            "!" => Some(Self::NEVER),
+            UNIT_TYPE_NAME => Some(Self::UNIT),
+            NEVER_TYPE_NAME => Some(Self::NEVER),
             _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
     }
@@ -946,15 +946,6 @@ impl TypeTable {
         }
         Self::primitive_by_name(defs.name(def))
     }
-
-    /// Reserved `GenericInstance` base name of the built-in tuple. Not a
-    /// writable type name, so it can never collide with a user-defined
-    /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
-    /// check sound. User-facing spelling is `[T1, T2, …]`.
-    pub const TUPLE_TYPE_NAME: &'static str = TUPLE_TYPE_NAME;
-
-    /// The unit type's name in method lookup, impl indexing and mangling.
-    pub const UNIT_TYPE_NAME: &'static str = UNIT_TYPE_NAME;
 
     /// Canonical user-facing name of the raw GC array (`ResolvedType::BuiltinArray`).
     /// Single source of truth for both the resolver arms that recognise the
@@ -984,11 +975,6 @@ impl TypeTable {
             }
             _ => None,
         }
-    }
-
-    /// Whether a `GenericInstance` base name is the built-in tuple.
-    pub fn is_tuple_type(name: &str) -> bool {
-        name == Self::TUPLE_TYPE_NAME
     }
 
     pub fn new() -> Self {
@@ -1643,6 +1629,12 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
     }
 
+    /// Whether `def` is the declaration the compiler item `item` names.
+    #[must_use]
+    pub fn is_compiler_item_def(&self, def: DefId, item: CompilerItem) -> bool {
+        self.compiler_item_def(item) == Some(def)
+    }
+
     /// The declaration a nominal type was written from, if it names one.
     ///
     /// This is identity: compare these, never the names below.
@@ -2151,7 +2143,7 @@ impl TypeTable {
             return false;
         };
         self.nominal_def(id)
-            .is_some_and(|def| self.compiler_item_def(item) == Some(def))
+            .is_some_and(|def| self.is_compiler_item_def(def, item))
     }
 
     pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
@@ -2354,12 +2346,16 @@ impl TypeTable {
         })
     }
 
+    /// Whether `def` declares the built-in tuple family.
+    pub fn is_tuple_def(&self, def: DefId) -> bool {
+        self.is_compiler_item_def(def, CompilerItem::Tuple)
+    }
+
     /// Whether a type is a built-in tuple.
     pub fn is_tuple(&self, id: TypeId) -> bool {
         matches!(
             self.get(id),
-            ResolvedType::GenericInstance { def, .. }
-                if Self::is_tuple_type(self.def_name(*def))
+            ResolvedType::GenericInstance { def, .. } if self.is_tuple_def(*def)
         )
     }
 
@@ -2461,7 +2457,7 @@ impl TypeTable {
     /// If the type is a built-in tuple, return its element types.
     pub fn as_tuple(&self, id: TypeId) -> Option<Vec<TypeId>> {
         if let ResolvedType::GenericInstance { def, type_args } = self.get(id)
-            && Self::is_tuple_type(self.def_name(*def))
+            && self.is_tuple_def(*def)
         {
             Some(type_args.clone())
         } else {
@@ -2987,7 +2983,7 @@ impl TypeTable {
     ) {
         self.assoc_type_resolutions
             .entry(AssocTypeKey {
-                receiver: self.assoc_receiver(concrete_id),
+                receiver: self.instance_key(concrete_id),
                 trait_decl: trait_ref.decl,
                 assoc_name,
             })
@@ -2995,20 +2991,18 @@ impl TypeTable {
             .insert(trait_ref.args, resolved_id);
     }
 
-    fn assoc_receiver(&self, id: TypeId) -> AssocReceiver {
-        let args =
-            |type_args: &[TypeId]| type_args.iter().map(|a| self.assoc_receiver(*a)).collect();
+    /// The [`InstanceKey`] of `id`.
+    pub fn instance_key(&self, id: TypeId) -> InstanceKey {
+        let args = |type_args: &[TypeId]| type_args.iter().map(|a| self.instance_key(*a)).collect();
         match self.get_unerased(id) {
             ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 type_args,
-            } if !type_args.is_empty() => AssocReceiver::Nominal(*def, args(type_args)),
-            ResolvedType::Ref(inner) => AssocReceiver::Ref(Box::new(self.assoc_receiver(*inner))),
-            ResolvedType::MutRef(inner) => {
-                AssocReceiver::MutRef(Box::new(self.assoc_receiver(*inner)))
-            }
-            unerased => AssocReceiver::Other(self.intern_map.get(unerased).copied().unwrap_or(id)),
+            } if !type_args.is_empty() => InstanceKey::Nominal(*def, args(type_args)),
+            ResolvedType::Ref(inner) => InstanceKey::Ref(Box::new(self.instance_key(*inner))),
+            ResolvedType::MutRef(inner) => InstanceKey::MutRef(Box::new(self.instance_key(*inner))),
+            unerased => InstanceKey::Other(self.intern_map.get(unerased).copied().unwrap_or(id)),
         }
     }
 
@@ -3036,7 +3030,7 @@ impl TypeTable {
         self.inheriting(concrete_id, |receiver| {
             self.assoc_type_resolutions
                 .get(&AssocTypeKey {
-                    receiver: self.assoc_receiver(receiver),
+                    receiver: self.instance_key(receiver),
                     trait_decl: *trait_key,
                     assoc_name: assoc_name.to_string(),
                 })?
@@ -3087,7 +3081,7 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type_of_trait`] instead.
     pub fn resolve_assoc_type(&self, concrete_id: TypeId, assoc_name: &str) -> Option<TypeId> {
         self.inheriting(concrete_id, |receiver| {
-            let receiver = self.assoc_receiver(receiver);
+            let receiver = self.instance_key(receiver);
             one_assoc_answer(
                 self.assoc_type_resolutions
                     .iter()
@@ -3478,8 +3472,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.def_name(def).to_string();
-                if Self::is_tuple_type(&name) {
+                if self.is_tuple_def(def) {
                     // Tuples need TypePack expansion: splice pack elements
                     // into the tuple's type-arg list.
                     let mut new_elems: Vec<TypeId> = Vec::new();
@@ -3511,11 +3504,7 @@ impl TypeTable {
                                             }
                                         }
                                         None => {
-                                            if let Some(pack_elems) = self.as_tuple(pack_type) {
-                                                new_elems.extend_from_slice(&pack_elems);
-                                            } else {
-                                                new_elems.push(pack_type);
-                                            }
+                                            new_elems.extend(self.elem_types_or_self(pack_type));
                                         }
                                     }
                                 } else {
@@ -3553,12 +3542,7 @@ impl TypeTable {
             } => {
                 // The use site's answer wins: a rebuilt projection cannot
                 // re-derive what `Self::X` means there.
-                let base_slot = match self.get(param_id) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some(*index),
-                    _ => None,
-                };
-                if let Some(slot) = base_slot
+                if let Some(slot) = self.param_slot(param_id)
                     && let Some(answer) = projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
@@ -4150,9 +4134,7 @@ impl TypeTable {
     pub fn contains_type_pack(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance { def, type_args }
-                if Self::is_tuple_type(self.def_name(*def)) =>
-            {
+            ResolvedType::GenericInstance { def, type_args } if self.is_tuple_def(*def) => {
                 type_args.iter().any(|e| self.contains_type_pack(*e))
             }
             _ => false,
@@ -4224,6 +4206,16 @@ impl TypeTable {
                 .iter()
                 .any(|t| self.contains_assoc_type_projection(*t)),
             _ => false,
+        }
+    }
+
+    /// The frame slot `id` names where it is a type parameter or a pack.
+    pub fn param_slot(&self, id: TypeId) -> Option<u32> {
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                Some(*index)
+            }
+            _ => None,
         }
     }
 
@@ -4399,8 +4391,8 @@ impl TypeTable {
         let type_name = |t: TypeId| self.render_type_name(t, qualified);
         match self.get(id) {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
-            ResolvedType::Unit => Self::UNIT_TYPE_NAME.to_string(),
-            ResolvedType::Never => "!".to_string(),
+            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "unknown".to_string(),
             ResolvedType::Error => "error".to_string(),
             ResolvedType::BuiltinArray(elem) => {
@@ -4475,7 +4467,7 @@ impl TypeTable {
             ResolvedType::GenericInstance { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
                 // A tuple is module-independent, so it has nothing to qualify.
-                if Self::is_tuple_type(self.def_name(*def)) {
+                if self.is_tuple_def(*def) {
                     format!("[{}]", arg_names.join(", "))
                 } else {
                     format!(
@@ -4505,7 +4497,6 @@ impl TypeTable {
         let base = self.representation_head(id);
         match self.get(base) {
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.def_name(*def);
                 let module_source = self.def_module(*def);
                 let args: Vec<String> = type_args
                     .iter()
@@ -4513,7 +4504,7 @@ impl TypeTable {
                     .collect();
                 // A tuple is module-independent; every other instance is named
                 // by the module declaring its base.
-                if Self::is_tuple_type(name) {
+                if self.is_tuple_def(*def) {
                     mangle_tuple_type(&args)
                 } else {
                     let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
@@ -4627,8 +4618,7 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_erased(*t))
                     .collect();
-                let name = self.def_name(*def);
-                if Self::is_tuple_type(name) {
+                if self.is_tuple_def(*def) {
                     return mangle_tuple_type(&args);
                 }
                 let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
@@ -4683,8 +4673,7 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
-                let name = self.def_name(*def);
-                Some(if Self::is_tuple_type(name) {
+                Some(if self.is_tuple_def(*def) {
                     mangle_tuple_type(&args)
                 } else {
                     mangle_generic_name(&self.decl_render_name(*def), &args)
@@ -4730,7 +4719,7 @@ impl TypeTable {
             | ResolvedType::GenericResource { def, .. } => declared(*def),
             ResolvedType::TypeParam { name, .. } => Receiver::Type(FqTypeName::binder(name)),
             ResolvedType::BuiltinArray(_) => builtin(Self::ARRAY_TYPE_NAME),
-            ResolvedType::Unit => builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Unit => builtin(UNIT_TYPE_NAME),
             ResolvedType::Primitive(prim) => builtin(prim.as_str()),
             ResolvedType::Function { .. } => Receiver::Type(self.fn_receiver_name(self.get(id))),
             _ => builtin(&self.base_type_name(id)),
@@ -4792,7 +4781,7 @@ impl TypeTable {
                 self.fq_base_type_name(*inner)
             }
             ResolvedType::BuiltinArray(_) => FqTypeName::builtin(Self::ARRAY_TYPE_NAME),
-            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
+            ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
             ResolvedType::Function { .. } => self.fn_receiver_name(self.get(id)),
             // Tuples, primitives and function types are builtin shapes: no
             // module declares them and every mangler spells them bare.
@@ -4834,7 +4823,6 @@ impl TypeTable {
     }
 
     fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
-        use crate::name::FqTypeName;
         // Only a borrow is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
@@ -4855,8 +4843,8 @@ impl TypeTable {
         // together must answer one name.
         match self.get(id) {
             ResolvedType::Primitive(prim) => FqTypeName::builtin(prim.as_str()),
-            ResolvedType::Unit => FqTypeName::builtin(Self::UNIT_TYPE_NAME),
-            ResolvedType::Never => FqTypeName::builtin("!"),
+            ResolvedType::Unit => FqTypeName::builtin(UNIT_TYPE_NAME),
+            ResolvedType::Never => FqTypeName::builtin(NEVER_TYPE_NAME),
             // Head and arguments come straight off the type — the same shape
             // every other instantiated type has. No recovery step, because
             // there is no fused spelling left to recover them from.
@@ -4875,7 +4863,7 @@ impl TypeTable {
             ResolvedType::TypeParam { name, .. } => FqTypeName::binder(name),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args = args_of(type_args);
-                if Self::is_tuple_type(self.def_name(*def)) {
+                if self.is_tuple_def(*def) {
                     FqTypeName::tuple(args)
                 } else {
                     FqTypeName::declared(&self.defs, *def).with_args(args)
@@ -4944,14 +4932,12 @@ impl TypeTable {
                     .iter()
                     .map(|t| self.mangle_type_arg_for_generic(*t))
                     .collect();
-                let name = self.def_name(*def);
-                let module_source = self.def_module(*def);
                 // A tuple is module-independent; its elements stay qualified.
-                if Self::is_tuple_type(name) {
+                if self.is_tuple_def(*def) {
                     return TypeNameInfo::Tuple(args);
                 }
                 TypeNameInfo::Generic {
-                    name: format!("{module_source}/{}", self.decl_render_name(*def)),
+                    name: format!("{}/{}", self.def_module(*def), self.decl_render_name(*def)),
                     args,
                 }
             }
@@ -4989,7 +4975,7 @@ impl TypeTable {
                 assoc_name
             )),
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(format!("..{name}")),
-            ResolvedType::Never => TypeNameInfo::Named("!".to_string()),
+            ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
     }
@@ -6046,6 +6032,14 @@ pub enum TemplateId {
 }
 
 impl TemplateId {
+    /// The declaration `def` as emitted into the impl block `block`.
+    pub fn in_block(def: DefId, block: DefId) -> Self {
+        Self::Declared {
+            def,
+            block: Some(block),
+        }
+    }
+
     /// The module the body is emitted into: its block's where it has one.
     pub fn home(&self, defs: &DefTable) -> ModuleSource {
         match self {
@@ -6244,15 +6238,6 @@ pub struct TirGlobal {
     pub span: Span,
 }
 
-/// The `impl` block a method comes from, which tells apart two templates that
-/// blocks on one head name alike.
-#[derive(Debug, Clone)]
-pub struct ImplOrigin {
-    pub def: DefId,
-    /// The arguments the target writes, a binder as its own `TypeParam`.
-    pub target_args: Vec<TypeId>,
-}
-
 /// What an impl block's target writes.
 #[derive(Debug, Clone)]
 struct ImplTarget {
@@ -6279,13 +6264,21 @@ impl TypeTable {
                 type_args,
             } if type_args.len() == head_args.len() => {
                 let head = *head;
-                Some(self.intern(ResolvedType::GenericInstance {
-                    def: head,
-                    type_args: head_args.to_vec(),
-                }))
+                Some(self.make_generic_instance(head, head_args.to_vec()))
             }
             _ => None,
         }
+    }
+
+    /// Impl block `def`'s target as a whole, its reference included.
+    pub fn impl_target_whole(&self, def: DefId) -> TypeId {
+        self.impl_target(def).whole
+    }
+
+    /// The arguments of the head impl block `def`'s target names past any
+    /// reference, a binder as its own `TypeParam`; empty for a non-generic one.
+    pub fn impl_target_args(&self, def: DefId) -> &[TypeId] {
+        &self.impl_target(def).args
     }
 
     fn impl_target(&self, def: DefId) -> &ImplTarget {
@@ -6301,10 +6294,7 @@ impl TypeTable {
         if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
             self.get_unerased(target.whole)
             && let ResolvedType::Ref(asked) | ResolvedType::MutRef(asked) = self.get(instance)
-            && !matches!(
-                self.get(*written),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            )
+            && self.param_slot(*written).is_none()
         {
             let head = self.impl_receiver_key(*written);
             let mut link = self.peel_refs(*asked);
@@ -6354,12 +6344,10 @@ impl TypeTable {
         };
         let mut seen = IndexSet::default();
         names_a_head
-            && target.args.iter().all(|&arg| match self.get(arg) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    seen.insert(*index)
-                }
-                _ => false,
-            })
+            && target
+                .args
+                .iter()
+                .all(|&arg| self.param_slot(arg).is_some_and(|slot| seen.insert(slot)))
     }
 
     /// Every recorded impl block reaching only some instances of its head.
@@ -6422,94 +6410,51 @@ impl TypeTable {
         concrete: TypeId,
         bound: &mut IndexMap<u32, TypeId>,
     ) -> bool {
-        match (self.get(written), self.get(concrete)) {
-            (ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. }, _) => {
-                let prior = *bound.entry(*index).or_insert(concrete);
-                self.type_key(prior) == self.type_key(concrete)
-            }
-            // An `_` or an unresolvable name: nothing written to match against.
-            (ResolvedType::Unknown | ResolvedType::Error, _) => true,
-            (ResolvedType::Ref(w), ResolvedType::Ref(c))
-            | (ResolvedType::MutRef(w), ResolvedType::MutRef(c))
-            | (ResolvedType::Reactive(w), ResolvedType::Reactive(c))
-            | (ResolvedType::BuiltinArray(w), ResolvedType::BuiltinArray(c)) => {
-                self.bind_one(*w, *c, bound)
-            }
-            (
-                ResolvedType::Function {
-                    is_mut: w_mut,
-                    params: w_params,
-                    return_type: w_ret,
-                    effects: w_effects,
-                },
-                ResolvedType::Function {
-                    is_mut: c_mut,
-                    params: c_params,
-                    return_type: c_ret,
-                    effects: c_effects,
-                },
-            ) => {
-                w_mut == c_mut
-                    && w_effects == c_effects
-                    && self.bind_all(w_params, c_params, bound)
-                    && self.bind_one(*w_ret, *c_ret, bound)
-            }
-            _ => match (
-                self.generic_type_args(written),
-                self.generic_type_args(concrete),
-            ) {
-                (Some(w), Some(c)) => {
-                    self.fq_base_type_name(written).head()
-                        == self.fq_base_type_name(concrete).head()
-                        && self.bind_all(&w, &c, bound)
-                }
-                // A head written bare (`impl Slot<Box>`) constrains the head alone.
-                (None, Some(_))
-                    if self.peel_refs(written) == written
-                        && self.decl_of_type(written).is_some() =>
-                {
-                    self.fq_base_type_name(written).head()
-                        == self.fq_base_type_name(concrete).head()
-                }
-                _ => self.type_key(written) == self.type_key(concrete),
-            },
+        if let Some(slot) = self.param_slot(written) {
+            let prior = *bound.entry(slot).or_insert(concrete);
+            return self.type_key(prior) == self.type_key(concrete);
         }
+        // An `_` or an unresolvable name: nothing written to match against.
+        if matches!(
+            self.get(written),
+            ResolvedType::Unknown | ResolvedType::Error
+        ) {
+            return true;
+        }
+        if let Some(agrees) = self.zip_shapes(written, concrete, |w, c| self.bind_one(w, c, bound))
+        {
+            return agrees;
+        }
+        // A head written bare (`impl Slot<Box>`) constrains the head alone.
+        if self.peel_refs(written) == written
+            && self.decl_of_type(written).is_some()
+            && self.generic_type_args(written).is_none()
+            && self.generic_type_args(concrete).is_some()
+        {
+            return self.fq_base_type_name(written).head()
+                == self.fq_base_type_name(concrete).head();
+        }
+        self.type_key(written) == self.type_key(concrete)
     }
 
-    /// Whether some type instantiates both targets `a` and `b`, their type
-    /// parameters kept apart even where they share an id.
-    pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {
-        let mut subst = IndexMap::default();
-        self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
-    }
-
-    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, u32), Term>) -> bool {
-        let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
-        let var = |(side, id): Term| match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                Some((side, *index))
-            }
-            _ => None,
+    /// Whether `each` holds of every pair of parts `a` and `b` line up, or
+    /// `None` where they share no outer shape to line parts up by.
+    fn zip_shapes(
+        &self,
+        a: TypeId,
+        b: TypeId,
+        mut each: impl FnMut(TypeId, TypeId) -> bool,
+    ) -> Option<bool> {
+        let mut all = |xs: &[TypeId], ys: &[TypeId]| {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(&x, &y)| each(x, y))
         };
-        match (var(a), var(b)) {
-            (Some(x), Some(y)) if x == y => return true,
-            (Some(x), _) => return !self.occurs(x, b, subst) && subst.insert(x, b).is_none(),
-            (_, Some(y)) => return !self.occurs(y, a, subst) && subst.insert(y, a).is_none(),
-            (None, None) => {}
-        }
-        let pair = |x: TypeId, y: TypeId, subst: &mut IndexMap<(Side, u32), Term>| {
-            self.unify_apart((a.0, x), (b.0, y), subst)
-        };
-        let all = |xs: &[TypeId], ys: &[TypeId], subst: &mut IndexMap<(Side, u32), Term>| {
-            xs.len() == ys.len() && xs.iter().zip(ys).all(|(&x, &y)| pair(x, y, subst))
-        };
-        match (self.get(a.1), self.get(b.1)) {
-            (ResolvedType::Unknown | ResolvedType::Error, _)
-            | (_, ResolvedType::Unknown | ResolvedType::Error) => true,
+        match (self.get(a), self.get(b)) {
             (ResolvedType::Ref(x), ResolvedType::Ref(y))
             | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
             | (ResolvedType::Reactive(x), ResolvedType::Reactive(y))
-            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => pair(*x, *y, subst),
+            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => {
+                Some(all(&[*x], &[*y]))
+            }
             (
                 ResolvedType::Function {
                     is_mut: x_mut,
@@ -6523,27 +6468,51 @@ impl TypeTable {
                     return_type: y_ret,
                     effects: y_effects,
                 },
-            ) => {
+            ) => Some(
                 x_mut == y_mut
                     && x_effects == y_effects
-                    && all(x_params, y_params, subst)
-                    && pair(*x_ret, *y_ret, subst)
-            }
-            _ => match (self.generic_type_args(a.1), self.generic_type_args(b.1)) {
-                (Some(x), Some(y)) => {
-                    self.fq_base_type_name(a.1).head() == self.fq_base_type_name(b.1).head()
-                        && all(&x, &y, subst)
-                }
-                _ => self.type_key(a.1) == self.type_key(b.1),
+                    && all(x_params, y_params)
+                    && all(&[*x_ret], &[*y_ret]),
+            ),
+            _ => match (self.generic_type_args(a), self.generic_type_args(b)) {
+                (Some(x), Some(y)) => Some(
+                    self.fq_base_type_name(a).head() == self.fq_base_type_name(b).head()
+                        && all(&x, &y),
+                ),
+                _ => None,
             },
         }
     }
 
+    /// Whether some type instantiates both targets `a` and `b`, their type
+    /// parameters kept apart even where they share an id.
+    pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {
+        let mut subst = IndexMap::default();
+        self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
+    }
+
+    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, u32), Term>) -> bool {
+        let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
+        let var = |(side, id): Term| self.param_slot(id).map(|slot| (side, slot));
+        match (var(a), var(b)) {
+            (Some(x), Some(y)) if x == y => return true,
+            (Some(x), _) => return !self.occurs(x, b, subst) && subst.insert(x, b).is_none(),
+            (_, Some(y)) => return !self.occurs(y, a, subst) && subst.insert(y, a).is_none(),
+            (None, None) => {}
+        }
+        let unknown =
+            |id: TypeId| matches!(self.get(id), ResolvedType::Unknown | ResolvedType::Error);
+        if unknown(a.1) || unknown(b.1) {
+            return true;
+        }
+        self.zip_shapes(a.1, b.1, |x, y| self.unify_apart((a.0, x), (b.0, y), subst))
+            .unwrap_or_else(|| self.type_key(a.1) == self.type_key(b.1))
+    }
+
     /// `term` past every parameter the substitution has bound.
     fn walk_term(&self, mut term: Term, subst: &IndexMap<(Side, u32), Term>) -> Term {
-        while let ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } =
-            self.get(term.1)
-            && let Some(&next) = subst.get(&(term.0, *index))
+        while let Some(slot) = self.param_slot(term.1)
+            && let Some(&next) = subst.get(&(term.0, slot))
         {
             term = next;
         }
@@ -6554,11 +6523,11 @@ impl TypeTable {
     /// it there would make a type contain itself.
     fn occurs(&self, var: (Side, u32), term: Term, subst: &IndexMap<(Side, u32), Term>) -> bool {
         let (side, id) = self.walk_term(term, subst);
+        if let Some(slot) = self.param_slot(id) {
+            return (side, slot) == var;
+        }
         let inside = |ids: &[TypeId]| ids.iter().any(|&i| self.occurs(var, (side, i), subst));
         match self.get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                (side, *index) == var
-            }
             ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
             | ResolvedType::Reactive(inner)
@@ -6604,9 +6573,9 @@ pub struct TirFunction {
     /// Type parameters from the impl block (for methods on generic structs)
     /// e.g., for a method in `impl Counter<T>`, this contains T's info
     pub impl_type_params: Vec<TirTypeParam>,
-    /// The `impl` block a method was emitted into. `None` for anything else,
-    /// instances included.
-    pub impl_origin: Option<ImplOrigin>,
+    /// The `impl` block a method was emitted into, which tells apart two blocks'
+    /// like-named templates. `None` for anything else, instances included.
+    pub impl_origin: Option<DefId>,
     /// If this function was created by monomorphization, contains the origin info
     pub monomorph_info: Option<MonomorphInfo>,
     /// Parsed method info for methods (None for free functions)
@@ -7201,7 +7170,7 @@ impl TirFunction {
         Some(match self.def_id {
             Some(def) => TemplateId::Declared {
                 def,
-                block: self.impl_origin.as_ref().map(|origin| origin.def),
+                block: self.impl_origin,
             },
             None => TemplateId::Synthesized {
                 module: self.module_source.clone(),

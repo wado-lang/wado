@@ -1306,12 +1306,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .record_bound_driven_synth_request_for(target_type_id, &module_source, &trait_);
             return;
         }
-        let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
         if self.tysys.has_real_trait_impl_for_type(
             &self.annotate_ctx,
             &self.type_lookup(),
-            Some(target_type_id),
-            &receiver,
+            target_type_id,
             trait_,
         ) {
             return;
@@ -1596,8 +1594,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some("!".to_string()),
+            ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
             ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }

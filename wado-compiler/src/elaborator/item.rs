@@ -933,9 +933,13 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.def_at(impl_block.id);
+        scope
+            .tysys
+            .type_table
+            .borrow_mut()
+            .record_impl_target(impl_def, target, target_type_args);
         let sig = ImplSig {
-            target,
-            target_type_args,
+            def: impl_def,
             trait_type_args,
             associated_types,
             target_fq,

@@ -26,7 +26,9 @@ use crate::cm_abi::{
 };
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
+use crate::name::{
+    DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, UNIT_TYPE_NAME, to_kebab,
+};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::synthesis::cm_binding::types::cm_interface_module;
@@ -3036,22 +3038,52 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_binding_source(CmTypeKind::Resource, wado_name))
     }
 
-    /// The CM resources `ty` references at any depth, as
-    /// `(declaring_interface, wado_name)`, asking `emitting` first.
+    /// The CM resources `ty` references at any depth, inside the records and
+    /// variants it names too, as `(declaring_interface, wado_name)`.
     pub fn resources_in_type(
         &self,
         ty: &Type,
         emitting: Option<&str>,
         out: &mut IndexSet<(String, String)>,
     ) {
+        self.resources_in_type_inner(ty, emitting, out, &mut IndexSet::default());
+    }
+
+    fn resources_in_type_inner(
+        &self,
+        ty: &Type,
+        emitting: Option<&str>,
+        out: &mut IndexSet<(String, String)>,
+        visited: &mut IndexSet<(String, String)>,
+    ) {
         ty.for_each(&mut |ty| {
-            if let Type::Named(named) = ty
-                && let Some(source) = self.cm_source_of_named_type(named, emitting)
-                && self
-                    .get_resource_cm_name_by_source(&source, &named.name)
-                    .is_some()
-            {
-                out.insert((source, named.name.clone()));
+            let Type::Named(named) = ty else {
+                return;
+            };
+            let Some(source) = self.cm_source_of_named_type(named, emitting) else {
+                return;
+            };
+            let key = (source, named.name.clone());
+            if !visited.insert(key.clone()) {
+                return;
+            }
+            let (source, name) = &key;
+            let members: Vec<&Type> =
+                if let Some(fields) = self.get_struct_fields_by_source(source, name) {
+                    fields.iter().map(|(_, field)| field).collect()
+                } else if let Some(cases) = self.get_variant_cases_by_source(source, name) {
+                    cases
+                        .iter()
+                        .filter_map(|case| case.payload.as_ref())
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+            for member in members {
+                self.resources_in_type_inner(member, Some(source), out, visited);
+            }
+            if self.get_resource_cm_name_by_source(source, name).is_some() {
+                out.insert(key);
             }
         });
     }
@@ -3712,7 +3744,7 @@ impl CmInterfaceRegistry {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
-                TypeTable::UNIT_TYPE_NAME => {}
+                UNIT_TYPE_NAME => {}
                 name => {
                     if let Some(source) = self.resolve_cm_source_for(named) {
                         if let Some(fields) = self
@@ -4197,6 +4229,21 @@ impl CmTypeGen {
         self.cache.insert(key.to_string(), idx);
     }
 
+    /// Register the `own` and `borrow` handles the sink already defines over
+    /// resource `cm_name`, so the walk reuses them rather than minting its own.
+    pub fn register_resource_handles(&mut self, cm_name: &str, own: u32, borrow: u32) {
+        self.cache.insert(Self::own_key(cm_name), own);
+        self.cache.insert(Self::borrow_key(cm_name), borrow);
+    }
+
+    fn own_key(resource_cm_name: &str) -> String {
+        format!("own:{resource_cm_name}")
+    }
+
+    fn borrow_key(resource_cm_name: &str) -> String {
+        format!("borrow:{resource_cm_name}")
+    }
+
     /// Compute a stable cache key for an AST type (ignoring spans)
     fn type_key(ty: &Type) -> String {
         match ty {
@@ -4348,7 +4395,7 @@ impl CmTypeGen {
         resource_export_idx: u32,
         resource_cm_name: &str,
     ) -> u32 {
-        let cache_key = format!("borrow:{resource_cm_name}");
+        let cache_key = Self::borrow_key(resource_cm_name);
         if let Some(&idx) = self.cache.get(&cache_key) {
             return idx;
         }
@@ -4429,8 +4476,8 @@ impl CmTypeGen {
     /// Convert a resolved Wado AST type to a CM [`ComponentValType`] within the instance type.
     ///
     /// Creates intermediate types as needed and caches them for deduplication.
-    /// The `resource_exports` maps CM resource names (e.g., "fields") to their
-    /// export indices within the instance type.
+    /// The `resource_exports` maps CM resource names (e.g., "fields") to the
+    /// resource's own type index, never to a handle over it.
     pub fn ast_type_to_cm(
         &mut self,
         sink: &mut dyn CmTypeSink,
@@ -4493,7 +4540,7 @@ impl CmTypeGen {
                 if let Some(cm_name) =
                     cm_interface_registry.get_resource_cm_name_by_source(source, name)
                 {
-                    let cache_key = format!("own:{cm_name}");
+                    let cache_key = Self::own_key(cm_name);
                     if let Some(&idx) = self.cache.get(&cache_key) {
                         return ComponentValType::Type(idx);
                     }

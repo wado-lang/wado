@@ -27,7 +27,7 @@ use super::types::{
     flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::name::FqTypeName;
+use crate::name::{FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
 use crate::tir::TirUnaryOp;
@@ -75,7 +75,11 @@ pub fn synthesize_lower(
             let packed_local = *next_local;
             locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
             *next_local += 1;
-            let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
+            let packed = internal_call(
+                CompilerItem::CmLowerString.attr_name(),
+                vec![value],
+                TypeTable::I64,
+            );
             let mut stmts = vec![let_stmt("$packed", packed_local, TypeTable::I64, packed)];
 
             let (ptr, len) =
@@ -98,7 +102,7 @@ pub fn synthesize_lower(
         }
         Type::Named(named) => match named.name.as_str() {
             // Unit occupies no memory, so there is nothing to store.
-            TypeTable::UNIT_TYPE_NAME => vec![],
+            UNIT_TYPE_NAME => vec![],
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
@@ -1177,7 +1181,11 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 &format!("{prefix}_packed"),
                 packed_local,
                 TypeTable::I64,
-                internal_call("cm_lower_string", vec![value], TypeTable::I64),
+                internal_call(
+                    CompilerItem::CmLowerString.attr_name(),
+                    vec![value],
+                    TypeTable::I64,
+                ),
             ));
             let (ptr, len) = split_packed_ptr_len(local_ref(
                 packed_local,

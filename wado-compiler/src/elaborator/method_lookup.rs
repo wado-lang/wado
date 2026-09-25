@@ -13,7 +13,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
 use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -42,7 +42,7 @@ use crate::elaborator::solver_bridge::Ordered;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::elaborator::{scope, sig};
-use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind};
+use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
 use crate::resolve::Resolution;
 use crate::unparse::binary_op_str;
 
@@ -223,10 +223,15 @@ impl TypeSystem {
         }
     }
 
+    /// `id` read through one reference, if it is one.
+    pub(crate) fn through_ref(&self, id: TypeId) -> TypeId {
+        self.pointee_of(id).unwrap_or(id)
+    }
+
     /// What a receiver fills the positions [`impl_target_args`] reads, a
     /// reference read through to its pointee's (WEP 2026-08-12).
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
-        let pointee = self.pointee_of(receiver).unwrap_or(receiver);
+        let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
         tt.nominal_type_args(tt.representation_head(pointee))
             .filter(|args| !args.is_empty())
@@ -250,10 +255,9 @@ impl TypeSystem {
         let Some(receiver_args) = receiver_args else {
             return true;
         };
-        let written = &self.signatures.impl_sig(def).target_type_args;
-        self.type_table
-            .borrow()
-            .impl_target_binding(written, receiver_args)
+        let table = self.type_table.borrow();
+        table
+            .impl_target_binding(table.impl_target_args(def), receiver_args)
             .is_some()
     }
 
@@ -617,7 +621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = &self.tysys.type_table.borrow().def_name(*def).to_string();
                 let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
-                if TypeTable::is_tuple_type(name) {
+                if self.tysys.type_table.borrow().is_tuple_def(*def) {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
@@ -687,12 +691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             defaults_module: None,
                         });
                     }
-                    (
-                        TypeTable::TUPLE_TYPE_NAME.to_string(),
-                        None,
-                        Some(elems.clone()),
-                        None,
-                    )
+                    (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
                 } else {
                     (
                         name.clone(),
@@ -766,7 +765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None,
             ),
             // Unit type () - search for impl blocks in loaded modules
-            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
+            ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), None, None, None),
             // An enum or a non-generic variant: the declaration is the whole
             // receiver, so its head names the impl blocks to search. A generic
             // variant arrives as `GenericInstance`, handled above.
@@ -936,9 +935,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        let table = &self.tysys.type_table;
         let impl_type_bindings = slot_type_bindings(
-            &self.tysys.type_table,
-            &impl_sig.target_type_args,
+            table,
+            table.borrow().impl_target_args(impl_ref.0),
             receiver_type_args.unwrap_or(&[]),
         );
 
@@ -2797,7 +2797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The declared parameter is `&Rhs`; the operand is the
                 // referent, so admissibility compares against that.
                 if let Some(class) = rhs {
-                    let declared = rhs_type.map(|t| s.tysys.pointee_of(t).unwrap_or(t));
+                    let declared = rhs_type.map(|t| s.tysys.through_ref(t));
                     if let Some(declared) = declared
                         && !s.class_admits(declared, class)
                     {
@@ -2956,10 +2956,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<(String, TypeId)> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = self
-            .tysys
-            .pointee_of(container_type)
-            .unwrap_or(container_type);
+        let base_type_id = self.tysys.through_ref(container_type);
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -3038,7 +3035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
-        let output_base_type_id = self.tysys.pointee_of(output_type).unwrap_or(output_type);
+        let output_base_type_id = self.tysys.through_ref(output_type);
 
         let (output_struct_name, output_module_source, output_type_args) = match self
             .tysys
@@ -3255,8 +3252,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let output_fq = self
             .tysys
             .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
-        let mangled_method_name =
-            MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
+        let method_info =
+            LocalMethodName::new(output_fq, method_trait_name, method_call.method.clone());
 
         // `module_source` is the body's home module: trait-impl block for
         // trait methods, otherwise the output type's defining module
@@ -3266,19 +3263,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let func = FunctionRef {
             module_source: method_call_module_source,
-            name: mangled_method_name,
+            name: method_info.to_mangled_name(),
             template: method_def
                 .zip(impl_block)
-                .map(|(def, block)| TemplateId::Declared {
-                    def,
-                    block: Some(block),
-                }),
+                .map(|(def, block)| TemplateId::in_block(def, block)),
             monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                output_fq,
-                method_trait_name,
-                method_call.method.clone(),
-            )),
+            method_info: Some(method_info),
         };
 
         // The IndexMut rewrite is the only path building user-visible method-call

@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use crate::ast::{self, AstVisitor, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
-use crate::elaborator::sig::Signatures;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -1422,10 +1421,7 @@ impl TraitEnv {
                 .find(|m| m.name == method && m.has_body)?
                 .def
         };
-        Some(TemplateId::Declared {
-            def,
-            block: Some(block),
-        })
+        Some(TemplateId::in_block(def, block))
     }
 
     /// The block on `receiver` whose body answers `method` of `trait_` where
@@ -1551,14 +1547,8 @@ impl TraitEnv {
             .unwrap_or_default()
     }
 
-    /// Like [`impl_module_for`] but only returns a hit when the impl block
-    /// is **fully concrete** (no `impl<T, …>` type parameters). Used by
-    /// the monomorphizer when redirecting a substituted trait-method call
-    /// to the impl that actually defines its body: a concrete impl's
-    /// function lives in the impl block's module, while a generic impl's
-    /// post-substitution instance is materialised in the receiver type's
-    /// module by convention. Mirrors the legacy `trait_method_locations`
-    /// semantics that filtered on `impl_type_params.is_empty()`.
+    /// [`Self::impl_module_for`] restricted to fully concrete blocks: only
+    /// their function lives in the block's module, a generic one's in the receiver's.
     pub(crate) fn concrete_impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,
@@ -2391,7 +2381,6 @@ fn check_variadic_impl_overlap(
 pub(super) fn inherent_impl_overlaps(
     defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    signatures: &Signatures,
     type_table: &TypeTable,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut by_target: IndexMap<name::Receiver, Vec<(&ImplHeader, TypeId)>> = IndexMap::default();
@@ -2399,9 +2388,8 @@ pub(super) fn inherent_impl_overlaps(
         if header.trait_.is_some() {
             continue;
         }
-        let sig = signatures.impl_sig(*def);
         // An `impl &T` defines its methods on `T`, so it keys by the pointee.
-        let pointee = type_table.peel_refs(sig.target);
+        let pointee = type_table.peel_refs(type_table.impl_target_whole(*def));
         by_target
             .entry(type_table.impl_receiver_key(pointee))
             .or_default()
@@ -2462,7 +2450,7 @@ fn check_all_orphan_rules(
         tuple: type_decl_index
             .iter()
             .filter(owned)
-            .any(|def| defs.name(*def) == TypeTable::TUPLE_TYPE_NAME),
+            .any(|def| defs.name(*def) == name::TUPLE_TYPE_NAME),
     };
 
     for header in impl_headers.values() {
@@ -2753,9 +2741,9 @@ pub(super) fn get_type_name_static(ty: &ast::Type) -> String {
             .to_string(),
         ast::Type::Tuple(elems) => {
             if elems.is_empty() {
-                TypeTable::UNIT_TYPE_NAME.to_string()
+                name::UNIT_TYPE_NAME.to_string()
             } else {
-                TypeTable::TUPLE_TYPE_NAME.to_string()
+                name::TUPLE_TYPE_NAME.to_string()
             }
         }
         // `geo::Tag` writes the declaration name `Tag`; the namespace says
