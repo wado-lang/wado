@@ -1,5 +1,5 @@
 //! Capture by reference a boxed binding a closure only reads, where the owning
-//! frame may still write it while the closure lives; a `for` header's, per iteration.
+//! frame may still write it while the closure lives.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
@@ -9,7 +9,7 @@ use crate::tir::{
     CaptureSource, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, remap_local_reads_in_block};
 use crate::token::Span;
 
 pub fn capture_observed_by_ref(flat: &mut FlatPackage) {
@@ -148,8 +148,7 @@ fn rewrite_frame(
                 .filter(|(_, local, type_id)| {
                     complete
                         && type_table.is_boxed_reference_target(*type_id)
-                        && (address_taken.contains(local)
-                            || scan.written_after(*local, site))
+                        && (address_taken.contains(local) || scan.written_after(*local, site))
                 })
                 .map(|(slot, _, _)| *slot)
                 .collect()
@@ -168,9 +167,8 @@ fn rewrite_frame(
     }
 }
 
-/// Gives each mutable binding a C-style `for` header declares, and a closure in
-/// its body captures, a local of its own per iteration: the body works on a
-/// copy taken ahead of it, stored back after it for the condition and update.
+/// Gives each mutable `for` header binding a body closure captures a local per
+/// iteration, copied in ahead of the body and stored back after it.
 struct RebindForHeaders<'a, 'l> {
     locals: &'a mut FrameLocals<'l>,
     address_taken: &'a mut IndexSet<u32>,
@@ -178,81 +176,74 @@ struct RebindForHeaders<'a, 'l> {
 }
 
 impl RebindForHeaders<'_, '_> {
-    fn rebind(&mut self, stmts: Vec<TirStmt>, loop_span: Span) -> Vec<TirStmt> {
-        let mut out = Vec::with_capacity(stmts.len());
-        for mut stmt in stmts {
-            let TirStmtKind::LabeledBlock { label, block } = &mut stmt.kind else {
-                out.push(stmt);
+    /// Rebinds the header bindings `body`, a `for` body in the loop at
+    /// `loop_span`, captures; answers the copies in and the stores back.
+    fn rebind(&mut self, body: &mut TirStmt, loop_span: Span) -> (Vec<TirStmt>, Vec<TirStmt>) {
+        let body_span = body.span;
+        let TirStmtKind::LabeledBlock { block, .. } = &mut body.kind else {
+            unreachable!("a `for` body is a labeled block");
+        };
+        let mut captured = CapturedLocals::default();
+        captured.visit_block(block);
+        let mut copy_in = Vec::new();
+        let mut store_back = Vec::new();
+        for header in captured.locals {
+            let Some(local) = self.locals.declared(header) else {
                 continue;
             };
-            if !is_for_body_label(label) {
-                out.push(stmt);
+            if !(local.is_mut
+                && encloses(&loop_span, &local.span)
+                && !encloses(&body_span, &local.span))
+            {
                 continue;
             }
-            let body_span = stmt.span;
-            let mut captured = CapturedLocals::default();
-            captured.visit_block(block);
-            let mut store_back = Vec::new();
-            for header in captured.locals {
-                let Some(local) = self.locals.declared(header) else {
-                    continue;
-                };
-                if !(local.is_mut
-                    && encloses(&loop_span, &local.span)
-                    && !encloses(&body_span, &local.span))
-                {
-                    continue;
-                }
-                let name = local.name.clone();
-                let type_id = local.type_id;
-                let own = self.locals.alloc(name.clone(), type_id, true);
-                if self.address_taken.contains(&header) {
-                    self.address_taken.insert(own);
-                }
-                RenameLocal {
-                    from: header,
-                    to: own,
-                }
-                .visit_block(block);
-                let read = |index| {
-                    TirExpr::new(
-                        TirExprKind::Local {
-                            index,
-                            name: name.clone(),
-                        },
-                        type_id,
-                        body_span,
-                    )
-                };
-                out.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: own,
-                        is_mut: true,
-                        is_reactive: false,
-                        type_id,
-                        value: read(header),
-                        skip_value_copy: false,
-                    },
-                    body_span,
-                ));
-                store_back.push(TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Assign {
-                            target: Box::new(read(header)),
-                            value: Box::new(read(own)),
-                        },
-                        TypeTable::UNIT,
-                        body_span,
-                    )),
-                    body_span,
-                ));
+            let name = local.name.clone();
+            let type_id = local.type_id;
+            let own = self.locals.alloc(name.clone(), type_id, true);
+            if self.address_taken.contains(&header) {
+                self.address_taken.insert(own);
             }
-            out.push(stmt);
-            out.append(&mut store_back);
+            remap_local_reads_in_block(block, header, own);
+            let read = |index| {
+                TirExpr::new(
+                    TirExprKind::Local {
+                        index,
+                        name: name.clone(),
+                    },
+                    type_id,
+                    body_span,
+                )
+            };
+            copy_in.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: name.clone(),
+                    local_index: own,
+                    is_mut: true,
+                    is_reactive: false,
+                    type_id,
+                    value: read(header),
+                    skip_value_copy: false,
+                },
+                body_span,
+            ));
+            store_back.push(TirStmt::new(
+                TirStmtKind::Expr(TirExpr::new(
+                    TirExprKind::Assign {
+                        target: Box::new(read(header)),
+                        value: Box::new(read(own)),
+                    },
+                    TypeTable::UNIT,
+                    body_span,
+                )),
+                body_span,
+            ));
         }
-        out
+        (copy_in, store_back)
     }
+}
+
+fn is_for_body(stmt: &TirStmt) -> bool {
+    matches!(&stmt.kind, TirStmtKind::LabeledBlock { label, .. } if is_for_body_label(label))
 }
 
 impl TirMutVisitor for RebindForHeaders<'_, '_> {
@@ -268,10 +259,16 @@ impl TirMutVisitor for RebindForHeaders<'_, '_> {
 
     fn visit_block(&mut self, block: &mut TirBlock) {
         self.walk_block(block);
-        if let Some(&loop_span) = self.loop_spans.last() {
-            let stmts = std::mem::take(&mut block.stmts);
-            block.stmts = self.rebind(stmts, loop_span);
-        }
+        let Some(&loop_span) = self.loop_spans.last() else {
+            return;
+        };
+        let Some(at) = block.stmts.iter().position(is_for_body) else {
+            return;
+        };
+        let (copy_in, store_back) = self.rebind(&mut block.stmts[at], loop_span);
+        let after = at + 1;
+        block.stmts.splice(after..after, store_back);
+        block.stmts.splice(at..at, copy_in);
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
@@ -294,32 +291,8 @@ impl TirRefVisitor for CapturedLocals {
         if let TirExprKind::Closure { captures, .. } = &expr.kind {
             self.locals
                 .extend(captures.iter().filter_map(|capture| capture.source.local()));
-            return;
         }
-        self.walk_expr(expr);
-    }
-}
-
-/// Points every use of frame local `from` at `to`, a closure's capture of it
-/// included.
-struct RenameLocal {
-    from: u32,
-    to: u32,
-}
-
-impl TirMutVisitor for RenameLocal {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            TirExprKind::Local { index, .. } if *index == self.from => *index = self.to,
-            TirExprKind::Closure { captures, .. } => {
-                for capture in captures {
-                    capture.source = capture
-                        .source
-                        .map_local(|index| if index == self.from { self.to } else { index });
-                }
-            }
-            _ => self.walk_expr(expr),
-        }
+        self.walk_expr_in_frame(expr);
     }
 }
 
