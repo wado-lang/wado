@@ -503,18 +503,18 @@ fn infer_node(
 ) -> Result<Shape, InferError> {
     let op = node.op;
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
-        let operand = operand_at(node, shapes, 0)?;
+        let operand = operand_at(node, shapes, 0);
         return match regrouped_extents(node, known, &static_extents_of(node, &operand)?) {
             Ok(targets) => regrouped(node, &operand, &targets, schema),
             Err(reason) => Result::Err(refusal(node, reason)),
         };
     }
     if op == "Flatten" {
-        return flatten(node, &operand_at(node, shapes, 0)?, schema);
+        return flatten(node, &operand_at(node, shapes, 0), schema);
     }
     if op == "Gather" {
-        let data = operand_at(node, shapes, 0)?;
-        let indices = operand_at(node, shapes, 1)?;
+        let data = operand_at(node, shapes, 0);
+        let indices = operand_at(node, shapes, 1);
         let axis = gather_axis(node, data.rank())?;
         let mut axes = data.axes[0..<axis].to_list();
         axes.extend(&indices.axes);
@@ -522,13 +522,13 @@ fn infer_node(
         return Result::Ok(Shape { axes });
     }
     if op == "MaxPool" {
-        let x = operand_at(node, shapes, 0)?;
+        let x = operand_at(node, shapes, 0);
         let window = window_of(node, &x, shapes)?;
         return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
     }
     if op == "Conv" {
-        let x = operand_at(node, shapes, 0)?;
-        let w = operand_at(node, shapes, 1)?;
+        let x = operand_at(node, shapes, 0);
+        let w = operand_at(node, shapes, 1);
         let group = int_attr(node, "group", 1)?;
         if group != 1 {
             return Result::Err(attribute_error(node, "group", `is ${group}, and only a single group is read`));
@@ -536,7 +536,7 @@ fn infer_node(
         let window = window_of(node, &x, shapes)?;
         agree_at(node, &x.axes[1], &w.axes[1])?;
         if has_bias(node) {
-            let b = operand_at(node, shapes, 2)?;
+            let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
                 return Result::Err(operand_rank(node, 2, b.rank(), 1));
             }
@@ -566,31 +566,31 @@ fn infer_node(
         }
         // ONNX broadcasts `C` into the product, so a bias of higher rank is
         // refused rather than widening a `Gemm` past the two axes it has.
-        let c = operand_at(node, shapes, 2)?;
+        let c = operand_at(node, shapes, 2);
         if c.rank() > product.rank() {
             return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
         return at_node(node, product.elementwise(&c, op));
     }
     if op == "Transpose" {
-        let shape = operand_at(node, shapes, 0)?;
+        let shape = operand_at(node, shapes, 0);
         let perm = transpose_perm(node, shape.rank())?;
         return Result::Ok(shape.permute(&perm));
     }
     if is_unary_elementwise(&op) {
-        return operand_at(node, shapes, 0);
+        return Result::Ok(operand_at(node, shapes, 0));
     }
     if op == "Where" {
-        let branches = at_node(node, operand_at(node, shapes, 1)?.elementwise(&operand_at(node, shapes, 2)?, op))?;
-        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0)?, op));
+        let branches = at_node(node, operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op))?;
+        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op));
     }
     if op == "Softmax" {
-        let x = operand_at(node, shapes, 0)?;
+        let x = operand_at(node, shapes, 0);
         softmax_axis(node, x.rank(), opset)?;
         return Result::Ok(x);
     }
     if is_reduction(&op) {
-        let x = operand_at(node, shapes, 0)?;
+        let x = operand_at(node, shapes, 0);
         let reduced = reduced_axes(node, known, x.rank())?;
         let keep = int_attr(node, "keepdims", 1)? != 0;
         let mut axes: List<Axis> = [];
@@ -615,7 +615,7 @@ fn split(
     known: &TreeMap<String, Known>,
     schema: &Schema,
 ) -> Result<List<Shape>, InferError> {
-    let x = operand_at(node, shapes, 0)?;
+    let x = operand_at(node, shapes, 0);
     let parts = split_parts(node, known, &x)?;
     let axis = split_axis(node, x.rank())?;
     let whole = x.axes[axis].static_extent();
@@ -766,7 +766,7 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
     }
     let spatial = spatial_extents(&static_extents_of(node, x)?);
     let kernel = if node.op == "Conv" {
-        let w = operand_at(node, shapes, 1)?;
+        let w = operand_at(node, shapes, 1);
         if w.rank() != x.rank() {
             return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
         }
@@ -831,7 +831,7 @@ fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
 /// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
 /// `Gemm` over two-dimensional operands only.
 fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
-    let shape = operand_at(node, shapes, index)?;
+    let shape = operand_at(node, shapes, index);
     if shape.rank() != 2 {
         return Result::Err(operand_rank(node, index, shape.rank(), 2));
     }
@@ -951,8 +951,8 @@ fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
 
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
     return Result::Ok([
-        operand_at(node, shapes, 0)?,
-        operand_at(node, shapes, 1)?,
+        operand_at(node, shapes, 0),
+        operand_at(node, shapes, 1),
     ]);
 }
 
@@ -1022,14 +1022,10 @@ fn is_unary_elementwise(op: &String) -> bool {
         || *op == "Abs";
 }
 
-
-fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
-    let name = node.inputs[index];
-    let Some(shape) = shapes.get(name) else {
-        builtin::cold_path();
-        return Result::Err(InferError::Undefined(name));
-    };
-    return Result::Ok(shape);
+/// Operand `index`'s shape. `operands_given` proved it defined, and a folded one
+/// is materialized before any rule reads it.
+fn operand_at(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Shape {
+    return shapes.get(node.inputs[index]).unwrap();
 }
 
 fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, InferError> {

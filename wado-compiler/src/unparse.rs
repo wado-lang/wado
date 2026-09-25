@@ -2914,23 +2914,24 @@ impl<'a> Unparser<'a> {
     /// line, save one the `next` entry follows on its line: the trivia map's rule.
     fn emit_line_end_comments(&mut self, end: Span, next: Option<Span>, hi: usize) {
         let hi = next.map_or(hi, |next| next.start);
-        for comment in &self.pending_comments_in(end.end, hi) {
-            let interior = next.is_some_and(|next| next.line == comment.span.end_line());
-            if comment.span.line != end.end_line() || interior {
-                continue;
-            }
-            self.emitted_comments.insert(comment.span.start);
-            self.output.push_str("  ");
-            self.emit_comment(comment);
-        }
+        let on_line: Vec<Comment> = self
+            .pending_comments(end.end, hi)
+            .filter(|c| c.span.line == end.end_line())
+            .filter(|c| next.is_none_or(|next| next.line != c.span.end_line()))
+            .cloned()
+            .collect();
+        self.append_comments(&on_line);
     }
 
-    /// Inline variant of [`Self::emit_trailing_for`]: appends two
-    /// spaces and the comment without touching surrounding newlines.
-    /// Used in places where the caller manages line termination itself.
+    /// Inline variant of [`Self::emit_trailing_for`], for a caller that ends
+    /// the line itself.
     fn emit_trailing_for_inline(&mut self, id: AstId) {
-        let comments: Vec<Comment> = self.trailing_of(id).to_vec();
-        for comment in &comments {
+        self.append_comments(self.trailing_of(id));
+    }
+
+    /// Append each comment not yet placed after two spaces, on the current line.
+    fn append_comments(&mut self, comments: &[Comment]) {
+        for comment in comments {
             if self.emitted_comments.insert(comment.span.start) {
                 self.output.push_str("  ");
                 self.emit_comment(comment);

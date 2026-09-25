@@ -723,9 +723,8 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<St
     return Result::Ok(`reduce(${a}, ${axes}, 0.0, |x, y| x + y)`);
 }
 
-/// The literal operand `index` folds into a closure as, or `None` where it is
-/// read as a tensor. A binary elementwise operand folds where its partner is a
-/// tensor of no lower rank, so the output keeps the partner's shape; a `Gemm` bias always does.
+/// The literal operand `index` folds into a closure as: a `Gemm` bias, or an
+/// arithmetic operand whose partner is a tensor it does not widen. `None` reads it as a tensor.
 fn folded_literal(
     node: &Node,
     index: i32,

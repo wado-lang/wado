@@ -41,8 +41,8 @@ pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
         return Result::Err("a model without a graph");
     };
     let opset = default_opset(&read_opset_imports(s, toks)?);
-    let read = read_graph(s, toks, graph)?;
-    return Result::Ok(Graph { ..read, nodes: upgraded(read.nodes, opset)?, opset });
+    let written = read_graph(s, toks, graph)?;
+    return Result::Ok(Graph { ..written, nodes: upgraded(written.nodes, opset)?, opset });
 }
 
 /// The `(domain, version)` pairs the model's metadata lists under `opset_import`.
