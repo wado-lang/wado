@@ -656,7 +656,7 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
         buf.push_str("-");
     }
 
-    let abs_exp = if exp < 0 { -exp } else { exp };
+    let abs_exp = i32::abs(exp);
     if abs_exp < 10 {
         buf.push(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {
@@ -799,7 +799,7 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         buf.push_str("-");
     }
 
-    let abs_exp = if exp < 0 { -exp } else { exp };
+    let abs_exp = i32::abs(exp);
     if abs_exp < 10 {
         buf.push(char::from_u32_unchecked('0' as u32 + abs_exp as u32));
     } else if abs_exp < 100 {

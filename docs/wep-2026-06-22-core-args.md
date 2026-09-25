@@ -55,6 +55,7 @@ Implemented (`lib/core/args.wado`, tested in `lib/core/args_test.wado`):
       [Subcommands as Variants](#subcommands-as-variants)); the case tag matches
       the variant case name verbatim.
 - [x] Lenient scalar conversion (`LenientFromStr`) and the `ArgsError` kinds.
+- [x] `enum`-valued options, matched by wire name.
 
 Deferred:
 
@@ -81,8 +82,9 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError>;   // e
 pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment; // wraps core:cli::args()
 ```
 
-`parse` takes argv directly, so tests and subcommand dispatch inject a
-`List<String>` (bpaf's `run_inner` vs `run`).
+`parse` takes the arguments directly, so tests and subcommand dispatch inject a
+`List<String>` (bpaf's `run_inner` vs `run`). Neither sees the program name:
+`core:cli::args()` leaves it to `core:cli::program_name()`.
 
 ### Object Mapping
 
@@ -122,9 +124,13 @@ The `ArgvDeserializer`'s scalar `deserialize_*` methods convert the token with
 `--jobs 0x10`, `--retries 1_000`, `--verbose=1` all parse, matching CLI
 conventions. The boundary is clean — argv tokens become scalar leaves via
 `LenientFromStr`, composite structure via serde. Tokens are already
-shell-split, so no trimming; a failed conversion is `InvalidValue`. Parsing an
-`enum` from a bare value (`--color red`) needs a lenient enum derive and is
-deferred (see that WEP's future work).
+shell-split, so no trimming; a failed conversion is `InvalidValue`. An `enum`
+option (`--color red`, `--color=red`) takes its value as the case tag, matched
+against the case's wire name as a subcommand tag is, so `name_policy` gives it
+lowercase names. A value naming no case is `InvalidValue`, as any other bad
+value is; only a subcommand tag naming no case is `UnknownSubcommand`. Matching
+it leniently (any casing) needs a lenient enum derive
+and is deferred (see that WEP's future work).
 
 ### Positional Arguments
 
@@ -260,7 +266,7 @@ Unix convention).
 ### Future Extensions
 
 - [ ] Combinator layer for count flags, optional-value flags, exclusive groups.
-- [ ] `enum`-valued options (`--color red`) once a lenient enum derive lands.
+- [ ] Case-insensitive `enum`-valued options once a lenient enum derive lands.
 - [ ] Shell completion from the schema.
 - [ ] `core:cli` helper wiring `from_env` + error printing + exit codes.
 - [ ] Subcommand-aware error context. `ArgsError` carries only `kind` + `message`,

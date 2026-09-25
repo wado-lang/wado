@@ -578,6 +578,11 @@ Returns an adapter that stops after yielding at most `n` elements.
 
 Returns an adapter that discards the first `n` elements before yielding the rest.
 
+#### `fn step_by(&self, step: i32) -> IterStepBy<Self>`
+
+Returns an adapter that yields the first element, then every `step`-th after it.
+Panics unless `step` is positive.
+
 #### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>`
 
 Returns an adapter that yields all elements of `self`, then all elements of `other`.
@@ -2041,6 +2046,11 @@ True for a NaN, quiet or signaling.
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn abs(x: i64) -> i64`
+
+The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
+as negating it does.
+
 #### `pub fn clz(x: i64) -> i64`
 
 Counts the leading zeros in this integer.
@@ -2281,6 +2291,11 @@ Counts the number of set bits (population count).
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn abs(x: i8) -> i8`
+
+The magnitude of `x`. `MIN` has none in `i8` and wraps to itself,
+as negating it does.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
@@ -2376,6 +2391,11 @@ Counts the number of set bits (population count).
 #### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i16) -> i16`
+
+The magnitude of `x`. `MIN` has none in `i16` and wraps to itself,
+as negating it does.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -2476,6 +2496,11 @@ Counts the number of set bits (population count).
 #### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i32) -> i32`
+
+The magnitude of `x`. `MIN` has none in `i32` and wraps to itself,
+as negating it does.
 
 #### `pub fn clz(x: i32) -> i32`
 
@@ -3336,6 +3361,24 @@ Generic skip iterator adapter that skips elements from any Iterator.
 
 ##### `fn into_iter(&self) -> IterSkip<I>`
 
+### `pub struct IterStepBy<I: Iterator>`
+
+Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
+
+#### `inner: I`
+
+#### `gap: i32`
+
+#### `started: bool`
+
+#### `impl Iterator for IterStepBy<I>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+#### `impl IntoIterator for IterStepBy<I>`
+
+##### `fn into_iter(&self) -> IterStepBy<I>`
+
 ### `pub struct IterChain<I: Iterator, J: Iterator>`
 
 Generic chain iterator adapter that chains two iterators of the same item type.
@@ -3826,6 +3869,11 @@ The smaller of two values.
 #### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i128) -> i128`
+
+The magnitude of `x`. `MIN` has none in `i128` and wraps to itself,
+as negating it does.
 
 #### `pub fn low(&self) -> u64`
 

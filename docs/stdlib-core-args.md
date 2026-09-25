@@ -13,7 +13,8 @@ declaration order. Scalar tokens are converted with `LenientFromStr`.
 
 Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 `Option<T> = null`, required/optional/variadic positionals, repeatable
-`List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
+`List<T>` options (`--inc a --inc b`, interspersing allowed), `enum`-valued
+options (`--color dark-red`, matched by wire name), and the `--`
 end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 
 Long options only: an option value never starts with `--`, so a missing
@@ -77,8 +78,7 @@ subcommand dispatch and tests inject a `List<String>` directly.
 
 ### `pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment`
 
-Parse the process arguments (from `core:cli::args()`, with the program name
-dropped) into `T`.
+Parse the process arguments (`core:cli::args()`) into `T`.
 
 ## Structs
 
