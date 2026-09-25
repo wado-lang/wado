@@ -308,7 +308,7 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 
 A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`KILN_MISSING_WITH`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
 
-A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`KILN_NO_GENERATED_MODULE`); the compiler never falls back to parsing the schema as Wado.
+A file that is neither `.wado` nor a Wasm asset is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`KILN_NO_GENERATED_MODULE`); the compiler never falls back to parsing the schema as Wado.
 
 ### Authoring a generator
 
