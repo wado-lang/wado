@@ -40,8 +40,8 @@ use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_encoding_written, wire_number_of,
-    wire_number_written,
+    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_discriminant,
+    wire_encoding_written, wire_number_of, wire_number_written,
 };
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
@@ -2142,9 +2142,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_lookup()
             .enum_cases_of(def)
             .expect("an enum literal's type is a declared enum");
-        info.cases[case_index as usize]
-            .wire_number
-            .unwrap_or(case_index as i32)
+        wire_discriminant(info.cases[case_index as usize].wire_number, case_index)
     }
 
     /// A field's `#[wire(encoding = "…")]`, checked against the integer the

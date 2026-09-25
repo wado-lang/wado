@@ -502,10 +502,8 @@ test "a fixed-width field tagged as a varint is refused" {
     assert from_bytes::<Fixed, ByteList>(b"\x08\x01") matches { Err(_) };
 }
 
-// A field whose default is its type's zero is proto3's implicit presence: the
-// zero is what an absent field means, so it stays off the wire. One declaring
-// no default is required, and an `Option` is explicit presence; both are
-// always written.
+// A zero default is proto3's implicit presence, so the zero stays off the wire.
+// A field with no default, or an `Option`, is always written.
 struct Presence {
     #[wire(number = 1)]
     implicit: i32 = 0,

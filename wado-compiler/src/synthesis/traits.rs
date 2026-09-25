@@ -26,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding};
+use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding, wire_discriminant};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -2529,7 +2529,7 @@ fn generate_enum_reflect_impls(
                     name: c.name.clone(),
                     index: c.index,
                     wire_name_override: c.wire_name_override.clone(),
-                    wire_discriminant: c.wire_number.unwrap_or(c.index as i32),
+                    wire_discriminant: wire_discriminant(c.wire_number, c.index),
                 })
                 .collect(),
             span: e.span,
