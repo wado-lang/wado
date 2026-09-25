@@ -7,13 +7,28 @@ use { TensorProto, known_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
-        panic("the tensor did not decode");
-    };
-    let Ok(Some(Known { extents, elements: Floats(data) })) = known_tensor(&t) else {
+    let Known { extents, elements: Floats(data) } = known_of(bytes) else {
         panic("the tensor is not float");
     };
     return [data, extents];
+}
+
+/// `tensor_of` for an int64 tensor, such as token ids.
+pub fn ints_of(bytes: ByteList) -> [List<i64>, List<i32>] {
+    let Known { extents, elements: Ints(data) } = known_of(bytes) else {
+        panic("the tensor is not int64");
+    };
+    return [data, extents];
+}
+
+fn known_of(bytes: ByteList) -> Known {
+    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
+        panic("the tensor did not decode");
+    };
+    let Ok(Some(k)) = known_tensor(&t) else {
+        panic("the tensor carries no elements");
+    };
+    return k;
 }
 
 /// How far a kernel may sit from ONNX's output: relative above 1, absolute
