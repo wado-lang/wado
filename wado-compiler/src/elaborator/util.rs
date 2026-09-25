@@ -216,3 +216,35 @@ pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
 pub(super) fn unpack_i128(value: i128) -> (u64, i64) {
     (value as u64, (value >> 64) as i64)
 }
+
+/// Run `body` with `owner`'s `field` set to `value`, answering its result and
+/// what the field then held. The enclosing value returns even on a panic.
+pub(super) fn replaced<O, T, R>(
+    owner: &mut O,
+    field: for<'s> fn(&'s mut O) -> &'s mut T,
+    value: T,
+    body: impl FnOnce(&mut O) -> R,
+) -> (R, T) {
+    struct Restore<'r, O, T> {
+        owner: &'r mut O,
+        field: for<'s> fn(&'s mut O) -> &'s mut T,
+        saved: Option<T>,
+    }
+    impl<O, T> Drop for Restore<'_, O, T> {
+        fn drop(&mut self) {
+            if let Some(saved) = self.saved.take() {
+                *(self.field)(self.owner) = saved;
+            }
+        }
+    }
+    let saved = std::mem::replace(field(owner), value);
+    let mut guard = Restore {
+        owner,
+        field,
+        saved: Some(saved),
+    };
+    let result = body(guard.owner);
+    let saved = guard.saved.take().expect("enclosing value present");
+    let left = std::mem::replace(field(guard.owner), saved);
+    (result, left)
+}

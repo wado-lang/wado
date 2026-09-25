@@ -1,0 +1,29 @@
+// A `From` marker names its payload under the alias or namespace its own
+// module imported, which is neither the declaration's name nor the call's.
+
+use { Far as Near } from "./sub/aliased_impl_head_a.wado";
+use sub from "./sub/aliased_impl_head_a.wado";
+
+variant ByAlias {
+    Hit(Near),
+    Miss(i32),
+}
+
+impl From<Near> for ByAlias;
+
+variant ByNamespace {
+    Hit(sub::Far),
+    Miss(i32),
+}
+
+impl From<sub::Far> for ByNamespace;
+
+test "a From marker written under an alias synthesizes the conversion" {
+    let v = ByAlias::from(Near { v: 7 });
+    assert v matches { Hit(n) && n.v == 7 };
+}
+
+test "a From marker written under a namespace synthesizes the conversion" {
+    let v = ByNamespace::from(Near { v: 8 });
+    assert v matches { Hit(n) && n.v == 8 };
+}

@@ -2,35 +2,16 @@
 // expressions as arms — not just `Local` / `Literal`. Both arms of a
 // `select` are evaluated unconditionally, so the eligibility check
 // must reject anything that could trap (Div, Mod, Deref) or have side
-// effects (Call, Assign) but accept the cheap leaf-pure shapes.
-//
-// The motivating sites are in `fpfmt`:
-//   `abs_f = if is_neg { -value } else { value };`       (Unary Neg)
-//   `decimal_pos = if c { 2 - p1 } else { 1 - p1 };`     (Binary Sub)
-// which used to survive as `if` expressions because the arms weren't
-// `Local | Literal`.
+// effects (Call, Assign) but accept the cheap leaf-pure shapes. Each input
+// is opaque, and each pattern names its local, so a match is this run's
+// select and not one inlined from the stdlib.
 
 use { println, Stdout } from "core:cli";
 
-#[inline(never)]
-fn opaque_f(x: f64) -> f64 {
-    return x + 1.0;
-}
-
-#[inline(never)]
-fn opaque_i(x: i32) -> i32 {
-    return x;
-}
-
-#[inline(never)]
-fn opaque_bool(x: i32) -> bool {
-    return x > 0;
-}
-
 export fn run() with Stdout {
     // Unary::Neg arm (the fpfmt::fmt_fixed shape).
-    let v = opaque_f(2.5);
-    let neg = opaque_bool(1);
+    let v = builtin::black_box(3.5);
+    let neg = builtin::black_box(true);
     let abs_f = if neg {
         -v;
     } else {
@@ -38,8 +19,8 @@ export fn run() with Stdout {
     };
 
     // Binary::Sub arms (the fpfmt::fixed_width_for_prec shape).
-    let p = opaque_i(7);
-    let c = opaque_bool(1);
+    let p = builtin::black_box(7);
+    let c = builtin::black_box(true);
     let decimal_pos = if c {
         2 - p;
     } else {
@@ -47,8 +28,8 @@ export fn run() with Stdout {
     };
 
     // Cast arm.
-    let x = opaque_i(3);
-    let c2 = opaque_bool(0);
+    let x = builtin::black_box(3);
+    let c2 = builtin::black_box(false);
     let widened = if c2 {
         x as i64;
     } else {
@@ -65,8 +46,8 @@ __DATA__
 {
     "stdout": "-3.5 -5 4\n",
     "wir_expect:O2": [
-        "select f64(",
-        "select i32(",
-        "select i64("
+        "abs_f = select f64(",
+        "decimal_pos = select i32(",
+        "widened = select i64("
     ]
 }

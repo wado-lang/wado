@@ -99,7 +99,7 @@ enum Stdio {
 impl WasiState {
     /// Create a new WASI state with preopened directories and program arguments.
     /// `preopened_dirs`: `(host_path, guest_path)` pairs.
-    /// `args`: arguments passed to the guest program via `wasi:cli/environment.get-arguments`.
+    /// `args`: what `wasi:cli/environment.get-arguments` answers, the program name first.
     ///
     /// Inherits the host's environment so guest CLI/test programs can read
     /// `PATH`, `HOME`, etc. — appropriate for `wado run` and `wado test`,
@@ -533,7 +533,7 @@ pub fn create_serve_engine(
 
 /// Create a Store with WASI state, preopened directories, and program arguments.
 /// `preopened_dirs`: `(host_path, guest_path)` pairs.
-/// `args`: arguments passed to the guest via `wasi:cli/environment.get-arguments`.
+/// `args`: what `wasi:cli/environment.get-arguments` answers, the program name first.
 ///
 /// # Errors
 ///
@@ -557,8 +557,10 @@ pub fn create_store(
 pub fn create_test_store(
     engine: &Engine,
     preopened_dirs: &[(String, String)],
+    program: &str,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
-    let (state, stdout, stderr) = WasiState::new_capturing_stdio(preopened_dirs, &[])?;
+    let (state, stdout, stderr) =
+        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()])?;
     Ok((Store::new(engine, state), stdout, stderr))
 }
 

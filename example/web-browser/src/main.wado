@@ -1,0 +1,44 @@
+//! Greets whoever the page's input names, through the browser's own DOM.
+
+use { Dom, HtmlInputElement, SurfaceDom } from "wado-lang:web";
+
+export fn run() with Dom {
+    greet();
+}
+
+pub fn greet() with Dom {
+    let doc = Dom::document();
+    let name = match doc.get_element_by_id("name") {
+        Some(input: HtmlInputElement) => input.value(),
+        _ => "stranger",
+    };
+    let greeting = doc.create_element("p", null);
+    greeting.set_id("greeting");
+    greeting.set_text_content(Option::Some(`Hello, ${name}!`));
+    doc.body().unwrap().append_child(greeting);
+}
+
+test "the greeting names the input's value" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let input = doc.create_element("input", null);
+        input.set_id("name");
+        if let input: HtmlInputElement = input {
+            input.set_value("Wado");
+        }
+        doc.body().unwrap().append_child(input);
+        greet();
+        let greeting = doc.get_element_by_id("greeting").unwrap();
+        assert greeting.text_content() == Option::Some("Hello, Wado!");
+    };
+}
+
+test "without the input, the greeting names a stranger" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        greet();
+        let greeting = Dom::document().get_element_by_id("greeting").unwrap();
+        assert greeting.text_content() == Option::Some("Hello, stranger!");
+    };
+}

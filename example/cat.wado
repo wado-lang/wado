@@ -12,17 +12,19 @@
 //   wado run example/cat.wado README.md
 //   wado run example/cat.wado example/cat.wado example/hello.wado
 
-use { args, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { args, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Stdin } from "wasi:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
-export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin) {
-    let arguments = args();
+export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin, Exit) {
+    let paths = args();
 
-    if arguments.len() == 0 {
-        // No arguments: read from stdin and write to stdout
-        let [stdin_stream, _done] = Stdin::read_via_stream();
-        Stdout::write_via_stream(stdin_stream);
+    if paths.is_empty() {
+        let [data, read_done] = Stdin::read_via_stream();
+        if let Err(problem) = copy_to_stdout(data, read_done) {
+            eprintln(`cat: stdin: ${problem}`);
+            exit_error();
+        }
         return;
     }
 
@@ -30,27 +32,52 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin) {
     let dirs = Preopens::get_directories();
     if dirs.len() == 0 {
         eprintln("cat: no preopened directories available (try without --no-dir)");
-        return;
+        exit_error();
     }
     let root = dirs[0].0;
 
-    for let mut i = 0; i < arguments.len(); i = i + 1 {
-        cat_file(&root, arguments[i]);
+    // Like cat(1), a file that fails does not stop the rest.
+    let mut failed = false;
+    for let path of paths {
+        if let Err(problem) = cat_file(&root, path) {
+            eprintln(`cat: ${path}: ${problem}`);
+            failed = true;
+        }
+    }
+    if failed {
+        exit_error();
     }
 }
 
-fn cat_file(dir: &Descriptor, path: String) with (Stdout, Stderr) {
+fn cat_file(dir: &Descriptor, path: String) -> Result<(), String> with Stdout {
     let open_result = dir.open_at(
         PathFlags::none(),
         path,
         OpenFlags::none(),
         DescriptorFlags::Read,
     ).wait();
+    let file = match open_result {
+        Ok(f) => f,
+        Err(e) => {
+            return Result::Err(`cannot open: ${e:?}`);
+        },
+    };
+    let [data, read_done] = file.read_via_stream(0 as Filesize);
+    return copy_to_stdout(data, read_done);
+}
 
-    if let Ok(file) = open_result {
-        let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-        Stdout::write_via_stream(read_stream);
-    } else {
-        eprintln(`cat: ${path}: cannot open file`);
+// The host copies the stream, so wait for it: returning first would cut it off.
+fn copy_to_stdout<E>(data: Stream<u8>, read_done: Future<Result<(), E>>) -> Result<(), String> with Stdout {
+    let copied = Stdout::write_via_stream(data);
+    let written = copied.read();
+    copied.drop();
+    let read = read_done.read();
+    read_done.drop();
+    if let Some(Err(e)) = read {
+        return Result::Err(`read failed: ${e:?}`);
     }
+    if let Some(Err(e)) = written {
+        return Result::Err(`write failed: ${e:?}`);
+    }
+    return Result::Ok(());
 }

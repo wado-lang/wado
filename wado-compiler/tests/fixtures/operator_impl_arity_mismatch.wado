@@ -1,0 +1,21 @@
+// An operator impl declaring another arity than its trait is reported once, at
+// the impl, and the operator using it adds nothing.
+
+struct V {
+    x: i32,
+}
+
+impl Add for V {
+    type Output = V;
+    fn add(&self) -> V {
+        return V { x: self.x };
+    }
+}
+
+export fn run() {
+    let a = V { x: 1 };
+    let _ = a + a;
+}
+
+__DATA__
+{"compile_error": ":10:8: analysis error: method `add` takes 0 parameter(s) but `Add` declares 1", "compile_error_count": 1}

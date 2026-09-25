@@ -67,7 +67,7 @@ The emit _decisions_ below the route — plain vs lookahead-aware repeat, first-
 
 The plan never holds a second copy of the same elements. A scored alternation only peeks what follows it, so that suffix stays a step of the enclosing sequence and `gen_lexer_alt_seq` re-emits those steps from a `from` index; planning it apart would let the peek and the commit choose differently. Only a non-greedy repeat's exit try is cut out, since it alone lowers what follows outside the sequence's tail position.
 
-`lexer_dump_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
+The test "every strategy the dump reports is one the emitter emitted" in `codegen_test.wado` counts the strategies the dump reports against the locals the emitter mints for them (`alts_best_`, `la_win_`, `accept_`, `ng_saved_`), over shapes that force each one. The grammars are action-free on purpose: an action-carrying rule emits its body twice.
 
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
@@ -102,6 +102,8 @@ wado test package-gale/src/codegen_test.wado   # one file
 ```
 
 Pass the package directory and let the CLI discover the files. A hand-written glob is the thing that goes wrong: the descriptor corpus sits one directory deeper (`tests/antlr4-compat/stage_{a,b,b_oracle,c}/<Category>/`), so a flat `tests/antlr4-compat/*.wado` reaches about a third of the suite, passes, and says nothing about the rest — including the corpus that exists to catch compatibility regressions. The fixtures it never reaches also keep whatever the generator emitted the last time something did run them, so the committed corpus drifts behind the generator with every green run.
+
+A test that calls `generate` belongs in `src/codegen_test.wado`. A test file that reaches `generate` compiles the whole generator, which takes about two minutes at `-O2` however small the test is. Keeping all such tests in one file pays that cost once. A unit test beside its module stays cheap as long as it does not reach `generate`. No check enforces this rule. A file that breaks it shows up as a two-minute compile in the output of `wado test`.
 
 Each corpus file carries up to `DESCRIPTORS_PER_FILE` descriptors, each importing its grammar as `t_<Name>`. Grouping is what bounds the corpus's compile time: every entry module is a whole-program `-O3` build, so the shared Gale runtime is compiled once per file rather than once per descriptor.
 

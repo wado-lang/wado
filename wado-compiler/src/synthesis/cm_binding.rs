@@ -53,11 +53,11 @@ use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, spli
 use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
+use types::flat_types_from_type_id;
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
-use types::{flat_types_from_ast_type, flat_types_from_type_id};
 
 /// Build a `(module_source, name)` set for every effect/resource declared in
 /// the loaded TIR modules. The CM binding synthesizer uses this to attach the
@@ -684,6 +684,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                     export,
                     &tt,
                     &project.tir_modules,
+                    &project.cm_interface_registry,
                 )?;
             }
 
@@ -695,10 +696,8 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
                 // An export declaring no result still delivers; it has no slot
                 // to flatten.
                 let return_type = export.return_type.as_ref();
-                let flat_types = return_type.map_or_else(Vec::new, |ty| {
-                    let tt = entry_type_table.borrow();
-                    flat_types_from_ast_type(ty, &project.tir_modules, &tt)
-                });
+                let flat_types = return_type
+                    .map_or_else(Vec::new, |ty| project.cm_interface_registry.cm_flatten(ty));
                 let task_return = CanonicalIntrinsic::TaskReturn(export.name.clone());
                 let task_entry = split_task_entry(&user_func_rc, &export.name);
                 expand_task_returns_in_func(
@@ -1047,6 +1046,7 @@ fn validate_world_signature_compatibility(
     export: &WorldExportInfo,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
+    registry: &CmInterfaceRegistry,
 ) -> Result<(), String> {
     if user_func.params.len() != export.params.len() {
         return Err(format!(
@@ -1067,6 +1067,7 @@ fn validate_world_signature_compatibility(
             world_ty,
             tt,
             tir_modules,
+            registry,
         )?;
     }
     let Some(world_return) = export.return_type.as_ref() else {
@@ -1084,6 +1085,7 @@ fn validate_world_signature_compatibility(
         world_return,
         tt,
         tir_modules,
+        registry,
     )
 }
 
@@ -1125,9 +1127,10 @@ fn validate_flat_shape_agrees(
     world_type: &Type,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
+    registry: &CmInterfaceRegistry,
 ) -> Result<(), String> {
     let user_flat = flat_types_from_type_id(user_type, tir_modules, tt);
-    let world_flat = flat_types_from_ast_type(world_type, tir_modules, tt);
+    let world_flat = registry.cm_flatten(world_type);
     if user_flat == world_flat {
         return Ok(());
     }

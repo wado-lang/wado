@@ -1,5 +1,5 @@
-//! `package-web/src/dom.wado` is what the vendored snapshot generates.
-//! Regenerate with `mise run update-package-web`.
+//! `package-web/src/dom.wado` and `package-web/glue/dom.js` are what the
+//! vendored snapshot generates. Regenerate with `mise run update-package-web`.
 
 use std::path::{Path, PathBuf};
 
@@ -14,14 +14,18 @@ fn package_web_dom_is_generated_from_the_vendored_snapshot() {
     let json = std::fs::read_to_string(root.join(source)).expect("the snapshot is vendored");
     let snapshot: wado_from_idl::webidl::Snapshot =
         serde_json::from_str(&json).expect("the snapshot parses");
-    let (generated, _skipped) =
+    let generated =
         wado_from_idl::webidl::generate(&snapshot, source).expect("the slice transforms");
-    let committed = std::fs::read_to_string(root.join("package-web/src/dom.wado"))
-        .expect("the module is committed");
-    assert!(
-        generated == committed,
-        "package-web/src/dom.wado is stale: run `mise run update-package-web`"
-    );
+    for (path, code) in [
+        ("package-web/src/dom.wado", &generated.wado),
+        ("package-web/glue/dom.js", &generated.glue),
+    ] {
+        let committed = std::fs::read_to_string(root.join(path)).expect("the file is committed");
+        assert!(
+            *code == committed,
+            "{path} is stale: run `mise run update-package-web`"
+        );
+    }
 }
 
 /// `package-web`'s hand-written facade re-exports every name `dom.wado` declares.
