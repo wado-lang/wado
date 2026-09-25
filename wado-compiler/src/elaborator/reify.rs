@@ -3112,7 +3112,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, span)
+                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
@@ -7222,6 +7222,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
+        recorded_type: TypeId,
         span: Span,
     ) -> TirExpr {
         use crate::tir::{
@@ -7347,7 +7348,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             } else {
                 let resolved = self.reify_expr(elem, ctx, None);
-                elem_types.push(resolved.type_id);
+                // A diverging element takes the type the tuple is expected to hold
+                // there, and stays `!` where nothing expects one.
+                let table = self.tysys.type_table.borrow();
+                let elem_type = match table.as_tuple(recorded_type) {
+                    Some(expected) if table.is_never(resolved.type_id) => {
+                        expected[elem_types.len()]
+                    }
+                    _ => resolved.type_id,
+                };
+                drop(table);
+                elem_types.push(elem_type);
                 elements.push(resolved);
             }
         }

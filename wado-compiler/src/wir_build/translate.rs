@@ -1493,17 +1493,13 @@ impl FunctionTranslator<'_, '_> {
         Some(WirInstr::Seq(instrs))
     }
 
-    /// Resolve the WIR tuple struct type and translate its non-unit field
-    /// initialisers, applying `cast_nonnull_fields` to honour non-nullable
-    /// field declarations. Used by `TupleLiteral` lowering (the resulting
-    /// `StructNew` is later unwrapped to a `Seq(fields)` at the function
-    /// return boundary if `ReturnAbi::MultiValue` is set, or left as-is
-    /// for the heap-resident path).
+    /// The WIR tuple struct type for a `TupleLiteral`, the prelude evaluating its
+    /// erased elements, and its field initialisers.
     fn tuple_constructor_args(
         &mut self,
         tuple_type_id: tir::TypeId,
         elements: &[Operand],
-    ) -> (WirTypeId, Vec<WirInstr>) {
+    ) -> (WirTypeId, Vec<WirInstr>, Vec<WirInstr>) {
         let elem_type_ids: Vec<tir::TypeId> =
             elements.iter().map(|e| self.operand_type_id(*e)).collect();
         // A tuple interned by CM binding synthesis can carry `TypeId`s the
@@ -1529,26 +1525,9 @@ impl FunctionTranslator<'_, '_> {
                 elements.len()
             );
         };
-        // Filter out unit-typed elements before borrowing self mutably to
-        // translate them; chaining the filter into the iterator below would
-        // double-borrow self.
-        let non_unit: Vec<Operand> = elements
-            .iter()
-            .copied()
-            .filter(|e| {
-                !matches!(
-                    self.ctx
-                        .type_id_to_wir_type(self.type_table, self.operand_type_id(*e)),
-                    WirType::Unit
-                )
-            })
-            .collect();
-        let raw_fields: Vec<WirInstr> = non_unit
-            .into_iter()
-            .map(|e| self.translate_operand(e))
-            .collect();
+        let (prelude, raw_fields) = self.translate_args_erasing_unit(elements);
         let fields = self.cast_nonnull_fields(&type_id, raw_fields);
-        (type_id, fields)
+        (type_id, prelude, fields)
     }
 
     /// Lower an `ArrayLiteral`: `array.new_fixed<T>(e0, …)` for the raw
@@ -2259,12 +2238,17 @@ impl FunctionTranslator<'_, '_> {
             Operand::Value(_) => false,
             Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
         };
+        // A diverging argument stays in its place: the call after it is dead
+        // code, which validates at any arity, and nothing to its right runs.
+        let erased = |this: &Self, op: Operand| {
+            let ty = this.operand_type_id(op);
+            this.is_stackless_type(ty) && !this.type_table.is_never(ty)
+        };
         // An argument evaluated into the prelude runs ahead of every argument
         // left on the stack, so each one to its left is spilled to hold source
         // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
-            split.contains_key(&i)
-                || (this.is_stackless_type(this.operand_type_id(op)) && unit_needs_eval(this, op))
+            split.contains_key(&i) || (erased(this, op) && unit_needs_eval(this, op))
         };
         let last_early = ordered
             .iter()
@@ -2280,7 +2264,7 @@ impl FunctionTranslator<'_, '_> {
                 let (p, reads) = self.split_argument(op, fields);
                 prelude.extend(p);
                 call_args.extend(reads);
-            } else if self.is_stackless_type(self.operand_type_id(op)) {
+            } else if erased(self, op) {
                 if unit_needs_eval(self, op) {
                     prelude.push(self.translate_operand(op));
                 }
@@ -2710,24 +2694,10 @@ impl FunctionTranslator<'_, '_> {
                         expr.type_id, resolved
                     );
                 };
-                // Unit-typed fields have no Wasm representation; skip them.
-                let non_unit_fields: Vec<_> = fields
-                    .iter()
-                    .filter(|f| {
-                        !matches!(
-                            self.ctx.type_id_to_wir_type(
-                                self.type_table,
-                                self.operand_type_id(f.value)
-                            ),
-                            WirType::Unit
-                        )
-                    })
-                    .collect();
-                let field_instrs: Vec<WirInstr> = non_unit_fields
-                    .iter()
-                    .map(|f| self.translate_operand(f.value))
-                    .collect();
-                self.struct_new(type_id, field_instrs)
+                let values: Vec<Operand> = fields.iter().map(|f| f.value).collect();
+                let (prelude, field_instrs) = self.translate_args_erasing_unit(&values);
+                let new = self.struct_new(type_id, field_instrs);
+                self.wrap_call_with_prelude(prelude, new, expr.type_id, false)
             }
 
             ExprKind::FieldAccess {
@@ -2913,8 +2883,14 @@ impl FunctionTranslator<'_, '_> {
                 // (`try_emit_multi_value_let`, and
                 // `pattern_match::try_bind_multivalue_builtin` for the
                 // wide-integer builtins).
-                let (type_id, fields) = self.tuple_constructor_args(expr.type_id, elements);
-                WirInstr::StructNew { type_id, fields }
+                let (type_id, prelude, fields) =
+                    self.tuple_constructor_args(expr.type_id, elements);
+                self.wrap_call_with_prelude(
+                    prelude,
+                    WirInstr::StructNew { type_id, fields },
+                    expr.type_id,
+                    false,
+                )
             }
 
             ExprKind::ArrayLiteral { elements } => self.build_array_literal(expr.type_id, elements),

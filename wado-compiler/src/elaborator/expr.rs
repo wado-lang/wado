@@ -4980,7 +4980,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                elem_types.push(resolved);
+                // A diverging element takes the type the tuple is expected to hold.
+                let diverges = self.tysys.type_table.borrow().is_never(resolved);
+                elem_types.push(elem_expected.filter(|_| diverges).unwrap_or(resolved));
             }
         }
 

@@ -1,0 +1,45 @@
+// An operand that diverges ends its construct there: the operands to its left
+// have run, and neither those to its right nor the construct itself ever do.
+use { println, Stdout } from "core:cli";
+
+// `Late` is declared after the types naming it, and a `()` field or a `!`
+// element sits ahead of it.
+struct Holder { u: (), late: Late }
+struct Q { p: Late, n: i32, u: (), m: Late }
+struct Late { x: i32 }
+
+fn make() -> Late with Stdout {
+    println("make");
+    return Late { x: 1 };
+}
+
+fn note() with Stdout {
+    println("note");
+}
+
+fn take(p: &Late, n: i32) {}
+
+fn take_after_unit(p: &Late, u: (), n: i32, q: Late) {}
+
+impl Late {
+    fn take(&self, n: i32, q: Late) {}
+}
+
+export fn run() with Stdout {
+    let h = Holder { u: note(), late: make() };
+    assert h.late.x == 1;
+    if builtin::black_box(false) {
+        take_after_unit(&make(), (), panic("a"), make());
+        let q = Q { p: make(), n: panic("b"), u: (), m: make() };
+        let t: [Late, i32, Late] = [make(), panic("c"), make()];
+        let u = [make(), panic("d"), make()];
+        make().take(panic("e"), make());
+    }
+    take(&make(), panic("unset"));
+}
+
+__DATA__
+{
+  "stdout": "note\nmake\nmake\n",
+  "trapped": true
+}
