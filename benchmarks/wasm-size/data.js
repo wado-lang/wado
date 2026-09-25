@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790343755661,
+  "lastUpdate": 1790352700852,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59809,6 +59809,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/16877fd5c45584ce00edf25b0045a48c75b92180"
         },
         "date": 1790343755262,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a183287244137a9119e0d9c6f150e586b4950a5f",
+          "message": "Merge pull request #2164 from wado-lang/loam-inference\n\nfeat(loam): text in, text out through a tiny GPT-2, and MNIST-12 end to end",
+          "timestamp": "2026-09-26T00:42:51+09:00",
+          "tree_id": "5dce4a57ff6d03af09f5751fc45a8a63f7f5858b",
+          "url": "https://github.com/wado-lang/wado/commit/a183287244137a9119e0d9c6f150e586b4950a5f"
+        },
+        "date": 1790352699882,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
