@@ -773,6 +773,17 @@ fn test_test_failing() {
 }
 
 #[test]
+fn test_test_trap_names_its_reason() {
+    // The reason is the cause under wasmtime's backtrace context, which a
+    // plain `Display` of the error leaves out.
+    wado()
+        .args(["test", "wado-cli/tests/fixtures/test_trap.wado"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("integer divide by zero"));
+}
+
+#[test]
 fn test_test_heartbeat_is_default_and_reports_failure_immediately() {
     // `heartbeat` is the default `--format`: no per-file `Compiled`/`Loaded`
     // log lines and no per-test `ok`/`FAILED` lines (that's `verbose`
