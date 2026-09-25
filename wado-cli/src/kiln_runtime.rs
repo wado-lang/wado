@@ -616,7 +616,7 @@ mod tests {
             .unwrap()
     }
 
-    /// End-to-end: a revision-3 typed-options generator drives through the dynamic
+    /// End-to-end: a typed-options generator drives through the dynamic
     /// `Val` invocation — options materialized against the introspected param
     /// type, `generate` called dynamically, and the `Result<Response, Error>`
     /// lifted back. The emitted file name depends on `options.verbose`, so a
