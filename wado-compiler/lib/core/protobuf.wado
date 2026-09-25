@@ -365,7 +365,7 @@ impl SerializeStruct for SizeStructSerializer {
             builtin::cold_path();
             return Result::Err(unnumbered(name));
         }
-        if leaves_off(default, value)? {
+        if leaves_off(default)? {
             return Result::Ok(());
         }
         let mut ser = SizeSerializer { state: self.state, number, encoding };
@@ -474,13 +474,13 @@ impl Serializer for SizeSerializer {
     }
 }
 
-/// Proto3's implicit presence: a field whose default is its type's zero is
-/// left off the wire while it holds that zero.
-fn leaves_off<T: Serialize>(default: &Option<T>, value: &T) -> Result<bool, SerializeError> {
-    let Some(default) = default else {
-        return Result::Ok(false);
+/// Proto3's implicit presence. `reads_default` fetches a default only for a zero
+/// value, so the field is left off when that default is the zero too.
+fn leaves_off<T: Serialize>(default: &Option<T>) -> Result<bool, SerializeError> {
+    return match default {
+        Some(d) => is_zero(d),
+        None => Result::Ok(false),
     };
-    return Result::Ok(is_zero(default)? && is_zero(value)?);
 }
 
 /// Whether `value` is its type's zero: 0, `false`, empty, `null`, or the enum
@@ -734,7 +734,7 @@ impl SerializeStruct for WriteStructSerializer {
         // The size pass refused this already, so reaching it here is the two
         // passes disagreeing about the same declaration.
         assert is_field_number(number as i64);
-        if leaves_off(default, value)? {
+        if leaves_off(default)? {
             return Result::Ok(());
         }
         let mut ser = WriteSerializer { state: self.state, number, encoding };

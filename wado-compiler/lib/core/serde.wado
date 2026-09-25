@@ -283,8 +283,8 @@ pub trait SerializeStruct with () {
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
-    /// Whether writing `value` depends on the field's declared default, which is
-    /// evaluated only then and passed to `field_numbered`. A format keyed by name never reads it.
+    /// Whether writing `value` needs the field's declared default, which is then
+    /// evaluated and passed to `field_numbered`. A format keyed by name never does.
     fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError> {
         return Result::Ok(false);
     }

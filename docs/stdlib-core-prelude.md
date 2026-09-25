@@ -120,13 +120,12 @@ Returns the per-field members.
 
 Assembles the struct from its field values.
 
-#### `fn defaults() -> Self::FieldSlots`
+#### `fn default_slot(index: i32) -> Self::FieldSlots`
 
-`#[compiler_item("reflect_struct_defaults")]`
+`#[compiler_item("reflect_struct_default_slot")]`
 
-The declared field defaults (`f: T = expr`), `None` where a field
-declares none. Read per field, so only a slot the wire left empty
-evaluates its default.
+Empty slots but `index`, which holds that field's declared default
+(`f: T = expr`) if it has one. No other field's default is evaluated.
 
 #### `fn empty_slots() -> Self::FieldSlots`
 

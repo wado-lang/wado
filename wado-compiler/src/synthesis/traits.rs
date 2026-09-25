@@ -959,7 +959,7 @@ fn case_style_item(name_policy: Option<NamePolicy>) -> CompilerItem {
 /// A metadata-struct field holding an integer literal of type `ty`.
 fn reflect_meta_int_field(
     name: &str,
-    value: u64,
+    value: i64,
     ty: TypeId,
     index: u32,
     span: Span,
@@ -968,7 +968,7 @@ fn reflect_meta_int_field(
         name: name.to_string(),
         value: TirExpr::new(
             TirExprKind::IntLiteral {
-                value,
+                value: value.cast_unsigned(),
                 repr: value.to_string(),
             },
             ty,
@@ -1018,7 +1018,7 @@ fn generate_struct_members_fn(
                 }
             };
             let field_fields = vec![
-                reflect_meta_int_field("index", u64::from(f.index), TypeTable::I32, 0, span),
+                reflect_meta_int_field("index", i64::from(f.index), TypeTable::I32, 0, span),
                 TirStructField {
                     name: "field_name".to_string(),
                     value: TirExpr::new(
@@ -1053,9 +1053,7 @@ fn generate_struct_members_fn(
                 },
                 reflect_meta_int_field(
                     "wire_number",
-                    u64::try_from(f.wire_number).unwrap_or_else(|_| {
-                        unreachable!("reify rejects a field number outside 1..=536870911")
-                    }),
+                    i64::from(f.wire_number),
                     TypeTable::I32,
                     5,
                     span,
@@ -1755,7 +1753,7 @@ fn generate_template_members_fn(
         .enumerate()
         .map(|(k, (hole, raw))| {
             vec![
-                reflect_meta_int_field("index", k as u64, TypeTable::I32, 0, span),
+                reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 string_field("lit", &unescape_template_segment(raw), 1),
                 string_field("raw", raw, 2),
                 string_field("source", &hole.source, 3),
@@ -2095,7 +2093,7 @@ fn generate_variant_cases_fn(
                     }
                 };
                 let case_fields = vec![
-                    reflect_meta_int_field("index", u64::from(*index), TypeTable::I32, 0, span),
+                    reflect_meta_int_field("index", i64::from(*index), TypeTable::I32, 0, span),
                     TirStructField {
                         name: "case_name".to_string(),
                         value: TirExpr::new(
@@ -2813,7 +2811,7 @@ fn generate_enum_members_fn(
                 span,
             );
             vec![
-                reflect_meta_int_field("discriminant", u64::from(*index), TypeTable::I32, 0, span),
+                reflect_meta_int_field("discriminant", i64::from(*index), TypeTable::I32, 0, span),
                 TirStructField {
                     name: "value".to_string(),
                     value,
@@ -2833,18 +2831,13 @@ fn generate_enum_members_fn(
                     value: wire_override,
                     field_index: 3,
                 },
-                TirStructField {
-                    name: "wire_discriminant".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: i64::from(*wire_discriminant).cast_unsigned(),
-                            repr: wire_discriminant.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    ),
-                    field_index: 4,
-                },
+                reflect_meta_int_field(
+                    "wire_discriminant",
+                    i64::from(*wire_discriminant),
+                    TypeTable::I32,
+                    4,
+                    span,
+                ),
             ]
         })
         .collect();
@@ -3283,7 +3276,7 @@ fn generate_flags_members_fn(
             );
             let value = common::cast(bit_u32, target.flags_type);
             vec![
-                reflect_meta_int_field("bit", u64::from(*bitmask), TypeTable::U64, 0, span),
+                reflect_meta_int_field("bit", i64::from(*bitmask), TypeTable::U64, 0, span),
                 TirStructField {
                     name: "value".to_string(),
                     value,

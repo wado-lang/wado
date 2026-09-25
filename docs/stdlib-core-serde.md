@@ -153,10 +153,15 @@ written rather than where the bytes are produced. See
 
 `#[compiler_item("serialize_struct_field")]`
 
+#### `fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError>`
+
+Whether writing `value` needs the field's declared default, which is then
+evaluated and passed to `field_numbered`. A format keyed by name never does.
+
 #### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, encoding: WireEncoding, default: &Option<T>, name: S, value: &T) -> Result<(), SerializeError>`
 
-The same field with its `#[wire(...)]` number and encoding and its
-declared default, which a format keyed by name drops.
+The same field with its `#[wire(...)]` number and encoding, and its
+declared default where `reads_default` asked for it.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 

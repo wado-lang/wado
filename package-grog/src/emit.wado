@@ -145,7 +145,7 @@ impl Emitter {
         let prefix = `${apply_case(CaseStyle::ScreamingSnake, &decl.path[decl.path.len() - 1])}_`;
         let mut cases: List<PlannedCase> = [];
         let mut aliases: List<[String, String]> = [];
-        let mut named_by = TreeMap::<String, EnumValue>::new();
+        let mut named_by = TreeMap::<String, String>::new();
         if decl.values.is_empty() {
             return Result::Err(EmitError::Invalid(`${decl.line}: ${decl.path.join(".")} declares no value`));
         }
@@ -158,11 +158,11 @@ impl Emitter {
                 }
                 return Result::Err(
                     EmitError::Invalid(
-                        `${decl.line}: ${decl.path.join(".")}: '${other.name}' and '${value.name}' are both ${case} in Wado`,
+                        `${decl.line}: ${decl.path.join(".")}: '${other}' and '${value.name}' are both ${case} in Wado`,
                     ),
                 );
             }
-            named_by[case] = *value;
+            named_by[case] = value.name;
             match aliased {
                 Some(c) => aliases.push([case, c.name]),
                 None => cases.push(PlannedCase { name: case, value: *value }),
