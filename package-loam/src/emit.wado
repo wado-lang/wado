@@ -8,6 +8,7 @@ use { Graph, Known, Node, element_of, is_binary_elementwise, static_extents } fr
 use {
     Checked,
     InferError,
+    Refusal,
     gather_axis,
     gemm_options,
     has_bias,
@@ -24,13 +25,6 @@ use {
 pub struct UnmappedDtype {
     pub tensor: String,
     pub dtype: String,
-}
-
-/// A node stage 0 checks in a form no kernel computes. `reason` names the form.
-pub struct UnimplementedOperator {
-    pub node: String,
-    pub op: String,
-    pub reason: String,
 }
 
 /// A broadcast the kernels do not cover: one operand's axes must be the
@@ -54,7 +48,8 @@ pub variant EmitError {
     /// tensor, it is not renamed: the schema's author chose the word.
     ReservedAxis(String),
     Dtype(UnmappedDtype),
-    Operator(UnimplementedOperator),
+    /// A node stage 0 checks in a form no kernel computes.
+    Refused(Refusal),
     Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
@@ -64,12 +59,6 @@ pub variant EmitError {
 impl Display for UnmappedDtype {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.tensor}: no kernel holds ${self.dtype}`);
-    }
-}
-
-impl Display for UnimplementedOperator {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.node} = ${self.op}: ${self.reason}`);
     }
 }
 
@@ -94,12 +83,24 @@ impl Display for EmitError {
                 f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
             },
             Dtype(e) => e.fmt(f),
-            Operator(e) => e.fmt(f),
+            Refused(e) => e.fmt(f),
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
         }
     }
+}
+
+impl Error for UnmappedDtype {
+}
+
+impl Error for UnimplementedBroadcast {
+}
+
+impl Error for NameCollision {
+}
+
+impl Error for EmitError {
 }
 
 /// The generated module's source. Every axis the graph mentions becomes a
@@ -599,7 +600,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64
         let axis = settled(gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
         if axis != 0 {
             builtin::cold_path();
-            return Result::Err(EmitError::Operator(UnimplementedOperator {
+            return Result::Err(EmitError::Refused(Refusal {
                 node: node.outputs[0],
                 op,
                 reason: `no kernel gathers along axis ${axis}`,
@@ -709,7 +710,7 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<St
     let x = checked.shapes.get(node.inputs[0]).unwrap();
     if checked.shapes.get(node.outputs[0]).unwrap().rank() != x.rank() {
         builtin::cold_path();
-        return Result::Err(EmitError::Operator(UnimplementedOperator {
+        return Result::Err(EmitError::Refused(Refusal {
             node: node.outputs[0],
             op: node.op,
             reason: "no kernel drops a reduced axis",
