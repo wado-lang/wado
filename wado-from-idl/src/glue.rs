@@ -1,4 +1,4 @@
-//! The JavaScript glue serving a WebIDL module's imports from the browser's own
+//! The JavaScript glue serving a `WebIDL` module's imports from the browser's own
 //! objects, generated from the same IR as the Wado module.
 
 use std::cmp::Reverse;
