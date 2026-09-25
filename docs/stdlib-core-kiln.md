@@ -63,7 +63,7 @@ The typed request a Kiln generator receives. Generator authors write
 single record: a generic cannot be expressed in a fixed WIT world (that is
 why generators do not share one world). The compiler rewrites
 `fn generate(req: Request<T>)` into flat, typed parameters
-`(primary: InputFile, inputs: List<InputFile>, options: T)` in the
+`(primary: InputFile, inputs: List<InputFile>, module: String, options: T)` in the
 generator's own synthesized world, then rebinds them into a `Request<T>`
 value so the author's body sees `req` unchanged. `options` crosses as a
 typed WIT argument, not a serialized blob. The `#[compiler_item("kiln_request")]`
@@ -74,6 +74,11 @@ See WEP 2026-04-12 §"Options are a typed argument in each generator's own world
 #### `primary: InputFile`
 
 #### `inputs: List<InputFile>`
+
+#### `module: String`
+
+How the use site named this generator: its `module:` specifier as
+written, or for a path, that path from the project root.
 
 #### `options: T`
 

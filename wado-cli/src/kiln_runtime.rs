@@ -404,20 +404,33 @@ pub async fn run_generator(
                 GeneratorRunnerError::Host("generator exports no `generate`".to_string())
             })?;
 
-        // `generate(primary, inputs[, options])`: the options parameter is
-        // present only when the generator declares a non-empty `Options`.
-        let options_ty = generate.ty(&store).params().nth(2).map(|(_, t)| t);
-        let mut args: Vec<Val> = Vec::with_capacity(3);
-        args.push(input_file_val(&mut store, &request.primary)?);
-        let mut inputs = Vec::with_capacity(request.inputs.len());
-        for f in &request.inputs {
-            inputs.push(input_file_val(&mut store, f)?);
-        }
-        args.push(Val::List(inputs));
-        if let Some(ty) = &options_ty {
-            let val = options_to_val(&request.options, ty)
-                .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?;
-            args.push(val);
+        // Matched by name: `options` exists only for a non-empty `Options`, and a
+        // component built before `module` existed lacks that parameter.
+        let params: Vec<(String, Type)> = generate
+            .ty(&store)
+            .params()
+            .map(|(name, ty)| (name.to_string(), ty))
+            .collect();
+        let mut args: Vec<Val> = Vec::with_capacity(params.len());
+        for (name, ty) in &params {
+            args.push(match name.as_str() {
+                "primary" => input_file_val(&mut store, &request.primary)?,
+                "inputs" => {
+                    let mut inputs = Vec::with_capacity(request.inputs.len());
+                    for f in &request.inputs {
+                        inputs.push(input_file_val(&mut store, f)?);
+                    }
+                    Val::List(inputs)
+                }
+                "module" => Val::String(request.module.clone()),
+                "options" => options_to_val(&request.options, ty)
+                    .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?,
+                other => {
+                    return Err(GeneratorRunnerError::Host(format!(
+                        "`generate` takes an unknown parameter `{other}`"
+                    )));
+                }
+            });
         }
 
         // `call_async` drives the async task-return export to completion; its
@@ -680,6 +693,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
                 content: b"hello".to_vec(),
             },
             inputs: vec![],
+            module: "../gen".to_string(),
             options,
         };
 
@@ -771,6 +785,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
                 content: b"hello".to_vec(),
             },
             inputs: vec![],
+            module: "../gen".to_string(),
             options,
         };
 

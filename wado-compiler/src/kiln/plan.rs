@@ -219,6 +219,7 @@ mod tests {
                 synthetic_id: format!("kiln-{name}"),
             }],
             module: GeneratorModule::Spec(format!("ns:{name}@1.0.0").into()),
+            invoked_as: format!("ns:{name}@1.0.0"),
             from: InvocationPath::normalize(from),
             inputs: inputs
                 .iter()

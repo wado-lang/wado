@@ -383,6 +383,7 @@ mod tests {
                 synthetic_id: "kiln-proto".to_string(),
             }],
             module: GeneratorModule::Spec("ns:p@1.0.0".into()),
+            invoked_as: "ns:p@1.0.0".to_string(),
             from: InvocationPath::normalize("schema.proto"),
             inputs: vec![InvocationPath::normalize("dep.proto")],
             output_dir: InvocationPath::normalize("build/kiln/proto"),

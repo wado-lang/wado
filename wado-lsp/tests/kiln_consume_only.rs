@@ -122,6 +122,7 @@ fn build_fixture(spec: FixtureSpec<'_>) -> Fixture {
             .metadata_generator
             .unwrap_or("fake:gen@0.1")
             .to_string(),
+        invoked_as: String::new(),
         generator_source_hash: String::new(),
         primary: FileHash {
             path: "grammars/calc.g4".to_string(),

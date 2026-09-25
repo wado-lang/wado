@@ -124,6 +124,17 @@ pub enum GeneratorModule {
     LocalPath(InvocationPath),
 }
 
+impl GeneratorModule {
+    /// The generator's name as the use site wrote it, before any host rewrite.
+    #[must_use]
+    pub fn as_written(&self) -> String {
+        match self {
+            Self::Spec(s) => s.spec.clone(),
+            Self::LocalPath(p) => p.as_str().to_string(),
+        }
+    }
+}
+
 /// A `[build-dependencies]` specifier plus any inline registry source supplied
 /// at the `use` site for single-file mode (no `wado.toml`). The compiler stores
 /// the fields opaquely; the host resolves them.
@@ -190,6 +201,9 @@ pub struct Invocation {
     /// keyed by. Non-empty; the first is what diagnostics name.
     pub decl_sites: Vec<DeclSite>,
     pub module: GeneratorModule,
+    /// How the use site named the generator, handed to it as `Request.module`:
+    /// a specifier verbatim, or a path resolved against the project root.
+    pub invoked_as: String,
     /// Primary schema file, resolved relative to the declaring `.wado` file
     /// (project-root-relative). Drives input loading, the cache key, and the
     /// default `output_dir`.
@@ -248,9 +262,12 @@ impl Invocation {
     /// Does not include `decl_sites`: clauses with identical invocation tuples
     /// merge into one invocation, wherever they were written.
     #[must_use]
-    pub fn identity_tuple(&self) -> (&GeneratorModule, &str, &[InvocationPath], &str, Vec<u8>) {
+    pub fn identity_tuple(
+        &self,
+    ) -> (&GeneratorModule, &str, &str, &[InvocationPath], &str, Vec<u8>) {
         (
             &self.module,
+            &self.invoked_as,
             self.from.as_str(),
             self.inputs.as_slice(),
             self.output_dir.as_str(),
@@ -330,6 +347,7 @@ mod tests {
                 synthetic_id: "kiln-aaaa".to_string(),
             }],
             module: GeneratorModule::Spec("ns:x@1.0.0".into()),
+            invoked_as: "ns:x@1.0.0".to_string(),
             from: InvocationPath::normalize("s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
