@@ -10,8 +10,7 @@ fn rule(pattern: String, axes: List<String>) -> LayoutRule {
 
 fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitError> {
     let graph = read(&source).unwrap();
-    let shapes = infer(&graph, &Schema { layout }).unwrap();
-    return emit(&graph, &shapes);
+    return emit(&graph, &infer(&graph, &Schema { layout }).unwrap());
 }
 
 /// The part of the module generated from the graph, with the inlined runtime
@@ -507,10 +506,10 @@ fn node(op: String, output: String, inputs: List<String>) -> Node {
 }
 
 fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
-    let shapes = infer(graph, &Schema {
+    let checked = infer(graph, &Schema {
         layout: [rule("*", ["Batch", "Unit"])],
     }).unwrap();
-    return emit(graph, &shapes);
+    return emit(graph, &checked);
 }
 
 fn matrix_rank() -> Rank {
@@ -522,6 +521,32 @@ fn matrix_rank() -> Rank {
 
 fn folded_add(value: f32) -> Result<String, EmitError> {
     return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
+}
+
+test "Identity names its operand again and computes nothing" {
+    let source = `g (float[2] X) => (float[2] Y) <float[2] W = {1.0, 2.0}> {
+        V = Identity(W)
+        Y = Add(X, V)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Feat"])]).unwrap());
+    assert out.contains("let Y = zip(X, &weights.W, |x, y| x + y);");
+    assert !out.contains("let V");
+}
+
+test "a scale the graph computes from a shape folds to a literal" {
+    // Attention's `1 / sqrt(head_dim)`, as an exporter writes it.
+    let source = `g (float[2, 4] X) => (float[2, 4] Y) {
+        S = Shape(X)
+        I = Constant<value_int = 1>()
+        D = Gather(S, I)
+        F = Cast<to = 1>(D)
+        H = Constant<value_float = 0.5>()
+        R = Pow(F, H)
+        Y = Div(X, R)
+    }`;
+    let out = emitted(&generate(source, [rule("X", ["Batch", "Feat"])]).unwrap());
+    assert out.contains("let Y = map(X, |v| v / (2 as f32));");
+    assert !out.contains("let S");
 }
 
 test "a constant folds into the operator that reads it" {

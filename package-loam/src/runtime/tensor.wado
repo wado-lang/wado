@@ -3,7 +3,7 @@ pub struct Tensor<E, Axes> {
     pub extents: List<i32>,
 }
 
-fn element_count(extents: &List<i32>) -> i32 {
+pub fn element_count(extents: &List<i32>) -> i32 {
     let mut count = 1;
     for let e of *extents {
         assert e >= 0;
@@ -112,16 +112,10 @@ fn stretched_zip<Axes>(
     b_extents: List<i32>,
     op: fn(f32, f32) -> f32,
 ) -> Tensor<f32, Axes> {
-    let rank = i32::max(a_extents.len(), b_extents.len());
+    let extents = broadcast_extents(&a_extents, &b_extents).unwrap();
+    let rank = extents.len();
     let a_strides = stretched_strides(&a_extents, rank);
     let b_strides = stretched_strides(&b_extents, rank);
-    let mut extents: List<i32> = [];
-    for let mut i = 0; i < rank; i += 1 {
-        let ea = aligned_extent(&a_extents, rank, i);
-        let eb = aligned_extent(&b_extents, rank, i);
-        assert ea == eb || ea == 1 || eb == 1;
-        extents.push(if ea == 1 { eb } else { ea });
-    }
     let count = element_count(&extents);
     let mut out = List::<f32>::with_capacity(count);
     let mut index = List::<i32>::filled(rank, 0);
@@ -144,6 +138,22 @@ fn stretched_zip<Axes>(
     return Tensor { data: out, extents };
 }
 
+/// The extents two operands broadcast to under ONNX's rule, or `None` where an
+/// axis meets a different extent and neither is 1.
+pub fn broadcast_extents(a: &List<i32>, b: &List<i32>) -> Option<List<i32>> {
+    let rank = i32::max(a.len(), b.len());
+    let mut extents: List<i32> = [];
+    for let i of 0..<rank {
+        let ea = aligned_extent(a, rank, i);
+        let eb = aligned_extent(b, rank, i);
+        if ea != eb && ea != 1 && eb != 1 {
+            return null;
+        }
+        extents.push(if ea == 1 { eb } else { ea });
+    }
+    return Option::Some(extents);
+}
+
 /// `extents` aligned to `rank` axes from the end, a missing axis being 1.
 fn aligned_extent(extents: &List<i32>, rank: i32, axis: i32) -> i32 {
     let own = axis - (rank - extents.len());
@@ -152,7 +162,7 @@ fn aligned_extent(extents: &List<i32>, rank: i32, axis: i32) -> i32 {
 
 /// Each of `rank` axes' step through a tensor of `extents`, aligned from the
 /// end. A stretched axis steps by zero, so every position reads one element.
-fn stretched_strides(extents: &List<i32>, rank: i32) -> List<i32> {
+pub fn stretched_strides(extents: &List<i32>, rank: i32) -> List<i32> {
     let mut strides = List::<i32>::filled(rank, 0);
     let mut step = 1;
     for let mut back = 0; back < extents.len(); back += 1 {

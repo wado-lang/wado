@@ -2,7 +2,7 @@
 //! for.
 
 use { Extent } from "./extent.wado";
-use { infer } from "./infer.wado";
+use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
@@ -39,7 +39,7 @@ fn mlp(hidden_in_w2: i32) -> String {
 fn infer_mlp(hidden_in_w2: i32) -> Result<String, String> {
     let graph = read(&mlp(hidden_in_w2)).unwrap();
     return match infer(&graph, &mlp_schema()) {
-        Ok(shapes) => {
+        Ok(Checked { shapes, .. }) => {
             let y = shapes["Y"];
             Result::Ok(`${y.axes[0].name}=${y.axes[0].extent},${y.axes[1].name}=${y.axes[1].extent}`);
         },
@@ -57,14 +57,14 @@ test "an extent mismatch between the layers names both extents" {
 
 test "a symbolic batch axis flows through both layers" {
     let graph = read(&mlp(64)).unwrap();
-    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
     assert shapes["H"].axes[0].extent.agrees(&Extent::Symbol("N"));
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
 }
 
 test "a bias broadcasts against the batch axis ahead of it" {
     let graph = read(&mlp(64)).unwrap();
-    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
     assert shapes["HB"].rank() == 2;
     assert shapes["HB"].axes[1].name == "Hidden";
 }
@@ -108,7 +108,7 @@ test "a wildcard pattern reaches every tensor" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["X"].axes[0].name == "A";
 }
 
@@ -124,7 +124,7 @@ test "an earlier pattern overrides a later one" {
             rule("*", ["A", "B"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["layers.0.weight"].axes[0].name == "First";
 }
 
@@ -140,7 +140,7 @@ test "an unknown dimension takes its axis's name as its symbol" {
             rule("W", ["In", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
@@ -224,7 +224,7 @@ test "a declared symbolic name need not be the one the schema gave the axis" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
@@ -237,7 +237,7 @@ test "a declared static extent settles an axis the nodes left symbolic" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
     // Only the declared output is settled; the input keeps what it stated.
     assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
@@ -252,7 +252,7 @@ test "a declared `?` claims nothing about the produced extent" {
     let schema = Schema {
         layout: [rule("*", ["Batch", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
 }
 
@@ -283,7 +283,7 @@ test "Gemm contracts the axis its transpose flags leave facing" {
             rule("Y", ["Batch", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "Batch";
     assert shapes["Y"].axes[1].name == "Out";
 }
@@ -301,7 +301,7 @@ test "Gemm without its C operand is the product alone" {
             rule("Y", ["Batch", "Out"]),
         ],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
 }
 
@@ -331,7 +331,7 @@ test "Transpose reorders the axes its perm names" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "B";
     assert shapes["Y"].axes[1].name == "A";
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(3));
@@ -346,7 +346,7 @@ test "Transpose with no perm reverses the axes, as ONNX defaults it" {
     let schema = Schema {
         layout: [rule("*", ["A", "B"])],
     };
-    let shapes = infer(&graph, &schema).unwrap();
+    let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].name == "B";
 }
 
@@ -380,7 +380,7 @@ test "a perm naming the wrong number of axes stops the build" {
 fn reshaped(source: String, layout: List<LayoutRule>) -> Result<String, String> {
     let graph = read(&source).unwrap();
     return match infer(&graph, &Schema { layout }) {
-        Ok(shapes) => {
+        Ok(Checked { shapes, .. }) => {
             let mut axes: List<String> = [];
             for let a of shapes["Y"].axes {
                 axes.push(`${a.name}=${a.extent}`);
@@ -407,6 +407,28 @@ test "Reshape reads 0 as the input's extent and -1 as what remains" {
         Y = Reshape(X, S)
     }`;
     assert reshaped(source, nchw()).unwrap() == "Batch=1,Merged<[Chan, Row, Col]>=256";
+}
+
+test "a Reshape target the graph computes from Shape folds at build time" {
+    // An exporter's spelling of `x.view(x.size(0), -1)`.
+    let source = `g (float[2, 3, 4] X) => (float[2, 12] Y) <int64[1] M = {-1}> {
+        S = Shape(X)
+        I = Constant<value_int = 0>()
+        B = Gather(S, I)
+        A = Constant<value_ints = [0]>()
+        U = Unsqueeze(B, A)
+        T = Concat<axis = 0>(U, M)
+        Y = Reshape(X, T)
+    }`;
+    assert reshaped(source, [rule("X", ["Batch", "Row", "Col"])]).unwrap() == "Batch=2,Merged<[Row, Col]>=12";
+}
+
+test "Shape of a symbolic extent stops the build" {
+    let source = `g (float[N, 3] X) => (float[N, 3] Y) {
+        S = Shape(X)
+        Y = Reshape(X, S)
+    }`;
+    assert reshaped(source, [rule("X", ["Batch", "Col"])]).unwrap_err() == "S = Shape: axis Batch is N, and the build reads static extents";
 }
 
 test "Reshape splits a merged axis back into its parts" {
@@ -469,7 +491,7 @@ test "a Reshape target no integer initializer carries stops the build" {
         rule("X", ["Batch", "Wide"]),
         rule("S", ["Two"]),
     ]).unwrap_err();
-    assert e == "Y = Reshape: the target shape S is not an integer initializer the graph carries";
+    assert e == "Y = Reshape: the target shape S is not an integer tensor the build knows";
 }
 
 test "a Reshape target that changes the element count stops the build" {

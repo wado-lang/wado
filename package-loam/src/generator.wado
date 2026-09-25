@@ -64,8 +64,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     keep_outputs(&mut graph, &req.options.outputs).map_err(|e| at(&path, &e))?;
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
-    let shapes = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
-    let generated = emit(&graph, &shapes).map_err(|e| at(&path, &e))?;
+    let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &checked).map_err(|e| at(&path, &e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,

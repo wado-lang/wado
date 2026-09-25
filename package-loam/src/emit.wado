@@ -4,8 +4,8 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, KERNEL_ELEMENT, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
-use { constant_value, gemm_options, has_bias, transpose_perm, window_of } from "./infer.wado";
+use { Graph, KERNEL_ELEMENT, Known, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
+use { Checked, gemm_options, has_bias, read_at_build_time, transpose_perm, window_of } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -110,7 +110,8 @@ impl Display for EmitError {
 
 /// The generated module's source. Every axis the graph mentions becomes a
 /// marker type, so two tensors sharing an axis share one type.
-pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, EmitError> {
+pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
     if graph.outputs.len() != 1 {
         builtin::cold_path();
         return Result::Err(EmitError::OutputCount(graph.outputs.len()));
@@ -124,7 +125,7 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     w.blank();
 
     let axes = axis_names(graph, shapes);
-    let names = Names::of(graph, &axes)?;
+    let names = Names::of(graph, &checked.known, &axes)?;
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
     }
@@ -133,7 +134,7 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     w.raw(&GRAPH_BANNER);
 
     emit_weights(&mut w, graph, shapes, &names, &held);
-    emit_forward(&mut w, graph, shapes, &names, &held)?;
+    emit_forward(&mut w, graph, checked, &names, &held)?;
     return Result::Ok(w.to_string());
 }
 
@@ -164,7 +165,7 @@ struct Names {
 }
 
 impl Names {
-    fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
+    fn of(graph: &Graph, known: &TreeMap<String, Known>, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
@@ -185,7 +186,9 @@ impl Names {
             names.take(&mut taken, &vi.name)?;
         }
         for let node of &graph.nodes {
-            names.take(&mut taken, &node.outputs[0])?;
+            if !known.contains_key(node.outputs[0]) {
+                names.take(&mut taken, &node.outputs[0])?;
+            }
         }
         return Result::Ok(names);
     }
@@ -366,9 +369,11 @@ fn emit_embedded(
 struct Operands {
     values: TreeMap<String, String>,
     already_reference: TreeSet<String>,
-    /// A one-element `Constant`, as the literal that replaces it. It allocates
-    /// no tensor: every operator reading one folds it into a closure.
+    /// A folded float of one element, as the literal that replaces it. It
+    /// allocates no tensor: every operator reading one folds it into a closure.
     scalars: TreeMap<String, String>,
+    /// Every other folded tensor, which no kernel reads yet.
+    unfolded: TreeSet<String>,
 }
 
 impl Operands {
@@ -393,15 +398,24 @@ impl Operands {
 fn emit_forward(
     w: &mut CodeWriter,
     graph: &Graph,
-    shapes: &TreeMap<String, Shape>,
+    checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
 ) -> Result<(), EmitError> {
+    let shapes = &checked.shapes;
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
         scalars: TreeMap::<String, String>::new(),
+        unfolded: TreeSet::<String>::new(),
     };
+    for let [name, k] of checked.known.entries() {
+        if let Floats(v) = k.elements && v.len() == 1 {
+            exprs.scalars[*name] = float_literal(v[0]);
+        } else {
+            exprs.unfolded.insert(*name);
+        }
+    }
     let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
     let mut widened: List<String> = [];
@@ -433,19 +447,22 @@ fn emit_forward(
     }
     for let node of &graph.nodes {
         let produced = node.outputs[0];
-        if node.op == "Constant" {
-            let Ok(value) = constant_value(node) else {
-                // Stage 0 read the same attribute and stopped the build there.
-                unreachable();
-            };
-            exprs.scalars[produced] = float_literal(value);
+        if checked.known.contains_key(produced) {
+            continue;
+        }
+        if node.op == "Identity" {
+            let source = node.inputs[0];
+            exprs.values[produced] = exprs.values.get(source).unwrap();
+            if exprs.already_reference.contains(source) {
+                exprs.already_reference.insert(produced);
+            }
             continue;
         }
         let ident = names.get(&produced);
         w.line(`let ${ident} = ${node_call(node, shapes, &exprs)?};`);
         exprs.values[produced] = ident;
     }
-    if exprs.scalars.contains_key(result) {
+    if checked.known.contains_key(result) {
         builtin::cold_path();
         return Result::Err(EmitError::ReturnedConstant(result));
     }
@@ -549,10 +566,11 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
 /// lookup that would find no tensor.
 fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
     for let [index, input] of node.inputs.into_iter().enumerate() {
-        if !exprs.scalars.contains_key(input) {
+        let scalar = exprs.scalars.contains_key(input);
+        if read_at_build_time(node, index) || !scalar && !exprs.unfolded.contains(input) {
             continue;
         }
-        if folds_constant(node, index, exprs) {
+        if scalar && folds_constant(node, index, exprs) {
             continue;
         }
         builtin::cold_path();

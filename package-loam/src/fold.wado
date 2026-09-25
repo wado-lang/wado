@@ -1,0 +1,560 @@
+//! Stage 0's evaluation of what a graph computes from what the build knows:
+//! the shape arithmetic an exporter writes, and the constants it reaches.
+//! Each operator means what its ONNX definition says.
+
+use { TreeMap } from "core:collections";
+use { Elements, Known, Node } from "./graph.wado";
+use { broadcast_extents, element_count, stretched_strides } from "./runtime/tensor.wado";
+use { Shape } from "./shape.wado";
+
+/// The tensor `node` produces when every operand it reads is known, or `None`
+/// where the run computes it. `Err` says why the build cannot evaluate it.
+pub fn fold(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    shapes: &TreeMap<String, Shape>,
+) -> Result<Option<Known>, String> {
+    let op = node.op;
+    if op == "Constant" {
+        return constant(node).map(|k| Option::Some(k));
+    }
+    if op == "Shape" {
+        return shape_of(node, known, shapes).map(|k| Option::Some(k));
+    }
+    let mut operands: List<Known> = [];
+    for let input of node.inputs {
+        if input == "" {
+            continue;
+        }
+        let Some(k) = known.get(input) else {
+            return Result::Ok(null);
+        };
+        operands.push(k);
+    }
+    if operands.is_empty() {
+        return Result::Ok(null);
+    }
+    let x = &operands[0];
+    let folded = match op.as_str_slice() {
+        "Identity" => *x,
+        "Gather" => gather(x, &operands[1], int_attr(node, "axis", 0)?)?,
+        "Unsqueeze" => unsqueeze(x, &axes_of(node, &operands, 1, "axes")?.unwrap())?,
+        "Squeeze" => squeeze(x, axes_of(node, &operands, 1, "axes")?)?,
+        "Concat" => concat(&operands, int_attr(node, "axis", 0)?)?,
+        "Slice" => slice(x, node, &operands)?,
+        "Cast" => cast(x, int_attr(node, "to", 0)?)?,
+        "Range" => range(x, &operands[1], &operands[2])?,
+        "ConstantOfShape" => constant_of_shape(node, x)?,
+        "Reshape" => Known {
+            extents: reshape_extents(&ints_of(&operands[1])?, &x.extents, int_attr(node, "allowzero", 0)? != 0)?,
+            elements: x.elements,
+        },
+        "Add" | "Sub" | "Mul" | "Div" | "Pow" => arithmetic(&op, x, &operands[1])?,
+        _ => {
+            return Result::Ok(null);
+        },
+    };
+    return Result::Ok(Option::Some(folded));
+}
+
+/// A `Reshape` target as ONNX reads it: `0` copies the input's extent at that
+/// position unless `allowzero` is set, and one `-1` is what the rest leave.
+pub fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> Result<List<i32>, String> {
+    let total = element_count(input) as i64;
+    let mut extents: List<i32> = [];
+    let mut inferred = -1;
+    let mut known: i64 = 1;
+    for let [i, w] of written.into_iter().enumerate() {
+        if *w == -1 && inferred < 0 {
+            inferred = i;
+            extents.push(1);
+            continue;
+        }
+        let e = if *w == 0 && !allow_zero && i < input.len() { input[i] as i64 } else { *w };
+        if !(0 <= e <= i32::MAX as i64) {
+            return Result::Err(`the target shape holds ${*w}`);
+        }
+        extents.push(e as i32);
+        known *= e;
+    }
+    if inferred >= 0 && known != 0 && total % known == 0 {
+        extents[inferred] = (total / known) as i32;
+        known = total;
+    }
+    if known != total {
+        return Result::Err(`${total} elements cannot take the shape ${*written:?}`);
+    }
+    return Result::Ok(extents);
+}
+
+fn constant(node: &Node) -> Result<Known, String> {
+    if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
+        return Result::Ok(t);
+    }
+    if let Some(a) = node.attr("value_int") {
+        return Result::Ok(Known { extents: [], elements: Elements::Ints([parse_int(&a.values[0])?]) });
+    }
+    if let Some(a) = node.attr("value_ints") {
+        let mut values: List<i64> = [];
+        for let v of a.values {
+            values.push(parse_int(&v)?);
+        }
+        return Result::Ok(Known {
+            extents: [values.len()],
+            elements: Elements::Ints(values),
+        });
+    }
+    if let Some(a) = node.attr("value_float") {
+        let Ok(v) = f32::from_str(&a.values[0]) else {
+            return Result::Err(`value_float holds '${a.values[0]}'`);
+        };
+        return Result::Ok(Known { extents: [], elements: Elements::Floats([v]) });
+    }
+    return Result::Err("the value is none this reader carries");
+}
+
+fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String, Shape>) -> Result<Known, String> {
+    let input = node.inputs[0];
+    let extents = match known.get(input) {
+        Some(k) => k.extents,
+        None => {
+            let mut static_extents: List<i32> = [];
+            for let axis of shapes.get(input).unwrap().axes {
+                let Static(e) = axis.extent else {
+                    return Result::Err(`axis ${axis.name} is ${axis.extent}, and the build reads static extents`);
+                };
+                static_extents.push(e);
+            }
+            static_extents;
+        },
+    };
+    let rank = extents.len() as i64;
+    let start = clamped(int_attr(node, "start", 0)?, rank, 0, rank);
+    let end = clamped(int_attr(node, "end", rank)?, rank, 0, rank);
+    let mut values: List<i64> = [];
+    for let i of start..<i64::max(start, end) {
+        values.push(extents[i as i32] as i64);
+    }
+    return Result::Ok(Known {
+        extents: [values.len()],
+        elements: Elements::Ints(values),
+    });
+}
+
+/// `i` counted from the end where negative, then held within `[lo, hi]`.
+fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
+    let from_start = if i < 0 { i + extent } else { i };
+    return i64::clamp(from_start, lo, hi);
+}
+
+fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
+    let rank = data.extents.len();
+    let a = axis_index(axis, rank)?;
+    let along = data.extents[a];
+    let inner = element_count(&tail(&data.extents, a + 1));
+    let outer = element_count(&head(&data.extents, a));
+    let mut picks: List<i32> = [];
+    for let o of 0..<outer {
+        for let index of ints_of(indices)? {
+            let i = if index < 0 { index + along as i64 } else { index };
+            if !(0 <= i < along as i64) {
+                return Result::Err(`index ${index} is outside an axis of ${along}`);
+            }
+            for let n of 0..<inner {
+                picks.push((o * along + i as i32) * inner + n);
+            }
+        }
+    }
+    let mut extents = head(&data.extents, a);
+    extents.extend(&indices.extents);
+    extents.extend(&tail(&data.extents, a + 1));
+    return Result::Ok(Known { extents, elements: picked(&data.elements, &picks) });
+}
+
+fn unsqueeze(x: &Known, axes: &List<i64>) -> Result<Known, String> {
+    let rank = x.extents.len() + axes.len();
+    let mut inserted = List::<bool>::filled(rank, false);
+    for let axis of *axes {
+        inserted[axis_index(axis, rank)?] = true;
+    }
+    let mut extents: List<i32> = [];
+    let mut next = 0;
+    for let i of 0..<rank {
+        if inserted[i] {
+            extents.push(1);
+        } else {
+            extents.push(x.extents[next]);
+            next += 1;
+        }
+    }
+    return Result::Ok(Known { extents, elements: x.elements });
+}
+
+fn squeeze(x: &Known, axes: Option<List<i64>>) -> Result<Known, String> {
+    let rank = x.extents.len();
+    let mut dropped = List::<bool>::filled(rank, false);
+    match axes {
+        Some(listed) => {
+            for let axis of listed {
+                let i = axis_index(axis, rank)?;
+                if x.extents[i] != 1 {
+                    return Result::Err(`axis ${axis} has extent ${x.extents[i]}, not 1`);
+                }
+                dropped[i] = true;
+            }
+        },
+        None => {
+            for let i of 0..<rank {
+                dropped[i] = x.extents[i] == 1;
+            }
+        },
+    }
+    let mut extents: List<i32> = [];
+    for let i of 0..<rank {
+        if !dropped[i] {
+            extents.push(x.extents[i]);
+        }
+    }
+    return Result::Ok(Known { extents, elements: x.elements });
+}
+
+fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
+    let first = &parts[0];
+    let a = axis_index(axis, first.extents.len())?;
+    let outer = element_count(&head(&first.extents, a));
+    let mut offsets: List<i32> = [];
+    let mut joined = 0;
+    let mut along = 0;
+    for let p of *parts {
+        if p.extents.len() != first.extents.len()
+            || head(&p.extents, a) != head(&first.extents, a)
+            || tail(&p.extents, a + 1) != tail(&first.extents, a + 1) {
+            return Result::Err(
+                `operands of extents ${first.extents:?} and ${p.extents:?} do not join along axis ${axis}`,
+            );
+        }
+        offsets.push(joined);
+        joined += p.len();
+        along += p.extents[a];
+    }
+    let mut picks: List<i32> = [];
+    for let o of 0..<outer {
+        for let [i, p] of parts.into_iter().enumerate() {
+            let block = p.len() / outer;
+            for let n of 0..<block {
+                picks.push(offsets[i] + o * block + n);
+            }
+        }
+    }
+    let mut extents = first.extents;
+    extents[a] = along;
+    return Result::Ok(Known { extents, elements: picked(&joined_elements(parts)?, &picks) });
+}
+
+fn slice(x: &Known, node: &Node, operands: &List<Known>) -> Result<Known, String> {
+    let rank = x.extents.len();
+    let starts = axes_of(node, operands, 1, "starts")?.unwrap();
+    let ends = axes_of(node, operands, 2, "ends")?.unwrap();
+    let mut axes: List<i64> = [];
+    for let i of 0..<starts.len() {
+        axes.push(i as i64);
+    }
+    if let Some(listed) = axes_of(node, operands, 3, "axes")? {
+        axes = listed;
+    }
+    let steps = if operands.len() > 4 { ints_of(&operands[4])? } else { List::<i64>::filled(starts.len(), 1) };
+    let mut begin = List::<i64>::filled(rank, 0);
+    let mut step = List::<i64>::filled(rank, 1);
+    let mut extents = x.extents;
+    for let i of 0..<starts.len() {
+        let a = axis_index(axes[i], rank)?;
+        let dim = x.extents[a] as i64;
+        let s = steps[i];
+        if s == 0 {
+            return Result::Err("a step is 0");
+        }
+        let b = if s > 0 { clamped(starts[i], dim, 0, dim) } else { clamped(starts[i], dim, 0, dim - 1) };
+        let e = if s > 0 { clamped(ends[i], dim, 0, dim) } else { clamped(ends[i], dim, -1, dim - 1) };
+        let count = if s > 0 { (e - b + s - 1) / s } else { (b - e - s - 1) / -s };
+        begin[a] = b;
+        step[a] = s;
+        extents[a] = i64::max(count, 0) as i32;
+    }
+    let mut picks: List<i32> = [];
+    let strides = stretched_strides(&x.extents, rank);
+    for let n of 0..<element_count(&extents) {
+        let mut rest = n;
+        let mut at = 0;
+        for let mut a = rank - 1; a >= 0; a -= 1 {
+            let index = begin[a] + (rest % extents[a]) as i64 * step[a];
+            // An extent-1 axis has stride 0 here, and only index 0 to read.
+            at += index as i32 * strides[a];
+            rest /= extents[a];
+        }
+        picks.push(at);
+    }
+    return Result::Ok(Known { extents, elements: picked(&x.elements, &picks) });
+}
+
+/// `Cast` to float, int32, int64 or bool. A float becomes an integer by
+/// truncation toward zero, and anything nonzero becomes `true`.
+fn cast(x: &Known, to: i64) -> Result<Known, String> {
+    let count = x.len();
+    let elements = match to {
+        1 => {
+            let mut out = List::<f32>::with_capacity(count);
+            for let i of 0..<count {
+                out.push(as_float(&x.elements, i));
+            }
+            Elements::Floats(out);
+        },
+        6 | 7 => {
+            let mut out = List::<i64>::with_capacity(count);
+            for let i of 0..<count {
+                let v = as_int(&x.elements, i);
+                out.push(if to == 6 { v as i32 as i64 } else { v });
+            }
+            Elements::Ints(out);
+        },
+        9 => {
+            let mut out = List::<bool>::with_capacity(count);
+            for let i of 0..<count {
+                out.push(as_float(&x.elements, i) != 0.0);
+            }
+            Elements::Bools(out);
+        },
+        _ => {
+            return Result::Err(`\`to\` is element type ${to}, which the build does not compute in`);
+        },
+    };
+    return Result::Ok(Known { extents: x.extents, elements });
+}
+
+fn as_float(elements: &Elements, i: i32) -> f32 {
+    return match elements {
+        Ints(v) => v[i] as f32,
+        Floats(v) => v[i],
+        Bools(v) => if v[i] { 1.0 } else { 0.0 },
+    };
+}
+
+fn as_int(elements: &Elements, i: i32) -> i64 {
+    return match elements {
+        Ints(v) => v[i],
+        Floats(v) => v[i] as i64,
+        Bools(v) => if v[i] { 1 } else { 0 },
+    };
+}
+
+fn range(start: &Known, limit: &Known, delta: &Known) -> Result<Known, String> {
+    return match [&start.elements, &limit.elements, &delta.elements] {
+        [Ints(s), Ints(l), Ints(d)] => {
+            let [s, l, d] = [s[0], l[0], d[0]];
+            if d == 0 {
+                return Result::Err("delta is 0");
+            }
+            let count = i64::max(if d > 0 { (l - s + d - 1) / d } else { (s - l - d - 1) / -d }, 0);
+            let mut values: List<i64> = [];
+            for let i of 0..<count {
+                values.push(s + i * d);
+            }
+            Result::Ok(Known {
+                extents: [values.len()],
+                elements: Elements::Ints(values),
+            });
+        },
+        [Floats(s), Floats(l), Floats(d)] => {
+            let [s, l, d] = [s[0], l[0], d[0]];
+            let count = f32::max(f32::ceil((l - s) / d), 0.0) as i32;
+            let mut values: List<f32> = [];
+            for let i of 0..<count {
+                values.push(s + i as f32 * d);
+            }
+            Result::Ok(Known {
+                extents: [count],
+                elements: Elements::Floats(values),
+            });
+        },
+        _ => Result::Err("start, limit and delta are not one element type"),
+    };
+}
+
+fn constant_of_shape(node: &Node, shape: &Known) -> Result<Known, String> {
+    let mut extents: List<i32> = [];
+    for let e of ints_of(shape)? {
+        if !(0 <= e <= i32::MAX as i64) {
+            return Result::Err(`the shape holds ${e}`);
+        }
+        extents.push(e as i32);
+    }
+    let mut fill = Known {
+        extents: [1],
+        elements: Elements::Floats([0.0]),
+    };
+    if let Some(a) = node.attr("value") && let Some(t) = a.tensor {
+        fill = t;
+    }
+    let count = element_count(&extents);
+    return Result::Ok(Known { extents, elements: picked(&fill.elements, &List::<i32>::filled(count, 0)) });
+}
+
+fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
+    let Some(extents) = broadcast_extents(&a.extents, &b.extents) else {
+        return Result::Err(`operands of extents ${a.extents:?} and ${b.extents:?} do not broadcast`);
+    };
+    let x = picked(&a.elements, &positions(&a.extents, &extents));
+    let y = picked(&b.elements, &positions(&b.extents, &extents));
+    let elements = match [&x, &y] {
+        [Ints(l), Ints(r)] => {
+            let mut out: List<i64> = [];
+            for let i of 0..<l.len() {
+                out.push(int_op(op, l[i], r[i])?);
+            }
+            Elements::Ints(out);
+        },
+        [Floats(l), Floats(r)] => {
+            let mut out: List<f32> = [];
+            for let i of 0..<l.len() {
+                out.push(float_op(op, l[i], r[i]));
+            }
+            Elements::Floats(out);
+        },
+        _ => {
+            return Result::Err("the operands are not one element type the build computes in");
+        },
+    };
+    return Result::Ok(Known { extents, elements });
+}
+
+/// ONNX leaves the rounding of a negative integer quotient unstated, so the
+/// build divides only where every rounding agrees.
+fn int_op(op: &String, l: i64, r: i64) -> Result<i64, String> {
+    return match op.as_str_slice() {
+        "Add" => Result::Ok(l + r),
+        "Sub" => Result::Ok(l - r),
+        "Mul" => Result::Ok(l * r),
+        "Div" => {
+            if r == 0 || l < 0 || r < 0 {
+                return Result::Err(`${l} / ${r} has no rounding every implementation shares`);
+            }
+            Result::Ok(l / r);
+        },
+        _ => Result::Err(`${op} of integers is not evaluated`),
+    };
+}
+
+fn float_op(op: &String, l: f32, r: f32) -> f32 {
+    return match op.as_str_slice() {
+        "Add" => l + r,
+        "Sub" => l - r,
+        "Mul" => l * r,
+        "Div" => l / r,
+        _ => f32::pow(l, r),
+    };
+}
+
+/// For each element of a tensor of `out` extents, the element a tensor of
+/// `extents` broadcast to it reads.
+fn positions(extents: &List<i32>, out: &List<i32>) -> List<i32> {
+    let strides = stretched_strides(extents, out.len());
+    let mut at: List<i32> = [];
+    for let n of 0..<element_count(out) {
+        let mut rest = n;
+        let mut p = 0;
+        for let mut a = out.len() - 1; a >= 0; a -= 1 {
+            p += rest % out[a] * strides[a];
+            rest /= out[a];
+        }
+        at.push(p);
+    }
+    return at;
+}
+
+fn picked(elements: &Elements, at: &List<i32>) -> Elements {
+    return match elements {
+        Ints(v) => Elements::Ints(pick(v, at)),
+        Floats(v) => Elements::Floats(pick(v, at)),
+        Bools(v) => Elements::Bools(pick(v, at)),
+    };
+}
+
+fn pick<T>(values: &List<T>, at: &List<i32>) -> List<T> {
+    let mut out = List::<T>::with_capacity(at.len());
+    for let i of *at {
+        out.push(values[i]);
+    }
+    return out;
+}
+
+fn joined_elements(parts: &List<Known>) -> Result<Elements, String> {
+    let mut joined = parts[0].elements;
+    for let i of 1..<parts.len() {
+        match [&mut joined, &parts[i].elements] {
+            [Ints(a), Ints(b)] => a.extend(b),
+            [Floats(a), Floats(b)] => a.extend(b),
+            [Bools(a), Bools(b)] => a.extend(b),
+            _ => {
+                return Result::Err("the operands are not one element type");
+            },
+        }
+    }
+    return Result::Ok(joined);
+}
+
+fn ints_of(k: &Known) -> Result<List<i64>, String> {
+    let Ints(v) = k.elements else {
+        return Result::Err("an operand read as integers is not an integer tensor");
+    };
+    return Result::Ok(v);
+}
+
+/// The integers an operator reads from operand `index`, or from the attribute
+/// `attr` an opset before 13 wrote them in. `None` where neither is given.
+fn axes_of(node: &Node, operands: &List<Known>, index: i32, attr: String) -> Result<Option<List<i64>>, String> {
+    if index < operands.len() {
+        return ints_of(&operands[index]).map(|v| Option::Some(v));
+    }
+    let Some(a) = node.attr(attr) else {
+        return Result::Ok(null);
+    };
+    let mut values: List<i64> = [];
+    for let v of a.values {
+        values.push(parse_int(&v)?);
+    }
+    return Result::Ok(Option::Some(values));
+}
+
+fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
+    let Some(a) = node.attr(name) else {
+        return Result::Ok(fallback);
+    };
+    return parse_int(&a.values[0]);
+}
+
+fn parse_int(text: &String) -> Result<i64, String> {
+    return i64::from_str(text).map_err(|_| `'${text}' is not an integer`);
+}
+
+fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
+    let i = if axis < 0 { axis + rank as i64 } else { axis };
+    if !(0 <= i < rank as i64) {
+        return Result::Err(`axis ${axis} is outside rank ${rank}`);
+    }
+    return Result::Ok(i as i32);
+}
+
+fn head(extents: &List<i32>, end: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of 0..<end {
+        out.push(extents[i]);
+    }
+    return out;
+}
+
+fn tail(extents: &List<i32>, start: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of start..<extents.len() {
+        out.push(extents[i]);
+    }
+    return out;
+}
