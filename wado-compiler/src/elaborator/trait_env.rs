@@ -1035,14 +1035,10 @@ impl TraitEnv {
             for item in &module.items {
                 match item {
                     Item::Interface(effect_decl) => {
-                        if let Some(def) = defs.of_ast_id(effect_decl.id) {
-                            effect_decl_index.insert(def);
-                        }
+                        effect_decl_index.insert(defs.def_at(effect_decl.id));
                     }
                     Item::Resource(resource) => {
-                        let Some(resource_key) = defs.of_ast_id(resource.id) else {
-                            continue;
-                        };
+                        let resource_key = defs.def_at(resource.id);
                         resource_decl_index.insert(resource_key);
                         // Index static methods from resource declarations.
                         // The resource declaration itself is the receiver.
@@ -1172,9 +1168,7 @@ impl TraitEnv {
                     _ => {}
                 }
                 if let Item::Trait(trait_decl) = item {
-                    let Some(trait_def) = defs.of_ast_id(trait_decl.id) else {
-                        continue;
-                    };
+                    let trait_def = defs.def_at(trait_decl.id);
                     trait_decl_headers.insert(
                         trait_def,
                         TraitDeclHeader {

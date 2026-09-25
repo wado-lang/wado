@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::ast::{BinaryOp, Expr, Literal};
+use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
@@ -17,10 +17,9 @@ use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-use super::trait_env::TraitEnv;
-use super::types::{
-    EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, VariantInfo,
-};
+use super::sem::decls::ModuleDecls;
+use super::trait_env::{NamespaceImports, TraitEnv};
+use super::types::{DataDecls, TypeLookup};
 use super::util::bound_param_name;
 use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
@@ -44,17 +43,9 @@ pub(crate) struct TypeSystem {
     /// shared interior mutability the WEP explicitly preserves.
     pub(crate) type_table: Rc<RefCell<TypeTable>>,
 
-    /// Decl-interned type tables (one per loaded module). Built during
-    /// the annotate-decls pass; read-only afterwards. [`super::types::TypeLookup`]
-    /// resolves type names against these without cloning into per-module
-    /// flat maps.
-    pub(crate) all_newtypes: Rc<IndexMap<DefId, TypeId>>,
-    pub(crate) all_generic_newtypes: Rc<IndexMap<DefId, GenericNewtypeInfo>>,
-    pub(crate) all_struct_fields: Rc<IndexMap<DefId, StructFieldInfo>>,
-    pub(crate) all_variant_cases: Rc<IndexMap<DefId, VariantInfo>>,
-    pub(crate) all_enum_cases: Rc<IndexMap<DefId, EnumInfo>>,
-    pub(crate) all_flags_cases: Rc<IndexMap<DefId, FlagsInfo>>,
-    pub(crate) all_resource_types: Rc<IndexMap<DefId, ResourceInfo>>,
+    /// Every loaded module's data declarations. Built during the
+    /// annotate-decls pass; read-only afterwards.
+    pub(crate) data: Rc<DataDecls>,
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration
@@ -118,6 +109,24 @@ pub(crate) struct TypeSystem {
 }
 
 impl TypeSystem {
+    /// A [`TypeLookup`] standing in `module`, reading `walk`'s additions ahead
+    /// of the program's declarations.
+    pub(crate) fn type_lookup<'s>(
+        &'s self,
+        module: &'s ModuleSource,
+        namespace_imports: &'s NamespaceImports,
+        walk: &'s ModuleDecls,
+    ) -> TypeLookup<'s> {
+        TypeLookup {
+            current_module_source: module,
+            resolutions: &self.resolutions,
+            namespace_imports,
+            program: &self.data,
+            walk,
+            decls: &self.trait_env,
+        }
+    }
+
     /// Check if a name refers to a known type (struct, variant, enum,
     /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
     /// lookup instead of scanning all module maps.
@@ -131,7 +140,7 @@ impl TypeSystem {
     /// each reached one by destructuring a `ResolvedType`. Used by the resource
     /// move check to decide whether an aggregate transitively owns a resource.
     pub(crate) fn struct_field_type_ids_of(&self, type_id: TypeId) -> Option<Vec<TypeId>> {
-        let info = self.all_struct_fields.get(&self.type_def(type_id)?)?;
+        let info = self.data.struct_fields.get(&self.type_def(type_id)?)?;
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
@@ -245,6 +254,14 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
     operator_trait_method(op).map(|(item, _)| item)
 }
 
+/// The prelude struct a `kind` range literal builds.
+pub(super) fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
+    }
+}
+
 /// Pure type-shape helpers answerable from the type table alone (peel
 /// references, extract a declared type's name, newtype-base resolution, type
 /// stringification). They touch only `self.type_table`; the body walk and
@@ -318,6 +335,30 @@ impl TypeSystem {
             }
             tid = base;
         }
+    }
+
+    /// The prelude struct a `kind` range literal builds: its name, and its
+    /// instance over `element`.
+    pub(crate) fn range_type(&self, kind: RangeKind, element: TypeId) -> (String, TypeId) {
+        let item = range_item(kind);
+        let mut type_table = self.type_table.borrow_mut();
+        let name = type_table.compiler_items().struct_name(item).to_string();
+        let def = type_table.require_compiler_item_def(item);
+        (name, type_table.make_generic_instance(def, vec![element]))
+    }
+
+    /// The name an operator impl on `ty` is indexed under. `None` for a type no
+    /// user impl can supply an operator for.
+    pub(crate) fn operator_receiver_name(&self, ty: TypeId) -> Option<String> {
+        let table = self.type_table.borrow();
+        matches!(
+            table.get(ty),
+            ResolvedType::Struct { .. }
+                | ResolvedType::GenericInstance { .. }
+                | ResolvedType::Newtype { .. }
+                | ResolvedType::Flags { .. }
+        )
+        .then(|| table.base_type_name(ty))
     }
 
     /// [`Self::newtype_base_lookup`] for a trait dispatch: an impl a link below
@@ -530,4 +571,34 @@ impl TypeSystem {
             ResolvedType::Error => "<error>".to_string(),
         }
     }
+
+    /// How `==` / `!=` compares these operands by identity, if it does.
+    pub(super) fn identity_of(
+        &self,
+        op: BinaryOp,
+        left: TypeId,
+        right: TypeId,
+    ) -> Option<Identity> {
+        if !matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
+            return None;
+        }
+        let type_table = self.type_table.borrow();
+        if matches!(
+            (type_table.get(left), type_table.get(right)),
+            (ResolvedType::Ref(_), ResolvedType::Ref(_))
+                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+        ) {
+            return Some(Identity::Reference);
+        }
+        type_table
+            .handles_compare(left, right)
+            .then_some(Identity::Handle)
+    }
+}
+
+/// What `==` compares when it compares by identity.
+pub(super) enum Identity {
+    Reference,
+    /// An unrestricted resource handle, which the host interns.
+    Handle,
 }

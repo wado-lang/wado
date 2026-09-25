@@ -1,0 +1,19 @@
+// A variadic for-of body is a block, so its local items are in scope in it.
+
+fn tags<..T: Display>(t: [..T]) -> String {
+    let mut out = "";
+    for let v of t {
+        struct Tag {
+            n: i32,
+        }
+        type Doubled = i32;
+        let tag = Tag { n: 2 };
+        let d = (tag.n * 2) as Doubled;
+        out.push_str(`${v}:${d} `);
+    }
+    return out;
+}
+
+test "a local item declared in a variadic for-of body" {
+    assert tags([1, "a"]) == "1:4 a:4 ";
+}

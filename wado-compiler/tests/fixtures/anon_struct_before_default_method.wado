@@ -1,0 +1,41 @@
+// An anonymous shape minted before an impl's default methods are walked is
+// declared once in the module, however many impls take a default.
+
+trait Greet {
+    fn name(&self) -> String;
+
+    fn greet(&self) -> String {
+        return `hi ${self.name()}`;
+    }
+}
+
+struct P {
+    n: String,
+}
+
+struct Q {
+    n: String,
+}
+
+fn pair() -> i32 {
+    let a = { x: 1, y: 2 };
+    return a.x + a.y;
+}
+
+impl Greet for P {
+    fn name(&self) -> String {
+        return self.n;
+    }
+}
+
+impl Greet for Q {
+    fn name(&self) -> String {
+        return self.n;
+    }
+}
+
+test "the shape and both default methods" {
+    assert pair() == 3;
+    assert P { n: "p" }.greet() == "hi p";
+    assert Q { n: "q" }.greet() == "hi q";
+}

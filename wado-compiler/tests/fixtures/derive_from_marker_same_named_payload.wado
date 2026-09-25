@@ -1,0 +1,21 @@
+// A `From` marker's payload is a declaration: a same-named local type is not it.
+
+use sub from "./sub/aliased_impl_head_a.wado";
+
+struct Far {
+    v: i32,
+}
+
+variant Wrap {
+    Hit(sub::Far),
+    Miss(i32),
+}
+
+impl From<sub::Far> for Wrap;
+
+export fn run() {
+    let _ = Wrap::from(Far { v: 1 });
+}
+
+__DATA__
+{"compile_error": ":17:13: analysis error: unknown function 'Wrap::from'", "compile_error_count": 1}
