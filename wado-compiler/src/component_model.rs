@@ -690,8 +690,8 @@ pub struct CmFunctionInfo {
     pub is_async: bool,
     /// Parameter names and types: (`wado_name`, `cm_name`, type)
     pub params: Vec<(String, String, Type)>,
-    /// The indices in `params` of the closures, which cross as their `u32` keys.
-    pub callbacks: Vec<usize>,
+    /// The closures among `params`, by index and declared type. Each crosses as its `u32` key.
+    pub callbacks: Vec<(usize, Type)>,
     /// Return type
     pub return_type: Option<Type>,
 }
@@ -725,7 +725,8 @@ impl CmFunctionInfo {
         format!("{}#{}", self.interface_path, self.wasi_func_name)
     }
 
-    /// The CM parameter names and every type's [`CmInterfaceRegistry::type_key`].
+    /// The CM parameter names and every type's [`CmInterfaceRegistry::type_key`],
+    /// a closure's as declared rather than as its key.
     fn signature_key(
         &self,
         registry: &CmInterfaceRegistry,
@@ -733,7 +734,12 @@ impl CmFunctionInfo {
         let params = self
             .params
             .iter()
-            .map(|(_, cm_name, ty)| (cm_name.as_str(), registry.type_key(ty)))
+            .enumerate()
+            .map(|(i, (_, cm_name, ty))| {
+                let declared = self.callbacks.iter().find(|(at, _)| *at == i);
+                let ty = declared.map_or(ty, |(_, closure)| closure);
+                (cm_name.as_str(), registry.type_key(ty))
+            })
             .collect();
         let ret = self.return_type.as_ref().map(|ty| registry.type_key(ty));
         (self.is_async, params, ret)
@@ -1891,6 +1897,10 @@ impl CmInterfaceRegistry {
                 format!("{}::{}:{}", g.namespace, g.name, keys(&g.args))
             }
             Type::Tuple(elems) => format!("[{}]", keys(elems)),
+            // The host sees a closure's arguments and result, never its effects.
+            Type::Function(f) => {
+                format!("fn({})->{}", keys(&f.params), self.type_key(&f.return_type))
+            }
             _ => format!("{ty:?}"),
         }
     }
@@ -3453,11 +3463,11 @@ impl CmInterfaceRegistry {
     }
 
     /// `params` at their GC-level value types, closures as `u32` keys, and the
-    /// indices of the closures.
+    /// closures by index.
     fn value_params(
         &self,
         params: Vec<(String, String, Type)>,
-    ) -> (Vec<(String, String, Type)>, Vec<usize>) {
+    ) -> (Vec<(String, String, Type)>, Vec<(usize, Type)>) {
         let mut callbacks = Vec::new();
         let params = params
             .into_iter()
@@ -3466,8 +3476,8 @@ impl CmInterfaceRegistry {
                 if !matches!(ty, Type::Function(_)) {
                     return (name, cm_name, self.value_type(&ty));
                 }
-                callbacks.push(i);
                 let key = NamedType::new(AstId::fresh(), "u32".to_string(), ty.span());
+                callbacks.push((i, ty));
                 (name, cm_name, Type::Named(key))
             })
             .collect();

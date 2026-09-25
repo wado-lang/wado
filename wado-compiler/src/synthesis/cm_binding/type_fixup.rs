@@ -784,7 +784,11 @@ impl CallRewriteWalker<'_> {
         param_offset: usize,
     ) {
         for (i, arg) in args.enumerate() {
-            if !func_info.callbacks.contains(&(i + param_offset)) {
+            if !func_info
+                .callbacks
+                .iter()
+                .any(|(at, _)| *at == i + param_offset)
+            {
                 continue;
             }
             // A diverging argument never reaches the call.
