@@ -12,7 +12,7 @@ use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -554,7 +554,7 @@ fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
             "array_get_ref_mut",
         ]
         .iter()
-        .any(|b| matches_builtin(&func.name, func.monomorph_info.as_ref(), b));
+        .any(|b| func.is_builtin_named(b));
     }
     let Some(declared) = func
         .method_info

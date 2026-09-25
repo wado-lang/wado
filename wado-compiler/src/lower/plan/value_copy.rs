@@ -28,9 +28,7 @@ use funcset::{FuncKeyMap, FuncKeySet};
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
 /// rewrites the marker into. The seed and the rewrite must name the same one.
 pub fn copy_value_type_arg(func: &tir::FunctionRef) -> Option<TypeId> {
-    if !func.module_source.is_core_builtin()
-        || !tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
-    {
+    if !func.is_builtin_named("copy_value") {
         return None;
     }
     let mono = func.monomorph_info.as_ref()?;
@@ -46,12 +44,9 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
-    if !func.module_source.is_core_builtin() {
-        return None;
-    }
     let is_clone = ["array_clone", "array_clone_prefix"]
         .into_iter()
-        .any(|name| tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), name));
+        .any(|name| func.is_builtin_named(name));
     if !is_clone {
         return None;
     }

@@ -5165,8 +5165,22 @@ impl FunctionRef {
         }
     }
 
+    /// Whether this is the `core:builtin` function `builtin`, plain or as a
+    /// monomorphized instance. A user function may share the name.
+    pub fn is_builtin_named(&self, builtin: &str) -> bool {
+        self.module_source.is_core_builtin()
+            && (self.name == builtin
+                || self
+                    .monomorph_info
+                    .as_ref()
+                    .is_some_and(|m| m.generic_name == builtin))
+    }
+
     /// Get the monomorphized builtin name if this is a monomorphized builtin function.
     pub fn monomorphized_builtin_name(&self) -> Option<String> {
+        if !self.module_source.is_core_builtin() {
+            return None;
+        }
         let generic_name = self
             .monomorph_info
             .as_ref()
@@ -6122,14 +6136,6 @@ pub struct MonomorphInfo {
     pub method_type_args: Vec<TypeId>,
     /// Whether this originates from a blanket impl (e.g., `impl<I: Iterator> IntoIterator for I`)
     pub is_blanket: bool,
-}
-
-/// Whether a function identifies as the core builtin `builtin`, matching both
-/// the plain generic form (`name`) and a monomorphized instance whose `name` is
-/// mangled but whose `monomorph_info.generic_name` is the base name. A name
-/// check that only compares `name` silently misses monomorphized builtins.
-pub fn matches_builtin(name: &str, monomorph_info: Option<&MonomorphInfo>, builtin: &str) -> bool {
-    name == builtin || monomorph_info.is_some_and(|m| m.generic_name == builtin)
 }
 
 /// The value a method call's receiver argument delivers, past the auto-`&` /

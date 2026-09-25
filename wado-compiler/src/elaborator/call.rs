@@ -2681,7 +2681,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `builtin::array_new(n)` infer their generic type parameters from
         // argument types or LHS annotations the same way ordinary generic
         // functions do.
-        if let Some(info) = self.tysys.builtin_registry.get(func_name) {
+        if callee.module().is_builtin()
+            && let Some(info) = self.tysys.builtin_registry.get(func_name)
+        {
             if info.type_params.is_empty() {
                 return vec![];
             }
