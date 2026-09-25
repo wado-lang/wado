@@ -221,14 +221,10 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     let mut resources: IndexMap<&str, WadoResource> = IndexMap::new();
     for (name, iface) in &merged {
         let path = lowering.interface_path(name);
-        let methods = lowering
-            .methods_of(name, &path, iface, &mut skipped)
-            .into_iter()
-            .map(|(function, member)| {
-                js.insert(function.cm_attr.clone(), member);
-                function
-            })
-            .collect();
+        let methods = split_js(
+            lowering.methods_of(name, &path, iface, &mut skipped),
+            &mut js,
+        );
         resources.insert(
             name,
             WadoResource {
@@ -245,14 +241,8 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     reject_overrides(&merged, &resources)?;
 
     let mut module = WadoModule::new(snapshot.package.clone(), snapshot.webref.clone());
-    if let Some(bindings) = lowering.global_effect(&merged, &resources)? {
-        let functions = bindings
-            .into_iter()
-            .map(|(function, member)| {
-                js.insert(function.cm_attr.clone(), member);
-                function
-            })
-            .collect();
+    if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
+        let functions = split_js(bindings, &mut js);
         module.interfaces.push(WadoInterface {
             name: to_upper_camel_case(&snapshot.package),
             doc_comment: Some(format!(
@@ -274,6 +264,20 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         interfaces,
         skipped,
     })
+}
+
+/// The functions of `bindings`, their JavaScript halves moved into `js`.
+fn split_js(
+    bindings: Vec<(WadoFunction, JsMember)>,
+    js: &mut IndexMap<String, JsMember>,
+) -> Vec<WadoFunction> {
+    bindings
+        .into_iter()
+        .map(|(function, member)| {
+            js.insert(function.cm_attr.clone(), member);
+            function
+        })
+        .collect()
 }
 
 /// Each interface's handle classes: its own, then its descendants' right after.
@@ -671,7 +675,7 @@ impl Lowering<'_> {
 
     /// The functions handing out the first handle: the `[Global]` interface, and
     /// each of its read-only attributes typed as another slice resource.
-    fn global_effect(
+    fn global_bindings(
         &self,
         merged: &IndexMap<&str, Merged<'_>>,
         resources: &IndexMap<&str, WadoResource>,

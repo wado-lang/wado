@@ -745,34 +745,19 @@ fn annotate_lib_export_sources(
     entry_module: Option<&ast::Module>,
     submodule_type_names: &hashmap::IndexSet<String>,
 ) {
-    use crate::ast::Item;
-
     let fq = world.fq_name.as_str();
     let mut local_type_names: hashmap::IndexSet<String> = entry_module
-        .map(|module| {
-            module
-                .items
-                .iter()
-                .filter_map(|item| match item {
-                    Item::Struct(d) => Some(d.name.clone()),
-                    Item::Enum(d) => Some(d.name.clone()),
-                    Item::Variant(d) => Some(d.name.clone()),
-                    Item::Flags(d) => Some(d.name.clone()),
-                    Item::Newtype(d) => Some(d.name.clone()),
-                    _ => None,
-                })
-                .collect()
-        })
+        .map(|module| module.items.iter().filter_map(lib_type_decl_name).collect())
         .unwrap_or_default();
     // Types defined in submodules but reached through the facade's exported
     // signatures are lib-local too (registered via `register_lib_local_items`).
     local_type_names.extend(submodule_type_names.iter().cloned());
     for export in &world.exports {
         for (_, ty) in &export.params {
-            annotate_lib_local_sources(registry, resolutions, ty, fq, &local_type_names);
+            annotate_lib_type_sources(registry, resolutions, ty, fq, &local_type_names);
         }
         if let Some(ty) = export.return_type.as_ref() {
-            annotate_lib_local_sources(registry, resolutions, ty, fq, &local_type_names);
+            annotate_lib_type_sources(registry, resolutions, ty, fq, &local_type_names);
         }
     }
 }
@@ -783,7 +768,7 @@ fn annotate_lib_export_sources(
 /// The registry's answer table is first-writer-wins, so an already-resolved
 /// reference — a shared `core:kiln/types` record — keeps its own interface,
 /// which the CM lift/lower needs to find its fields.
-fn annotate_lib_local_sources(
+fn annotate_lib_type_sources(
     registry: &component_model::CmInterfaceRegistry,
     resolutions: &resolve::Resolutions,
     ty: &ast::Type,
@@ -805,16 +790,16 @@ fn annotate_lib_local_sources(
         }
         Type::Generic(g) => {
             for arg in &g.args {
-                annotate_lib_local_sources(registry, resolutions, arg, fq, local_type_names);
+                annotate_lib_type_sources(registry, resolutions, arg, fq, local_type_names);
             }
         }
         Type::Tuple(elems) => {
             for elem in elems {
-                annotate_lib_local_sources(registry, resolutions, elem, fq, local_type_names);
+                annotate_lib_type_sources(registry, resolutions, elem, fq, local_type_names);
             }
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            annotate_lib_local_sources(registry, resolutions, inner, fq, local_type_names);
+            annotate_lib_type_sources(registry, resolutions, inner, fq, local_type_names);
         }
         _ => {}
     }
@@ -824,7 +809,7 @@ fn annotate_lib_local_sources(
 /// default-interface FQ, so a nested user type (e.g. `HeadingInfo` inside
 /// `RenderResult.headings: List<HeadingInfo>`) resolves against the same
 /// registration as the fields the CM lift/lower reads. Mirrors
-/// `annotate_lib_local_sources` for export signatures, but reaches inside the
+/// `annotate_lib_type_sources` for export signatures, but reaches inside the
 /// registered type's own fields.
 fn tag_lib_local_decl_fields(
     registry: &component_model::CmInterfaceRegistry,
@@ -837,24 +822,18 @@ fn tag_lib_local_decl_fields(
     match item {
         Item::Struct(d) => {
             for field in &d.fields {
-                annotate_lib_local_sources(registry, resolutions, &field.ty, fq, local_type_names);
+                annotate_lib_type_sources(registry, resolutions, &field.ty, fq, local_type_names);
             }
         }
         Item::Variant(d) => {
             for case in &d.cases {
                 if let Some(payload) = case.payload.as_ref() {
-                    annotate_lib_local_sources(
-                        registry,
-                        resolutions,
-                        payload,
-                        fq,
-                        local_type_names,
-                    );
+                    annotate_lib_type_sources(registry, resolutions, payload, fq, local_type_names);
                 }
             }
         }
         Item::Newtype(d) => {
-            annotate_lib_local_sources(registry, resolutions, &d.ty, fq, local_type_names);
+            annotate_lib_type_sources(registry, resolutions, &d.ty, fq, local_type_names);
         }
         _ => {}
     }
@@ -1460,7 +1439,7 @@ fn compile_after_load<H: CompilerHost>(
             // CM lift/lower resolves their fields instead of a same-named type
             // elsewhere (`wasi:http`'s `Response`) or an i32 handle.
             for (_, ty) in &export.params {
-                annotate_lib_local_sources(
+                annotate_lib_type_sources(
                     kiln_registry,
                     resolutions,
                     ty,
@@ -1469,7 +1448,7 @@ fn compile_after_load<H: CompilerHost>(
                 );
             }
             if let Some(ty) = export.return_type.as_ref() {
-                annotate_lib_local_sources(
+                annotate_lib_type_sources(
                     kiln_registry,
                     resolutions,
                     ty,
