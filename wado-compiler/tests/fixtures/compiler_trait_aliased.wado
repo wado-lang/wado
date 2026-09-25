@@ -1,0 +1,62 @@
+// A compiler trait imported under another name is the same trait: reflection's
+// static calls, pack bounds and associated-type inference, and the `From` and
+// derive markers all read the declaration, not the spelling.
+use { ReflectStruct as Shape, ReflectTemplate as Tmpl, From as Wrap, Eq as Same } from "core:prelude";
+use { println, Stdout } from "core:cli";
+
+struct P {
+    a: String,
+    b: i32,
+}
+
+impl Same for P;
+
+struct NetworkError {
+    code: i32,
+}
+
+variant ServiceError {
+    Network(NetworkError),
+    Other,
+}
+
+impl Wrap<NetworkError> for ServiceError;
+
+fn tail_of<T: Tmpl>(t: T) -> String {
+    return Tmpl::<T>::tail();
+}
+
+fn no_fields<T: Shape<FieldTypes = F>, F>(t: T) -> Option<F> {
+    return null;
+}
+
+fn names<S: Shape<FieldTypes = [..F]>, ..F>(s: &S) -> String {
+    let mut out = "";
+    for let f of Shape::<S>::members() {
+        out.push_str(f.name());
+    }
+    return out;
+}
+
+fn fetch() -> Result<i32, NetworkError> {
+    return Err(NetworkError { code: 7 });
+}
+
+fn serve() -> Result<i32, ServiceError> {
+    return Ok(fetch()?);
+}
+
+export fn run() with Stdout {
+    let x = 1;
+    println(tail_of`a ${x} end`);
+    let f = no_fields(P { a: "a", b: 1 });
+    println(`${f:?}`);
+    println(names(&P { a: "a", b: 1 }));
+    println(`${serve():?}`);
+    println(`${P { a: "a", b: 1 } == P { a: "a", b: 1 }}`);
+}
+
+__DATA__
+{
+    "stdout": " end\nOption::None\nab\nResult::Err(ServiceError::Network(NetworkError { code: 7 }))\ntrue\n"
+}

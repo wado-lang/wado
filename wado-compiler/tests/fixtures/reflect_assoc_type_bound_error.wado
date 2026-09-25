@@ -1,5 +1,8 @@
 // A reflect trait's associated types bind like any other trait's: a subject
-// whose holes or fields differ from what the bound writes does not satisfy it.
+// whose holes or fields differ from what the bound writes does not satisfy it,
+// whatever name the bound spells the trait by.
+use { ReflectStruct as Shape } from "core:prelude";
+
 struct P {
     a: String,
 }
@@ -16,15 +19,20 @@ fn int_fields<T: ReflectStruct<FieldTypes = [i32]>>(t: T) -> i32 {
     return 0;
 }
 
+fn aliased_fields<T: Shape<FieldTypes = [i32]>>(t: T) -> i32 {
+    return 0;
+}
+
 export fn run() {
     let x = 1;
     let _ = no_holes`plain`;
     let _ = no_holes`a ${x}`;
     let _ = unit_holes`plain`;
     let _ = int_fields(P { a: "a" });
+    let _ = aliased_fields(P { a: "a" });
 }
 
 __DATA__
 {
-    "compile_error": ":22:13: analysis error: type '`a ${i32}`' does not satisfy the associated type 'ReflectTemplate::Holes = []': it is '[i32]'; 23:13: type '`plain`' does not satisfy the associated type 'ReflectTemplate::Holes = ()': it is '[]'; 24:13: type 'P' does not satisfy the associated type 'ReflectStruct::FieldTypes = [i32]': it is '[String]'"
+    "compile_error": ":29:13: analysis error: type '`a ${i32}`' does not satisfy the associated type 'ReflectTemplate::Holes = []': it is '[i32]'; 30:13: type '`plain`' does not satisfy the associated type 'ReflectTemplate::Holes = ()': it is '[]'; 31:13: type 'P' does not satisfy the associated type 'ReflectStruct::FieldTypes = [i32]': it is '[String]'; 32:13: type 'P' does not satisfy the associated type 'Shape::FieldTypes = [i32]': it is '[String]'"
 }
