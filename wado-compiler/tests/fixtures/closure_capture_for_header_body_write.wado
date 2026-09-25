@@ -1,6 +1,10 @@
 // A binding a `for` header declares is one per iteration, so a body's write
 // lands on its own iteration's copy, whether or not it runs.
 
+fn called(fs: List<fn() -> i32>) -> List<i32> {
+    return fs.into_iter().map(|f| f()).collect();
+}
+
 export fn run() {
     let mut untaken: List<fn() -> i32> = [];
     for let mut i = 0; i < 2; i += 1 {
@@ -9,24 +13,21 @@ export fn run() {
         }
         untaken.push(|| i);
     }
-    assert untaken[0]() == 0;
-    assert untaken[1]() == 1;
+    assert called(untaken) == [0, 1];
 
     let mut before: List<fn() -> i32> = [];
     for let mut i = 0; i < 20; i += 1 {
         i += 10;
         before.push(|| i);
     }
-    assert before[0]() == 10;
-    assert before[1]() == 21;
+    assert called(before) == [10, 21];
 
     let mut after: List<fn() -> i32> = [];
     for let mut i = 0; i < 20; i += 1 {
         after.push(|| i);
         i += 10;
     }
-    assert after[0]() == 10;
-    assert after[1]() == 21;
+    assert called(after) == [10, 21];
 
     let mut skipped: List<fn() -> i32> = [];
     for let mut i = 0; i < 4; i += 1 {
@@ -36,8 +37,7 @@ export fn run() {
             continue;
         }
     }
-    assert skipped[0]() == 1;
-    assert skipped[1]() == 3;
+    assert called(skipped) == [1, 3];
 
     let mut chained: List<fn() -> i32> = [];
     let items: List<i32> = [1, 2];
@@ -46,8 +46,7 @@ export fn run() {
         chained.push(|| x);
         x *= 10;
     }
-    assert chained[0]() == 10;
-    assert chained[1]() == 20;
+    assert called(chained) == [10, 20];
 }
 
 __DATA__
