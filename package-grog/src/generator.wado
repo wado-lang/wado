@@ -13,7 +13,7 @@ export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
             return Result::Err(Error::InvalidSchema(`grog: '${path}' is not UTF-8: ${e}`));
         },
     };
-    let runtime = runtime_of(&req.module).map_err(|e| at(&path, e))?;
+    let runtime = runtime_of(&req.module)?;
     let file = read(&source).map_err(|e| at(&path, EmitError::Invalid(e)))?;
     let generated = emit(&file, runtime).map_err(|e| at(&path, e))?;
     let files: List<OutputFile> = [
@@ -28,11 +28,11 @@ export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
 
 /// The package spec the generated code imports the runtime from: the one Grog
 /// was invoked under, since the consumer's `[dependencies]` names it the same.
-fn runtime_of(module: &String) -> Result<String, EmitError> {
+fn runtime_of(module: &String) -> Result<String, Error> {
     let view = module.as_str_slice();
     let Some(colon) = view.find(":") else {
-        return Result::Err(EmitError::Unsupported(
-            ` Grog was named by the path ${module}; name it by the package spec its runtime is a dependency under`,
+        return Result::Err(Error::Unsupported(
+            `grog: invoked by the path ${module}; name it by the package spec its runtime is a dependency under`,
         ));
     };
     let rest = view.slice(colon + 1, view.len());

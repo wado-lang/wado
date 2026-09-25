@@ -239,24 +239,25 @@ impl Reader {
         unreachable();
     }
 
+    fn field_options(&self, node: i32) -> List<i32> {
+        let options = self.s.find_child(node, protobuf::RK_FIELD_OPTIONS);
+        if options < 0 {
+            return [];
+        }
+        return self.nodes_of(options, protobuf::RK_FIELD_OPTION);
+    }
+
     fn field_features(&self, node: i32) -> Features {
         let mut features = Features {};
-        let options = self.s.find_child(node, protobuf::RK_FIELD_OPTIONS);
-        if options >= 0 {
-            for let option of self.nodes_of(options, protobuf::RK_FIELD_OPTION) {
-                self.read_feature(&mut features, option);
-            }
+        for let option of self.field_options(node) {
+            self.read_feature(&mut features, option);
         }
         return features;
     }
 
     /// The `packed` option a field writes, if any.
     fn packed_option(&self, node: i32) -> Option<bool> {
-        let options = self.s.find_child(node, protobuf::RK_FIELD_OPTIONS);
-        if options < 0 {
-            return null;
-        }
-        for let option of self.nodes_of(options, protobuf::RK_FIELD_OPTION) {
+        for let option of self.field_options(node) {
             if self.text(self.child(option, protobuf::RK_OPTION_NAME)) == "packed" {
                 return Option::Some(self.text(self.child(option, protobuf::RK_CONSTANT)) == "true");
             }

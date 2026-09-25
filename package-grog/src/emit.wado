@@ -39,8 +39,6 @@ pub fn emit(file: &ProtoFile, runtime: String) -> Result<String, EmitError> {
         features: TreeMap::new(),
         uses_map: false,
     };
-    e.taken[RUNTIME] = "the runtime";
-    e.taken["TreeMap"] = "core:collections";
     for let decl of &file.messages {
         e.features[decl.path.join(".")] = decl.features;
     }
@@ -210,6 +208,24 @@ struct MessagePlan {
 }
 
 impl MessagePlan {
+    /// One runtime call per field, each prefixed by `call`: the size or the write pass.
+    fn calls(&self, w: &mut CodeWriter, call: String) {
+        for let slot of &self.slots {
+            match slot {
+                Field([field, a]) => w.line(`${call}${a.put}${a.types}(${a.number}, &self.${field});`),
+                Oneof([field, sum, members]) => {
+                    w.begin(`if let Some(c) = &self.${field}`);
+                    w.begin("match c");
+                    for let m of members {
+                        w.line(`${sum}::${m.case}(v) => ${call}${m.put}${m.types}(${m.number}, v),`);
+                    }
+                    w.end();
+                    w.end();
+                },
+            }
+        }
+    }
+
     fn write(&self, w: &mut CodeWriter) {
         self.spec.emit(w);
         for let v of &self.oneofs {
@@ -221,42 +237,12 @@ impl MessagePlan {
         w.begin(`impl ${RUNTIME}::Message for ${name}`);
         w.begin(`fn size(&self, s: &mut ${RUNTIME}::Sizer) -> i32`);
         w.line(`let mut n = self.${UNKNOWN_FIELDS}.len();`);
-        for let slot of &self.slots {
-            match slot {
-                Field([field, a]) => {
-                    w.line(`n += s.${a.put}${a.types}(${a.number}, &self.${field});`);
-                },
-                Oneof([field, sum, members]) => {
-                    w.begin(`if let Some(c) = &self.${field}`);
-                    w.begin("n += match c");
-                    for let m of members {
-                        w.line(`${sum}::${m.case}(v) => s.${m.put}${m.types}(${m.number}, v),`);
-                    }
-                    w.end_with(";");
-                    w.end();
-                },
-            }
-        }
+        self.calls(w, "n += s.");
         w.line("return n;");
         w.end();
         w.blank();
         w.begin(`fn write(&self, w: &mut ${RUNTIME}::Writer)`);
-        for let slot of &self.slots {
-            match slot {
-                Field([field, a]) => {
-                    w.line(`w.${a.put}${a.types}(${a.number}, &self.${field});`);
-                },
-                Oneof([field, sum, members]) => {
-                    w.begin(`if let Some(c) = &self.${field}`);
-                    w.begin("match c");
-                    for let m of members {
-                        w.line(`${sum}::${m.case}(v) => w.${m.put}${m.types}(${m.number}, v),`);
-                    }
-                    w.end();
-                    w.end();
-                },
-            }
-        }
+        self.calls(w, "w.");
         w.line(`w.raw(&self.${UNKNOWN_FIELDS});`);
         w.end();
         w.blank();
@@ -361,10 +347,11 @@ impl Emitter {
 
     /// The top-level Wado name for a nested declaration, joined from its path.
     fn claim(&mut self, path: &List<String>, line: i32) -> Result<String, EmitError> {
-        return self.take(type_name_of(path.join("")), path.join("."), line);
+        return self.take(path.join(""), path.join("."), line);
     }
 
     fn take(&mut self, name: String, owner: String, line: i32) -> Result<String, EmitError> {
+        let name = type_name_of(name);
         if let Some(other) = self.taken.get_str(&name) {
             return Result::Err(EmitError::Invalid(
                 `${line}: '${owner}' and '${other}' are both named ${name} once flattened`,
@@ -452,18 +439,16 @@ impl Emitter {
                     Some(at) => at,
                     None => {
                         field_names.push(field_name(oneof, &field_names, decl, field)?);
-                        let sum = type_name_of(`${name}${pascal(oneof)}`);
-                        let sum = self.take(sum, `${decl.path.join(".")}.${oneof}`, field.line)?;
+                        let sum = self.take(`${name}${pascal(oneof)}`, `${decl.path.join(".")}.${oneof}`, field.line)?;
                         let mut out = FieldSpec::new_pub(&wado_name, &`Option<${sum}>`);
                         out.default = Option::Some("null");
                         spec.add_field_spec(out);
                         oneofs.push([wado_name, sum, []]);
-                        oneofs.len() - 1
+                        oneofs.len() - 1;
                     },
                 };
-                let mut entry = oneofs[at];
-                entry.2.push(self.plan_member(decl, field, &entry.2)?);
-                oneofs[at] = entry;
+                let member = self.plan_member(decl, field, &oneofs[at].2)?;
+                oneofs[at].2.push(member);
                 continue;
             }
             let wado_name = field_name(&field.name, &field_names, decl, field)?;
@@ -537,9 +522,6 @@ impl Emitter {
         if !is_map_key(key) {
             return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map key cannot be ${key}`));
         }
-        if value matches { Map(_) } {
-            return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map's value cannot be a map`));
-        }
         self.uses_map = true;
         let [key_wado, key_runtime, _] = scalar(key);
         let [wado, put, types] = match self.resolve_type(decl, field, value)? {
@@ -607,18 +589,16 @@ impl Emitter {
     /// Protobuf's scoping: a relative name is looked up in the innermost
     /// enclosing scope first, out to the root; a leading `.` starts at the root.
     fn resolve(&self, name: &String, decl: &MessageDecl) -> Option<Named> {
-        if name.starts_with(".") {
-            return self.names.get_str(name.as_str_slice().slice(1, name.len()));
+        if let Some(rooted) = name.as_str_slice().strip_prefix(".") {
+            return self.names.get_str(rooted);
         }
         let mut scope: List<String> = [];
         if !self.file.package.is_empty() {
-            for let part of self.file.package.split(".") {
-                scope.push(part.to_string());
-            }
+            scope = self.file.package.split(".").collect();
         }
         scope.extend(&decl.path);
         for let mut depth = scope.len(); depth >= 0; depth -= 1 {
-            let prefix = scope.as_slice().slice(0, depth).to_list().join(".");
+            let prefix = joined_prefix(&scope, depth);
             let candidate = if prefix.is_empty() { *name } else { `${prefix}.${name}` };
             if let Some(found) = self.names.get_str(&candidate) {
                 return Option::Some(found);
@@ -671,7 +651,7 @@ impl Emitter {
             return Option::Some(v);
         }
         for let mut depth = path.len() - 1; depth > 0; depth -= 1 {
-            let key = path.as_slice().slice(0, depth).to_list().join(".");
+            let key = joined_prefix(path, depth);
             if let Some(f) = self.features.get_str(&key) {
                 if let Some(v) = pick(&f) {
                     return Option::Some(v);
@@ -680,6 +660,11 @@ impl Emitter {
         }
         return pick(&self.file.features);
     }
+}
+
+/// The first `depth` parts of a dotted path, joined.
+fn joined_prefix(path: &List<String>, depth: i32) -> String {
+    return path.as_slice().slice(0, depth).to_list().join(".");
 }
 
 fn access(number: i32, put: String, take: Take, types: String) -> Access {
@@ -754,10 +739,9 @@ fn is_map_key(name: &String) -> bool {
 /// An enum value's case name: its enum's prefix dropped, the rest PascalCased.
 fn case_name(value: &String, prefix: &String) -> String {
     let mut rest = *value;
-    if !prefix.is_empty() && value.starts_with(prefix) && value.len() > prefix.len() {
-        let tail = value.as_str_slice().slice(prefix.len(), value.len()).to_string();
-        if !tail.chars().next().unwrap().is_ascii_digit() {
-            rest = tail;
+    if let Some(tail) = value.as_str_slice().strip_prefix(prefix) {
+        if tail.chars().next() matches { Some(c) && !c.is_ascii_digit() } {
+            rest = tail.to_string();
         }
     }
     let mut name = pascal(&rest);
@@ -776,10 +760,9 @@ fn pascal(name: &String) -> String {
     let mut out = "";
     let mut previous = ' ';
     for let part of name.split("_") {
-        let text = part.to_string();
-        let mixed = text.chars().any(|c| c.is_ascii_lowercase()) && text.chars().any(|c| c.is_ascii_uppercase());
+        let mixed = part.chars().any(|c| c.is_ascii_lowercase()) && part.chars().any(|c| c.is_ascii_uppercase());
         let mut first = true;
-        for let c of text.chars() {
+        for let c of part.chars() {
             // `2017_11_3` keeps its separators, or it would read as `2017_1_13`.
             if first && previous.is_ascii_digit() && c.is_ascii_digit() {
                 out.push('_');

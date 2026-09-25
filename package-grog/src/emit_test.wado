@@ -204,10 +204,10 @@ impl grog::Message for Point {
         n += s.packed::<grog::Fixed32>(3, &self.tags);
         n += s.optional_message(5, &self.next);
         if let Some(c) = &self.choice {
-            n += match c {
-                PointChoice::Label(v) => s.scalar::<grog::Str>(7, v),
-                PointChoice::Other(v) => s.message(8, v),
-            };
+            match c {
+                PointChoice::Label(v) => n += s.scalar::<grog::Str>(7, v),
+                PointChoice::Other(v) => n += s.message(8, v),
+            }
         }
         return n;
     }

@@ -181,9 +181,14 @@ fn tag_len(number: i32) -> i32 {
     return varint_len(number as u64 << 3);
 }
 
+/// A `payload`-byte body behind its length prefix.
+fn prefixed_len(payload: i32) -> i32 {
+    return varint_len(payload as u64) + payload;
+}
+
 /// A length-prefixed record of a `payload`-byte body, tag included.
 fn delimited_len(number: i32, payload: i32) -> i32 {
-    return tag_len(number) + varint_len(payload as u64) + payload;
+    return tag_len(number) + prefixed_len(payload);
 }
 
 /// A scalar map entry's body: the key numbered 1 and the value 2, both written.
@@ -206,6 +211,11 @@ pub struct Sizer {
 }
 
 impl Sizer {
+    fn reserve(&mut self) -> i32 {
+        self.sizes.push(0);
+        return self.sizes.len() - 1;
+    }
+
     pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i32 {
         return tag_len(number) + T::len(v);
     }
@@ -225,11 +235,7 @@ impl Sizer {
     }
 
     pub fn repeated<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
-        let mut n = 0;
-        for let v of values {
-            n += self.scalar::<T>(number, v);
-        }
-        return n;
+        return values.len() * tag_len(number) + packed_len::<T>(values);
     }
 
     pub fn packed<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
@@ -240,8 +246,7 @@ impl Sizer {
     }
 
     pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i32 {
-        let slot = self.sizes.len();
-        self.sizes.push(0);
+        let slot = self.reserve();
         let n = m.size(self);
         self.sizes[slot] = n;
         return delimited_len(number, n);
@@ -298,8 +303,7 @@ impl Sizer {
     pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) -> i32 {
         let mut n = 0;
         for let [k, v] of map.entries() {
-            let slot = self.sizes.len();
-            self.sizes.push(0);
+            let slot = self.reserve();
             let entry = self.scalar::<KS>(1, k) + self.message(2, v);
             self.sizes[slot] = entry;
             n += delimited_len(number, entry);
@@ -346,6 +350,11 @@ impl Writer {
         self.varint(number as u64 << 3 | bits_of(wire_type));
     }
 
+    fn len_header(&mut self, number: i32, n: i32) {
+        self.tag(number, WireType::Len);
+        self.varint(n as u64);
+    }
+
     fn take_size(&mut self) -> i32 {
         let n = self.sizes[self.next];
         self.next += 1;
@@ -379,17 +388,14 @@ impl Writer {
         if values.is_empty() {
             return;
         }
-        self.tag(number, WireType::Len);
-        self.varint(packed_len::<T>(values) as u64);
+        self.len_header(number, packed_len::<T>(values));
         for let v of values {
             T::put(self, v);
         }
     }
 
     pub fn message<M: Message>(&mut self, number: i32, m: &M) {
-        self.tag(number, WireType::Len);
-        let n = self.take_size();
-        self.varint(n as u64);
+        self.len_header(number, self.take_size());
         m.write(self);
     }
 
@@ -425,8 +431,7 @@ impl Writer {
 
     pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(&mut self, number: i32, map: &TreeMap<K, V>) {
         for let [k, v] of map.entries() {
-            self.tag(number, WireType::Len);
-            self.varint(entry_len::<KS, VS>(k, v) as u64);
+            self.len_header(number, entry_len::<KS, VS>(k, v));
             self.scalar::<KS>(1, k);
             self.scalar::<VS>(2, v);
         }
@@ -434,9 +439,7 @@ impl Writer {
 
     pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) {
         for let [k, v] of map.entries() {
-            self.tag(number, WireType::Len);
-            let n = self.take_size();
-            self.varint(n as u64);
+            self.len_header(number, self.take_size());
             self.scalar::<KS>(1, k);
             self.message(2, v);
         }
@@ -623,9 +626,7 @@ impl Reader {
     pub fn repeated<T: Scalar>(&mut self, list: &mut List<T::Value>) -> Result<bool, DecodeError> {
         let element = T::wire_type();
         if self.wire_type == WireType::Len && element != WireType::Len {
-            let n = self.length()?;
-            let outer = self.end;
-            self.end = self.pos + n;
+            let outer = self.narrow()?;
             while self.pos < self.end {
                 let start = self.pos;
                 match T::take(self)? {
@@ -718,11 +719,17 @@ impl Reader {
         return Result::Ok(true);
     }
 
-    /// Enter a length-prefixed message, returning the end of the one it sits in.
-    fn open(&mut self) -> Result<i32, DecodeError> {
+    /// Bound reading to a length-prefixed record, returning the end it sits in.
+    fn narrow(&mut self) -> Result<i32, DecodeError> {
         let n = self.length()?;
         let outer = self.end;
         self.end = self.pos + n;
+        return Result::Ok(outer);
+    }
+
+    /// Enter a length-prefixed message, returning the end of the one it sits in.
+    fn open(&mut self) -> Result<i32, DecodeError> {
+        let outer = self.narrow()?;
         self.enter()?;
         return Result::Ok(outer);
     }
@@ -1183,7 +1190,7 @@ impl Scalar for Str {
     }
 
     fn len(v: &String) -> i32 {
-        return varint_len(v.len() as u64) + v.len();
+        return prefixed_len(v.len());
     }
 
     fn put(w: &mut Writer, v: &String) {
@@ -1214,7 +1221,7 @@ impl Scalar for Bytes {
     }
 
     fn len(v: &ByteList) -> i32 {
-        return varint_len(v.len() as u64) + v.len();
+        return prefixed_len(v.len());
     }
 
     fn put(w: &mut Writer, v: &ByteList) {
@@ -1246,11 +1253,11 @@ impl<E: Enumeration> Scalar for Enum<E> {
     }
 
     fn len(v: &E) -> i32 {
-        return varint_len(v.number() as i64 as u64);
+        return Int32::len(&v.number());
     }
 
     fn put(w: &mut Writer, v: &E) {
-        w.varint(v.number() as i64 as u64);
+        Int32::put(w, &v.number());
     }
 
     fn take(r: &mut Reader) -> Result<Option<E>, DecodeError> {
