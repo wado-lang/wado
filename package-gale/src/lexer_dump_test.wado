@@ -25,27 +25,6 @@ fn lexer_dump<S: AsStrSlice>(input: S) -> String {
     return render_lexer_dump(&merged);
 }
 
-fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len > h_len {
-        return false;
-    }
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            return true;
-        }
-    }
-    return false;
-}
-
 fn str_count<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let h_len = haystack.len();
     let n_len = needle.len();
@@ -73,10 +52,10 @@ test "lexer dump names the grammar and summarizes strategies" {
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "grammar T (lexer)"), report;
-    assert str_contains(&report, "rule ID — matcher try_ID"), report;
-    assert str_contains(&report, "strategies:"), report;
-    assert str_contains(&report, "routes: matcher 1"), report;
+    assert report.contains("grammar T (lexer)"), report;
+    assert report.contains("rule ID — matcher try_ID"), report;
+    assert report.contains("strategies:"), report;
+    assert report.contains("routes: matcher 1"), report;
 }
 
 test "lexer dump reports a tail alternation as maximal munch" {
@@ -86,8 +65,8 @@ test "lexer dump reports a tail alternation as maximal munch" {
 r : INT ;
 INT : '0' | [0-9] [0-9]* ;");
 
-    assert str_contains(&report, "maximal munch"), report;
-    assert str_contains(&report, "maximal munch 1"), report;
+    assert report.contains("maximal munch"), report;
+    assert report.contains("maximal munch 1"), report;
 }
 
 test "lexer dump reports a tail alternation of disjoint arms as first-match" {
@@ -96,11 +75,10 @@ test "lexer dump reports a tail alternation of disjoint arms as first-match" {
 r : INT ;
 INT : '0' | [1-9] [0-9]* ;");
 
-    assert str_contains(
-        &report,
+    assert report.contains(
         "alternation ('0' | [1-9] [0-9]*) — first-match: no two arms can match at the same position",
     ), report;
-    assert str_contains(&report, "maximal munch 0"), report;
+    assert report.contains("maximal munch 0"), report;
 }
 
 test "lexer dump reads a fragment's first chars when telling arms apart" {
@@ -109,8 +87,8 @@ r : NUM ;
 fragment D : [0-9] ;
 NUM : D+ ('.' D*)? | '.' D+ ;");
 
-    assert str_contains(&report, "— first-match: no two arms can match at the same position"), report;
-    assert str_contains(&report, "maximal munch 0"), report;
+    assert report.contains("— first-match: no two arms can match at the same position"), report;
+    assert report.contains("maximal munch 0"), report;
 }
 
 test "lexer dump reports equal-length arms as first-match" {
@@ -120,7 +98,7 @@ test "lexer dump reports equal-length arms as first-match" {
 r : AB ;
 AB : 'a' | 'b' ;");
 
-    assert str_contains(&report, "first-match: every arm consumes the same fixed length"), report;
+    assert report.contains("first-match: every arm consumes the same fixed length"), report;
 }
 
 test "lexer dump reports a called rule's alternation as not-tail" {
@@ -131,7 +109,7 @@ r : A ;
 A : B 'z' ;
 B : 'a' | 'ab' ;");
 
-    assert str_contains(&report, "first-match: not in tail position"), report;
+    assert report.contains("first-match: not in tail position"), report;
 }
 
 test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
@@ -141,8 +119,8 @@ test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert str_contains(&report, "repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
-    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports a lookahead-aware greedy repeat" {
@@ -153,8 +131,8 @@ test "lexer dump reports a lookahead-aware greedy repeat" {
 r : S ;
 S : 'a' .+ 'c' ;");
 
-    assert str_contains(&report, "lookahead-aware: the inner can eat a char the suffix needs"), report;
-    assert str_contains(&report, "lookahead-aware 1"), report;
+    assert report.contains("lookahead-aware: the inner can eat a char the suffix needs"), report;
+    assert report.contains("lookahead-aware 1"), report;
 }
 
 test "lexer dump reports a non-greedy repeat" {
@@ -162,8 +140,8 @@ test "lexer dump reports a non-greedy repeat" {
 r : CMT ;
 CMT : '/*' .*? '*/' ;");
 
-    assert str_contains(&report, "non-greedy: min-match loop"), report;
-    assert str_contains(&report, "non-greedy repeat: 1"), report;
+    assert report.contains("non-greedy: min-match loop"), report;
+    assert report.contains("non-greedy repeat: 1"), report;
 }
 
 test "lexer dump reports arm scoring for an alternation with a suffix" {
@@ -173,8 +151,8 @@ test "lexer dump reports arm scoring for an alternation with a suffix" {
 r : I ;
 I : ('a' | 'ab') 'bc' ;");
 
-    assert str_contains(&report, "alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
-    assert str_contains(&report, "arm scoring 1"), report;
+    assert report.contains("alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
+    assert report.contains("arm scoring 1"), report;
 }
 
 test "lexer dump reports a scored alternation's suffix once" {
@@ -187,7 +165,7 @@ r : I ;
 I : ('a' | 'ab') [0-9]* 'z' ;");
 
     assert str_count(&report, "repeat [0-9]* then 'z'") == 1, report;
-    assert str_contains(&report, "greedy repeat: plain 1"), report;
+    assert report.contains("greedy repeat: plain 1"), report;
 }
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
@@ -199,8 +177,8 @@ test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
 r : S ;
 S : 'a' .*? .* {true}? 'x' ;");
 
-    assert str_contains(&report, "repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
-    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
+    assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {
@@ -210,7 +188,7 @@ test "lexer dump reports disjoint arms with a suffix as first-match" {
 r : I ;
 I : ('a' | 'bcd') 'z' ;");
 
-    assert str_contains(&report, "first-match: no two arms can match at the same position"), report;
+    assert report.contains("first-match: no two arms can match at the same position"), report;
 }
 
 test "lexer dump reports the keyword classifier and its carrier" {
@@ -221,8 +199,8 @@ r : IF ID ;
 IF : [iI] [fF] ;
 ID : [a-zA-Z]+ ;");
 
-    assert str_contains(&report, "rule IF — keyword classifier (carrier ID)"), report;
-    assert str_contains(&report, "keyword classifier 1"), report;
+    assert report.contains("rule IF — keyword classifier (carrier ID)"), report;
+    assert report.contains("keyword classifier 1"), report;
 }
 
 test "lexer dump keeps a keyword its carrier cannot match in every case on its own matcher" {
@@ -231,7 +209,7 @@ r : IF ID ;
 IF : [iI] [fF] ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule IF — matcher try_IF"), report;
+    assert report.contains("rule IF — matcher try_IF"), report;
 }
 
 test "lexer dump reports a multi-char literal as a keyword" {
@@ -240,7 +218,7 @@ r : AS ID ;
 AS : 'as' ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule AS — keyword classifier (carrier ID)"), report;
+    assert report.contains("rule AS — keyword classifier (carrier ID)"), report;
 }
 
 test "lexer dump reports a rule the shared literal matcher covers" {
@@ -249,7 +227,7 @@ test "lexer dump reports a rule the shared literal matcher covers" {
 r : 'xy' X ;
 X : 'x' 'y' ;");
 
-    assert str_contains(&report, "shared literal matcher (TK_LIT_xy)"), report;
+    assert report.contains("shared literal matcher (TK_LIT_xy)"), report;
 }
 
 test "lexer dump reports a rule the parser also writes inline keeping its matcher" {
@@ -257,8 +235,8 @@ test "lexer dump reports a rule the parser also writes inline keeping its matche
 r : 'x' X ;
 X : 'x' ;");
 
-    assert str_contains(&report, "rule X"), report;
-    assert !str_contains(&report, "shared literal matcher"), report;
+    assert report.contains("rule X"), report;
+    assert !report.contains("shared literal matcher"), report;
 }
 
 test "lexer dump reports an alternation of single chars as one set" {
@@ -267,9 +245,9 @@ r : A ;
 fragment D : [0-9] ;
 A : ('_' | D) 'z' (D | 'x')* ;");
 
-    assert str_contains(&report, "set ('_' | D) — one class test of 2 ranges"), report;
-    assert str_contains(&report, "set (D | 'x') — one class test of 2 ranges"), report;
-    assert str_contains(&report, "char set 2"), report;
+    assert report.contains("set ('_' | D) — one class test of 2 ranges"), report;
+    assert report.contains("set (D | 'x') — one class test of 2 ranges"), report;
+    assert report.contains("char set 2"), report;
 }
 
 test "lexer dump reports a rule made of earlier rules as subsumed" {
@@ -281,8 +259,8 @@ A : 'a' [0-9]* ;
 B : 'b' ;
 EITHER : (A | B) -> channel(HIDDEN) ;");
 
-    assert str_contains(&report, "rule EITHER — subsumed by A, B: never the longest match"), report;
-    assert str_contains(&report, "subsumed 1"), report;
+    assert report.contains("rule EITHER — subsumed by A, B: never the longest match"), report;
+    assert report.contains("subsumed 1"), report;
 }
 
 test "lexer dump reports a rule an earlier rule offers whole as subsumed" {
@@ -293,12 +271,11 @@ DEC : [0-9]+ ;
 HEX : '0x' [0-9a-f]+ ;
 USE : NUM ;");
 
-    assert str_contains(
-        &report,
+    assert report.contains(
         "rule DEC — subsumed by NUM: never the longest match + matcher try_DEC (another rule calls it)",
     ), report;
-    assert str_contains(&report, "rule HEX — subsumed by NUM"), report;
-    assert str_contains(&report, "rule USE — subsumed by NUM"), report;
+    assert report.contains("rule HEX — subsumed by NUM"), report;
+    assert report.contains("rule USE — subsumed by NUM"), report;
 }
 
 test "lexer dump keeps a rule an earlier rule offers only with a suffix" {
@@ -309,7 +286,7 @@ NUM : (DEC | HEX) 'u' ;
 DEC : [0-9]+ ;
 HEX : '0x' [0-9a-f]+ ;");
 
-    assert str_contains(&report, "rule DEC — matcher try_DEC"), report;
+    assert report.contains("rule DEC — matcher try_DEC"), report;
 }
 
 test "lexer dump keeps a rule whose subsumer carries a predicate" {
@@ -318,7 +295,7 @@ r : NUM ;
 NUM : {true}? DEC ;
 DEC : [0-9]+ ;");
 
-    assert str_contains(&report, "rule DEC — matcher try_DEC"), report;
+    assert report.contains("rule DEC — matcher try_DEC"), report;
 }
 
 test "lexer dump keeps a rule made of later rules" {
@@ -328,7 +305,7 @@ EITHER : A | B ;
 A : 'a' ;
 B : 'b' ;");
 
-    assert str_contains(&report, "rule EITHER — matcher try_EITHER"), report;
+    assert report.contains("rule EITHER — matcher try_EITHER"), report;
 }
 
 test "lexer dump separates inlined from recursive fragments" {
@@ -341,9 +318,9 @@ fragment NEST : '(' NEST* ')' ;
 fragment D : [0-9] ;
 NUM : D+ ;");
 
-    assert str_contains(&report, "rule NEST — recursive fragment: matcher try_NEST"), report;
-    assert str_contains(&report, "rule D — fragment: inlined at each use site"), report;
-    assert str_contains(&report, "recursive fragment 1"), report;
+    assert report.contains("rule NEST — recursive fragment: matcher try_NEST"), report;
+    assert report.contains("rule D — fragment: inlined at each use site"), report;
+    assert report.contains("recursive fragment 1"), report;
 }
 
 test "lexer dump reports a tokens-block entry as a virtual token" {
@@ -352,8 +329,8 @@ tokens { VT }
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule VT — virtual token: no text to match"), report;
-    assert str_contains(&report, "virtual 1"), report;
+    assert report.contains("rule VT — virtual token: no text to match"), report;
+    assert report.contains("virtual 1"), report;
 }
 
 test "lexer dump reports an ATN-class rule as routed to latn_match" {
@@ -363,8 +340,8 @@ test "lexer dump reports an ATN-class rule as routed to latn_match" {
 r : CMT ;
 CMT : '/*' (CMT | .)+? '*/' ;");
 
-    assert str_contains(&report, "rule CMT — ATN-class: latn_match (latn rule 0)"), report;
-    assert str_contains(&report, "ATN-class 1"), report;
+    assert report.contains("rule CMT — ATN-class: latn_match (latn rule 0)"), report;
+    assert report.contains("ATN-class 1"), report;
 }
 
 test "lexer dump scores a predicate-carrying alternation by length" {
@@ -376,8 +353,8 @@ test "lexer dump scores a predicate-carrying alternation by length" {
 r : I ;
 I : ('a' | {true}? 'ab') 'bc' ;");
 
-    assert !str_contains(&report, "an arm carries a semantic predicate"), report;
-    assert str_contains(&report, "arm scoring"), report;
+    assert !report.contains("an arm carries a semantic predicate"), report;
+    assert report.contains("arm scoring"), report;
 }
 
 test "lexer dump names a rule's constructs with its own element text" {
@@ -385,6 +362,6 @@ test "lexer dump names a rule's constructs with its own element text" {
 r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
-    assert str_contains(&report, "repeat [ \\t\\r\\n]+"), report;
-    assert str_contains(&report, "plain loop: nothing follows the repeat"), report;
+    assert report.contains("repeat [ \\t\\r\\n]+"), report;
+    assert report.contains("plain loop: nothing follows the repeat"), report;
 }
