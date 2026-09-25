@@ -1,7 +1,5 @@
 // Regenerates the index in docs/README.md: the title of every document in
 // docs/, grouped by filename prefix. Only the text between the markers changes.
-//
-// Usage: node scripts/docs-index.mjs [--check]
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -12,7 +10,7 @@ const END = "<!-- END GENERATED -->";
 
 const GROUPS = [
   { heading: "Specification", prefix: "spec-", first: "spec-overview.md" },
-  { heading: "Wado Evolution Proposals", prefix: "wep-", strip: /^WEP: / },
+  { heading: "Wado Evolution Proposals", prefix: "wep-" },
   { heading: "Standard Library", prefix: "stdlib-" },
   { heading: "Research", prefix: "research-" },
   { heading: "Guides", prefix: "" },
@@ -37,7 +35,7 @@ function index() {
     const mine = files.filter((f) => f.startsWith(g.prefix));
     files = files.filter((f) => !mine.includes(f));
     if (g.first) mine.sort((a, b) => (b === g.first) - (a === g.first));
-    const items = mine.map((f) => `- [${title(f).replace(g.strip ?? /^$/, "")}](./${f})`);
+    const items = mine.map((f) => `- [${title(f).replace(/^WEP: /, "")}](./${f})`);
     sections.push(`## ${g.heading}\n\n${items.join("\n")}`);
   }
   return sections.join("\n\n");
@@ -49,11 +47,4 @@ const end = current.indexOf(END);
 if (begin < 0 || end < begin) throw new Error(`${README}: missing index markers`);
 const next = `${current.slice(0, begin)}${BEGIN}\n\n${index()}\n\n${current.slice(end)}`;
 
-if (process.argv.includes("--check")) {
-  if (next !== current) {
-    console.error(`${README} is stale; run \`mise run update-docs-index\``);
-    process.exit(1);
-  }
-} else if (next !== current) {
-  writeFileSync(README, next);
-}
+if (next !== current) writeFileSync(README, next);

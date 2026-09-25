@@ -13,10 +13,10 @@ This is the documentation directory of Wado.
 
 ## Specification
 
-The specification is `docs/spec-*.md`, one file per area of the language, and
-it is normative: `spec-overview.md` says what that means. A rule is stated in
-exactly one place. The specification says what the rule is; how it came to be
-belongs to the WEP that proposed it.
+The specification is `docs/spec-*.md`, one file per area of the language. It is
+normative, and `spec-overview.md` says what that means. Each rule is stated in
+exactly one place. The specification says what a rule is. How the rule came to
+be belongs to the WEP that proposed it.
 
 A change that settles a rule writes it into the specification in the same
 change. A file stays readable in one sitting; an area that outgrows that splits

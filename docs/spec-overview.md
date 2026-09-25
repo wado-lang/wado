@@ -4,9 +4,9 @@ Wado is a programming language targeting Wasm/WASI -- Wasm in plain sight.
 
 ## Status
 
-The specification is the `spec-*.md` files, one per area of the language, and
-it is normative. It says what the language is meant to be, and you read a
-program's meaning from here. It is not a record of what the compiler happens to
+The specification is the `spec-*.md` files, one per area of the language. It is
+normative: it says what the language is meant to be, and you read a program's
+meaning from here. It is not a record of what the compiler happens to
 do today. The [index](./README.md) lists the files.
 
 So if the specification and the implementation disagree, something is wrong.
