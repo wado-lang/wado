@@ -621,16 +621,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effective_name: &str,
     ) -> Option<(VariantInfo, VariantCaseData)> {
         let (prefix, suffix) = effective_name.split_once("::")?;
-        let (variant, case) = match self.variant_of_callee(callee_kind, receiver_site, prefix) {
-            Some(variant) => (variant, suffix),
-            None => {
+        let (variant, case) =
+            if let Some(variant) = self.variant_of_callee(callee_kind, receiver_site, prefix) {
+                (variant, suffix)
+            } else {
                 let def = self.tysys.qualified_owner_decl(ident)?;
                 (
                     self.tysys.data.variant_cases.get(&def)?,
                     suffix.rsplit_once("::")?.1,
                 )
-            }
-        };
+            };
         let (_, case_data) = variant.case_named(case)?;
         Some((variant.clone(), case_data.clone()))
     }
@@ -1017,37 +1017,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
         // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty() {
-            if let Some((variant_info, case_data)) =
+        if param_types.is_empty()
+            && let Some((variant_info, case_data)) =
                 self.constructed_case(ident, &callee_kind, receiver_site, effective_name)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
-                let mut payload_type = case_data.payload;
-                if !type_args.is_empty() {
-                    payload_type = self.substitute_in_frame(payload_type, &type_args);
-                } else if let Some(expected) = expected_type {
-                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                    if let ResolvedType::GenericInstance {
-                        def: expected_def,
-                        type_args: expected_args,
-                    } = expected_resolved
-                        && Some(expected_def)
-                            == self
-                                .tysys
-                                .resolutions
-                                .defs()
-                                .of_ast_id(variant_info.defined_at)
-                        && expected_args.len() == variant_info.type_param_type_ids.len()
-                    {
-                        payload_type = self
+            && case_data.has_payload(&self.tysys.type_table.borrow())
+        {
+            let mut payload_type = case_data.payload;
+            if !type_args.is_empty() {
+                payload_type = self.substitute_in_frame(payload_type, &type_args);
+            } else if let Some(expected) = expected_type {
+                // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
+                let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
+                if let ResolvedType::GenericInstance {
+                    def: expected_def,
+                    type_args: expected_args,
+                } = expected_resolved
+                    && Some(expected_def)
+                        == self
                             .tysys
-                            .substitute_type_params(payload_type, &expected_args);
-                    }
+                            .resolutions
+                            .defs()
+                            .of_ast_id(variant_info.defined_at)
+                    && expected_args.len() == variant_info.type_param_type_ids.len()
+                {
+                    payload_type = self
+                        .tysys
+                        .substitute_type_params(payload_type, &expected_args);
                 }
-                param_types.push(payload_type);
-                is_variant_payload = true;
             }
+            param_types.push(payload_type);
+            is_variant_payload = true;
         }
 
         // Resolve arguments with coercion awareness
