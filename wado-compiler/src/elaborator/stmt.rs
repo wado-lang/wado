@@ -13,14 +13,8 @@ use crate::token::Span;
 
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
-<<<<<<< HEAD
 use super::{Elaborator, ForwardDefaults};
-use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
-||||||| 1c849b3d8
-use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
-=======
 use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
->>>>>>> origin/main
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -1607,23 +1601,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.immutable_global_type(name).is_some()
     }
 
-<<<<<<< HEAD
-    /// The type of the immutable global `name`, defined here or imported.
-    fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
-        let decls = &self.sem.decls;
-        match decls.current_module_globals.get(name) {
-            Some(&(ty, mutable)) => (!mutable).then_some(ty),
-            None => decls
-||||||| 1c849b3d8
-        self.sem
-            .decls
-            .current_module_globals
-            .get(name)
-            .is_some_and(|&(_ty, mutable)| !mutable)
-            || self
-                .sem
-                .decls
-=======
     /// The type of the immutable global `name` refers to, if it names one.
     fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
         match self.sem.decls.current_module_globals.get(name) {
@@ -1631,15 +1608,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self
                 .sem
                 .decls
->>>>>>> origin/main
                 .imported_globals
                 .get(name)
                 .and_then(|&(_, _, ty, mutable)| (!mutable).then_some(ty)),
         }
-<<<<<<< HEAD
-||||||| 1c849b3d8
-                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
-=======
     }
 
     /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
@@ -1671,7 +1643,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.sem.types.operator_dispatch.contains_key(&pattern_id) {
             ctx.add_local(constant_pattern_local_name(), scrutinee, false, None);
         }
->>>>>>> origin/main
     }
 
     /// Bind a refutable pattern's variables into `ctx`, returning them in
@@ -1749,21 +1720,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-<<<<<<< HEAD
-                if !is_mut && let Some(ty) = self.immutable_global_type(name) {
-||||||| 1c849b3d8
-                if !is_mut && self.is_immutable_global(name) {
-=======
                 if !is_mut && let Some(constant) = self.immutable_global_type(name) {
->>>>>>> origin/main
                     self.record_item_reference_by_name(*id, name);
-<<<<<<< HEAD
-                    let (scrutinee_type, _) = self.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                    self.typecheck(ty, scrutinee_type, *name_span);
-||||||| 1c849b3d8
-=======
+                    let (peeled, _) = self.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.typecheck(constant, peeled, *name_span);
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
->>>>>>> origin/main
                     return Vec::new();
                 }
                 let binding_type =
@@ -1872,46 +1833,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
-<<<<<<< HEAD
                         self.typecheck(assoc.ty, scrutinee_type, *span);
-||||||| 1c849b3d8
-=======
                         if let Some(id) = *name_id {
                             self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
                         }
->>>>>>> origin/main
                         return Vec::new();
                     }
 
-<<<<<<< HEAD
-                    if let Some((alias, ty)) =
+                    if let Some((alias, constant)) =
                         self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
-||||||| 1c849b3d8
-                    // `ns::NAME` naming an immutable global the namespace exports
-                    // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some(alias) = self
-                        .sem
-                        .imports
-                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .filter(|alias| self.is_immutable_global(alias))
-=======
-                    // `ns::NAME` naming an immutable global the namespace exports
-                    // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some((alias, constant)) = self
-                        .sem
-                        .imports
-                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .and_then(|alias| {
-                            let constant = self.immutable_global_type(&alias)?;
-                            Some((alias, constant))
-                        })
->>>>>>> origin/main
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
                             self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
                         }
-                        self.typecheck(ty, scrutinee_type, *span);
+                        self.typecheck(constant, scrutinee_type, *span);
                         return Vec::new();
                     }
 

@@ -1344,26 +1344,16 @@ impl TypeError {
                 format!("type mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
-<<<<<<< HEAD
-            TypeError::UnknownType { name, span } => (
-                Code::UnknownType,
-                format!("unknown type '{}'", unalias_namespace_member(name)),
-                *span,
-            ),
-||||||| 1c849b3d8
-            TypeError::UnknownType { name, span } => {
-                (Code::UnknownType, format!("unknown type '{name}'"), *span)
-            }
-=======
             TypeError::TagParamNotTemplate { param, span } => (
                 Code::TypeMismatch,
                 format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
-            TypeError::UnknownType { name, span } => {
-                (Code::UnknownType, format!("unknown type '{name}'"), *span)
-            }
->>>>>>> origin/main
+            TypeError::UnknownType { name, span } => (
+                Code::UnknownType,
+                format!("unknown type '{}'", unalias_namespace_member(name)),
+                *span,
+            ),
             TypeError::SelfInUnboundedBound { param, span } => (
                 Code::UnknownType,
                 format!(

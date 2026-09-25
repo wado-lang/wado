@@ -3988,7 +3988,6 @@ impl TypeTable {
         self.representation_head(a) == self.representation_head(b)
     }
 
-<<<<<<< HEAD
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
     /// a byte-string literal coerces to.
     pub fn is_byte_list_representation(&self, id: TypeId) -> bool {
@@ -4004,8 +4003,8 @@ impl TypeTable {
                 ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
             )
         })
-||||||| 1c849b3d8
-=======
+    }
+
     /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
     /// newtype over either) reads from little-endian data; `None` for the rest.
     pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
@@ -4020,7 +4019,6 @@ impl TypeTable {
             ResolvedType::BuiltinArray(elem) => Some(*elem),
             _ => self.as_list(head),
         }
->>>>>>> origin/main
     }
 
     /// Check if a type is `List<T>` and return the element type if so.

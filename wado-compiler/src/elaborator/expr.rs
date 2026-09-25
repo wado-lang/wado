@@ -815,14 +815,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-<<<<<<< HEAD
-        // A parameter this default may name. Below the binder tiers, so a
-        // binder the default opens itself shadows the parameter, matching the
-        // scope a reader sees at the declaration.
-        if let Some(&param_type) = self.annotate_ctx.default_arg_types.get(&ident.name) {
-            return param_type;
-        }
-
         if let Some((decl, _)) = self.dispatched_operation(ident) {
             let callable = if self.tysys.trait_env.effect_decl_index.contains(&decl) {
                 CallableKind::Operation
@@ -837,16 +829,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-||||||| 1c849b3d8
-        // A parameter this default may name. Below the binder tiers, so a
-        // binder the default opens itself shadows the parameter, matching the
-        // scope a reader sees at the declaration.
-        if let Some(&param_type) = self.annotate_ctx.default_arg_types.get(&ident.name) {
-            return param_type;
-        }
-
-=======
->>>>>>> origin/main
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
         // constant's body is *foreign* AST owned by `const_module`; we
         // re-resolve it here only for the consumer's inference side effects.
