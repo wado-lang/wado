@@ -1,0 +1,45 @@
+// A literal coerces to a newtype through a `From<Array<…>>` on any link of its
+// chain, the middle one included, as `type V = f32x4` over `v128` needs.
+use { println, Stdout } from "core:cli";
+use { f32x4 } from "core:simd";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+type Inner = Point;
+
+impl From<Array<i32>> for Inner {
+    fn from(a: Array<i32>) -> Inner {
+        return Point { x: a[0], y: a[1] } as Inner;
+    }
+}
+
+type Outer = Inner;
+
+type Outermost = Outer;
+
+type Vec3 = f32x4;
+
+fn outer() -> Outer {
+    return [1, 2];
+}
+
+fn outermost() -> Outermost {
+    return [3, 4];
+}
+
+fn vec3(x: f32) -> Vec3 {
+    return [x, 2.0, 3.0, 0.0];
+}
+
+export fn run() with Stdout {
+    let o = outer();
+    let m = outermost();
+    let v = vec3(1.5);
+    println(`${o.x} ${o.y} ${m.x} ${m.y} ${v.extract_lane(0)} ${v.extract_lane(2)}`);
+}
+
+__DATA__
+{"stdout": "1 2 3 4 1.5 3\n"}

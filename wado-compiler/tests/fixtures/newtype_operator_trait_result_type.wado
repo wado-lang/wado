@@ -1,0 +1,81 @@
+// An operator a trait implements on the base yields the newtype, as a method
+// call does: the base in the return type is substituted, whatever link of the
+// chain carries the impl.
+use { println, Stdout } from "core:cli";
+
+struct Vec2 {
+    x: f64,
+    y: f64,
+}
+
+impl Add for Vec2 {
+    type Output = Vec2;
+    fn add(&self, rhs: &Vec2) -> Vec2 {
+        return Vec2 { x: self.x + rhs.x, y: self.y + rhs.y };
+    }
+}
+
+impl Neg for Vec2 {
+    type Output = Vec2;
+    fn neg(&self) -> Vec2 {
+        return Vec2 { x: -self.x, y: -self.y };
+    }
+}
+
+impl Mul<f64> for Vec2 {
+    type Output = Vec2;
+    fn mul(&self, k: &f64) -> Vec2 {
+        return Vec2 { x: self.x * *k, y: self.y * *k };
+    }
+}
+
+type Position = Vec2;
+
+type Anchor = Position;
+
+type Counter = i32;
+
+impl Sub for Counter {
+    type Output = Counter;
+    fn sub(&self, rhs: &Counter) -> Counter {
+        return (*self as i32 - *rhs as i32 - 1) as Counter;
+    }
+}
+
+type Ticks = Counter;
+
+fn sum(a: Position, b: Position) -> Position {
+    return a + b;
+}
+
+fn flip(a: Position) -> Position {
+    return -a;
+}
+
+fn scaled(a: Anchor) -> Anchor {
+    return a * 2.0;
+}
+
+fn gap(a: Ticks, b: Ticks) -> Ticks {
+    return a - b;
+}
+
+fn accumulate(a: Position, b: Position) -> Position {
+    let mut acc = a;
+    acc += b;
+    return acc;
+}
+
+export fn run() with Stdout {
+    let p = Vec2 { x: 1.0, y: 2.0 } as Position;
+    let q = Vec2 { x: 3.0, y: 4.0 } as Position;
+    let s = sum(p, q);
+    let f = flip(p);
+    let d = scaled(p as Anchor);
+    let a = accumulate(p, q);
+    println(`${s.x} ${s.y} ${f.x} ${d.y} ${a.x}`);
+    println(`${gap(10 as Ticks, 3 as Ticks) as i32}`);
+}
+
+__DATA__
+{"stdout": "4 6 -1 4 4\n6\n"}

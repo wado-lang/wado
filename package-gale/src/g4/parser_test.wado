@@ -16,6 +16,7 @@ use {
     CharClass,
     CharRange,
     Visibility,
+    merge_grammars,
 } from "../ir.wado";
 use { parse, parse_checked } from "./parser.wado";
 
@@ -26,9 +27,8 @@ test "minimal grammar" {
     assert g.lexer_rules.is_empty();
 }
 
-// ANTLR4's `NameStartChar` admits `À` upwards, and it retypes a rule by
-// `Character.isUpperCase` on the first character — the UCD's `Uppercase`, which
-// `core:icu` answers.
+// ANTLR4's `NameStartChar` admits `À` upwards, and it types a rule by
+// `Character.isUpperCase` on its first character: the UCD's `Uppercase`.
 test "a rule name outside ASCII parses and is typed by Uppercase" {
     let upper = parse("grammar Test;\nÀBC : [0-9]+ ;").unwrap();
     assert upper.lexer_rules.len() == 1;
@@ -460,11 +460,8 @@ X : [\\p{Script=Greek}] ;");
     assert !class_admits(&sc, 'a');
 }
 
-// Block, Decomposition_Type and the UCD's contributory `Other_*` are answered
-// by ANTLR4 and not by Gale, because `core:icu` does not answer them. Each is
-// refused with a message naming the reason, never approximated: `\P{...}`
-// complements what comes back, so a close-enough set would admit real members
-// of the property. No grammar in antlr/grammars-v4 uses one in a live rule.
+// `core:icu` has no Block, Decomposition_Type or contributory `Other_*`, so each is
+// refused, not approximated: `\P{...}` of a close-enough set admits real members.
 test "a property Gale deliberately does not answer says so" {
     let blk = parse("grammar Test;\nX : [\\p{Block=Greek_And_Coptic}] ;");
     assert blk.unwrap_err().message.contains("ICU ships no Block data");
@@ -475,8 +472,7 @@ test "a property Gale deliberately does not answer says so" {
     let contributory = parse("grammar Test;\nX : [\\p{Other_ID_Start}] ;");
     assert contributory.unwrap_err().message.contains("contributory property");
     // A property of its own beginning with `In`, which the Block reading would
-    // otherwise swallow. ICU answers its two siblings, so only this one reaches
-    // the message at all.
+    // otherwise swallow.
     let indic = parse("grammar Test;\nX : [\\p{Indic_Positional_Category=Top}] ;");
     assert !indic.unwrap_err().message.contains("Block");
 }
@@ -1005,6 +1001,27 @@ rule : ID ;";
     assert_option_ident(&g.options[1], "Python");
     assert g.options[2].name == "superClass";
     assert_option_qualified(&g.options[2], ["my", "pkg", "BaseParser"]);
+}
+
+test "a lexer and a parser split each keep their own base" {
+    let lexer_g = parse("lexer grammar SLexer;
+options { superClass = LBase; language = Wado; }
+GT : { this.ok() }? '>' ;
+").unwrap();
+    let parser_g = parse("parser grammar SParser;
+options { superClass = PBase; language = Wado; }
+shr : GT { this.next_gt() }? GT ;
+").unwrap();
+    let merged = merge_grammars([lexer_g, parser_g]);
+    assert merged.lexer_superclass == "LBase";
+    assert merged.parser_superclass == "PBase";
+}
+
+test "parse wado_prs_super.g4" {
+    let g = parse(#include_str("../../tests/grammars/wado_prs_super.g4")).unwrap();
+    assert g.name == "WadoPrsSuper";
+    assert g.parser_superclass == "PsBase";
+    assert g.lexer_superclass.is_empty(), "a combined grammar's superClass is the parser's";
 }
 
 test "grammar options with string literal value" {
@@ -2031,12 +2048,8 @@ fn assert_option_qualified(opt: &GrammarOption, expected: List<String>) {
     }
 }
 
-// Left-recursion policy (issue #1671): Gale, like ANTLR4, supports only direct
-// left recursion (a self-ref as an alt's leading element, lowered by
-// precedence climbing). Hidden and indirect left recursion would generate a
-// recursive-descent scan/parse that re-enters a rule without consuming input
-// and never terminates, so `check_left_recursion` rejects them at grammar-check
-// time rather than emitting looping code.
+// Like ANTLR4, only direct left recursion is supported (#1671): hidden or indirect
+// recursion would re-enter a rule without consuming input and never terminate.
 
 test "direct left recursion is accepted" {
     let g = "grammar D;\nprog : e EOF ;\ne : e '+' e | INT ;\nINT : [0-9]+ ;\nWS : [ \\t]+ -> skip ;";
@@ -2061,9 +2074,8 @@ test "a non-left-recursive grammar with nullable rules is accepted" {
     assert parse_checked(g) matches { Ok(_) }, "a plain grammar with nullable rules must be accepted";
 }
 
-// Epsilon-closure policy: a `*` / `+` whose body can match the empty string
-// never leaves the position, so `check_epsilon_closure` rejects it, as ANTLR4
-// does (error 153). An optional over the same body is not a closure.
+// A `*` / `+` whose body can match empty never advances, so it is rejected as
+// ANTLR4 does (error 153).
 
 test "a closure over an empty alternative is rejected" {
     let g = "grammar EP;\nr : ( A B | )+ C ;\nA : 'a' ; B : 'b' ; C : 'c' ;";
@@ -2096,13 +2108,8 @@ test "a lexer closure over an empty alternative is rejected" {
     assert parse_checked(g) matches { Err(_) }, "a lexer closure matching empty loops forever too";
 }
 
-// The POSIX compatibility properties and ANTLR4's `EmojiPresentation=` values.
-// Neither is a UCD property, so each is derived from tables Gale already has —
-// which makes the derivation, not a table, the thing that can be wrong. `\P`
-// complements whatever comes back, so a definition that is merely close admits
-// characters rather than missing them. Every assertion below is a character
-// measured against the published jar, chosen where two plausible definitions
-// disagree.
+// POSIX properties and `EmojiPresentation=` are derived, not UCD tables. Each character
+// below was measured against the jar where two plausible derivations disagree.
 
 test "POSIX alnum is Alphabetic plus Nd, not L plus N" {
     let cc = class_of("grammar Test;
@@ -2210,9 +2217,8 @@ X : [\\p{EmojiPresentation=Text}] ;");
     assert !class_admits(&not_emoji, '\u{1F600}');
 }
 
-// The enumerated `Property=Value` names beyond `gc=` and `sc=`, pinned
-// character by character. The default-value cases carry the weight: a property
-// whose default is implicit answers those wrongly rather than not at all.
+// The default-value cases carry the weight: a property whose default is implicit
+// answers those wrongly rather than not at all.
 
 test "Line_Break takes both alias spellings and its default value" {
     let alphabetic = class_of("grammar Test;
@@ -2305,10 +2311,8 @@ test "an unknown enumerated property or value is still rejected" {
 }
 
 test "a property escape cannot be a bound of a character range" {
-    // There is no range from one property to another, so accepting these would
-    // mean inventing a meaning — ANTLR4 rejects each with error(182). The
-    // third form appears commented out in RustLexer.g4, where it is Rust's
-    // set-difference notation rather than anything ANTLR4 has.
+    // ANTLR4 rejects each with error(182). The third form is Rust's set-difference
+    // notation, seen commented out in RustLexer.g4.
     let bad: List<String> = [
         "grammar Test;\nX : [\\p{L}-z] ;", "grammar Test;\nX : [a-\\p{L}] ;", "grammar Test;\nX : [\\p{L}-\\p{Nd}] ;",
         "grammar Test;\nX : [\\p{L}\\p{Nl}-\\p{Pattern_Syntax}] ;",
@@ -2320,11 +2324,8 @@ test "a property escape cannot be a bound of a character range" {
 }
 
 test "a label on a block ANTLR4 calls no set is rejected" {
-    // `error(130): label x assigned to a block which is not a set`. A set is
-    // two or more alternatives, each one terminal. Anything richer has no
-    // binding slot ANTLR4 names, so `(e)` is not the free wrapper it looks
-    // like. The rule covers both label forms, and a suffix on the block does
-    // not exempt it.
+    // `error(130): label x assigned to a block which is not a set`. A set is two or
+    // more alternatives, each one terminal, so `(e)` is not a free wrapper.
     let bad: List<String> = [
         "grammar Test;\nr : x=(A) ;", "grammar Test;\nr : x+=(A)+ ;", "grammar Test;\nr : x=(A B)+ ;",
         "grammar Test;\nr : x+=(A*) ;", "grammar Test;\nr : x+=(A B)*? ;", "grammar Test;\nr : x=(A? B)? ;",
@@ -2362,11 +2363,8 @@ fn assert_escape_errors(cases: &List<[String, String]>) {
 }
 
 test "a char set rejects an escape ANTLR4 does not define" {
-    // `[` needs no escape inside a set, so `\[` is `invalid escape sequence`
-    // from the jar while Gale used to read it as the bare `[`. Accepting it is
-    // what let a grammar here compile in a shape the oracle scripts cannot run.
-    // `\'` and `\"` belong to string literals, and `\p` without `{` names no
-    // property.
+    // The jar rejects `\[`, which Gale once accepted. `\'` and `\"` belong to string
+    // literals, and `\p` without `{` names no property.
     assert_escape_errors(
         &[
             ["grammar Test;\nX : [\\[] ;", "\\["],

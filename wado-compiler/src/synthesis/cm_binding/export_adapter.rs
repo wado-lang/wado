@@ -39,10 +39,8 @@ use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_from_type_id,
     cm_val_type_to_type_id, cm_zero, coerce_flat_lift, coerce_flat_lower,
-    compute_export_flat_param_types, export_needs_param_lifting, field_access, find_struct_decl,
-    find_variant_decl, flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type,
-    struct_decl_of, type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag,
-    variant_test,
+    export_needs_param_lifting, field_access, flat_types_from_type_id, struct_decl_of,
+    type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
@@ -844,7 +842,17 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // and recursively lift each field, then construct a
                 // `StructLiteral`. Resource handles, enums, flags, and
                 // unknown types pass their one flat value through.
-                if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
+                let (struct_decl, variant_decl) = {
+                    let tt = type_table_cell.borrow();
+                    match tt.get(tt.peel_refs(target_type_id)) {
+                        ResolvedType::Struct { def, type_args } => {
+                            (struct_decl_of(*def, type_args, tir_modules), None)
+                        }
+                        ResolvedType::Variant { def } => (None, variant_decl_of(*def, tir_modules)),
+                        _ => (None, None),
+                    }
+                };
+                if let Some(struct_decl) = struct_decl {
                     let mut offset = 0;
                     let mut fields_out = Vec::with_capacity(struct_decl.fields.len());
                     // Precompute each field's AST surface under the `TypeTable`
@@ -920,7 +928,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // `(disc: i32, ...joined-payload-flats)`; each case's payload
                 // shares the joined slots positionally, so lift the active
                 // case's payload recursively from `flat[1..]`.
-                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
+                if let Some(variant_decl) = variant_decl {
                     return lift_variant_from_flat_params(
                         &variant_decl,
                         flat_param_locals,
@@ -989,10 +997,11 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // option<T> flat ABI: (disc: i32, ...T_flat)
                 let (inner_flat, inner_type_id) = {
                     let tt = type_table_cell.borrow();
-                    let mut out = Vec::new();
-                    flatten_export_type(&generic.args[0], &mut out, tir_modules, &tt);
                     let inner_tid = tt.as_option(target_type_id).unwrap_or(target_type_id);
-                    (out, inner_tid)
+                    (
+                        flat_types_from_type_id(inner_tid, tir_modules, &tt),
+                        inner_tid,
+                    )
                 };
                 let total_flat = 1 + inner_flat.len();
 
@@ -1175,7 +1184,7 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
 /// run only inside the active case's branch.
 #[allow(clippy::too_many_arguments)]
 fn coerce_payload_slots(
-    payload_ty: &Type,
+    payload: TypeId,
     slot_locals: &[u32],
     slot_types: &[cm_abi::CmValType],
     next_local: &mut u32,
@@ -1184,12 +1193,7 @@ fn coerce_payload_slots(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table_cell: &RefCell<TypeTable>,
 ) -> (Vec<u32>, Vec<cm_abi::CmValType>) {
-    let natural: Vec<cm_abi::CmValType> = {
-        let tt = type_table_cell.borrow();
-        let mut out = Vec::new();
-        flatten_export_type(payload_ty, &mut out, tir_modules, &tt);
-        out
-    };
+    let natural = flat_types_from_type_id(payload, tir_modules, &type_table_cell.borrow());
     let mut out_locals = Vec::with_capacity(natural.len());
     for (j, &want) in natural.iter().enumerate() {
         let Some(slot_local) = slot_locals.get(j).copied() else {
@@ -1327,7 +1331,7 @@ fn lift_variant_from_flat_params(
             // bit-reinterpreting where the join widened the slot to a different
             // core class.
             let (payload_locals, payload_types) = coerce_payload_slots(
-                payload_ty,
+                case.payload,
                 &flat_param_locals[1..],
                 &flat_types[1..],
                 next_local,
@@ -1402,9 +1406,10 @@ fn build_export_adapter_params(
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
     let needs_lifting = export_needs_param_lifting(&user_func_ref.params, lift_ctx.type_table);
     if needs_lifting {
-        let tt = lift_ctx.type_table.borrow();
-        let flat_param_types = compute_export_flat_param_types(world_params, tir_modules, &tt);
-        drop(tt);
+        let flat_param_types: Vec<cm_abi::CmValType> = world_params
+            .iter()
+            .flat_map(|(_, ty)| lift_ctx.cm_interface_registry.cm_flatten(ty))
+            .collect();
 
         let flat_params: Vec<TirParam> = flat_param_types
             .iter()
@@ -1538,8 +1543,6 @@ impl<'a> ExportBindingEnv<'a> {
         CmShapeContext {
             cm_interface_registry: self.cm_interface_registry,
             names,
-            tir_modules: self.tir_modules,
-            type_table: self.type_table,
         }
     }
 }
@@ -1705,11 +1708,7 @@ fn push_sync_return_epilogue(
     );
     let flat_count = env
         .world_return
-        .map(|ty| {
-            let tt = env.type_table.borrow();
-            flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
-        })
-        .unwrap_or(0);
+        .map_or(0, |ty| env.cm_interface_registry.cm_flatten(ty).len());
 
     if is_unit_return {
         body_stmts.push(expr_stmt(call_user));
@@ -1802,10 +1801,7 @@ pub(super) fn synthesize_post_return(
     env: &ExportBindingEnv<'_>,
 ) -> Option<Rc<RefCell<TirFunction>>> {
     let ty = env.world_return?;
-    let flat_count = {
-        let tt = env.type_table.borrow();
-        flat_types_from_ast_type(ty, env.tir_modules, &tt).len()
-    };
+    let flat_count = env.cm_interface_registry.cm_flatten(ty).len();
     // The condition `push_sync_return_epilogue` allocates the area under.
     if flat_count <= 1 {
         return None;
@@ -1866,10 +1862,7 @@ fn push_result_task_return_epilogue(
     let return_ast = env
         .world_return
         .expect("Result export binding requires a world return type");
-    let flat_return_types = {
-        let tt = env.type_table.borrow();
-        flat_types_from_ast_type(return_ast, env.tir_modules, &tt)
-    };
+    let flat_return_types = env.cm_interface_registry.cm_flatten(return_ast);
 
     let result_local = alloc_local(next_local, locals, user_return_type);
     body_stmts.push(let_stmt(

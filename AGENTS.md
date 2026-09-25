@@ -109,7 +109,7 @@ modules while tuples follow TypeScript.
 - `package-marl` - A CommonMark subset in Wado.
 - `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
 - `package-wadopoet` - Builders for generated Wado source, and the reserved vocabulary (generated from `wado syntax --format json`) a minted name must avoid.
-- `package-web/` - The `web:dom` bindings (`wado-lang:web`), and a server-side DOM that serves them under `wado test` and `wado run`.
+- `package-web/` - The `web:dom` bindings (`wado-lang:web`), their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
 - `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.
 - `vendor/` — reference specs and runtimes, as git submodules.
 

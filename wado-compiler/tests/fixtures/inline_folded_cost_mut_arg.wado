@@ -14,7 +14,7 @@
 // `#[inline(never)]` keeps the write in `bump`. Spliced, it would leave an
 // assignment in `pick` that the plain scan for writes already catches.
 
-use { println, Stdout, Environment, args } from "core:cli";
+use { println, Stdout } from "core:cli";
 
 struct S {
     n: i32,
@@ -47,8 +47,8 @@ fn pick(s: &mut S, seed: i32) -> i32 {
     }
 }
 
-export fn run() with (Stdout, Environment) {
-    let seed = args().len() as i32;
+export fn run() with Stdout {
+    let seed = builtin::black_box(0);
     let mut a = S { n: 0 };
     let mut b = S { n: 0 };
     let mut c = S { n: 0 };

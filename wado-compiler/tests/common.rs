@@ -736,7 +736,11 @@ impl WasiHttpHooks for TestHttpCtx {
 /// it tests. Reaching the network stays denied: no `inherit_network`, so the
 /// per-address check refuses every connection.
 fn fixture_wasi_ctx(builder: &mut WasiCtxBuilder) -> WasiCtx {
-    builder.allow_tcp(true).allow_udp(true).build()
+    builder
+        .arg("fixture.wasm")
+        .allow_tcp(true)
+        .allow_udp(true)
+        .build()
 }
 
 /// Mock spec for a single `wasi:tls` handshake.

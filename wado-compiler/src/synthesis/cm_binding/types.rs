@@ -976,111 +976,6 @@ pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> boo
     matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
 }
 
-/// Flat CM ABI types of a boundary type the world declares, the AST-side twin
-/// of [`flat_types_from_type_id`]. Comparing the two says whether an export's
-/// own type lowers to the values the world's does.
-pub(super) fn flat_types_from_ast_type(
-    ty: &Type,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-) -> Vec<cm_abi::CmValType> {
-    let mut out = Vec::new();
-    flatten_export_type(ty, &mut out, tir_modules, type_table);
-    out
-}
-
-/// Recursively flatten an export type to CM ABI flat values.
-///
-/// Thin wrapper that builds the [`CmStdlibNames`] snapshot once and delegates
-/// to the recursive inner function, so recursion does not rebuild it per level.
-pub(super) fn flatten_export_type(
-    ty: &Type,
-    out: &mut Vec<cm_abi::CmValType>,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-) {
-    let names = CmStdlibNames::from_type_table(type_table);
-    flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
-}
-
-fn flatten_export_type_inner(
-    ty: &Type,
-    out: &mut Vec<cm_abi::CmValType>,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-    names: &CmStdlibNames,
-) {
-    match ty {
-        Type::Named(named) if named.name == names.string => {
-            out.push(cm_abi::CmValType::I32); // ptr
-            out.push(cm_abi::CmValType::I32); // len
-        }
-        Type::Named(named) => match named.name.as_str() {
-            "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
-                out.push(cm_abi::CmValType::I32);
-            }
-            "i64" | "u64" => out.push(cm_abi::CmValType::I64),
-            "f32" => out.push(cm_abi::CmValType::F32),
-            "f64" => out.push(cm_abi::CmValType::F64),
-            "()" => {} // unit — no values
-            _ => {
-                // Check if it's a variant type defined in TIR modules
-                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
-                    flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
-                } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
-                    flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
-                } else if let Some(type_id) = find_newtype_type_id(&named.name, tir_modules)
-                    .or_else(|| find_resource_type_id(&named.name, tir_modules, type_table))
-                {
-                    flat_types_from_type_id_inner(type_id, out, tir_modules, type_table, names);
-                } else {
-                    // Enums, unknown → i32
-                    out.push(cm_abi::CmValType::I32);
-                }
-            }
-        },
-        Type::Generic(generic) if generic.name == names.array || names.is_tree_map(generic) => {
-            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
-            // type's `(ptr, count)`.
-            out.push(cm_abi::CmValType::I32); // ptr
-            out.push(cm_abi::CmValType::I32); // len
-        }
-        Type::Generic(generic) if generic.name == names.option && generic.args.len() == 1 => {
-            out.push(cm_abi::CmValType::I32); // discriminant
-            flatten_export_type_inner(&generic.args[0], out, tir_modules, type_table, names);
-        }
-        Type::Generic(generic) if generic.name == names.result && generic.args.len() == 2 => {
-            out.push(cm_abi::CmValType::I32); // discriminant
-            let mut ok_flat = Vec::new();
-            let mut err_flat = Vec::new();
-            flatten_export_type_inner(
-                &generic.args[0],
-                &mut ok_flat,
-                tir_modules,
-                type_table,
-                names,
-            );
-            flatten_export_type_inner(
-                &generic.args[1],
-                &mut err_flat,
-                tir_modules,
-                type_table,
-                names,
-            );
-            out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-        }
-        // Stream / Future / Own / Borrow and other generics are i32 handles.
-        Type::Generic(_) => out.push(cm_abi::CmValType::I32),
-        Type::Tuple(elems) => {
-            for elem in elems {
-                flatten_export_type_inner(elem, out, tir_modules, type_table, names);
-            }
-        }
-        Type::Reference(_) | Type::MutReference(_) => out.push(cm_abi::CmValType::I32),
-        _ => {}
-    }
-}
-
 /// Flatten a variant type: discriminant + union of all case payloads.
 fn flatten_variant_type(
     variant_decl: &TirVariantDecl,
@@ -1229,7 +1124,9 @@ fn flat_types_from_type_id_inner(
                 out.push(cm_abi::CmValType::I32);
             }
         }
-        ResolvedType::Newtype { base_type, .. } => {
+        ResolvedType::Newtype { base_type, .. }
+        | ResolvedType::Ref(base_type)
+        | ResolvedType::MutRef(base_type) => {
             flat_types_from_type_id_inner(*base_type, out, tir_modules, type_table, names);
         }
         ResolvedType::Flags { .. } => {
@@ -1275,61 +1172,6 @@ pub(super) fn struct_decl_of(
         }
     }
     declaration.cloned()
-}
-
-/// Find a variant declaration by name across all TIR modules. For a name off
-/// an AST type, which names no declaration on its own; every caller holding a
-/// resolved type keys on [`variant_decl_of`] instead.
-pub(super) fn find_variant_decl(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TirVariantDecl> {
-    tir_modules
-        .values()
-        .flat_map(|module| &module.variants)
-        .find(|variant| variant.name == name)
-        .cloned()
-}
-
-/// Find a struct declaration by name across all TIR modules — the name-keyed
-/// counterpart of [`struct_decl_of`], for an AST type's spelling.
-pub(super) fn find_struct_decl(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TirStruct> {
-    tir_modules
-        .values()
-        .flat_map(|module| &module.structs)
-        .find(|s| s.name == name)
-        .cloned()
-}
-
-/// Find the `TypeId` of a newtype declaration by name across all TIR modules.
-pub(super) fn find_newtype_type_id(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TypeId> {
-    // A generic declaration names no single type, so it is not a candidate at
-    // all — reading its `None` after matching the name would let it shadow a
-    // concrete declaration of the same name and flatten that one as `i32`.
-    tir_modules
-        .values()
-        .flat_map(|module| &module.newtypes)
-        .filter(|nt| nt.name == name)
-        .find_map(|nt| nt.type_id)
-}
-
-/// Find the `TypeId` of a resource declaration by name across all TIR modules.
-pub(super) fn find_resource_type_id(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-) -> Option<TypeId> {
-    tir_modules
-        .values()
-        .flat_map(|module| &module.resources)
-        .filter(|resource| resource.name == name)
-        .find_map(|resource| type_table.find_resource_type(resource.def))
 }
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
@@ -1530,18 +1372,6 @@ pub(super) fn type_id_to_ast_type(
             panic!("type has no Component Model surface: {resolved:?}")
         }
     }
-}
-
-pub(super) fn compute_export_flat_param_types(
-    params: &[(String, Type)],
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-) -> Vec<cm_abi::CmValType> {
-    let mut out = Vec::new();
-    for (_name, ty) in params {
-        flatten_export_type(ty, &mut out, tir_modules, type_table);
-    }
-    out
 }
 
 /// Whether a parameter needs CM flat-ABI lifting at the export boundary — that

@@ -111,14 +111,22 @@ pub(super) fn unify(
                 }
             }
         }
-        // Same-named generic instance (including tuples): unify type
-        // arguments positionally.
+        // Same generic declaration (including tuples, `Future` and `Stream`):
+        // unify type arguments positionally.
         (
             ResolvedType::GenericInstance {
                 def: expected_def,
                 type_args: expected_args,
+            }
+            | ResolvedType::GenericResource {
+                def: expected_def,
+                type_args: expected_args,
             },
             ResolvedType::GenericInstance {
+                def: actual_def,
+                type_args: actual_args,
+            }
+            | ResolvedType::GenericResource {
                 def: actual_def,
                 type_args: actual_args,
             },

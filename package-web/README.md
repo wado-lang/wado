@@ -13,16 +13,19 @@ export fn run() with Dom {
 }
 ```
 
-The imports are the `web:dom/*` Component Model interfaces. A browser host
-provides them. `wado run`, `wado test` and `wado serve` define each one as a
-trap, so the program instantiates anywhere, and `FakeDom` answers the calls
-instead:
+The imports are the `web:dom/*` Component Model interfaces. In a browser,
+`glue/dom.js` provides them from the page's own DOM: the released-jco transpile
+(`scripts/jco/transpile-released.mjs`) maps each `web:<package>/*` import to
+its glue. `example/web-browser` runs one program that way.
+
+`wado run`, `wado test` and `wado serve` define each import as a trap, so the
+program instantiates anywhere, and `SurfaceDom` answers the calls instead:
 
 ```wado
-use { Dom, FakeDom } from "wado-lang:web";
+use { Dom, SurfaceDom } from "wado-lang:web";
 
 test "the app renders a heading" {
-    let mut dom = FakeDom::new();
+    let mut dom = SurfaceDom::new();
     with &mut dom do {
         app();
         let h1 = Dom::document().get_element_by_id("title").unwrap();
@@ -31,9 +34,16 @@ test "the app renders a heading" {
 }
 ```
 
-`FakeDom` holds a tree, text, attributes and an input's value. A call it does
-not answer traps, and so does an insertion the DOM standard rejects with a
-`HierarchyRequestError`.
+`SurfaceDom` is the DOM's API surface with no browser engine behind it: no
+layout, style or scripting. It holds a tree, text, attributes, an input's value
+and the document's title. A call it does not answer traps, and so does a call
+the DOM standard throws from, such as an insertion it rejects
+(`HierarchyRequestError`) or an invalid name (`InvalidCharacterError`).
+
+A server renders a page by serializing it. `dom.to_html()` gives the whole
+document, doctype included, and `Element::get_html` an element's children. Both
+follow the HTML standard's serialization. `example/web-ssr` prints a page with
+`wado run` and serves it with `wado serve`.
 
 ## Layout
 
@@ -41,8 +51,12 @@ not answer traps, and so does an insertion the DOM standard rejects with a
   (`mise run update-webidl-snapshot`).
 - `src/dom.wado` — the bindings generated from it
   (`mise run update-package-web`). Do not edit by hand.
-- `src/fake_dom.wado` — `FakeDom`, written by hand. It mints handles from the
-  class numbers `dom.wado` generates.
+- `glue/dom.js` — the browser glue generated beside them: one shim per
+  member, over a table that hands out one handle per object, tagged with its
+  nearest class in the slice. `mise run test-web-glue` runs it on Node against
+  jsdom (`glue/dom.test.mjs`).
+- `src/surface_dom.wado` — `SurfaceDom`, written by hand. It mints handles from
+  the class numbers `dom.wado` generates.
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 

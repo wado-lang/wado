@@ -572,13 +572,14 @@ depends = ["webidl-deps"]
 run = "node scripts/webidl/snapshot.mjs package-web/idl/dom.webidl.json"
 
 [tasks.update-package-web]
-description = "Regenerate package-web's web:dom bindings from the vendored WebIDL snapshot"
+description = "Regenerate package-web's web:dom bindings and glue from the vendored WebIDL snapshot"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 cargo run -p wado-from-idl -- \
     --webidl package-web/idl/dom.webidl.json \
-    --output-dir package-web/src
+    --output-dir package-web/src \
+    --glue-dir package-web/glue
 """
 
 [tasks.update-stdlib-kiln]
@@ -777,6 +778,26 @@ timeout 120 node -e "
 "
 """
 
+[tasks.test-web-glue]
+description = "Run example/web-browser on Node against jsdom, through package-web's glue"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+example/web-browser/build.sh
+WEB_BROWSER_JS="$PWD/example/web-browser/build/main.js" timeout 120 node --test "package-web/glue/*.test.mjs"
+"""
+
+[tasks.web-browser-demo]
+description = "Build example/web-browser and serve it on http://127.0.0.1:8089"
+depends = ["jco-deps"]
+run = """
+#!/usr/bin/env bash
+set -e -o pipefail
+example/web-browser/build.sh
+cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8089 --dir example/web-browser example/static_server.wado
+"""
+
 
 [tasks.cloudflare-build]
 description = "Compile a Wado service and transpile it for the Cloudflare Worker"
@@ -851,7 +872,7 @@ tar tzf "$OUT"
 
 [tasks.playground-web-serve]
 description = "Serve the browser playground on http://127.0.0.1:8088 (run playground-web-build first)"
-run = "cd wado-playground/web && python3 -m http.server 8088"
+run = "cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8088 --dir wado-playground/web example/static_server.wado"
 
 [tasks.playground-web-test]
 description = "Browser smoke test for the playground (installs playwright-core; needs Chromium 137+)"

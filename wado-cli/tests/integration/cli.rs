@@ -642,6 +642,86 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
+/// The program name is what `wado run` was given, never `wado` itself, and
+/// `args()` holds what follows it.
+#[test]
+fn test_run_program_name_and_args() {
+    wado()
+        .args([
+            "run",
+            "wado-cli/tests/fixtures/run_args.wado",
+            "--",
+            "-x",
+            "y",
+        ])
+        .assert()
+        .success()
+        .stdout(
+            r#"Option::Some("wado-cli/tests/fixtures/run_args.wado") ["-x", "y"]"#.to_owned()
+                + "\n",
+        );
+}
+
+/// `example/cat.wado` prints every file it is given, in order, and not itself.
+#[test]
+fn test_run_cat_prints_each_file() {
+    let hello = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../example/hello.wado"
+    ))
+    .unwrap();
+    wado()
+        .args([
+            "run",
+            "example/cat.wado",
+            "example/hello.wado",
+            "example/hello.wado",
+        ])
+        .assert()
+        .success()
+        .stdout(hello.repeat(2));
+}
+
+/// Like cat(1), `example/cat.wado` reports a file it cannot open, prints the
+/// rest, and exits with a failure.
+#[test]
+fn test_run_cat_fails_on_a_missing_file() {
+    let hello = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../example/hello.wado"
+    ))
+    .unwrap();
+    wado()
+        .args([
+            "run",
+            "example/cat.wado",
+            "example/no-such-file",
+            "example/hello.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(hello)
+        .stderr(predicates::str::contains(
+            "cat: example/no-such-file: cannot open: ErrorCode::NoEntry",
+        ));
+}
+
+/// `core:args::from_env` parses what follows the program name.
+#[test]
+fn test_run_args_reach_from_env() {
+    wado()
+        .args([
+            "run",
+            "wado-cli/tests/fixtures/run_args_from_env.wado",
+            "--jobs",
+            "4",
+            "in.txt",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("input=in.txt jobs=4"));
+}
+
 /// A run writes the program's output and nothing else.
 #[test]
 fn test_run_announces_nothing() {

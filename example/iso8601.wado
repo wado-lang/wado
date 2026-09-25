@@ -51,7 +51,7 @@ export fn run() with (Stdout, SystemClock, Timezone) {
 // `+00:00`, which `core:temporal` normalizes to the `Z` suffix.
 fn offset_zone(offset_secs: i64) -> String {
     let sign = if offset_secs < 0 { "-" } else { "+" };
-    let abs = if offset_secs < 0 { -offset_secs } else { offset_secs };
+    let abs = i64::abs(offset_secs);
     let h = abs / 3600;
     let m = abs % 3600 / 60;
     return `${sign}${h:02}:${m:02}`;

@@ -33,6 +33,7 @@ use {
     LexerElemPlan,
 } from "./lexer_gen.wado";
 use { grammar_needs_latn, build_latn } from "./latn.wado";
+use { canonicalize_for_analysis } from "./codegen.wado";
 use { TreeMap } from "core:collections";
 
 /// Read-only inputs every walk step needs. Assembled once from the grammar,
@@ -70,11 +71,11 @@ struct DumpOut {
     char_sets: i32 = 0,
 }
 
-/// Render the per-rule lexer emit report for a grammar.
-///
-/// Takes the surface `Grammar` alone, deriving every input `gen_lexer` reads
-/// the way `generate` derives it.
-pub fn render_lexer_dump(grammar: &Grammar) -> String {
+/// Render the per-rule lexer emit report for an assembled grammar, canonicalized
+/// and read the way `generate` does for `gen_lexer`.
+pub fn render_lexer_dump(assembled: &Grammar) -> String {
+    let mut grammar = *assembled;
+    canonicalize_for_analysis(&mut grammar);
     let empty_opts: List<GrammarOption> = [];
     let ctx = DumpCtx {
         rules: grammar.lexer_rules,
@@ -86,7 +87,7 @@ pub fn render_lexer_dump(grammar: &Grammar) -> String {
             &grammar.options,
             resolve_ci(&grammar.options, &empty_opts),
         ),
-        atn_class: latn_rule_indices(grammar),
+        atn_class: latn_rule_indices(&grammar),
     };
 
     let mut o = DumpOut {
