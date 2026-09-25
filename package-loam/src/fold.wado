@@ -107,18 +107,18 @@ fn constant(node: &Node) -> Result<Known, String> {
         return Result::Ok(Known { extents: [], elements: Elements::Ints([int_attr(node, "value_int", 0)?]) });
     }
     if let Some(a) = node.attr("value_ints") {
-        let values = a.ints().map_err(|reason| `attribute value_ints ${reason}`)?;
+        let values = a.ints().map_err(|e| `${e}`)?;
         return Result::Ok(Known {
             extents: [values.len()],
             elements: Elements::Ints(values),
         });
     }
     if node.attr("value_float") matches { Some(_) } {
-        let v = node.float_attr("value_float", 0.0).map_err(|reason| `attribute value_float ${reason}`)?;
+        let v = node.float_attr("value_float", 0.0).map_err(|e| `${e}`)?;
         return Result::Ok(Known { extents: [], elements: Elements::Floats([v]) });
     }
     if let Some(a) = node.attr("value_floats") {
-        let values = a.floats().map_err(|reason| `attribute value_floats ${reason}`)?;
+        let values = a.floats().map_err(|e| `${e}`)?;
         return Result::Ok(Known {
             extents: [values.len()],
             elements: Elements::Floats(values),
@@ -557,11 +557,11 @@ pub fn axes_of(
     let Some(a) = node.attr(attr) else {
         return Result::Ok(null);
     };
-    return a.ints().map(|v| Option::Some(v)).map_err(|reason| `attribute ${attr} ${reason}`);
+    return a.ints().map(|v| Option::Some(v)).map_err(|e| `${e}`);
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
-    return node.int_attr(name, fallback).map_err(|reason| `attribute ${name} ${reason}`);
+    return node.int_attr(name, fallback).map_err(|e| `${e}`);
 }
 
 pub fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {

@@ -1,13 +1,21 @@
 //! What the reader takes out of a graph, on the forms a real model carries.
 
-use { Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
+use { AttrError, Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
 use { read } from "./onnx_text.wado";
 
 fn is_error<E: Error>() {
 }
 
-test "a reader's failure is an Error" {
+test "a reader's failure and an attribute's are Errors" {
     is_error::<ReadError>();
+    is_error::<AttrError>();
+}
+
+test "an attribute read names the attribute it failed on" {
+    let g = read(`agraph (float[2] X) => (float[2] Y) { Y = Softmax <axis = [1, 2]> (X) }`).unwrap();
+    let e = g.nodes[0].int_attr("axis", -1).unwrap_err();
+    assert e.attr == "axis";
+    assert `${e}` == "attribute axis is a list and the operator reads one value";
 }
 
 global MLP: String = `<ir_version: 7, opset_import: [ "" : 10 ]>

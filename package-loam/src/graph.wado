@@ -145,24 +145,59 @@ pub struct Attr {
     pub tensor: Option<Known> = null,
 }
 
+/// An attribute its operator cannot read as written, and why.
+pub struct AttrError {
+    pub attr: String,
+    pub reason: String,
+}
+
+impl Display for AttrError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`attribute ${self.attr} ${self.reason}`);
+    }
+}
+
+impl Error for AttrError {
+}
+
 impl Attr {
-    /// Every value read as an integer. `Err` is the reason one is not, for the
-    /// caller to name the attribute in.
-    pub fn ints(&self) -> Result<List<i64>, String> {
+    /// Every value read as an integer.
+    pub fn ints(&self) -> Result<List<i64>, AttrError> {
         let mut values: List<i64> = [];
         for let text of self.values {
-            values.push(int_of(&text)?);
+            values.push(int_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
     }
 
     /// `ints` for a float attribute.
-    pub fn floats(&self) -> Result<List<f32>, String> {
+    pub fn floats(&self) -> Result<List<f32>, AttrError> {
         let mut values: List<f32> = [];
         for let text of self.values {
-            values.push(float_of(&text)?);
+            values.push(float_of(&text).map_err(|reason| self.error(reason))?);
         }
         return Result::Ok(values);
+    }
+
+    /// The one value an operator reads as an integer.
+    pub fn int(&self) -> Result<i64, AttrError> {
+        return int_of(&self.one_value()?).map_err(|reason| self.error(reason));
+    }
+
+    /// `int` for a float attribute.
+    pub fn float(&self) -> Result<f32, AttrError> {
+        return float_of(&self.one_value()?).map_err(|reason| self.error(reason));
+    }
+
+    fn one_value(&self) -> Result<String, AttrError> {
+        if self.values.len() != 1 {
+            return Result::Err(self.error("is a list and the operator reads one value"));
+        }
+        return Result::Ok(self.values[0]);
+    }
+
+    fn error(&self, reason: String) -> AttrError {
+        return AttrError { attr: self.name, reason };
     }
 }
 
@@ -197,31 +232,20 @@ impl Node {
         return null;
     }
 
-    /// The one integer attribute `name` holds, or `fallback` where it is
-    /// absent. `Err` is the reason, as `Attr::ints` gives it.
-    pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, String> {
-        let Some(text) = self.one_value(name)? else {
-            return Result::Ok(fallback);
+    /// The one integer attribute `name` holds, or `fallback` where it is absent.
+    pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.int(),
+            None => Result::Ok(fallback),
         };
-        return int_of(&text);
     }
 
     /// `int_attr` for a float attribute.
-    pub fn float_attr<S: AsStrSlice>(&self, name: S, fallback: f32) -> Result<f32, String> {
-        let Some(text) = self.one_value(name)? else {
-            return Result::Ok(fallback);
+    pub fn float_attr<S: AsStrSlice>(&self, name: S, fallback: f32) -> Result<f32, AttrError> {
+        return match self.attr(name) {
+            Some(a) => a.float(),
+            None => Result::Ok(fallback),
         };
-        return float_of(&text);
-    }
-
-    fn one_value<S: AsStrSlice>(&self, name: S) -> Result<Option<String>, String> {
-        let Some(a) = self.attr(name) else {
-            return Result::Ok(null);
-        };
-        if a.values.len() != 1 {
-            return Result::Err("is a list and the operator reads one value");
-        }
-        return Result::Ok(Option::Some(a.values[0]));
     }
 }
 

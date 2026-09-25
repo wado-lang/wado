@@ -1,18 +1,12 @@
 //! A sliding window's geometry, which `Conv` and `MaxPool` share: the
 //! attributes ONNX gives both, and the output extents they imply.
 
-use { Node } from "./graph.wado";
+use { AttrError, Node } from "./graph.wado";
 pub use { Window } from "./runtime/tensor.wado";
-
-/// An attribute the window cannot be read from, and why.
-pub struct WindowError {
-    pub attr: String,
-    pub reason: String,
-}
 
 /// The window of `kernel` extents that `node` slides over the spatial extents
 /// `input`. `ceil` rounds a partial last step up, as `MaxPool`'s `ceil_mode` does.
-pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, WindowError> {
+pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool) -> Result<Window, AttrError> {
     let spatial = input.len();
     let strides = ints(node, "strides", spatial, 1)?;
     let dilations = ints(node, "dilations", spatial, 1)?;
@@ -37,12 +31,12 @@ pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool
             pads[i] = 0;
             pads[spatial + i] = 0;
         } else if mode != "NOTSET" {
-            return Result::Err(WindowError { attr: "auto_pad", reason: `is ${mode}, which ONNX does not define` });
+            return Result::Err(AttrError { attr: "auto_pad", reason: `is ${mode}, which ONNX does not define` });
         }
         let span = input[i] + pads[i] + pads[spatial + i] - reach;
         if span < 0 {
             return Result::Err(
-                WindowError {
+                AttrError {
                     attr: "kernel_shape",
                     reason: `reaches ${reach} along spatial axis ${i}, past the ${input[i] + pads[i] + pads[spatial + i]} the padded input holds`,
                 },
@@ -60,12 +54,12 @@ pub fn window_over(node: &Node, input: &List<i32>, kernel: List<i32>, ceil: bool
 
 /// An integer list attribute of `count` entries no smaller than `least`, each
 /// `least` where the attribute is absent.
-pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i32>, WindowError> {
+pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i32>, AttrError> {
     let Some(attr) = node.attr(name) else {
         return Result::Ok(List::<i32>::filled(count, least));
     };
     if attr.values.len() != count {
-        return Result::Err(WindowError {
+        return Result::Err(AttrError {
             attr: name,
             reason: `holds ${attr.values.len()} values and the operator reads ${count}`,
         });
@@ -73,10 +67,10 @@ pub fn ints(node: &Node, name: String, count: i32, least: i32) -> Result<List<i3
     let mut values: List<i32> = [];
     for let text of attr.values {
         let Ok(v) = i32::from_str(&text) else {
-            return Result::Err(WindowError { attr: name, reason: `holds '${text}', which is not an integer` });
+            return Result::Err(AttrError { attr: name, reason: `holds '${text}', which is not an integer` });
         };
         if v < least {
-            return Result::Err(WindowError { attr: name, reason: `holds ${v}, below ${least}` });
+            return Result::Err(AttrError { attr: name, reason: `holds ${v}, below ${least}` });
         }
         values.push(v);
     }

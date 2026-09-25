@@ -6,6 +6,7 @@ use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use { axes_of, axis_index, fold, regrouped_extents, resolve_index } from "./fold.wado";
 use {
+    AttrError,
     Dim,
     Graph,
     KERNEL_ELEMENT,
@@ -19,7 +20,7 @@ use {
 } from "./graph.wado";
 use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
-use { Window, WindowError, ints, window_over } from "./window.wado";
+use { Window, ints, window_over } from "./window.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 does not fall back to a runtime check.
@@ -820,13 +821,14 @@ pub fn window_of(node: &Node, x: &Shape, shapes: &TreeMap<String, Shape>) -> Res
         if node.attr("kernel_shape") matches { None } {
             return Result::Err(attribute_error(node, "kernel_shape", "is absent and the operator reads it"));
         }
-        window_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
+        attr_read(node, ints(node, "kernel_shape", spatial.len(), 1))?;
     };
     let ceil = int_attr(node, "ceil_mode", 0)? != 0;
-    return window_read(node, window_over(node, &spatial, kernel, ceil));
+    return attr_read(node, window_over(node, &spatial, kernel, ceil));
 }
 
-fn window_read<T>(node: &Node, read: Result<T, WindowError>) -> Result<T, InferError> {
+/// An attribute read, its failure said at `node`.
+fn attr_read<T>(node: &Node, read: Result<T, AttrError>) -> Result<T, InferError> {
     return match read {
         Ok(v) => Result::Ok(v),
         Err(e) => Result::Err(attribute_error(node, e.attr, e.reason)),
@@ -886,11 +888,11 @@ fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transpo
 }
 
 fn float_attr(node: &Node, name: String, fallback: f32) -> Result<f32, InferError> {
-    return node.float_attr(name, fallback).map_err(|reason| attribute_error(node, name, reason));
+    return attr_read(node, node.float_attr(name, fallback));
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError> {
-    return node.int_attr(name, fallback).map_err(|reason| attribute_error(node, name, reason));
+    return attr_read(node, node.int_attr(name, fallback));
 }
 
 /// The operand axis `Gather` indexes along.
