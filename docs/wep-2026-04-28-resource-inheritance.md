@@ -728,7 +728,7 @@ downcast by `as` would skip the class test a type pattern makes.
 
 `extends` introduces no drop protocol: however many Wado static types name a handle, it is one value, copied like any number.
 
-There is no release path. A handle the host hands out is never reclaimed, and each one costs a table slot for the lifetime of the instance. That counts every handle the program receives, not only the ones it keeps: a loop calling `query_selector` once a frame leaks one slot a frame. The CM knows nothing about the handle, so it cannot reclaim it, and Wasm GC offers no finalization to hang a release on. See the known gap below for the only representation that closes this.
+There is no release path. Each object the host hands out keeps a table slot, and the table keeps the object alive, for the lifetime of the instance. The glue interns, so a loop calling `query_selector` for one element costs one slot in all. What grows is the number of distinct objects: every `Event` a dispatch creates, every element created and then removed. The CM knows nothing about the handle, so it cannot reclaim it, and Wasm GC offers no finalization to hang a release on. See the known gap below and [Research: CM Pain Points](./research-cm-pain-points.md).
 
 ## Consequences
 

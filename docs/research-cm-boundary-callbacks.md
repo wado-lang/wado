@@ -65,10 +65,9 @@ module both calls the child and receives calls from it). The instance graph
 stays acyclic — the callback edge is core-level, inside one component
 instance.
 
-Reentrance is explicitly legal: Component Invariant #2
-([Explainer.md](../vendor/component-model/design/mvp/Explainer.md)) permits a
-component to be reentered when it "call[s] a donut wrapped child component";
-the Canonical ABI's `lift` guard traps only _recursive_ reentry of the child.
+Reentrance is legal, recursive reentrance included. component-model#705
+removed the `may_enter` trap from the Canonical ABI, and Concurrency.md,
+"Reentrance", leaves its hazards to the component's documented API.
 
 ### Function values are explicitly future work
 
@@ -93,18 +92,14 @@ parent→child call returns the expected value.
 Sibling adapters (the shape `wasm-compose` produces, and what the component
 -import pipeline uses today) are unaffected.
 
-### Host reentry is task-chain-scoped
+### Host reentry
 
-`Store::may_enter` (wasmtime `component/concurrent.rs`) forbids the host
-entering a top-level instance that is **on the current task's call chain**
-("the behavior defined in the spec"). Consequences:
-
-- A host import handler synchronously calling back into its caller's
-  component traps — regardless of sync/async lifting.
-- A **detached task** (scheduled from the host event loop, not on the guest
-  task's chain) may enter the instance concurrently. A synchronously lifted
-  export is enough: `cm_callback_export.rs` enters one while `run` waits on a
-  timer.
+wasmtime 49 refuses entry only to an instance that has trapped. A host import
+handler may call back into its caller's component while the import call is in
+progress, and a detached task scheduled from the host event loop may enter it
+concurrently: `cm_callback_export.rs` enters a synchronously lifted export
+while `run` waits on a timer. jco 1.30.0 mishandles the first case; see
+[Research: CM Pain Points](./research-cm-pain-points.md#jco).
 
 ## Options
 
@@ -178,7 +173,7 @@ permission ask, progress / cancellation), not as a highlighting mechanism.
 
 Leave the import unsatisfied and have the wado runtime harness provide it as a
 host function that pumps calls to the consumer's handler (a detached task
-against an async-lifted shim export — legal under the task-chain rule above).
+against an async-lifted shim export — legal, see Host reentry above).
 It offers dynamic extent, but the artifact is no longer self-satisfying: it
 runs only on a wado-aware host, forfeiting the portability that is the point of
 targeting Wasm. Rejected on that ground; effect channels reach the same
