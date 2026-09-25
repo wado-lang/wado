@@ -1353,6 +1353,7 @@ Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic s
 // Iteration (integers and char via Step trait)
 for let i of 0..<5 { println(`${i}`); }    // 0, 1, 2, 3, 4
 for let c of 'a'..='e' { print(`${c}`); }  // abcde
+for let i of (0..<10).step_by(3) { ... }   // 0, 3, 6, 9 (any iterator takes step_by)
 ```
 
 ## Effects

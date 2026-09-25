@@ -161,7 +161,7 @@ fn render(opts: &Options, set: &Set, view: &Viewport) -> Image {
     let weight = 1.0 / (n * n) as f64;
     // Pixel pairs go through the SIMD lanes; an odd width repeats the last column.
     for let py of 0..<opts.height {
-        for let mut px = 0; px < opts.width; px += 2 {
+        for let px of (0..<opts.width).step_by(2) {
             let px1 = i32::min(px + 1, opts.width - 1);
             let mut acc0 = [0.0, 0.0, 0.0];
             let mut acc1 = [0.0, 0.0, 0.0];

@@ -7,6 +7,7 @@ use { Option, Result } from "core:prelude/types.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
+use { panic } from "core:rt";
 
 /// Result of a comparison between two values.
 #[compiler_item("ordering")]
@@ -1183,6 +1184,15 @@ pub trait Iterator with () {
         return IterSkip { inner: *self, remaining: n };
     }
 
+    /// Returns an adapter that yields the first element, then every `step`-th after it.
+    /// Panics unless `step` is positive.
+    fn step_by(&self, step: i32) -> IterStepBy<Self> {
+        if step <= 0 {
+            panic("step_by: step must be positive");
+        }
+        return IterStepBy { inner: *self, gap: step - 1, started: false };
+    }
+
     /// Returns an adapter that yields all elements of `self`, then all elements of `other`.
     fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J> {
         return IterChain { first: *self, second: other, first_done: false };
@@ -1418,6 +1428,34 @@ impl<I: Iterator> IntoIterator for IterSkip<I> {
     type Iter = IterSkip<I>;
 
     fn into_iter(&self) -> IterSkip<I> {
+        return *self;
+    }
+}
+
+/// Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
+pub struct IterStepBy<I: Iterator> {
+    pub inner: I,
+    pub gap: i32,
+    pub started: bool,
+}
+
+impl<I: Iterator> Iterator for IterStepBy<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            return self.inner.nth(self.gap);
+        }
+        self.started = true;
+        return self.inner.next();
+    }
+}
+
+impl<I: Iterator> IntoIterator for IterStepBy<I> {
+    type Item = I::Item;
+    type Iter = IterStepBy<I>;
+
+    fn into_iter(&self) -> IterStepBy<I> {
         return *self;
     }
 }

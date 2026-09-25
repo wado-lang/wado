@@ -578,6 +578,11 @@ Returns an adapter that stops after yielding at most `n` elements.
 
 Returns an adapter that discards the first `n` elements before yielding the rest.
 
+#### `fn step_by(&self, step: i32) -> IterStepBy<Self>`
+
+Returns an adapter that yields the first element, then every `step`-th after it.
+Panics unless `step` is positive.
+
 #### `fn chain<J: Iterator<Item = Self::Item>>(&self, other: J) -> IterChain<Self, J>`
 
 Returns an adapter that yields all elements of `self`, then all elements of `other`.
@@ -3355,6 +3360,24 @@ Generic skip iterator adapter that skips elements from any Iterator.
 #### `impl IntoIterator for IterSkip<I>`
 
 ##### `fn into_iter(&self) -> IterSkip<I>`
+
+### `pub struct IterStepBy<I: Iterator>`
+
+Generic step iterator adapter that yields every `gap + 1`-th element of any Iterator.
+
+#### `inner: I`
+
+#### `gap: i32`
+
+#### `started: bool`
+
+#### `impl Iterator for IterStepBy<I>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
+#### `impl IntoIterator for IterStepBy<I>`
+
+##### `fn into_iter(&self) -> IterStepBy<I>`
 
 ### `pub struct IterChain<I: Iterator, J: Iterator>`
 
