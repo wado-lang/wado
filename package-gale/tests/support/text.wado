@@ -1,0 +1,13 @@
+//! Substring helpers the package's tests share over generated source and reports.
+
+/// How many times `needle` occurs in `haystack` without overlapping; 0 when it is empty.
+pub fn count_occurrences<S: AsStrSlice, P: AsStrSlice>(haystack: S, needle: P) -> i32 {
+    return haystack.as_str_slice().split(needle).count() - 1;
+}
+
+test "an occurrence is counted once, and an empty needle never" {
+    assert count_occurrences("aaa", "aa") == 1;
+    assert count_occurrences("a,b,c", ",") == 2;
+    assert count_occurrences("abc", "x") == 0;
+    assert count_occurrences("abc", "") == 0;
+}

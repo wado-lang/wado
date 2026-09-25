@@ -1016,17 +1016,22 @@ impl SolverBridge {
         lowering: &mut Lowering,
         program: &mut Program,
     ) {
-        let (mut declarations, variants) = Self::declarations(tysys, table, lowering);
+        let (mut declarations, variants, handles) = Self::declarations(tysys, table, lowering);
         let variants_from = declarations.len();
         declarations.extend(variants);
+        let handles_from = declarations.len();
+        declarations.extend(handles);
         for item in Self::DERIVED {
             let Some(trait_) = tysys.compiler_trait_def(item) else {
                 continue;
             };
-            let eligible = if item == CompilerItem::Ord {
-                &declarations[..variants_from]
-            } else {
-                &declarations[..]
+            let eligible = match item {
+                CompilerItem::Eq => &declarations[..],
+                CompilerItem::Ord => &declarations[..variants_from],
+                CompilerItem::Serialize | CompilerItem::Deserialize => {
+                    &declarations[..handles_from]
+                }
+                other => unreachable!("{other:?} is not derived"),
             };
             derive(program, lowering.trait_decl(trait_), eligible);
         }
@@ -1197,13 +1202,13 @@ impl SolverBridge {
     }
 
     /// Every declaration as [`derive`] reads it: structs, plain enums and
-    /// flags, then the variants. One with a member the lowering cannot express
-    /// is left out.
+    /// flags, then the variants, then the unrestricted resources. One with a
+    /// member the lowering cannot express is left out.
     fn declarations(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &Lowering,
-    ) -> (Vec<Declaration>, Vec<Declaration>) {
+    ) -> (Vec<Declaration>, Vec<Declaration>, Vec<Declaration>) {
         let by_index = |_: &str, index: u32| Some(index);
         let lowered = |def: DefId,
                        params: usize,
@@ -1255,7 +1260,15 @@ impl SolverBridge {
                 &info.module_source,
             ));
         }
-        (out, variants)
+        let handles = tysys
+            .all_resource_types
+            .iter()
+            .filter(|&(&def, _)| table.is_unrestricted_resource(def))
+            .filter_map(|(&def, info)| {
+                lowered(def, 0, &mut std::iter::empty(), &info.module_source)
+            })
+            .collect();
+        (out, variants, handles)
     }
 
     /// `type_id` lowered, and the bounds in force around it. `None` where a

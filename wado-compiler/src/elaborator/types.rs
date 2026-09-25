@@ -321,6 +321,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A template passed to a tag whose parameter it cannot satisfy.
+    TagParamNotTemplate {
+        param: String,
+        span: Span,
+    },
+
     /// Unknown type name
     UnknownType {
         name: String,
@@ -739,6 +745,16 @@ pub enum TypeError {
         assoc_name: String,
         expected: String,
         actual: String,
+        span: Span,
+    },
+
+    /// A reflect member called on a type parameter whose bound binds no pack
+    /// (`T: ReflectTemplate` without `Holes = [..V]`): the member reads one.
+    MissingReflectPackBound {
+        trait_name: String,
+        type_param: String,
+        method: String,
+        pack_bound: String,
         span: Span,
     },
 
@@ -1222,6 +1238,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[cm(..., classes = ...)]` numbers an `extends` tree in a way a handle
+    /// cannot be tested against, or a type pattern narrows to an unnumbered resource.
+    ResourceClasses {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -1321,11 +1344,26 @@ impl TypeError {
                 format!("type mismatch: expected '{expected}', found '{found}'"),
                 *span,
             ),
+<<<<<<< HEAD
             TypeError::UnknownType { name, span } => (
                 Code::UnknownType,
                 format!("unknown type '{}'", unalias_namespace_member(name)),
                 *span,
             ),
+||||||| 1c849b3d8
+            TypeError::UnknownType { name, span } => {
+                (Code::UnknownType, format!("unknown type '{name}'"), *span)
+            }
+=======
+            TypeError::TagParamNotTemplate { param, span } => (
+                Code::TypeMismatch,
+                format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
+                *span,
+            ),
+            TypeError::UnknownType { name, span } => {
+                (Code::UnknownType, format!("unknown type '{name}'"), *span)
+            }
+>>>>>>> origin/main
             TypeError::SelfInUnboundedBound { param, span } => (
                 Code::UnknownType,
                 format!(
@@ -1855,6 +1893,20 @@ impl TypeError {
                 Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
+                ),
+                *span,
+            ),
+            TypeError::MissingReflectPackBound {
+                trait_name,
+                type_param,
+                method,
+                pack_bound,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
+                     `{trait_name}<{pack_bound}>`"
                 ),
                 *span,
             ),
@@ -2423,6 +2475,9 @@ impl TypeError {
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
             }
+            TypeError::ResourceClasses { message, span } => {
+                (Code::ResourceClasses, message.clone(), *span)
+            }
             TypeError::AmbiguousResourceMethod {
                 method,
                 resource,
@@ -2984,6 +3039,24 @@ impl FunctionContext {
             },
         );
         index
+    }
+
+    /// Reach local `index` as `name` from the current scope too, the way a
+    /// minted local stands for a binding source can spell.
+    pub(super) fn name_local(&mut self, name: String, index: u32) {
+        let TirLocal {
+            type_id, is_mut, ..
+        } = self.locals[index as usize];
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            name,
+            LocalVar {
+                type_id,
+                index,
+                is_mut,
+                defining_ast_id: None,
+            },
+        );
     }
 
     /// Look up a variable by name (searches from innermost to outermost scope)

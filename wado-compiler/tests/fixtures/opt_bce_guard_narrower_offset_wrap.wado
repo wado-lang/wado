@@ -1,0 +1,25 @@
+// A passed guard on `i + 1` says nothing about `i`: Wado's add wraps, so at
+// `i32::MAX` the sum is `i32::MIN` and passes while `i` itself is out of range.
+// The second guard must still run and panic.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn g(arr: &List<i32>, i: i32) with Stdout {
+    if i + 1 >= arr.len() {
+        panic("offset guard");
+    }
+    if i >= arr.len() {
+        panic("plain guard");
+    }
+    println(`ok ${i}`);
+}
+
+export fn run() with Stdout {
+    let arr: List<i32> = [1, 2, 3];
+    g(&arr, builtin::black_box(0));
+    g(&arr, builtin::black_box(2147483647));
+}
+
+__DATA__
+{"stdout": "ok 0\n", "stderr_contains": ["plain guard"], "trapped": true}

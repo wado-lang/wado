@@ -208,7 +208,7 @@ against your own `[dependencies]`, and a package you did not declare offers you
 nothing. (Its own generation still runs, at whatever depth it sits — that is the
 package's business, not a file you named.)
 
-Files from a reserved namespace. `core:` / `wasi:` / `web:` are bundled in the
+Files from a reserved namespace. `core:` / `wasi:` are bundled in the
 compiler and have no `wado.toml` to carry an allowlist, so they export nothing.
 Nothing rules it out later — a bundled allowlist would be a table in the
 compiler — but no need has come up, and the specifier rule is easier to state

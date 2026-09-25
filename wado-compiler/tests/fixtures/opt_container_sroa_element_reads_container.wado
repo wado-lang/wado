@@ -1,0 +1,39 @@
+// Splitting `List<[i32, i32]>` into one list per field turns one write of a
+// pair into one write per field. An element that reads the list must still see
+// it as it was before the write, not with an earlier field already stored:
+// the swap keeps both old values, and each pushed length is the one before
+// that push.
+
+use { println, Stdout } from "core:cli";
+
+fn touch() with Stdout {
+    let mut w: List<i32> = List::with_capacity(builtin::black_box(2));
+    w.push(builtin::black_box(5));
+    w[0] = builtin::black_box(6);
+    println(`${w[0]} ${w.len()}`);
+}
+
+fn swap_first() with Stdout {
+    let mut v: List<[i32, i32]> = List::with_capacity(4);
+    v.push([1, 2]);
+    v.push([3, 4]);
+    let i = builtin::black_box(0);
+    v[i] = [v[i].1, v[i].0];
+    println(`${v[0].0} ${v[0].1} ${v[1].0} ${v[1].1}`);
+}
+
+fn push_lengths() with Stdout {
+    let mut v: List<[i32, i32]> = List::with_capacity(4);
+    v.push([10, v.len()]);
+    v.push([20, v.len()]);
+    println(`${v[0].0} ${v[0].1} ${v[1].0} ${v[1].1}`);
+}
+
+export fn run() with Stdout {
+    touch();
+    swap_first();
+    push_lengths();
+}
+
+__DATA__
+{"stdout": "6 1\n2 1 3 4\n10 0 20 1\n"}

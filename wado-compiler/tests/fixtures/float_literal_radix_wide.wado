@@ -1,0 +1,14 @@
+// A radix literal at a float target is read as the exact integer it spells,
+// however wide, and rounded once, as a decimal integer of the same value is.
+
+export fn run() {
+    let hex: f64 = 0x1_0000_0000_0000_0000_0000_0000_0000_0000;
+    let decimal: f64 = 340282366920938463463374607431768211456;
+    assert hex == decimal;
+    // 2^128 + 2^75 + 1: just above the midpoint to the next f64 up.
+    let above_tie: f64 = 0x1_0000_0000_0000_0800_0000_0000_0000_0001;
+    assert above_tie.to_bits() == 0x47F0_0000_0000_0001;
+}
+
+__DATA__
+{}

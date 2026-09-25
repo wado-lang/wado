@@ -9,8 +9,8 @@ use crate::ast::{
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EFFECT_HOLE,
     EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
-    ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
+    FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
     RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,
@@ -644,7 +644,7 @@ impl Parser {
             Ok(self.advance())
         } else {
             Err(ParseError {
-                message: format!("expected {:?}, found {:?}", kind, self.peek_kind()),
+                message: format!("expected {kind}, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -674,7 +674,7 @@ impl Parser {
         }
 
         Err(ParseError {
-            message: format!("expected Gt, found {:?}", self.peek_kind()),
+            message: format!("expected `>`, found {}", self.peek_kind()),
             span: self.peek().span,
         })
     }
@@ -1073,7 +1073,7 @@ impl Parser {
             Ok((name, span))
         } else {
             Err(ParseError {
-                message: format!("expected identifier, found {:?}", self.peek_kind()),
+                message: format!("expected identifier, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -1096,7 +1096,7 @@ impl Parser {
         }
 
         Err(ParseError {
-            message: format!("expected field name, found {:?}", self.peek_kind()),
+            message: format!("expected field name, found {}", self.peek_kind()),
             span: self.peek().span,
         })
     }
@@ -1190,7 +1190,7 @@ impl Parser {
             TokenKind::World => self.parse_world_decl(visibility, attrs).map(Item::World),
             TokenKind::Global => self.parse_global_decl(visibility, attrs).map(Item::Global),
             _ => Err(ParseError {
-                message: format!("expected item, found {:?}", self.peek_kind()),
+                message: format!("expected item, found {}", self.peek_kind()),
                 span: self.peek().span,
             }),
         }
@@ -1812,7 +1812,7 @@ impl Parser {
             }
             other => Err(ParseError {
                 message: format!(
-                    "expected attribute value (string, number, bool, array, or object), got {other:?}"
+                    "expected attribute value (string, number, bool, array, or object), found {other}"
                 ),
                 span,
             }),
@@ -2211,7 +2211,7 @@ impl Parser {
         }
         Err(self.error_at_span(
             self.peek().span,
-            &format!("expected `;` or `}}`, found {:?}", self.peek_kind()),
+            &format!("expected `;` or `}}`, found {}", self.peek_kind()),
         ))
     }
 
@@ -3177,7 +3177,7 @@ impl Parser {
             } else {
                 Err(ParseError {
                     message: format!(
-                        "expected numeric literal after '-', found {:?}",
+                        "expected numeric literal after `-`, found {}",
                         self.peek_kind()
                     ),
                     span: self.peek().span,
@@ -3185,7 +3185,7 @@ impl Parser {
             }
         } else {
             Err(ParseError {
-                message: format!("expected pattern, found {:?}", self.peek_kind()),
+                message: format!("expected pattern, found {}", self.peek_kind()),
                 span: self.peek().span,
             })
         }
@@ -3236,7 +3236,7 @@ impl Parser {
                     } else {
                         return Err(ParseError {
                             message: format!(
-                                "expected field name in struct pattern, found {:?}",
+                                "expected field name in struct pattern, found {}",
                                 self.peek_kind()
                             ),
                             span: self.peek().span,
@@ -3854,7 +3854,10 @@ impl Parser {
                             } else {
                                 // Not a valid tuple field sequence
                                 return Err(ParseError {
-                                    message: format!("expected field name, found NumberLit({s:?})"),
+                                    message: format!(
+                                        "expected field name, found {}",
+                                        self.peek().kind
+                                    ),
                                     span: field_span,
                                 });
                             }
@@ -4332,7 +4335,7 @@ impl Parser {
                 span: start_span,
             }),
             _ => Err(ParseError {
-                message: format!("expected expression, found {:?}", self.peek_kind()),
+                message: format!("expected expression, found {}", self.peek_kind()),
                 span: start_span,
             }),
         }
@@ -4589,7 +4592,7 @@ impl Parser {
             return Err(self.error_at_span(
                 self.peek().span,
                 &format!(
-                    "expected `do` after handler bindings, found {:?}",
+                    "expected `do` after handler bindings, found {}",
                     self.peek_kind()
                 ),
             ));
@@ -6229,7 +6232,7 @@ impl Parser {
                 _ => {
                     return Err(ParseError {
                         message: format!(
-                            "expected 'import' or 'export' in world declaration, found {:?}",
+                            "expected `import` or `export` in world declaration, found {}",
                             self.peek_kind()
                         ),
                         span: self.peek().span,
@@ -6679,26 +6682,49 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
-        let mut seen_linearity = false;
+        let mut linearity = None;
+        let mut classes = None;
         for field in fields {
             let AttrArg::KeyValue(key, value) = field else {
                 return Err(
                     "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
                 );
             };
-            if key != "linearity" {
-                return Err(format!(
-                    "unknown #[cm] field `{key}`; the only field is `linearity`"
-                ));
+            match key.as_str() {
+                "linearity" => {
+                    let parsed = CmResourceLinearity::parse(value).ok_or_else(|| {
+                        format!(
+                            "unknown #[cm] linearity `{value}`; expected \"affine\" or \"unrestricted\""
+                        )
+                    })?;
+                    if linearity.replace(parsed).is_some() {
+                        return Err("#[cm] takes one `linearity` field".to_string());
+                    }
+                }
+                "classes" => {
+                    let parsed = HandleClasses::parse(value).ok_or_else(|| {
+                        format!(
+                            "#[cm] classes `{value}` is not `lo..=hi` with lo <= hi <= {}",
+                            u16::MAX
+                        )
+                    })?;
+                    if classes.replace(parsed).is_some() {
+                        return Err("#[cm] takes one `classes` field".to_string());
+                    }
+                }
+                _ => {
+                    return Err(format!(
+                        "unknown #[cm] field `{key}`; the fields are `linearity` and `classes`"
+                    ));
+                }
             }
-            if std::mem::replace(&mut seen_linearity, true) {
-                return Err("#[cm] takes one `linearity` field".to_string());
-            }
-            if CmResourceLinearity::parse(value).is_none() {
-                return Err(format!(
-                    "unknown #[cm] linearity `{value}`; expected \"affine\" or \"unrestricted\""
-                ));
-            }
+        }
+        if classes.is_some() && linearity != Some(CmResourceLinearity::Unrestricted) {
+            return Err(
+                "#[cm] `classes` numbers the handles of an unrestricted resource; \
+                 it needs `linearity = \"unrestricted\"` beside it"
+                    .to_string(),
+            );
         }
         return Ok(Some(match CmImport::parse(s) {
             Some(cm) => CmBoundary::Import(cm),
@@ -6801,7 +6827,10 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item, written_params};
+    use crate::ast::{
+        AstVisitor, ConditionElement, EffectHandlerBinding, Item, declared_handle_classes,
+        written_params,
+    };
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
     use crate::{ast, format};
@@ -7361,6 +7390,68 @@ mod tests {
         assert!(
             err.message.contains("backing"),
             "expected the unknown field named, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn cm_attribute_carries_handle_classes() {
+        let source = r#"
+            #[cm("web:dom/element", linearity="unrestricted", classes="2..=4")]
+            pub resource Element {}
+        "#;
+        let module = parse(source).unwrap();
+        let Item::Resource(decl) = &module.items[0] else {
+            panic!("expected resource declaration");
+        };
+        assert_eq!(
+            declared_handle_classes(&decl.attrs),
+            Some(HandleClasses { lo: 2, hi: 4 })
+        );
+    }
+
+    #[test]
+    fn cm_attribute_rejects_malformed_classes() {
+        for classes in ["4..=2", "1..3", "0..=65536", "a..=b", "", "1..=1..=2"] {
+            let source = format!(
+                "#[cm(\"web:dom/element\", linearity=\"unrestricted\", classes=\"{classes}\")]\n\
+                 pub resource Element {{}}"
+            );
+            let err = parse(&source).unwrap_err();
+            assert!(
+                err.message.contains("lo..=hi"),
+                "expected `{classes}` rejected, got: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn cm_attribute_classes_need_an_unrestricted_resource() {
+        for linearity in ["", ", linearity=\"affine\""] {
+            let source = format!(
+                "#[cm(\"web:dom/element\"{linearity}, classes=\"0..=0\")]\n\
+                 pub resource Element {{}}"
+            );
+            let err = parse(&source).unwrap_err();
+            assert!(
+                err.message.contains("linearity = \"unrestricted\""),
+                "expected classes without unrestricted rejected, got: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn cm_attribute_rejects_repeated_classes() {
+        let source = r#"
+            #[cm("web:dom/element", linearity="unrestricted", classes="0..=1", classes="0..=2")]
+            pub resource Element {}
+        "#;
+        let err = parse(source).unwrap_err();
+        assert!(
+            err.message.contains("one `classes` field"),
+            "a second range must not be silently dropped, got: {}",
             err.message
         );
     }

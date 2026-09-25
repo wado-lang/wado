@@ -15,6 +15,7 @@
 use { String, StrSlice } from "core:prelude/string.wado";
 use { List } from "core:prelude/list.wado";
 use { Option } from "core:prelude/types.wado";
+use { ByteSlice } from "core:prelude/bytes.wado";
 
 
 // The f64 bit pattern of -0.0: the sign bit alone.
@@ -137,40 +138,28 @@ pub struct PmHiLo {
 }
 
 // Small pow10 tables: decompose 10^p into coarse (every 27th power) * fine (0..=26)
-// This replaces the large 696-entry table with 26+27 entries + runtime multiplication.
-// Tables are implemented as functions for better Wasm optimization.
+// in place of a 696-entry table of 128-bit values.
 
-fn pow10_coarse(i: i32) -> PmHiLo {
-    return match i {
-        0 => PmHiLo { hi: 0x8049a4ac0c5811af, lo: 0xdfa4769288829d87 },
-        1 => PmHiLo { hi: 0xcf42894a5dce35eb, lo: 0xadf9b3537d798a46 },
-        2 => PmHiLo { hi: 0xa76c582338ed2622, lo: 0x50d50d47f5090db1 },
-        3 => PmHiLo { hi: 0x873e4f75e2224e69, lo: 0xa588bb5917fb5d6e },
-        4 => PmHiLo { hi: 0xda7f5bf590966849, lo: 0x50c65b8aaf957661 },
-        5 => PmHiLo { hi: 0xb080392cc4349ded, lo: 0x427286b26955304c },
-        6 => PmHiLo { hi: 0x8e938662882af53f, lo: 0xab814b848d7d1163 },
-        7 => PmHiLo { hi: 0xe65829b3046b0afb, lo: 0xf34b5a5ceed5aeed },
-        8 => PmHiLo { hi: 0xba121a4650e4ddec, lo: 0x6d0cb29d9e931bec },
-        9 => PmHiLo { hi: 0x964e858c91ba2656, lo: 0xc595f8072aef0790 },
-        10 => PmHiLo { hi: 0xf2d56790ab41c2a3, lo: 0x051d8d66bdc0463c },
-        11 => PmHiLo { hi: 0xc428d05aa4751e4d, lo: 0x55681eb3c3d94779 },
-        12 => PmHiLo { hi: 0x9e74d1b791e07e49, lo: 0x88a15d9b30aacb82 },
-        13 => PmHiLo { hi: 0x8000000000000000, lo: 0x0000000000000000 },
-        14 => PmHiLo { hi: 0xcecb8f27f4200f3a, lo: 0x0000000000000000 },
-        15 => PmHiLo { hi: 0xa70c3c40a64e6c52, lo: 0x666f6f49a09826dc },
-        16 => PmHiLo { hi: 0x86f0ac99b4e8dafe, lo: 0x965fd744c2128e5c },
-        17 => PmHiLo { hi: 0xda01ee641a708dea, lo: 0x17f190b7df336b6a },
-        18 => PmHiLo { hi: 0xb01ae745b101e9e5, lo: 0xa13fa23008d18070 },
-        19 => PmHiLo { hi: 0x8e41ade9fbebc27e, lo: 0xeba770ec417b8cf8 },
-        20 => PmHiLo { hi: 0xe5d3ef282a242e82, lo: 0x70e9973757925a05 },
-        21 => PmHiLo { hi: 0xb9a74a0637ce2ee2, lo: 0x926ac1d428e8c96d },
-        22 => PmHiLo { hi: 0x95f83d0a1fb69cda, lo: 0xb54250efea9b0671 },
-        23 => PmHiLo { hi: 0xf24a01a73cf2dcd0, lo: 0x439cc4c698c37313 },
-        24 => PmHiLo { hi: 0xc3b8358109e84f08, lo: 0xf579d07f13b8ff37 },
-        25 => PmHiLo { hi: 0x9e19db92b4e31baa, lo: 0x93f85d3d957cb92e },
-        _ => unreachable(),
-    };
-}
+// The coarse factors, 192 bits each, most significant word first, rounded up:
+// at 128 bits the product lands up to 3 units above ⌈10^p⌉, `uscale` takes 1.
+global POW10_COARSE: List<u64> = [
+    0x8049a4ac0c5811ae, 0x205b896d777d6278, 0xac261e9f5141430c, 0xcf42894a5dce35ea, 0x52064cac828675b9,
+    0x475f2b7d7df1ad7b, 0xa76c582338ed2621, 0xaf2af2b80af6f24e, 0x657c8f4d43323a37, 0x873e4f75e2224e68,
+    0x5a7744a6e804a291, 0xcc35eddfcf0996d8, 0xda7f5bf590966848, 0xaf39a475506a899e, 0xa30294cc2934e663,
+    0xb080392cc4349dec, 0xbd8d794d96aacfb3, 0xfe13a5c86af64419, 0x8e938662882af53e, 0x547eb47b7282ee9c,
+    0x41b0230e1421487e, 0xe65829b3046b0afa, 0x0cb4a5a3112a5112, 0xa3b561b1cb208397, 0xba121a4650e4ddeb,
+    0x92f34d62616ce413, 0x21a0183e10583cd4, 0x964e858c91ba2655, 0x3a6a07f8d510f86f, 0xe9082f25e9c5e9ed,
+    0xf2d56790ab41c2a2, 0xfae27299423fb9c3, 0x3695dad7e8858902, 0xc428d05aa4751e4c, 0xaa97e14c3c26b886,
+    0x96842dc95323f5a9, 0x9e74d1b791e07e48, 0x775ea264cf55347d, 0xca49f1c05120c9c8, 0x8000000000000000,
+    0x0000000000000000, 0x0000000000000000, 0xcecb8f27f4200f3a, 0x0000000000000000, 0x0000000000000000,
+    0xa70c3c40a64e6c51, 0x999090b65f67d924, 0x0000000000000000, 0x86f0ac99b4e8dafd, 0x69a028bb3ded71a3,
+    0xdf9f915627c04e28, 0xda01ee641a708de9, 0xe80e6f4820cc9495, 0xd74baad03bc1d8d4, 0xb01ae745b101e9e4,
+    0x5ec05dcff72e7f8f, 0xc04c79ffe3243020, 0x8e41ade9fbebc27d, 0x14588f13be847307, 0x23bd6a2059c002f6,
+    0xe5d3ef282a242e81, 0x8f1668c8a86da5fa, 0xf0b5ccf5176ecc7d, 0xb9a74a0637ce2ee1, 0x6d953e2bd7173692,
+    0x88efb0037ac08bdf, 0x95f83d0a1fb69cd9, 0x4abdaf101564f98e, 0x0d5a4af7b3a98e48, 0xf24a01a73cf2dccf,
+    0xbc633b39673c8cec, 0x3d9c44cd2f36917d, 0xc3b8358109e84f07, 0x0a862f80ec4700c8, 0x02606ea01029dc38,
+    0x9e19db92b4e31ba9, 0x6c07a2c26a8346d1, 0x4944d9f52cd0dec3,
+];
 
 // The fine factors are an indexed load, not a `match`: the jump table a 27-arm
 // match lowers to costs an unpredictable indirect branch on the hot path.
@@ -190,8 +179,8 @@ fn pow10_fine(i: i32) -> u64 {
 // Coarse/fine split of the pow10 decomposition; see mul_pow10.
 global POW10_K: i32 = 27;
 
-// mul_pow10 computes the PmHiLo representation of 10^p by decomposing
-// p = q*K + r (where K=27) and multiplying coarse[q] * fine[r].
+// mul_pow10 computes the PmHiLo representation of ceil(10^p), normalized to
+// 128 bits, by decomposing p = q*K + r (where K=27) into coarse[q] * fine[r].
 pub fn mul_pow10(p: i32) -> PmHiLo {
     let K = POW10_K;
     let Q_MIN = -13;
@@ -204,44 +193,37 @@ pub fn mul_pow10(p: i32) -> PmHiLo {
         r = r + K;
     }
 
-    let c = pow10_coarse(q - Q_MIN);
-    let f = pow10_fine(r);
+    let at = (q - Q_MIN) * 3;
+    let f = pow10_fine(r) as i64;
+    let [p2_lo, p2_hi] = builtin::i64_mul_wide_u(POW10_COARSE[at] as i64, f);
+    let [p1_lo, p1_hi] = builtin::i64_mul_wide_u(POW10_COARSE[at + 1] as i64, f);
+    let [p0_lo, p0_hi] = builtin::i64_mul_wide_u(POW10_COARSE[at + 2] as i64, f);
 
-    // Convert PmHiLo to raw u128 value: val = c.hi * 2^64 - c.lo
-    // Represented as two u64 words [c_lo_raw, c_hi_raw]
-    let borrow = (c.lo != 0) as u64;
-    let c_hi_raw = c.hi - borrow;
-    let c_lo_raw = 0 as u64 - c.lo;
+    // The 256-bit product, least significant word first.
+    let w0 = p0_lo as u64;
+    let w1 = p1_lo as u64 + p0_hi as u64;
+    let c1 = (w1 < p1_lo as u64) as u64;
+    let s2 = p2_lo as u64 + p1_hi as u64;
+    let w2 = s2 + c1;
+    let c2 = (s2 < p2_lo as u64) as u64 + (w2 < s2) as u64;
+    let mut w3 = p2_hi as u64 + c2;
+    let mut top_lo = w2;
+    let mut below = w1 | w0;
 
-    // Product = (c_hi_raw * 2^64 + c_lo_raw) * f
-    // a1 = c_hi_raw * f → [lo, hi]
-    let [a1_lo_i, a1_hi_i] = builtin::i64_mul_wide_u(c_hi_raw as i64, f as i64);
-    let a1_lo = a1_lo_i as u64;
-    let a1_hi = a1_hi_i as u64;
+    // Normalize: ensure bit 255 is set, pulling the next bit up from below.
+    if w3 >> 63 == 0 {
+        w3 = w3 << 1 | w2 >> 63;
+        top_lo = w2 << 1 | w1 >> 63;
+        below = w1 << 1 | w0;
+    }
 
-    // a0 = c_lo_raw * f → [lo, hi]
-    let [a0_lo_i, a0_hi_i] = builtin::i64_mul_wide_u(c_lo_raw as i64, f as i64);
-    let a0_lo = a0_lo_i as u64;
-    let a0_hi = a0_hi_i as u64;
-
-    // top_128 = a1 + (a0 >> 64) = a1 + a0_hi
-    let sum_lo = a1_lo + a0_hi;
-    let carry1 = (sum_lo < a1_lo) as u64;
-    let mut top_lo = sum_lo;
-    let mut top_hi = a1_hi + carry1;
-
-    // Round up if not exact (matching generator convention)
-    if a0_lo != 0 {
+    // Round the top 128 bits up where anything below them is set.
+    let mut top_hi = w3;
+    if below != 0 {
         top_lo = top_lo + 1;
         if top_lo == 0 {
             top_hi = top_hi + 1;
         }
-    }
-
-    // Normalize: ensure bit 127 is set (top_hi bit 63)
-    if top_hi >> 63 == 0 {
-        top_hi = top_hi << 1 | top_lo >> 63;
-        top_lo = top_lo << 1;
     }
 
     // Convert back to PmHiLo (hi<<64 - lo)
@@ -879,21 +861,40 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     return [false, is_neg, SpecialKind::NotSpecial];
 }
 
-// Convert a SpecialKind to its display string.
-// For Inf: returns "Inf" (caller should prepend "-" if is_neg).
-// For NaN: returns "NaN".
-// For Zero: returns "0".
-// pack64 takes (m, e) and returns f = m * 2^e.
-// It assumes the caller has provided a 53-bit mantissa m
-// and an exponent that is in range for the mantissa.
-fn pack64(m: u64, e: i32) -> f64 {
-    let bit52 = 1 as u64 << 52;
-    if m & bit52 == 0 {
-        return f64::from_bits(m);
+/// An IEEE 754 binary interchange format, as `parse_bits` rounds into it.
+pub struct BinaryFormat {
+    /// Significand bits, the implicit leading one included.
+    pub precision: i32,
+    pub exponent_bits: i32,
+}
+
+pub global BINARY64: BinaryFormat = BinaryFormat { precision: 53, exponent_bits: 11 };
+pub global BINARY32: BinaryFormat = BinaryFormat { precision: 24, exponent_bits: 8 };
+pub global BINARY16: BinaryFormat = BinaryFormat { precision: 11, exponent_bits: 5 };
+pub global BFLOAT16: BinaryFormat = BinaryFormat { precision: 8, exponent_bits: 8 };
+
+impl BinaryFormat {
+    fn fraction_bits(&self) -> u64 {
+        return (self.precision - 1) as u64;
     }
-    let mantissa_bits = m & ~bit52;
-    let exp_bits = (1075 + e) as u64 << 52;
-    return f64::from_bits(mantissa_bits | exp_bits);
+
+    /// The negated exponent of the smallest subnormal's unit.
+    fn tiny(&self) -> i32 {
+        let bias = (1 << self.exponent_bits - 1) - 1;
+        return bias + self.precision - 2;
+    }
+
+    pub fn infinity_bits(&self) -> u64 {
+        return (1 as u64 << self.exponent_bits as u64) - 1 << self.fraction_bits();
+    }
+
+    fn quiet_nan_bits(&self) -> u64 {
+        return self.infinity_bits() | 1 as u64 << self.fraction_bits() - 1;
+    }
+
+    pub fn sign_bit(&self) -> u64 {
+        return 1 as u64 << (self.exponent_bits + self.precision - 1) as u64;
+    }
 }
 
 /// `parse` accepts at most this many decimal digits in `d` — the most that
@@ -905,44 +906,62 @@ pub global PARSE_DIGITS_MAX: i32 = 19;
 pub global PARSE_EXP_MAX: i32 = 350;
 pub global PARSE_EXP_MIN: i32 = -351;
 
-// parse rounds d * 10^p to the nearest f64.
-// d must have at most PARSE_DIGITS_MAX digits.
-pub fn parse(d: u64, p: i32) -> f64 {
+/// `d * 10^p` rounded once, ties to even, into `format`, as its bits with the
+/// sign clear. `d` is nonzero with at most `PARSE_DIGITS_MAX` digits.
+pub fn parse_bits(d: u64, p: i32, format: &BinaryFormat) -> u64 {
+    assert d != 0;
+    let precision = format.precision;
+    let tiny = format.tiny();
     let b = u64_bit_len(d);
     let lp = log2_pow10(p);
-    let mut e = i32::min(1074, 53 - b - lp);
-    let x = d << (64 - b) as u64;
+    let mut e = i32::min(tiny, precision - b - lp);
+    let s = -(e - (64 - b) + lp + 3);
+    // Every bit `uscale` would keep is shifted out: the value is below a
+    // quarter of the smallest subnormal.
+    if s >= 64 {
+        return 0;
+    }
     let pm = get_pow10(p);
-    let s_val = -(e - (64 - b) + lp + 3);
-    let mut u = uscale(x, pm.hi, pm.lo, s_val);
+    let mut u = uscale(d << (64 - b) as u64, pm.hi, pm.lo, s);
 
-    // Branch-free: if round(u) >= 1<<53, shift right by 1
-    let unmin_val = (1 as u64 << 55) - 2;
-    let shift = (u >= unmin_val) as u64;
+    // Branch-free: if round(u) >= 1<<precision, shift right by 1
+    let unmin = (1 as u64 << (precision + 2) as u64) - 2;
+    let shift = (u >= unmin) as u64;
     u = u >> shift | u & 1;
     e = e - shift as i32;
 
-    return pack64(unrounded_round(u), -e);
+    let m = unrounded_round(u);
+    let hidden = 1 as u64 << format.fraction_bits();
+    if m & hidden == 0 {
+        return m;
+    }
+    let biased = tiny + 1 - e;
+    if biased >= (1 << format.exponent_bits) - 1 {
+        return format.infinity_bits();
+    }
+    return m & ~hidden | biased as u64 << format.fraction_bits();
 }
 
-// parse_text parses the view as a decimal number and returns the nearest f64,
-// allocating no substring. Returns null if the input is malformed.
-// Accepts: optional sign, decimal digits, optional fractional part, optional exponent,
-//          "inf"/"infinity" (case-insensitive), "nan" (case-insensitive).
-// Rejects: leading dot (".5"), trailing dot ("5."), empty input.
-// Examples: "3.14", "1e2", "0.5", "123", "+1.5e-3", "-42", "inf", "NaN"
-pub fn parse_text(s: &StrSlice) -> Option<f64> {
+// parse rounds d * 10^p to the nearest f64.
+// d must have at most PARSE_DIGITS_MAX digits.
+pub fn parse(d: u64, p: i32) -> f64 {
+    return f64::from_bits(parse_bits(d, p, &BINARY64));
+}
+
+/// The decimal text `s` rounded once into `format`, as its bits; `None` where it
+/// is malformed. Takes a sign, `inf`/`infinity`/`nan` in any case, and no bare dot.
+pub fn parse_text_bits(s: &StrSlice, format: &BinaryFormat) -> Option<u64> {
     let len = s.len();
     if len == 0 {
         return null;
     }
 
     // Parse optional sign
-    let mut sign = 1.0;
+    let mut sign: u64 = 0;
     let mut i = 0;
     let first = s.get_byte_unchecked(0);
     if first == b'-' {
-        sign = -1.0;
+        sign = format.sign_bit();
         i = 1;
     } else if first == b'+' {
         i = 1;
@@ -964,7 +983,7 @@ pub fn parse_text(s: &StrSlice) -> Option<f64> {
         let c2 = s.get_byte_unchecked(i + 2);
         if c1.eq_ignore_ascii_case(&b'n') && c2.eq_ignore_ascii_case(&b'f') {
             if remaining == 3 {
-                return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
+                return Option::Some(sign | format.infinity_bits());
             }
             if remaining == 8 {
                 let c3 = s.get_byte_unchecked(i + 3);
@@ -977,7 +996,7 @@ pub fn parse_text(s: &StrSlice) -> Option<f64> {
                     && c5.eq_ignore_ascii_case(&b'i')
                     && c6.eq_ignore_ascii_case(&b't')
                     && c7.eq_ignore_ascii_case(&b'y') {
-                    return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
+                    return Option::Some(sign | format.infinity_bits());
                 }
             }
         }
@@ -991,68 +1010,76 @@ pub fn parse_text(s: &StrSlice) -> Option<f64> {
         let c1 = s.get_byte_unchecked(i + 1);
         let c2 = s.get_byte_unchecked(i + 2);
         if c1.eq_ignore_ascii_case(&b'a') && c2.eq_ignore_ascii_case(&b'n') {
-            return Option::Some(f64::NAN);
+            return Option::Some(format.quiet_nan_bits());
         }
         return null;
     }
 
-    // Parse decimal number
-    let MAX_DIGITS = 19;
+    // The first PARSE_DIGITS_MAX significant digits accumulate into `d`, and
+    // `scale` places them. A nonzero digit past them makes the value `inexact`.
+    let mantissa_start = i;
     let mut d: u64 = 0;
-    let mut frac = 0;
-    let digit_start = i;
-
-    // Read integer digits
+    let mut kept = 0;
+    let mut scale = 0;
+    let mut inexact = false;
+    let int_start = i;
     for ; i < len && s.get_byte_unchecked(i).is_ascii_digit(); i += 1 {
-        d = d * 10 + (s.get_byte_unchecked(i) - b'0') as u64;
-    }
-    let int_digits = i - digit_start;
-
-    // Read fractional digits
-    if i < len && s.get_byte_unchecked(i) == b'.' {
-        if int_digits == 0 {
-            return null;  // leading dot not allowed
+        let digit = (s.get_byte_unchecked(i) - b'0') as u64;
+        if kept == PARSE_DIGITS_MAX {
+            scale += 1;
+            inexact = inexact || digit != 0;
+        } else if d != 0 || digit != 0 {
+            d = d * 10 + digit;
+            kept += 1;
         }
+    }
+    // A leading dot, and a string with no digits, are both refused here.
+    if i == int_start {
+        return null;
+    }
+    if i < len && s.get_byte_unchecked(i) == b'.' {
         i += 1;
         let frac_start = i;
         for ; i < len && s.get_byte_unchecked(i).is_ascii_digit(); i += 1 {
-            d = d * 10 + (s.get_byte_unchecked(i) - b'0') as u64;
-            frac += 1;
+            let digit = (s.get_byte_unchecked(i) - b'0') as u64;
+            if kept == PARSE_DIGITS_MAX {
+                inexact = inexact || digit != 0;
+            } else {
+                if d != 0 || digit != 0 {
+                    d = d * 10 + digit;
+                    kept += 1;
+                }
+                scale -= 1;
+            }
         }
         if i == frac_start {
             return null;  // trailing dot not allowed
         }
     }
+    let mantissa_end = i;
 
-    let total_digits = int_digits + frac;
-    if total_digits == 0 || total_digits > MAX_DIGITS {
-        return null;
-    }
-
-    // Read exponent
-    let mut p = 0;
+    let mut written: i64 = 0;
     if i < len && (s.get_byte_unchecked(i) == b'e' || s.get_byte_unchecked(i) == b'E') {
         i += 1;
-        let mut exp_sign = 1;
+        let mut negative = false;
         if i < len {
             if s.get_byte_unchecked(i) == b'-' {
-                exp_sign = -1;
+                negative = true;
                 i += 1;
             } else if s.get_byte_unchecked(i) == b'+' {
                 i += 1;
             }
         }
         let exp_start = i;
-        if i >= len || len - i > 3 {
-            return null;
-        }
         for ; i < len && s.get_byte_unchecked(i).is_ascii_digit(); i += 1 {
-            p = p * 10 + (s.get_byte_unchecked(i) - b'0') as i32;
+            written = push_exponent_digit(written, (s.get_byte_unchecked(i) - b'0') as i32);
         }
         if i == exp_start {
             return null;
         }
-        p = p * exp_sign;
+        if negative {
+            written = -written;
+        }
     }
 
     if i != len {
@@ -1061,19 +1088,189 @@ pub fn parse_text(s: &StrSlice) -> Option<f64> {
 
     // Handle d == 0 (preserve negative zero)
     if d == 0 {
-        return Option::Some(builtin::f64_copysign(0.0, sign));
+        return Option::Some(sign);
     }
+    let p = decimal_scale(written, scale);
+    if !inexact {
+        return Option::Some(sign | round_decimal(d, p, format));
+    }
+    let digits = s.as_bytes().slice(mantissa_start, mantissa_end);
+    return Option::Some(sign | round_truncated_decimal(d, p, digits, format));
+}
 
-    // Handle overflow/underflow for extreme exponents.
-    // Beyond the pow10 table's domain the result is definitely inf or 0.
-    let eff_p = p - frac;
-    if eff_p > PARSE_EXP_MAX {
-        return Option::Some(builtin::f64_copysign(f64::INFINITY, sign));
-    }
-    if eff_p < PARSE_EXP_MIN {
-        return Option::Some(builtin::f64_copysign(0.0, sign));
-    }
+/// An exponent's digits stop accumulating here, far past what any run of
+/// mantissa digits an input can hold would take to bring it back into range.
+global EXPONENT_SATURATION: i64 = 1000000000000000;
 
-    let val = parse(d, eff_p);
-    return Option::Some(builtin::f64_copysign(val, sign));
+/// `exponent` with one more decimal digit written after it, saturating.
+pub fn push_exponent_digit(exponent: i64, digit: i32) -> i64 {
+    if exponent >= EXPONENT_SATURATION {
+        return exponent;
+    }
+    return exponent * 10 + digit as i64;
+}
+
+/// The power of ten placing a decimal's kept digits: the `written` exponent
+/// plus their `offset`, pinned just outside the pow10 table's domain.
+pub fn decimal_scale(written: i64, offset: i32) -> i32 {
+    let p = written + offset as i64;
+    return i64::clamp(p, (PARSE_EXP_MIN - 20) as i64, (PARSE_EXP_MAX + 20) as i64) as i32;
+}
+
+/// `d * 10^p` rounded once into `format`, as its bits with the sign clear; an
+/// infinity or zero where `p` is past the pow10 table's domain.
+pub fn round_decimal(d: u64, p: i32, format: &BinaryFormat) -> u64 {
+    if p > PARSE_EXP_MAX {
+        return format.infinity_bits();
+    }
+    if p < PARSE_EXP_MIN {
+        return 0;
+    }
+    return parse_bits(d, p, format);
+}
+
+/// `round_decimal` where `d` holds the first `PARSE_DIGITS_MAX` significant
+/// digits of `digits`, as written, and a nonzero one follows them.
+pub fn round_truncated_decimal(d: u64, p: i32, digits: ByteSlice, format: &BinaryFormat) -> u64 {
+    let lo = round_decimal(d, p, format);
+    // The value lies strictly between d and d + 1 at this scale, so only a
+    // rounding boundary between their two results needs the digits dropped.
+    let hi = if d == 9999999999999999999 {
+        round_decimal(1000000000000000000, p + 1, format);
+    } else {
+        round_decimal(d + 1, p, format);
+    };
+    if lo == hi {
+        return lo;
+    }
+    assert hi == lo + 1;
+    let order = compare_to_midpoint(digits, p, lo, format);
+    return if order < 0 || order == 0 && lo & 1 == 0 { lo } else { hi };
+}
+
+/// The exact sign of the decimal `digits` spell, its first `PARSE_DIGITS_MAX`
+/// significant digits scaled by `10^p`, less the midpoint just above `below`.
+fn compare_to_midpoint(digits: ByteSlice, p: i32, below: u64, format: &BinaryFormat) -> i32 {
+    let mut decimal: List<u32> = [];
+    let mut kept = 0;
+    let mut sticky = false;
+    for let mut k = 0; k < digits.len(); k += 1 {
+        let c = digits.get_unchecked(k);
+        if c == b'.' {
+            continue;
+        }
+        let digit = (c - b'0') as u32;
+        if kept == MIDPOINT_DIGITS_MAX {
+            sticky = sticky || digit != 0;
+        } else if kept > 0 || digit != 0 {
+            big_mul_add(&mut decimal, 10, digit);
+            kept += 1;
+        }
+    }
+    let e10 = p - (kept - PARSE_DIGITS_MAX);
+
+    // The midpoint is (2m + 1) * 2^(q - 1), where `below` is m * 2^q.
+    let tiny = format.tiny();
+    let fraction = below & (1 as u64 << format.fraction_bits()) - 1;
+    let biased = (below >> format.fraction_bits()) as i32;
+    let m = if biased == 0 { fraction } else { fraction | 1 as u64 << format.fraction_bits() };
+    let q = if biased == 0 { -tiny } else { biased - tiny - 1 };
+    let odd = 2 * m + 1;
+    let mut midpoint: List<u32> = [odd as u32, (odd >> 32) as u32];
+
+    // decimal * 5^e10 * 2^e10 against midpoint * 2^(q - 1), with the power of
+    // five moved to whichever side keeps both integers.
+    let mut decimal_twos = 0;
+    let mut midpoint_twos = q - 1;
+    if e10 >= 0 {
+        big_mul_pow5(&mut decimal, e10);
+        decimal_twos = e10;
+    } else {
+        big_mul_pow5(&mut midpoint, -e10);
+        midpoint_twos -= e10;
+    }
+    if decimal_twos > midpoint_twos {
+        big_shl(&mut decimal, decimal_twos - midpoint_twos);
+    } else {
+        big_shl(&mut midpoint, midpoint_twos - decimal_twos);
+    }
+    let order = big_cmp(&decimal, &midpoint);
+    if order == 0 && sticky {
+        return 1;
+    }
+    return order;
+}
+
+/// More significant digits than any midpoint of the formats `parse_bits`
+/// serves has: binary64's smallest carries 767.
+global MIDPOINT_DIGITS_MAX: i32 = 800;
+
+/// A little-endian unsigned big integer, times `factor` plus `addend`.
+fn big_mul_add(n: &mut List<u32>, factor: u32, addend: u32) {
+    let mut carry = addend as u64;
+    for let mut k = 0; k < n.len(); k += 1 {
+        let v = n[k] as u64 * factor as u64 + carry;
+        n[k] = v as u32;
+        carry = v >> 32;
+    }
+    if carry != 0 {
+        n.push(carry as u32);
+    }
+}
+
+/// 5^13, the largest power of five a `u32` holds.
+global POW5_13: u32 = 1220703125;
+
+fn big_mul_pow5(n: &mut List<u32>, e: i32) {
+    let mut left = e;
+    while left >= 13 {
+        big_mul_add(n, POW5_13, 0);
+        left -= 13;
+    }
+    let mut last: u32 = 1;
+    for let mut k = 0; k < left; k += 1 {
+        last *= 5;
+    }
+    big_mul_add(n, last, 0);
+}
+
+fn big_shl(n: &mut List<u32>, bits: i32) {
+    let words = bits / 32;
+    let rest = (bits % 32) as u32;
+    if rest != 0 {
+        big_mul_add(n, 1 as u32 << rest, 0);
+    }
+    if words > 0 {
+        let mut shifted: List<u32> = List::with_capacity(n.len() + words);
+        for let mut k = 0; k < words; k += 1 {
+            shifted.push(0);
+        }
+        for let w of *n {
+            shifted.push(w);
+        }
+        *n = shifted;
+    }
+}
+
+/// The sign of `a - b`, ignoring high zero words.
+fn big_cmp(a: &List<u32>, b: &List<u32>) -> i32 {
+    let la = significant_words(a);
+    let lb = significant_words(b);
+    if la != lb {
+        return if la < lb { -1 } else { 1 };
+    }
+    for let mut k = la - 1; k >= 0; k -= 1 {
+        if a[k] != b[k] {
+            return if a[k] < b[k] { -1 } else { 1 };
+        }
+    }
+    return 0;
+}
+
+fn significant_words(n: &List<u32>) -> i32 {
+    let mut len = n.len();
+    while len > 0 && n[len - 1] == 0 {
+        len -= 1;
+    }
+    return len;
 }

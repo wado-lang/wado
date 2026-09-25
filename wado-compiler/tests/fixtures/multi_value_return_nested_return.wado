@@ -1,0 +1,28 @@
+// A `return` nested inside another return's value: a tuple element, and a
+// match arm. The shape check looked only at tail positions, so it passed the
+// inner `return fb`, which the multi-value lowering cannot split (invalid Wasm).
+
+use { println, Stdout } from "core:cli";
+
+fn pair(k: i32, fb: [i32, i32]) -> [i32, i32] {
+    return [if k > 0 { k } else { return fb; }, 1];
+}
+
+fn pick(k: i32, fb: [i32, i32]) -> [i32, i32] {
+    return match k {
+        0 => [10, 0],
+        _ => return fb,
+    };
+}
+
+export fn run() with Stdout {
+    for let k of 0..<builtin::black_box(2) {
+        let fb = [builtin::black_box(7), 8];
+        let [a, b] = pair(k, fb);
+        let [c, d] = pick(k, fb);
+        println(`${a} ${b} ${c} ${d}`);
+    }
+}
+
+__DATA__
+{"stdout": "7 8 10 0\n1 1 7 8\n"}

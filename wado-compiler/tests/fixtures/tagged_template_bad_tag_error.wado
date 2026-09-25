@@ -6,7 +6,13 @@ export fn run() {
     let case = Option::Some`x`;
     let f = |n: i32| n;
     let closure = f`y`;
+    let g = |s: String| s;
+    let typed = g`z`;
 }
 
 __DATA__
-{"compile_error": "a template tag must name a function or a static method", "compile_error_count": 2}
+{
+    "compile_error": "a template tag must name a function or a static method",
+    "compile_error_count": 3,
+    "compile_errors_not_contains": ["type mismatch", "$tmpl$"]
+}

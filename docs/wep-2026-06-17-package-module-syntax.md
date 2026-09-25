@@ -25,7 +25,7 @@ A specifier is a CM package coordinate, a `lib:` alias, a local path, or a
 remote URL. Two principles anchor the rest:
 
 - **Reserved namespace ⇔ bundled namespace.** A namespace is reserved iff the
-  compiler ships its bytes — today `core`, `wasi` and `web`. Every other
+  compiler ships its bytes — today `core` and `wasi`. Every other
   namespace is open and resolves from outside. `lib` is the one extra reserved
   namespace, and carries a single responsibility (below).
 - **Manifest key ≡ specifier string.** A `[dependencies]` key is byte-identical
@@ -35,14 +35,14 @@ remote URL. Two principles anchor the rest:
 
 | Form                      | Resolver                                      |
 | ------------------------- | --------------------------------------------- |
-| `core:…` `wasi:…` `web:…` | Reserved → compiler-bundled                   |
+| `core:…` `wasi:…`         | Reserved → compiler-bundled                   |
 | `ns:pkg[@ver]` (open ns)  | Default registry, or `with`/manifest override |
 | `lib:nick`                | Indirection: alias / rename / private dep     |
 | `<coordinate>/<path.ext>` | One file the package exports                  |
 | `./` `../`                | Local file                                    |
 | `http(s)://`              | Remote                                        |
 
-`core:`/`wasi:`/`web:` are not a separate scheme — they are coordinates whose
+`core:`/`wasi:` are not a separate scheme — they are coordinates whose
 namespace happens to be bundled. Nested namespaces (`a:b:pkg`) follow WIT.
 
 A specifier carries no interface segment. Interfaces and their members are
@@ -127,7 +127,7 @@ Bare names (`from "router"`) are rejected everywhere.
 - Single-file scripts gain the manifest's full expressive power inline.
 - Coverage is complete with one indirection point: public-transparent (direct
   coordinate), rename/short/multi-major/coordinate-less (`lib:`), bundled
-  (`core:`/`wasi:`/`web:`), local (`./`), remote (`http(s)://`).
+  (`core:`/`wasi:`), local (`./`), remote (`http(s)://`).
 
 ### Trade-offs
 

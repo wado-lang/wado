@@ -35,14 +35,6 @@ pub const INTERNAL_PREFIX: &str = "$";
 /// anchor would have nothing to bind to. A `const` is the right shape.
 pub const CLOSURE_CALL_METHOD: &str = "$call";
 
-/// Method a narrowing type pattern calls on its target resource: the
-/// receiver's `is-<resource>` import, which answers whether the handle is one.
-pub const NARROWING_TEST_METHOD: &str = "$is";
-
-/// Method `==` calls on the root of two unrestricted handles' chain: the
-/// package's `is-same` import, which answers whether both name one host object.
-pub const IDENTITY_TEST_METHOD: &str = "$same";
-
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
 /// a valid Wado identifier character, so the alias is a single `::`-free token
@@ -386,10 +378,34 @@ pub fn deref_capture_name(index: u32) -> String {
     format!("{INTERNAL_PREFIX}deref_cap_{index}")
 }
 
-/// The `&mut` proxy an owning frame binds for a binding a closure writes.
+/// The label on a C-style `for` loop's body, which `continue` breaks out of.
 #[must_use]
-pub fn mut_capture_ref_name(var_name: &str) -> String {
+pub fn for_body_label(serial: u32) -> String {
+    format!("{INTERNAL_PREFIX}for_{serial}_body")
+}
+
+/// Whether `label` is one [`for_body_label`] minted: what runs after it in the
+/// loop is the header's update, which acts on the next iteration's bindings.
+#[must_use]
+pub fn is_for_body_label(label: &str) -> bool {
+    label
+        .strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix("for_"))
+        .and_then(|rest| rest.strip_suffix("_body"))
+        .is_some_and(|serial| serial.parse::<u32>().is_ok())
+}
+
+/// The reference proxy an owning frame binds for a binding a closure captures
+/// by reference.
+#[must_use]
+pub fn capture_ref_name(var_name: &str) -> String {
     format!("{INTERNAL_PREFIX}ref_{var_name}")
+}
+
+/// The local a constant pattern compared by `Eq` holds its scrutinee in.
+#[must_use]
+pub fn constant_pattern_local_name() -> String {
+    format!("{INTERNAL_PREFIX}constant")
 }
 
 /// Local holding one flattened field of a variant-return slot. `slot_local`
@@ -399,11 +415,70 @@ pub fn variant_return_field_local(field_name: &str, slot_local: &str) -> String 
     format!("{INTERNAL_PREFIX}vr_{field_name}_{slot_local}")
 }
 
-/// The label a block no `break` names carries: `what` says which construct put
-/// the block there, `id` makes it unique within the body.
+/// A local or label a construct mints for itself: `what` says which construct,
+/// `serial` makes it unique within the body.
 #[must_use]
-pub fn plain_block_label(what: &str, id: usize) -> String {
-    format!("{INTERNAL_PREFIX}{what}_{id}")
+pub fn minted_name(what: &str, serial: impl fmt::Display) -> String {
+    format!("{INTERNAL_PREFIX}{what}_{serial}")
+}
+
+/// `what` narrowed by `sub` (a field name, say), for [`minted_name`].
+#[must_use]
+pub fn minted_what(what: &str, sub: &str) -> String {
+    format!("{what}_{sub}")
+}
+
+/// What every LICM hoist is minted under, narrowed by [`minted_what`].
+pub const LICM_HOIST: &str = "licm";
+
+/// Whether `name` is one minted under [`LICM_HOIST`]: what tells a later LICM
+/// session the hoists an earlier one left.
+#[must_use]
+pub fn is_licm_hoist(name: &str) -> bool {
+    name.strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix(LICM_HOIST))
+        .is_some_and(|rest| rest.starts_with('_'))
+}
+
+/// The local a derived `Eq` binds `side`'s payload of variant case `case` to.
+#[must_use]
+pub fn eq_payload_local(side: &str, case: &str, index: u32) -> String {
+    format!("{INTERNAL_PREFIX}eq_{side}_{case}_{index}")
+}
+
+/// `name` told apart by `serial` from a same-spelled name already taken.
+#[must_use]
+pub fn serial_suffixed(name: &str, serial: u32) -> String {
+    format!("{name}_{serial}")
+}
+
+/// The label of a block fusing labeled block `label` with the branch on its
+/// value.
+#[must_use]
+pub fn fused_block_label(label: &str) -> String {
+    format!("{INTERNAL_PREFIX}fused_{label}")
+}
+
+/// The label of a `match` that labeled block `label`'s exits are threaded into.
+#[must_use]
+pub fn threaded_block_label(label: &str) -> String {
+    format!("{INTERNAL_PREFIX}thread_{label}")
+}
+
+/// The label of the block holding an inlined body of `callee`.
+#[must_use]
+pub fn inline_block_label(callee: &str, serial: u32) -> String {
+    let callee: String = callee
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
 }
 
 /// Label the template-string synthesiser stamps on the block wrapping an

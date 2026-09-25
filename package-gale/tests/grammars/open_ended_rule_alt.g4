@@ -1,10 +1,9 @@
-// A regression for a rule-level open-ended alternative.
+// A rule-level open-ended alternative.
 //
 // `A? . C` reaches a wildcard behind a nullable prefix, so it has a first set
-// (`a`) and still admits every token. An arm built from it therefore tests
-// nothing, and may keep its place only where the partition has merged the
-// other alternatives into it — which rule level, partitioning by raw first
-// sets, does not (see `rule_overlap_groups`).
+// (`a`) and still admits every token: the rule's decision has to offer it on
+// `b` beside the two alternatives that name `b`, and on every token no
+// alternative names. Its `A?` contests every token with the `.` after it.
 //
 // Measured against the published jar:
 //
@@ -13,9 +12,6 @@
 //   `b e`   → `(r b e)`     alt 2
 //   `b c`   → `(r b c)`     alt 0, selected by a token its prefix does not name
 //   `a c`   → `(r a c)`     alt 0, with `A?` skipped so `.` takes the `a`
-//
-// The last two are where Gale's static prediction and the jar part company;
-// `driver_cst_open_ended_rule_alt_test.wado` marks them `#[TODO]`.
 grammar OpenEndedRuleAlt;
 
 r : A? . C | B D | B E ;

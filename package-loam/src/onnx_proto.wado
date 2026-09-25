@@ -6,8 +6,21 @@
 //! subset leaves out is skipped by `core:protobuf`, so a real model reads
 //! whatever else it carries.
 
-use { from_bytes, read_fixed32 } from "core:protobuf";
-use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
+use { from_bytes } from "core:protobuf";
+use {
+    Attr,
+    ConstTensor,
+    Dim,
+    Graph,
+    Node,
+    Rank,
+    ValueInfo,
+    bit_pattern,
+    check_element_count,
+    element_of,
+    parameters,
+    push_element,
+} from "./graph.wado";
 
 /// Nesting flattens: `.proto` nests a message inside a message and Wado has
 /// no nested declaration, so the path is joined into the name. This is the
@@ -191,48 +204,19 @@ pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, S
     if t.data_type != 1 {
         return Result::Ok(null);
     }
+    let extents = extents_of(t)?;
+    let Some(bytes) = payload(t, &"float", &extents)? else {
+        return Result::Err(`${t.name}: no data`);
+    };
+    return Result::Ok(Option::Some([List::<f32>::from_le_bytes(bytes), extents]));
+}
+
+fn extents_of(t: &TensorProto) -> Result<List<i32>, String> {
     let mut extents: List<i32> = [];
     for let d of t.dims {
         extents.push(extent(d, &t.name)?);
     }
-    let data = if t.raw_data.is_empty() { t.float_data } else { raw_floats(&t.raw_data, &t.name)? };
-    check_element_count(&t.name, data.len(), &extents)?;
-    return Result::Ok(Option::Some([data, extents]));
-}
-
-fn raw_floats(raw: &ByteList, tensor: &String) -> Result<List<f32>, String> {
-    if raw.len() % 4 != 0 {
-        return Result::Err(`${tensor}: ${raw.len()} raw bytes is not whole f32 elements`);
-    }
-    let bytes = raw.as_byte_slice();
-    let mut data: List<f32> = List::with_capacity(raw.len() / 4);
-    let mut at = 0;
-    while at < bytes.len() {
-        let Some([bits, next]) = read_fixed32(&bytes, at) else {
-            unreachable();
-        };
-        data.push(f32::from_bits(bits));
-        at = next;
-    }
-    return Result::Ok(data);
-}
-
-/// The extents' product is how many elements the tensor says it has, and a
-/// payload of any other length is a file disagreeing with itself.
-fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
-    let mut declared: i64 = 1;
-    for let e of *extents {
-        declared = declared * e as i64;
-        // No payload is longer than what was read, so a product past it is
-        // already wrong and cannot overflow on the way.
-        if declared > elements as i64 {
-            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
-        }
-    }
-    if declared != elements as i64 {
-        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
-    }
-    return Result::Ok(());
+    return Result::Ok(extents);
 }
 
 /// The element type names the textual format spells, indexed by
@@ -305,8 +289,7 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
     return Result::Ok(ValueInfo { name: vi.name, dtype, rank });
 }
 
-/// An initializer as a `ValueInfo`: its name, type and extents. The weights
-/// themselves are the caller's, as `emit` already assumes.
+/// An initializer as a `ValueInfo`: its name, type, extents and data.
 fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     if let Some(entry) = t.external_data.first() {
         return Result::Err(`${t.name}: external data (${entry.key})`);
@@ -317,11 +300,48 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     let Some(dtype) = dtype_name(t.data_type) else {
         return Result::Err(`${t.name}: element type ${t.data_type}`);
     };
+    let extents = extents_of(t)?;
     let mut dims: List<Dim> = [];
-    for let d of t.dims {
-        dims.push(Dim::Static(extent(d, &t.name)?));
+    for let e of extents {
+        dims.push(Dim::Static(e));
     }
-    return Result::Ok(ValueInfo { name: t.name, dtype, rank: Rank::Dims(dims) });
+    return Result::Ok(ValueInfo {
+        name: t.name,
+        dtype,
+        rank: Rank::Dims(dims),
+        data: payload(t, &dtype, &extents)?,
+    });
+}
+
+/// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
+/// typed field re-encoded. A 16-bit element sits in the low half of an `int32`.
+fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Option<ByteList>, String> {
+    let Some(element) = element_of(dtype) else {
+        return Result::Ok(null);
+    };
+    let width = element.width;
+    let mut bytes = t.raw_data;
+    if bytes.is_empty() {
+        if width == 4 {
+            for let v of t.float_data {
+                push_element(&mut bytes, v.to_bits(), width);
+            }
+        } else {
+            for let v of t.int32_data {
+                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)?, width);
+            }
+        }
+    }
+    // No value field at all, on a shape that has elements: the checkpoint
+    // supplies them, as a textual initializer written without `=` says.
+    if bytes.is_empty() && check_element_count(&t.name, 0, extents).is_err() {
+        return Result::Ok(null);
+    }
+    if bytes.len() % width != 0 {
+        return Result::Err(`${t.name}: ${bytes.len()} raw bytes is not whole ${dtype} elements`);
+    }
+    check_element_count(&t.name, bytes.len() / width, extents)?;
+    return Result::Ok(Option::Some(bytes));
 }
 
 /// An attribute's values as text, so the two readers hand `Attr` the same

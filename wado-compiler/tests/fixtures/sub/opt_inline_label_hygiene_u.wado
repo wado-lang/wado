@@ -1,0 +1,12 @@
+// Heavy enough to be inlined only in a later round than its caller.
+global FLAG: bool = false;
+
+pub fn f(x: i32) -> i32 {
+    if FLAG {
+        let mut s = 0;
+        for let i of 0..<x { s += i * x + (s >> 3) ^ (i << 2); }
+        for let i of 0..<x { s += i * x + (s >> 4) ^ (i << 3); }
+        return s;
+    }
+    return x + 1;
+}

@@ -1,10 +1,8 @@
-//! Dropped-value elimination: a value in discarded position keeps only its
-//! effects. `docs/optimizer.md` states the rewrite and what counts as discarded.
-//!
-//! Deliberately not extended to a discarded `Expr(aggregate)` statement:
-//! `sroa_variant_return` tracks a call by whether its result is dropped, reads
-//! that off bare `Expr` statements only, and reboxes what the decomposition
-//! moves one level down — every round, past the optimizer's iteration cap.
+//! Dropped-value elimination: a discarded value-producing labeled block keeps
+//! only its effects, and every `break` to it gives up its operand.
+
+// Not extended to a discarded `Expr(aggregate)`: `sroa_variant_return` reads
+// "result dropped" off bare `Expr` statements and would rebox it every round.
 
 use crate::nir_arena::{BlockId, BlockRole, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};

@@ -952,6 +952,8 @@ pub struct TokenRefElement {
     /// the `generate()` path so FIRST-set analysis carries the integer, not the
     /// name. -1 until resolved (or for an unresolved reference).
     pub kind_id: i32 = -1,
+    /// Unique terminal id, assigned by `assign_atn_leaf_sites`; -1 until then.
+    pub atn_leaf_site: i32 = -1,
 }
 
 impl TokenRefElement {
@@ -976,6 +978,8 @@ pub struct LiteralElement {
     /// `const_name` global's value). Resolved once by `resolve_kind_ids`; -1
     /// until resolved. See `TokenRefElement::kind_id`.
     pub kind_id: i32 = -1,
+    /// See `TokenRefElement::atn_leaf_site`.
+    pub atn_leaf_site: i32 = -1,
 }
 
 impl LiteralElement {
@@ -1005,13 +1009,9 @@ impl WildcardElement {
 pub struct GroupElement {
     pub alternatives: List<Alternative>,
     pub options: List<GrammarOption>,
-    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
-    /// to `atn_call_site`). Ties this group's alternation BlockStart to its
-    /// ATN decision number: `build_atn` records `atn_decision -> decision` in
-    /// `Atn.decision_sites`, and codegen reads it to emit
-    /// `atn_predict_with_stack(sim, decision, …)` for an ATN-class multi-alt
-    /// group. -1 until assigned (and for single-alt groups, which mark no
-    /// decision). See `TODO.md` "ATN-class grammars".
+    /// Decision-site id (`assign_atn_decisions`), which `Atn.decision_sites`
+    /// maps to the decision an ATN-class group predicts at. -1 until assigned
+    /// and for a single-alt group.
     pub atn_decision: i32 = -1,
 }
 
@@ -1025,14 +1025,8 @@ pub struct RepeatElement {
     pub kind: RepeatKind,
     pub element: Element,
     pub non_greedy: bool,
-    /// Unique decision-site id, assigned by `assign_atn_decisions` (parallel
-    /// to `atn_call_site`). Ties this repeat's loop/optional decision state to
-    /// its ATN decision number: `build_atn` records `atn_decision -> decision`
-    /// in `Atn.decision_sites`, and codegen reads it to emit
-    /// `atn_predict_with_stack(sim, decision, …)` for a non-greedy `??` —
-    /// retiring the runtime "unique exit-first BlockStart" search, so several
-    /// `??` in one rule each get their own decision. -1 until assigned. See
-    /// `TODO.md` "ATN-class grammars".
+    /// Decision-site id (`assign_atn_decisions`), which `Atn.decision_sites`
+    /// maps to the decision a non-greedy `??` predicts at. -1 until assigned.
     pub atn_decision: i32 = -1,
 }
 
@@ -1769,12 +1763,19 @@ pub fn assign_atn_call_sites(grammar: &mut Grammar) {
     stamp_parser_elements(grammar, StampMode::CallSites);
 }
 
+/// Assign every parser-rule terminal an `atn_leaf_site` id, which `build_atn`
+/// records as `leaf_site -> the state after the match`.
+pub fn assign_atn_leaf_sites(grammar: &mut Grammar) {
+    stamp_parser_elements(grammar, StampMode::LeafSites);
+}
+
 /// Which id a single traversal of the parser element tree assigns: the
-/// `RuleRef` call-site id, the `Repeat`/`Group` decision id, or the retained
-/// action ids (alt actions + arg-actions). One walk, one mode.
+/// `RuleRef` call-site id, the `Repeat`/`Group` decision id, the terminal leaf
+/// id, or the retained action ids (alt actions + arg-actions). One walk, one mode.
 enum StampMode {
     CallSites,
     Decisions,
+    LeafSites,
     ActionIds,
 }
 
@@ -1808,25 +1809,16 @@ fn stamp_alternatives(alts: &List<Alternative>, mode: StampMode, next: &mut i32)
 fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
     return match *elem {
         RuleRef(rr) => {
-            let mut call_site = rr.atn_call_site;
-            let mut arg = rr.arg_action;
-            match mode {
-                CallSites => {
-                    call_site = *next;
-                    *next += 1;
-                },
-                ActionIds => arg = stamp_action_source_opt(rr.arg_action, next),
-                Decisions => {
-                },
-            }
+            let call_site = stamped_id(rr.atn_call_site, mode matches { CallSites }, next);
+            let arg = if mode matches { ActionIds } {
+                stamp_action_source_opt(rr.arg_action, next);
+            } else {
+                rr.arg_action;
+            };
             Element::RuleRef(RuleRefElement { ..rr, atn_call_site: call_site, arg_action: arg });
         },
         Repeat(rep) => {
-            let mut decision = rep.atn_decision;
-            if mode matches { Decisions } {
-                decision = *next;
-                *next += 1;
-            }
+            let decision = stamped_id(rep.atn_decision, mode matches { Decisions }, next);
             Element::Repeat(RepeatElement {
                 kind: rep.kind,
                 element: stamp_element(&rep.element, mode, next),
@@ -1835,11 +1827,7 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
             });
         },
         Group(g) => {
-            let mut decision = g.atn_decision;
-            if mode matches { Decisions } {
-                decision = *next;
-                *next += 1;
-            }
+            let decision = stamped_id(g.atn_decision, mode matches { Decisions }, next);
             Element::Group(GroupElement {
                 alternatives: stamp_alternatives(&g.alternatives, mode, next),
                 options: g.options,
@@ -1856,16 +1844,36 @@ fn stamp_element(elem: &Element, mode: StampMode, next: &mut i32) -> Element {
         Not(n) => Element::Not(NotElement {
             element: stamp_element(&n.element, mode, next),
         }),
+        TokenRef(t) => Element::TokenRef(TokenRefElement {
+            ..t,
+            atn_leaf_site: stamped_id(t.atn_leaf_site, mode matches { LeafSites }, next),
+        }),
+        Literal(l) => Element::Literal(LiteralElement {
+            ..l,
+            atn_leaf_site: stamped_id(l.atn_leaf_site, mode matches { LeafSites }, next),
+        }),
         _ => *elem,
     };
+}
+
+/// The next id when this walk assigns it, else the one `id` already holds.
+fn stamped_id(id: i32, assigns: bool, next: &mut i32) -> i32 {
+    return if assigns { take_id(next) } else { id };
+}
+
+fn take_id(next: &mut i32) -> i32 {
+    let id = *next;
+    *next += 1;
+    return id;
 }
 
 fn stamp_alt_actions(actions: &List<AltAction>, next: &mut i32) -> List<AltAction> {
     let mut out: List<AltAction> = [];
     for let a of actions {
-        let src = ActionSource { ..a.source, action_id: *next };
-        *next += 1;
-        out.push(AltAction { ..*a, source: src });
+        out.push(AltAction {
+            ..*a,
+            source: ActionSource { ..a.source, action_id: take_id(next) },
+        });
     }
     return out;
 }
@@ -1903,9 +1911,10 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
         );
         let mut new_catches: List<CatchClause> = [];
         for let c of &grammar.parser_rules[ri].catches {
-            let body = ActionSource { ..c.body, action_id: next };
-            next += 1;
-            new_catches.push(CatchClause { ..*c, body });
+            new_catches.push(CatchClause {
+                ..*c,
+                body: ActionSource { ..c.body, action_id: take_id(&mut next) },
+            });
         }
         grammar.parser_rules[ri].catches = new_catches;
         grammar.parser_rules[ri].finally_action = stamp_action_source_opt(
@@ -1918,29 +1927,20 @@ pub fn assign_action_ids(grammar: &mut Grammar) {
         grammar.lexer_rules[li].body = stamped;
     }
     for let mut ni = 0; ni < grammar.named_actions.len(); ni += 1 {
-        grammar.named_actions[ni].body.action_id = next;
-        next += 1;
+        grammar.named_actions[ni].body.action_id = take_id(&mut next);
     }
     for let mut oi = 0; oi < grammar.options.len(); oi += 1 {
         if let Action(src) = &grammar.options[oi].value {
-            let ns = ActionSource { ..*src, action_id: next };
-            next += 1;
-            grammar.options[oi].value = OptionValue::Action(ns);
+            grammar.options[oi].value = OptionValue::Action(ActionSource { ..*src, action_id: take_id(&mut next) });
         }
     }
 }
 
 fn stamp_action_source_opt(opt: Option<ActionSource>, next: &mut i32) -> Option<ActionSource> {
-    match opt {
-        Some(s) => {
-            let ns = ActionSource { ..s, action_id: *next };
-            *next += 1;
-            return Option::<ActionSource>::Some(ns);
-        },
-        None => {
-            return opt;
-        },
-    }
+    let Some(s) = opt else {
+        return opt;
+    };
+    return Option::Some(ActionSource { ..s, action_id: take_id(next) });
 }
 
 fn stamp_actions_lexer_alternatives(alts: &List<LexerAlternative>, next: &mut i32) -> List<LexerAlternative> {

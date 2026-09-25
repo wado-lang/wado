@@ -1,0 +1,27 @@
+// A pattern over a value whose type is already an error still runs the checks
+// that need no scrutinee: a float literal and a reversed range are reported,
+// and an or-pattern's bare case names are not compared as bindings.
+export fn run() {
+    match missing_a() {
+        Some | None => {},
+    }
+    match missing_b() {
+        1.5 => {},
+        _ => {},
+    }
+    match missing_c() {
+        9..=1 => {},
+        _ => {},
+    }
+}
+
+__DATA__
+{
+    "compile_error": "unknown function 'missing_",
+    "compile_error_count": 3,
+    "compile_errors_contains": [
+        "float literals cannot be used in match patterns",
+        "reversed range pattern"
+    ],
+    "compile_errors_not_contains": ["or-pattern alternatives"]
+}

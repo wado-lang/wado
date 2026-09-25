@@ -168,7 +168,7 @@ pub enum CompilerItem {
     /// `FlagsBit<T>` — the per-bit member struct minted by
     /// `ReflectFlags::members()` (WEP 2026-06-13 §3c).
     ReflectFlagsBit,
-    /// `Hole<T, V>` — the per-hole member struct minted by
+    /// `TemplateHole<T, V>` — the per-hole member struct minted by
     /// `ReflectTemplate::members()` (WEP 2026-01-10).
     ReflectTemplateHole,
     /// `Slice<T>` — the array reference view the byte-slice methods and
@@ -214,6 +214,8 @@ pub enum CompilerItem {
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
     Default,
+    /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
+    FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
     /// `type_name` for all of them (WEP 2026-06-13).
     Reflect,
@@ -416,6 +418,8 @@ pub enum CompilerItem {
     /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
     /// call it.
     ListFromTuple,
+    /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
+    ListFromLeBytes,
     /// `Reflect::type_name` — the declaration's name, for every kind.
     ReflectTypeName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
@@ -606,6 +610,10 @@ pub enum CompilerItem {
     FormatterWriteLiteral,
     /// `core:rt::assert_failed`.
     AssertFailed,
+    /// `core:rt::handle_class`.
+    HandleClass,
+    /// `core:rt::inspect_handle`.
+    InspectHandle,
     /// `core:rt::cm_future_pair`.
     CmFuturePair,
     /// `core:rt::cm_stream_pair`.
@@ -677,6 +685,7 @@ impl CompilerItem {
         Self::StreamWrite,
         Self::CaseStyle,
         Self::Default,
+        Self::FromLeBytes,
         Self::Reflect,
         Self::ReflectStruct,
         Self::ReflectVariant,
@@ -765,6 +774,7 @@ impl CompilerItem {
         Self::AlignmentRight,
         Self::ListPush,
         Self::ListFromTuple,
+        Self::ListFromLeBytes,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
@@ -837,6 +847,8 @@ impl CompilerItem {
         Self::FormatterNew,
         Self::FormatterWriteLiteral,
         Self::AssertFailed,
+        Self::HandleClass,
+        Self::InspectHandle,
         Self::CmFuturePair,
         Self::CmStreamPair,
         Self::MemoryToGcString,
@@ -885,6 +897,7 @@ impl CompilerItem {
             Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
             Self::Default => "default",
+            Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
             Self::ReflectStruct => "reflect_struct",
             Self::ReflectVariant => "reflect_variant",
@@ -892,7 +905,7 @@ impl CompilerItem {
             Self::ReflectStructField => "struct_field",
             Self::ReflectEnumCase => "enum_case",
             Self::ReflectFlagsBit => "flags_bit",
-            Self::ReflectTemplateHole => "hole",
+            Self::ReflectTemplateHole => "template_hole",
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::Future => "future",
@@ -973,6 +986,7 @@ impl CompilerItem {
             Self::AlignmentRight => "alignment_right",
             Self::ListPush => "list_push",
             Self::ListFromTuple => "list_from_tuple",
+            Self::ListFromLeBytes => "list_from_le_bytes",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
@@ -991,6 +1005,8 @@ impl CompilerItem {
             Self::FormatterNew => "formatter_new",
             Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::AssertFailed => "assert_failed",
+            Self::HandleClass => "handle_class",
+            Self::InspectHandle => "inspect_handle",
             Self::CmFuturePair => "cm_future_pair",
             Self::CmStreamPair => "cm_stream_pair",
             Self::MemoryToGcString => "memory_to_gc_string",
@@ -1082,6 +1098,8 @@ impl CompilerItem {
             // Always loaded — `core:prelude` is auto-imported, and `core:rt`
             // carries the CM ABI helpers the binding synthesis calls.
             | Self::AssertFailed
+            | Self::HandleClass
+            | Self::InspectHandle
             | Self::CmFuturePair
             | Self::CmStreamPair
             | Self::MemoryToGcString
@@ -1124,6 +1142,7 @@ impl CompilerItem {
             | Self::StreamWrite
             | Self::CaseStyle
             | Self::Default
+            | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
             | Self::ReflectVariant
@@ -1158,6 +1177,7 @@ impl CompilerItem {
             | Self::From
             | Self::ListPush
             | Self::ListFromTuple
+            | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
@@ -1327,6 +1347,8 @@ impl CompilerItem {
         match self {
             Self::FormatterNew | Self::FormatterWriteLiteral => CompilerItemKind::Method,
             Self::AssertFailed
+            | Self::HandleClass
+            | Self::InspectHandle
             | Self::CmFuturePair
             | Self::CmStreamPair
             | Self::MemoryToGcString
@@ -1372,6 +1394,7 @@ impl CompilerItem {
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
             Self::Formatter => CompilerItemKind::Struct,
             Self::Default
+            | Self::FromLeBytes
             | Self::Reflect
             | Self::ReflectStruct
             | Self::ReflectVariant
@@ -1427,6 +1450,7 @@ impl CompilerItem {
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListFromTuple
+            | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
@@ -2177,6 +2201,17 @@ impl CompilerItems {
         match self.get(item)? {
             Resolved::Struct { module_source, .. } => Some(module_source),
             _ => None,
+        }
+    }
+
+    /// Module + name of a [`CompilerItemKind::Function`] item.
+    pub fn require_function(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        match self.require(item) {
+            Resolved::Function {
+                module_source,
+                name,
+            } => (module_source, name.as_str()),
+            other => kind_mismatch_ice(item, "Function", other),
         }
     }
 

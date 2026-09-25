@@ -6,8 +6,8 @@
 //! grammar-specific tables that path needs: the per-rule `NodeKind` constants
 //! + name table, and the `to_string_tree` convenience.
 
-use { Grammar, LexerRule, ParserRule, Alternative } from "./ir.wado";
-use { LitToken } from "./lexer_gen.wado";
+use { Grammar, LexerRule, ParserRule } from "./ir.wado";
+use { LitToken, gen_token_display_name_fn } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { to_pascal_case, escape_case, rule_alts_labeled, rule_kind_const } from "./gen_util.wado";
@@ -146,12 +146,13 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// `token_kind_name`). Used by driver tests; never called by the parser.
 pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, emit_actions: bool) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
+    gen_token_display_name_fn(w, &grammar.lexer_rules);
     // `$ctx.toStringTree()` runs inside a parse, so an action grammar caches the
     // table and the renderers share it; elsewhere they build it on demand.
     w.begin("fn _token_names() -> List<String>");
     w.line(`let mut v: List<String> = List::with_capacity(${n});`);
     w.begin(`for let mut k = 0; k < ${n}; k += 1`);
-    w.line("v.push(token_kind_name(k));");
+    w.line("v.push(token_display_name(k));");
     w.end();
     w.line("return v;");
     w.end();

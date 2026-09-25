@@ -49,6 +49,8 @@ use {
     write_decimal_prec,
     write_exp_prec,
     u64_bit_len,
+    BINARY32,
+    BINARY64,
 } from "core:prelude/fpfmt.wado";
 
 // Deterministic math functions imported directly from the bundled
@@ -120,7 +122,7 @@ use {
     ParseFloatError,
     parse_i64_radix,
     parse_u64_radix,
-    parse_f64_from_str,
+    parse_float_bits,
     lenient_int_preprocess,
     lenient_float_preprocess,
 } from "core:prelude/intparse.wado";
@@ -671,6 +673,7 @@ impl LenientFromStr for char {
 }
 
 impl i8 {
+    pub const BITS: i32 = 8;
     pub const MAX: i8 = 127;
     pub const MIN: i8 = -128;
 
@@ -726,6 +729,7 @@ impl LenientFromStr for i8 {
 }
 
 impl u8 {
+    pub const BITS: i32 = 8;
     pub const MAX: u8 = 255;
     pub const MIN: u8 = 0;
 
@@ -833,6 +837,7 @@ impl LenientFromStr for u8 {
 }
 
 impl i16 {
+    pub const BITS: i32 = 16;
     pub const MAX: i16 = 32767;
     pub const MIN: i16 = -32768;
 
@@ -888,6 +893,7 @@ impl LenientFromStr for i16 {
 }
 
 impl u16 {
+    pub const BITS: i32 = 16;
     pub const MAX: u16 = 65535;
     pub const MIN: u16 = 0;
 
@@ -943,6 +949,7 @@ impl LenientFromStr for u16 {
 }
 
 impl i32 {
+    pub const BITS: i32 = 32;
     pub const MAX: i32 = 2147483647;
     pub const MIN: i32 = -2147483648;
 
@@ -1021,6 +1028,7 @@ impl LenientFromStr for i32 {
 }
 
 impl u32 {
+    pub const BITS: i32 = 32;
     pub const MAX: u32 = 4294967295;
     pub const MIN: u32 = 0;
 
@@ -1083,6 +1091,7 @@ impl LenientFromStr for u32 {
 }
 
 impl i64 {
+    pub const BITS: i32 = 64;
     pub const MAX: i64 = 9223372036854775807;
     pub const MIN: i64 = -9223372036854775808;
 
@@ -1162,6 +1171,7 @@ impl LenientFromStr for i64 {
 }
 
 impl u64 {
+    pub const BITS: i32 = 64;
     pub const MAX: u64 = 18446744073709551615;
     pub const MIN: u64 = 0;
 
@@ -1271,6 +1281,7 @@ fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
 }
 
 impl f32 {
+    pub const BITS: i32 = 32;
     pub const PI: f32 = 3.14159265358979323846;
     pub const TAU: f32 = 6.28318530717958647692;
     pub const E: f32 = 2.71828182845904523536;
@@ -1284,7 +1295,28 @@ impl f32 {
     pub const FRAC_PI_4: f32 = 0.78539816339744830962;
     pub const INFINITY: f32 = 1.0 / 0.0;
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
+<<<<<<< HEAD
     pub const NAN: f32 = builtin::f32_reinterpret_i32(0x7fc00000);
+||||||| 1c849b3d8
+    pub const NAN: f32 = 0.0 / 0.0;
+=======
+    pub const NAN: f32 = 0.0 / 0.0;
+    pub const MAX: f32 = 3.40282347e38;
+    pub const MIN: f32 = -3.40282347e38;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f32 = 1.17549435e-38;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f32 = 1.1920929e-7;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 24;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 6;
+    pub const MIN_EXP: i32 = -125;
+    pub const MAX_EXP: i32 = 128;
+    pub const MIN_10_EXP: i32 = -37;
+    pub const MAX_10_EXP: i32 = 38;
+>>>>>>> origin/main
 
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
@@ -1569,7 +1601,7 @@ impl FromStr for f32 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
-        return Result::Ok(parse_f64_from_str(&s.as_str_slice())? as f32);
+        return Result::Ok(f32::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY32)? as u32));
     }
 }
 
@@ -1583,6 +1615,7 @@ impl LenientFromStr for f32 {
 }
 
 impl f64 {
+    pub const BITS: i32 = 64;
     pub const PI: f64 = 3.14159265358979323846;
     pub const TAU: f64 = 6.28318530717958647692;
     pub const E: f64 = 2.71828182845904523536;
@@ -1596,7 +1629,28 @@ impl f64 {
     pub const FRAC_PI_4: f64 = 0.78539816339744830962;
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
+<<<<<<< HEAD
     pub const NAN: f64 = builtin::f64_reinterpret_i64(0x7ff8000000000000);
+||||||| 1c849b3d8
+    pub const NAN: f64 = 0.0 / 0.0;
+=======
+    pub const NAN: f64 = 0.0 / 0.0;
+    pub const MAX: f64 = 1.7976931348623157e308;
+    pub const MIN: f64 = -1.7976931348623157e308;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f64 = 2.2250738585072014e-308;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f64 = 2.220446049250313e-16;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 53;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 15;
+    pub const MIN_EXP: i32 = -1021;
+    pub const MAX_EXP: i32 = 1024;
+    pub const MIN_10_EXP: i32 = -307;
+    pub const MAX_10_EXP: i32 = 308;
+>>>>>>> origin/main
     /// The largest integer exactly representable in f64: 2^53 - 1.
     /// Mirrors JS `Number.MAX_SAFE_INTEGER`.
     pub const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
@@ -1956,7 +2010,7 @@ impl FromStr for f64 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(&s.as_str_slice());
+        return Result::Ok(f64::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY64)?));
     }
 }
 

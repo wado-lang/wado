@@ -1,0 +1,41 @@
+// A method that takes `&List<T>` and returns `i32` looks like `len()`, but
+// this one reads the elements. Splitting `List<[i32, i32]>` per field must not
+// hand it the first field's list alone, or the second field never counts.
+
+use { println, Stdout } from "core:cli";
+
+fn touch() with Stdout {
+    let mut w: List<i32> = List::with_capacity(builtin::black_box(2));
+    w.push(builtin::black_box(5));
+    w[0] = builtin::black_box(6);
+    println(`${w[0]} ${w.len()}`);
+}
+
+trait Weight with () { fn w(&self) -> i32; }
+impl Weight for i32 { fn w(&self) -> i32 { return *self; } }
+impl Weight for [i32, i32] { fn w(&self) -> i32 { return self.0 * 100 + self.1; } }
+
+trait Total with () { fn total(&self) -> i32; }
+impl<T: Weight> Total for List<T> {
+    fn total(&self) -> i32 {
+        let mut s = 0;
+        for let mut i = 0; i < self.len(); i += 1 {
+            s += self[i].w();
+        }
+        return s;
+    }
+}
+
+export fn run() with Stdout {
+    touch();
+    let mut w: List<i32> = List::with_capacity(2);
+    w.push(builtin::black_box(7));
+    println(`${w.total()}`);
+    let mut v: List<[i32, i32]> = List::with_capacity(4);
+    v.push([1, 2]);
+    v.push([3, 4]);
+    println(`${v.total()}`);
+}
+
+__DATA__
+{"stdout": "6 1\n7\n406\n"}

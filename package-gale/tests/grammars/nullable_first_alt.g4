@@ -5,9 +5,8 @@
 //   'p' r B EOF  on `p b` → `(s p r b)`     alt 0 matches empty, `s` takes B
 //   'q' r EOF    on `q b` → `(s q (r b))`   alt 0 followed by EOF cannot, so B
 //
-// One static decision cannot be both. Gale keeps the unconditional arm in
-// alternative order, which is the first answer; the second is the
-// full-context decision the ATN simulator makes.
+// One static decision cannot be both, so the ATN simulator decides with full
+// context.
 grammar NullableFirstAlt;
 
 s : 'p' r B EOF

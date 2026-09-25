@@ -8,7 +8,10 @@
 //! every field on every opaque call; a "writes no field" summary propagated up
 //! the call graph would remove that cliff for thin forwarding wrappers.
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::minted_what;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind,
@@ -17,10 +20,18 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
+use crate::optimize::arena_query::is_local;
+use crate::optimize::gate::FunctionGate;
+use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, HeapFrame};
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 const MIN_ACCESS_COUNT: usize = 4;
+
+/// What a field's scalar is minted under, narrowed by the field name.
+const SCALAR: &str = "hfs";
+/// What a call's result temp is minted under.
+const CALL_TEMP: &str = "hfs_call";
 
 /// Per-parameter field usage: `Some(set)` = only these fields accessed,
 /// `None` = all fields potentially accessed (conservative).
@@ -38,16 +49,24 @@ struct FuncUsageEntry {
 /// Maps each function (by module + name) to its usage info.
 type FieldUsageCache = IndexMap<FuncId, FuncUsageEntry>;
 
-pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
+pub fn scalarize_hot_fields(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    heap: &mut HeapEffectsCache,
+) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
     let cache = build_field_usage_cache(project);
 
     // Phase 2: Run scalarization (mutable access)
     let type_table = project.type_table.borrow();
+    let effects = heap.effects(project, &type_table, gate);
     let mut changed = false;
-    for func_rc in &project.functions {
+    for (i, func_rc) in project.functions.iter().enumerate() {
         let mut func = func_rc.borrow_mut();
-        changed |= scalarize_function(&mut func, &type_table, &cache);
+        if scalarize_function(&mut func, &type_table, &cache, &effects) {
+            gate.mark_changed(FuncId::new(i));
+            changed = true;
+        }
     }
     changed
 }
@@ -252,6 +271,7 @@ fn scalarize_function(
     func: &mut NirFunction,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    effects: &HeapEffects,
 ) -> bool {
     if func.body.is_none() {
         return false;
@@ -264,25 +284,23 @@ fn scalarize_function(
     // whose address is taken anywhere in the function (read-only, over
     // the arena body) so loop-level scalarization can refuse those
     // candidates.
-    let aliases = collect_function_aliases(func.body.as_ref().unwrap(), type_table);
-    let analysis = HfsAnalysis { aliases: &aliases };
-    let mut local_count = func.local_count();
-    let mut locals = func.locals.clone();
-    let changed = {
-        let body = func.body.as_mut().unwrap();
-        let root = body.root;
-        scalarize_block(
-            body,
-            root,
-            &mut local_count,
-            &mut locals,
-            type_table,
-            cache,
-            &analysis,
-        )
+    let body = func.body.as_ref().unwrap();
+    let loop_sites = loop_sites(body);
+    if loop_sites.is_empty() {
+        return false;
+    }
+    let aliases = collect_function_aliases(body, type_table);
+    let params: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
+    let frame = HeapFrame::new(effects, body, &params);
+    let analysis = HfsAnalysis {
+        aliases: &aliases,
+        effects,
+        frame: &frame,
+        loop_sites,
     };
-    func.locals = locals;
-    changed
+    let body = func.body.as_mut().unwrap();
+    let root = body.root;
+    scalarize_block(body, root, &mut func.locals, type_table, cache, &analysis)
 }
 
 /// Read-only function-wide pre-analysis shared by every `scalarize_loop`
@@ -290,6 +308,82 @@ fn scalarize_function(
 /// to keep the per-loop work linear in the loop body's size.
 struct HfsAnalysis<'a> {
     aliases: &'a FnAliases,
+    effects: &'a HeapEffects<'a>,
+    frame: &'a HeapFrame,
+    /// Every node of each loop body, as it stood before any loop was
+    /// rewritten: the sites [`HeapFrame`] recorded its accesses at.
+    loop_sites: IndexMap<BlockId, IndexSet<NodeRef>>,
+}
+
+impl HfsAnalysis<'_> {
+    /// Whether the loop reaches field `field` of the object `local` holds other
+    /// than through `local.field` itself, which the scalar replaces.
+    fn field_reached_besides(
+        &self,
+        body: &Body,
+        loop_body: BlockId,
+        local: u32,
+        local_type: TypeId,
+        field: u32,
+    ) -> bool {
+        let Some(key) = self.effects.object_key(local_type) else {
+            return false;
+        };
+        let sites = &self.loop_sites[&loop_body];
+        self.frame.accessed_besides(
+            false,
+            |site| sites.contains(&site),
+            (key, field),
+            local,
+            |receiver| receiver.as_expr().is_some_and(|e| is_local(body, e, local)),
+        )
+    }
+
+    /// Whether `call` may reach `c`'s object other than through an argument
+    /// naming `c`, which the field-usage cache answers for.
+    fn call_reaches_besides(
+        &self,
+        body: &Body,
+        call: ExprId,
+        effect: Effect,
+        c: &ScalarizeCandidate,
+        type_table: &TypeTable,
+    ) -> bool {
+        let Some(key) = self.effects.object_key(c.local_type_id) else {
+            return false;
+        };
+        self.frame.call_may_besides(
+            self.effects,
+            body,
+            call,
+            effect,
+            key,
+            c.local_index,
+            |arg| extract_gc_local_index_operand(body, arg, type_table) == Some(c.local_index),
+        )
+    }
+}
+
+/// The nodes of every loop body in `body`, by the loop's body block.
+fn loop_sites(body: &Body) -> IndexMap<BlockId, IndexSet<NodeRef>> {
+    let mut loops = Vec::new();
+    body.for_each_reachable_node(|node| {
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Loop { body: lb } = &body.stmts[s].kind
+        {
+            loops.push(*lb);
+        }
+    });
+    loops
+        .into_iter()
+        .map(|lb| {
+            let mut sites = IndexSet::default();
+            body.for_each_live_node_under(NodeRef::Block(lb), |n| {
+                sites.insert(n);
+            });
+            (lb, sites)
+        })
+        .collect()
 }
 
 /// Walk the function body finding loops, recursing into nested blocks first,
@@ -297,7 +391,6 @@ struct HfsAnalysis<'a> {
 fn scalarize_block(
     body: &mut Body,
     block: BlockId,
-    local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
@@ -326,11 +419,9 @@ fn scalarize_block(
         match shape {
             Shape::Loop(lb) => {
                 // Recurse into inner blocks/loops first.
-                changed |=
-                    scalarize_block(body, lb, local_count, locals, type_table, cache, analysis);
+                changed |= scalarize_block(body, lb, locals, type_table, cache, analysis);
                 // Scalarize hot fields at this loop level.
-                let (pre, post) =
-                    scalarize_loop_at(body, lb, local_count, locals, type_table, cache, analysis);
+                let (pre, post) = scalarize_loop_at(body, lb, locals, type_table, cache, analysis);
                 if pre.is_empty() {
                     new_stmts.push(s);
                 } else {
@@ -341,31 +432,14 @@ fn scalarize_block(
                 }
             }
             Shape::If(then_b, else_b) => {
-                changed |= scalarize_block(
-                    body,
-                    then_b,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |= scalarize_block(body, then_b, locals, type_table, cache, analysis);
                 if let Some(eb) = else_b {
-                    changed |=
-                        scalarize_block(body, eb, local_count, locals, type_table, cache, analysis);
+                    changed |= scalarize_block(body, eb, locals, type_table, cache, analysis);
                 }
                 new_stmts.push(s);
             }
             Shape::Labeled(inner) => {
-                changed |= scalarize_block(
-                    body,
-                    inner,
-                    local_count,
-                    locals,
-                    type_table,
-                    cache,
-                    analysis,
-                );
+                changed |= scalarize_block(body, inner, locals, type_table, cache, analysis);
                 new_stmts.push(s);
             }
             Shape::Other => new_stmts.push(s),
@@ -378,11 +452,9 @@ fn scalarize_block(
 
 /// Run the loop scalarizer on the arena loop body `lb` in place, returning
 /// the pre / post statements that wrap the loop as arena statement ids.
-#[allow(clippy::too_many_arguments)]
 fn scalarize_loop_at(
     body: &mut Body,
     lb: BlockId,
-    local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
@@ -393,7 +465,6 @@ fn scalarize_loop_at(
         body,
         lb,
         &inside_loop_locals,
-        local_count,
         locals,
         type_table,
         cache,
@@ -416,14 +487,13 @@ struct ScalarizeCandidate {
     field_name: String,
     type_id: TypeId,
     new_local_index: u32,
+    new_local_name: String,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn scalarize_loop(
     body: &mut Body,
     loop_body: BlockId,
     inside_loop_locals: &IndexSet<u32>,
-    local_count: &mut u32,
     locals: &mut Vec<NirLocal>,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
@@ -444,7 +514,6 @@ fn scalarize_loop(
     // Step 2: Select candidates - fields accessed frequently enough,
     // where the field is modified only by direct assignment (not by the whole local being reassigned)
     let mut candidates: Vec<ScalarizeCandidate> = Vec::new();
-    let mut next_local = *local_count;
 
     for (&(local_idx, field_idx), info) in &access_counts {
         let total = info.read_count + info.write_count;
@@ -491,7 +560,17 @@ fn scalarize_loop(
         if !is_gc_heap_type(info.local_type_id, type_table) {
             continue;
         }
+        if analysis.field_reached_besides(body, loop_body, local_idx, info.local_type_id, field_idx)
+        {
+            continue;
+        }
 
+        let new_local_index = NirLocal::push_minted(
+            locals,
+            &minted_what(SCALAR, &info.field_name),
+            info.field_type_id,
+            /* is_mut */ true,
+        );
         candidates.push(ScalarizeCandidate {
             local_index: local_idx,
             local_name: info.local_name.clone(),
@@ -499,14 +578,9 @@ fn scalarize_loop(
             field_index: field_idx,
             field_name: info.field_name.clone(),
             type_id: info.field_type_id,
-            new_local_index: next_local,
+            new_local_index,
+            new_local_name: locals[new_local_index as usize].name.clone(),
         });
-        locals.push(NirLocal {
-            name: format!("$hfs_{}_{}", info.field_name, next_local),
-            type_id: info.field_type_id,
-            is_mut: true,
-        });
-        next_local += 1;
     }
 
     if candidates.is_empty() {
@@ -516,8 +590,6 @@ fn scalarize_loop(
         };
     }
 
-    *local_count = next_local;
-
     // Step 3: Create pre-loop load statements
     let span = Span::new(0, 0, 0, 0);
     let mut pre_stmts: Vec<StmtId> = Vec::new();
@@ -526,7 +598,7 @@ fn scalarize_loop(
         let load_stmt = push_stmt(
             body,
             StmtKind::Let {
-                name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
+                name: c.new_local_name.clone(),
                 local_index: c.new_local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -546,9 +618,9 @@ fn scalarize_loop(
         loop_body,
         &candidates,
         locals,
-        local_count,
         type_table,
         cache,
+        analysis,
     );
     let post_stmts: Vec<StmtId> = Vec::new();
 
@@ -578,7 +650,7 @@ fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> Exp
         body,
         ExprKind::Local {
             index: c.new_local_index,
-            name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
+            name: c.new_local_name.clone(),
         },
         c.type_id,
         span,
@@ -1165,11 +1237,13 @@ fn compute_deferrable_candidates(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
 ) -> Vec<bool> {
     let mut scan = CallTouchedScan {
         candidates,
         type_table,
         cache,
+        analysis,
         touched: IndexSet::default(),
     };
     scan.visit_node(body, NodeRef::Block(block));
@@ -1187,6 +1261,7 @@ struct CallTouchedScan<'a> {
     candidates: &'a [ScalarizeCandidate],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
+    analysis: &'a HfsAnalysis<'a>,
     touched: IndexSet<(u32, u32)>,
 }
 
@@ -1204,6 +1279,7 @@ impl NirRefVisitor for CallTouchedScan<'_> {
                     self.candidates,
                     self.type_table,
                     self.cache,
+                    self.analysis,
                     &mut sync,
                 );
                 self.touched.extend(sync.write_back.iter().copied());
@@ -1241,8 +1317,8 @@ struct WalkCtx<'a> {
     candidates: &'a [ScalarizeCandidate],
     type_table: &'a TypeTable,
     cache: &'a FieldUsageCache,
+    analysis: &'a HfsAnalysis<'a>,
     locals: &'a mut Vec<NirLocal>,
-    local_count: &'a mut u32,
     /// Per-type free pool of `$hfs_call_*` temp local indices. Each call
     /// wrap that captures a non-unit return value pulls an index from the
     /// pool of the matching type and returns it when the wrap is fully
@@ -1291,14 +1367,7 @@ impl WalkCtx<'_> {
         {
             return idx;
         }
-        let idx = *self.local_count;
-        *self.local_count += 1;
-        self.locals.push(NirLocal {
-            name: format!("$hfs_call_{idx}"),
-            type_id,
-            is_mut: false,
-        });
-        idx
+        NirLocal::push_minted(self.locals, CALL_TEMP, type_id, /* is_mut */ false)
     }
 
     fn free_temp(&mut self, idx: u32, type_id: TypeId) {
@@ -1306,7 +1375,7 @@ impl WalkCtx<'_> {
     }
 
     fn temp_name(&self, idx: u32) -> String {
-        format!("$hfs_call_{idx}")
+        self.locals[idx as usize].name.clone()
     }
 }
 
@@ -1314,25 +1383,25 @@ impl WalkCtx<'_> {
 /// body-exit back to it so the back-edge invariant holds. Call-clean
 /// (`deferrable`) candidates enter and stay `ScalarOnly`, making the converge a
 /// no-op; their write-back happens at the loop's escape points instead.
-#[allow(clippy::too_many_arguments)]
 fn process_loop_body(
     body: &mut Body,
     block: BlockId,
     candidates: &[ScalarizeCandidate],
     locals: &mut Vec<NirLocal>,
-    local_count: &mut u32,
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
 ) {
-    let deferrable = compute_deferrable_candidates(body, block, candidates, type_table, cache);
+    let deferrable =
+        compute_deferrable_candidates(body, block, candidates, type_table, cache, analysis);
     let entry = entry_states_for(candidates, &deferrable);
     let mut states = entry.clone();
     let mut ctx = WalkCtx {
         candidates,
         type_table,
         cache,
+        analysis,
         locals,
-        local_count,
         temp_pool: IndexMap::default(),
         label_breaks: IndexMap::default(),
         loop_entry_stack: vec![entry.clone()],
@@ -2218,7 +2287,7 @@ fn walk_expr(
             // Commit the assignment: rewrite target in place and update state.
             body.exprs[target].kind = ExprKind::Local {
                 index: c.new_local_index,
-                name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
+                name: c.new_local_name.clone(),
             };
             body.exprs[target].type_id = c.type_id;
             states[cand_idx] = CanonState::ScalarOnly;
@@ -2243,7 +2312,7 @@ fn walk_expr(
         }
         body.exprs[e].kind = ExprKind::Local {
             index: c.new_local_index,
-            name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
+            name: c.new_local_name.clone(),
         };
         if needs_re_read {
             if ctx.interior_effects {
@@ -2464,6 +2533,7 @@ fn compute_call_field_effects(body: &Body, call: ExprId, ctx: &WalkCtx) -> CallF
         ctx.candidates,
         ctx.type_table,
         ctx.cache,
+        ctx.analysis,
         &mut sync,
     );
     let mut read_required = Vec::new();
@@ -2515,8 +2585,23 @@ fn accumulate_call_sync(
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
     cache: &FieldUsageCache,
+    analysis: &HfsAnalysis,
     result: &mut SyncFields,
 ) {
+    if matches!(
+        body.exprs[call].kind,
+        ExprKind::Call { .. } | ExprKind::IndirectCall { .. }
+    ) {
+        for c in candidates {
+            let place = (c.local_index, c.field_index);
+            if analysis.call_reaches_besides(body, call, Effect::Read, c, type_table) {
+                result.write_back.insert(place);
+            }
+            if analysis.call_reaches_besides(body, call, Effect::Write, c, type_table) {
+                result.re_read.insert(place);
+            }
+        }
+    }
     match &body.exprs[call].kind {
         ExprKind::Call { func_id, args, .. } => {
             let callee_id = *func_id;

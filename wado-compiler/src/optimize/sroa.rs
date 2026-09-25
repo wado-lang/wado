@@ -1,6 +1,6 @@
 //! Scalar Replacement of Aggregates: a struct, tuple or array used only for
 //! element access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed
-//! into per-element `$sroa_s_x` locals, and copy propagation then removes the
+//! into per-element `$sroa_s_x_N` locals, and copy propagation then removes the
 //! trivial copies.
 
 use std::cell::{Cell, RefCell};
@@ -11,6 +11,7 @@ use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::minted_what;
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
@@ -21,6 +22,10 @@ use crate::nir_value_graph::ValueKind;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap, build_ctfe_builtin_map};
 use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
+
+/// What an element local is minted under, narrowed by its aggregate's name and
+/// then the element's.
+const SROA: &str = "sroa";
 
 /// Maps a callee → the set of its parameter indices it retains.
 type StoresLookup = IndexMap<FuncId, IndexSet<usize>>;
@@ -214,8 +219,9 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         // count: a `let` always stands where the literal did, while folding the
         // read into a constant operand in place needs a parent slot to hold one.
         if uses.len_read.contains(&candidate.local_index) {
-            let name = format!("$sroa_{}_len", candidate.local_name);
-            let local_index = engine.alloc_local(name.clone(), TypeTable::I32, false);
+            let what = minted_what(&minted_what(SROA, &candidate.local_name), "len");
+            let local_index = engine.alloc_minted_local(&what, TypeTable::I32, false);
+            let name = engine.local_name(local_index);
             len_map.insert(
                 candidate.local_index,
                 FieldSlot {
@@ -229,8 +235,9 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         // collection), so the positional index `i` *is* the `field_index` every
         // lookup keys by.
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
-            let name = format!("$sroa_{}_{}", candidate.local_name, field_name);
-            let local_index = engine.alloc_local(name.clone(), *field_type, candidate.is_mut);
+            let what = minted_what(&minted_what(SROA, &candidate.local_name), field_name);
+            let local_index = engine.alloc_minted_local(&what, *field_type, candidate.is_mut);
+            let name = engine.local_name(local_index);
             field_map.insert(
                 (candidate.local_index, i as u32),
                 FieldSlot {

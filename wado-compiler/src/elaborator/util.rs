@@ -156,30 +156,6 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     i128::try_from(unsigned).map_err(|_| format!("integer literal out of range: {repr}"))
 }
 
-/// Parse a float literal string into an f64 value.
-pub(super) fn parse_float_literal(repr: &str) -> Result<f64, String> {
-    let clean = normalize_numeric_literal(repr);
-
-    // Handle hex/binary/octal literals as float values (not bit patterns)
-    if let Some(hex) = clean.strip_prefix("0x") {
-        let value =
-            u64::from_str_radix(hex, 16).map_err(|_| format!("invalid hex literal: {repr}"))?;
-        return Ok(value as f64);
-    } else if let Some(bin) = clean.strip_prefix("0b") {
-        let value =
-            u64::from_str_radix(bin, 2).map_err(|_| format!("invalid binary literal: {repr}"))?;
-        return Ok(value as f64);
-    } else if let Some(oct) = clean.strip_prefix("0o") {
-        let value =
-            u64::from_str_radix(oct, 8).map_err(|_| format!("invalid octal literal: {repr}"))?;
-        return Ok(value as f64);
-    }
-
-    clean
-        .parse()
-        .map_err(|_| format!("invalid float literal: {repr}"))
-}
-
 /// Check if a number literal can only be a float (has decimal point or negative exponent).
 pub(super) fn is_float_only_literal(repr: &str) -> bool {
     if repr.contains('.') {

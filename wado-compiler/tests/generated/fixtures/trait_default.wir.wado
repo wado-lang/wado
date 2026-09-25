@@ -118,16 +118,16 @@ fn "trait_default.wado/trait_default_count"() with Stdout {
     let rx_28: i32;
     let tx_29: i32;
     let repr_42: ref Array<i32>;
-    let $sroa_iter_index: i32;
+    let $sroa_iter_index_48: i32;
     repr_42 = global:trait_default.wado::$const_obj_19;
-    $sroa_iter_index = 0;
-    $sroa_iter_index = 1;
+    $sroa_iter_index_48 = 0;
+    $sroa_iter_index_48 = 1;
     n = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_iter_index >= 5;
-            drop(builtin::array_get_value<i32>(repr_42, $sroa_iter_index));
-            $sroa_iter_index = $sroa_iter_index + 1;
+            break_if b0 $sroa_iter_index_48 >= 5;
+            drop(builtin::array_get_value<i32>(repr_42, $sroa_iter_index_48));
+            $sroa_iter_index_48 = $sroa_iter_index_48 + 1;
             n = n + 1;
             continue l1;
         };
@@ -156,13 +156,13 @@ fn "trait_default.wado/$cm_export__run"() {
     let rx_128: i32;
     let tx_129: i32;
     let handle_139: i32;
-    let packed_185: i64;
-    let rx_186: i32;
-    let tx_187: i32;
-    let handle_195: i32;
-    let packed_228: i64;
-    let rx_229: i32;
-    let tx_230: i32;
+    let packed_171: i64;
+    let rx_172: i32;
+    let tx_173: i32;
+    let handle_177: i32;
+    let packed_179: i64;
+    let rx_180: i32;
+    let tx_181: i32;
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     handle_5 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
@@ -179,20 +179,20 @@ fn "trait_default.wado/$cm_export__run"() {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_61);
     "trait_default.wado/trait_default_calls_default"();
     "trait_default.wado/trait_default_count"();
-    rx_186 = builtin::i32_wrap_i64(local.tee packed_185("wasi/stream-new"()));
-    tx_187 = builtin::i32_wrap_i64(packed_185 >> 32_i64);
-    handle_139 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_186);
+    rx_172 = builtin::i32_wrap_i64(local.tee packed_171("wasi/stream-new"()));
+    tx_173 = builtin::i32_wrap_i64(packed_171 >> 32_i64);
+    handle_139 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_172);
     let $mv_field_8: ref Array<u8>;
     $mv_field_8 = array.new_data<u8>("Breaking News - Something happened");
-    "core:rt/write_string_to_stream"(tx_187, $mv_field_8, 34);
+    "core:rt/write_string_to_stream"(tx_173, $mv_field_8, 34);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_139);
-    rx_229 = builtin::i32_wrap_i64(local.tee packed_228("wasi/stream-new"()));
-    tx_230 = builtin::i32_wrap_i64(packed_228 >> 32_i64);
-    handle_195 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_229);
+    rx_180 = builtin::i32_wrap_i64(local.tee packed_179("wasi/stream-new"()));
+    tx_181 = builtin::i32_wrap_i64(packed_179 >> 32_i64);
+    handle_177 = "trait_default.wado/$cm_binding__Stdout_write_via_stream"(rx_180);
     let $mv_field_11: ref Array<u8>;
     $mv_field_11 = array.new_data<u8>("Title: Hello world");
-    "core:rt/write_string_to_stream"(tx_230, $mv_field_11, 18);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_195);
+    "core:rt/write_string_to_stream"(tx_181, $mv_field_11, 18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_177);
     "wasi/task-return"(0);
 }
 
@@ -299,9 +299,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -309,11 +309,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l24: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b25: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b25: block {
                 l26: loop {
                     break_if b25 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l26;
                 };
@@ -331,8 +331,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -344,8 +344,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l24;

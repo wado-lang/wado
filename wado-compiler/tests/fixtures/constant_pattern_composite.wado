@@ -1,0 +1,107 @@
+// A constant pattern of a composite type compares by `Eq`, as `==` does, at
+// the top of an arm and nested inside another pattern.
+
+struct P {
+    a: i32,
+    b: String,
+}
+
+global S: String = "hi";
+global Q: P = P { a: 1, b: "x" };
+global O: Option<i32> = Option::Some(3);
+global T: [i32, String] = [2, "y"];
+
+struct K {}
+
+impl K {
+    const NAME: String = "k";
+}
+
+fn string(x: String) -> i32 {
+    return match x {
+        S => 1,
+        _ => 0,
+    };
+}
+
+fn structure(p: P) -> i32 {
+    return match p {
+        Q => 1,
+        _ => 0,
+    };
+}
+
+fn option(o: Option<i32>) -> i32 {
+    return match o {
+        O => 1,
+        _ => 0,
+    };
+}
+
+fn tuple(t: [i32, String]) -> i32 {
+    return match t {
+        T => 1,
+        _ => 0,
+    };
+}
+
+fn sub_pattern(t: [String, i32]) -> i32 {
+    return match t {
+        [S, 1] => 1,
+        [S, n] => n,
+        _ => 0,
+    };
+}
+
+fn nested_variant(o: Option<String>) -> i32 {
+    return match o {
+        Some(S) => 1,
+        Some(_) => 2,
+        None => 0,
+    };
+}
+
+fn associated(x: String) -> i32 {
+    return match x {
+        K::NAME => 1,
+        _ => 0,
+    };
+}
+
+fn through_reference(x: &String) -> i32 {
+    return match x {
+        S => 1,
+        _ => 0,
+    };
+}
+
+fn in_matches(p: P) -> bool {
+    return p matches { Q };
+}
+
+export fn run() {
+    assert string("hi") == 1;
+    assert string("ho") == 0;
+    assert structure(P { a: 1, b: "x" }) == 1;
+    assert structure(P { a: 1, b: "z" }) == 0;
+    assert option(Option::Some(3)) == 1;
+    assert option(Option::Some(4)) == 0;
+    assert option(null) == 0;
+    assert tuple([2, "y"]) == 1;
+    assert tuple([2, "n"]) == 0;
+    assert sub_pattern(["hi", 1]) == 1;
+    assert sub_pattern(["hi", 7]) == 7;
+    assert sub_pattern(["no", 1]) == 0;
+    assert nested_variant(Option::Some("hi")) == 1;
+    assert nested_variant(Option::Some("x")) == 2;
+    assert nested_variant(null) == 0;
+    assert associated("k") == 1;
+    assert associated("j") == 0;
+    let hi: String = "hi";
+    assert through_reference(&hi) == 1;
+    assert in_matches(P { a: 1, b: "x" });
+    assert !in_matches(P { a: 2, b: "x" });
+}
+
+__DATA__
+{}

@@ -1,0 +1,49 @@
+// Compile-time evaluation is budgeted per function. `first` spends its whole
+// budget on `heavy` and gives up; `second`, compiled after it, must still get a
+// budget of its own and fold `tiny(14)`. Whether a call folds must not depend on
+// what another function happened to try first.
+
+use { println, Stdout } from "core:cli";
+
+fn heavy() -> i32 {
+    let mut acc = 0;
+    let mut i = 0;
+    while i < 3000 {
+        acc = (acc * 31 + i) % 1000003;
+        i += 1;
+    }
+    return acc;
+}
+
+fn tiny(n: i32) -> i32 {
+    let mut acc = 0;
+    let mut i = 0;
+    while i < n {
+        acc += i;
+        i += 1;
+    }
+    return acc;
+}
+
+fn first() -> i32 {
+    return heavy();
+}
+
+fn second() -> i32 {
+    return tiny(14);
+}
+
+export fn run() with Stdout {
+    println(`${first()} ${second()}`);
+}
+
+__DATA__
+{
+    "stdout": "220629 91\n",
+    "wir_expect:O2": [
+        "(91, "
+    ],
+    "wir_not_expect:O2": [
+        ">= 14"
+    ]
+}

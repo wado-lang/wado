@@ -12,10 +12,10 @@
 //! `parser_gen.wado` (`gen_prediction_code_inner`).
 
 use { Element, RepeatElement, Alternative } from "./ir.wado";
-use { GenContext, is_nullable } from "./gen_context.wado";
+use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
 use { bits_set, bits_test } from "./token_kinds.wado";
 use { sort_group_by_specificity } from "./alt_grouping.wado";
-use { all_alts_are_single_token } from "./gen_util.wado";
+use { all_alts_are_single_token, dedup_append_arr } from "./gen_util.wado";
 use { TreeSet } from "core:collections";
 
 pub variant PredictionNode {
@@ -50,6 +50,9 @@ pub enum AmbiguityReason {
     MultiAtEnd,
     /// No alternative survived to this position (degenerate fall-through).
     NoViableAlt,
+    /// No token is named here and an alive alt reaches a `.` or `~X`, so it
+    /// admits every token and no token-led branch separates the alts.
+    OpenEnded,
 }
 
 pub struct AmbiguousNode {
@@ -128,11 +131,14 @@ pub global MAX_LOOKAHEAD_DEPTH: i32 = 5;
 /// scan-dispatches) rather than keep growing the set.
 global MAX_CONFIG_SET: i32 = 200;
 
+/// `end_follow` is what can follow the decision's rule, exactly, or empty where
+/// that is not known; an at-end alternative faces it.
 pub fn build_prediction(
     alt_indices: &List<i32>,
     alt_elements: &List<List<Element>>,
     max_depth: i32,
     ctx: &mut GenContext,
+    end_follow: &List<String>,
 ) -> PredictionNode {
     let mut configs: List<SllConfig> = [];
     for let mut i = 0; i < alt_indices.len(); i += 1 {
@@ -143,7 +149,7 @@ pub fn build_prediction(
             return_stack: [],
         });
     }
-    let tree = build_sll_node(&configs, 0, max_depth, ctx);
+    let tree = build_sll_node(&configs, 0, max_depth, ctx, end_follow);
     return strip_dead_consume(tree);
 }
 
@@ -170,9 +176,10 @@ pub fn build_group_prediction_tree_from_order(
     alts: &List<Alternative>,
     real_indices: &List<i32>,
     ctx: &mut GenContext,
+    end_follow: &List<String>,
 ) -> PredictionNode {
     let pred_elements: List<List<Element>> = real_indices.iter_ref().map(|ri: &i32| alts[*ri].elements).collect();
-    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx);
+    return build_prediction(real_indices, &pred_elements, MAX_LOOKAHEAD_DEPTH, ctx, end_follow);
 }
 
 /// `build_group_prediction_tree_from_order` with the ordering done for
@@ -185,9 +192,10 @@ pub fn build_group_prediction_tree(
     first_sets: &List<List<String>>,
     non_lr_indices: &List<i32>,
     ctx: &mut GenContext,
+    end_follow: &List<String>,
 ) -> PredictionNode {
     let real_indices = group_prediction_order(group, first_sets, non_lr_indices);
-    return build_group_prediction_tree_from_order(alts, &real_indices, ctx);
+    return build_group_prediction_tree_from_order(alts, &real_indices, ctx, end_follow);
 }
 
 /// Strip Consume nodes whose child contains any Ambiguous — fall back to
@@ -354,27 +362,21 @@ fn pop_return(c: &SllConfig) -> SllConfig {
 }
 
 
-/// True when the config has fully consumed its elements and has no return
-/// frame to pop into — i.e. the alt's body is finished and any further token
-/// belongs to the calling context. Opaque configs (`pos == SLL_POS_OPAQUE`) are not at-end.
-///
-/// The check walks `return_stack` from the most-recently-pushed frame back
-/// to the oldest, mirroring what a sequence of `pop_return` calls would
-/// expose. Walking by index keeps this O(n); the previous recursive
-/// implementation was O(n^2) because each `pop_return` rebuilt the entire
-/// surviving prefix of `return_stack` into a fresh `List`.
-fn config_is_at_end(c: &SllConfig) -> bool {
+/// True when what the config has left, through every return frame, can match
+/// nothing — the alt can finish here and a further token may belong to the
+/// calling context. Opaque configs (`pos == SLL_POS_OPAQUE`) cannot.
+fn config_is_at_end(c: &SllConfig, ctx: &mut GenContext) -> bool {
     if c.pos == SLL_POS_OPAQUE {
         return false;
     }
-    if c.pos < c.elements.len() {
+    if !ctx.tail_is_nullable_deep(c.elements, c.pos) {
         return false;
     }
     let mut i = c.return_stack.len();
     while i > 0 {
         i -= 1;
         let frame = &c.return_stack[i];
-        if frame.pos < frame.elements.len() {
+        if !ctx.tail_is_nullable_deep(frame.elements, frame.pos) {
             return false;
         }
     }
@@ -533,7 +535,8 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
                 },
                 _ => {
                     let mut v: List<String> = [];
-                    if ctx.first_ids_of_element(skipped_elem, &mut v).contains(&token) {
+                    if ctx.first_ids_of_element(skipped_elem, &mut v).contains(&token)
+                        || open_terminal_admits(skipped_elem, token, ctx) {
                         results.push(SllConfig { ..*c, pos: skip_pos + 1 });
                     }
                 },
@@ -590,8 +593,39 @@ fn sll_advance(c: &SllConfig, token: i32, ctx: &mut GenContext, inline_depth: i3
             let unwrapped = SllConfig { ..*c, elements: &unlabeled };
             sll_advance(&unwrapped, token, ctx, inline_depth);
         },
-        Wildcard(_) | Not(_) => [],
+        Wildcard(_) | Not(_) => if open_terminal_admits(elem, token, ctx) { sll_step(c, c.pos + 1) } else { [] },
     };
+}
+
+/// Whether `elem` is a `.` or `~X` matching `token`. Neither matches EOF,
+/// which ends the input rather than being a token of it.
+fn open_terminal_admits(elem: &Element, token: i32, ctx: &mut GenContext) -> bool {
+    if token == ctx.eof_kind_id() {
+        return false;
+    }
+    return match elem {
+        Wildcard(_) => true,
+        Not(ne) => {
+            let mut v: List<String> = [];
+            !ctx.first_ids_of_element(&ne.element, &mut v).contains(&token);
+        },
+        TokenRef(_) | Literal(_) | RuleRef(_) | Group(_) | Repeat(_) | Label(_) => false,
+    };
+}
+
+/// Whether the config's position admits a token no first set names: a `.` or
+/// `~X` it can reach there, directly or through what it would return into.
+fn sll_config_open(c: &SllConfig, ctx: &mut GenContext) -> bool {
+    if c.pos == SLL_POS_OPAQUE {
+        return false;
+    }
+    if c.pos >= c.elements.len() {
+        if c.return_stack.is_empty() {
+            return false;
+        }
+        return sll_config_open(&pop_return(c), ctx);
+    }
+    return ctx.elements_reach_open_end(c.elements, c.pos);
 }
 
 fn sll_unique_alts(configs: &List<SllConfig>) -> List<i32> {
@@ -619,7 +653,13 @@ fn sll_dedup_by_alt(configs: &List<SllConfig>) -> List<SllConfig> {
     return result;
 }
 
-fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &mut GenContext) -> PredictionNode {
+fn build_sll_node(
+    configs: &List<SllConfig>,
+    depth: i32,
+    max_depth: i32,
+    ctx: &mut GenContext,
+    end_follow: &List<String>,
+) -> PredictionNode {
     // No explicit closure step: nullable handling is done in
     // `sll_config_first` (`first_of_elements_from`) and `sll_advance`
     // (explicit skip logic), so the config set is used as-is.
@@ -650,13 +690,15 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         // Advance all configs past this shared terminal.
         let advanced: List<SllConfig> = closed.iter_ref().map(|c: &SllConfig| SllConfig { ..*c, pos: c.pos + 1 }).collect(
         );
-        let child = build_sll_node(&advanced, depth, max_depth, ctx);
+        let child = build_sll_node(&advanced, depth, max_depth, ctx, end_follow);
         return PredictionNode::Consume(ConsumeNode { element: elem, child });
     }
 
     let mut all_tokens: List<i32> = [];
     let mut config_firsts: List<List<i32>> = [];
     collect_config_first_tokens(&closed, ctx, &mut all_tokens, &mut config_firsts);
+    let open: List<bool> = closed.iter_ref().map(|c: &SllConfig| sll_config_open(c, ctx)).collect();
+    let eof = ctx.eof_kind_id();
 
     let mut branches: List<PredictionBranch> = [];
 
@@ -666,8 +708,14 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
         let mut next_configs: List<SllConfig> = [];
         let mut opaque_alts: List<i32> = [];
         for let mut i = 0; i < closed.len(); i += 1 {
-            if config_firsts[i].contains(&tk) {
+            let opens_on_tk = open[i] && tk != eof;
+            if config_firsts[i].contains(&tk) || opens_on_tk {
                 let advanced = sll_advance(&closed[i], tk, ctx);
+                // An open position admits the token even where the walk cannot
+                // follow it there; dropping the alt would hand the token away.
+                if opens_on_tk && advanced.is_empty() && !opaque_alts.contains(&closed[i].alt_index) {
+                    opaque_alts.push(closed[i].alt_index);
+                }
                 for let a of advanced {
                     if a.pos == -1 {
                         // Opaque config: multi-token RuleRef, can't advance past.
@@ -708,7 +756,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
             }
         } else {
             // Still ambiguous: recurse with deeper lookahead.
-            build_sll_node(&deduped, depth + 1, max_depth, ctx);
+            build_sll_node(&deduped, depth + 1, max_depth, ctx, end_follow);
         };
         let idx = find_merge_branch(&branches, &child);
         let tk_name = ctx.token_name(tk);
@@ -720,6 +768,12 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
                 child,
             });
         }
+    }
+
+    // No token is named here, yet one alternative admits every token: nothing
+    // is left for a token-led branch to separate, at-end alternatives included.
+    if branches.is_empty() && open.iter_ref().any(|o: &bool| *o) {
+        return ambiguous(alts, AmbiguityReason::OpenEnded);
     }
 
     // Detect at-end configs: their alts are fully consumed at this depth and
@@ -740,7 +794,7 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
     //  * Multiple at-end alts → true ambiguity → Ambiguous.
     let mut at_end_alts: List<i32> = [];
     for let c of &closed {
-        if config_is_at_end(c) && !at_end_alts.contains(&c.alt_index) {
+        if config_is_at_end(c, ctx) && !at_end_alts.contains(&c.alt_index) {
             at_end_alts.push(c.alt_index);
         }
     }
@@ -753,6 +807,18 @@ fn build_sll_node(configs: &List<SllConfig>, depth: i32, max_depth: i32, ctx: &m
                     branch_tokens.push(*t);
                 }
             }
+        }
+        // No token a branch takes can follow the rule, so an at-end alternative
+        // is viable exactly on what follows it: a token decides.
+        if !end_follow.is_empty() && !sets_overlap(&branch_tokens, end_follow) {
+            let ended = PredictionNode::Leaf(at_end_alts.sorted()[0]);
+            let idx = find_merge_branch(&branches, &ended);
+            if idx >= 0 {
+                dedup_append_arr(&mut branches[idx].tokens, end_follow);
+            } else {
+                branches.push(PredictionBranch { tokens: *end_follow, child: ended });
+            }
+            return PredictionNode::Dispatch(PredictionDispatch { depth, branches });
         }
         return PredictionNode::Ambiguous(AmbiguousNode {
             alts,
@@ -878,12 +944,17 @@ fn try_expand_opaque(
     // token belongs to the calling context, which is what `build_sll_node`
     // reports as `AtEndConflict`. Any other empty FIRST is outside what this
     // walk models, so the expansion is abandoned to the tournament.
+    // A flat token dispatch cannot hold an alternative that admits every
+    // token, so an open position abandons the expansion the same way.
+    if all_configs.iter_ref().any(|c: &SllConfig| sll_config_open(c, ctx)) {
+        return null;
+    }
     let mut has_at_end = false;
     for let mut i = 0; i < all_configs.len(); i += 1 {
         if !config_firsts[i].is_empty() {
             continue;
         }
-        if !config_is_at_end(&all_configs[i]) {
+        if !config_is_at_end(&all_configs[i], ctx) {
             return null;
         }
         has_at_end = true;
@@ -1047,10 +1118,8 @@ fn element_eq(a: &Element, b: &Element) -> bool {
     };
 }
 
-/// Whether an `Ambiguous` node's decision is emitted as a runtime-ATN
-/// prediction (`atn_predict_with_stack`). Shared by the marking pass and
-/// `gen_prediction_code_inner`'s `route_via_atn` so the two cannot disagree
-/// about which nodes take the ATN path.
+/// Whether an `Ambiguous` node's decision is a runtime-ATN prediction. The
+/// marking pass and `gen_prediction_code_inner` both ask here.
 pub fn ambiguous_node_routes_via_atn<S: AsStrSlice>(a: &AmbiguousNode, rule_name: S, ctx: &GenContext) -> bool {
     return a.reason matches { AtEndConflict }
         && ctx.emits_at_end_conflict_via_atn(ctx.current_rule_index(), rule_name, &a.branch_tokens);

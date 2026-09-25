@@ -3,8 +3,8 @@
 //! alternative can still find its own. Expected trees are the published ANTLR4
 //! jar's (black-box oracle).
 //!
-//! The loop entry is decided per token, by scanning the operator's suffix and
-//! then checking the caller's continuation is still there — no simulator.
+//! The loop entry is decided per token without the simulator: it scans the
+//! operator's suffix, then checks that the caller's continuation is still there.
 
 use g from "./grammars/lr_mid_operand.g4"
     with {
@@ -18,21 +18,33 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-fn assert_parses<S: AsStrSlice>(input: S) {
-    let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
-}
-
 test "between's middle operand stops at the enclosing and" {
     assert_tree("a between b and c", "(s (e (e a) between (e b) and (e c)))");
 }
 
-test "between with a trailing and parses" {
-    assert_parses("a between b and c and d");
-}
-
 test "between's middle operand climbs the shared and when one is left over" {
     assert_tree("a between b and c and d", "(s (e (e a) between (e (e b) and (e c)) and (e d)))");
+}
+
+// The climb that must stop sits in a nested operand, below a looser `or`.
+test "a nested operand leaves between its and" {
+    assert_tree(
+        "a between b or c and d and e",
+        "(s (e (e a) between (e (e b) or (e (e c) and (e d))) and (e e)))",
+    );
+}
+
+test "between's trailing operand takes a looser operator" {
+    assert_tree("a between b and c or d", "(s (e (e a) between (e b) and (e (e c) or (e d))))");
+    assert_tree("a or b between c and d or e", "(s (e (e (e a) or (e b)) between (e c) and (e (e d) or (e e))))");
+    assert_tree(
+        "a between b and c and d or e",
+        "(s (e (e a) between (e (e b) and (e c)) and (e (e d) or (e e))))",
+    );
+    assert_tree(
+        "a between b and c between d and e",
+        "(s (e (e (e a) between (e b) and (e c)) between (e d) and (e e)))",
+    );
 }
 
 test "binary and chains left-associatively" {

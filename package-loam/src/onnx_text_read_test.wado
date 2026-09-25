@@ -125,6 +125,15 @@ test "an attribute is read as the text the operator's schema types" {
     assert a[2].values == ["c"];
 }
 
+test "a float attribute may end its fraction at the point" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = LeakyRelu <alpha = 1.> (X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].values == ["1.0"];
+}
+
 test "an attribute after the input list reads as the same attribute" {
     let g = read(
         `agraph (float[2, 3] X) => (float[3, 2] Y) {
@@ -148,6 +157,92 @@ test "an initializer's inline values are not mistaken for its name" {
     ).unwrap();
     assert g.initializers.len() == 1;
     assert g.initializers[0].name == "W";
+    // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x20\xc0");
+}
+
+test "an initializer without inline values carries no data" {
+    assert mlp().initializers[0].data matches { None };
+}
+
+test "inline values that disagree with the shape name the tensor" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[3] W = {1.0, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: 2 elements for a shape of 3 or more";
+}
+
+test "a zero extent after a larger one still means no elements" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[3, 0] W = {}>
+        {
+            Y = Identity(X)
+        }`,
+    ).unwrap();
+    assert g.initializers[0].data == Option::Some(b"");
+}
+
+test "inline half values are bit patterns, as ONNX's parser reads them" {
+    let g = read(
+        `agraph (float16[2] X) => (float16[2] Y)
+        <float16[2] W = {15360, 2049}, bfloat16[1] B = {49184}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap();
+    assert g.initializers[0].data == Option::Some(b"\x00\x3c\x01\x08");
+    assert g.initializers[1].data == Option::Some(b"\x20\xc0");
+}
+
+test "a half bit pattern past sixteen bits names itself" {
+    for let text of ["70000", "-1"] {
+        let e = read(
+            `agraph (float16[1] X) => (float16[1] Y)
+            <float16[1] W = {${text}}>
+            {
+                Y = Add(X, W)
+            }`,
+        ).unwrap_err();
+        assert e == `W: ${text} is not a float16 bit pattern`;
+    }
+}
+
+test "a decimal in a half tensor names itself" {
+    let e = read(
+        `agraph (float16[1] X) => (float16[1] Y)
+        <float16[1] W = {1.0}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: 1.0 is not a float16 bit pattern";
+}
+
+test "a float may end its fraction at the point" {
+    let g = read(
+        `agraph (float[3] X) => (float[3] Y)
+        <float[3] W = {1., 1.e1, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap();
+    assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x20\x41\x00\x00\x20\xc0");
+}
+
+test "a float may not start at the point" {
+    let e = read(
+        `agraph (float[1] X) => (float[1] Y)
+        <float[1] W = {.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e.starts_with("2:");
 }
 
 test "a syntax error comes back with its position" {

@@ -13,6 +13,7 @@ use crate::token::Span;
 
 use super::arena_query::{Place, is_place_prefix, place_path};
 use crate::optimize::arena_query::is_pure_expr;
+use crate::optimize::heap_effect::{LazyHeapFrame, field_path};
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
@@ -45,7 +46,7 @@ pub(super) struct RefElimRule {
 }
 
 /// Build a [`RefElimRule`] for one function from its pristine body.
-pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
+pub(super) fn build_ref_elim(body: &Body, heap: LazyHeapFrame) -> RefElimRule {
     let rebound = find_rebound_locals(body);
     let mut refs: IndexMap<u32, RefInfo> = IndexMap::default();
     analyze_block(body, body.root, &rebound, &mut refs);
@@ -59,6 +60,13 @@ pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
     // between does not. An inherited shadow (`let r = s`) captures at `s`'s
     // binding, not its own, so it falls back to a whole-body check.
     let facts = collect_capture_facts(body, &refs);
+    let replaced_elsewhere: IndexSet<u32> = refs
+        .iter()
+        .filter(|(local, info)| {
+            info.eliminable && replaced_through_heap(body, &heap, **local, info, &refs, &facts)
+        })
+        .map(|(&local, _)| local)
+        .collect();
     for (&local, info) in &mut refs {
         let Some(referent) = place_path(body, info.referent_e) else {
             continue;
@@ -67,7 +75,7 @@ pub(super) fn build_ref_elim(body: &Body) -> RefElimRule {
             replaces_capture(r, &referent)
                 && (info.inherited || invalidates_capture(r, local, &facts))
         });
-        if replaced {
+        if replaced || replaced_elsewhere.contains(&local) {
             info.eliminable = false;
         }
     }
@@ -272,6 +280,8 @@ struct CaptureFacts {
     binding_pos: IndexMap<u32, usize>,
     last_use: IndexMap<u32, usize>,
     replacements: Vec<Replacement>,
+    /// The statement position of every node the walk numbered.
+    positions: IndexMap<NodeRef, usize>,
     /// Position range `[entry, exit]` of every `Loop` body (inclusive). Pre-order
     /// numbering makes a loop's statements a contiguous range, so a position `p`
     /// is inside the loop iff `entry <= p <= exit`. Used to extend a captured
@@ -290,6 +300,7 @@ fn collect_capture_facts(body: &Body, refs: &IndexMap<u32, RefInfo>) -> CaptureF
         binding_pos: IndexMap::default(),
         last_use: IndexMap::default(),
         replacements: Vec::new(),
+        positions: IndexMap::default(),
         loops: Vec::new(),
     };
     let mut pos = 0;
@@ -328,6 +339,7 @@ fn capture_walk(
         }
         _ => enclosing,
     };
+    facts.positions.insert(node, here);
     if let NodeRef::Expr(id) = node {
         match &body.exprs[id].kind {
             ExprKind::Assign { target, .. } => {
@@ -393,6 +405,60 @@ fn extended_live_end(binding: usize, last_use: usize, loops: &[(usize, usize)]) 
         }
     }
     end
+}
+
+/// Whether a store through another handle, or a call, may put a new object on
+/// the referent's path while ref `local` is live.
+fn replaced_through_heap(
+    body: &Body,
+    heap: &LazyHeapFrame,
+    local: u32,
+    info: &RefInfo,
+    refs: &IndexMap<u32, RefInfo>,
+    facts: &CaptureFacts,
+) -> bool {
+    let mut crossed = vec![local];
+    let Some((root, path)) = referent_path(body, info.referent_e, refs, &mut crossed) else {
+        return true;
+    };
+    if path.is_empty() {
+        return false;
+    }
+    let whole_body = crossed.iter().any(|r| refs[r].inherited);
+    let window = facts.last_use.get(&local).map(|&last_use| {
+        let binding = crossed
+            .iter()
+            .map(|r| facts.binding_pos.get(r).copied().unwrap_or(0))
+            .min()
+            .expect("holds `local`");
+        (binding, extended_live_end(binding, last_use, &facts.loops))
+    });
+    let live = |pos: usize| whole_body || window.is_some_and(|(from, to)| from < pos && pos <= to);
+    heap.get(body)
+        .place_replaced(heap.effects, body, root, &path, |site| {
+            facts.positions.get(&site).is_none_or(|&pos| live(pos))
+        })
+}
+
+/// The local a referent starts from, and each object on its path with the field
+/// taken from it. Adds each tracked ref the path runs through to `crossed`.
+fn referent_path(
+    body: &Body,
+    e: ExprId,
+    refs: &IndexMap<u32, RefInfo>,
+    crossed: &mut Vec<u32>,
+) -> Option<(u32, Vec<(TypeId, u32)>)> {
+    let (base, mut path) = field_path(body, e)?;
+    let ExprKind::Local { index, .. } = &body.exprs[base].kind else {
+        return None;
+    };
+    let Some(info) = refs.get(index) else {
+        return Some((*index, path));
+    };
+    crossed.push(*index);
+    let (root, inner) = referent_path(body, info.referent_e, refs, crossed)?;
+    path.extend(inner);
+    Some((root, path))
 }
 
 /// Whether replacement `r` invalidates ref `local`'s capture, making the

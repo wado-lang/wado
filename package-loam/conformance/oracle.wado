@@ -2,7 +2,7 @@
 //! One `.pb` file is one bare `TensorProto`.
 
 use { from_bytes } from "core:protobuf";
-use { ModelProto, TensorProto, float_tensor } from "../src/onnx_proto.wado";
+use { TensorProto, float_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
@@ -11,21 +11,6 @@ pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
     };
     let Ok(Some(pair)) = float_tensor(&t) else {
         panic("the tensor is not float");
-    };
-    return pair;
-}
-
-/// A model's first initializer, read straight out of the model. This is the
-/// seam Loam's checkpoint reader fills: what a reader produces is `Weights`.
-pub fn first_initializer(model_bytes: ByteList) -> [List<f32>, List<i32>] {
-    let Ok(model) = from_bytes::<ModelProto, ByteList>(model_bytes) else {
-        panic("the model did not decode");
-    };
-    let Some(graph) = &model.graph else {
-        panic("a model without a graph");
-    };
-    let Ok(Some(pair)) = float_tensor(&graph.initializer[0]) else {
-        panic("the initializer is not float");
     };
     return pair;
 }

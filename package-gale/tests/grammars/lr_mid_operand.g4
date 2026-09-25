@@ -13,6 +13,7 @@ grammar LrMidOperand;
 s : e EOF ;
 e : ID
   | e 'and' e
+  | e 'or' e
   | e 'between' e 'and' e
   ;
 

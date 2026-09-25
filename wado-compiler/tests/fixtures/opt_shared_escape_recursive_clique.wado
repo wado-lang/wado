@@ -1,0 +1,125 @@
+// Twelve mutually recursive functions hand one constant aggregate to each
+// other. Whether it may be shared is one question per parameter, and every
+// parameter's answer rests on all the others: settled per path through the
+// cycle it is factorial in the cycle's size, which does not finish at twelve.
+
+use { println, Stdout } from "core:cli";
+
+struct Cfg { a: List<i32>, b: i32 }
+
+fn f0(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[0] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f1(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[1] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f2(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[2] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f3(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[0] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f4(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[1] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f5(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[2] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f6(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[0] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f7(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[1] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f8(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[2] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f9(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[0] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f10(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[1] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+fn f11(p: Cfg, n: i32) -> i32 {
+    if n <= 0 {
+        return p.a[2] + p.b;
+    }
+    return f0(p, n - 1) + f1(p, n - 2) + f2(p, n - 3) + f3(p, n - 4)
+        + f4(p, n - 5) + f5(p, n - 6) + f6(p, n - 7) + f7(p, n - 8)
+        + f8(p, n - 9) + f9(p, n - 10) + f10(p, n - 11) + f11(p, n - 12);
+}
+
+export fn run() with Stdout {
+    println(`${f0(Cfg { a: [1, 2, 3], b: 2 }, builtin::black_box(1))}`);
+}
+
+__DATA__
+{
+    "stdout": "48\n"
+}

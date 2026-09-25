@@ -171,7 +171,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     let packed_99: i64;
     let rx_100: i32;
     let tx_101: i32;
-    let $sroa_g_used: i32;
+    let $sroa_g_used_113: i32;
     h = struct.new "effect_handler_bundled.wado//MultiMock" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 }, count: 0 };
     $save_Greeting = global:effect_handler_bundled.wado::$effect_Greeting;
     $d_Greeting = struct.new "effect_handler_bundled.wado//$Dispatch_Greeting" { outer: $save_Greeting, op_hello: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_handler_bundled.wado/$closure_wrapper_0" } };
@@ -204,7 +204,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     let $array_clone_dst_3: ref Array<u8>;
     $array_clone_dst_3 = builtin::array_new<u8>($array_clone_len_4);
     builtin::array_copy<u8>($array_clone_dst_3, 0, $array_clone_src_2, 0, $array_clone_len_4);
-    $sroa_g_used = $load_5;
+    $sroa_g_used_113 = $load_5;
     n1 = $inline__effect_dispatch__Counter__tick_3: block -> i32 {
         $local_0_19 = global:effect_handler_bundled.wado::$effect_Counter;
         if @likely(ref.is_null($local_0_19) == 0) {
@@ -242,7 +242,7 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
         unreachable;
     };
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(58), used: 0 };
-    new_used_34 = 5 + $sroa_g_used;
+    new_used_34 = 5 + $sroa_g_used_113;
     if @unlikely(new_used_34 > 58) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_34);
@@ -250,9 +250,9 @@ fn "effect_handler_bundled.wado/run"() with Stdout {
     start_35 = $local_4_4.used;
     $local_4_4.used = new_used_34;
     self_37 = local.tee $load_15($local_4_4.repr);
-    builtin::array_copy<u8>(self_37, start_35, $array_clone_dst_3, 0, $sroa_g_used);
+    builtin::array_copy<u8>(self_37, start_35, $array_clone_dst_3, 0, $sroa_g_used_113);
     self_41 = $load_15;
-    offset_42 = start_35 + $sroa_g_used;
+    offset_42 = start_35 + $sroa_g_used_113;
     builtin::array_copy<u8>(self_41, offset_42, global:effect_handler_bundled.wado::$const_obj_4, 0, 5);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(n1, $local_5.buf);
@@ -416,9 +416,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let $sroa_data_start: i32;
-    let $sroa_written_count: i32;
-    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_data_start_48: i32;
+    let $sroa_written_count_50: i32;
+    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -426,11 +426,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     offset = $mv$data$start;
     block {
         l31: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b32: block {
+            $sroa_data_start_48 = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b32: block {
                 l33: loop {
                     break_if b32 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
                     i = i + 1;
                     continue l33;
                 };
@@ -448,8 +448,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            $sroa_written_count = result >> 4;
-            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_50 = result >> 4;
+            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -461,8 +461,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count;
-            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
+            offset = offset + $sroa_written_count_50;
+            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l31;

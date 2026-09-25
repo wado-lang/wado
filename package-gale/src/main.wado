@@ -196,12 +196,6 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
     }
     let mut merged = load_and_merge(&paths);
 
-    // `dump` reports what the emitter sees, so it canonicalizes and stamps the
-    // grammar through `generate`'s own prologue — otherwise it reports a shape
-    // no parser is built from, and lowering re-derives per query what the
-    // prologue answers once.
-    let token_kinds = canonicalize_for_analysis(&mut merged);
-
     // `--lexer` reports the lexer emit instead of the GIR dump: the GIR dump
     // covers the parser only, and lexer strategies are decided at emit time
     // from the surface IR, so it needs no lowering.
@@ -209,6 +203,12 @@ fn cmd_dump(paths: List<String>, atn: bool, lexer: bool) with (Stdout, Stderr, P
         print(render_lexer_dump(&merged));
         return;
     }
+
+    // `dump` reports what the emitter sees, so it canonicalizes and stamps the
+    // grammar through `generate`'s own prologue — otherwise it reports a shape
+    // no parser is built from, and lowering re-derives per query what the
+    // prologue answers once.
+    let token_kinds = canonicalize_for_analysis(&mut merged);
 
     // Lower to GIR and render the per-rule report derived from the
     // actual prediction decisions (not the raw surface IR).

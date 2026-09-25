@@ -3,10 +3,9 @@
 //! This is the codegen-side representation of the grammar as an NFA, the
 //! foundation of the hybrid runtime ATN simulator (see the "ATN-class
 //! grammars" section of `TODO.md`). The simulator runs only at the cold
-//! decisions that need it — today, non-greedy `??` (each one keyed to its own
-//! decision number via `assign_atn_decisions` -> `Atn.decision_sites`) and an
-//! ATN-class LR rule's loop entry; the static fast path handles everything
-//! else. The ATN is the data it walks.
+//! decisions static prediction cannot settle, each keyed to its own decision
+//! number (`assign_atn_decisions` -> `Atn.decision_sites`). The ATN is the data
+//! it walks, and what every grammar's recovery sets are read off.
 //!
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
@@ -24,7 +23,7 @@
 //! `atn_blob_bytes` -> `atn_decode` round-trip.
 
 use { Grammar, ParserRule, Alternative, Element, RepeatKind } from "./ir.wado";
-use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt } from "./gir.wado";
+use { LoweredGrammar, Rule, LeftRecursiveRule, LrAlt, lr_trailing_prec } from "./gir.wado";
 use { lower, element_is_self_ref } from "./lower.wado";
 use { collect_literal_tokens, token_slot_order, LitToken } from "./lexer_gen.wado";
 use {
@@ -91,14 +90,12 @@ pub struct Atn {
     /// exact return state around each rule call. Empty when call sites were
     /// not assigned (`assign_atn_call_sites` not run).
     pub call_site_returns: List<i32>,
-    /// Compile-time correspondence `atn_decision -> decision number`, indexed
-    /// by the surface `RepeatElement.atn_decision` / `GroupElement.atn_decision`
-    /// id (`-1` for any id whose node marked no decision, e.g. a single-alt
-    /// group). NOT part of the serialized blob — codegen reads it to emit each
-    /// `??`'s exact `atn_predict_with_stack(sim, decision, …)` call, retiring
-    /// the runtime "unique exit-first BlockStart" search. Empty when decision
-    /// sites were not assigned (`assign_atn_decisions` not run).
+    /// Compile-time `atn_decision -> decision number`, -1 for a site that marks
+    /// no decision. Not serialized; empty when sites were not assigned.
     pub decision_sites: List<i32>,
+    /// Compile-time `atn_leaf_site -> the state after the terminal matches`,
+    /// `-1` for an id no segment took. Not serialized.
+    pub leaf_site_states: List<i32> = [],
 }
 
 /// The loop-entry (`STAR_LOOP_ENTRY`) decision number for parser rule
@@ -133,11 +130,9 @@ pub fn lr_loop_entry_decision(atn: &Atn, rule: i32) -> i32 {
     return -1;
 }
 
-/// The decision number of parser rule `rule`'s top-level alternation (the
-/// `BlockStart` directly off its `RuleStart`), or -1 if the rule body marks
-/// no decision (a single-alt rule). Codegen uses this to route an `AtEndConflict`
-/// multi-alt `Ambiguous` site through `atn_predict_with_stack`. For an LR rule
-/// this is the atom block's decision, not the loop entry (`lr_loop_entry_decision`).
+/// The decision number of rule `rule`'s top-level alternation, which an
+/// `AtEndConflict` site predicts at; -1 for a single-alt rule. For an LR rule
+/// it is the atom block's, not the loop entry (`lr_loop_entry_decision`).
 pub fn rule_body_decision(atn: &Atn, rule: i32) -> i32 {
     let start = atn.rule_start[rule];
     if atn.states[start].transitions.is_empty() {
@@ -179,6 +174,7 @@ struct AtnBuilder {
     num_tokens: i32,
     call_site_returns: List<i32>,
     decision_sites: List<i32>,
+    leaf_site_states: List<i32> = [],
 }
 
 impl AtnBuilder {
@@ -196,6 +192,14 @@ impl AtnBuilder {
             return;
         }
         sparse_set(&mut self.call_site_returns, call_site, return_state);
+    }
+
+    fn record_leaf_site(&mut self, leaf_site: i32, after: i32) {
+        if leaf_site < 0 {
+            return;
+        }
+        assert leaf_site >= self.leaf_site_states.len() || self.leaf_site_states[leaf_site] < 0, "a terminal is built once";
+        sparse_set(&mut self.leaf_site_states, leaf_site, after);
     }
 
     /// Allocate a fresh decision number and bind it to `state`.
@@ -321,6 +325,7 @@ pub fn build_atn_with(grammar: &Grammar, lowered: &LoweredGrammar) -> Atn {
         num_tokens: b.num_tokens,
         call_site_returns: b.call_site_returns,
         decision_sites: b.decision_sites,
+        leaf_site_states: b.leaf_site_states,
     };
 }
 
@@ -383,7 +388,7 @@ fn build_lr_body(
         if alt.elements.len() <= 1 {
             continue;
         }
-        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index);
+        let suffix_seg = build_lr_suffix(b, alt, a, &rule.name, &lr_first, r, rule_index, lr.atn_class);
         b.add_trans(entry, AtnTransition { kind: ATN_TR_PRECEDENCE, target: suffix_seg.0, prec: a.own_prec });
         b.add_eps(suffix_seg.1, back);
     }
@@ -404,24 +409,27 @@ fn build_lr_suffix<S: AsStrSlice>(
     lr_first: &List<String>,
     r: i32,
     rule_index: &TreeMap<String, i32>,
+    atn_class: bool,
 ) -> [i32, i32] {
     let entry = b.new_state(ATN_BASIC, r);
     let mut cursor = entry;
     for let mut i = 1; i < alt.elements.len(); i += 1 {
-        // Whether an LR operator can follow this element in the rest of the
-        // suffix. The LR loop can re-enter on an operator after the suffix,
-        // so the suffix tail conservatively carries one (`tail_has = true`).
-        let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
-        let seg = build_lr_suffix_element(
-            b,
-            &alt.elements[i],
-            rule_name,
-            lr_first,
-            lr_alt.conflict_min,
-            follow_has,
-            r,
-            rule_index,
-        );
+        let elem = &alt.elements[i];
+        let seg = if atn_class && element_is_self_ref(elem, rule_name) {
+            // ANTLR4's `e[0]` mid operand and `e[p+1]` trailing one: the
+            // simulator decides the climb, as `stamp_lr_self_ref_min_prec` has it.
+            let prec = if i + 1 < alt.elements.len() {
+                0;
+            } else {
+                lr_trailing_prec(lr_alt.own_prec, lr_alt.right_associative);
+            };
+            self_ref_segment(b, r, prec, self_ref_call_site(elem));
+        } else {
+            // The LR loop can re-enter on an operator after the suffix, so the
+            // suffix tail conservatively carries one (`tail_has = true`).
+            let follow_has = elements_seq_first_has_lr(&alt.elements, i + 1, lr_first, true);
+            build_lr_suffix_element(b, elem, rule_name, lr_first, lr_alt.conflict_min, follow_has, r, rule_index);
+        };
         b.add_eps(cursor, seg.0);
         cursor = seg.1;
     }
@@ -733,8 +741,8 @@ fn build_sequence(
 /// Build a single element, returning its `[entry, exit]` state pair.
 fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
     return match *elem {
-        TokenRef(t) => atom_segment(b, b.kind_of(`TK_${t.name}`), rule),
-        Literal(l) => atom_segment(b, b.kind_of(&l.const_name), rule),
+        TokenRef(t) => leaf_segment(b, b.kind_of(`TK_${t.name}`), rule, t.atn_leaf_site),
+        Literal(l) => leaf_segment(b, b.kind_of(&l.const_name), rule, l.atn_leaf_site),
         Wildcard(_) => {
             let from = b.new_state(ATN_BASIC, rule);
             let to = b.new_state(ATN_BASIC, rule);
@@ -774,10 +782,11 @@ fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &Tre
 /// `entry --Atom(kind)--> exit`. A `kind` of -1 (unresolved token) still
 /// produces a transition so the ATN stays structurally complete; the
 /// simulator simply never matches it.
-fn atom_segment(b: &mut AtnBuilder, kind: i32, rule: i32) -> [i32, i32] {
+fn leaf_segment(b: &mut AtnBuilder, kind: i32, rule: i32, leaf_site: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, rule);
     let to = b.new_state(ATN_BASIC, rule);
     b.add_trans(from, AtnTransition { kind: ATN_TR_ATOM, target: to, label: kind });
+    b.record_leaf_site(leaf_site, to);
     return [from, to];
 }
 

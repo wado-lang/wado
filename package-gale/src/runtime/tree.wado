@@ -159,6 +159,7 @@ pub struct TreeBuilder {
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
+    error_row: i32,
 }
 
 impl TreeBuilder {
@@ -170,6 +171,7 @@ impl TreeBuilder {
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
+            error_row: -1,
         };
     }
 
@@ -219,6 +221,9 @@ impl TreeBuilder {
         if self.last_finished >= checkpoint {
             self.last_finished += 1;
         }
+        if self.error_row >= checkpoint {
+            self.error_row += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -232,12 +237,63 @@ impl TreeBuilder {
         if self.last_finished >= checkpoint {
             self.last_finished = -1;
         }
+        if self.error_row > checkpoint {
+            self.error_row = checkpoint;
+        }
     }
 
     pub fn finish_node(&mut self, end: i32) {
         self.push_row(EventTag::Close, end, 0);
         self.last_finished = self.open[self.open.len() - 1];
         let _ = self.open.pop();
+    }
+
+    pub fn innermost_open(&self) -> i32 {
+        if self.open.is_empty() {
+            return -1;
+        }
+        return self.open[self.open.len() - 1];
+    }
+
+    pub fn node_kind(&self, row: i32) -> NodeKind {
+        return self.a[row] as NodeKind;
+    }
+
+    pub fn resume_node(&mut self, row: i32, end: i32) {
+        while self.innermost_open() > row {
+            self.finish_node(end);
+        }
+        if self.innermost_open() == row {
+            return;
+        }
+        assert self.last_finished == row && self.tag[self.tag.len() - 1] matches { Close }, "resume_node: a node no longer open is the last one closed";
+        self.truncate(self.tag.len() - 1);
+        self.open.push(row);
+    }
+
+    pub fn mark_error(&mut self) {
+        self.error_row = self.tag.len();
+    }
+
+    pub fn in_error_mode(&self) -> bool {
+        if self.error_row < 0 {
+            return false;
+        }
+        for let mut r = self.error_row; r < self.tag.len(); r += 1 {
+            if self.tag[r] matches { Tok } {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
+        for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
+            let kind = self.a[self.open[i]];
+            if kind != K_ERROR as i32 {
+                out.push(rule_names[kind]);
+            }
+        }
     }
 
     pub fn token(&mut self, idx: i32) {

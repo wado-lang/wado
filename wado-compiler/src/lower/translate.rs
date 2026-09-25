@@ -37,11 +37,12 @@ use crate::nir::{
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode,
-    StmtId, StmtKind, StmtNode,
+    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
+    PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
     StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
@@ -1121,9 +1122,20 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
+    /// `value` lowered for a store into a place, a literal or an argument: a copy
+    /// unless the value is fresh or moved, since the two are independent after.
+    fn convert_stored_operand(&self, value: &TirExpr) -> Operand {
+        let needs_wrap = self.should_wrap_value_copy(value);
+        let value_op = self.convert_operand(value);
+        if needs_wrap {
+            self.wrap_value_copy_operand(value_op, value.type_id)
+        } else {
+            value_op
+        }
+    }
+
     /// [`Self::wrap_value_copy`] over an operand: a promoted scalar
-    /// (`Operand::Value`) is never value-semantic, so it passes through; only a
-    /// skeleton aggregate is wrapped.
+    /// (`Operand::Value`) is never value-semantic, so only an aggregate is wrapped.
     fn wrap_value_copy_operand(&self, value: Operand, type_id: tir::TypeId) -> Operand {
         match value {
             Operand::Expr(e) => self.wrap_value_copy(e, type_id).into(),
@@ -1227,18 +1239,11 @@ impl FunctionTranslator<'_, '_> {
                 is_mut,
                 value,
             } => {
-                let needs_wrap = self.should_wrap_value_copy(value);
-                let value_type = value.type_id;
-                let value_op = self.convert_operand(value);
-                let value_op = if needs_wrap {
-                    self.wrap_value_copy_operand(value_op, value_type)
-                } else {
-                    value_op
-                };
+                let value = self.convert_stored_operand(value);
                 StmtKind::LetDestructure {
                     pattern: self.convert_pattern(pattern),
                     is_mut: *is_mut,
-                    value: value_op,
+                    value,
                 }
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!(
@@ -1690,7 +1695,7 @@ impl FunctionTranslator<'_, '_> {
             } => ExprKind::GlobalVarSet {
                 module_source: module_source.clone(),
                 name: name.clone(),
-                value: self.convert_operand(value),
+                value: self.convert_stored_operand(value),
             },
             TirExprKind::Binary { left, op, right } => ExprKind::Binary {
                 left: self.convert_operand(left),
@@ -1702,22 +1707,10 @@ impl FunctionTranslator<'_, '_> {
                 expr: self.convert_operand(expr),
             },
             TirExprKind::Assign { target, value } => {
-                // Only `Local` targets receive a defensive copy.
-                // `FieldAccess` / `Index` writes mutate an existing
-                // aggregate slot — the WIR-side semantics let the
-                // reference flow through without an extra wrap.
-                let needs_wrap = matches!(&target.kind, TirExprKind::Local { .. })
-                    && self.should_wrap_value_copy(value);
-                let value_type = value.type_id;
-                let value_op = self.convert_operand(value);
-                let value_op = if needs_wrap {
-                    self.wrap_value_copy_operand(value_op, value_type)
-                } else {
-                    value_op
-                };
+                let value = self.convert_stored_operand(value);
                 ExprKind::Assign {
                     target: self.convert_expr(target),
-                    value: value_op,
+                    value,
                 }
             }
             TirExprKind::Cast { expr, target_type } => ExprKind::Cast {
@@ -1778,13 +1771,13 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::TupleLiteral { elements } => ExprKind::TupleLiteral {
                 elements: elements
                     .iter()
-                    .map(|e| self.convert_literal_element(e))
+                    .map(|e| self.convert_stored_operand(e))
                     .collect(),
             },
             TirExprKind::ArrayLiteral { elements } => ExprKind::ArrayLiteral {
                 elements: elements
                     .iter()
-                    .map(|e| self.convert_literal_element(e))
+                    .map(|e| self.convert_stored_operand(e))
                     .collect(),
             },
             TirExprKind::TupleSpread { .. } => unreachable!(
@@ -1825,15 +1818,7 @@ impl FunctionTranslator<'_, '_> {
                 // marker.
                 args: args
                     .iter()
-                    .map(|a| {
-                        let needs_wrap = self.should_wrap_value_copy(a);
-                        let op = self.convert_operand(a);
-                        if needs_wrap {
-                            self.wrap_value_copy_operand(op, a.type_id)
-                        } else {
-                            op
-                        }
-                    })
+                    .map(|a| self.convert_stored_operand(a))
                     .collect(),
             },
             TirExprKind::VariantConstruct {
@@ -1845,7 +1830,7 @@ impl FunctionTranslator<'_, '_> {
                 variant_type: *variant_type,
                 case_index: *case_index,
                 case_name: case_name.clone(),
-                payload: payload.as_ref().map(|p| self.convert_literal_element(p)),
+                payload: payload.as_ref().map(|p| self.convert_stored_operand(p)),
             },
             TirExprKind::EnumConstruct {
                 enum_type,
@@ -2248,7 +2233,7 @@ impl FunctionTranslator<'_, '_> {
     fn convert_struct_field(&self, field: &TirStructField) -> ArenaStructField {
         ArenaStructField {
             name: field.name.clone(),
-            value: self.convert_literal_element(&field.value),
+            value: self.convert_stored_operand(&field.value),
             field_index: field.field_index,
         }
     }
@@ -2280,18 +2265,6 @@ impl FunctionTranslator<'_, '_> {
         self.alloc_expr(kind, value.type_id, value.span).into()
     }
 
-    /// Convert a value stored into an aggregate literal (a struct field or tuple
-    /// element), deep-copying it when it names an existing value — building a
-    /// literal from a variable must not share the variable's interior.
-    fn convert_literal_element(&self, value: &TirExpr) -> Operand {
-        let converted = self.convert_operand(value);
-        if self.should_wrap_value_copy(value) {
-            self.wrap_value_copy_operand(converted, value.type_id)
-        } else {
-            converted
-        }
-    }
-
     /// The single `Array<u8>` type every `String` / `List<u8>` literal uses for
     /// its `repr` field. The two share one canonical backing type, read off the
     /// always-loaded `String` struct through the compiler-item registry rather
@@ -2318,11 +2291,39 @@ impl FunctionTranslator<'_, '_> {
             .expect("String struct (repr field) is always loaded")
     }
 
+    /// The element of a sequence literal's type, and the array type holding
+    /// it. A `String` and every byte sequence share one `Array<u8>`.
+    fn packed_layout(&self, seq_type_id: tir::TypeId) -> (PrimitiveType, tir::TypeId) {
+        let elem = self.base.type_table.borrow().packed_element(seq_type_id);
+        match elem {
+            Some(PrimitiveType::U8) | None => (PrimitiveType::U8, self.seq_u8_repr_type()),
+            Some(prim) => {
+                let array = self
+                    .base
+                    .type_table
+                    .borrow_mut()
+                    .make_builtin_array(TypeTable::primitive_type_id(prim));
+                (prim, array)
+            }
+        }
+    }
+
     fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
         use crate::compiler_item::SeqField;
-        let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
-        let array_u8_ty = self.seq_u8_repr_type();
-        let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
+        let (elem, repr_ty) = self.packed_layout(seq_type_id);
+        let data = PackedData::new(bytes, elem);
+        let len = i32::try_from(data.len()).expect("seq literal length fits i32");
+        let is_array = {
+            let tt = self.base.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(seq_type_id)),
+                ResolvedType::BuiltinArray(_)
+            )
+        };
+        if is_array {
+            return self.alloc_expr(ExprKind::PackedArray(data), seq_type_id, span);
+        }
+        let packed = self.alloc_expr(ExprKind::PackedArray(data), repr_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
             ValueKind::Int(i64::from(len) as u64, TypeTable::I32),
             TypeTable::I32,

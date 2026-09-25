@@ -1,0 +1,78 @@
+// A value destructured out of a parameter carries that parameter: returning or
+// storing the binding hands the argument's storage on, so the caller keeps a
+// copy of what it passed.
+
+struct P {
+    l: List<i32>,
+}
+
+struct Holder {
+    p: P,
+}
+
+variant V {
+    One(P),
+    Two(P),
+}
+
+fn take(o: Option<P>) -> P {
+    if let Some(p) = o {
+        return p;
+    }
+    return P { l: [] };
+}
+
+fn take_match(v: V) -> P {
+    return match v {
+        One(p) => p,
+        Two(p) => p,
+    };
+}
+
+fn take_destructure(h: Holder) -> P {
+    let Holder { p } = h;
+    return p;
+}
+
+fn stash(o: Option<P>, h: &mut Holder) {
+    if let Some(p) = o {
+        h.p = p;
+    }
+}
+
+fn payload_len(o: Option<P>) -> i32 {
+    if let Some(p) = o {
+        return p.l.len();
+    }
+    return -1;
+}
+
+export fn run() {
+    let v = Option::Some(P { l: [1] });
+    let mut q = take(v);
+    q.l.push(3);
+    assert payload_len(v) == 1;
+    assert q.l.len() == 2;
+
+    let one = V::One(P { l: [1] });
+    let mut r = take_match(one);
+    r.l.push(3);
+    if let One(p) = one {
+        assert p.l.len() == 1;
+    }
+
+    let h = Holder { p: P { l: [1] } };
+    let mut s = take_destructure(h);
+    s.l.push(3);
+    assert h.p.l.len() == 1;
+
+    let w = Option::Some(P { l: [1] });
+    let mut hold = Holder { p: P { l: [] } };
+    stash(w, &mut hold);
+    hold.p.l.push(3);
+    assert payload_len(w) == 1;
+    assert hold.p.l.len() == 2;
+}
+
+__DATA__
+{}

@@ -850,9 +850,6 @@ pub(crate) struct MutCapture {
     pub(crate) inner_type: TypeId,
     /// `TypeId` of the mut-ref (`&mut T`).
     pub(crate) ref_type: TypeId,
-    /// Local index `resolve_closure` reserved for `ref_name`, which reify's own
-    /// allocation has to land on — two closures over one binding reserve two.
-    pub(crate) ref_index: u32,
 }
 
 /// One entry in the closure's capture list: the binding it holds and the type
@@ -1113,8 +1110,8 @@ pub(crate) enum IndirectCallee {
 
 /// Which TIR-direct desugar path the body walk took at a source-level
 /// rewrite site. The variants enumerate every surface form whose
-/// lowering bypasses synthetic AST construction (see the LSP-friendly
-/// compiler architecture note in `wado-compiler/CLAUDE.md`); reify reads
+/// lowering bypasses synthetic AST construction (see
+/// `docs/compiler.md`); reify reads
 /// this tag to pick the same expansion without re-deciding the shape.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DesugarKind {

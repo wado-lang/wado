@@ -1,0 +1,23 @@
+// An unrestricted handle is `Eq`, so a type holding one compares too.
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+resource Node {}
+
+struct Pair {
+    left: Node,
+    right: Node,
+}
+
+export fn run() {
+    let a = builtin::black_box(1.0) as Node;
+    let b = builtin::black_box(2.0) as Node;
+    assert Option::Some(a) == Option::Some(a);
+    assert Option::Some(a) != Option::Some(b);
+    assert Option::Some(a) != null;
+    assert Pair { left: a, right: b } == Pair { left: a, right: b };
+    assert Pair { left: a, right: b } != Pair { left: b, right: a };
+    let nodes: List<Node> = [a, b];
+    assert nodes == [a, b];
+}
+
+__DATA__
+{}

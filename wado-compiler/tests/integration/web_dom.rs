@@ -1,13 +1,12 @@
-//! `web:` is a bundled namespace and `web:dom` the unrestricted-resource slice
-//! Tide's generator emits from the vendored `WebIDL` snapshot. See
-//! `docs/wep-2026-04-01-tide.md`.
+//! The `web:dom` unrestricted-resource slice `package-web` generates from its
+//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-tide.md`.
 
-use crate::common::{check_diagnostics, compile_source};
+use crate::common::{WEB_PACKAGE, compile_against_web};
 
 /// A program whose `body` runs with `el`, a fresh `Element`, in scope.
 fn on_an_element(body: &str) -> String {
     format!(
-        "use {{ Dom, Node }} from \"web:dom\";\n\
+        "use {{ Dom, Node }} from \"{WEB_PACKAGE}\";\n\
          export fn run() with Dom {{\n\
              let doc = Dom::document();\n\
              let el = doc.create_element(\"div\", null);\n\
@@ -23,14 +22,18 @@ const INHERITED: &str = "el.set_text_content(Option::Some(\"Hello, Wado!\"));";
 const UPCAST: &str =
     "let parent: Node = el;\nparent.set_text_content(Option::Some(\"Hello, Wado!\"));";
 
-/// An unrestricted resource is an opaque `u32` at the CM boundary, not a CM
+/// An unrestricted resource is an opaque `f64` at the CM boundary, not a CM
 /// `resource`, so the component's imports carry no handle type.
 #[test]
-fn an_unrestricted_resource_crosses_as_a_bare_u32() {
+fn an_unrestricted_resource_crosses_as_a_bare_f64() {
     let wat = compile_to_wat(&on_an_element("el.set_id(\"app\");"));
     assert!(
         wat.contains("web:dom/element"),
         "the element interface should be imported: {wat}"
+    );
+    assert!(
+        wat.contains("(param \"self\" f64)"),
+        "the receiver should cross as an `f64`: {wat}"
     );
     assert!(
         !wat.contains("(resource"),
@@ -60,7 +63,7 @@ fn an_upcast_is_a_no_op() {
 }
 
 /// An `option<extern-handle>` result lifts into the declared `Option<Element>`,
-/// not the `Option<u32>` the boundary sees.
+/// not the `Option<f64>` the boundary sees.
 #[test]
 fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
     let wat = compile_to_wat(&on_an_element(
@@ -88,11 +91,18 @@ fn an_optional_extern_handle_argument_keeps_the_declared_option() {
     assert!(wat.contains("web:dom/node"), "{wat}");
 }
 
-/// Compile `source`, holding it to what `wado check` reports as well: a program
-/// this slice accepts has to be clean, not merely compilable.
+/// Compile `source`, holding it to its warnings as well: a program this slice
+/// accepts has to be clean, not merely compilable.
 fn compile_to_wat(source: &str) -> String {
-    assert_eq!(check_diagnostics(source), Vec::<String>::new());
-    let result = compile_source(source)
+    let compiled = compile_against_web(source);
+    let warnings: Vec<&str> = compiled
+        .warnings
+        .iter()
+        .map(|w| w.message.as_str())
+        .collect();
+    assert_eq!(warnings, Vec::<&str>::new());
+    let result = compiled
+        .result
         .unwrap_or_else(|e| panic!("expected the web:dom slice to compile, got {e}"));
     wasmprinter::print_bytes(&result.wasm).expect("the component should print")
 }

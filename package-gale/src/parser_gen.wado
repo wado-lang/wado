@@ -47,10 +47,19 @@ use {
     rule_kind_const,
     collect_called_names,
     defined_fn_names,
+    join_kinds,
 } from "./gen_util.wado";
-use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
+use {
+    ATN_STATE_HANDLE,
+    ATN_STATE_TYPE,
+    Forwarded,
+    GenContext,
+    is_nullable,
+    sets_overlap,
+    union_kind_arrays,
+} from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, wado } from "lib:wadopoet";
-use { TreeSet } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use {
     PredictionNode,
     PredictionDispatch,
@@ -66,7 +75,6 @@ use {
     alt_class_of,
     alt_classes,
     classes_union,
-    compute_overlap_groups,
     compute_overlap_groups_of,
     direct_dispatch_branches,
     dispatch_branches,
@@ -75,7 +83,6 @@ use {
     has_multi_alt_groups,
     is_decision_fallback,
     scan_decision_branches,
-    sort_group_by_specificity,
     sort_group_by_mandatory_count_desc,
     sort_group_by_element_count,
 } from "./alt_grouping.wado";
@@ -95,6 +102,7 @@ use {
     LoweredGrammar,
     Rule,
     LrAlt,
+    LR_CONT_FORWARD,
     LrDispatchData,
     MultiAltDispatch,
     AltBody,
@@ -136,27 +144,26 @@ use {
     add_parser_super_effect,
     add_seeded_vals_param,
     alt_gate_and_suffix,
+    alt_gate_condition,
     alt_gate_suffix_unanswered,
+    and_gate,
     alt_has_gate,
-    alt_initial_gate_conditions,
     mark_alt_gate_answered,
     alt_vals_arg,
-    alt_helper_exit,
+    emit_alt_helper_exit,
     ambiguous_group_predicate_gated,
+    atn_decision_gates,
     call_arg_suffix,
     current_rule_emits_vals,
     emit_arg_stores,
-    emit_atn_disabled_seed,
     emit_no_viable_return,
     emit_span_capture,
     gen_action_body,
     gen_alt_actions_at,
     gen_parser_member_methods,
     gen_predicate_fns,
-    gen_predicate_gated_dispatch,
     install_rule_captures,
     gen_vals_structs,
-    join_gate_conds,
     mark_gated_predicates,
     result_type_carries_vals,
     rule_call_ctx_field,
@@ -183,12 +190,14 @@ use { AltBinding } from "./attr_resolve.wado";
 use {
     EMPTY_SYNC,
     build_lookahead_condition,
+    build_scan_lookahead_condition,
     find_needed_depth,
     gen_lookahead_condition,
     gen_scan_lookahead_condition,
     sync_set_ref,
     expected_set_ref,
     expect_set_call,
+    kind_bitset_words,
 } from "./kind_set_gen.wado";
 use { group_alt_classes, non_greedy_static_undecided, peel_repeat_body_label, rebind_op_field } from "./lower.wado";
 
@@ -285,7 +294,36 @@ pub fn gen_parser(
         w.raw(chunk);
     }
     w.raw(&parse_text);
+    gen_call_follow_tables(w, ctx);
     warn_unhandled_actions(grammar, ctx);
+}
+
+/// `CALL_FOLLOW[site]` indexes the bitset of what may follow that rule call in
+/// its caller, `CALL_FOLLOW_SETS` holding each distinct set once.
+/// `CALL_FOLLOW_ENDS[site]` says whether the caller may end there instead.
+fn gen_call_follow_tables(w: &mut CodeWriter, ctx: &GenContext) {
+    let mut set_ids = TreeMap::<String, i32>::new();
+    let mut sets: List<String> = [];
+    let mut index: List<String> = [];
+    for let follow of &ctx.recovery_sets().call_follow {
+        let words = join_kinds(&kind_bitset_words(follow));
+        let id = if let Some(id) = set_ids.get(words) {
+            id;
+        } else {
+            set_ids[words] = sets.len();
+            sets.push(`[${words}]`);
+            sets.len() - 1;
+        };
+        index.push(`${id}`);
+    }
+    w.line(`global CALL_FOLLOW_SETS: List<List<i32>> = [${join_kinds(&sets)}];`);
+    w.line(`global CALL_FOLLOW: List<i32> = [${join_kinds(&index)}];`);
+    let mut ends: List<String> = [];
+    for let e of &ctx.recovery_sets().call_follow_ends {
+        ends.push(`${*e}`);
+    }
+    w.line(`global CALL_FOLLOW_ENDS: List<bool> = [${join_kinds(&ends)}];`);
+    w.blank();
 }
 
 /// The scan chunks something calls, in emit order: a chunk is kept when the
@@ -320,6 +358,19 @@ fn called_scan_chunks(chunks: &List<String>, parse_text: &String) -> List<String
     return out;
 }
 
+/// The caller's own `lr_cont`, handed on where the callee's trailing operand reads it.
+fn lr_cont_forward(mid_operand_gated: bool) -> String {
+    return if mid_operand_gated { ", lr_cont" } else { "" };
+}
+
+/// The `lr_cont` argument a self-reference passes, with its leading comma.
+fn lr_cont_arg(mask: i32, ctx: &GenContext) -> String {
+    if mask == LR_CONT_FORWARD {
+        return lr_cont_forward(true);
+    }
+    return if mask >= 0 { `, ${ctx.follow_mask_ref(mask)}` } else { "" };
+}
+
 /// The LR loop's caller-continuation argument. Separate from `follow`
 /// because every caller sets that one; only a mid-operand call sets this.
 fn add_lr_cont_param(f: &mut FnSpec) {
@@ -351,26 +402,24 @@ fn scannable_prefix_len(elements: &List<Element>, ctx: &mut GenContext) -> i32 {
     return count;
 }
 
-/// Emit the scan function a parse-side tournament calls for `alt_index`,
-/// unless the scan side already emitted one for it.
+/// Emit `name`, the scan function of the current rule's `alt_index`, unless
+/// the rule already has one.
 fn ensure_alt_scan_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &Alternative,
     lowered_rule: &Rule,
-    fn_name: S,
+    name: S,
     alt_index: i32,
     ctx: &mut GenContext,
 ) {
     if ctx.alt_scan_fn(alt_index) matches { Some(_) } {
         return;
     }
-    assert alt_scan_is_full(&alt.elements, ctx), `a tournament alternative ${alt_index} scans in full`;
-    let scan_body = if let Some(b) = rule_alt_scan_body(lowered_rule, alt_index) {
-        b;
-    } else {
+    assert alt_scan_is_full(&alt.elements, ctx), `a picked alternative ${alt_index} scans in full`;
+    let Some(scan_body) = rule_alt_scan_body(lowered_rule, alt_index) else {
         panic(`ensure_alt_scan_fn: no scan body for alt ${alt_index}`);
     };
-    gen_alt_scan_fn(w, `${fn_name}_scan_${alt_index}`, scan_body, alt_index, ctx);
+    gen_alt_scan_fn(w, name, scan_body, alt_index, ctx);
 }
 
 /// The one emitter of a whole-alternative scan function, which both the scan
@@ -404,7 +453,7 @@ pub fn gen_alt_scan_fn<S: AsStrSlice>(
     let text = bw.to_string();
     if let Some(callee) = forwarded_scan_callee(&text, &params) {
         ctx.record_alt_scan_fn(alt_index, &callee);
-        ctx.set_forwarded_call(&name, &callee);
+        ctx.set_forwarded_call(&name, Forwarded { stamps: [], call: callee });
         return;
     }
     ctx.record_alt_scan_fn(alt_index, &name);
@@ -430,17 +479,10 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
     return Option::Some(callee.to_string());
 }
 
-/// The call measuring hoisted alternative `i` from `start`, through the function
-/// its helper forwards to where it only forwards.
-fn hoisted_scan_call<S: AsStrSlice>(base_name: S, i: i32, ctx: &GenContext) -> String {
-    let name = scan_alt_helper_name(base_name, i);
-    return `${ctx.forwarded_call(&name).unwrap_or(name)}(tokens, start${scan_trailing_args(ctx)})`;
-}
-
-/// What a scan call passes after the position: the gate, and the caller's
-/// follow where the rule reads one.
+/// What a scan call passes after the position: the parser state it borrows,
+/// and the caller's follow where the rule reads one.
 fn scan_trailing_args(ctx: &GenContext) -> String {
-    return `${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())}`;
+    return `${ctx.scan_state_args()}${follow_sep(ctx.current_rule_reads_follow())}`;
 }
 
 /// A scan function's parameters up to `min_prec`: the token kinds, the
@@ -451,14 +493,12 @@ fn add_scan_params(f: &mut FnSpec, ctx: &GenContext) {
     if ctx.emit_scan_gate() {
         f.add_param(&SCAN_GATE_HANDLE, `&mut ${SCAN_GATE_TYPE}`);
     }
+    if ctx.needs_scan_atn() {
+        f.add_param(&ATN_STATE_HANDLE, `&mut ${ATN_STATE_TYPE}`);
+    }
     if ctx.current_rule_reads_follow() {
         add_follow_param(f);
     }
-}
-
-/// Returns true if the alternative has a generated scan function (has scannable prefix).
-fn alt_has_scan(elements: &List<Element>, ctx: &mut GenContext) -> bool {
-    return scannable_prefix_len(elements, ctx) > 0;
 }
 
 /// Returns true if the scan function covers the entire alternative (all elements are scannable).
@@ -626,6 +666,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
         gen_scan_lr_functions(
             w,
             rule,
+            lowered_rule,
             &l.lr_alts,
             &l.lr_dispatch,
             &non_lr_indices,
@@ -638,17 +679,13 @@ fn gen_scan_function_named<S: AsStrSlice>(
         return;
     }
 
-    let multi_alt_plan = if rule.alternatives.len() > 1 && !is_compact_single_token(rule, ctx) {
-        if let MultiAlt(m) = lowered_rule {
-            let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
-            let surface_alts: List<i32> = (0..<rule.alternatives.len()).collect();
-            gen_scan_alt_helpers(w, &plan, &m.scan_alts, &surface_alts, ctx, fn_name);
-            Option::Some(plan);
-        } else {
-            Option::<ScanAltPlan>::None;
-        }
+    let multi_alt = if rule.alternatives.len() > 1 {
+        assert lowered_rule matches { MultiAlt(_) }, "gen_scan_function_named: lowering gives a multi-alt rule a MultiAlt body";
+        let og = rule_overlap_groups(rule, lowered_rule, ctx);
+        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx, fn_name);
+        Option::Some(og);
     } else {
-        Option::<ScanAltPlan>::None;
+        Option::<RuleOverlap>::None;
     };
 
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
@@ -698,49 +735,8 @@ fn gen_scan_function_named<S: AsStrSlice>(
             w.line("if pos == scan_start { return -1; }");
         }
         w.line("return pos;");
-    } else if is_compact_single_token(rule, ctx) {
-        // Compact form: every alt matches exactly one fixed token, so the
-        // entire scan reduces to "is the next token in this set?". A naive
-        // multi-alt expansion would emit one labelled partition per token
-        // (~7 lines × N tokens) — for `keyword` in SQLite that is 122 alts
-        // ≈ 1000 lines of source per scan invocation site. Collapsing to a
-        // single `matches` cuts the per-rule scan code 100×+, which removes
-        // most of the wasm bloat that LR-gate removal otherwise pays for
-        // by making scan_X functions reachable. Behaviourally identical to
-        // the longest-match tournament: every alt consumes exactly one
-        // token, so longest-match and first-success-wins both pick whatever
-        // alt's token equals `tokens[pos]`.
-        let mut firsts: List<String> = [];
-        for let alt of &rule.alternatives {
-            let t = single_token_first(&alt.elements[0]);
-            if !first_contains(&firsts, &t) {
-                firsts.push(t);
-            }
-        }
-        let check = ctx.kind_check_str(&firsts, "tokens[pos]");
-        w.begin(`if pos < tokens.len() && ${check}`);
-        w.line("return pos + 1;");
-        w.end();
-        w.line("return -1;");
     } else {
-        // `gen_scan_multi_alt` walks every alt body via the op-driven
-        // `gen_scan_op_elements_in_block`. Fetch the `scan_alts` from
-        // the matching `Rule` variant — multi-alt non-LR rules go
-        // through `MultiAlt`; LR rules dispatch earlier via the
-        // `LeftRecursive` branch above.
-        let scan_alts = if let MultiAlt(m) = lowered_rule {
-            &m.scan_alts;
-        } else {
-            panic(
-                "gen_scan_function_named: multi-alt rule but lowered_rule is not MultiAlt — lower_rule invariant violated",
-            );
-        };
-        let plan = if let Some(p) = multi_alt_plan {
-            p;
-        } else {
-            panic("gen_scan_function_named: multi-alt rule without a scan plan — the two shape tests disagree");
-        };
-        gen_scan_multi_alt(w, &plan, scan_alts, ctx, fn_name);
+        gen_scan_pick(w, rule, lowered_rule, &multi_alt.unwrap(), ctx, fn_name);
     }
 
     w.end();
@@ -761,6 +757,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
 fn gen_scan_lr_functions<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &ParserRule,
+    lowered_rule: &Rule,
     lr_alts: &List<LrAlt>,
     lr_dispatch: &LrDispatchData,
     non_lr_indices: &List<i32>,
@@ -772,26 +769,22 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 ) {
     let atom_name = `${fn_name}_atom`;
 
-    let mut non_lr_alts: List<Alternative> = [];
-    for let idx of non_lr_indices {
-        non_lr_alts.push(rule.alternatives[*idx]);
-    }
-    let atom_plan = if non_lr_alts.len() > 1 {
-        let plan = plan_scan_multi_alt(&non_lr_alts, ctx);
-        gen_scan_alt_helpers(w, &plan, atom_scan_alts, non_lr_indices, ctx, &atom_name);
-        Option::Some(plan);
+    let atom_og = if non_lr_indices.len() > 1 {
+        let og = rule_overlap_groups(rule, lowered_rule, ctx);
+        gen_group_alt_scan_fns(w, rule, &og, lowered_rule, ctx, &atom_name);
+        Option::Some(og);
     } else {
-        Option::<ScanAltPlan>::None;
+        Option::<RuleOverlap>::None;
     };
 
-    // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
+    // scan_X_atom: the choice among the non-LR alternatives.
     let mut fa = FnSpec::new(&atom_name);
     add_scan_params(&mut fa, ctx);
     fa.set_return_type("i32");
     fa.emit_begin(w);
-    if non_lr_alts.len() == 0 {
+    if non_lr_indices.len() == 0 {
         w.line("return -1;");
-    } else if non_lr_alts.len() == 1 {
+    } else if non_lr_indices.len() == 1 {
         w.line("let mut pos = pos;");
         let body = &atom_scan_alts[0];
         gen_scan_op_elements(
@@ -806,18 +799,16 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
         );
         w.line("return pos;");
     } else {
-        let plan = if let Some(p) = atom_plan {
-            p;
-        } else {
-            panic("gen_scan_lr_functions: multi-alt atom without a scan plan");
+        let Some(og) = &atom_og else {
+            panic("gen_scan_lr_functions: a multi-alt atom has its overlap groups");
         };
-        gen_scan_multi_alt(w, &plan, atom_scan_alts, ctx, &atom_name);
+        gen_scan_pick(w, rule, lowered_rule, og, ctx, &atom_name);
     }
     w.end();
     w.blank();
 
     // scan_X_lr_N for each valid LR alt (suffix helper, mirrors parse_X_lr_N).
-    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name);
+    gen_scan_lr_suffix_helpers(w, lr_alts, &lr_dispatch.valid_lr_alts, ctx, fn_name, mid_operand_gated);
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
@@ -857,6 +848,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
     valid_lr_alts: &List<i32>,
     ctx: &mut GenContext,
     fn_name: S,
+    mid_operand_gated: bool,
 ) {
     // Emit a helper for EXACTLY the alts the dispatch references — iterate
     // `valid_lr_alts` directly rather than re-deriving the skip predicate, so
@@ -870,6 +862,9 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
 
         let mut f = FnSpec::new(&suffix_fn);
         add_scan_params(&mut f, ctx);
+        if mid_operand_gated {
+            add_lr_cont_param(&mut f);
+        }
         f.set_return_type("i32");
         f.emit_begin(w);
         w.line("let mut pos = pos;");
@@ -912,7 +907,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let decl = lr_atn_alt_decl(lr_dispatch);
     w.begin("loop");
     w.line(
-        `${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+        `${decl} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
     w.line("let _lr_pos0 = pos;");
@@ -1134,7 +1129,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)});`);
         gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     }
     if mid_operand_gated {
@@ -1426,7 +1421,11 @@ fn emit_lr_overlap(
                         gen_scan_gate_from(w, ctx, &origin);
                     }
                     first_candidate = false;
-                    w.line(`let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)});`);
+                    w.line(
+                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${scan_trailing_args(ctx)}${lr_cont_forward(
+                            mid_operand_gated,
+                        )});`,
+                    );
                     // A position the scan branch may commit to, so it keeps the
                     // gate it was reached under — the run rolls the global back.
                     // The parse commits no scan gate.
@@ -1483,241 +1482,40 @@ fn emit_lr_overlap(
     }
 }
 
-/// Generate scan code for a multi-alt non-LR rule body (or LR atom body).
-/// Mirrors the parse-side `gen_multi_alt_body` peek-dispatch so that an alt
-/// is only attempted when its FIRST set matches `alt_kind` — this turns
-/// rule-level alt selection from linear first-match into O(1) token dispatch.
-///
-/// Strategy: for each alt compute FIRST, then emit a per-alt `if` guard on
-/// `alt_kind`. On inner failure (break `try_i`), fall through to the next
-/// alt (which is itself peek-dispatched). If no alt's FIRST matches or every
-/// try block fails, return -1. Alts with empty FIRST (e.g. starting with
-/// Wildcard or a rule whose FIRST is unenumerable) are attempted
-/// unconditionally as fallbacks.
-/// The token partitioning of a multi-alt rule, plus the alt bodies more than
-/// one partition emits. Computed once so the helper emit and the dispatch
-/// cannot disagree on which alts are hoisted.
-pub struct ScanAltPlan {
-    groups_alts: List<List<i32>>,
-    groups_tokens: List<List<String>>,
-    unguarded_idx: List<i32>,
-    hoisted: List<i32>,
-}
-
-impl ScanAltPlan {
-    fn is_hoisted(&self, alt: i32) -> bool {
-        return self.hoisted.contains(&alt);
-    }
-}
-
-fn scan_alt_helper_name<S: AsStrSlice>(base: S, alt: i32) -> String {
-    return `${base}_alt_${alt}`;
-}
-
-fn plan_scan_multi_alt(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanAltPlan {
-    let n = alts.len();
-    let max_k = MAX_LOOKAHEAD_DEPTH;
-    let mut all_pos_sets: List<List<List<String>>> = [];
-    for let alt of alts {
-        all_pos_sets.push(ctx.alt_position_first_sets(alt, max_k));
-    }
-
-    // Token-partitioned dispatch, mirroring parse-side `gen_multi_alt_body`
-    // (see e.g. `parse_expr_atom` in the sqlite golden).
-    //
-    // For each depth-0 first token in the union of all alt guards, we
-    // compute which alts claim it. Tokens claimed by the same set of
-    // alts are folded into one partition. Each partition becomes one
-    // dispatch branch:
-    //   - 1 alt in partition → fast-path: commit on success, fail on miss.
-    //   - 2+ alts in partition → mini-tournament over ONLY those alts
-    //     (plus any unguarded alts), picking the longest match.
-    //
-    // This avoids the regression where sharing a single ambiguous pair
-    // (e.g. `column_ref` and `function_call` both starting with an
-    // IDENT-like token) forced every first-token dispatch through an
-    // N-way tournament. Under partitioning:
-    //   - `BIND_PARAMETER` → fast-path to the bind-param alt.
-    //   - `LPAREN` → 3-way tournament among column_ref, function_call,
-    //     paren_expr (the only alts whose depth-0 first-set contains
-    //     LPAREN, via `any_name`'s `'(' any_name ')'` sub-alt).
-    //   - `IDENT`/keyword → 2-way tournament among column_ref and
-    //     function_call only.
-    //
-    // Unguarded alts (empty pos_sets — fully nullable or unpredictable)
-    // ride along as tournament candidates in every partition and in the
-    // fall-through default, matching the existing fallback semantics.
-
-    let mut guarded_idx: List<i32> = [];
-    let mut unguarded_idx: List<i32> = [];
-    for let mut i = 0; i < n; i += 1 {
-        if all_pos_sets[i].len() >= 1 {
-            guarded_idx.push(i);
-        } else {
-            unguarded_idx.push(i);
-        }
-    }
-
-    let mut union_tokens: List<String> = [];
-    for let i of &guarded_idx {
-        let depth0 = &all_pos_sets[*i][0];
-        for let t of depth0 {
-            if !first_contains(&union_tokens, t) {
-                union_tokens.push(*t);
-            }
-        }
-    }
-
-    let mut groups_alts: List<List<i32>> = [];
-    let mut groups_tokens: List<List<String>> = [];
-
-    for let t of &union_tokens {
-        let mut claiming: List<i32> = [];
-        for let i of &guarded_idx {
-            if first_contains(&all_pos_sets[*i][0], t) {
-                claiming.push(*i);
-            }
-        }
-        let mut found: i32 = -1;
-        for let mut g = 0; g < groups_alts.len(); g += 1 {
-            if groups_alts[g] == claiming {
-                found = g;
-                break;
-            }
-        }
-        if found >= 0 {
-            groups_tokens[found].push(*t);
-        } else {
-            groups_alts.push(claiming);
-            let mut seed: List<String> = [];
-            seed.push(*t);
-            groups_tokens.push(seed);
-        }
-    }
-
-    // Sort each partition (and the unguarded alts) longest-first via
-    // `sort_group_by_element_count`. `gen_scan_partition_body` runs a
-    // real longest-match tournament per partition (keeping the greatest
-    // successful end), so this order does not decide correctness — it only
-    // breaks ties deterministically, preferring the most specific
-    // (highest-priority, then most-elements) candidate when two alts scan
-    // to the same end (e.g. `expr`'s `column_ref` IDENT vs
-    // `function_call` IDENT '(' ... ')' ).
-    for let mut g = 0; g < groups_alts.len(); g += 1 {
-        sort_group_by_element_count(&mut groups_alts[g], alts);
-    }
-    sort_group_by_element_count(&mut unguarded_idx, alts);
-
-    // Hoist an alt more than one partition would emit; one reached once stays
-    // inline, so a grammar without the duplication keeps byte-identical output.
-    let mut emits: List<[i32, i32]> = [];
-    for let mut g = 0; g < groups_alts.len(); g += 1 {
-        for let i of &groups_alts[g] {
-            bump_emit_count(&mut emits, *i);
-        }
-        for let i of &unguarded_idx {
-            bump_emit_count(&mut emits, *i);
-        }
-    }
-    if !unguarded_idx.is_empty() {
-        for let i of &unguarded_idx {
-            bump_emit_count(&mut emits, *i);
-        }
-    }
-    let mut hoisted: List<i32> = [];
-    for let e of &emits {
-        if e[1] > 1 {
-            hoisted.push(e[0]);
-        }
-    }
-    hoisted.sort();
-
-    return ScanAltPlan { groups_alts, groups_tokens, unguarded_idx, hoisted };
-}
-
-fn bump_emit_count(emits: &mut List<[i32, i32]>, alt: i32) {
-    for let mut i = 0; i < emits.len(); i += 1 {
-        if emits[i][0] == alt {
-            emits[i] = [alt, emits[i][1] + 1];
-            return;
-        }
-    }
-    emits.push([alt, 1]);
-}
-
-/// Emit one `<base>_alt_<i>` scan helper per hoisted alt. `w` must be at top
-/// level: these are siblings of the scan function that calls them.
-/// `surface_alts[i]` is plan slot `i`'s index among the rule's alternatives.
-fn gen_scan_alt_helpers<S: AsStrSlice>(
+/// The scan body of a multi-alt rule or LR atom: the alternative the parse
+/// would pick, scanned. A scan that chose differently would accept a different input.
+fn gen_scan_pick<S: AsStrSlice>(
     w: &mut CodeWriter,
-    plan: &ScanAltPlan,
-    scan_alts: &List<ScanBody>,
-    surface_alts: &List<i32>,
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    og: &RuleOverlap,
     ctx: &mut GenContext,
-    base_name: S,
+    fn_name: S,
 ) {
-    for let i of &plan.hoisted {
-        gen_alt_scan_fn(w, scan_alt_helper_name(base_name, *i), &scan_alts[*i], surface_alts[*i], ctx);
-    }
-}
-
-fn gen_scan_multi_alt<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    plan: &ScanAltPlan,
-    scan_alts: &List<ScanBody>,
-    ctx: &mut GenContext,
-    base_name: S,
-) {
-    let groups_alts = &plan.groups_alts;
-    let groups_tokens = &plan.groups_tokens;
-    let unguarded_idx = &plan.unguarded_idx;
-
     gen_scan_mark(w, ctx, "start");
     w.line("let mut pos = pos;");
-    w.line("let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    gen_rule_pick(w, PickSide::Scan, rule, lowered_rule, &rule.type_name, ctx, og, fn_name);
+}
 
-    w.begin("scan_alts:");
-
-    let mut arms: List<DecisionBranch> = [];
-    let mut bodies: List<String> = [];
-    for let mut g = 0; g < groups_alts.len(); g += 1 {
-        let mut body = CodeWriter::with_capacity(256);
-        gen_scan_partition_body(
-            &mut body,
-            &groups_alts[g],
-            unguarded_idx,
-            scan_alts,
-            ctx,
-            plan,
-            base_name,
-            &groups_tokens[g],
-        );
-        arms.push(DecisionBranch { test: admits_or_everything(&groups_tokens[g]), gate: "", alts: groups_alts[g] });
-        bodies.push(body.to_string());
-    }
-    let untested = arms.is_empty();
-    emit_tested_arms(w, &arms, &bodies, "alt_kind", ctx);
-
-    if unguarded_idx.len() > 0 {
-        let empty_alts: List<i32> = [];
-        let no_guard: List<String> = [];
-        if untested {
-            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
-        } else {
-            w.else_begin("else");
-            gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
-            w.end();
+/// The scan function of every alternative a contested overlap group chooses
+/// between, emitted before the scan `base` that calls them.
+fn gen_group_alt_scan_fns<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    og: &RuleOverlap,
+    lowered_rule: &Rule,
+    ctx: &mut GenContext,
+    base: S,
+) {
+    for let group of &og.groups {
+        if group.len() < 2 {
+            continue;
         }
-    } else if !untested {
-        w.else_begin("else");
-        w.line("return -1;");
-        w.end();
-    } else {
-        w.line("return -1;");
+        for let gi of group {
+            let idx = og.non_lr_indices[*gi];
+            ensure_alt_scan_fn(w, &rule.alternatives[idx], lowered_rule, `${base}_alt_${idx}`, idx, ctx);
+        }
     }
-
-    w.end();
-    w.line("return pos;");
 }
 
 /// Adjacent branches whose rendered bodies are the same, joined under the
@@ -1789,88 +1587,6 @@ fn emit_decision_arms<S: AsStrSlice>(
         w.write(&merged_bodies[i]);
     }
     return merged;
-}
-
-/// Emit the body of a single partition branch. The partition's alts were
-/// sorted longest-first via `sort_group_by_element_count` in
-/// `gen_scan_multi_alt`. On no match the branch `return -1`s so the caller
-/// falls through to the next partition (or the rule-level fallback).
-///
-/// A single-alt partition commits on success (`break scan_alts`) — there is
-/// no other candidate to compare against. A multi-alt partition runs a real
-/// longest-match tournament: it tries every candidate from the same `start`
-/// and commits to the greatest successful end.
-///
-/// First-success-wins (commit to the first alt that scans, trusting the
-/// longest-first sort) is NOT used for the multi-alt case. It is unsound
-/// when two alts share a prefix and tie on static length: `'mut'? IDENT`
-/// vs `path '(' ... ')'` on input `N(n)` — the bare-IDENT alt scans
-/// (consuming just `N`) but leaves `(n)` for the caller, while the correct
-/// match is the longer `path '(' ... ')'`. The two are not
-/// correctness-equivalent (the bug fixed in #1245), so the tournament
-/// keeps the longest end rather than the first hit.
-fn gen_scan_partition_body<S: AsStrSlice>(
-    w: &mut CodeWriter,
-    guarded_alts: &List<i32>,
-    unguarded_alts: &List<i32>,
-    scan_alts: &List<ScanBody>,
-    ctx: &mut GenContext,
-    plan: &ScanAltPlan,
-    base_name: S,
-    guard_tokens: &List<String>,
-) {
-    let total = guarded_alts.len() + unguarded_alts.len();
-    if total == 1 {
-        let guarded = guarded_alts.len() == 1;
-        let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
-        if plan.is_hoisted(i) {
-            w.line(`pos = ${hoisted_scan_call(base_name, i, ctx)};`);
-            w.line("if pos >= 0 { break scan_alts; }");
-            w.line("return -1;");
-            return;
-        }
-        let body = &scan_alts[i];
-        let known = if guarded { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
-        if gen_scan_alt_candidate(w, i, body, &known, ctx, "break scan_alts;", true) {
-            w.line("return -1;");
-        }
-        return;
-    }
-    // Longest-match tournament (see the function doc): try each from
-    // `start`, keep the greatest successful end.
-    w.line("let mut best: i32 = -1;");
-    // The gate travels with `best` for the same reason the group's does: every
-    // candidate runs, so the global holds the last one's value and not the
-    // winner's.
-    gen_scan_gate_save(w, ctx, "best", /*mutable=*/ true);
-    let mut all_idx: List<i32> = [];
-    for let i of guarded_alts {
-        all_idx.push(*i);
-    }
-    let guarded_count = all_idx.len();
-    for let i of unguarded_alts {
-        all_idx.push(*i);
-    }
-    for let mut k = 0; k < all_idx.len(); k += 1 {
-        let i = all_idx[k];
-        if plan.is_hoisted(i) {
-            // The gate half of a rewind alone: a hoisted candidate takes `start`
-            // as an argument rather than through `pos`, so the position is
-            // already where it belongs and only the gate has to follow it.
-            if k > 0 {
-                gen_scan_gate_restore(w, ctx, "start");
-            }
-            w.line(`let try_${i}_end = ${hoisted_scan_call(base_name, i, ctx)};`);
-            w.line(&scan_gate_best_commit(ctx, "best", `try_${i}_end > best`, `try_${i}_end`));
-            continue;
-        }
-        let body = &scan_alts[i];
-        let known = if k < guarded_count { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
-        let commit = scan_gate_best_commit(ctx, "best", "pos > best", "pos");
-        let _ = gen_scan_alt_candidate(w, i, body, &known, ctx, &commit, k == 0);
-    }
-    gen_scan_rewind_break(w, ctx, "best", "best >= 0", "break scan_alts;");
-    w.line("return -1;");
 }
 
 /// What the scan has proved about the tokens ahead: `known[d]` holds every kind
@@ -1945,22 +1661,18 @@ fn scan_skip_known_token(elements: &List<ScanElement>, known: &List<List<String>
     return 0;
 }
 
-/// Emit one alt as a scan candidate ending in `commit_stmt`, and return whether
-/// it can fail. One that cannot has committed, so a caller's fallthrough is dead.
-fn gen_scan_alt_candidate<S: AsStrSlice>(
+/// Scan alt `i` from the rule's start and return its end, and return whether
+/// the walk can fail. One that cannot has returned, so a caller's fallthrough is dead.
+fn gen_scan_alt_in_place(
     w: &mut CodeWriter,
     i: i32,
     body: &ScanBody,
     known: &List<List<String>>,
     ctx: &mut GenContext,
-    commit_stmt: S,
-    at_start: bool,
 ) -> bool {
     let from = scan_skip_known_token(&body.elements, known, ctx);
     let rest_known = if from == 1 { known_after(&body.elements[0], known, ctx) } else { *known };
-    if !at_start {
-        gen_scan_rewind(w, ctx, "start", from);
-    } else if from > 0 {
+    if from > 0 {
         w.line(`pos = start + ${from};`);
     }
     return gen_scan_labeled_walk(
@@ -1970,7 +1682,7 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
         from,
         &rest_known,
         ctx,
-        commit_stmt,
+        "return pos;",
         &body.gates,
         &body.gate_cond,
     );
@@ -2021,30 +1733,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
                 gen_scan_token_set(w, &kinds, ctx, fail_stmt, false, known);
                 return;
             }
-            // Single scan callee + runtime FOLLOW arg.
-            let fn_name = `scan_${ctx.scan_alias(&rc.target_snake)}`;
-            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
-            let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
-                `, ${rc.min_prec_arg.unwrap_or(0)}`;
-            } else {
-                String::new();
-            };
-            // ATN-class scan: bracket every rule-call scan with the scan caller
-            // stack so the callee's LR loop yields the caller's mandatory
-            // continuation (e.g. `between`'s `'and'`), exactly as the parse side's
-            // rule-entry wrapper does. Pop before the fail check so an early return
-            // never leaks the frame.
-            let push_ret = ctx.scan_atn_push_return(rc.atn_call_site);
-            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
-            assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
-            let call = `pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`;
-            if push_ret >= 0 {
-                w.line(`SCAN_STACK.push(${push_ret});`);
-                w.line(&call);
-                w.line("SCAN_STACK.pop();");
-            } else {
-                w.line(&call);
-            }
+            gen_scan_rule_call(w, rc, ctx);
             w.line(`if pos < 0 { ${fail_stmt} }`);
         },
         Wildcard => {
@@ -2072,6 +1761,32 @@ fn gen_scan_op_element<S: AsStrSlice>(
     }
 }
 
+/// The `pos = scan_X(...);` a rule-call scan element runs: one callee per rule,
+/// taking the runtime FOLLOW, the baked `min_prec` and the LR continuation.
+fn scan_rule_call_stmt(rc: &ScanRuleCallElement, ctx: &mut GenContext) -> String {
+    let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
+    let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
+        `, ${rc.min_prec_arg.unwrap_or(0)}`;
+    } else {
+        String::new();
+    };
+    let cont = lr_cont_arg(rc.lr_cont_mask, ctx);
+    assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
+    return `pos = scan_${ctx.scan_alias(&rc.target_snake)}(tokens, pos${ctx.scan_state_args()}${follow_arg_str}${min_prec_arg}${cont});`;
+}
+
+/// A scan's rule call. The callee's simulation sees the caller's continuation, as
+/// the parse side's entry wrapper pushes it; popping before any fail check never leaks it.
+fn gen_scan_rule_call(w: &mut CodeWriter, rc: &ScanRuleCallElement, ctx: &mut GenContext) {
+    if !ctx.needs_scan_atn() {
+        w.line(&scan_rule_call_stmt(rc, ctx));
+        return;
+    }
+    w.line(`${ctx.atn_stack_place()}.push(${ctx.atn_call_site_return(rc.atn_call_site)});`);
+    w.line(&scan_rule_call_stmt(rc, ctx));
+    w.line(`${ctx.atn_stack_place()}.pop();`);
+}
+
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
 /// running `fail_stmt`. Used inside Optional/Repeat loops where a
 /// failed iteration means "skip", not abort.
@@ -2083,25 +1798,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
                 gen_scan_token_set_assign(w, &kinds, ctx, known);
                 return;
             }
-            let fn_name = `scan_${ctx.scan_alias(&rc.target_snake)}`;
-            let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
-            // `_assign` only fires inside Repeat bodies — never reachable
-            // from alt-scan's trailing-self-ref site, so `min_prec` here
-            // is always the rule's default `0` (or whatever
-            // `min_prec_arg` baked at lower time, e.g. LR self-refs).
-            let min_prec_arg = if ctx.rule_takes_min_prec_arg(&rc.target_snake) {
-                let mp = if let Some(p) = rc.min_prec_arg {
-                    p;
-                } else {
-                    0;
-                };
-                `, ${mp}`;
-            } else {
-                String::new();
-            };
-            let cont = if rc.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(rc.lr_cont_mask)}` } else { "" };
-            assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
-            w.line(`pos = ${fn_name}(tokens, pos${ctx.scan_gate_arg()}${follow_arg_str}${min_prec_arg}${cont});`);
+            gen_scan_rule_call(w, rc, ctx);
         },
         Wildcard => {
             w.line("if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
@@ -2171,7 +1868,7 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let opt_ok = "opt_ok";
-    emit_probe_verdict(w, &re.probe_viable, &opt_ok, ctx);
+    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &opt_ok, ctx);
     w.end();
     // The probe only asks whether the continuation fits, so its walk is undone
     // either way: keeping the body means the gate the body left, dropping it
@@ -2204,7 +1901,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
         gen_scan_op_element(w, se, ctx, &fail);
     }
     let ng_exit = "ng_exit";
-    emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
+    emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &ng_exit, ctx);
     w.end();
     gen_scan_rewind(w, ctx, "ep");
     w.line("if ng_exit { break; }");
@@ -2219,25 +1916,19 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
 /// Whether the exit probe decides this scan-side loop, from the same stamp
 /// and parts the parse side reads.
 fn scan_non_greedy_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    let first = admits_kinds(&re.inner_admits);
     return re.non_greedy
         && re.static_exit_undecided
-        && !first.is_empty()
-        && probe_decides(&first, &first, &re.continuation_scan, re.continuation_scannable, ctx);
+        && !admits_kinds(&re.inner_admits).is_empty()
+        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Scan-side twin of `optional_probe_decides` — same conjuncts off the mirror
 /// stamps, so the two sides answer identically.
 fn scan_optional_probe_decides(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    return re.body matches { RuleCall(_) }
+    return re.body matches { RuleCall(_) | Token(_) | Wildcard | Excluded(_) }
         && re.body_scannable
-        && probe_decides(
-            &admits_kinds(&re.inner_admits),
-            &re.caller_follow_first,
-            &re.continuation_scan,
-            re.continuation_scannable,
-            ctx,
-        );
+        && re.probe_contested
+        && probe_decides(&re.continuation_scan, re.continuation_scannable, ctx);
 }
 
 /// Whether the repeat guard already proves the body matches, leaving the
@@ -2466,7 +2157,7 @@ fn gen_scan_decline_stranded(
     for let se of &duties.decline_scan {
         gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
     }
-    emit_probe_verdict(w, &duties.decline_viable, `dc_${gc}_exit`, ctx);
+    emit_probe_verdict(w, DECLINE_ASKS_CALLER, &duties.decline_viable, `dc_${gc}_exit`, ctx);
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
@@ -2576,11 +2267,20 @@ fn gen_scan_op_group<S: AsStrSlice>(
     // the global holds the last arm's value hands the enclosing walk a gate from
     // a reading it did not take.
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
+    let atn_dec = ctx.atn_decision_site(ge.atn_site);
+    let atn_var = `sg_${gc}_atn`;
     let mut bodies: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         let mut body = CodeWriter::with_capacity(256);
         let branch_known = branch_proves(&branches, i);
+        let simulated = atn_dec >= 0 && branches[i].alts.len() > 1;
+        if simulated {
+            body.line(`let ${atn_var} = ${atn_predict_call(atn_dec, "tokens", "pos", ctx)};`);
+        }
         for let ai of &branches[i].alts {
+            if simulated {
+                body.begin(`if ${atn_var} == ${*ai}`);
+            }
             gen_scan_rewind(&mut body, ctx, &gp_var);
             let commit = scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos");
             let _ = gen_scan_labeled_walk(
@@ -2592,6 +2292,9 @@ fn gen_scan_op_group<S: AsStrSlice>(
                 ctx,
                 &commit,
             );
+            if simulated {
+                body.end();
+            }
         }
         bodies.push(body.to_string());
     }
@@ -2897,15 +2600,18 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
     gen_scan_op_elements(w, scan_elems, start, end, ctx, `break ${label};`, gates, gate_cond, known);
 }
 
-/// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
-/// them — the one answer the AtEndConflict detection
-/// (`rule_has_at_end_conflict`), the multi-alt emit (`gen_parse_fn`) and the
-/// dump all read, so none can drift on how a rule's alternatives are grouped.
-pub fn rule_overlap_groups(
-    rule: &ParserRule,
-    lowered_rule: &Rule,
-    ctx: &mut GenContext,
-) -> [List<i32>, List<List<String>>, List<List<i32>>] {
+/// How a rule's non-LR alternatives group: the one answer the at-end conflict
+/// detection, the multi-alt emit and the dump all read, so none can drift.
+pub struct RuleOverlap {
+    pub non_lr_indices: List<i32>,
+    pub first_sets: List<List<String>>,
+    pub groups: List<List<i32>>,
+    /// The rule's exact FOLLOW, or empty where it is unknown, where an ended
+    /// atom runs on into an LR suffix, or where a gate selects instead.
+    pub end_follow: List<String>,
+}
+
+pub fn rule_overlap_groups(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut GenContext) -> RuleOverlap {
     let mut non_lr_indices: List<i32> = [];
     match lowered_rule {
         Simple(_) => {
@@ -2927,18 +2633,43 @@ pub fn rule_overlap_groups(
         let mut visiting: List<String> = [];
         first_sets.push(ctx.first_of_alt(&rule.alternatives[idx], &mut visiting));
     }
-    // Raw first sets, not `compute_overlap_groups_of` — the one partition that
-    // cannot yet be the shared one. A merged branch here is decided by
-    // `build_prediction`, which walks static first sets and so cannot rank an
-    // open-ended alternative; merging loses `. EOF | A EOF`'s first
-    // alternative. The cost is the `#[TODO]` in
-    // `driver_cst_open_ended_rule_alt_test.wado`, and closing it means
-    // teaching `build_prediction` what `AltClass` knows.
-    let groups = compute_overlap_groups(&first_sets);
-    return [non_lr_indices, first_sets, groups];
+    let mut classes = alt_classes(&non_lr_indices, &rule.alternatives, &first_sets, ctx);
+    // Prediction is predicate-blind, so a rule with a gate keeps deciding in the
+    // tournament that evaluates it.
+    let gated = non_lr_indices.iter_ref().any(|i: &i32| alt_has_gate(&rule.alternatives[*i], ctx));
+    let end_follow: List<String> = if lowered_rule matches { MultiAlt(_) } && !gated {
+        ctx.rule_follow_for_probe(&rule.name);
+    } else {
+        [];
+    };
+    admit_rule_follow_into_nullable(&mut classes, &mut first_sets, &end_follow);
+    let groups = compute_overlap_groups_of(&classes);
+    return RuleOverlap { non_lr_indices, first_sets, groups, end_follow };
 }
 
-pub fn grammar_has_at_end_conflict(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
+/// What follows the rule selects its nullable alternatives too, so one whose
+/// FOLLOW meets a sibling's first set shares its group: `r : A? | B ;` on `b`.
+fn admit_rule_follow_into_nullable(
+    classes: &mut List<AltClass>,
+    first_sets: &mut List<List<String>>,
+    follow: &List<String>,
+) {
+    if follow.is_empty() {
+        return;
+    }
+    for let mut i = 0; i < classes.len(); i += 1 {
+        if let Nullable(tokens) = classes[i] {
+            let mut admitted = tokens;
+            dedup_append_arr(&mut admitted, follow);
+            first_sets[i] = admitted;
+            classes[i] = AltClass::Selects(admitted);
+        }
+    }
+}
+
+/// Whether a rule's at-end conflict routes to the simulator, which the scan of
+/// that rule then consults as the parse does.
+pub fn grammar_scans_through_atn(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) -> bool {
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
         if rule_has_at_end_conflict(&grammar.parser_rules[r], &lowered.parser_rules[r], ctx) {
             return true;
@@ -2953,12 +2684,16 @@ fn rule_has_at_end_conflict(rule: &ParserRule, lowered_rule: &Rule, ctx: &mut Ge
         return false;
     }
     let g = rule_overlap_groups(rule, lowered_rule, ctx);
-    let non_lr_indices = g.0;
-    let first_sets = g.1;
-    let groups = g.2;
-    for let group of &groups {
+    for let group of &g.groups {
         if group.len() > 1 {
-            let tree = build_group_prediction_tree(&rule.alternatives, group, &first_sets, &non_lr_indices, ctx);
+            let tree = build_group_prediction_tree(
+                &rule.alternatives,
+                group,
+                &g.first_sets,
+                &g.non_lr_indices,
+                ctx,
+                &g.end_follow,
+            );
             let mut conflicts: List<List<String>> = [];
             prediction_at_end_conflicts(&tree, &mut conflicts);
             for let tokens of &conflicts {
@@ -3114,7 +2849,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // the caller's continuation.
     let fsep = if emit_follow { `, ${follow_forward_args()}` } else { "" };
     let argfwd = wrapper_arg_forward(rule, ctx);
-    let contfwd = if mid_operand_gated { ", lr_cont" } else { "" };
+    let contfwd = lr_cont_forward(mid_operand_gated);
     let call = if takes_min_prec {
         `${inner_name}(p${fsep}, min_prec${contfwd}${argfwd})`;
     } else {
@@ -3130,8 +2865,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line("p.trace_depth += 1;");
     }
     if needs_atn {
-        emit_atn_enter(w);
+        emit_atn_enter(w, ctx.atn_stack_place());
     }
+    w.line("p.sites.push(p.site);");
     // LR rules manage their own nodes (precedence climbing wraps each
     // level via `start_node_at`), so the wrapper must NOT open an outer
     // node — it would nest one extra same-rule level. Non-LR rules get the
@@ -3139,6 +2875,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     if !takes_min_prec {
         w.line(`let _start = p.peek_start();`);
         w.line(`p.b.start_node(${rk}, _start);`);
+    } else {
+        // Where the outermost level opens, which recovery reopens.
+        w.line("let _row = p.b.checkpoint();");
     }
     if let Some(body) = inlined_body {
         assert !returns_vals, "only a unit body is inlined";
@@ -3149,22 +2888,23 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         w.line(`${call};`);
     }
     if !takes_min_prec {
+        w.line(`if p.recovering { let _ = p.recover_rule(${rk}, ${lit}, -1); }`);
         w.line("p.b.finish_node(p.last_end());");
+    } else {
+        w.line(`if p.recovering && p.recover_rule(${rk}, ${lit}, _row) { p.b.finish_node(p.last_end()); }`);
     }
     if needs_atn {
-        w.line("p.atn_stack.pop();");
+        w.line(`${ctx.atn_stack_place()}.pop();`);
     }
+    w.line("p.sites.pop();");
     if trace {
         w.line("p.trace_depth -= 1;");
-    }
-    w.begin("if p.recovering");
-    w.line(`p.push_rule_stack(${lit});`);
-    if trace {
+        w.begin("if p.recovering");
         w.line(`trace_fail(p, ${lit}, p.pending_message());`);
         w.else_begin("else");
         w.line(`trace_ok(p, ${lit});`);
+        w.end();
     }
-    w.end();
     if returns_vals {
         w.line("return __vals;");
     }
@@ -3252,6 +2992,7 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
+    gen_rule_entry_sync(w, ctx, rule);
     w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut firsts: List<String> = [];
@@ -3319,10 +3060,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
 
     // Rules whose alts are all a single token (e.g. SQLite's 122-keyword
     // `keyword`) use a compact `{ span, token }` struct (see
-    // `gen_multi_alt_cst`); the parser is a single first-set check plus one
-    // construction instead of an N-way `if kind == TK_X` cascade. The scan
-    // side already collapses these (`gen_scan_function_named`); the result is
-    // far smaller and no slower than the cascade.
+    // `gen_multi_alt_cst`), built once rather than per alternative.
     if is_compact_single_token(rule, ctx) && !rule_emits_vals(ctx, rule) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
@@ -3331,54 +3069,33 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     let type_name = rule.type_name;
     gen_visibility_comment(w, &rule.visibility);
 
-    // Project the lowered rule's alt partition into surface alt
-    // indices. For LR rules, atom alts are non-LR; for `Simple` /
-    // `MultiAlt` rules every alt is non-LR.
     let og = rule_overlap_groups(rule, lowered_rule, ctx);
-    let non_lr_indices = og.0;
-    let first_sets = og.1;
-    let mut groups = og.2;
-    let has_overlaps = has_multi_alt_groups(&groups);
+    let has_overlaps = has_multi_alt_groups(&og.groups);
 
-    if has_overlaps {
-        for let mut g = 0; g < groups.len(); g += 1 {
-            if groups[g].len() > 1 {
-                sort_group_by_specificity(&mut groups[g], &first_sets);
-                let mut mapped_alts: List<Alternative> = [];
-                for let gi of groups[g] {
-                    mapped_alts.push(rule.alternatives[non_lr_indices[gi]]);
-                }
-                let mut local_indices: List<i32> = [];
-                for let mut i = 0; i < groups[g].len(); i += 1 {
-                    local_indices.push(i);
-                }
-                sort_group_by_element_count(&mut local_indices, &mapped_alts);
-                let mut reordered: List<i32> = [];
-                for let li of local_indices {
-                    reordered.push(groups[g][li]);
-                }
-                groups[g] = reordered;
-            }
-        }
-    }
-
-    mark_gated_predicates(rule, has_overlaps, &groups, &first_sets, &non_lr_indices, ctx);
+    mark_gated_predicates(rule, has_overlaps, &og.groups, &og.first_sets, &og.non_lr_indices, &og.end_follow, ctx);
 
     if has_overlaps {
         // Pre-compute which alts' scan helpers the dispatch will call so the
         // emission loop can skip the dead ones (see `collect_referenced_scan_alts`).
         let mut referenced_scans: List<i32> = [];
-        for let group of &groups {
+        for let group of &og.groups {
             if group.len() > 1 {
-                let tree = build_group_prediction_tree(&rule.alternatives, group, &first_sets, &non_lr_indices, ctx);
+                let tree = build_group_prediction_tree(
+                    &rule.alternatives,
+                    group,
+                    &og.first_sets,
+                    &og.non_lr_indices,
+                    ctx,
+                    &og.end_follow,
+                );
                 collect_referenced_scan_alts(&tree, &rule.alternatives, ctx, &mut referenced_scans);
             }
         }
 
-        for let group of groups {
+        for let group of &og.groups {
             if group.len() > 1 {
                 for let gi of group {
-                    let alt_index = non_lr_indices[gi];
+                    let alt_index = og.non_lr_indices[*gi];
                     let alt = &rule.alternatives[alt_index];
                     let helper_name = `${fn_name}_alt_${alt_index}`;
 
@@ -3414,8 +3131,8 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                         ctx,
                     );
                     let helper_body = hw.to_string();
-                    if let Some(call) = forwarded_rule_call(&helper_body) {
-                        ctx.set_forwarded_call(&helper_name, &call);
+                    if let Some(forwarded) = forwarded_rule_call(&helper_body) {
+                        ctx.set_forwarded_call(&helper_name, forwarded);
                     } else {
                         f.emit_begin(w);
                         w.write(&helper_body);
@@ -3426,7 +3143,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     // Emit the per-alt scan helper only when the dispatch
                     // actually calls it; a token-led group leaves it dead.
                     if referenced_scans.contains(&alt_index) {
-                        ensure_alt_scan_fn(w, alt, lowered_rule, fn_name, alt_index, ctx);
+                        ensure_alt_scan_fn(w, alt, lowered_rule, `${fn_name}_scan_${alt_index}`, alt_index, ctx);
                     }
                 }
             }
@@ -3465,21 +3182,8 @@ fn gen_parse_fn_named<S: AsStrSlice>(
             w.line("let mut vals = vals;");
         }
         emit_span_capture(w, rule, ctx);
-        if has_overlaps {
-            gen_multi_alt_body_alt(
-                w,
-                rule,
-                lowered_rule,
-                &type_name,
-                ctx,
-                &groups,
-                &first_sets,
-                &non_lr_indices,
-                fn_name,
-            );
-        } else {
-            gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
-        }
+        gen_rule_entry_sync(w, ctx, rule);
+        gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, &type_name, ctx, &og, fn_name);
         w.end();
         w.blank();
 
@@ -3531,6 +3235,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 gen_prequel_action(w, a, &rule.name, true, ctx);
             }
         }
+        gen_rule_entry_sync(w, ctx, rule);
         // A finished alternative leaves the block for the one `@after`; the
         // no-viable path returns past it, as ANTLR4 skips `@after` on error.
         let after = rule_after_for(rule, lowered_rule, ctx);
@@ -3539,21 +3244,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
             w.begin(if emits_vals { "vals = alt_done:" } else { "alt_done:" });
             ctx.set_alt_exit_label(Option::Some("alt_done"));
         }
-        if has_overlaps {
-            gen_multi_alt_body_alt(
-                w,
-                rule,
-                lowered_rule,
-                &type_name,
-                ctx,
-                &groups,
-                &first_sets,
-                &non_lr_indices,
-                fn_name,
-            );
-        } else {
-            gen_multi_alt_body(w, rule, lowered_rule, &type_name, ctx, &non_lr_indices);
-        }
+        gen_rule_pick(w, PickSide::Parse, rule, lowered_rule, &type_name, ctx, &og, fn_name);
         if let Some(a) = &after {
             ctx.set_alt_exit_label(null);
             if emits_vals {
@@ -3569,19 +3260,30 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     }
 }
 
-/// The rule call an alternative helper's body is and nothing else, which its
-/// callers can make themselves.
-fn forwarded_rule_call(body: &String) -> Option<String> {
-    let tail = ");\nreturn;\n";
-    let text = body.as_str_slice();
-    if !text.starts_with("_parse_") || !text.ends_with(tail) {
+/// The rule call an alternative helper's body is and nothing else, with its
+/// call-site stamps, which its callers can make themselves.
+fn forwarded_rule_call(body: &String) -> Option<Forwarded> {
+    let mut stamps: List<String> = [];
+    let mut rest: List<String> = [];
+    for let line of body.lines() {
+        if rest.is_empty() && (line.starts_with("p.site = ") || line.starts_with("p.atn_ret_pending = ")) {
+            stamps.push(line.to_string());
+        } else {
+            rest.push(line.to_string());
+        }
+    }
+    if rest.len() != 2 || rest[1] != "return;" {
         return null;
     }
-    let call = text.slice(0, text.len() - tail.len() + 1);
-    if call.chars().any(|c| c == ';' || c == '\n') {
+    let call = rest[0].as_str_slice();
+    if !call.starts_with("_parse_") || !call.ends_with(");") {
         return null;
     }
-    return Option::Some(call.to_string());
+    let expr = call.slice(0, call.len() - 1);
+    if expr.chars().any(|c| c == ';') {
+        return null;
+    }
+    return Option::Some(Forwarded { stamps, call: expr.to_string() });
 }
 
 /// An alternative body that runs no `@after` of its own.
@@ -3605,10 +3307,50 @@ fn rule_after_for(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> O
 /// `enter literal_value @9 '1'` is noise. Tournament and speculative picks, and
 /// picks among alts that consume sub-structure, stay.
 fn gen_trace_pick(w: &mut CodeWriter, rule: &ParserRule, alt_index: i32, ctx: &GenContext) {
-    if !ctx.is_trace() || all_alts_are_single_token(&rule.alternatives) {
-        return;
+    if !all_alts_are_single_token(&rule.alternatives) {
+        emit_trace_pick(w, PickSide::Parse, &rule.name, `${alt_index}`, ctx);
     }
-    w.line(wado`trace_pick(p, "${rule.name}", ${alt_index});`);
+}
+
+/// The trace line naming the alternative `alt` evaluates to, where the parse
+/// traces. A scan has no parser to log through.
+fn emit_trace_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    rule_display: S,
+    alt: S1,
+    ctx: &GenContext,
+) {
+    if ctx.is_trace() && side matches { Parse } {
+        w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${alt.to_string()});`);
+    }
+}
+
+/// Commit to the rule's alternative `alt_index` and emit its body in place.
+fn gen_picked_rule_alt<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    type_name: S,
+    alt_index: i32,
+    ctx: &mut GenContext,
+    proven_first: &List<String>,
+) {
+    let body = rule_alt_body(lowered_rule, alt_index).unwrap();
+    gen_trace_pick(w, rule, alt_index, ctx);
+    gen_alt_body(
+        w,
+        type_name,
+        Option::Some(body.case_name),
+        Option::Some(body.struct_name),
+        &rule.alternatives[alt_index],
+        body,
+        alt_index,
+        rule_alts_labeled(&rule.alternatives),
+        &NO_AFTER,
+        ctx,
+        proven_first,
+    );
 }
 
 fn gen_alt_body<S: AsStrSlice>(
@@ -3646,15 +3388,35 @@ fn gen_alt_body<S: AsStrSlice>(
     w.line(&ctx.alt_exit(if current_rule_emits_vals(ctx) { "vals" } else { "" }));
 }
 
+/// A multi-alternative rule's choice of alternative, which the parse and the
+/// scan make alike.
+fn gen_rule_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    type_name: S,
+    ctx: &mut GenContext,
+    og: &RuleOverlap,
+    fn_name: S1,
+) {
+    assert side matches { Scan } == ctx.in_scan_fn(), "a pick is emitted into the function its side names";
+    if has_multi_alt_groups(&og.groups) {
+        gen_multi_alt_body_alt(w, side, rule, lowered_rule, type_name, ctx, og, fn_name);
+    } else {
+        gen_multi_alt_body(w, side, rule, lowered_rule, type_name, ctx, &og.non_lr_indices);
+    }
+}
+
 fn gen_multi_alt_body<S: AsStrSlice>(
     w: &mut CodeWriter,
+    side: PickSide,
     rule: &ParserRule,
     lowered_rule: &Rule,
     type_name: S,
     ctx: &mut GenContext,
     non_lr_indices: &List<i32>,
 ) {
-
     let max_k = MAX_LOOKAHEAD_DEPTH;
     let mut all_pos_sets: List<List<List<String>>> = [];
     for let idx of non_lr_indices {
@@ -3662,10 +3424,10 @@ fn gen_multi_alt_body<S: AsStrSlice>(
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
+    emit_pick_kind_read(w, side);
 
     let mut untestable: List<bool> = [];
-    let mut all_gate_conds: List<List<String>> = [];
+    let mut all_gate_conds: List<String> = [];
     for let mut i = 0; i < non_lr_indices.len(); i += 1 {
         let alt = &rule.alternatives[non_lr_indices[i]];
         // An arm with no emitted condition is not one no lookahead can select:
@@ -3673,52 +3435,61 @@ fn gen_multi_alt_body<S: AsStrSlice>(
         // tail. What the alternative matches is `alt_class`'s to say.
         let no_cond = depth == 0 || all_pos_sets[i].is_empty();
         let selected_by_nothing = alt_class_tests_nothing(&alt_class_of(alt, ctx));
-        // Asked once and read by the arm loop: a Java predicate resolves
-        // through `ctx.alt_bindings()`, which `gen_alt_elements` overwrites per
-        // arm, so asking twice can order an arm as gated that renders nothing.
-        all_gate_conds.push(alt_initial_gate_conditions(alt, ctx));
+        // Rendered once, before any arm: a Java predicate resolves through
+        // `ctx.alt_bindings()`, which `gen_alt_elements` overwrites per arm.
+        all_gate_conds.push(side_gate(side, alt, ctx));
         untestable.push(no_cond && selected_by_nothing && all_gate_conds[i].is_empty());
     }
 
-    for let slot of &arms_fallback_last(&untestable) {
-        let i = *slot;
-        let alt_index = non_lr_indices[i];
-        let alt = &rule.alternatives[alt_index];
+    let order = arms_fallback_last(&untestable);
+    let cond_depths: List<i32> = all_pos_sets.iter_ref().map(|s| i32::min(depth, s.len())).collect();
+    // Each arm then tests the first token alone, so arms running the same code
+    // are one arm.
+    if order.iter_ref().all(|i| cond_depths[*i] == 1) {
+        let mut arms: List<DecisionBranch> = [];
+        let mut bodies: List<String> = [];
+        for let i of &order {
+            let first = &all_pos_sets[*i][0];
+            let mut body = CodeWriter::with_capacity(256);
+            gen_pick_alt(&mut body, side, rule, lowered_rule, type_name, non_lr_indices[*i], ctx, first);
+            arms.push(DecisionBranch {
+                test: admits_kinds_of(first),
+                gate: and_gate(all_gate_conds[*i]),
+                alts: [],
+            });
+            bodies.push(body.to_string());
+        }
+        emit_tested_arms(w, &arms, &bodies, &DISPATCH_KIND_LOCAL, ctx);
+        w.end();
+        emit_no_alternative(w, side, rule, type_name, ctx);
+        return;
+    }
 
-        let pos_sets = &all_pos_sets[i];
-        let cond_depth = if depth < pos_sets.len() { depth } else { pos_sets.len() };
+    for let i of &order {
+        let alt_index = non_lr_indices[*i];
 
-        let gate_conds = all_gate_conds[i];
+        let pos_sets = &all_pos_sets[*i];
+        let cond_depth = cond_depths[*i];
+
+        let gate = all_gate_conds[*i];
         let proven_first: List<String> = if cond_depth > 0 { pos_sets[0] } else { [] };
         if cond_depth > 0 {
-            let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
-            let gate = if gate_conds.is_empty() { String::new() } else { ` && ${join_gate_conds(&gate_conds)}` };
-            w.begin(`if ${cond}${gate}`);
-        } else if gate_conds.is_empty() {
+            let cond = match side {
+                Parse => build_lookahead_condition(ctx, pos_sets, cond_depth),
+                Scan => build_scan_lookahead_condition(ctx, pos_sets, cond_depth),
+            };
+            w.begin(`if ${cond}${and_gate(gate)}`);
+        } else if gate.is_empty() {
             w.begin("scope:");
         } else {
-            w.begin(`if ${join_gate_conds(&gate_conds)}`);
+            w.begin(`if ${gate}`);
         }
 
-        let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-        gen_trace_pick(w, rule, alt_index, ctx);
-        gen_alt_body(
-            w,
-            type_name,
-            Option::Some(body.case_name),
-            Option::Some(body.struct_name),
-            alt,
-            body,
-            alt_index,
-            rule_alts_labeled(&rule.alternatives),
-            &NO_AFTER,
-            ctx,
-            &proven_first,
-        );
+        gen_pick_alt(w, side, rule, lowered_rule, type_name, alt_index, ctx, &proven_first);
         w.end();
     }
 
-    gen_error_fallback(w, rule, type_name, ctx);
+    emit_no_alternative(w, side, rule, type_name, ctx);
 }
 
 /// Peel scalar `Label(...)` wrappers off a surface element for op-dispatch.
@@ -3831,11 +3602,7 @@ fn gen_alt_elements(
             };
             gen_op_repeat(w, rep, rep_op, ctx, &mut name_counts);
         } else if op_is_leaf(op) {
-            // The rule's FIRST-of-rest at this position is the sync set `expect`
-            // inserts a missing terminal against (a recovery-only edit; on valid
-            // input the leaf matches and `sync` is never read).
-            let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven);
+            gen_op_leaf(w, op, ctx, &mut name_counts, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
@@ -3887,12 +3654,7 @@ fn gen_elements_with_non_greedy(
             let follow = inner_walker_follow_for_repeat(rep, rep_op, elements, i, outer_follow, ctx);
             gen_op_repeat_with_follow_override(w, rep, rep_op, ctx, name_counts, &follow);
         } else if op_is_leaf(op) {
-            // Same FIRST-of-rest sync as `gen_alt_elements`, so a missing leaf
-            // inside a group / single-alt body is inserted in place rather than
-            // only deleted-or-unwound (recovery quality is uniform with the
-            // top-level sequence).
-            let sync = ctx.first_of_elements_from(elements, i + 1);
-            gen_op_leaf(w, op, ctx, name_counts, &sync, proven);
+            gen_op_leaf(w, op, ctx, name_counts, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
@@ -3984,15 +3746,32 @@ fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String
     w.begin(`${dedup_name("_first_iter", name_counts)}:`);
 }
 
+/// ANTLR4's sync ahead of a decision, calling `method` when the current token
+/// is none the decision expects. Nothing where the rule may end (`expected` null).
+fn gen_decision_sync<S: AsStrSlice>(w: &mut CodeWriter, ctx: &mut GenContext, expected: Option<List<String>>, method: S) {
+    let Some(names) = expected else {
+        return;
+    };
+    assert !names.is_empty(), "a decision the rule cannot end at expects some token";
+    let bits = sync_set_ref(ctx, &names);
+    let list = expected_set_ref(ctx, &names);
+    w.line(`if !kind_set_has(${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(${bits}, ${list}); }`);
+}
 
-/// Emit `p.atn_ret_pending = <state>;` immediately before a `_parse_X` call
-/// so the callee's entry wrapper pushes the call's exact ATN return state
-/// onto `p.atn_stack` (full-context prediction). No-op unless the grammar
-/// needs the ATN and the call site has a known return state
-/// (`Atn.call_site_returns`, keyed by `RuleCallOp.atn_call_site`). An
-/// unstamped call leaves `atn_ret_pending` at -1, which the simulator reads
-/// as an unknown caller (SLL-accept at that frame).
-fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+fn gen_rule_entry_sync(w: &mut CodeWriter, ctx: &mut GenContext, rule: &ParserRule) {
+    gen_decision_sync(w, ctx, ctx.rule_entry_expect(ctx.rule_index_of(&rule.name)), "sync_alts");
+}
+
+fn gen_loop_back_sync(w: &mut CodeWriter, ctx: &mut GenContext, rep_op: &RepeatOp) {
+    gen_decision_sync(w, ctx, ctx.decision_back_expect(rep_op.atn_decision), "sync_back");
+}
+
+/// The call-site stamps ahead of a `_parse_X` call that its entry wrapper pushes:
+/// `p.site` for recovery's resync, `p.atn_ret_pending` for full-context prediction.
+fn gen_call_site_stamps(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
+    // `Atn.call_site_returns` is sparse: a site past its end has no follow.
+    let known = call_site >= 0 && call_site < ctx.recovery_sets().call_follow.len();
+    w.line(`p.site = ${if known { call_site } else { -1 }};`);
     if !ctx.needs_atn() {
         return;
     }
@@ -4070,28 +3849,20 @@ fn gen_op_leaf(
     op: &Op,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
-    sync: &List<String> = &EMPTY_SYNC,
     proven: &List<String> = &EMPTY_SYNC,
 ) {
     if leaf_is_proven(op, proven) {
         gen_op_leaf_taken(w, op, ctx, name_counts);
         return;
     }
-    // The Parser's `expect` / `match_*` append the matched token to the builder
-    // and return the token index. `sync` is the rule's FIRST-of-rest at this
-    // position — the set `expect` inserts a missing terminal against, passed by
-    // reference as an interned `&SYNC_<id>` global (`&EMPTY_SYNC` when empty, the
-    // default for callers outside a plain sequence — they only delete / panic).
     sync_name_counts_for_op_leaf(op, name_counts);
     return match *op {
-        Token(t) => {
-            let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &t.dedup_base, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
-        },
-        Literal(l) => {
-            let sync_ref = sync_set_ref(ctx, sync);
-            w.line(`${leaf_binding(ctx, &l.dedup_base, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
-        },
+        Token(t) => w.line(
+            `${leaf_binding(ctx, &t.dedup_base, &t.field)}${expect_call(&t.kind, t.atn_leaf_site, ctx)};`,
+        ),
+        Literal(l) => w.line(
+            `${leaf_binding(ctx, &l.dedup_base, &l.field)}${expect_call(&l.kind, l.atn_leaf_site, ctx)};`,
+        ),
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
             // threaded at runtime via `follow_arg` rather than selecting a
@@ -4105,9 +3876,9 @@ fn gen_op_leaf(
             // `stamp_lr_self_ref_min_prec`, and `lower_alt_body` stamps the
             // trailing self-ref of a prefix LR alt (e.g. `'-' e`) so emit
             // reads a single source.
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
             let argsfx = call_arg_suffix(&r, ctx);
-            let cont = if r.lr_cont_mask >= 0 { `, ${ctx.follow_mask_ref(r.lr_cont_mask)}` } else { "" };
+            let cont = lr_cont_arg(r.lr_cont_mask, ctx);
             let bind = leaf_binding(ctx, &r.dedup_base, &r.field);
             if let Some(min_prec) = r.min_prec_arg {
                 w.line(`${bind}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
@@ -4123,6 +3894,15 @@ fn gen_op_leaf(
         // the caller's `op_is_leaf` gate was bypassed.
         Repeat(_) | Group(_) | ListLabel(_) => panic("gen_op_leaf: non-leaf op; caller must guard with op_is_leaf"),
     };
+}
+
+/// `p.expect(kind, …)` for terminal `leaf_site`. A missing terminal is inserted
+/// where the token after it can follow it in its rule or, past the rule's end,
+/// in the rules under way.
+fn expect_call<S: AsStrSlice>(kind: S, leaf_site: i32, ctx: &mut GenContext) -> String {
+    let [follow, ends] = ctx.leaf_follow(leaf_site);
+    assert ends || !follow.is_empty(), "a terminal the rule cannot end after has a successor";
+    return `p.expect(${kind}, ${sync_set_ref(ctx, &follow)}, ${ends})`;
 }
 
 // === GIR-op body emission ===
@@ -4155,7 +3935,7 @@ fn gen_op(
         Repeat(r) => gen_repeat_body(w, &r, ctx, nc),
         Group(g) => gen_group_body(w, &g, ctx, nc, null, proven),
         ListLabel(ll) => gen_op(w, &ll.inner, ctx, nc, proven),
-        _ => gen_op_leaf(w, op, ctx, nc, &EMPTY_SYNC, proven),
+        _ => gen_op_leaf(w, op, ctx, nc, proven),
     }
 }
 
@@ -4443,7 +4223,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     w.begin("loop");
     w.line("if p.recovering { break; }");
     w.line(
-        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, ${ctx.atn_state_arg()}, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(
         w,
@@ -4464,7 +4244,7 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
         } else {
             w.else_begin(`else if _atn_alt == ${i}`);
         }
-        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc);
+        emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc, &lr_alts[valid[i]].suffix_first);
     }
     if !is_first {
         w.else_begin("else");
@@ -4508,7 +4288,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${scan_trailing_args(ctx)}${lr_cont_forward(mid_operand_gated)})`;
     };
     let matched = prebound matches { Some(_) };
     if mid_operand_gated {
@@ -4632,11 +4412,10 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
 /// competing readings are the loop's own, so `body_admits` stands in for
 /// the overlap; it also gates each iteration, hence non-empty.
 fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
-    let body_first = admits_kinds(&r.body_admits);
     return r.static_exit_undecided
         && r.kind matches { Star | Plus }
-        && !body_first.is_empty()
-        && probe_decides(&body_first, &body_first, &r.continuation_scan, r.continuation_scannable, ctx);
+        && !admits_kinds(&r.body_admits).is_empty()
+        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
 /// Open a non-greedy loop that exits only when exiting is viable. The caller
@@ -4647,15 +4426,25 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCo
     w.line("if p.recovering { break; }");
     let verdict = dedup_name("ng_exit", nc);
     w.line(`let mut ${verdict}: bool = false;`);
-    gen_viability_probe(w, &r.continuation_scan, &verdict, "ng_exit_scan", ctx, nc, null, &r.probe_viable);
+    gen_viability_probe(
+        w,
+        &r.continuation_scan,
+        &verdict,
+        "ng_exit_scan",
+        ctx,
+        nc,
+        null,
+        r.probe_asks_caller,
+        &r.probe_viable,
+    );
     w.line(`if ${verdict} { break; }`);
     w.line(`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
 /// when it matches, lets the caller's FOLLOW rule on everything past the
-/// rule; `verdict` is the caller's already-declared `bool`. `prefix_scan`
-/// runs first, for the entry probe's body.
+/// rule where `asks_caller`; `verdict` is the caller's already-declared
+/// `bool`. `prefix_scan` runs first, for the entry probe's body.
 fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
     continuation: &List<ScanElement>,
@@ -4663,8 +4452,9 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     label_base: S1,
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
-    prefix_scan: Option<ScanElement> = null,
-    probe_viable: &List<String> = &EMPTY_PROBE_VIABLE,
+    prefix_scan: Option<ScanElement>,
+    asks_caller: bool,
+    probe_viable: &List<String>,
 ) {
     let label = dedup_name(label_base, nc);
     w.begin(`${label}:`);
@@ -4676,18 +4466,24 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     for let se of continuation {
         gen_scan_op_element(w, se, ctx, &fail);
     }
-    emit_probe_verdict(w, probe_viable, verdict, ctx);
+    emit_probe_verdict(w, asks_caller, probe_viable, verdict, ctx);
     w.end();
 }
 
-global EMPTY_PROBE_VIABLE: List<String> = [];
-
-/// The probe's verdict once its scan has reached the rule's tail: the
-/// threaded mask has to admit the position, and so does the rule's own
-/// FOLLOW when lowering stamped one. The mask answers "yes" wherever a call
-/// site left it empty; the FOLLOW conjunct is what still says no there, and
-/// conjoining can only move a verdict from "exit" to "iterate".
-fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<String>, verdict: S, ctx: &mut GenContext) {
+/// The probe's verdict once its scan has matched: the match itself short of the
+/// rule's tail; at the tail, the threaded mask and any stamped FOLLOW admitting the position.
+fn emit_probe_verdict<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    asks_caller: bool,
+    probe_viable: &List<String>,
+    verdict: S,
+    ctx: &mut GenContext,
+) {
+    if !asks_caller {
+        assert probe_viable.is_empty(), "a FOLLOW is stamped only on a probe reaching the rule's tail";
+        w.line(`${verdict} = true;`);
+        return;
+    }
     let mask = if ctx.current_rule_reads_follow() {
         `${FOLLOW_PARAM} == 0 || ${follow_yields_call("tokens", "pos")}`;
     } else {
@@ -4701,6 +4497,8 @@ fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<Str
         }
         return;
     }
+    // The mask says yes wherever a call site left it empty; the FOLLOW is what
+    // still says no there, and conjoining only moves a verdict to "iterate".
     w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     let viable = ctx.kind_check_str(probe_viable, "probe_kind");
     let cond = if mask == "true" { viable } else { `${viable} && (${mask})` };
@@ -4710,6 +4508,7 @@ fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<Str
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
 /// appends), gated on the body's first set.
 fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
+    gen_decision_sync(w, ctx, ctx.decision_entry_expect(r.atn_decision), "sync_enter");
     if let NonGreedy(_) = r.strategy {
         gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
@@ -4732,6 +4531,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 begin_plus_first_iteration(w, nc);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
+                gen_loop_back_sync(w, ctx, r);
             }
             w.begin("loop");
             w.line("if p.recovering { break; }");
@@ -4755,6 +4555,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                     w.line(`if ${best} <= p.pos { break; }`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
+                    gen_loop_back_sync(w, ctx, r);
                     w.end();
                     return;
                 }
@@ -4763,6 +4564,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
             w.line(`if ${scan_pos} < 0 { break; }`);
             gen_op(w, &r.body, ctx, nc);
+            gen_loop_back_sync(w, ctx, r);
             w.end();
             return;
         }
@@ -4779,14 +4581,17 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         Star => {
             w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
+            gen_loop_back_sync(w, ctx, r);
             w.end();
         },
         Plus => {
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
+            gen_loop_back_sync(w, ctx, r);
             w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc, &admits_kinds(&r.body_admits));
+            gen_loop_back_sync(w, ctx, r);
             w.end();
         },
     }
@@ -4813,6 +4618,10 @@ fn gen_op_optional(
     }
     if let OptionalShapeLookahead(s) = &r.strategy {
         gen_op_optional_shape_lookahead(w, r, s, ctx, nc, follow_gate);
+        return;
+    }
+    if optional_probe_decides(r, ctx) {
+        gen_optional_probe_entry(w, r, ctx, nc);
         return;
     }
     if r.strategy matches { OptionalScanGuard } {
@@ -4973,7 +4782,7 @@ fn gen_op_inner_for_storable_repeat(
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
-        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, &EMPTY_SYNC, proven),
+        LeafRuleCall | LeafOther => gen_op_leaf(w, op, ctx, name_counts, proven),
         StorableGroup => gen_op_storable_group_inner(
             w,
             op,
@@ -5068,14 +4877,7 @@ fn gen_op_dispatch_element(
     proven: &List<String> = &EMPTY_SYNC,
 ) {
     match op {
-        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(
-            w,
-            op,
-            ctx,
-            name_counts,
-            &EMPTY_SYNC,
-            proven,
-        ),
+        Token(_) | Literal(_) | RuleCall(_) | Wildcard(_) | Excluded(_) => gen_op_leaf(w, op, ctx, name_counts, proven),
         Repeat(rep_op) => {
             let rep = if let Repeat(r) = elem {
                 r;
@@ -5246,21 +5048,17 @@ fn gen_op_storable_optional(
 /// optional edges are ordered `[exit=0, enter=1]`, so ENTER iff the simulator
 /// returns alt 1.
 fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
-    let rule = ctx.current_rule_index();
     let decision = ctx.atn_decision_site(rep_op.atn_decision);
     if decision < 0 {
         return "true";
     }
-    // A non-greedy `??` predicts enter-vs-skip with the rule's live
-    // precedence: inside a left-recursive rule the parser can be invoked with
-    // a raised `min_prec`, so the prediction must prune LR enter edges below
-    // it (otherwise it keeps an impossible suffix and wrongly SKIPs). The
-    // `min_prec` variable is only in scope in a left-recursive rule's bodies
-    // (atom, inlined suffix); a plain rule has no precedence climbing, so it is
-    // always invoked at 0 and its fns carry no `min_prec` parameter — pass the
-    // literal `0` there.
-    let prec_arg = if ctx.lr_loop_entry_decision(rule) >= 0 { "min_prec" } else { "0" };
-    return `atn_predict_with_stack(&ATN_SIM, ${decision}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, ${prec_arg}) == 1`;
+    return `${atn_predict_call(decision, "&p.kinds", "p.pos", ctx)} == 1`;
+}
+
+/// The precedence a prediction prunes LR enter edges below, or it keeps an
+/// impossible suffix: the live `min_prec`, which only a left-recursive rule has.
+fn atn_prec_arg(ctx: &GenContext) -> String {
+    return if ctx.lr_loop_entry_decision(ctx.current_rule_index()) >= 0 { "min_prec" } else { "0" };
 }
 
 /// Wrap a raw Optional entry condition with the runtime caller-FOLLOW
@@ -5900,6 +5698,11 @@ fn gen_op_group(
     // `peel_scalar_label` helper handles theoretical multi-level
     // scalar Label nesting; lower does not produce that today, but
     // the loop costs nothing.
+    if entry matches { Required } {
+        if let Group(g_elem) = peel_scalar_label(elem) {
+            gen_decision_sync(w, ctx, ctx.decision_entry_expect(g_elem.atn_decision), "sync_alts");
+        }
+    }
     let entry = open_group_entry(w, elem, ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
@@ -5923,6 +5726,7 @@ fn gen_op_group(
                 name_counts,
                 &g_op.empty_alt_admits,
                 decided,
+                ctx.atn_decision_site(g_op.atn_site),
             ),
             General(gs) => gen_general_group(
                 w,
@@ -5935,6 +5739,7 @@ fn gen_op_group(
                 name_counts,
                 &g_op.empty_alt_admits,
                 decided,
+                ctx.atn_decision_site(g_op.atn_site),
             ),
             Transparent => {
                 // Transparent groups inline their inner alt; walk
@@ -6077,13 +5882,15 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     match elem {
         TokenRef(t) => {
             let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(`${leaf_binding(ctx, &t.field_name, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+            w.line(
+                `${leaf_binding(ctx, &t.field_name, &field_name)}${expect_call(`TK_${t.name}`, t.atn_leaf_site, ctx)};`,
+            );
         },
         Literal(l) => {
             let const_name = l.const_name;
             let base = literal_field_name(&l.text);
             let field_name = dedup_name(&base, name_counts);
-            w.line(`${leaf_binding(ctx, &base, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
+            w.line(`${leaf_binding(ctx, &base, &field_name)}${expect_call(&const_name, l.atn_leaf_site, ctx)};`);
         },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
         // by lower and consumed by the op-driven walkers; this surface arm
@@ -6094,7 +5901,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         // so precedence is never threaded here either.
         RuleRef(r) => {
             let field_name = dedup_name(&r.field_name, name_counts);
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
             w.line(`${leaf_binding(ctx, &r.field_name, &field_name)}_parse_${r.snake_name}(p);`);
         },
         Wildcard(_) => {
@@ -6167,6 +5974,7 @@ fn gen_op_repeat_with_follow_override(
     name_counts: &mut List<[String, i32]>,
     follow: &List<String>,
 ) {
+    gen_decision_sync(w, ctx, ctx.decision_entry_expect(rep.atn_decision), "sync_enter");
     if rep.non_greedy {
         // `??` routes through the greedy Optional emitter because lower
         // already picked a greedy strategy for it (see `lower_repeat_op`).
@@ -6404,7 +6212,7 @@ fn gen_op_repeat_optional_rulecall(
     // Ambiguous entry: the exclusion below would hand every shared token
     // to the continuation, but ANTLR4 resolves the ambiguity by entering
     // whenever entering leaves a viable parse. Ask the probe instead.
-    if optional_probe_decides(rep_op, follow, ctx) {
+    if optional_probe_decides(rep_op, ctx) {
         gen_optional_probe_entry(w, rep_op, ctx, name_counts);
         return;
     }
@@ -6433,27 +6241,19 @@ fn gen_op_repeat_optional_rulecall(
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx, &proven);
 }
 
-fn optional_probe_decides(r: &RepeatOp, follow: &List<String>, ctx: &mut GenContext) -> bool {
-    return r.body_scannable
-        && probe_decides(&admits_kinds(&r.body_admits), follow, &r.continuation_scan, r.continuation_scannable, ctx);
+/// Whether the probe decides this greedy `?` over a leaf body. Any leaf: a
+/// token contests a continuation as a rule call does (`A? . C` on `a c`).
+fn optional_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
+    return r.body_shape matches { LeafRuleCall | LeafOther }
+        && r.body_scannable
+        && r.probe_contested
+        && probe_decides(&r.continuation_scan, r.continuation_scannable, ctx);
 }
 
-/// Whether a probe can decide this Repeat, from the parts the parse-side
-/// `RepeatOp` and the scan-side `ScanRepeatElement` both carry — the two must
-/// answer identically or the tournament measures a length the parse will not
-/// consume. It takes a lowered continuation, a competing reading to rule on,
-/// and something to ask: with nothing after the body and no runtime FOLLOW
-/// the probe would reduce to "the body scans, so enter".
-fn probe_decides(
-    body_first: &List<String>,
-    follow: &List<String>,
-    continuation: &List<ScanElement>,
-    continuation_scannable: bool,
-    ctx: &mut GenContext,
-) -> bool {
-    return continuation_scannable
-        && sets_overlap(body_first, follow)
-        && (!continuation.is_empty() || ctx.current_rule_reads_follow());
+/// Whether a probe has something to ask: a lowered continuation, or the runtime
+/// FOLLOW. Both sides read it, or the tournament measures a length the parse skips.
+fn probe_decides(continuation: &List<ScanElement>, continuation_scannable: bool, ctx: &mut GenContext) -> bool {
+    return continuation_scannable && (!continuation.is_empty() || ctx.current_rule_reads_follow());
 }
 
 /// Greedy Optional that enters when entering stays viable. The cheap
@@ -6477,6 +6277,7 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
         ctx,
         nc,
         Option::Some(r.scan_body),
+        r.probe_asks_caller,
         &r.probe_viable,
     );
     w.end();
@@ -6500,7 +6301,7 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
     let guard = if gate_expr.is_empty() { cond.to_string() } else { `${cond} && !${gate_expr}` };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
-    gen_op_leaf(w, body, ctx, &mut nc, &EMPTY_SYNC, proven);
+    gen_op_leaf(w, body, ctx, &mut nc, proven);
     w.end();
 }
 
@@ -6517,6 +6318,10 @@ fn gen_op_repeat_optional_leaf(
 ) {
     let opt_field = rep_op.field;
     let _ = dedup_name(&opt_field, name_counts);
+    if optional_probe_decides(rep_op, ctx) {
+        gen_optional_probe_entry(w, rep_op, ctx, name_counts);
+        return;
+    }
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
@@ -6635,6 +6440,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &no_flag), decided);
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             w.begin(
@@ -6643,6 +6449,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
         return;
@@ -6656,6 +6463,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             // Plus + non-scannable + no-field: emit the first iteration
@@ -6665,12 +6473,14 @@ fn gen_op_repeat_star_plus_non_storable_group(
             begin_plus_first_iteration(w, name_counts);
             gen_op_group(w, g_op, inner, ctx, name_counts, GroupEntry::Required);
             w.end();
+            gen_loop_back_sync(w, ctx, rep_op);
             w.begin(
                 `while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
     }
@@ -6742,7 +6552,7 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
         // does, so a context-sensitive callee (`??` / ATN-class LR) sees the
         // right caller frame.
         if let RuleCall(r) = &rep_op.body {
-            gen_atn_ret_pending(w, ctx, r.atn_call_site);
+            gen_call_site_stamps(w, ctx, r.atn_call_site);
         }
         w.line(`${call};`);
         w.line("p.speculating = _rec_spec;");
@@ -6798,6 +6608,7 @@ fn gen_op_repeat_star_plus_storable(
                 decided_entry(&decided, &no_flag),
                 decided,
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             w.begin(
@@ -6807,6 +6618,7 @@ fn gen_op_repeat_star_plus_storable(
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
         return;
@@ -6830,6 +6642,7 @@ fn gen_op_repeat_star_plus_storable(
                 decided_entry(&decided, &plus_flag),
                 decided,
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         } else {
             let plus_flag = dedup_name("_plus_first", name_counts);
@@ -6851,6 +6664,7 @@ fn gen_op_repeat_star_plus_storable(
                 &iter_follow,
                 GroupEntry::Looped(plus_flag),
             );
+            gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
     }
@@ -6905,6 +6719,10 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     return null;
 }
 
+/// A decline is stamped only where the walk reaches the rule's tail
+/// (`lower_decline_scan`), so its verdict always asks the caller.
+global DECLINE_ASKS_CALLER: bool = true;
+
 /// Decline an iteration that would strand the loop's own alternative.
 ///
 /// `scan_pos` is where the iteration would end. Two questions decide it, the
@@ -6936,7 +6754,17 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     let can_continue = decline_continue_check(body_admits, duties, &cont_kind, ctx);
     w.begin(`if !(${can_continue})`);
     w.line(`let mut ${dead_end}: bool = false;`);
-    gen_viability_probe(w, &duties.decline_scan, &dead_end, "decline_scan", ctx, nc, null, &duties.decline_viable);
+    gen_viability_probe(
+        w,
+        &duties.decline_scan,
+        &dead_end,
+        "decline_scan",
+        ctx,
+        nc,
+        null,
+        DECLINE_ASKS_CALLER,
+        &duties.decline_viable,
+    );
     w.line(`if ${dead_end} { break; }`);
     w.end();
     w.end();
@@ -7850,7 +7678,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
         `p${follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg)}`;
     };
     let span_field = open_call_capture(w, op, ctx);
-    gen_atn_ret_pending(w, ctx, rc.atn_call_site);
+    gen_call_site_stamps(w, ctx, rc.atn_call_site);
     w.line(`${leaf_binding(ctx, &local_var, &local_var)}${fn_name}(${call_args});`);
     close_call_capture(w, &span_field);
 }
@@ -7931,6 +7759,7 @@ fn gen_group_dispatch(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     decided: Option<String> = null,
+    atn_dec: i32 = -1,
 ) {
     if decided matches { Some(_) } {
         assert entry matches { Guaranteed }, "gen_group_dispatch: a decided dispatch commits, so it has no arm left to report or break in";
@@ -7947,7 +7776,18 @@ fn gen_group_dispatch(
     }
     // A decision that tests nothing has no chain to emit.
     if decision_is_unconditional(branches) {
-        gen_group_branch_body(w, &branches[0].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+        gen_group_branch_body(
+            w,
+            &branches[0].alts,
+            alts,
+            g_op_alts,
+            g_op_scan_alts,
+            kind,
+            ctx,
+            name_counts,
+            &EMPTY_SYNC,
+            atn_dec,
+        );
         return;
     }
     // A trailing fallback is the `else`, so nothing is left to report. A gated
@@ -7990,6 +7830,7 @@ fn gen_group_dispatch(
             ctx,
             name_counts,
             &proven,
+            atn_dec,
         );
         bodies.push(body.to_string());
         if g < tested {
@@ -8011,7 +7852,7 @@ fn gen_group_dispatch(
         // and a bare `else` here would run, on the tokens that arm refused,
         // exactly the alternative the predicate says does not exist. A gate
         // that fails leaves nothing viable, empty match included.
-        let gate = join_gate_conds(&alt_initial_gate_conditions(&alts[slot], ctx));
+        let gate = alt_gate_condition(&alts[slot], ctx);
         w.else_begin(&if gate.is_empty() { String::from("else") } else { `else if ${gate}` });
         gen_group_branch_body(w, &[slot], alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
         if !gate.is_empty() {
@@ -8042,7 +7883,7 @@ fn first_nullable_alt(classes: &List<AltClass>) -> Option<i32> {
 }
 
 /// The union of one branch's first sets, for the branches not over classified
-/// alternatives: LR suffixes, and a rule's arms (see `rule_overlap_groups`).
+/// alternatives: LR suffixes.
 fn slot_first_union(group: &List<i32>, first_sets: &List<List<String>>) -> List<String> {
     let mut union_first: List<String> = [];
     for let idx of group {
@@ -8088,6 +7929,7 @@ fn gen_group_branch_body(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
     proven: &List<String> = &EMPTY_SYNC,
+    atn_dec: i32 = -1,
 ) {
     if group.len() == 1 {
         let alt_index = group[0];
@@ -8108,8 +7950,47 @@ fn gen_group_branch_body(
     // Alternatives sharing a first token are decided by the longest-match
     // tournament, mandatory-heavy first.
     let sorted_group = branch_emit_order(group, alts, ctx);
+    if atn_dec >= 0 {
+        let var = dedup_name("gd_atn", name_counts);
+        w.line(`let ${var} = ${atn_predict_call(atn_dec, "&p.kinds", "p.pos", ctx)};`);
+        gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts, Option::Some(
+            var,
+        ));
+        return;
+    }
     assert group_all_scannable(&sorted_group, alts, kind, ctx), UNSCANNABLE_ALT;
     gen_group_scan_dispatch(w, alts, g_op_alts, g_op_scan_alts, &sorted_group, kind, ctx, name_counts);
+}
+
+/// `let _atn_alt`: the simulator's pick at rule-body decision `dec`, with each
+/// alternative whose gate is false disabled. The parse and a scan both pick here.
+fn gen_atn_body_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    dec: i32,
+    gates: &List<[i32, String]>,
+    tokens: S,
+    pos: S1,
+    ctx: &GenContext,
+) {
+    assert atn_prec_arg(ctx) == "0", "a rule-body decision belongs to a rule that climbs no precedence";
+    if gates.is_empty() {
+        w.line(`let _atn_alt = ${atn_predict_call(dec, tokens, pos, ctx)};`);
+        return;
+    }
+    w.line("let mut _atn_disabled: List<i32> = [];");
+    for let g of gates {
+        w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
+    }
+    w.line(
+        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &${ctx.atn_stack_place()}, ${tokens}, ${pos}, TK_EOF, 0, &_atn_disabled);`,
+    );
+}
+
+/// The simulator's pick at decision `atn_dec`, over `tokens` at `pos`.
+fn atn_predict_call<S: AsStrSlice, S1: AsStrSlice>(atn_dec: i32, tokens: S, pos: S1, ctx: &GenContext) -> String {
+    return `atn_predict_once(&ATN_SIM, ${atn_dec}, ${ctx.atn_state_arg()}, ${tokens}, ${pos}, TK_EOF, ${atn_prec_arg(
+        ctx,
+    )})`;
 }
 
 global UNSCANNABLE_ALT: String = "group has an unscannable alt; backtracking has been removed (see AGENTS.md 'Generated Parser Rules')";
@@ -8153,6 +8034,7 @@ fn gen_general_group(
     name_counts: &mut List<[String, i32]>,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     decided: Option<String> = null,
+    atn_dec: i32 = -1,
 ) {
     let _ = dedup_name(&general_group_field_name(gs.group_index), name_counts);
     let [classes, groups] = group_partition(alts, empty_alt_admits, ctx);
@@ -8168,6 +8050,7 @@ fn gen_general_group(
         ctx,
         name_counts,
         decided,
+        atn_dec,
     );
 }
 
@@ -8183,6 +8066,7 @@ fn gen_rule_ref_group(
     name_counts: &mut List<[String, i32]>,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     decided: Option<String> = null,
+    atn_dec: i32 = -1,
 ) {
     let _ = dedup_name(&group_field_base_name(alts), name_counts);
     // One rule call per alternative, and that rule can be nullable, so the
@@ -8200,6 +8084,7 @@ fn gen_rule_ref_group(
         ctx,
         name_counts,
         decided,
+        atn_dec,
     );
 }
 
@@ -8430,45 +8315,139 @@ fn lr_scan_local(lr_idx: i32) -> String {
     return `_lr_scan_${lr_idx}`;
 }
 
-fn gen_prediction_code<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
-    w: &mut CodeWriter,
-    node: &PredictionNode,
-    fn_name: S,
-    alts: &List<Alternative>,
-    lowered_rule: &Rule,
-    type_name: S1,
-    ctx: &mut GenContext,
-    rule_display: S2,
-    proven_first: &List<String>,
-) {
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display, proven_first);
-}
-
-
-/// Emit the per-alt index dispatch shared by the longest-match tournament
-/// (`var` = `_sd_best_i`) and the AtEndConflict ATN route (`var` = `_atn_alt`):
-/// a single `trace_pick`, one `if ${var} == ${idx} { return _alt_${idx} }` per
-/// alt, then an unconditional fallthrough to the last alt (its parse path
-/// surfaces a useful diagnostic when `var` matched nothing).
+/// Run the alternative `var` names, for the parse tournament (`_sd_best_i`)
+/// and the ATN route (`_atn_alt`). The last alt runs untested: where `var`
+/// matched nothing, its parse reports the mismatch.
 fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
+    side: PickSide,
     var: S,
     sorted_indices: &List<i32>,
     fn_name: S1,
     rule_display: S2,
     ctx: &GenContext,
 ) {
-    if ctx.is_trace() {
-        w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${var.to_string()});`);
-    }
+    emit_trace_pick(w, side, &rule_display, &var, ctx);
     // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(`if ${var} == ${idx}`);
-        w.line(&alt_helper_exit(&fn_name, idx, ctx));
+        emit_leaf_pick(w, side, &fn_name, idx, 0, ctx);
         w.end();
     }
-    w.line(&alt_helper_exit(&fn_name, sorted_indices[sorted_indices.len() - 1], ctx));
+    emit_leaf_pick(w, side, &fn_name, sorted_indices[sorted_indices.len() - 1], 0, ctx);
+}
+
+/// Run alternative `idx` from the rule's start, `skip` tokens behind the cursor,
+/// as the rule's whole match.
+fn emit_leaf_pick<S: AsStrSlice>(w: &mut CodeWriter, side: PickSide, fn_name: S, idx: i32, skip: i32, ctx: &GenContext) {
+    match side {
+        Parse => {
+            if skip > 0 {
+                w.line(`p.pos -= ${skip};`);
+            }
+            emit_alt_helper_exit(w, fn_name, idx, ctx);
+        },
+        Scan => {
+            w.line(`return ${alt_scan_call(idx, ctx)};`);
+        },
+    }
+}
+
+/// The call scanning the current rule's alternative `idx` from the rule's start.
+fn alt_scan_call(idx: i32, ctx: &GenContext) -> String {
+    let Some(scan_fn) = ctx.alt_scan_fn(idx) else {
+        panic(`alternative ${idx} of rule ${ctx.current_rule_index()} is picked without a scan function`);
+    };
+    return `${scan_fn}(tokens, start${scan_trailing_args(ctx)})`;
+}
+
+/// What a rule does when its choice finds no viable alternative.
+fn emit_no_viable_pick(w: &mut CodeWriter, side: PickSide, ctx: &GenContext) {
+    match side {
+        Parse => {
+            w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+            emit_no_viable_return(w, ctx);
+        },
+        Scan => {
+            w.line("return -1;");
+        },
+    }
+}
+
+/// Predicate-gated selection for an interchangeable `Ambiguous` group, in
+/// grammar order: the first alt whose predicates hold wins, an unpredicated alt
+/// closes the chain, and all-false is no viable alternative. A gate the scan
+/// cannot evaluate counts as holding there: any interchangeable alt scans the same.
+fn gen_predicate_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    amb_alts: &List<i32>,
+    alts: &List<Alternative>,
+    fn_name: S,
+    ctx: &mut GenContext,
+    rule_display: S1,
+) {
+    let mut opened = false;
+    for let idx of amb_alts.sorted() {
+        let cond = side_gate(side, &alts[idx], ctx);
+        if cond.is_empty() {
+            if opened {
+                w.else_begin("else");
+            }
+            emit_gated_leaf(w, side, &fn_name, idx, ctx, &rule_display);
+            if opened {
+                w.end();
+            }
+            return;
+        }
+        if opened {
+            w.else_begin(`else if ${cond}`);
+        } else {
+            w.begin(`if ${cond}`);
+            opened = true;
+        }
+        emit_gated_leaf(w, side, &fn_name, idx, ctx, &rule_display);
+    }
+    w.else_begin("else");
+    emit_no_viable_pick(w, side, ctx);
+    w.end();
+}
+
+fn emit_gated_leaf<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    fn_name: S,
+    idx: i32,
+    ctx: &GenContext,
+    rule_display: S1,
+) {
+    emit_trace_pick(w, side, rule_display, `${idx}`, ctx);
+    emit_leaf_pick(w, side, fn_name, idx, 0, ctx);
+}
+
+/// The scan's `emit_scan_tournament`, where a gate the scan cannot evaluate
+/// counts as holding. With nothing scanning, `fall_through` leaves the decision
+/// and otherwise the scan fails.
+fn emit_scan_side_tournament(w: &mut CodeWriter, indices: &List<i32>, ctx: &GenContext, fall_through: bool) {
+    w.line("let mut best: i32 = -1;");
+    gen_scan_gate_save(w, ctx, "best", /*mutable=*/ true);
+    let order = indices.sorted();
+    for let mut k = 0; k < order.len(); k += 1 {
+        let idx = order[k];
+        if k > 0 {
+            gen_scan_gate_restore(w, ctx, "start");
+        }
+        let end = `try_${idx}_end`;
+        w.line(`let ${end} = ${alt_scan_call(idx, ctx)};`);
+        w.line(&scan_gate_best_commit(ctx, "best", `${end} > best`, &end));
+    }
+    gen_scan_rewind_break(w, ctx, "best", "best >= 0", "return pos;");
+    if fall_through {
+        gen_scan_gate_restore(w, ctx, "start");
+    } else {
+        w.line("return -1;");
+    }
 }
 
 
@@ -8566,7 +8545,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     if guard_pick {
         w.begin("if _sd_best_i >= 0");
     }
-    emit_index_pick_dispatch(w, "_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
+    emit_index_pick_dispatch(w, PickSide::Parse, "_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
     if guard_pick {
         w.end();
     }
@@ -8577,7 +8556,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
 /// `emit_scan_tournament`.
 fn alts_all_scan_full(indices: &List<i32>, alts: &List<Alternative>, ctx: &mut GenContext) -> bool {
     for let idx of indices {
-        if !alt_has_scan(&alts[*idx].elements, ctx) || !alt_scan_is_full(&alts[*idx].elements, ctx) {
+        if !alt_scan_is_full(&alts[*idx].elements, ctx) {
             return false;
         }
     }
@@ -8603,7 +8582,7 @@ fn alt_initial_gate(idx: i32, ctx: &mut GenContext) -> Option<String> {
     if !alt_has_gate(alt, ctx) {
         return null;
     }
-    return Option::Some(join_gate_conds(&alt_initial_gate_conditions(alt, ctx)));
+    return Option::Some(alt_gate_condition(alt, ctx));
 }
 
 /// Whether alternative `idx`'s scan helper tests its gate itself, against a
@@ -8644,7 +8623,8 @@ fn dispatch_fallback_indices(
 /// the `Consume` steps crossed terminals every alt shares, so FIRST at `skip`
 /// is exact. It is not exact for an alt whose remainder there can match empty:
 /// that alt also admits whatever follows the rule at the call site, which no
-/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`).
+/// FIRST-derived branch set names (`a : X Y? | X Z` on `X`). Nor for one that
+/// reaches a `.` or `~X`, which admits every token.
 fn dispatch_claims_every_first_token(
     d: &PredictionDispatch,
     indices: &List<i32>,
@@ -8664,7 +8644,8 @@ fn dispatch_claims_every_first_token(
         }
     }
     for let idx of indices {
-        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip) {
+        if ctx.tail_is_nullable_deep(&alts[*idx].elements, skip)
+            || ctx.elements_reach_open_end(&alts[*idx].elements, skip) {
             return false;
         }
         for let tk of &ctx.first_of_elements_from(&alts[*idx].elements, skip) {
@@ -8678,6 +8659,7 @@ fn dispatch_claims_every_first_token(
 
 fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
+    side: PickSide,
     node: &PredictionNode,
     fn_name: S,
     alts: &List<Alternative>,
@@ -8687,15 +8669,11 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     skip: i32,
     rule_display: S2,
     proven_first: &List<String> = &EMPTY_SYNC,
+    read: &List<i32> = &NO_READS,
 ) {
     match node {
         Leaf(idx) => {
-            // Consume advanced `p.pos` past `skip` shared tokens without building a
-            // node; rewind so `_alt_<idx>` re-parses the alt from its start.
-            if skip > 0 {
-                w.line(`p.pos -= ${skip};`);
-            }
-            w.line(&alt_helper_exit(&fn_name, *idx, ctx));
+            emit_leaf_pick(w, side, &fn_name, *idx, skip, ctx);
         },
         Consume(c) => {
             // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
@@ -8703,78 +8681,68 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // match every alt below (the group need not contain alt 0; regression:
             // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
             // rewinds exactly what was advanced.
-            if consume_advances_cursor(c, alts, skip) {
+            let advances = consume_advances_cursor(c, alts, skip);
+            if advances && side matches { Parse } {
                 w.line("p.pos += 1;");
-                gen_prediction_code_inner(
-                    w,
-                    &c.child,
-                    fn_name,
-                    alts,
-                    lowered_rule,
-                    type_name,
-                    ctx,
-                    skip + 1,
-                    rule_display,
-                );
-            } else {
-                gen_prediction_code_inner(w, &c.child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
             }
+            gen_prediction_code_inner(
+                w,
+                side,
+                &c.child,
+                fn_name,
+                alts,
+                lowered_rule,
+                type_name,
+                ctx,
+                if advances { skip + 1 } else { skip },
+                rule_display,
+                &EMPTY_SYNC,
+                read,
+            );
         },
         Ambiguous(a) => {
+            assert skip == 0, "a Consume leading to an Ambiguous node is stripped when the tree is built";
             // Sort by element count for proper ordering (single RuleRef first, etc.)
             let mut sorted_indices = a.alts.sorted();
             sort_group_by_element_count(&mut sorted_indices, alts);
-            if skip == 0 {
-                if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
-                    gen_predicate_gated_dispatch(w, &a.alts, alts, fn_name, ctx, rule_display);
-                    return;
+            if ctx.emit_actions() && ambiguous_group_predicate_gated(&a.alts, alts, ctx) {
+                gen_predicate_gated_pick(w, side, &a.alts, alts, fn_name, ctx, rule_display);
+                return;
+            }
+            if ambiguous_node_routes_via_atn(a, rule_display, ctx) {
+                let in_scan = side matches { Scan };
+                assert !in_scan || ctx.needs_scan_atn(), "a scan picks through the ATN only where every scan borrows its state";
+                let gates = atn_decision_gates(&a.alts, alts, ctx, in_scan);
+                let dec = ctx.atn_rule_body_decision(ctx.current_rule_index());
+                if in_scan {
+                    gen_atn_body_pick(w, dec, &gates, "tokens", "pos", ctx);
+                } else {
+                    gen_atn_body_pick(w, dec, &gates, "&p.kinds", "p.pos", ctx);
                 }
-                let amb_rule = ctx.current_rule_index();
-                let route_via_atn = ambiguous_node_routes_via_atn(a, rule_display, ctx);
-                if route_via_atn {
-                    let dec = ctx.atn_rule_body_decision(amb_rule);
-                    let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
-                    w.line(
-                        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
-                    );
-                    // A seed can exclude every alt (`_atn_alt == -1`), which the
-                    // index dispatch would otherwise route to its last alt.
-                    if !disabled_arg.is_empty() {
-                        w.begin("if _atn_alt < 0");
-                        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-                        emit_no_viable_return(w, ctx);
-                        w.end();
-                    }
-                    emit_index_pick_dispatch(w, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
-                    return;
+                // A seed can exclude every alt (`_atn_alt == -1`), which the
+                // index dispatch would otherwise route to its last alt.
+                if !gates.is_empty() {
+                    w.begin("if _atn_alt < 0");
+                    emit_no_viable_pick(w, side, ctx);
+                    w.end();
                 }
-                // Every alternative reaching codegen scans in full:
-                // non-scannability's only source is a `RuleRef` to a name that
-                // is not a parser rule, which `ir.wado` rejects first. Assert
-                // that rather than keep the try-fail-retry lowerings only
-                // breaking it could reach.
-                assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
-                let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
-                assert all_scan_full, `an alternative of ${rule_display} is not fully scannable`;
-                emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
-            } else {
-                // Prefix already consumed — should not happen.
-                // Consume nodes that lead to Ambiguous are stripped at build time.
-                panic("unreachable: Consume leading to Ambiguous should have been stripped");
+                emit_index_pick_dispatch(w, side, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                return;
+            }
+            // Every alternative reaching codegen scans in full:
+            // non-scannability's only source is a `RuleRef` to a name that
+            // is not a parser rule, which `ir.wado` rejects first. Assert
+            // that rather than keep the try-fail-retry lowerings only
+            // breaking it could reach.
+            assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+            let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
+            assert all_scan_full, `an alternative of ${rule_display} is not fully scannable`;
+            match side {
+                Parse => emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx),
+                Scan => emit_scan_side_tournament(w, &sorted_indices, ctx, false),
             }
         },
         Dispatch(d) => {
-            // The caller's `kind` is the cursor token only while nothing has
-            // been consumed, so a `Consume` prefix re-reads.
-            let check_var = if d.depth == 0 {
-                if skip == 0 {
-                    DISPATCH_KIND_LOCAL;
-                } else {
-                    `${PARSER_HANDLE}.peek_kind()`;
-                }
-            } else {
-                `p.peek_at(${d.depth})`;
-            };
             let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
             if d.depth == 0
                 && skip == 0
@@ -8783,6 +8751,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 && proves(proven_first, &d.branches[0].tokens) {
                 gen_prediction_code_inner(
                     w,
+                    side,
                     &d.branches[0].child,
                     fn_name,
                     alts,
@@ -8791,15 +8760,20 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                     ctx,
                     skip,
                     rule_display,
+                    &EMPTY_SYNC,
+                    read,
                 );
                 return;
             }
+            let mut read_here = *read;
+            let check_var = dispatch_check_var(w, side, skip, d.depth, &mut read_here);
             let mut arms: List<DecisionBranch> = [];
             let mut bodies: List<String> = [];
             for let branch of &d.branches {
                 let mut body = CodeWriter::with_capacity(256);
                 gen_prediction_code_inner(
                     &mut body,
+                    side,
                     &branch.child,
                     fn_name,
                     alts,
@@ -8808,6 +8782,8 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                     ctx,
                     skip,
                     rule_display,
+                    &EMPTY_SYNC,
+                    &read_here,
                 );
                 arms.push(DecisionBranch { test: admits_or_everything(&branch.tokens), gate: "", alts: [] });
                 bodies.push(body.to_string());
@@ -8821,19 +8797,61 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // lowering already chose for this overlap group.
             if !fallback.is_empty() {
                 w.else_begin("else");
-                // The tournament scans each alt from its first element, as
-                // `Leaf` does; the rule's error path expects the cursor back.
-                if skip > 0 {
-                    w.line(`p.pos -= ${skip};`);
-                }
-                emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx, /*fall_through_on_no_match=*/ true);
-                if skip > 0 {
-                    w.line(`p.pos += ${skip};`);
+                match side {
+                    Parse => {
+                        // The tournament scans each alt from its first element, as
+                        // `Leaf` does; the rule's error path expects the cursor back.
+                        if skip > 0 {
+                            w.line(`p.pos -= ${skip};`);
+                        }
+                        emit_scan_tournament(
+                            w,
+                            &fallback,
+                            fn_name,
+                            rule_display,
+                            ctx,
+                            /*fall_through_on_no_match=*/ true,
+                        );
+                        if skip > 0 {
+                            w.line(`p.pos += ${skip};`);
+                        }
+                    },
+                    Scan => emit_scan_side_tournament(w, &fallback, ctx, true),
                 }
             }
             w.end();
         },
     }
+}
+
+/// Which function a rule's choice between its alternatives is emitted into.
+/// Both make the same choice; only how each reads the input and commits differs.
+enum PickSide {
+    Parse,
+    Scan,
+}
+
+global NO_READS: List<i32> = [];
+
+/// The expression a `Dispatch` tests: the token `depth` past the `skip` tokens
+/// the tree consumed. A scan reads it into a local once, recording it in `read`.
+fn dispatch_check_var(w: &mut CodeWriter, side: PickSide, skip: i32, depth: i32, read: &mut List<i32>) -> String {
+    let at = skip + depth;
+    if at == 0 {
+        return DISPATCH_KIND_LOCAL;
+    }
+    return match side {
+        // `Consume` moved the parse's cursor past the skipped tokens.
+        Parse => if depth == 0 { `${PARSER_HANDLE}.peek_kind()` } else { `${PARSER_HANDLE}.peek_at(${depth})` },
+        Scan => {
+            let local = `la_${at}`;
+            if !read.contains(&at) {
+                gen_kind_read(w, &local, "tokens", `pos + ${at}`);
+                read.push(at);
+            }
+            local;
+        },
+    };
 }
 
 /// Collect the alt indices whose per-alt `_scan_<n>` helper the dispatch
@@ -8884,92 +8902,162 @@ fn collect_referenced_scan_alts(
     }
 }
 
-/// Emit the body of a multi-alt rule whose alts have overlapping
-/// FIRST sets — the prediction codepath. `fn_name` is the name of
-/// the surrounding emit function (`parse_<rule>`); it's threaded into
-/// `gen_prediction_code` so the dispatcher references this rule's own
-/// `_alt_<n>` / `_scan_<n>` helpers.
+/// The choice of a multi-alt rule whose alts' FIRST sets overlap: an arm per
+/// overlap group, a contested one decided by its prediction tree.
 fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
+    side: PickSide,
     rule: &ParserRule,
     lowered_rule: &Rule,
     type_name: S,
     ctx: &mut GenContext,
-    groups: &List<List<i32>>,
-    first_sets: &List<List<String>>,
-    non_lr_indices: &List<i32>,
+    og: &RuleOverlap,
     fn_name: S1,
 ) {
-    w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
+    let non_lr_indices = &og.non_lr_indices;
+    emit_pick_kind_read(w, side);
 
     // The arms are independent `if`s that return, so an undecidable one goes
     // last or the alternatives after it are dead. The partition is over the
     // non-LR alternatives, so groups and verdicts are slots into
     // `non_lr_indices`.
-    let classes = alt_classes(non_lr_indices, &rule.alternatives, first_sets, ctx);
+    let classes = alt_classes(non_lr_indices, &rule.alternatives, &og.first_sets, ctx);
     let mut admits: List<Admits> = [];
     let mut untestable: List<bool> = [];
-    for let group of groups {
-        let ungated = group.len() != 1 || !alt_has_gate(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+    for let group of &og.groups {
+        let ungated = group.len() != 1 || !side_has_gate(side, &rule.alternatives[non_lr_indices[group[0]]], ctx);
         admits.push(group_branch_admits(group, &classes));
         untestable.push(admits_is_untestable(&admits[admits.len() - 1]) && ungated);
     }
 
     for let slot of &arms_fallback_last(&untestable) {
         let g = *slot;
-        let group = &groups[g];
+        let group = &og.groups[g];
         let gate = if group.len() == 1 {
-            alt_gate_and_suffix(&rule.alternatives[non_lr_indices[group[0]]], ctx);
+            and_gate(side_gate(side, &rule.alternatives[non_lr_indices[group[0]]], ctx));
         } else {
             String::new();
         };
-        // The raw union, not `admits[g]`: rule level does not merge the other
-        // alternatives into an open-ended branch (see `rule_overlap_groups`),
-        // so the narrower test is what keeps the arms after it reachable. The
-        // `#[TODO]` in `driver_cst_open_ended_rule_alt_test.wado` is the cost.
-        let cond = ctx.admits_check_str(
-            &admits_or_everything(&slot_first_union(group, first_sets)),
-            &DISPATCH_KIND_LOCAL,
-        );
-        w.begin(`if ${cond}${gate}`);
+        let proven = admits_kinds(&admits[g]);
+        w.begin(`if ${ctx.admits_check_str(&admits[g], &DISPATCH_KIND_LOCAL)}${gate}`);
 
         if group.len() == 1 {
-            let alt_index = non_lr_indices[group[0]];
-            let alt = &rule.alternatives[alt_index];
-            let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-            gen_trace_pick(w, rule, alt_index, ctx);
-            gen_alt_body(
-                w,
-                type_name,
-                Option::Some(body.case_name),
-                Option::Some(body.struct_name),
-                alt,
-                body,
-                alt_index,
-                rule_alts_labeled(&rule.alternatives),
-                &NO_AFTER,
-                ctx,
-                &slot_first_union(group, first_sets),
-            );
+            gen_pick_alt(w, side, rule, lowered_rule, type_name, non_lr_indices[group[0]], ctx, &proven);
         } else {
-            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
-            gen_prediction_code(
+            let tree = build_group_prediction_tree(
+                &rule.alternatives,
+                group,
+                &og.first_sets,
+                non_lr_indices,
+                ctx,
+                &og.end_follow,
+            );
+            gen_prediction_code_inner(
                 w,
+                side,
                 &tree,
                 fn_name,
                 &rule.alternatives,
                 lowered_rule,
                 type_name,
                 ctx,
+                0,
                 &rule.name,
-                &slot_first_union(group, first_sets),
+                &proven,
             );
         }
 
         w.end();
     }
 
-    gen_error_fallback(w, rule, type_name, ctx);
+    // A nullable alternative the rule's FOLLOW selects still matches empty on a
+    // lookahead nothing admits, leaving the caller to report it, as in a group.
+    if let Some(alt_index) = follow_admitted_nullable_alt(rule, non_lr_indices, &og.end_follow, ctx) {
+        w.begin("scope:");
+        gen_pick_alt(w, side, rule, lowered_rule, type_name, alt_index, ctx, &EMPTY_SYNC);
+        w.end();
+    }
+    emit_no_alternative(w, side, rule, type_name, ctx);
+}
+
+/// An alternative's gate as `side` evaluates it, or "" where it has none that
+/// side can. The parse's registers the predicate its condition names.
+fn side_gate(side: PickSide, alt: &Alternative, ctx: &mut GenContext) -> String {
+    return match side {
+        Parse => alt_gate_condition(alt, ctx),
+        Scan => alt_scan_gate_conditions(alt, ctx),
+    };
+}
+
+/// Whether `side` tests a gate on `alt`, asked without registering it.
+fn side_has_gate(side: PickSide, alt: &Alternative, ctx: &GenContext) -> bool {
+    return match side {
+        Parse => alt_has_gate(alt, ctx),
+        Scan => !alt_scan_gate_conditions(alt, ctx).is_empty(),
+    };
+}
+
+/// The `kind` local a rule's choice tests first.
+fn emit_pick_kind_read(w: &mut CodeWriter, side: PickSide) {
+    match side {
+        Parse => w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`),
+        Scan => gen_kind_read(w, DISPATCH_KIND_LOCAL, "tokens", "pos"),
+    }
+}
+
+/// Commit to the rule's alternative `alt_index` and run it in place.
+fn gen_pick_alt<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    rule: &ParserRule,
+    lowered_rule: &Rule,
+    type_name: S,
+    alt_index: i32,
+    ctx: &mut GenContext,
+    proven_first: &List<String>,
+) {
+    match side {
+        Parse => gen_picked_rule_alt(w, rule, lowered_rule, type_name, alt_index, ctx, proven_first),
+        Scan => {
+            let body = rule_alt_scan_body(lowered_rule, alt_index).unwrap();
+            if gen_scan_alt_in_place(w, alt_index, body, &known_at_start(proven_first), ctx) {
+                w.line("return -1;");
+            }
+        },
+    }
+}
+
+/// What a rule does when no alternative's test admits the lookahead.
+fn emit_no_alternative<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    side: PickSide,
+    rule: &ParserRule,
+    type_name: S,
+    ctx: &mut GenContext,
+) {
+    match side {
+        Parse => gen_error_fallback(w, rule, type_name, ctx),
+        Scan => w.line("return -1;"),
+    }
+}
+
+/// The first alternative `admit_rule_follow_into_nullable` gave the rule's FOLLOW.
+fn follow_admitted_nullable_alt(
+    rule: &ParserRule,
+    non_lr_indices: &List<i32>,
+    end_follow: &List<String>,
+    ctx: &mut GenContext,
+) -> Option<i32> {
+    if end_follow.is_empty() {
+        return null;
+    }
+    for let idx of non_lr_indices {
+        let alt = &rule.alternatives[*idx];
+        if alt_class_is_nullable(&alt_class_of(alt, ctx)) {
+            return Option::Some(*idx);
+        }
+    }
+    return null;
 }
 
 /// `_parse_<rule>` for a left-recursive rule whose surface body

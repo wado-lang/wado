@@ -13,8 +13,14 @@ use crate::token::Span;
 
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::util;
+<<<<<<< HEAD
 use super::{Elaborator, ForwardDefaults};
 use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
+||||||| 1c849b3d8
+use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
+=======
+use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
+>>>>>>> origin/main
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -23,7 +29,10 @@ use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{
     GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
-use crate::name::{mangle_local_item_name, namespace_member_alias};
+use crate::name::{
+    constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
+    namespace_member_alias,
+};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, escape, hashmap, tir};
@@ -1207,6 +1216,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         ref_binding: RefBinding,
     ) {
+        if type_id == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            for p in subpatterns {
+                let error = TypeTable::ERROR;
+                self.resolve_let_pattern_inner(p, error, is_mut, span, site, ctx, ref_binding);
+            }
+            return;
+        }
         match pattern {
             ast::Pattern::Ident {
                 id,
@@ -1589,16 +1607,71 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.immutable_global_type(name).is_some()
     }
 
+<<<<<<< HEAD
     /// The type of the immutable global `name`, defined here or imported.
     fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
         let decls = &self.sem.decls;
         match decls.current_module_globals.get(name) {
             Some(&(ty, mutable)) => (!mutable).then_some(ty),
             None => decls
+||||||| 1c849b3d8
+        self.sem
+            .decls
+            .current_module_globals
+            .get(name)
+            .is_some_and(|&(_ty, mutable)| !mutable)
+            || self
+                .sem
+                .decls
+=======
+    /// The type of the immutable global `name` refers to, if it names one.
+    fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
+        match self.sem.decls.current_module_globals.get(name) {
+            Some(&(ty, mutable)) => (!mutable).then_some(ty),
+            None => self
+                .sem
+                .decls
+>>>>>>> origin/main
                 .imported_globals
                 .get(name)
                 .and_then(|&(_, _, ty, mutable)| (!mutable).then_some(ty)),
         }
+<<<<<<< HEAD
+||||||| 1c849b3d8
+                .is_some_and(|(_m, _n, _ty, mutable)| !*mutable)
+=======
+    }
+
+    /// Where a constant pattern's `scrutinee == constant` is a trait call, dispatch
+    /// it on the pattern and reserve the local reify holds the scrutinee in.
+    fn resolve_constant_pattern(
+        &mut self,
+        pattern_id: AstId,
+        scrutinee: TypeId,
+        constant: TypeId,
+        ctx: &mut FunctionContext,
+        span: Span,
+    ) {
+        {
+            let type_table = self.tysys.type_table.borrow();
+            // A scalar compares by instruction, and a wide int's constant is
+            // folded to a literal pattern.
+            if type_table.is_scalar_primitive_like(scrutinee) || type_table.is_wide_int(scrutinee) {
+                return;
+            }
+        }
+        self.resolve_binary_op(
+            scrutinee,
+            BinaryOp::Eq,
+            constant,
+            span,
+            span,
+            Some(pattern_id),
+        );
+        if self.sem.types.operator_dispatch.contains_key(&pattern_id) {
+            ctx.add_local(constant_pattern_local_name(), scrutinee, false, None);
+        }
+>>>>>>> origin/main
     }
 
     /// Bind a refutable pattern's variables into `ctx`, returning them in
@@ -1622,6 +1695,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
+        if scrutinee_type == TypeTable::ERROR
+            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
+        {
+            return subpatterns
+                .into_iter()
+                .flat_map(|p| {
+                    self.resolve_if_pattern_inner(p, TypeTable::ERROR, ctx, span, ref_binding)
+                })
+                .collect();
+        }
         if let Some(site) = ctx.irrefutable_site
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
@@ -1666,10 +1749,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
+<<<<<<< HEAD
                 if !is_mut && let Some(ty) = self.immutable_global_type(name) {
+||||||| 1c849b3d8
+                if !is_mut && self.is_immutable_global(name) {
+=======
+                if !is_mut && let Some(constant) = self.immutable_global_type(name) {
+>>>>>>> origin/main
                     self.record_item_reference_by_name(*id, name);
+<<<<<<< HEAD
                     let (scrutinee_type, _) = self.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(ty, scrutinee_type, *name_span);
+||||||| 1c849b3d8
+=======
+                    self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
+>>>>>>> origin/main
                     return Vec::new();
                 }
                 let binding_type =
@@ -1778,15 +1872,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
+<<<<<<< HEAD
                         self.typecheck(assoc.ty, scrutinee_type, *span);
+||||||| 1c849b3d8
+=======
+                        if let Some(id) = *name_id {
+                            self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
+                        }
+>>>>>>> origin/main
                         return Vec::new();
                     }
 
+<<<<<<< HEAD
                     if let Some((alias, ty)) =
                         self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
+||||||| 1c849b3d8
+                    // `ns::NAME` naming an immutable global the namespace exports
+                    // is a constant-value pattern, as the bare `NAME` is.
+                    if let Some(alias) = self
+                        .sem
+                        .imports
+                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
+                        .filter(|alias| self.is_immutable_global(alias))
+=======
+                    // `ns::NAME` naming an immutable global the namespace exports
+                    // is a constant-value pattern, as the bare `NAME` is.
+                    if let Some((alias, constant)) = self
+                        .sem
+                        .imports
+                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
+                        .and_then(|alias| {
+                            let constant = self.immutable_global_type(&alias)?;
+                            Some((alias, constant))
+                        })
+>>>>>>> origin/main
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
+                            self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
                         }
                         self.typecheck(ty, scrutinee_type, *span);
                         return Vec::new();
@@ -1930,7 +2053,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
-                            found: format!("{resolved_type:?}"),
+                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
                             span: *span,
                         });
                         TypeTable::UNKNOWN
@@ -2093,14 +2216,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
 
-                    if first_names != alt_names {
-                        let fn_: Vec<&str> = first_names.iter().map(|(n, _)| *n).collect();
-                        let an: Vec<&str> = alt_names.iter().map(|(n, _)| *n).collect();
+                    // Over an ERROR scrutinee a bare case name reads as a
+                    // binding, so the names compare nothing.
+                    if scrutinee_type != TypeTable::ERROR && first_names != alt_names {
+                        let shown = |names: &[(&str, tir::TypeId)]| {
+                            if names.is_empty() {
+                                return "nothing".to_string();
+                            }
+                            let tt = self.tysys.type_table.borrow();
+                            names
+                                .iter()
+                                .map(|(n, ty)| format!("`{n}: {}`", tt.type_name(*ty)))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        };
                         let _ = self.emit(TypeError::InvalidPattern {
                             message: format!(
                                 "or-pattern alternatives must bind the same names with the same types: \
-                                 alternative 1 binds {:?}, but alternative {} binds {:?}",
-                                fn_, i + 1, an,
+                                 alternative 1 binds {}, but alternative {} binds {}",
+                                shown(&first_names),
+                                i + 1,
+                                shown(&alt_names),
                             ),
                             span,
                         });
@@ -2157,6 +2293,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .is_resource_narrowing(scrutinee_type, target)
                 {
+                    self.require_handle_classes(target, *typed_span);
                     match ctx.irrefutable_site {
                         Some(site) => self.reject_refutable_narrowing(
                             scrutinee_type,
@@ -2173,6 +2310,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Parser error-recovery placeholder; inert.
             Pattern::Error(_) => Vec::new(),
+        }
+    }
+
+    /// A narrowing tests the class a handle carries, so its target must number one.
+    fn require_handle_classes(&mut self, target: TypeId, span: Span) {
+        let unnumbered = {
+            let tt = self.tysys.type_table.borrow();
+            tt.narrowing_classes(target)
+                .is_none()
+                .then(|| tt.type_name(target))
+        };
+        if let Some(name) = unnumbered {
+            let _ = self.emit(TypeError::ResourceClasses {
+                message: format!(
+                    "a type pattern cannot narrow to `{name}`: it declares no `#[cm(..., classes = \"lo..=hi\")]`"
+                ),
+                span,
+            });
         }
     }
 
@@ -2577,21 +2732,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.type_table.borrow().get(iterable_type_id),
                 ResolvedType::Unknown | ResolvedType::TypeParam { .. }
             );
-            if !implements_into_iter {
-                let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
-                let _ = self.emit(TypeError::MissingTraitImpl {
-                    type_name,
-                    trait_name: "IntoIterator".to_string(),
-                    span: for_of.span,
-                });
-            }
-            // Only record the desugar tag when the iterable actually
-            // supports iteration; tagging an error-path node would lead
-            // reify to expand a TIR shape the elaborator never produced.
-            if implements_into_iter {
+            let into_iter_receiver = if implements_into_iter {
+                // Reify expands the tag, so only an iterable that supports
+                // iteration carries one.
                 self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
-            }
-            self.resolve_iterator_for_of(for_of, ctx);
+                if is_enumerate {
+                    self.resolve_expr(&for_of.iterable, ctx, None)
+                } else {
+                    iterable_type_id
+                }
+            } else {
+                if iterable_type_id != TypeTable::ERROR {
+                    let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
+                    let _ = self.emit(TypeError::MissingTraitImpl {
+                        type_name,
+                        trait_name: "IntoIterator".to_string(),
+                        span: for_of.span,
+                    });
+                }
+                TypeTable::ERROR
+            };
+            self.resolve_iterator_for_of(for_of, into_iter_receiver, ctx);
         }
 
         ctx.for_continue_labels = saved_continue;
@@ -2679,7 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
             Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            _ => (format!("$pattern_temp_{unique_id}"), None, None),
+            _ => (minted_name("pattern_temp", unique_id), None, None),
         };
 
         let is_mut = for_of.is_mut;
@@ -2891,19 +3052,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// binding `$iter_N = iterable.into_iter()` around a `loop` that matches
     /// `$iter_N.next()`, breaking on `None`. The synthetic local and both
     /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
-    /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
-    fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
+    /// user into `Iterator::next`. `into_iter_receiver_type` is the type of
+    /// `for_of.iterable` as written, or `ERROR` where it cannot be iterated.
+    fn resolve_iterator_for_of(
+        &mut self,
+        for_of: &ForOfStmt,
+        into_iter_receiver_type: TypeId,
+        ctx: &mut FunctionContext,
+    ) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
         let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
-
-        // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
-        // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
-        // `.filter(…)`, `.map(…)`) is already part of `for_of.iterable`.
-        let into_iter_receiver_type = self.resolve_expr(&for_of.iterable, ctx, None);
 
         // `<receiver>.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
@@ -2941,7 +3103,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),
-            ResolvedType::Unknown | ResolvedType::TypeParam { .. }
+            ResolvedType::Unknown | ResolvedType::Error | ResolvedType::TypeParam { .. }
         ) {
             let type_name = self.tysys.type_table.borrow().type_name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
@@ -3018,10 +3180,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some((def, type_args)) => {
                 self.get_variant_case_payload_type(def, &some_case_name, &type_args, span)
             }
-            // `.next()` returned an unexpected non-Option type. The iterator-
-            // trait check above (or method dispatch downstream) has already
-            // diagnosed it; degrade to `UNKNOWN` to keep resolution going.
-            None => TypeTable::UNKNOWN,
+            // A non-Option `.next()` was diagnosed above, so the binding
+            // carries the error.
+            None => TypeTable::ERROR,
         };
 
         if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
@@ -3222,7 +3383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
-        let body_label = format!("$for_{}_body", ctx.fresh_serial());
+        let body_label = for_body_label(ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant
@@ -3457,6 +3618,24 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
             span: *span,
         },
         other => other.clone(),
+    }
+}
+
+/// The subpatterns a pattern reaches through the scrutinee's shape; `None` for
+/// one whose own checks stay sound over an ERROR scrutinee.
+fn shape_checked_subpatterns(pattern: &Pattern) -> Option<Vec<&Pattern>> {
+    match pattern {
+        Pattern::Tuple(patterns, _) => Some(patterns.iter().collect()),
+        Pattern::Struct { fields, .. } => Some(fields.iter().map(|f| &f.pattern).collect()),
+        Pattern::Variant { bindings, .. } => Some(bindings.iter().collect()),
+        Pattern::Ident { .. }
+        | Pattern::MutIdent { .. }
+        | Pattern::Wildcard
+        | Pattern::Literal(_)
+        | Pattern::Range { .. }
+        | Pattern::Or(_)
+        | Pattern::Typed { .. }
+        | Pattern::Error(_) => None,
     }
 }
 

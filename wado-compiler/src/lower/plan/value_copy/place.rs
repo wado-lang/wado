@@ -504,6 +504,45 @@ fn place_walk(expr: &TirExpr, source_forms: Option<&CompilerItems>) -> bool {
     }
 }
 
+/// The values a source place computes on its way to the storage, in the order
+/// it computes them: the subscripts along its index chain.
+pub fn source_place_subscripts_mut<'e>(
+    expr: &'e mut TirExpr,
+    items: &CompilerItems,
+) -> Vec<&'e mut TirExpr> {
+    let mut subscripts = Vec::new();
+    collect_subscripts(expr, items, &mut subscripts);
+    subscripts
+}
+
+fn collect_subscripts<'e>(
+    expr: &'e mut TirExpr,
+    items: &CompilerItems,
+    out: &mut Vec<&'e mut TirExpr>,
+) {
+    match &mut expr.kind {
+        TirExprKind::Index { expr: inner, index } => {
+            collect_subscripts(inner, items, out);
+            out.push(index);
+        }
+        TirExprKind::Call { func, args, .. } if is_index_accessor(func, items) => {
+            let Some((container, subscripts)) = args.split_first_mut() else {
+                unreachable!("an index accessor takes its container first")
+            };
+            collect_subscripts(&mut container.expr, items, out);
+            out.extend(subscripts.iter_mut().map(|arg| &mut arg.expr));
+        }
+        TirExprKind::FieldAccess { expr: inner, .. }
+        | TirExprKind::VariantPayload { expr: inner, .. }
+        | TirExprKind::Cast { expr: inner, .. }
+        | TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef | TirUnaryOp::Deref,
+            expr: inner,
+        } => collect_subscripts(inner, items, out),
+        _ => {}
+    }
+}
+
 /// Whether this callee is what `a[i]` dispatches to: the `Index*` trait method,
 /// or the `array_get_*` builtin under it. Both take the container as `args[0]`.
 fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {

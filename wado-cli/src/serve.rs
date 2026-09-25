@@ -882,7 +882,7 @@ async fn run_http_server(
     let engine =
         runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, runtime_knobs)?;
     let component = Component::new(&engine, &wasm)?;
-    let linker = runtime::create_linker(&engine)?;
+    let linker = runtime::create_linker(&component)?;
     // Open preopens once at startup; they are attached to every worker
     // generation's `WasiState`.
     let preopens = Arc::new(Preopens::open(&preopened_dirs)?);

@@ -1,0 +1,19 @@
+// A type pattern tests the class a handle carries, so its target must be
+// numbered: with no `classes` there is no range to test against.
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+resource EventTarget {}
+
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+resource Node extends EventTarget {}
+
+fn is_node(t: EventTarget) -> bool {
+    return t matches { _: Node };
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "a type pattern cannot narrow to `Node`: it declares no `#[cm(..., classes = \"lo..=hi\")]`",
+    "compile_error_codes": ["RESOURCE_CLASSES"]
+}

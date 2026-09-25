@@ -832,13 +832,13 @@ fn parse_wasm_module_exports(
             .get(local_idx)
             .ok_or_else(|| LoadError::WasmImport {
                 module_source: source.clone(),
-                message: format!("export {name:?} references missing function index"),
+                message: format!("export `{name}` references missing function index"),
             })?;
         let func_ty = func_types
             .get(type_idx as usize)
             .ok_or_else(|| LoadError::WasmImport {
                 module_source: source.clone(),
-                message: format!("export {name:?} references missing type index"),
+                message: format!("export `{name}` references missing type index"),
             })?
             .clone();
 

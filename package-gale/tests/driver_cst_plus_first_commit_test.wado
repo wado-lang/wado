@@ -27,7 +27,7 @@ test "a body that cannot match reports from inside the committed alternative" {
     let bad = pfc::parse("p a");
     assert bad.has_errors(), "the missing `;` is an error";
     let tree = pfc::to_string_tree(&bad);
-    assert tree == "(s p a t)", `the first iteration must be entered, got: ${tree}`;
+    assert tree == "(s p a (t <missing ';'>))", `the first iteration must be entered, got: ${tree}`;
 }
 
 test "prediction that cannot pick reports a no-viable-alternative" {

@@ -1,0 +1,51 @@
+// `r = &m.inner` keeps the object it took, so `r.v` does not become
+// `m.inner.v` across a call, or a store through another handle, that puts a
+// new object in `m.inner`.
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    v: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+#[inline(never)]
+fn swap_in(o: &mut Outer, k: i32) {
+    o.inner = Inner { v: k };
+}
+
+#[inline(never)]
+fn through_call(m: &mut Outer) -> i32 {
+    let r = &m.inner;
+    swap_in(m, 33);
+    return r.v;
+}
+
+#[inline(never)]
+fn through_alias(m: &mut Outer, p: &mut Outer) -> i32 {
+    let r = &m.inner;
+    p.inner = Inner { v: 44 };
+    return r.v;
+}
+
+export fn run() with Stdout {
+    let mut o = Outer { inner: Inner { v: builtin::black_box(3) } };
+    println(`${through_call(&mut o)}`);
+
+    let mut z = Outer { inner: Inner { v: builtin::black_box(4) } };
+    let m = &mut z;
+    let r = &m.inner;
+    swap_in(m, 33);
+    println(`${r.v}`);
+
+    let mut a = Outer { inner: Inner { v: builtin::black_box(5) } };
+    println(`${through_alias(&mut a, &mut a)}`);
+}
+
+__DATA__
+{
+    "stdout": "3\n4\n5\n"
+}

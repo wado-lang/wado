@@ -428,6 +428,9 @@ pub(super) fn freeze_pure_arith(
 
 const TRACE_TARGET: &str = "freeze_refusals";
 
+/// What the local pinning a shared value is called, the `_av` of `let _av`.
+const ANCHORED_VALUE: &str = "av";
+
 /// Per-run tally of what kept the pure kinds in the skeleton, printed under
 /// `WADO_TRACE=freeze_refusals`. It counts nothing with the target off — this
 /// runs once per candidate expression of every function.
@@ -685,8 +688,8 @@ fn apply_field_materialise(
         return false;
     }
     let span = engine.body.exprs[ids[0]].span;
-    let name = format!("$av_{}", engine.locals().len());
-    let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+    let av = engine.alloc_minted_local(ANCHORED_VALUE, id_ty, /* is_mut */ false);
+    let name = engine.local_name(av);
     let let_stmt = engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),
@@ -785,8 +788,8 @@ fn apply_value_freeze(
     let mut changed = false;
     if materialize {
         let (anchor, block) = point.expect("`anchorable` holds only with a point");
-        let name = format!("$av_{}", engine.locals().len());
-        let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
+        let av = engine.alloc_minted_local(ANCHORED_VALUE, id_ty, /* is_mut */ false);
+        let name = engine.local_name(av);
         let read = engine
             .body
             .values

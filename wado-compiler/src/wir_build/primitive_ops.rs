@@ -11,8 +11,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
-use crate::nir_arena::Operand;
-use crate::wir_build::packed_array_is_eager;
+use crate::nir_arena::{Operand, PackedData};
+use crate::wir_build::{packed_array_is_eager, packed_element_consts};
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
@@ -74,51 +74,41 @@ impl PrimitiveKind {
 }
 
 impl FunctionTranslator<'_, '_> {
-    /// Translate a raw constant `Array<u8>` (`ExprKind::PackedArray`) — the
-    /// `repr` of a `String` / `List<u8>` literal — to WIR.
-    ///
-    /// Short payloads use a constant `array.new_fixed<u8>` (a valid Wasm const
-    /// instruction, so a const sequence global can be promoted eager by
-    /// `wir_optimize::const_global`); longer ones use a passive `array.new_data`
-    /// segment (compact, but not const). The `String` / `List<u8>` struct
-    /// wrapping is emitted by the enclosing `StructLiteral`.
-    pub(super) fn translate_packed_array(&self, b: &[u8]) -> WirInstr {
-        let byte_len = b.len();
-        let array_type_id = self
-            .ctx
-            .array_type_by_name
-            .get("u8")
-            .cloned()
-            .expect("[WIR] PackedArray: u8 array type not registered");
+    /// A constant array as WIR: a const `array.new_fixed`, which a global may run
+    /// eagerly, where the elements encode smaller inline, else `array.new_data`.
+    pub(super) fn translate_packed_array(&self, data: &PackedData, type_id: TypeId) -> WirInstr {
+        let array_type_id = if data.as_bytes().is_some() {
+            self.ctx
+                .array_type_by_name
+                .get("u8")
+                .cloned()
+                .expect("[WIR] PackedArray: u8 array type not registered")
+        } else {
+            self.ref_type_id(type_id)
+        };
 
-        if byte_len == 0 {
+        if data.is_empty() {
             WirInstr::ArrayNewDefault {
                 type_id: array_type_id,
                 len: Box::new(WirInstr::I32Const(0)),
             }
         } else if packed_array_is_eager(
-            byte_len,
+            data,
             self.ctx.package.string_inline_max_bytes,
             self.force_fixed_string_repr,
         ) {
-            let elements = b
-                .iter()
-                .map(|&x| WirInstr::I32Const(i32::from(x)))
-                .collect();
+            let elements = packed_element_consts(data).collect();
             WirInstr::ArrayNewFixed {
                 type_id: array_type_id,
                 elements,
             }
         } else {
-            // Every payload longer than `string_inline_max_bytes` is registered
-            // by `register_literal_data` under the same threshold, so a miss here
-            // means the two partitions disagreed — fail loudly instead of
-            // silently emitting segment 0 (a different literal's bytes).
-            let data_index = self.ctx.packed_data_map.get(b).copied().expect(
-                "[WIR] PackedArray: long payload missing from packed_data_map (registration must cover every >threshold literal)",
+            let data_index = self.ctx.packed_data_map.get(&data.bytes).copied().expect(
+                "[WIR] PackedArray: `register_literal_data` registers every payload `packed_array_is_eager` refuses",
             );
-            let len_i32 = i32::try_from(byte_len)
-                .unwrap_or_else(|_| panic!("[WIR] literal of {byte_len} bytes exceeds i32 length"));
+            let len = data.len();
+            let len_i32 = i32::try_from(len)
+                .unwrap_or_else(|_| panic!("[WIR] literal of {len} elements exceeds i32 length"));
             WirInstr::ArrayNewData {
                 type_id: array_type_id,
                 data_index,
@@ -602,8 +592,8 @@ impl FunctionTranslator<'_, '_> {
                 let from_wir = self.ctx.type_id_to_wir_type(self.type_table, from_type);
                 let to_wir = self.ctx.type_id_to_wir_type(self.type_table, to_type);
                 assert_eq!(
-                    from_wir.is_reference(),
-                    to_wir.is_reference(),
+                    from_wir.scalar_kind(),
+                    to_wir.scalar_kind(),
                     "[WIR] cast crosses Wasm representations and was not lowered \
                      before WIR build: {from:?} ({from_wir:?}) as {to:?} ({to_wir:?})",
                     from = self.type_table.get(from_type),

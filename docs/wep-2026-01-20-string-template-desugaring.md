@@ -8,7 +8,7 @@ intermediate strings. A template with a tag denotes a call on a synthesized
 template type instead, and is
 [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)'s
 business; what the two share is the per-specifier rendering below, which the
-tagged form reaches through `Hole::fmt`.
+tagged form reaches through `TemplateHole::fmt`.
 
 ## Decision
 
@@ -67,7 +67,7 @@ The literal writes every field, sentinels included, rather than deriving from
 the field list.
 
 In a tagged template the same selection is closed inside the synthesized
-`Hole::fmt`: the method the type selects, on the `Formatter` the rest of the
+`TemplateHole::fmt`: the method the type selects, on the `Formatter` the rest of the
 specifier describes, over the buffer the tag passes. The tag keeps the typed
 value and decides whether to render it.
 
@@ -101,7 +101,7 @@ precedes a `{` that should stay literal (`` `\${x}` `` renders `${x}`).
 
 - One buffer per template, no intermediate `String` per interpolation.
 - The specifier is resolved at the site, for the untagged form in the emitted
-  block and for the tagged form inside `Hole::fmt`, so no runtime dispatch on a
+  block and for the tagged form inside `TemplateHole::fmt`, so no runtime dispatch on a
   specifier exists anywhere.
 
 ## Related WEPs
