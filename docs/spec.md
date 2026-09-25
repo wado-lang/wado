@@ -3575,6 +3575,11 @@ The `==` and `!=` operators use `Eq::eq`:
 exactly as it picks among its `Add<Rhs>` impls, so `StrSlice` and `String`
 compare directly, in either order, with nothing copied.
 
+A reference compared with a value asks the impls written for the reference
+itself (`impl … for &T`), picked the same way. So a `&String` equals a `String`
+through `impl<T: AsStrSlice> Eq<String> for &T`. Nothing dereferences the
+reference: no impl answers `&i32 == i32`, so that comparison is an error.
+
 #### Ordering Enum
 
 ```wado

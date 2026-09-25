@@ -337,7 +337,7 @@ impl TypeSystem {
 
     /// The return type an auto-derived trait fixes, regardless of what any user
     /// impl writes (`Eq` → `bool`, `Ord` → `Ordering`).
-    fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
+    pub(super) fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
         match item {
             CompilerItem::Eq => TypeTable::BOOL,
             _ => self
@@ -2696,6 +2696,11 @@ impl TypeSystem {
             };
             return self.bounds_hold(ctx, scope, pointee, bounds);
         }
+        // `&Container<T>` reads the pointee's arguments, as its positions do.
+        let impl_ty = match impl_ty {
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
+            other => other,
+        };
 
         let Some(type_args) = type_args else {
             // An existence or bounds check that threaded no positions has

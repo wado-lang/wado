@@ -324,6 +324,17 @@ impl ImplHeader {
     pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
         self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
     }
+
+    /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
+    /// `None` for any other target.
+    pub(super) fn referent_key(&self, resolutions: &Resolutions) -> Option<ImplTargetKey> {
+        match &self.ty {
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Some(impl_target_key_at(inner, &self.module, resolutions))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// What fixes one of a blanket impl's type parameters.

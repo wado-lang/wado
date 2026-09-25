@@ -13,7 +13,9 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable, positional_substitution,
+};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -2616,8 +2618,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        let mut found =
-            self.find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs);
+        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        self.find_operator_impl_on(&target, base_type_id, trait_, method_name, rhs)
+    }
+
+    /// The one impl of `trait_` indexed under `target` whose right-hand
+    /// parameter admits `rhs`.
+    pub(super) fn find_operator_impl_on(
+        &mut self,
+        target: &ImplTargetKey,
+        receiver: TypeId,
+        trait_: DefId,
+        method_name: &str,
+        rhs: Option<&ArgClass>,
+    ) -> Option<ArithmeticTraitInfo> {
+        let mut found = self.find_operator_impls_on(target, receiver, trait_, method_name, rhs);
         self.tysys.retain_most_specific_rhs(&mut found);
         match found.as_slice() {
             [only] => Some(only.clone()),
@@ -2640,18 +2655,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
-        // Get concrete type arguments from the base type (for generic instances)
-        let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(base_type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
-            };
+        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        self.find_operator_impls_on(&target, base_type_id, trait_, method_name, rhs)
+    }
+
+    /// [`Self::find_arithmetic_trait_impls`] under an explicit key. A
+    /// [`ImplTargetKey::Ref`] key asks the blocks written for the reference
+    /// `receiver` itself, which answer only for the pointee they name.
+    fn find_operator_impls_on(
+        &mut self,
+        target: &ImplTargetKey,
+        receiver: TypeId,
+        trait_: DefId,
+        method_name: &str,
+        rhs: Option<&ArgClass>,
+    ) -> Vec<ArithmeticTraitInfo> {
+        let pointee = match target {
+            ImplTargetKey::Ref(_) => Some(
+                self.tysys
+                    .pointee_of(receiver)
+                    .expect("a reference key is asked of a reference receiver"),
+            ),
+            ImplTargetKey::Decl(_)
+            | ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Builtin(_) => None,
+        };
+        let pointee_key = pointee.map(|pointee| {
+            let name = self.tysys.fq_receiver_head(pointee).into_string();
+            self.impl_target_of(pointee, &DeclName::new(&name))
+        });
+        let concrete_type_args: Vec<TypeId> = match pointee {
+            Some(pointee) => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(pointee)
+                .unwrap_or_default(),
+            None => {
+                if let ResolvedType::GenericInstance { type_args, .. } =
+                    self.tysys.type_table.borrow().get(receiver).clone()
+                {
+                    type_args
+                } else {
+                    Vec::new()
+                }
+            }
+        };
 
         self.collect_trait_impls(
-            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
+            target,
             &concrete_type_args,
             |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
@@ -2661,13 +2714,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
+                let mut slots = positional_substitution(&concrete_type_args);
+                if let Some(pointee) = pointee {
+                    match header.referent_key(&s.tysys.resolutions)? {
+                        ImplTargetKey::TypeParam(_, binder) => {
+                            let slot = header
+                                .type_params
+                                .iter()
+                                .filter(|p| p.is_real_type_param())
+                                .position(|p| p.name == binder)?;
+                            slots = [(slot as u32, pointee)].into_iter().collect();
+                        }
+                        referent => {
+                            if Some(referent) != pointee_key {
+                                return None;
+                            }
+                        }
+                    }
+                }
+                let written_target = match &header.ty {
+                    Type::Reference(inner) | Type::MutReference(inner) => inner.as_ref(),
+                    other => other,
+                };
                 // A concrete type argument in the impl target is a constraint,
                 // not a free parameter: `impl … for TreeMap<String, V>` does
                 // not answer for a `TreeMap<i32, String>` receiver. Without
                 // this the method signature instantiates against the wrong
                 // arguments and the mismatch only surfaces at WIR build.
                 if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
+                    written_target,
                     &concrete_type_args,
                     declared,
                 ) {
@@ -2678,7 +2753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &s.type_lookup(),
                     &header.type_params,
                     &header.ty,
-                    Some(base_type_id),
+                    Some(receiver),
                     Some(&concrete_type_args),
                 ) {
                     return None;
@@ -2694,7 +2769,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
                     .decl
-                    .instantiate(&s.tysys.type_table, &concrete_type_args)
+                    .instantiate_slots(&s.tysys.type_table, &slots)
                     .param_types
                     .get(rhs_index)
                     .copied();
@@ -2713,11 +2788,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                let output_type = impl_sig
+                // A `&T` block's slots are not its target's arguments, which
+                // `impl_sig` was filled from.
+                let ref_sig = pointee.map(|_| {
+                    s.tysys
+                        .impl_sig(impl_ref)
+                        .instantiate_slots(&s.tysys.type_table, &slots)
+                });
+                let output_type = ref_sig
+                    .as_ref()
+                    .unwrap_or(impl_sig)
                     .associated_types
                     .get("Output")
                     .copied()
-                    .unwrap_or(base_type_id);
+                    .unwrap_or(receiver);
 
                 Some(ArithmeticTraitInfo {
                     impl_def: impl_ref.0,
