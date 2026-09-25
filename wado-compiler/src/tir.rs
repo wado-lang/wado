@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -7049,7 +7049,7 @@ pub struct TirStruct {
     pub fields: Vec<TirField>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all fields.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 #[derive(Debug, Clone)]
@@ -7074,9 +7074,37 @@ pub struct TirField {
     /// instead of the name. A struct numbers every field or none, so this is
     /// `Some` for all of a struct's fields or for none of them.
     pub serde_number: Option<u32>,
+    /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
+    pub serde_encoding: WireEncoding,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
+}
+
+impl TirField {
+    /// A field the compiler adds itself: no attributes and no default.
+    pub fn plain(
+        name: String,
+        visibility: Visibility,
+        type_id: TypeId,
+        index: u32,
+        span: Span,
+    ) -> Self {
+        Self {
+            name,
+            visibility,
+            type_id,
+            index,
+            span,
+            is_secret: false,
+            wire_name_override: None,
+            serde_default: false,
+            serde_positional: false,
+            serde_number: None,
+            serde_encoding: WireEncoding::Plain,
+            default_expr: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -7093,7 +7121,7 @@ pub struct TirEnum {
     pub cases: Vec<TirEnumCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a TIR enum.
@@ -7105,6 +7133,9 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    /// `#[wire(number = N)]` — the discriminant a format writes for this case.
+    /// An enum numbers every case or none.
+    pub wire_number: Option<i32>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -7121,7 +7152,7 @@ pub struct TirFlags {
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
     pub span: Span,
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A member of a flags type
@@ -7149,7 +7180,7 @@ pub struct TirVariantDecl {
     pub cases: Vec<TirVariantCase>,
     pub span: Span,
     /// `#[wire(name_policy = "...")]` — naming strategy for all cases.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
 }
 
 /// A case in a variant declaration
@@ -7187,7 +7218,7 @@ pub struct TirNewtype {
     /// The declaration's own `#[wire(name_policy)]`. A newtype has no members
     /// to rename, so this spells the *type's* name on the wire — what a schema
     /// keys its `$defs` entry by.
-    pub wire_name_policy: Option<String>,
+    pub wire_name_policy: Option<NamePolicy>,
     pub span: Span,
 }
 

@@ -4246,18 +4246,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tir_fields: Vec<TirField> = fields
             .iter()
             .enumerate()
-            .map(|(i, (fname, fty))| TirField {
-                name: fname.clone(),
-                visibility: Visibility::Public,
-                type_id: *fty,
-                index: i as u32,
-                span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                default_expr: None,
+            .map(|(i, (fname, fty))| {
+                TirField::plain(fname.clone(), Visibility::Public, *fty, i as u32, span)
             })
             .collect();
 

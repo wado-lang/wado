@@ -534,32 +534,20 @@ fn build_list_wrapper_copy(
     span: Span,
 ) -> TirExpr {
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
-    let repr_field = TirField {
-        name: SeqField::Backing.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: raw_array_ty,
-        index: 0,
+    let repr_field = TirField::plain(
+        SeqField::Backing.field_name().to_string(),
+        Visibility::Private,
+        raw_array_ty,
+        0,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
-    let used_field = TirField {
-        name: SeqField::Len.field_name().to_string(),
-        visibility: Visibility::Private,
-        type_id: TypeTable::I32,
-        index: 1,
+    );
+    let used_field = TirField::plain(
+        SeqField::Len.field_name().to_string(),
+        Visibility::Private,
+        TypeTable::I32,
+        1,
         span,
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        default_expr: None,
-    };
+    );
     let fields = vec![
         TirStructField {
             name: SeqField::Backing.field_name().to_string(),
@@ -602,19 +590,13 @@ fn build_tuple_copy(
         .iter()
         .enumerate()
         .map(|(idx, elem_ty)| {
-            let field = TirField {
-                name: idx.to_string(),
-                visibility: Visibility::Public,
-                type_id: *elem_ty,
-                index: idx as u32,
+            let field = TirField::plain(
+                idx.to_string(),
+                Visibility::Public,
+                *elem_ty,
+                idx as u32,
                 span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                default_expr: None,
-            };
+            );
             TirStructField {
                 name: field.name.clone(),
                 value: make_field_copy(v_local.clone(), &field, type_table, span),

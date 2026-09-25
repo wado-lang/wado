@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::Visibility;
+use crate::ast::{NamePolicy, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::module_source::ModuleSource;
 use crate::name::{
@@ -66,7 +66,7 @@ use super::common::{
 /// two never disagree.
 fn serialized_field_name(f: &TirField, struct_def: &TirStruct) -> String {
     f.wire_name_override.clone().unwrap_or_else(|| {
-        if let Some(strategy) = &struct_def.wire_name_policy {
+        if let Some(strategy) = struct_def.wire_name_policy {
             apply_name_policy(&f.name, strategy)
         } else {
             f.name.clone()
@@ -74,24 +74,20 @@ fn serialized_field_name(f: &TirField, struct_def: &TirStruct) -> String {
     })
 }
 
-/// Apply a `name_policy` strategy. Source-casing-agnostic, so it works for both
-/// `snake_case` struct fields and `PascalCase` enum/variant cases (Wado casing is
-/// convention, not a rule, so the source form is open).
-fn apply_name_policy(s: &str, strategy: &str) -> String {
+/// Apply a `name_policy` strategy. Source-casing-agnostic, since Wado casing is
+/// convention, not a rule.
+fn apply_name_policy(s: &str, strategy: NamePolicy) -> String {
     use heck::{
         ToKebabCase, ToLowerCamelCase, ToShoutyKebabCase, ToShoutySnakeCase, ToSnakeCase,
         ToUpperCamelCase,
     };
     match strategy {
-        "camelCase" => s.to_lower_camel_case(),
-        "snake_case" => s.to_snake_case(),
-        "PascalCase" => s.to_upper_camel_case(),
-        "SCREAMING_SNAKE_CASE" => s.to_shouty_snake_case(),
-        "kebab-case" => s.to_kebab_case(),
-        "SCREAMING-KEBAB-CASE" => s.to_shouty_kebab_case(),
-        // Unrecognized strategy string: fall back to identity (the name as
-        // written), matching the no-attribute default.
-        _ => s.to_string(),
+        NamePolicy::Camel => s.to_lower_camel_case(),
+        NamePolicy::Snake => s.to_snake_case(),
+        NamePolicy::Pascal => s.to_upper_camel_case(),
+        NamePolicy::ScreamingSnake => s.to_shouty_snake_case(),
+        NamePolicy::Kebab => s.to_kebab_case(),
+        NamePolicy::ScreamingKebab => s.to_shouty_kebab_case(),
     }
 }
 
@@ -857,7 +853,7 @@ mod tests {
     /// heck changes, this fails first and the Wado vectors are updated in step.
     #[test]
     fn rename_all_edge_corpus_locks_heck_output() {
-        let snake = |s: &str| apply_name_policy(s, "snake_case");
+        let snake = |s: &str| apply_name_policy(s, NamePolicy::Snake);
         assert_eq!(snake("userID"), "user_id");
         assert_eq!(snake("HTTPStatus"), "http_status");
         assert_eq!(snake("parseHTTP"), "parse_http");
@@ -865,18 +861,33 @@ mod tests {
         assert_eq!(snake("iOS"), "i_os");
         assert_eq!(snake("field2Name"), "field2_name");
         assert_eq!(snake("Apple2Banana"), "apple2_banana");
-        assert_eq!(apply_name_policy("HTTPStatus", "camelCase"), "httpStatus");
-        assert_eq!(apply_name_policy("userID", "PascalCase"), "UserId");
+        assert_eq!(
+            apply_name_policy("HTTPStatus", NamePolicy::Camel),
+            "httpStatus"
+        );
+        assert_eq!(apply_name_policy("userID", NamePolicy::Pascal), "UserId");
     }
 
     #[test]
     fn rename_all_from_snake_field() {
-        assert_eq!(apply_name_policy("user_name", "camelCase"), "userName");
-        assert_eq!(apply_name_policy("user_name", "snake_case"), "user_name");
-        assert_eq!(apply_name_policy("user_name", "PascalCase"), "UserName");
-        assert_eq!(apply_name_policy("user_name", "kebab-case"), "user-name");
         assert_eq!(
-            apply_name_policy("user_name", "SCREAMING_SNAKE_CASE"),
+            apply_name_policy("user_name", NamePolicy::Camel),
+            "userName"
+        );
+        assert_eq!(
+            apply_name_policy("user_name", NamePolicy::Snake),
+            "user_name"
+        );
+        assert_eq!(
+            apply_name_policy("user_name", NamePolicy::Pascal),
+            "UserName"
+        );
+        assert_eq!(
+            apply_name_policy("user_name", NamePolicy::Kebab),
+            "user-name"
+        );
+        assert_eq!(
+            apply_name_policy("user_name", NamePolicy::ScreamingSnake),
             "USER_NAME"
         );
     }
@@ -884,9 +895,18 @@ mod tests {
     #[test]
     fn rename_all_from_pascal_case() {
         // PascalCase source, not the snake_case of struct fields.
-        assert_eq!(apply_name_policy("AddRemote", "kebab-case"), "add-remote");
-        assert_eq!(apply_name_policy("AddRemote", "snake_case"), "add_remote");
-        assert_eq!(apply_name_policy("AddRemote", "camelCase"), "addRemote");
-        assert_eq!(apply_name_policy("List", "kebab-case"), "list");
+        assert_eq!(
+            apply_name_policy("AddRemote", NamePolicy::Kebab),
+            "add-remote"
+        );
+        assert_eq!(
+            apply_name_policy("AddRemote", NamePolicy::Snake),
+            "add_remote"
+        );
+        assert_eq!(
+            apply_name_policy("AddRemote", NamePolicy::Camel),
+            "addRemote"
+        );
+        assert_eq!(apply_name_policy("List", NamePolicy::Kebab), "list");
     }
 }

@@ -63,6 +63,11 @@ run out or the varint runs past the ten bytes a 64-bit value can take.
 
 ### `pub fn read_fixed64(input: &ByteSlice, pos: i32) -> Option<[u64, i32]>`
 
+### `pub fn is_assignable_field_number(number: i32) -> bool`
+
+Whether a schema may number a field `number`: one the wire admits, outside
+the range protobuf reserves for its own implementation.
+
 ### `pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, SerializeError>`
 
 A message as protobuf bytes. Fields are written in declaration order, which
@@ -148,6 +153,8 @@ _Fields are private._
 ##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
 ##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError>`
 
 ##### `fn skip(&mut self) -> Result<(), DeserializeError>`
 

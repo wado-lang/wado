@@ -105,7 +105,7 @@ impl ScalarReflectSpec {
 struct StructMethods {
     members: String,
     from_fields: String,
-    defaults: String,
+    default_slot: String,
     empty_slots: String,
 }
 
@@ -119,8 +119,8 @@ impl StructMethods {
             from_fields: items
                 .method_name(CompilerItem::ReflectStructFromFields)
                 .to_string(),
-            defaults: items
-                .method_name(CompilerItem::ReflectStructDefaults)
+            default_slot: items
+                .method_name(CompilerItem::ReflectStructDefaultSlot)
                 .to_string(),
             empty_slots: items
                 .method_name(CompilerItem::ReflectStructEmptySlots)
@@ -132,7 +132,7 @@ impl StructMethods {
         [
             &self.members,
             &self.from_fields,
-            &self.defaults,
+            &self.default_slot,
             &self.empty_slots,
         ]
         .into_iter()
@@ -299,12 +299,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        let well_formed = if method == methods.from_fields {
-            self.check_reflect_from_fields_arg(&field_types, static_call, ctx)
+        let params = if method == methods.from_fields {
+            vec![
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_tuple(field_types.clone()),
+            ]
+        } else if method == methods.default_slot {
+            vec![TypeTable::I32]
         } else {
-            self.reject_reflect_metadata_args(static_call, ctx)
+            Vec::new()
         };
-        if !well_formed {
+        if !self.check_reflect_args(&params, static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -321,7 +328,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let return_type = if method == methods.from_fields {
             self_ty
-        } else if method == methods.defaults || method == methods.empty_slots {
+        } else if method == methods.default_slot || method == methods.empty_slots {
             let mut tt = self.tysys.type_table.borrow_mut();
             let slots: Vec<TypeId> = field_types.iter().map(|&f| tt.make_option(f)).collect();
             tt.make_tuple(slots)
@@ -403,9 +410,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        let return_type = if method == methods.defaults || method == methods.empty_slots {
+        let return_type = if method == methods.default_slot || method == methods.empty_slots {
             let Some(slots_ty) =
-                self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
+                self.struct_slots_bound_ty(type_param_name, reflect_trait_name.base_name())
             else {
                 self.emit_missing_pack_bound(
                     reflect_trait_name.base_name(),
@@ -443,7 +450,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
 
-        if !self.reject_reflect_metadata_args(static_call, ctx) {
+        let params: &[TypeId] = if method == methods.default_slot {
+            &[TypeTable::I32]
+        } else {
+            &[]
+        };
+        if !self.check_reflect_args(params, static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -730,67 +742,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// Resolve the single field-value tuple argument of `ReflectStruct::from_fields`
-    /// against the subject's `FieldTypes`. Returns whether the call is well-formed.
-    fn check_reflect_from_fields_arg(
+    /// Resolve a reflect call's arguments against the parameter types `params`.
+    /// Returns whether the call is well-formed.
+    fn check_reflect_args(
         &mut self,
-        field_types: &[TypeId],
+        params: &[TypeId],
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> bool {
-        let fields_tuple_ty = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_tuple(field_types.to_vec());
         let arg_types: Vec<TypeId> = static_call
             .args
             .iter()
-            .map(|arg| self.resolve_expr(arg, ctx, Some(fields_tuple_ty)))
+            .enumerate()
+            .map(|(i, arg)| self.resolve_expr(arg, ctx, params.get(i).copied()))
             .collect();
-        if arg_types.len() != 1 {
+        if arg_types.len() != params.len() {
             let _ = self.emit(TypeError::ArgumentCountMismatch {
-                expected: 1,
+                expected: params.len(),
                 found: arg_types.len(),
                 span: static_call.span,
             });
             return false;
         }
-        let arg_ty = arg_types[0];
-        if arg_ty != TypeTable::ERROR && arg_ty != fields_tuple_ty {
-            let (expected, found) = {
-                let tt = self.tysys.type_table.borrow();
-                tt.type_names_for_mismatch(fields_tuple_ty, arg_ty)
-            };
-            let _ = self.emit(TypeError::TypeMismatch {
-                expected,
-                found,
-                span: static_call.span,
-            });
-            return false;
+        for (&param, &arg) in params.iter().zip(&arg_types) {
+            if arg != TypeTable::ERROR && arg != param {
+                let (expected, found) = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .type_names_for_mismatch(param, arg);
+                let _ = self.emit(TypeError::TypeMismatch {
+                    expected,
+                    found,
+                    span: static_call.span,
+                });
+                return false;
+            }
         }
         true
-    }
-
-    /// Resolve the args of a no-argument `ReflectStruct` metadata call and reject any
-    /// that were supplied. Returns whether the call is well-formed.
-    fn reject_reflect_metadata_args(
-        &mut self,
-        static_call: &ast::StaticMethodCallExpr,
-        ctx: &mut FunctionContext,
-    ) -> bool {
-        for arg in &static_call.args {
-            self.resolve_expr(arg, ctx, None);
-        }
-        if static_call.args.is_empty() {
-            return true;
-        }
-        let _ = self.emit(TypeError::ArgumentCountMismatch {
-            expected: 0,
-            found: static_call.args.len(),
-            span: static_call.span,
-        });
-        false
     }
 
     /// Whether `prefix::method` names a `ReflectStruct` trait-qualified static call
@@ -861,7 +850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> TypeId {
         let method = static_call.method.clone();
-        if !self.reject_reflect_metadata_args(static_call, ctx) {
+        if !self.check_reflect_args(&[], static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -963,7 +952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         };
 
-        if !self.reject_reflect_metadata_args(static_call, ctx) {
+        if !self.check_reflect_args(&[], static_call, ctx) {
             return TypeTable::ERROR;
         }
 
@@ -1098,7 +1087,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let args_valid = if is_discriminant {
             self.check_reflect_fields_receiver(self_ty, &self_name, static_call, ctx)
         } else {
-            self.reject_reflect_metadata_args(static_call, ctx)
+            self.check_reflect_args(&[], static_call, ctx)
         };
         if !args_valid {
             return TypeTable::ERROR;
@@ -1187,7 +1176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let args_valid = if is_discriminant {
             self.check_reflect_fields_receiver(self_ty, type_param_name, static_call, ctx)
         } else {
-            self.reject_reflect_metadata_args(static_call, ctx)
+            self.check_reflect_args(&[], static_call, ctx)
         };
         if !args_valid {
             return TypeTable::ERROR;
@@ -1260,11 +1249,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The slot pack `[..Option<F>]` — the type of `defaults()` under a
+    /// The slot pack `[..Option<F>]` — the type of `default_slot()` under a
     /// `T: ReflectStruct<FieldTypes = [..F]>` bound. Maps the field-type pack
     /// through `Option`, as [`Self::payload_member_pack_bound_ty`] maps it
     /// through the member constructor.
-    fn struct_defaults_bound_ty(
+    fn struct_slots_bound_ty(
         &mut self,
         type_param_name: &str,
         reflect_trait_name: &str,
@@ -1459,7 +1448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let methods = spec.methods(&self.tysys.type_table.borrow());
 
         if *method == methods.members {
-            if !self.reject_reflect_metadata_args(static_call, ctx) {
+            if !self.check_reflect_args(&[], static_call, ctx) {
                 return None;
             }
             self.scalar_members_return_ty(spec, self_ty, self_name, static_call)

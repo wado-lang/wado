@@ -22,6 +22,7 @@ use {
     SerializeVariant,
     Serializer,
     Visitor,
+    WireEncoding,
     WireNumbered,
     deeper,
 } from "core:serde";
@@ -199,15 +200,22 @@ fn unsupported<S: AsStrSlice>(what: S) -> SerializeError {
 /// written. A real field number starts at 1, so it can never collide.
 global NO_FIELD: i32 = 0;
 
-/// The field numbers the wire format admits, from the specification's
-/// "Assigning Field Numbers". `wado-compiler/src/ast.rs` holds the same two.
+/// The field numbers the wire format admits, and the ones a schema may not
+/// assign, from the specification's "Assigning Field Numbers". `ast.rs` holds the same.
 global FIELD_NUMBER_MIN: i32 = 1;
 global FIELD_NUMBER_MAX: i32 = 536870911;
+global RESERVED_FIELD_NUMBERS: RangeInclusive<i32> = 19000..=19999;
 
 /// Whether a number can key a field on the wire. `WireNumbered` answers for
 /// the type a call names; a field holding another message is bound by nothing.
 fn is_field_number(number: i64) -> bool {
     return FIELD_NUMBER_MIN as i64 <= number <= FIELD_NUMBER_MAX as i64;
+}
+
+/// Whether a schema may number a field `number`: one the wire admits, outside
+/// the range protobuf reserves for its own implementation.
+pub fn is_assignable_field_number(number: i32) -> bool {
+    return is_field_number(number as i64) && !RESERVED_FIELD_NUMBERS.contains(&number);
 }
 
 fn unnumbered<S: AsStrSlice>(name: S) -> SerializeError {
@@ -248,11 +256,13 @@ impl SizeState {
 struct SizeSerializer {
     state: &mut SizeState,
     number: i32,
+    encoding: WireEncoding,
 }
 
 struct SizeSeqSerializer {
     state: &mut SizeState,
     number: i32,
+    encoding: WireEncoding,
 }
 
 struct SizeStructSerializer {
@@ -308,11 +318,24 @@ impl SizeSerializer {
         self.state.add(tag_len(self.number) + varint_len(payload as u64) + payload);
         return Result::Ok(());
     }
+
+    /// An integer of `width` bytes, as the field's encoding writes it.
+    fn count_integer(&mut self, v: i64, width: i32) -> Result<(), SerializeError> {
+        return match self.encoding {
+            Plain => self.count_varint(v as u64),
+            ZigZag => self.count_varint(zigzag_64(v)),
+            Fixed => self.count_fixed(width),
+        };
+    }
 }
 
 impl SerializeSeq for SizeSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = SizeSerializer { state: self.state, number: self.number };
+        let mut ser = SizeSerializer {
+            state: self.state,
+            number: self.number,
+            encoding: self.encoding,
+        };
         return value.serialize::<SizeSerializer>(&mut ser);
     }
 
@@ -326,9 +349,15 @@ impl SerializeStruct for SizeStructSerializer {
         return Result::Err(unnumbered(name));
     }
 
+    fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError> {
+        return is_zero(value);
+    }
+
     fn field_numbered<T: Serialize, S: AsStrSlice>(
         &mut self,
         number: i32,
+        encoding: WireEncoding,
+        default: &Option<T>,
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
@@ -336,7 +365,10 @@ impl SerializeStruct for SizeStructSerializer {
             builtin::cold_path();
             return Result::Err(unnumbered(name));
         }
-        let mut ser = SizeSerializer { state: self.state, number };
+        if leaves_off(default)? {
+            return Result::Ok(());
+        }
+        let mut ser = SizeSerializer { state: self.state, number, encoding };
         return value.serialize::<SizeSerializer>(&mut ser);
     }
 
@@ -353,19 +385,19 @@ impl Serializer for SizeSerializer {
     type VariantSerializer = UnsupportedVariant;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        return self.count_varint(v as i64 as u64);
+        return self.count_integer(v as i64, 4);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        return self.count_varint(v as u64);
+        return self.count_integer(v, 8);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        return self.count_varint(v as u64);
+        return self.count_integer(v as i64, 4);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        return self.count_varint(v);
+        return self.count_integer(v as i64, 8);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
@@ -411,7 +443,7 @@ impl Serializer for SizeSerializer {
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<SizeSeqSerializer, SerializeError> {
-        return Result::Ok(SizeSeqSerializer { state: self.state, number: self.number });
+        return Result::Ok(SizeSeqSerializer { state: self.state, number: self.number, encoding: self.encoding });
     }
 
     fn begin_map(&mut self, len: i32) -> Result<UnsupportedMap, SerializeError> {
@@ -442,6 +474,159 @@ impl Serializer for SizeSerializer {
     }
 }
 
+/// Proto3's implicit presence. `reads_default` fetches a default only for a zero
+/// value, so the field is left off when that default is the zero too.
+fn leaves_off<T: Serialize>(default: &Option<T>) -> Result<bool, SerializeError> {
+    return match default {
+        Some(d) => is_zero(d),
+        None => Result::Ok(false),
+    };
+}
+
+/// Whether `value` is its type's zero: 0, `false`, empty, `null`, or the enum
+/// case numbered 0. `Some(0)` is not, since explicit presence writes it.
+fn is_zero<T: Serialize>(value: &T) -> Result<bool, SerializeError> {
+    let mut probe = ZeroProbe { zero: false };
+    value.serialize::<ZeroProbe>(&mut probe)?;
+    return Result::Ok(probe.zero);
+}
+
+struct ZeroProbe {
+    zero: bool,
+}
+
+/// What a probed sequence or message holds is not read: its emptiness is decided
+/// when it opens.
+struct UnreadContents {
+}
+
+impl SerializeSeq for UnreadContents {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl SerializeStruct for UnreadContents {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl Serializer for ZeroProbe {
+    type SeqSerializer = UnreadContents;
+    type MapSerializer = UnsupportedMap;
+    type StructSerializer = UnreadContents;
+    type VariantSerializer = UnsupportedVariant;
+
+    fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
+        self.zero = v == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
+        self.zero = v == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
+        self.zero = v == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
+        self.zero = v == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("an i128"));
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a u128"));
+    }
+
+    fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
+        self.zero = v.to_bits() == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
+        self.zero = v.to_bits() == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
+        self.zero = !v;
+        return Result::Ok(());
+    }
+
+    fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a char"));
+    }
+
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        self.zero = v.len() == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
+        self.zero = v.len() == 0;
+        return Result::Ok(());
+    }
+
+    fn serialize_null(&mut self) -> Result<(), SerializeError> {
+        self.zero = true;
+        return Result::Ok(());
+    }
+
+    fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        self.zero = false;
+        return Result::Ok(());
+    }
+
+    fn begin_seq(&mut self, len: i32) -> Result<UnreadContents, SerializeError> {
+        self.zero = len == 0;
+        return Result::Ok(UnreadContents {});
+    }
+
+    fn begin_map(&mut self, len: i32) -> Result<UnsupportedMap, SerializeError> {
+        return Result::Err(unsupported("a map"));
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<UnreadContents, SerializeError> {
+        self.zero = false;
+        return Result::Ok(UnreadContents {});
+    }
+
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<(), SerializeError> {
+        self.zero = disc == 0;
+        return Result::Ok(());
+    }
+
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        variant_name: S1,
+        disc: i32,
+    ) -> Result<UnsupportedVariant, SerializeError> {
+        return Result::Err(unsupported("a variant case with a payload"));
+    }
+}
+
 struct WriteState {
     buf: ByteList,
     sizes: List<i32>,
@@ -460,11 +645,13 @@ impl WriteState {
 struct WriteSerializer {
     state: &mut WriteState,
     number: i32,
+    encoding: WireEncoding,
 }
 
 struct WriteSeqSerializer {
     state: &mut WriteState,
     number: i32,
+    encoding: WireEncoding,
 }
 
 struct WriteStructSerializer {
@@ -483,11 +670,42 @@ impl WriteSerializer {
         write_tag(&mut self.state.buf, self.number, WireType::Len);
         write_varint(&mut self.state.buf, payload as u64);
     }
+
+    fn write_len_field(&mut self, payload: Slice<u8>) -> Result<(), SerializeError> {
+        self.write_len_prefix(payload.len());
+        self.state.buf.extend_from_slice(payload);
+        return Result::Ok(());
+    }
+
+    fn write_integer(&mut self, v: i64, width: i32) -> Result<(), SerializeError> {
+        match self.encoding {
+            Plain => {
+                return self.write_varint_field(v as u64);
+            },
+            ZigZag => {
+                return self.write_varint_field(zigzag_64(v));
+            },
+            Fixed => {
+                if width == 4 {
+                    write_tag(&mut self.state.buf, self.number, WireType::Fixed32);
+                    write_fixed32(&mut self.state.buf, v as u32);
+                } else {
+                    write_tag(&mut self.state.buf, self.number, WireType::Fixed64);
+                    write_fixed64(&mut self.state.buf, v as u64);
+                }
+                return Result::Ok(());
+            },
+        }
+    }
 }
 
 impl SerializeSeq for WriteSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        let mut ser = WriteSerializer { state: self.state, number: self.number };
+        let mut ser = WriteSerializer {
+            state: self.state,
+            number: self.number,
+            encoding: self.encoding,
+        };
         return value.serialize::<WriteSerializer>(&mut ser);
     }
 
@@ -501,16 +719,25 @@ impl SerializeStruct for WriteStructSerializer {
         return Result::Err(unnumbered(name));
     }
 
+    fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError> {
+        return is_zero(value);
+    }
+
     fn field_numbered<T: Serialize, S: AsStrSlice>(
         &mut self,
         number: i32,
+        encoding: WireEncoding,
+        default: &Option<T>,
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
         // The size pass refused this already, so reaching it here is the two
         // passes disagreeing about the same declaration.
         assert is_field_number(number as i64);
-        let mut ser = WriteSerializer { state: self.state, number };
+        if leaves_off(default)? {
+            return Result::Ok(());
+        }
+        let mut ser = WriteSerializer { state: self.state, number, encoding };
         return value.serialize::<WriteSerializer>(&mut ser);
     }
 
@@ -527,19 +754,19 @@ impl Serializer for WriteSerializer {
     type VariantSerializer = UnsupportedVariant;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        return self.write_varint_field(v as i64 as u64);
+        return self.write_integer(v as i64, 4);
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        return self.write_varint_field(v as u64);
+        return self.write_integer(v, 8);
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        return self.write_varint_field(v as u64);
+        return self.write_integer(v as i64, 4);
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        return self.write_varint_field(v);
+        return self.write_integer(v as i64, 8);
     }
 
     fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
@@ -571,15 +798,11 @@ impl Serializer for WriteSerializer {
     }
 
     fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
-        self.write_len_prefix(v.len());
-        self.state.buf.extend_from_slice(v.as_bytes() as Slice<u8>);
-        return Result::Ok(());
+        return self.write_len_field(v.as_bytes() as Slice<u8>);
     }
 
     fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError> {
-        self.write_len_prefix(v.len());
-        self.state.buf.extend_from_slice(v as Slice<u8>);
-        return Result::Ok(());
+        return self.write_len_field(v as Slice<u8>);
     }
 
     fn is_human_readable(&self) -> bool {
@@ -591,7 +814,7 @@ impl Serializer for WriteSerializer {
     }
 
     fn begin_seq(&mut self, len: i32) -> Result<WriteSeqSerializer, SerializeError> {
-        return Result::Ok(WriteSeqSerializer { state: self.state, number: self.number });
+        return Result::Ok(WriteSeqSerializer { state: self.state, number: self.number, encoding: self.encoding });
     }
 
     fn begin_map(&mut self, len: i32) -> Result<UnsupportedMap, SerializeError> {
@@ -632,7 +855,11 @@ impl Serializer for WriteSerializer {
 /// is deterministic here and is not a canonical form: protobuf defines none.
 pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, SerializeError> {
     let mut measured = SizeState { sizes: [], open: [] };
-    let mut size_pass = SizeSerializer { state: &mut measured, number: NO_FIELD };
+    let mut size_pass = SizeSerializer {
+        state: &mut measured,
+        number: NO_FIELD,
+        encoding: WireEncoding::Plain,
+    };
     value.serialize::<SizeSerializer>(&mut size_pass)?;
     assert measured.open.is_empty();
 
@@ -641,7 +868,11 @@ pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, Seri
         sizes: measured.sizes,
         next: 0,
     };
-    let mut write_pass = WriteSerializer { state: &mut out, number: NO_FIELD };
+    let mut write_pass = WriteSerializer {
+        state: &mut out,
+        number: NO_FIELD,
+        encoding: WireEncoding::Plain,
+    };
     value.serialize::<WriteSerializer>(&mut write_pass)?;
     assert out.next == out.sizes.len();
     return Result::Ok(out.buf);
@@ -670,6 +901,8 @@ struct ProtobufReader {
     /// reaching any other field is one value, not a sequence.
     in_seq: bool,
     number: i32,
+    /// How the field being read spells an integer.
+    encoding: WireEncoding,
     depth: i32,
     max_depth: i32,
 }
@@ -809,6 +1042,15 @@ impl ProtobufReader {
         }
         self.pos = next;
         return Result::Ok(value);
+    }
+
+    /// An integer of `width` bytes, read as the field's encoding spells it.
+    fn scalar_integer(&mut self, width: i32) -> Result<u64, DeserializeError> {
+        return match self.encoding {
+            Plain => self.scalar_varint(),
+            ZigZag => Result::Ok(unzigzag_64(self.scalar_varint()?) as u64),
+            Fixed => if width == 4 { Result::Ok(self.scalar_fixed32()? as u64) } else { self.scalar_fixed64() },
+        };
     }
 
     fn scalar_fixed64(&mut self) -> Result<u64, DeserializeError> {
@@ -967,6 +1209,11 @@ impl DeserializeStruct for PbStructAccess {
     }
 
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return self.value_encoded(WireEncoding::Plain);
+    }
+
+    fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError> {
+        self.de.encoding = encoding;
         let mut de = ProtobufDeserializer { de: self.de };
         return T::deserialize(&mut de);
     }
@@ -1012,22 +1259,22 @@ impl Deserializer for ProtobufDeserializer {
     type VariantAccess = PbVariantAccess;
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
-        let raw = self.de.scalar_varint()?;
+        let raw = self.de.scalar_integer(4)?;
         return Result::Ok(raw as i64 as i32);
     }
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
-        let raw = self.de.scalar_varint()?;
+        let raw = self.de.scalar_integer(8)?;
         return Result::Ok(raw as i64);
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
-        let raw = self.de.scalar_varint()?;
+        let raw = self.de.scalar_integer(4)?;
         return Result::Ok(raw as u32);
     }
 
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
-        return self.de.scalar_varint();
+        return self.de.scalar_integer(8);
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
@@ -1155,6 +1402,7 @@ pub fn from_bytes<T: Deserialize + WireNumbered, S: AsByteSlice>(
         packed_empty: false,
         in_seq: false,
         number: 0,
+        encoding: WireEncoding::Plain,
         depth: 0,
         max_depth,
     };

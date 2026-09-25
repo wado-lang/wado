@@ -1552,6 +1552,65 @@ pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
         .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
+/// An enum case's `#[wire(number = N)]`, where it fits the `int32` a protobuf
+/// enum value is.
+#[must_use]
+pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
+    wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
+}
+
+/// `#[wire(encoding = "…")]`: how a numbered format writes an integer field,
+/// which protobuf's `sint*`, `fixed*` and `sfixed*` each need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WireEncoding {
+    Plain,
+    ZigZag,
+    Fixed,
+}
+
+/// `#[wire(name_policy = "…")]`: the casing a name-keyed format spells a
+/// declaration's members in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamePolicy {
+    Camel,
+    Snake,
+    ScreamingSnake,
+    Pascal,
+    Kebab,
+    ScreamingKebab,
+}
+
+impl NamePolicy {
+    pub const WRITTEN: [(&'static str, Self); 6] = [
+        ("camelCase", Self::Camel),
+        ("snake_case", Self::Snake),
+        ("SCREAMING_SNAKE_CASE", Self::ScreamingSnake),
+        ("PascalCase", Self::Pascal),
+        ("kebab-case", Self::Kebab),
+        ("SCREAMING-KEBAB-CASE", Self::ScreamingKebab),
+    ];
+
+    #[must_use]
+    pub fn parse(written: &str) -> Option<Self> {
+        Self::WRITTEN
+            .iter()
+            .find(|(name, _)| *name == written)
+            .map(|&(_, policy)| policy)
+    }
+}
+
+/// The `#[wire(encoding = "…")]` text these attributes carry, as written.
+#[must_use]
+pub fn wire_encoding_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_value("encoding")
+        } else {
+            None
+        }
+    })
+}
+
 /// One entry per field, in declaration order, as `StructInfo` holds them.
 #[must_use]
 pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {

@@ -400,6 +400,8 @@ pub struct FieldSpec {
     /// Optional field default (`field: T = default`), so a struct literal can
     /// omit the field.
     pub default: Option<String> = null,
+    /// Attribute bodies, each written `#[body]` on its own line above the field.
+    pub attrs: List<String> = [],
 }
 
 impl FieldSpec {
@@ -469,6 +471,7 @@ impl StructSpec {
         }
         w.begin(head);
         for let field of &self.fields {
+            write_attrs(w, &field.attrs);
             let vis = if field.is_pub { "pub " } else { "" };
             match &field.default {
                 Some(d) => w.line(`${vis}${field.name}: ${field.type_str} = ${*d},`),
@@ -524,6 +527,13 @@ impl VariantSpec {
 pub struct EnumMember {
     pub name: String,
     pub trailing_comment: Option<String>,
+    pub attrs: List<String> = [],
+}
+
+fn write_attrs(w: &mut CodeWriter, attrs: &List<String>) {
+    for let attr of attrs {
+        w.line(`#[${attr}]`);
+    }
 }
 
 pub struct EnumSpec {
@@ -542,6 +552,11 @@ impl EnumSpec {
         return self;
     }
 
+    pub fn add_member_with_attrs<S: AsStrSlice>(&mut self, name: S, attrs: List<String>) -> &mut EnumSpec {
+        self.members.push(EnumMember { name: name.to_string(), trailing_comment: null, attrs });
+        return self;
+    }
+
     pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec {
         self.members.push(EnumMember {
             name: name.to_string(),
@@ -553,6 +568,7 @@ impl EnumSpec {
     pub fn emit(&self, w: &mut CodeWriter) {
         w.begin(`${self.visibility.prefix()}enum ${self.name}`);
         for let member of &self.members {
+            write_attrs(w, &member.attrs);
             if let Some(c) = &member.trailing_comment {
                 w.line(`${member.name},  // ${*c}`);
             } else {

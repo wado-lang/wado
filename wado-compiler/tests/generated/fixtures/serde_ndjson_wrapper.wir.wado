@@ -430,38 +430,38 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize<core:json/JsonSerializer>"(self, s) {
-    let $qm_e_11: ref "core:serde//SerializeError";
-    let self_19: ref "core:prelude/string.wado//String";
-    let new_used_29: i32;
-    let start_30: i32;
-    let v_40: bool;
-    let new_used_57: i32;
-    let start_58: i32;
+    let $qm_e_16: ref "core:serde//SerializeError";
+    let self_25: ref "core:prelude/string.wado//String";
+    let new_used_35: i32;
+    let start_36: i32;
+    let v_46: bool;
+    let new_used_69: i32;
+    let start_70: i32;
     let r: ref null "core:serde//SerializeError";
-    let $sroa_st_buf_82: ref "core:prelude/string.wado//String";
-    self_19 = s.buf;
-    new_used_29 = self_19.used + 1;
-    if @unlikely(new_used_29 > builtin::array_len(self_19.repr)) {
+    let $sroa_st_buf_98: ref "core:prelude/string.wado//String";
+    self_25 = s.buf;
+    new_used_35 = self_25.used + 1;
+    if @unlikely(new_used_35 > builtin::array_len(self_25.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_19, new_used_29);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_25, new_used_35);
     }
-    start_30 = self_19.used;
-    self_19.used = new_used_29;
-    builtin::array_copy<u8>(self_19.repr, start_30, global:core:serde::$const_obj_21, 0, 1);
-    $sroa_st_buf_82 = s.buf;
-    v_40 = self.ok;
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf_82, global:core:serde::$const_obj_20, 0);
-    r = "core:json/write_json_bool"($sroa_st_buf_82, v_40);
+    start_36 = self_25.used;
+    self_25.used = new_used_35;
+    builtin::array_copy<u8>(self_25.repr, start_36, global:core:serde::$const_obj_21, 0, 1);
+    $sroa_st_buf_98 = s.buf;
+    v_46 = self.ok;
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf_98, global:core:serde::$const_obj_20, 0);
+    r = "core:json/write_json_bool"($sroa_st_buf_98, v_46);
     if @likely(ref.is_null(r)) {
     } else {
-        $qm_e_11 = ref.as_non_null(r);
+        $qm_e_16 = ref.as_non_null(r);
         cold_path;
-        return $qm_e_11;
+        return $qm_e_16;
     }
-    return new_used_57 = $sroa_st_buf_82.used + 1, if @unlikely(new_used_57 > builtin::array_len($sroa_st_buf_82.repr)) {
+    return new_used_69 = $sroa_st_buf_98.used + 1, if @unlikely(new_used_69 > builtin::array_len($sroa_st_buf_98.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf_82, new_used_57);
-    }, start_58 = $sroa_st_buf_82.used, $sroa_st_buf_82.used = new_used_57, builtin::array_copy<u8>($sroa_st_buf_82.repr, start_58, global:core:serde::$const_obj_19, 0, 1), ref.null none;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf_98, new_used_69);
+    }, start_70 = $sroa_st_buf_98.used, $sroa_st_buf_98.used = new_used_69, builtin::array_copy<u8>($sroa_st_buf_98.repr, start_70, global:core:serde::$const_obj_19, 0, 1), ref.null none;
 }
 
 export fn "serde_ndjson_wrapper.wado/$cm_export__run" as "run"

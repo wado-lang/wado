@@ -1,0 +1,76 @@
+//! A `.proto` file as Grog reads it: its declarations, still named as the
+//! schema names them, before any Wado name is chosen.
+
+/// Which rules the file is written under: its `syntax` or `edition` statement.
+pub variant Syntax {
+    Proto2,
+    Proto3,
+    /// The edition's year as written, `"2023"` for `edition = "2023";`.
+    Edition(String),
+}
+
+/// A `features.*` setting, where the file, a message or a field writes one.
+/// Editions state presence here; the older syntaxes do it with labels.
+pub struct Features {
+    pub field_presence: Option<String> = null,
+    pub message_encoding: Option<String> = null,
+}
+
+pub enum Label {
+    None,
+    Optional,
+    Required,
+    Repeated,
+}
+
+/// What a field holds. A named type is a message or an enum, resolved only
+/// once every declaration in the file is known.
+pub variant FieldType {
+    Scalar(String),
+    Named(String),
+    /// `map<K, V>`: the key's scalar name and the value's type.
+    Map([String, FieldType]),
+    /// A proto2 `group`, whose body is the message named here.
+    Group(String),
+}
+
+pub struct Field {
+    pub name: String,
+    pub number: i32,
+    pub label: Label,
+    pub type_: FieldType,
+    /// The `oneof` the field belongs to, if any.
+    pub oneof: Option<String> = null,
+    pub features: Features = Features {},
+    pub line: i32,
+}
+
+pub struct EnumValue {
+    pub name: String,
+    pub number: i32,
+}
+
+pub struct EnumDecl {
+    /// The names from the file's top level down to this enum.
+    pub path: List<String>,
+    pub values: List<EnumValue>,
+    pub line: i32,
+}
+
+pub struct MessageDecl {
+    pub path: List<String>,
+    pub fields: List<Field>,
+    pub features: Features = Features {},
+    pub line: i32,
+}
+
+pub struct ProtoFile {
+    pub syntax: Syntax,
+    pub package: String,
+    pub imports: List<String>,
+    pub features: Features,
+    /// Every message, nested ones included, parents before children.
+    pub messages: List<MessageDecl>,
+    /// Every enum, nested ones included.
+    pub enums: List<EnumDecl>,
+}
