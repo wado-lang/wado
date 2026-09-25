@@ -173,11 +173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .cases
                         .iter()
                         .enumerate()
-                        .map(|(index, case)| EnumCaseData {
-                            name: case.name.clone(),
-                            index: index as u32,
-                            ast_id: case.id,
-                        })
+                        .map(|(index, case)| EnumCaseData::of(index, case))
                         .collect();
                     self.sem.decls.local_enum_cases.insert(
                         self.def_of_item(enum_decl.id),

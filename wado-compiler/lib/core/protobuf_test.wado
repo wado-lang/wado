@@ -502,9 +502,10 @@ test "a fixed-width field tagged as a varint is refused" {
     assert from_bytes::<Fixed, ByteList>(b"\x08\x01") matches { Err(_) };
 }
 
-// A field declaring a default is proto3's implicit presence: its zero value is
-// what an absent field means, so it stays off the wire. One declaring none is
-// required, and an `Option` is explicit presence; both are always written.
+// A field whose default is its type's zero is proto3's implicit presence: the
+// zero is what an absent field means, so it stays off the wire. One declaring
+// no default is required, and an `Option` is explicit presence; both are
+// always written.
 struct Presence {
     #[wire(number = 1)]
     implicit: i32 = 0,
@@ -538,4 +539,28 @@ test "a nonzero implicit-presence field is written" {
 test "negative zero is not the zero an absent field means" {
     let m = Presence { required: 0, real: -0.0 };
     assert encode(&m) == "1800" + "310000000000000080";
+}
+
+enum Mode {
+    #[wire(number = 1)]
+    Fast,
+    #[wire(number = 0)]
+    Off,
+}
+
+// A default other than the zero is not implicit presence: an absent field
+// would decode to the default, so a zero held there has to be written.
+struct Tuned {
+    #[wire(number = 1)]
+    retries: i32 = 3,
+    #[wire(number = 2)]
+    mode: Mode = Mode::Fast,
+    #[wire(number = 3)]
+    quiet: Mode = Mode::Off,
+}
+
+test "a default other than the zero is always written" {
+    let m = Tuned { retries: 0 };
+    assert encode(&m) == "0800" + "1001";
+    assert decode::<Tuned>(to_bytes(&m).unwrap()).retries == 0;
 }

@@ -25,7 +25,7 @@ use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
-use crate::ast::{RangeExpr, Visibility, WireEncoding};
+use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::DefId;
@@ -4469,19 +4469,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let tir_fields: Vec<TirField> = fields
             .iter()
             .enumerate()
-            .map(|(i, (fname, fty))| TirField {
-                name: fname.clone(),
-                visibility: Visibility::Public,
-                type_id: *fty,
-                index: i as u32,
-                span,
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                serde_encoding: WireEncoding::Plain,
-                default_expr: None,
+            .map(|(i, (fname, fty))| {
+                TirField::plain(fname.clone(), Visibility::Public, *fty, i as u32, span)
             })
             .collect();
 

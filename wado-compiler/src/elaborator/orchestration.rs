@@ -969,11 +969,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .cases
                             .iter()
                             .enumerate()
-                            .map(|(index, case)| EnumCaseData {
-                                name: case.name.clone(),
-                                index: index as u32,
-                                ast_id: case.id,
-                            })
+                            .map(|(index, case)| EnumCaseData::of(index, case))
                             .collect();
                         if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
                             all_enum_cases.insert(

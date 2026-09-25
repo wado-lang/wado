@@ -1801,10 +1801,10 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 
 ### core:protobuf
 
-The Protocol Buffers wire format, keyed by `#[wire(number = N)]`. A field with a
-default is implicit presence: it is left off the wire while it holds its
-default, so that default should be the zero. Grog generates these declarations
-from a `.proto`. See [`core:protobuf`](./stdlib-core-protobuf.md) and
+The Protocol Buffers wire format, keyed by `#[wire(number = N)]`. A field whose
+default is its type's zero has implicit presence: it is left off the wire while
+it holds that zero. Any other default is always written. Grog generates these
+declarations from a `.proto`. See [`core:protobuf`](./stdlib-core-protobuf.md) and
 [WEP: Grog](./wep-2026-09-22-grog.md).
 
 ```wado

@@ -168,3 +168,23 @@ test "a map value is length-prefixed whatever the file's encoding" {
     );
     assert out.contains("pub value: Option<M> = null,");
 }
+
+test "an enum with no value is refused" {
+    assert generate("syntax = \"proto2\";\nenum E {}") == "error: 2: E declares no value";
+}
+
+test "a map key is an integer, bool or string" {
+    assert generate("syntax = \"proto3\";\nmessage M { map<double, int32> m = 1; }") == "error: 2: m: a map key cannot be double";
+    assert generate("syntax = \"proto3\";\nmessage M { map<M, int32> m = 1; }") == "error: 2: m: a map key cannot be M";
+    assert !generate("syntax = \"proto3\"; message M { map<sfixed64, int32> m = 1; }").starts_with("error");
+}
+
+test "a field number the wire format does not admit is refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 0; }") == "error: 2: a: 0 is not a field number the wire format admits";
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 19000; }") == "error: 2: a: 19000 is not a field number the wire format admits";
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 536870912; }") == "error: 2: a: 536870912 is not a field number the wire format admits";
+}
+
+test "a field number used twice is refused" {
+    assert generate("syntax = \"proto3\";\nmessage M { int32 a = 1;\n int32 b = 1; }") == "error: 3: M: a and b are both field 1";
+}

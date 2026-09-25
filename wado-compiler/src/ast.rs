@@ -1556,15 +1556,34 @@ pub enum WireEncoding {
     Fixed,
 }
 
-impl WireEncoding {
-    /// The discriminant `core:prelude`'s `WireEncoding` gives the same case.
+/// `#[wire(name_policy = "…")]`: the casing a name-keyed format spells a
+/// declaration's members in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NamePolicy {
+    Camel,
+    Snake,
+    ScreamingSnake,
+    Pascal,
+    Kebab,
+    ScreamingKebab,
+}
+
+impl NamePolicy {
+    pub const WRITTEN: [(&'static str, Self); 6] = [
+        ("camelCase", Self::Camel),
+        ("snake_case", Self::Snake),
+        ("SCREAMING_SNAKE_CASE", Self::ScreamingSnake),
+        ("PascalCase", Self::Pascal),
+        ("kebab-case", Self::Kebab),
+        ("SCREAMING-KEBAB-CASE", Self::ScreamingKebab),
+    ];
+
     #[must_use]
-    pub fn discriminant(self) -> i32 {
-        match self {
-            Self::Plain => 0,
-            Self::ZigZag => 1,
-            Self::Fixed => 2,
-        }
+    pub fn parse(written: &str) -> Option<Self> {
+        Self::WRITTEN
+            .iter()
+            .find(|(name, _)| *name == written)
+            .map(|&(_, policy)| policy)
     }
 }
 

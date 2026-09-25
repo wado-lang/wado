@@ -5,7 +5,7 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{Visibility, WireEncoding};
+use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
@@ -265,20 +265,13 @@ impl TypeBuilder {
                 method_type_args: vec![],
                 is_blanket: false,
             }),
-            fields: vec![TirField {
-                name: "value".to_string(),
-                visibility: Visibility::Private,
-                type_id: inner_type_id,
-                index: 0,
-                span: Span::new(0, 0, 0, 0),
-                is_secret: false,
-                wire_name_override: None,
-                serde_default: false,
-                serde_positional: false,
-                serde_number: None,
-                serde_encoding: WireEncoding::Plain,
-                default_expr: None,
-            }],
+            fields: vec![TirField::plain(
+                "value".to_string(),
+                Visibility::Private,
+                inner_type_id,
+                0,
+                Span::new(0, 0, 0, 0),
+            )],
             span: Span::new(0, 0, 0, 0),
             wire_name_policy: None,
         };

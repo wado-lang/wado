@@ -64,6 +64,7 @@ attrArg
 
 attrValue
     : literal
+    | '-' INTEGER
     | identifier
     | '[' (attrValue (',' attrValue)*)? ']'
     ;

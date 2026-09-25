@@ -39,7 +39,7 @@ use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
-    AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
+    AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_encoding_written, wire_number_of,
     wire_number_written,
 };
@@ -1045,37 +1045,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = field_types[index];
-
-            let wire_name_override = wire_name_override_of(&field.attrs);
-
-            let default_expr: Option<Box<TirExpr>> = field.default.as_ref().map(|default_ast| {
-                Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
-            });
-
-            // A field is optional on deserialize iff it has a default value.
-            // `#[wire(default)]` is removed (rejected in `resolve_struct`).
-            let serde_default = field.default.is_some();
-
-            let serde_positional = field
-                .attrs
-                .iter()
-                .any(|a| a.name == WIRE && a.has_arg("positional"));
-
-            fields.push(TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-                wire_name_override,
-                serde_default,
-                serde_positional,
-                serde_number: wire_numbers[index],
-                serde_encoding: self.checked_wire_encoding(field, type_id),
-                default_expr,
-            });
+            fields.push(self.reify_struct_field(
+                field,
+                index,
+                field_types[index],
+                field.visibility,
+                wire_numbers[index],
+                &mut field_ctx,
+            ));
         }
 
         // Single source of truth: the body walk projected these type
@@ -1153,30 +1130,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .enumerate()
             .map(|(index, (name, type_id, visibility))| {
-                let field = struct_decl.fields.get(index);
-                let attrs: &[ast::Attribute] = field.map_or(&[], |f| &f.attrs);
-                let default_expr: Option<Box<TirExpr>> =
-                    field.and_then(|f| f.default.as_ref()).map(|default_ast| {
-                        Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(*type_id)))
-                    });
-                TirField {
-                    name: name.clone(),
-                    visibility: *visibility,
-                    type_id: *type_id,
-                    index: index as u32,
-                    span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == SECRET),
-                    wire_name_override: wire_name_override_of(attrs),
-                    serde_default: field.is_some_and(|f| f.default.is_some()),
-                    serde_positional: attrs
-                        .iter()
-                        .any(|a| a.name == WIRE && a.has_arg("positional")),
-                    serde_number: wire_numbers.get(index).copied().flatten(),
-                    serde_encoding: field.map_or(WireEncoding::Plain, |f| {
-                        self.checked_wire_encoding(f, *type_id)
-                    }),
-                    default_expr,
-                }
+                let field = &struct_decl.fields[index];
+                assert_eq!(
+                    &field.name, name,
+                    "resolve_local_struct keeps declaration order"
+                );
+                self.reify_struct_field(
+                    field,
+                    index,
+                    *type_id,
+                    *visibility,
+                    wire_numbers[index],
+                    &mut field_ctx,
+                )
             })
             .collect();
         // Single source of truth, as for a top-level struct: the body walk
@@ -2108,9 +2074,81 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// A field's `#[wire(encoding = "…")]`, checked against the integer it
-    /// applies to: the field's own type, or the element of an `Option` or
-    /// `List` it holds.
+    /// A declared struct field as TIR: its attributes read, its default reified.
+    fn reify_struct_field(
+        &mut self,
+        field: &ast::StructField,
+        index: usize,
+        type_id: TypeId,
+        visibility: Visibility,
+        wire_number: Option<u32>,
+        field_ctx: &mut FunctionContext,
+    ) -> TirField {
+        let default_expr = field
+            .default
+            .as_ref()
+            .map(|default_ast| Box::new(self.reify_expr(default_ast, field_ctx, Some(type_id))));
+        TirField {
+            name: field.name.clone(),
+            visibility,
+            type_id,
+            index: index as u32,
+            span: field.span,
+            is_secret: field.attrs.iter().any(|a| a.name == SECRET),
+            wire_name_override: wire_name_override_of(&field.attrs),
+            serde_default: field.default.is_some(),
+            serde_positional: field
+                .attrs
+                .iter()
+                .any(|a| a.name == WIRE && a.has_arg("positional")),
+            serde_number: wire_number,
+            serde_encoding: self.checked_wire_encoding(field, type_id),
+            default_is_zero: default_expr.as_deref().is_some_and(|e| self.is_zero(e)),
+            default_expr,
+        }
+    }
+
+    /// Whether a reified default is its type's zero: `0`, `0.0`, `false`, an
+    /// empty string, bytes or list, `null`, or the enum case whose wire number is 0.
+    fn is_zero(&self, expr: &TirExpr) -> bool {
+        match &expr.kind {
+            TirExprKind::IntLiteral { value, .. } => *value == 0,
+            TirExprKind::FloatLiteral { value, .. } => value.to_bits() == 0,
+            TirExprKind::BoolLiteral(b) => !b,
+            TirExprKind::StringLiteral(s) => s.is_empty(),
+            TirExprKind::BytesLiteral(b) => b.is_empty(),
+            TirExprKind::Null => true,
+            TirExprKind::EnumConstruct {
+                enum_type,
+                case_index,
+                ..
+            } => self.enum_case_wire_number(*enum_type, *case_index) == 0,
+            // `[]` coerced to a collection through `From<Array<T>>`.
+            TirExprKind::Call { args, .. } => {
+                matches!(args.as_slice(), [arg] if matches!(&arg.expr.kind, TirExprKind::ArrayLiteral { elements } if elements.is_empty()))
+            }
+            _ => false,
+        }
+    }
+
+    /// The number an enum case goes on the wire as: its `#[wire(number = N)]`,
+    /// or its position.
+    fn enum_case_wire_number(&self, enum_type: TypeId, case_index: u32) -> i32 {
+        let def = self
+            .tysys
+            .type_def(enum_type)
+            .expect("an enum literal's type is a declared enum");
+        let info = self
+            .type_lookup()
+            .enum_cases_of(def)
+            .expect("an enum literal's type is a declared enum");
+        info.cases[case_index as usize]
+            .wire_number
+            .unwrap_or(case_index as i32)
+    }
+
+    /// A field's `#[wire(encoding = "…")]`, checked against the integer the
+    /// field holds, directly or in an `Option` or `List`.
     fn checked_wire_encoding(&self, field: &ast::StructField, type_id: TypeId) -> WireEncoding {
         let Some(written) = wire_encoding_written(&field.attrs) else {
             return WireEncoding::Plain;
@@ -2142,10 +2180,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let tt = self.tysys.type_table.borrow();
-        let element = tt
-            .as_option(type_id)
-            .or_else(|| tt.as_list(type_id))
-            .unwrap_or(type_id);
+        let held = tt.representation_head(type_id);
+        let element = tt.representation_head(
+            tt.as_option(held)
+                .or_else(|| tt.as_list(held))
+                .unwrap_or(held),
+        );
         if !matches!(tt.get(element), ResolvedType::Primitive(p) if admits.contains(p)) {
             self.wire_encoding_error(
                 &field.span,
@@ -11845,11 +11885,12 @@ fn wire_number_fault(written: &str) -> String {
     )
 }
 
-/// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.
-fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
+/// `#[wire(name_policy = "...")]` on a declaration. The attribute check refuses
+/// a policy `NamePolicy` does not name.
+fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {
     attrs.iter().find_map(|a| {
         if a.name == WIRE {
-            a.kv_value("name_policy").map(str::to_string)
+            a.kv_value("name_policy").and_then(NamePolicy::parse)
         } else {
             None
         }

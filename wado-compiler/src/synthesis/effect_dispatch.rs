@@ -4,7 +4,7 @@
 //! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
-use crate::ast::{RestClause, Visibility, WireEncoding};
+use crate::ast::{RestClause, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -345,20 +345,13 @@ fn synthesize_dispatch_struct(
     // Build the field decls: outer at index 0, then ops in source order.
     let outer_field_type = nullable_ref_type_id;
     let mut fields: Vec<TirField> = Vec::with_capacity(meta.operations.len() + 1);
-    fields.push(TirField {
-        name: "outer".to_string(),
-        visibility: Visibility::Private,
-        type_id: outer_field_type,
-        index: 0,
-        span: synth_span(),
-        is_secret: false,
-        wire_name_override: None,
-        serde_default: false,
-        serde_positional: false,
-        serde_number: None,
-        serde_encoding: WireEncoding::Plain,
-        default_expr: None,
-    });
+    fields.push(TirField::plain(
+        "outer".to_string(),
+        Visibility::Private,
+        outer_field_type,
+        0,
+        synth_span(),
+    ));
 
     let mut wrapper_names: IndexMap<String, String> = IndexMap::default();
     let mut field_names: IndexMap<String, String> = IndexMap::default();
@@ -369,20 +362,13 @@ fn synthesize_dispatch_struct(
         let field_name = dispatch_field_name(&op.name);
         let field_type = op_field_types[i];
         let field_index = (i + 1) as u32;
-        fields.push(TirField {
-            name: field_name.clone(),
-            visibility: Visibility::Private,
-            type_id: field_type,
-            index: field_index,
-            span: synth_span(),
-            is_secret: false,
-            wire_name_override: None,
-            serde_default: false,
-            serde_positional: false,
-            serde_number: None,
-            serde_encoding: WireEncoding::Plain,
-            default_expr: None,
-        });
+        fields.push(TirField::plain(
+            field_name.clone(),
+            Visibility::Private,
+            field_type,
+            field_index,
+            synth_span(),
+        ));
         wrapper_names.insert(op.name.clone(), dispatch_wrapper_name(&label, &op.name));
         field_names.insert(op.name.clone(), field_name);
         field_types.insert(op.name.clone(), field_type);

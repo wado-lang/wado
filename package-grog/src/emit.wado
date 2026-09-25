@@ -3,6 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { CodeWriter, EnumSpec, FieldSpec, StructSpec, Vis, is_keyword, is_reserved, wado } from "lib:wadopoet";
+use { is_scalar } from "./parse.wado";
 use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
 
 pub variant EmitError {
@@ -142,6 +143,9 @@ impl Emitter {
         let prefix = `${screaming_snake(&decl.path[decl.path.len() - 1])}_`;
         let mut cases: List<PlannedCase> = [];
         let mut aliases: List<[String, String]> = [];
+        if decl.values.is_empty() {
+            return Result::Err(EmitError::Invalid(`${decl.line}: ${decl.path.join(".")} declares no value`));
+        }
         for let value of &decl.values {
             let case = case_name(&value.name, &prefix);
             let mut aliased = false;
@@ -182,7 +186,22 @@ impl Emitter {
         let mut spec = StructSpec::new(&name, Vis::Pub);
         let mut entries: List<StructSpec> = [];
         let mut field_names: List<String> = [];
+        let mut numbered: List<[i32, String]> = [];
         for let field of &decl.fields {
+            let n = field.number;
+            if n < 1 || n > 536_870_911 || 19_000 <= n && n <= 19_999 {
+                return Result::Err(EmitError::Invalid(
+                    `${field.line}: ${field.name}: ${n} is not a field number the wire format admits`,
+                ));
+            }
+            for let [number, other] of &numbered {
+                if *number == n {
+                    return Result::Err(EmitError::Invalid(
+                        `${field.line}: ${decl.path.join(".")}: ${other} and ${field.name} are both field ${n}`,
+                    ));
+                }
+            }
+            numbered.push([n, field.name]);
             let mut out = FieldSpec::new_pub(&field.name, "");
             out.attrs.push(`wire(number = ${field.number})`);
             if is_keyword(&field.name) {
@@ -255,6 +274,9 @@ impl Emitter {
         key: &String,
         value: &FieldType,
     ) -> Result<StructSpec, EmitError> {
+        if !is_map_key(key) {
+            return Result::Err(EmitError::Invalid(`${field.line}: ${field.name}: a map key cannot be ${key}`));
+        }
         let owner = self.names[self.full_name(&decl.path)].name;
         let name = self.take(`${owner}${pascal(&field.name)}Entry`, `${decl.path.join(".")}.${field.name}`, field.line)?;
         let mut spec = StructSpec::new(&name, Vis::Pub);
@@ -399,6 +421,14 @@ fn scalar(name: &String) -> [String, String, Option<String>] {
         "bool" => ["bool", "false", null],
         "string" => ["String", "\"\"", null],
         _ => ["ByteList", "b\"\"", null],
+    };
+}
+
+/// Any scalar but a float or `bytes`, as protobuf's language guide allows.
+fn is_map_key(name: &String) -> bool {
+    return match name.as_str_slice() {
+        "double" | "float" | "bytes" => false,
+        _ => is_scalar(name),
     };
 }
 

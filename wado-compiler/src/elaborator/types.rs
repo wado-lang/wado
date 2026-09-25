@@ -6,7 +6,7 @@ use std::ops::Deref;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility};
+use crate::ast::{self, AstId, Expr, Visibility, wire_case_number_of};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -169,6 +169,19 @@ pub(super) struct EnumCaseData {
     pub(super) index: u32,
     /// `AstId` of the case declaration (`EnumCase::id`) in the owning module.
     pub(super) ast_id: AstId,
+    /// `#[wire(number = N)]`, as written; reify checks it.
+    pub(super) wire_number: Option<i32>,
+}
+
+impl EnumCaseData {
+    pub(super) fn of(index: usize, case: &ast::EnumCase) -> Self {
+        Self {
+            name: case.name.clone(),
+            index: index as u32,
+            ast_id: case.id,
+            wire_number: wire_case_number_of(&case.attrs),
+        }
+    }
 }
 
 /// Enum info: module source and cases (enums have no type parameters or payloads)

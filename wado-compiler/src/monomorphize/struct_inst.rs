@@ -102,6 +102,7 @@ impl Monomorphizer {
                     serde_positional: field.serde_positional,
                     serde_number: field.serde_number,
                     serde_encoding: field.serde_encoding,
+                    default_is_zero: field.default_is_zero,
                     default_expr: None,
                 }
             })
