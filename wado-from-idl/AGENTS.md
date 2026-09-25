@@ -20,4 +20,4 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
   there and run `mise run update-webidl-snapshot`. See
   `docs/wep-2026-04-01-tide.md`.
 
-Never edit a generated `.wado` file. Change this crate and regenerate.
+Never edit a generated file. Change this crate and regenerate.
