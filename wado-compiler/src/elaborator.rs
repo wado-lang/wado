@@ -1088,7 +1088,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration(name)
     }
 
-<<<<<<< HEAD
     /// The trait `bound` names; one naming no declaration keeps its spelling,
     /// which the mangle falls back to.
     pub(super) fn fq_trait_name_of(&self, bound: &ast::TraitBound) -> FqTraitName {
@@ -1101,40 +1100,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The trait a reference site names, with the type arguments it writes; one
     /// naming no declaration keeps its spelling.
-||||||| 03599b796
-    /// The trait a bound's reference site names; `written` supplies the type
-    /// arguments and the diagnostic spelling.
-    ///
-    /// A site naming no declaration gets no invented identity — `use` and the
-    /// prelude are the only ways to name a trait, so a name reaching nothing here
-    /// reaches nothing at all, and the mangle falls back to the spelling.
-    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
-        let resolutions = &self.tysys.resolutions;
-        let answer = resolutions.get(site);
-        if let Resolution::Binder(_) = answer {
-            return FqTraitName::binder(written);
-        }
-        // `written` is a bound's spelling, and a bound is a bare name: the
-        // parser reads `<...>` after one as associated-type bindings, so no
-        // type argument ever reaches here to be split back out.
-        resolutions.declared(site).map_or_else(
-            || FqTraitName::binder(written),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
-    }
-
-    /// The trait a reference site names, in the form a mangled method name
-    /// embeds it: the declaration the site resolves to, plus the type
-    /// arguments the site wrote.
-    ///
-    /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
-    /// in the module that wrote the reference — so an alias and a second
-    /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration carries no identity — see [`Self::fq_trait_name_at`].
-=======
-    /// The trait a reference site names, as a mangled method name embeds it:
-    /// the declaration the writing module resolved it to, plus the written type arguments.
->>>>>>> origin/main
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let resolutions = &self.tysys.resolutions;
         let head = resolutions.head_decl(ty).map_or_else(
@@ -1376,96 +1341,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.local_types.insert(def_id, type_id);
     }
 
-<<<<<<< HEAD
-    /// The impl-associated constant `owner` declares as `name`.
-    ///
-    /// `owner` is the declaration the use site's qualifier resolved to — an
-    /// alias and a `ns$Type` prefix answer with it like any other spelling —
-    /// so a same-named type in an unrelated module can never satisfy the
-    /// lookup.
-    pub(super) fn associated_constant_of(
-        &self,
-        owner: DefId,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        self.tysys
-            .signatures
-            .associated_constant(owner, name)
-            .cloned()
-    }
-
-    /// [`Self::associated_constant_of`] for a qualified path in expression
-    /// position, whose leading segment carries the site that names the owner.
-    pub(super) fn associated_constant_of_path(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
-        let name = ident.segments.last()?;
-        self.associated_constant_of(owner, &name.name)
-    }
-
-    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
-    /// spelling, whose qualifier is a written `ast::Type` with its own site.
-    pub(super) fn associated_constant_qualified(
-        &self,
-        qualifier: Option<&ast::Type>,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
-        self.associated_constant_of(owner, name)
-    }
-
-||||||| 03599b796
-    /// The impl-associated constant `owner` declares as `name`.
-    ///
-    /// `owner` is the declaration the use site's qualifier resolved to — an
-    /// alias and a `ns$Type` prefix answer with it like any other spelling —
-    /// so a same-named type in an unrelated module can never satisfy the
-    /// lookup.
-    pub(super) fn associated_constant_of(
-        &self,
-        owner: DefId,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        self.tysys
-            .signatures
-            .associated_constant(owner, name)
-            .cloned()
-    }
-
-    /// [`Self::associated_constant_of`] for a qualified path in expression
-    /// position, whose leading segment carries the site that names the owner.
-    pub(super) fn associated_constant_of_path(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner_of_path(ident, &self.tysys.resolutions)?;
-        let name = ident.segments.last()?;
-        self.associated_constant_of(owner, &name.name)
-    }
-
-    /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
-    /// spelling, whose qualifier is a written `ast::Type` with its own site.
-    pub(super) fn associated_constant_qualified(
-        &self,
-        qualifier: Option<&ast::Type>,
-        name: &str,
-    ) -> Option<sig::AssocConstSig> {
-        let owner = trait_query::assoc_const_owner(qualifier, &self.tysys.resolutions)?;
-        self.associated_constant_of(owner, name)
-    }
-
-    /// The declaration a qualified path's *owner* segment names — `Color` in
-    /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
-    /// resolve walk answered for. `None` for a bare name, which qualifies
-    /// nothing, and for an owner that reaches no declaration.
-    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        self.tysys.resolutions.declared(ident.owner_segment()?.id)
-    }
-
-=======
->>>>>>> origin/main
     /// Field info for the declaration a *written* struct name resolved to.
     ///
     /// `None` where the name reached nothing, or reached something that is no
@@ -1528,38 +1403,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-<<<<<<< HEAD
-    /// The name the prelude declares a primitive, `()`, `!` or the raw
-    /// `Array<T>` under.
-    fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
-        use crate::tir::ResolvedType;
-        let tt = self.tysys.type_table.borrow();
-        match tt.get(tt.peel_refs(type_id)) {
-            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
-            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
-            _ => None,
-        }
-    }
-
-||||||| 03599b796
-    /// Name of a type whose identity is the name itself — a primitive, `()`,
-    /// `!` or the raw `Array<T>`.
-    fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
-        use crate::tir::ResolvedType;
-        let tt = self.tysys.type_table.borrow();
-        match tt.get(tt.peel_refs(type_id)) {
-            ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some("!".to_string()),
-            ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
-            _ => None,
-        }
-    }
-
-=======
->>>>>>> origin/main
     /// The declaration behind `type_id` (refs peeled), or `None` for a type
     /// parameter, an associated-type projection, an anonymous struct shape and
     /// the other shapes that name none.
@@ -1567,23 +1410,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
-<<<<<<< HEAD
         // No vantage: an import aliasing a builtin's name never steers the type.
-        if let Some(name) = self.builtin_type_name(type_id) {
-            return self.tysys.resolutions.prelude_decl(&name);
-||||||| 03599b796
-        // A builtin's identity is its name, and the name path already knows
-        // which module declares it. A second table answering here would be a
-        // second derivation, free to disagree with that one.
-        if let Some(name) = self.builtin_type_name(type_id) {
-            return self.decl_key_or_local(&name);
-=======
-        // A builtin's identity is its name, and the name path already knows
-        // which module declares it. A second table answering here would be a
-        // second derivation, free to disagree with that one.
         if let Some(name) = self.tysys.builtin_type_name(type_id) {
-            return self.decl_key_or_local(&name);
->>>>>>> origin/main
+            return self.tysys.resolutions.prelude_decl(&name);
         }
         let tt = self.tysys.type_table.borrow();
         tt.nominal_def(tt.peel_refs(type_id))
@@ -1628,139 +1457,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
         effects
             .iter()
-<<<<<<< HEAD
             .map(|effect| {
                 self.effect_named_at(Some(effect.id), effect.span, &effect.name)
                     .unwrap_or_else(|| {
                         tir::EffectRef::unresolved(&effect.name, &self.current_module_source)
                     })
-||||||| 03599b796
-            .enumerate()
-            .map(|(i, name)| {
-                let use_id = effect_ids.get(i).map(|(id, _)| *id);
-                if let Some(&decl_id) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
-                    if let Some(use_id) = use_id {
-                        self.record_reference(use_id, decl_id);
-                    }
-                    tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(def) = self.decl_key_or_local(name).filter(|def| {
-                    self.tysys.trait_env.effect_decl_index.contains(def)
-                        || self.tysys.trait_env.resource_decl_index.contains(def)
-                }) {
-                    if let Some(use_id) = use_id {
-                        let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-                        self.record_reference_to_def(use_id, decl_ast);
-                    }
-                    let defs = self.tysys.resolutions.defs();
-                    tir::EffectRef::Concrete {
-                        name: defs.name(def).to_string(),
-                        module_source: defs.module(def).clone(),
-                    }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Identity is the declaration, so two `with Stdout` clauses
-                    // — one importing from `core:cli`, one from `wasi:cli` —
-                    // and a `with Out` aliasing either name one effect.
-                    let declared = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                } else {
-                    if let Some(use_id) = use_id {
-                        self.record_item_reference_by_name(use_id, name);
-                    }
-                    // Fallback: resolve via the import-aware symbol table so that
-                    // prelude-defined effects/resources (e.g. `Future`, `Stream`)
-                    // canonicalise to their defining module rather than the
-                    // current module. Falls through to `current_module_source`
-                    // only when no symbol exists (genuinely-local declaration).
-                    let declared = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), self.current_module_source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                }
-=======
-            .enumerate()
-            .map(|(i, name)| {
-                let use_id = effect_ids.get(i).map(|(id, _)| *id);
-                if let Some(&decl_id) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
-                    if let Some(use_id) = use_id {
-                        self.record_reference(use_id, decl_id);
-                    }
-                    tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(def) = self
-                    .decl_key_or_local(name)
-                    .filter(|&def| self.tysys.is_effect_or_resource_decl(def))
-                {
-                    if let Some(use_id) = use_id {
-                        let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-                        self.record_reference_to_def(use_id, decl_ast);
-                    }
-                    let defs = self.tysys.resolutions.defs();
-                    tir::EffectRef::Concrete {
-                        name: defs.name(def).to_string(),
-                        module_source: defs.module(def).clone(),
-                    }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Identity is the declaration, so two `with Stdout` clauses
-                    // — one importing from `core:cli`, one from `wasi:cli` —
-                    // and a `with Out` aliasing either name one effect.
-                    let declared = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                } else {
-                    if let Some(use_id) = use_id {
-                        self.record_item_reference_by_name(use_id, name);
-                    }
-                    // Fallback: resolve via the import-aware symbol table so that
-                    // prelude-defined effects/resources (e.g. `Future`, `Stream`)
-                    // canonicalise to their defining module rather than the
-                    // current module. Falls through to `current_module_source`
-                    // only when no symbol exists (genuinely-local declaration).
-                    let declared = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), self.current_module_source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                }
->>>>>>> origin/main
             })
             .collect()
     }
@@ -2054,22 +1755,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &resource_decl.methods,
                         OperationOwner::Resource,
                     );
-<<<<<<< HEAD
-                    let resource_def = self.tysys.resolutions.defs().def_at(resource_decl.id);
-||||||| 03599b796
-                    let resource_def = self.tysys.resolutions.defs().of_ast_id(resource_decl.id);
-=======
->>>>>>> origin/main
                     self.resolve_operation_param_defaults(
                         &resource_decl.type_params,
                         &resource_decl.methods,
-<<<<<<< HEAD
-                        Some(resource_def),
-||||||| 03599b796
-                        resource_def,
-=======
                         Some(self.tysys.def_at(resource_decl.id)),
->>>>>>> origin/main
                     );
                 }
                 // Other items will be added as needed
@@ -2204,16 +1893,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-<<<<<<< HEAD
                 .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
-||||||| 03599b796
-                .is_some_and(|key| {
-                    scope.tysys.trait_env.effect_decl_index.contains(&key)
-                        || scope.tysys.trait_env.resource_decl_index.contains(&key)
-                });
-=======
-                .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
->>>>>>> origin/main
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
@@ -2410,12 +2090,6 @@ impl TypeSystem {
         self.associated_constant_of(owner, name)
     }
 
-    /// The declaration a qualified path's owner segment names: `Color` in
-    /// `Color::Red` or `ns::Color::Red`.
-    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        self.resolutions.declared(ident.owner_segment()?.id)
-    }
-
     /// The canonical signature of the free function the site names.
     pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
         self.signatures.function_sig(self.free_function_at(site)?)
@@ -2486,22 +2160,6 @@ impl TypeSystem {
         trait_env::render_decl_name(self.resolutions.defs(), def)
     }
 
-    /// The trait a bound's reference site names, `written` its spelling. A site
-    /// naming no declaration gets no invented identity: the mangle uses `written`.
-    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
-        let resolutions = &self.resolutions;
-        let answer = resolutions.get(site);
-        if let Resolution::Binder(_) = answer {
-            return FqTraitName::binder(written);
-        }
-        // A bound is a bare name: the parser reads `<...>` after one as
-        // associated-type bindings, so `written` carries no type arguments.
-        resolutions.declared(site).map_or_else(
-            || FqTraitName::binder(written),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
-    }
-
     /// The variant `type_id` is an instance of, or `None` when it is not one. An
     /// instantiated `Option<i32>` answers with the `Option` it was spelled from.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
@@ -2516,15 +2174,15 @@ impl TypeSystem {
         self.data.enum_cases.get(&def)
     }
 
-    /// Name of a type whose identity is the name itself — a primitive, `()`,
-    /// `!` or the raw `Array<T>`.
+    /// The name the prelude declares a primitive, `()`, `!` or the raw
+    /// `Array<T>` under.
     fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
         let tt = self.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some("!".to_string()),
+            ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
             ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }

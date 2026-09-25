@@ -7,22 +7,10 @@ use crate::ast::{
     BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
     ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
     CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EFFECT_HOLE,
-<<<<<<< HEAD
     EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr,
     ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
-    ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-||||||| 03599b796
-    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
-    FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
-    ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-=======
-    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
-    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
->>>>>>> origin/main
     LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
     RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,

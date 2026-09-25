@@ -6,7 +6,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::trait_env::{BlanketImpl, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{BlanketImpl, BlanketReceiver, ImplReceiver, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, RefKind, mangle_generic_name};
@@ -2409,6 +2409,54 @@ impl Monomorphizer {
         shorter().unwrap_or(info)
     }
 
+    fn is_universal_ref_blanket(&self, template: Option<&TemplateId>) -> bool {
+        let Some(TemplateId::Declared {
+            block: Some(block), ..
+        }) = template
+        else {
+            return false;
+        };
+        self.functions
+            .trait_env
+            .blanket_of_block(*block)
+            .is_some_and(|blanket| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
+    }
+
+    /// A universal `&T` blanket call at this instance. Its head stays `&`: only
+    /// the pointee it is keyed by can mention the substituted parameters.
+    fn substitute_ref_blanket_pointee(
+        &self,
+        method_func: &mut FunctionRef,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        let monomorph = method_func
+            .monomorph_info
+            .as_mut()
+            .expect("a `&T` blanket call is keyed by its pointee");
+        let [pointee] = monomorph.impl_type_args[..] else {
+            panic!("a `&T` blanket is keyed by one pointee");
+        };
+        let pointee = self.substitute_type(pointee, substitution, type_table);
+        let method_type_args: Vec<TypeId> = monomorph
+            .method_type_args
+            .iter()
+            .map(|&arg| self.substitute_type(arg, substitution, type_table))
+            .collect();
+        let new_info = info.with_type_args(
+            &[type_table.fq_type_name(pointee)],
+            &method_type_args
+                .iter()
+                .map(|&arg| type_table.fq_type_name(arg))
+                .collect::<Vec<_>>(),
+        );
+        monomorph.impl_type_args = vec![pointee];
+        monomorph.method_type_args = method_type_args;
+        method_func.name = new_info.to_mangled_name();
+        method_func.method_info = Some(new_info);
+    }
+
     /// Resolve a method call in a generic body to its concrete target after
     /// substitution, delegating by receiver kind: a reference type-param to
     /// [`Self::try_ref_blanket_shortcut`], a type-param (`T^Ord::cmp` →
@@ -2430,6 +2478,10 @@ impl Monomorphizer {
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
         if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
+            return;
+        }
+        if self.is_universal_ref_blanket(method_func.template.as_ref()) {
+            self.substitute_ref_blanket_pointee(method_func, &info, substitution, type_table);
             return;
         }
 
@@ -2776,19 +2828,16 @@ impl Monomorphizer {
         let template = self
             .dispatch_template(&new_info, receiver_type_id, &module_source, type_table)
             .or_else(|| written.clone());
-        let existing_is_blanket = existing_is_blanket && template == written;
-        // For blanket impl calls, substitute the existing type_args rather than
-        // building from the enclosing substitution map.
-        let final_impl_ta = if existing_is_blanket {
-            if let Some(args) = existing_impl_ta {
-                args.iter()
-                    .map(|&tid| self.substitute_type(tid, substitution, type_table))
-                    .collect()
-            } else {
-                type_args
-            }
-        } else {
-            type_args
+        let same_block = template == written;
+        let existing_is_blanket = existing_is_blanket && same_block;
+        // The call's own impl args name its block's parameters; the enclosing
+        // substitution names them only where the call has none of its own.
+        let final_impl_ta = match existing_impl_ta {
+            Some(args) if same_block => args
+                .iter()
+                .map(|&tid| self.substitute_type(tid, substitution, type_table))
+                .collect(),
+            _ => type_args,
         };
         let final_method_ta = existing_method_ta.unwrap_or_default();
         let monomorph_info = Some(MonomorphInfo {

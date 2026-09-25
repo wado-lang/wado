@@ -167,24 +167,8 @@ pub fn expand_templates(
     }
 }
 
-<<<<<<< HEAD
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
 /// template shape in `module`, each arm the untagged interpolation of hole `index`.
-||||||| 03599b796
-/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
-/// tagged template shape in `module`: `match index { k => <hole k rendered
-/// through its specifier into f's buffer> }`. `Hole::fmt`'s body carries a
-/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
-/// Each arm is the interpolation the untagged template would emit for that
-/// hole, so the two forms cannot render differently.
-=======
-/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
-/// tagged template shape in `module`: `match index { k => <hole k rendered
-/// through its specifier into f's buffer> }`. `TemplateHole::fmt`'s body carries a
-/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
-/// Each arm is the interpolation the untagged template would emit for that
-/// hole, so the two forms cannot render differently.
->>>>>>> origin/main
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -1147,7 +1131,7 @@ pub(crate) fn method_template_at(
     tt: &TypeTable,
 ) -> Option<TemplateId> {
     let receiver = if info.ref_receiver().is_some() {
-        receiver
+        tt.innermost_ref(receiver)
     } else {
         tt.peel_refs(receiver)
     };

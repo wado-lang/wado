@@ -1438,23 +1438,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a generic instance names a declaration")
                     .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-<<<<<<< HEAD
                 let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
                 if is_tuple && let Ok(index) = field_name.parse::<usize>() {
-                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
-                    {
-||||||| 03599b796
-                if TypeTable::is_tuple_type(&name)
-                    && let Ok(index) = field_name.parse::<usize>()
-                {
-                    match Self::tuple_literal_index_type(&self.tysys.type_table, &type_args, index)
-                    {
-=======
-                if TypeTable::is_tuple_type(&name)
-                    && let Ok(index) = field_name.parse::<usize>()
-                {
                     match self.tysys.tuple_literal_index_type(&type_args, index) {
->>>>>>> origin/main
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
                             let _ = self.emit(TypeError::InvalidLiteral { message, span });
@@ -1766,7 +1752,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
-                    template: Some(self.declared_template(trait_info.method_def)),
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1819,7 +1809,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
-                    template: Some(self.declared_template(trait_info.method_def)),
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1870,54 +1864,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-<<<<<<< HEAD
         let base_type_id = self.tysys.through_ref(recv_type);
-        let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)
-                .unwrap_or_default(),
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            _ => return None,
-        };
-        if struct_name.is_empty() {
-            return None;
-        }
-||||||| 03599b796
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
-        let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
-            ResolvedType::Struct { .. }
-            | ResolvedType::GenericInstance { .. }
-            | ResolvedType::Newtype { .. }
-            | ResolvedType::Flags { .. } => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type_id)
-                .map(|(n, _)| n)
-                .unwrap_or_default(),
-            ResolvedType::BuiltinArray(_) => TypeTable::ARRAY_TYPE_NAME.to_string(),
-            _ => return None,
-        };
-        if struct_name.is_empty() {
-            return None;
-        }
-=======
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
         let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
->>>>>>> origin/main
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
         self.index_lookup_or_newtype_base(
@@ -1978,189 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(b) = &if_expr.else_block {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
-<<<<<<< HEAD
-
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-
-                    // `never` is the bottom type: a branch returning `never` is compatible
-                    // with any type, so the result type comes from the non-never branch.
-                    //
-                    // An indefinite branch defers to its sibling's resolved
-                    // type; its tail is patched below.
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => {
-                            if then_type != TypeTable::UNIT {
-                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                                let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: UNIT_TYPE_NAME.to_string(),
-                                    found: type_name,
-                                    span: if_expr.then_block.span,
-                                });
-                            }
-                            TypeTable::UNIT
-                        }
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // Report any unresolved `null` tail in either branch against
-                // the determined result type — AST mirror of the old
-                // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed indefinite (both branches a bare `null`)
-                // `report_uninferable_result` already fired and the null pass
-                // is skipped.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same rule as `resolve_match_expr`: an if-expression whose
-                // result is consumed needs branches that agree. Inference
-                // diagnoses the `expected_type = None` case, but `Some(X)`
-                // bypasses it and would emit an `(if (result X) …)` whose other
-                // side pushes the wrong type. Skipped at `Unit`.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
-                    } else {
-                        // Without an explicit `else` the implicit branch is `()`,
-                        // which cannot satisfy a non-Unit expected type.
-                        // `type_id` is left as-is: the recorded diagnostic
-                        // aborts before WIR build, so a result-typed `if` with
-                        // no else never reaches `wasmparser`.
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the `If` node from the AST; the
-                // body walk resolved the condition and both blocks for
-                // their fact-recording side effects and ran branch-agreement /
-                // null diagnostics off the AST (`ast_block_result_type`).
-                // Project only the result type.
-                type_id
-||||||| 03599b796
-
-                let expected_type = self.settled_result_expectation(expected_type);
-                let type_id = if let Some(ty) = expected_type {
-                    ty
-                } else {
-                    let (then_type, else_type) = self.if_branch_types(if_expr);
-
-                    // `never` is the bottom type: a branch returning `never` is compatible
-                    // with any type, so the result type comes from the non-never branch.
-                    //
-                    // An indefinite branch defers to its sibling's resolved
-                    // type; its tail is patched below.
-                    match (
-                        self.agreed_branch_type(&[then_type, else_type]),
-                        &if_expr.else_block,
-                    ) {
-                        (Some(agreed), _) => agreed,
-                        (None, None) => {
-                            if then_type != TypeTable::UNIT {
-                                let type_name = self.tysys.type_table.borrow().type_name(then_type);
-                                let _ = self.emit(TypeError::TypeMismatch {
-                                    expected: "()".to_string(),
-                                    found: type_name,
-                                    span: if_expr.then_block.span,
-                                });
-                            }
-                            TypeTable::UNIT
-                        }
-                        (None, Some(else_block)) => {
-                            let (then_name, else_name) = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .type_names_for_mismatch(then_type, else_type);
-                            let _ = self.emit(TypeError::TypeMismatch {
-                                expected: then_name,
-                                found: else_name,
-                                span: else_block.span,
-                            });
-                            then_type
-                        }
-                    }
-                };
-
-                // Report any unresolved `null` tail in either branch against
-                // the determined result type — AST mirror of the old
-                // `patch_unresolved_null` pass (whose TIR mutation was dead).
-                // When the type stayed indefinite (both branches a bare `null`)
-                // `report_uninferable_result` already fired and the null pass
-                // is skipped.
-                if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-                    let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-                    if let Some(eb) = &if_expr.else_block {
-                        blocks.push(eb);
-                    }
-                    self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
-                }
-
-                // Same rule as `resolve_match_expr`: an if-expression whose
-                // result is consumed needs branches that agree. Inference
-                // diagnoses the `expected_type = None` case, but `Some(X)`
-                // bypasses it and would emit an `(if (result X) …)` whose other
-                // side pushes the wrong type. Skipped at `Unit`.
-                if expected_type.is_some() && type_id != TypeTable::UNIT {
-                    let then_type = self.ast_block_result_type(&if_expr.then_block);
-                    self.check_branch_type(then_type, type_id, if_expr.then_block.span);
-                    if let Some(eb) = &if_expr.else_block {
-                        let else_type = self.ast_block_result_type(eb);
-                        self.check_branch_type(
-                            else_type,
-                            type_id,
-                            if_expr.else_block.as_ref().unwrap().span,
-                        );
-                    } else {
-                        // Without an explicit `else` the implicit branch is `()`,
-                        // which cannot satisfy a non-Unit expected type.
-                        // `type_id` is left as-is: the recorded diagnostic
-                        // aborts before WIR build, so a result-typed `if` with
-                        // no else never reaches `wasmparser`.
-                        self.check_branch_type(TypeTable::UNIT, type_id, if_expr.span);
-                    }
-                }
-
-                // Reify rebuilds the `If` node from the AST; the
-                // body walk resolved the condition and both blocks for
-                // their fact-recording side effects and ran branch-agreement /
-                // null diagnostics off the AST (`ast_block_result_type`).
-                // Project only the result type.
-                type_id
-=======
                 self.settle_if_result(if_expr, expected_type, false)
->>>>>>> origin/main
             }
         }
     }
@@ -2189,7 +1955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if then_type != TypeTable::UNIT {
                         let type_name = self.tysys.type_table.borrow().type_name(then_type);
                         let _ = self.emit(TypeError::TypeMismatch {
-                            expected: "()".to_string(),
+                            expected: UNIT_TYPE_NAME.to_string(),
                             found: type_name,
                             span: if_expr.then_block.span,
                         });
@@ -3119,59 +2885,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.exh_case(scrutinee_type, &normalized, bindings.first())
     }
 
-<<<<<<< HEAD
-    fn exh_range(
-        &self,
-        start: &ast::Pattern,
-        end: &ast::Pattern,
-        kind: ast::RangeKind,
-        scrutinee_type: TypeId,
-    ) -> Pat {
-        // Bad or empty bounds were reported where the pattern was resolved.
-        let is_unsigned = self.exh_is_unsigned(scrutinee_type);
-        let resolutions = &self.tysys.resolutions;
-        let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned, resolutions),
-            util::range_endpoint_to_i128(end, is_unsigned, resolutions),
-        ) else {
-            return Pat::Wild;
-        };
-        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() || (!inclusive && order.is_ge()) {
-            return Pat::Wild;
-        }
-        let hi = if inclusive { end_val } else { end_val - 1 };
-        self.exh_int(start_val, hi, scrutinee_type)
-    }
-
-||||||| 03599b796
-    fn exh_range(
-        &self,
-        start: &ast::Pattern,
-        end: &ast::Pattern,
-        kind: ast::RangeKind,
-        scrutinee_type: TypeId,
-    ) -> Pat {
-        // Bad or empty bounds were reported where the pattern was resolved.
-        let is_unsigned = self.exh_is_unsigned(scrutinee_type);
-        let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned),
-            util::range_endpoint_to_i128(end, is_unsigned),
-        ) else {
-            return Pat::Wild;
-        };
-        let inclusive = matches!(kind, ast::RangeKind::Inclusive);
-        let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
-        if order.is_gt() || (!inclusive && order.is_ge()) {
-            return Pat::Wild;
-        }
-        let hi = if inclusive { end_val } else { end_val - 1 };
-        self.exh_int(start_val, hi, scrutinee_type)
-    }
-
-=======
->>>>>>> origin/main
     fn format_missing_cases(cases: &[String]) -> String {
         match cases.len() {
             1 => format!("case `{}`", cases[0]),
@@ -5255,8 +4968,8 @@ impl TypeSystem {
         // Bad or empty bounds were reported where the pattern was resolved.
         let is_unsigned = self.type_table.borrow().is_unsigned_int(scrutinee_type);
         let (Some(start_val), Some(end_val)) = (
-            util::range_endpoint_to_i128(start, is_unsigned),
-            util::range_endpoint_to_i128(end, is_unsigned),
+            util::range_endpoint_to_i128(start, is_unsigned, &self.resolutions),
+            util::range_endpoint_to_i128(end, is_unsigned, &self.resolutions),
         ) else {
             return Pat::Wild;
         };

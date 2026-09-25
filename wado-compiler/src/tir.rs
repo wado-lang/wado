@@ -2874,6 +2874,19 @@ impl TypeTable {
         }
     }
 
+    /// The reference layer holding the pointee: `&&mut X` → `&mut X`.
+    pub fn innermost_ref(&self, mut type_id: TypeId) -> TypeId {
+        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(type_id)
+            && matches!(
+                self.get(*inner),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
+        {
+            type_id = *inner;
+        }
+        type_id
+    }
+
     /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {

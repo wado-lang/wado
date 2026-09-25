@@ -2259,7 +2259,6 @@ impl CompilerItems {
         }
     }
 
-<<<<<<< HEAD
     /// The template a synthesised call to a [`CompilerItemKind::Method`] or
     /// [`CompilerItemKind::Function`] item instantiates.
     pub fn require_template(&self, item: CompilerItem) -> TemplateId {
@@ -2278,18 +2277,18 @@ impl CompilerItems {
         };
         let def = def.unwrap_or_else(|| panic!("compiler item `{item}` records no declaration"));
         TemplateId::Declared { def, block }
-||||||| 03599b796
-=======
+    }
+
     /// Module + name of a [`CompilerItemKind::Function`] item.
     pub fn require_function(&self, item: CompilerItem) -> (&ModuleSource, &str) {
         match self.require(item) {
             Resolved::Function {
                 module_source,
                 name,
+                ..
             } => (module_source, name.as_str()),
             other => kind_mismatch_ice(item, "Function", other),
         }
->>>>>>> origin/main
     }
 
     /// Module + owner-type name + method name of a

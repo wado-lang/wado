@@ -52,13 +52,8 @@ use task_return::{
     assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
     split_task_entry,
 };
-<<<<<<< HEAD
 use type_fixup::{collect_effect_calls_in_block, rewrite_calls_in_block};
-use types::{Boundary, Slot, flat_types_from_ast_type, flat_types_from_type_id};
-||||||| 03599b796
-=======
-use types::flat_types_from_type_id;
->>>>>>> origin/main
+use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,

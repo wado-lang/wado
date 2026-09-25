@@ -2,14 +2,7 @@
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-<<<<<<< HEAD
-use crate::hashmap;
-||||||| 03599b796
-use crate::hashmap;
-use crate::module_source::ModuleSource;
-=======
-use crate::module_source::ModuleSource;
->>>>>>> origin/main
+
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -1083,13 +1076,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
-<<<<<<< HEAD
             .map(|b| self.fq_trait_name_of(b))
-||||||| 03599b796
-            .map(|b| self.fq_trait_name_at(b.id, &b.name))
-=======
-            .map(|b| self.tysys.fq_trait_name_at(b.id, &b.name))
->>>>>>> origin/main
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
         self.tysys
@@ -1117,15 +1104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
-<<<<<<< HEAD
                     (self.trait_decl_of(&bound) == Some(trait_))
-||||||| 03599b796
-                    let fq = self.fq_trait_name_at(bound.id, &bound.name);
-                    (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
-=======
-                    let fq = self.tysys.fq_trait_name_at(bound.id, &bound.name);
-                    (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
->>>>>>> origin/main
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()
                         .map(|binding| (binding.ty, space, bound))

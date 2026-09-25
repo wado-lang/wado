@@ -26,15 +26,7 @@ use crate::cm_abi::{
 };
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
-<<<<<<< HEAD
-use crate::name::{
-    DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, UNIT_TYPE_NAME, to_kebab,
-};
-||||||| 03599b796
-use crate::name::{DeclName, DeclPath, IDENTITY_TEST_METHOD, NARROWING_TEST_METHOD, to_kebab};
-=======
-use crate::name::{DeclName, DeclPath, to_kebab};
->>>>>>> origin/main
+use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_kebab};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::synthesis::cm_binding::types::cm_interface_module;
@@ -1683,8 +1675,9 @@ impl SourceInterfaces {
 /// Why the program's own `#[cm]` declarations cannot be registered.
 #[derive(Debug)]
 pub enum UserCmError {
-    /// A module declares a type in an interface another module owns.
-    TakenInterface(String),
+    /// A module declares into an interface another module owns, or binds an
+    /// `Interface::method` another binding already took.
+    Duplicate(String),
     /// A type crossing a binding belongs to no interface.
     UnboundType(String),
 }
@@ -2242,11 +2235,7 @@ impl CmInterfaceRegistry {
         // Collect enum types from this module
         for item in &module.items {
             if let Item::Enum(enum_def) = item {
-<<<<<<< HEAD
                 // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
-||||||| 03599b796
-=======
->>>>>>> origin/main
                 let source_interface = Self::cm_source_interface(&enum_def.attrs);
                 if !scope.admits(&source_interface) {
                     continue;
@@ -2418,9 +2407,10 @@ impl CmInterfaceRegistry {
                 .bind_module(&mut module)
                 .map_err(UserCmError::UnboundType)?;
             self.register_user_cm_decls(module_bound.values(), module_source)
-                .map_err(UserCmError::TakenInterface)?;
+                .map_err(UserCmError::Duplicate)?;
             self.extend_source_interfaces(sources);
-            self.register_module_decls(&module, &CmDeclScope::CmAttributed);
+            self.register_module_decls(&module, &CmDeclScope::CmAttributed)
+                .map_err(UserCmError::Duplicate)?;
         }
         Ok(())
     }
@@ -2454,24 +2444,7 @@ impl CmInterfaceRegistry {
                 .entry(source.clone())
                 .or_insert_with(|| module_source.clone());
         }
-<<<<<<< HEAD
         Ok(())
-||||||| 03599b796
-        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
-            IndexMap::default();
-        defs_by_module.insert(SELF_PATH, definitions);
-        let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
-        self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
-        self.register_module_decls(module, &CmDeclScope::CmAttributed);
-        Ok(())
-=======
-        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
-            IndexMap::default();
-        defs_by_module.insert(SELF_PATH, definitions);
-        let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
-        self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
-        self.register_module_decls(module, &CmDeclScope::CmAttributed)
->>>>>>> origin/main
     }
 
     /// Check that every `#[cm(…)]` function name `module` binds is one the
@@ -3582,7 +3555,7 @@ impl CmInterfaceRegistry {
             return_type,
         };
 
-        if self.bind(format!("{interface_name}::{method_name}"), &func_info)? {
+        if self.bind(operation_key(interface_name, method_name), &func_info)? {
             self.interfaces
                 .entry(interface_path)
                 .or_default()
@@ -3621,39 +3594,6 @@ impl CmInterfaceRegistry {
         }
         let local_name = func_info.local_alias_name();
         self.used_names.insert(local_name.clone());
-<<<<<<< HEAD
-
-        self.effect_to_func.insert(
-            operation_key(interface_name, method_name),
-            func_info.clone(),
-        );
-
-        // Register in interface -> functions map
-        self.interfaces
-            .entry(interface_path.clone())
-            .or_default()
-            .push(func_info);
-
-        // Register local alias: local_name -> (interface_path, wasi_func_name)
-        self.local_aliases
-            .insert(local_name, (interface_path, wasi_func_name));
-||||||| 03599b796
-
-        // Register in effect -> func map
-        let qualified_name = format!("{interface_name}::{method_name}");
-        self.effect_to_func
-            .insert(qualified_name, func_info.clone());
-
-        // Register in interface -> functions map
-        self.interfaces
-            .entry(interface_path.clone())
-            .or_default()
-            .push(func_info);
-
-        // Register local alias: local_name -> (interface_path, wasi_func_name)
-        self.local_aliases
-            .insert(local_name, (interface_path, wasi_func_name));
-=======
         self.local_aliases.insert(
             local_name,
             (
@@ -3663,7 +3603,6 @@ impl CmInterfaceRegistry {
         );
         self.effect_to_func.insert(key, func_info.clone());
         Ok(true)
->>>>>>> origin/main
     }
 
     /// Register a world-level function import (Phase 9), keyed by its bare name
@@ -4322,7 +4261,6 @@ impl CmTypeGen {
         self.cache.insert(key.to_string(), idx);
     }
 
-<<<<<<< HEAD
     /// Register the `own` and `borrow` handles the sink already defines over
     /// resource `cm_name`, so the walk reuses them rather than minting its own.
     pub fn register_resource_handles(&mut self, cm_name: &str, own: u32, borrow: u32) {
@@ -4338,45 +4276,6 @@ impl CmTypeGen {
         format!("borrow:{resource_cm_name}")
     }
 
-    /// Compute a stable cache key for an AST type (ignoring spans)
-    fn type_key(ty: &Type) -> String {
-        match ty {
-            Type::Named(n) => n.name.clone(),
-            Type::Reference(inner) => format!("&{}", Self::type_key(inner)),
-            Type::MutReference(inner) => format!("&mut {}", Self::type_key(inner)),
-            Type::Generic(g) => {
-                let args: Vec<String> = g.args.iter().map(Self::type_key).collect();
-                format!("{}:{}", g.name, args.join(","))
-            }
-            Type::Tuple(elems) => {
-                let args: Vec<String> = elems.iter().map(Self::type_key).collect();
-                format!("[{}]", args.join(","))
-            }
-            _ => format!("{ty:?}"),
-        }
-    }
-
-||||||| 03599b796
-    /// Compute a stable cache key for an AST type (ignoring spans)
-    fn type_key(ty: &Type) -> String {
-        match ty {
-            Type::Named(n) => n.name.clone(),
-            Type::Reference(inner) => format!("&{}", Self::type_key(inner)),
-            Type::MutReference(inner) => format!("&mut {}", Self::type_key(inner)),
-            Type::Generic(g) => {
-                let args: Vec<String> = g.args.iter().map(Self::type_key).collect();
-                format!("{}:{}", g.name, args.join(","))
-            }
-            Type::Tuple(elems) => {
-                let args: Vec<String> = elems.iter().map(Self::type_key).collect();
-                format!("[{}]", args.join(","))
-            }
-            _ => format!("{ty:?}"),
-        }
-    }
-
-=======
->>>>>>> origin/main
     /// Define a variant type and its named export, returning the exported type index.
     ///
     /// Handles payload types recursively via `ast_type_to_cm`.
@@ -5249,18 +5148,10 @@ mod tests {
         defs_by_module.insert(module_path, collect_cm_definitions(&module));
         let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
         let mut registry = CmInterfaceRegistry::new();
-<<<<<<< HEAD
         registry.extend_source_interfaces(collect_named_type_sources(&mut module, &local_names));
-        registry.register_module_decls(&module, &CmDeclScope::Module);
-||||||| 03599b796
-        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
-        registry.register_module_decls(&module, &CmDeclScope::Module);
-=======
-        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
         registry
             .register_module_decls(&module, &CmDeclScope::Module)
             .unwrap();
->>>>>>> origin/main
         registry
     }
 

@@ -1,15 +1,9 @@
 //! Trait query functions: checking trait implementations, bounds validation,
 //! and associated type resolution.
 
-<<<<<<< HEAD
-use crate::hashmap::IndexMap;
-||||||| 03599b796
-use crate::hashmap::{IndexMap, IndexSet};
-=======
 use std::cell::{Cell, RefCell};
 
-use crate::hashmap::{IndexMap, IndexSet};
->>>>>>> origin/main
+use crate::hashmap::IndexMap;
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
@@ -634,71 +628,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let table = self.tysys.type_table.borrow();
         trait_named_by_position(fq, &table, |i| resolved.get(i).copied().flatten())
-    }
-
-<<<<<<< HEAD
-    /// The declared type parameters of an already-identified trait: the
-    /// `<T, U>` of `trait Foo<T, U>`.
-    pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        self.trait_decl_header_of(key)
-            .map(|header| header.type_params.clone())
-||||||| 03599b796
-    /// The declared type parameters of an already-identified trait: the
-    /// `<T, U>` of `trait Foo<T, U>`.
-    pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        self.trait_decl_header_of(key)
-            .map(|header| header.type_params.clone())
-    }
-
-    pub(super) fn find_trait_decl_type_params(
-        &self,
-        trait_name: &str,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `decl_key_or_local` is local-first (issue #1298), so the type-param
-        // list and the default-method bodies resolve to the same trait.
-        if let Some(params) = self
-            .decl_key_or_local(trait_name)
-            .and_then(|key| self.trait_decl_type_params_of(&key))
-        {
-            return Some(params);
-        }
-        // The same headers, reached by module and name, for a trait declared
-        // here that the name resolved to no key at all.
-        let defs = self.tysys.resolutions.defs();
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .iter()
-            .find(|(key, header)| {
-                *defs.module(**key) == self.current_module_source && header.name == trait_name
-            })
-            .map(|(_, header)| header.type_params.clone())
-    }
-=======
-    pub(super) fn find_trait_decl_type_params(
-        &self,
-        trait_name: &str,
-    ) -> Option<Vec<ast::GenericParam>> {
-        // `decl_key_or_local` is local-first (issue #1298), so the type-param
-        // list and the default-method bodies resolve to the same trait.
-        if let Some(params) = self
-            .decl_key_or_local(trait_name)
-            .and_then(|key| self.tysys.trait_decl_type_params_of(&key))
-        {
-            return Some(params);
-        }
-        // The same headers, reached by module and name, for a trait declared
-        // here that the name resolved to no key at all.
-        let defs = self.tysys.resolutions.defs();
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .iter()
-            .find(|(key, header)| {
-                *defs.module(**key) == self.current_module_source && header.name == trait_name
-            })
-            .map(|(_, header)| header.type_params.clone())
->>>>>>> origin/main
     }
 }
 
@@ -2403,67 +2332,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &slots,
             &SlotProjections::from_iter([(0, answers)]),
         );
-<<<<<<< HEAD
-        let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-
-        Some((
-            fq_trait_name,
-            MethodInfo {
-                // A bare bound dispatches on the parameter itself, off no
-                // `impl` block.
-                impl_type_bindings: Vec::new(),
-                method_def: Some(sig.def),
-                impl_block: None,
-                return_type: instantiated.return_type,
-                self_kind: sig.self_kind,
-                param_types: instantiated.param_types[first_value_param..].to_vec(),
-                param_is_mut: Param::is_mut_flags(&sig.params),
-                owner: MethodOwner::Receiver,
-                cm_name: None,
-                is_ref_impl: false,
-                method_type_param_ids: sig.own_type_param_ids(),
-                method_own_params: sig.own_params.clone(),
-                impl_module: None,
-                from_concrete_impl: false,
-                param_defaults: Param::defaults(&sig.params),
-                param_names: Param::names(&sig.params),
-                consumes_self: sig.self_kind == ast::SelfKind::Value,
-                inherent_visibility: None,
-                defaults_module: sig.defaults_module.clone(),
-            },
-        ))
-||||||| 03599b796
-        let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-
-        Some((
-            fq_trait_name,
-            MethodInfo {
-                // A bare bound dispatches on the parameter itself, off no
-                // `impl` block.
-                impl_type_bindings: Vec::new(),
-                method_def: Some(sig.def),
-                return_type: instantiated.return_type,
-                self_kind: sig.self_kind,
-                param_types: instantiated.param_types[first_value_param..].to_vec(),
-                param_is_mut: Param::is_mut_flags(&sig.params),
-                owner: MethodOwner::Receiver,
-                cm_name: None,
-                is_ref_impl: false,
-                method_type_param_ids: sig.own_type_param_ids(),
-                method_own_params: sig.own_params.clone(),
-                impl_module: None,
-                from_concrete_impl: false,
-                param_defaults: Param::defaults(&sig.params),
-                param_names: Param::names(&sig.params),
-                consumes_self: sig.self_kind == ast::SelfKind::Value,
-                inherent_visibility: None,
-                defaults_module: sig.defaults_module.clone(),
-            },
-        ))
-=======
         // A bare bound dispatches on the parameter itself, off no `impl` block.
         Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
->>>>>>> origin/main
     }
 }
 
@@ -2852,18 +2722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if (binding.is_none() && mentions_self) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
-<<<<<<< HEAD
             let trait_key = self.tysys.resolutions.bound_decl(bound);
-||||||| 03599b796
-            // The bound's own site says which trait declares the constraint.
-            let trait_key = self.fq_trait_name_at(bound.id, &bound.name).canonical();
-=======
-            // The bound's own site says which trait declares the constraint.
-            let trait_key = self
-                .tysys
-                .fq_trait_name_at(bound.id, &bound.name)
-                .canonical();
->>>>>>> origin/main
             let Some(actual) = trait_key.and_then(|key| {
                 self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
                     type_arg,
@@ -3222,87 +3081,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                 )
             });
-<<<<<<< HEAD
-        let (info_trait_name, self_kind, param_types, return_type, impl_def, receiver) =
-            if let Some(info) = written {
-                let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
-                let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-                (
-                    info.trait_name,
-                    info.self_kind,
-                    param_types,
-                    return_type,
-                    Some(info.impl_def),
-                    info.receiver,
-                )
-            } else if let Some((item, return_type)) = auto_derive
-                && let Some(trait_) = self.tysys.compiler_trait(item)
-                && self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    lookup_type_id,
-                    &trait_,
-                )
-            {
-                let ref_self_ty = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Ref(lookup_type_id));
-                // Auto-derived: no `impl` block is written, so none is named.
-                (
-                    self.tysys.type_table.borrow().compiler_trait_fq(item),
-                    ast::SelfKind::Ref,
-                    vec![ref_self_ty],
-                    return_type,
-                    None,
-                    self.tysys.fq_receiver_head(lookup_type_id),
-                )
-            } else {
-                return None;
-||||||| 03599b796
-        let (info_trait_name, self_kind, param_types, return_type, impl_def) =
-            if let Some(info) = written {
-                let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
-                let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-                (
-                    info.trait_name,
-                    info.self_kind,
-                    param_types,
-                    return_type,
-                    Some(info.impl_def),
-                )
-            } else if let Some((item, return_type)) = auto_derive
-                && let Some(trait_) = self.tysys.compiler_trait(item)
-                && self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    lookup_type_id,
-                    &trait_,
-                )
-            {
-                let ref_self_ty = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Ref(lookup_type_id));
-                // Auto-derived: no `impl` block is written, so none is named.
-                (
-                    self.tysys.type_table.borrow().compiler_trait_fq(item),
-                    ast::SelfKind::Ref,
-                    vec![ref_self_ty],
-                    return_type,
-                    None,
-                )
-            } else {
-                return None;
-=======
         if let Some(info) = written {
             let found = OperatorImpl {
                 info,
                 impl_name: struct_name.to_string(),
                 impl_type_id: lookup_type_id,
->>>>>>> origin/main
             };
             let mut resolved =
                 ResolvedTraitMethod::of_operator_impl(&self.tysys, found, method_name);
@@ -3333,25 +3116,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name: method_name.to_string(),
             impl_def: None,
             impl_name: struct_name.to_string(),
-<<<<<<< HEAD
-            receiver,
-            self_kind,
-||||||| 03599b796
-            impl_type_id: (!is_type_param).then_some(lookup_type_id),
-            self_kind,
-=======
             impl_type_id: Some(lookup_type_id),
+            receiver: self.tysys.fq_receiver_head(lookup_type_id),
             self_kind: ast::SelfKind::Ref,
->>>>>>> origin/main
             return_type,
-<<<<<<< HEAD
-            param_types,
-||||||| 03599b796
-            param_types,
-            is_type_param_receiver: is_type_param,
-=======
             param_types: vec![ref_self_ty],
->>>>>>> origin/main
             is_type_param_receiver: false,
         })
     }
@@ -3396,21 +3165,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .intern(ResolvedType::Ref(derive_id));
         // Derived from the receiver's structure, off no `impl` block.
         let method_info = MethodInfo {
-<<<<<<< HEAD
-            // Derived from the receiver's structure, off no `impl` block.
-            impl_type_bindings: Vec::new(),
-            method_def: None,
-            impl_block: None,
-            return_type,
-            self_kind: ast::SelfKind::Ref,
-||||||| 03599b796
-            // Derived from the receiver's structure, off no `impl` block.
-            impl_type_bindings: Vec::new(),
-            method_def: None,
-            return_type,
-            self_kind: ast::SelfKind::Ref,
-=======
->>>>>>> origin/main
             param_types: vec![ref_self_ty],
             param_is_mut: vec![false],
             param_defaults: vec![None],

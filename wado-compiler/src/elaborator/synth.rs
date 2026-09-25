@@ -257,64 +257,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
-<<<<<<< HEAD
-    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a base name renders a function type's own parameters, so
-    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
-    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
-    /// `Holder<i32, String>`, which no `T` makes it.
-    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
-        let mut bindings = IndexMap::default();
-        unify(&self.tysys.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: IndexMap<u32, TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| Some((tt.param_slot(slot)?, filled)))
-                .collect()
-        };
-        let filled = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(param, &substitution);
-        param_takes(&self.tysys.type_table.borrow(), filled, arg)
-    }
-
-||||||| 03599b796
-    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a base name renders a function type's own parameters, so
-    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
-    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
-    /// `Holder<i32, String>`, which no `T` makes it.
-    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
-        let mut bindings = IndexMap::default();
-        unify(&self.tysys.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: IndexMap<u32, TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
-                .collect()
-        };
-        let filled = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(param, &substitution);
-        param_takes(&self.tysys.type_table.borrow(), filled, arg)
-    }
-
-=======
->>>>>>> origin/main
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -1116,11 +1058,7 @@ impl TypeSystem {
             let tt = self.type_table.borrow();
             bindings
                 .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
+                .filter_map(|(&slot, &filled)| Some((tt.param_slot(slot)?, filled)))
                 .collect()
         };
         let filled = self

@@ -30,16 +30,8 @@ use crate::ast::{HandleClasses, Visibility};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
-<<<<<<< HEAD
-    FqTraitName, case_construct_helper_name, case_extract_helper_name, field_get_helper_name,
-    hole_get_helper_name,
-||||||| 03599b796
-    DeclName, FqTraitName, case_construct_helper_name, case_extract_helper_name,
+    FqTraitName, case_construct_helper_name, case_extract_helper_name, eq_payload_local,
     field_get_helper_name, hole_get_helper_name,
-=======
-    DeclName, FqTraitName, case_construct_helper_name, case_extract_helper_name, eq_payload_local,
-    field_get_helper_name, hole_get_helper_name,
->>>>>>> origin/main
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
@@ -4271,73 +4263,6 @@ fn generate_opaque_inspect_fn(
 
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
-<<<<<<< HEAD
-    let handle = TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(deref_self),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        span,
-    );
-    let hex_stmt = inspect_call(
-        handle,
-        TypeTable::I32,
-        fmt(),
-        trait_env,
-        module_source,
-        tt,
-        span,
-        lower_hex_trait,
-        lower_hex_method,
-    );
-    let body = TirBlock::new(
-        vec![
-            write_str_stmt(
-                format!("{type_name}#0x"),
-                fmt(),
-                string_type,
-                span,
-                write_str,
-            ),
-            hex_stmt,
-        ],
-        span,
-    );
-||||||| 03599b796
-    let handle = TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(deref_self),
-            target_type: TypeTable::I32,
-        },
-        TypeTable::I32,
-        span,
-    );
-    let hex_stmt = inspect_call(
-        handle,
-        TypeTable::I32,
-        fmt(),
-        trait_env,
-        module_source,
-        tt,
-        span,
-        lower_hex_trait,
-        lower_hex_method,
-    );
-    let body = TirBlock::new(
-        vec![
-            write_str_stmt(
-                format!("{type_name}#0x"),
-                fmt(),
-                string_type,
-                span,
-                formatter_fq,
-            ),
-            hex_stmt,
-        ],
-        span,
-    );
-=======
     let mut locals = inspect_locals(ref_type, fmt_type);
     let body = if let ResolvedType::Resource { def } = *tt.get(resource_type)
         && tt.is_unrestricted_resource(def)
@@ -4370,14 +4295,13 @@ fn generate_opaque_inspect_fn(
                     fmt(),
                     string_type,
                     span,
-                    formatter_fq,
+                    write_str,
                 ),
                 handle_stmt,
             ],
             span,
         )
     };
->>>>>>> origin/main
 
     make_synthetic_method(
         qualified_name,

@@ -899,37 +899,12 @@ impl TraitEnv {
         for (module_source, module) in modules {
             for item in &module.items {
                 match item {
-<<<<<<< HEAD
-||||||| 03599b796
-                    Item::Interface(effect_decl) => {
-                        if let Some(def) = defs.of_ast_id(effect_decl.id) {
-                            effect_decl_index.insert(def);
-                        }
-                    }
-=======
-                    Item::Interface(effect_decl) => {
-                        effect_decl_index.insert(defs.def_at(effect_decl.id));
-                    }
->>>>>>> origin/main
                     Item::Resource(resource) => {
                         let resource_key = defs.def_at(resource.id);
-<<<<<<< HEAD
                         let is_resource = |ty: &ast::Type| {
                             matches!(ty, ast::Type::Named(n)
                                 if n.name == "Self" || resolutions.declared(n.id) == Some(resource_key))
                         };
-||||||| 03599b796
-                        let Some(resource_key) = defs.of_ast_id(resource.id) else {
-                            continue;
-                        };
-                        resource_decl_index.insert(resource_key);
-                        // Index static methods from resource declarations.
-                        // The resource declaration itself is the receiver.
-=======
-                        resource_decl_index.insert(resource_key);
-                        // Index static methods from resource declarations.
-                        // The resource declaration itself is the receiver.
->>>>>>> origin/main
                         for (method_idx, method) in resource.methods.iter().enumerate() {
                             let has_self = method.params.iter().any(|p| match &p.ty {
                                 ast::Type::Reference(r) | ast::Type::MutReference(r) => {
@@ -976,14 +951,6 @@ impl TraitEnv {
                     );
                 }
                 if let Item::Trait(trait_decl) = item {
-<<<<<<< HEAD
-||||||| 03599b796
-                    let Some(trait_def) = defs.of_ast_id(trait_decl.id) else {
-                        continue;
-                    };
-=======
-                    let trait_def = defs.def_at(trait_decl.id);
->>>>>>> origin/main
                     trait_decl_headers.insert(
                         defs.def_at(trait_decl.id),
                         TraitDeclHeader {

@@ -367,94 +367,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
     }
 
-<<<<<<< HEAD
-    /// Build the `FunctionRef` targeting a reflect subject's synthesized
-    /// `Base^Trait::method`. A generic instance carries the instantiation in
-    /// `monomorph_info` and in the mangled name, so monomorphization picks the
-    /// instance whose type args match; `type_args` is empty for a plain type.
-    fn reflect_func_ref(
-        &self,
-        self_ty: TypeId,
-        base_name: &str,
-        type_args: &[TypeId],
-        trait_name: &FqTraitName,
-        method: &str,
-        module_source: ModuleSource,
-    ) -> FunctionRef {
-        let mut method_info = LocalMethodName::new(
-            self.tysys.type_table.borrow().fq_base_type_name(self_ty),
-            Some(trait_name.clone()),
-            method.to_string(),
-        );
-        let template = tir::TemplateId::derived(module_source.clone(), &method_info);
-        let monomorph_info = if type_args.is_empty() {
-            None
-        } else {
-            let arg_names: Vec<FqTypeName> = type_args
-                .iter()
-                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                .collect();
-            method_info = method_info.with_type_args(&arg_names, &[]);
-            Some(tir::MonomorphInfo {
-                generic_name: base_name.to_string(),
-                impl_type_args: type_args.to_vec(),
-                method_type_args: Vec::new(),
-                is_blanket: false,
-            })
-        };
-        FunctionRef {
-            module_source,
-            name: method_info.to_mangled_name(),
-            template: Some(template),
-            monomorph_info,
-            method_info: Some(method_info),
-        }
-    }
-
-||||||| 03599b796
-    /// Build the `FunctionRef` targeting a reflect subject's synthesized
-    /// `Base^Trait::method`. A generic instance carries the instantiation in
-    /// `monomorph_info` and in the mangled name, so monomorphization picks the
-    /// instance whose type args match; `type_args` is empty for a plain type.
-    fn reflect_func_ref(
-        &self,
-        self_ty: TypeId,
-        base_name: &str,
-        type_args: &[TypeId],
-        trait_name: &FqTraitName,
-        method: &str,
-        module_source: ModuleSource,
-    ) -> FunctionRef {
-        let mut method_info = LocalMethodName::new(
-            self.tysys.type_table.borrow().fq_base_type_name(self_ty),
-            Some(trait_name.clone()),
-            method.to_string(),
-        );
-        let monomorph_info = if type_args.is_empty() {
-            None
-        } else {
-            let arg_names: Vec<FqTypeName> = type_args
-                .iter()
-                .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
-                .collect();
-            method_info = method_info.with_type_args(&arg_names, &[]);
-            Some(tir::MonomorphInfo {
-                generic_name: base_name.to_string(),
-                impl_type_args: type_args.to_vec(),
-                method_type_args: Vec::new(),
-                is_blanket: false,
-            })
-        };
-        FunctionRef {
-            module_source,
-            name: method_info.to_mangled_name(),
-            monomorph_info,
-            method_info: Some(method_info),
-        }
-    }
-
-=======
->>>>>>> origin/main
     /// Resolve `ReflectStruct::<T>::method()` where `T` is a generic type parameter
     /// (inside an `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: …>` derivation).
     /// `members()` resolves to the constructor-mapped
@@ -977,104 +889,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
 
         result
-    }
-
-<<<<<<< HEAD
-    /// The declaration `Reflect::<T>` names, and this instantiation's type args.
-    /// `None` where no `Reflect` impl is synthesized, which
-    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)
-    /// decides — the same answer monomorphization gets for a bounded blanket.
-    fn reflect_root_subject(&self, self_ty: TypeId) -> Option<(String, ModuleSource, Vec<TypeId>)> {
-        let tt = self.tysys.type_table.borrow();
-        if !has_reflect_kind(self_ty, &tt) {
-            return None;
-        }
-        let (base_name, module_source) = tt.nominal_head(self_ty)?;
-        let type_args = tt.generic_type_args(self_ty).unwrap_or_default();
-        Some((base_name, module_source, type_args))
-    }
-
-    /// The hole types of the template shape `self_ty` denotes, or `None` where
-    /// it denotes none.
-    pub(super) fn reflect_template_holes(&self, self_ty: TypeId) -> Option<Vec<TypeId>> {
-        let tt = self.tysys.type_table.borrow();
-        let shape = tt.template_shape_of_type(self_ty)?;
-        Some(shape.holes.iter().map(|hole| hole.ty).collect())
-||||||| 03599b796
-    /// The declaration `Reflect::<T>` names, and this instantiation's type args.
-    /// `None` where no `Reflect` impl is synthesized, which
-    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)
-    /// decides — the same answer monomorphization gets for a bounded blanket.
-    fn reflect_root_subject(&self, self_ty: TypeId) -> Option<(String, ModuleSource, Vec<TypeId>)> {
-        let tt = self.tysys.type_table.borrow();
-        if !has_reflect_kind(self_ty, &tt) {
-            return None;
-        }
-        let (base_name, module_source) = tt.nominal_head(self_ty)?;
-        let type_args = tt.generic_type_args(self_ty).unwrap_or_default();
-        Some((base_name, module_source, type_args))
-    }
-
-    /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectVariant)
-        {
-            return false;
-        }
-        VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
-    }
-
-    /// Whether `prefix::method` names a `ReflectTemplate` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_template_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectTemplate)
-        {
-            return false;
-        }
-        TemplateMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
-    }
-
-    /// The hole types of the template shape `self_ty` denotes, or `None` where
-    /// it denotes none.
-    pub(super) fn reflect_template_holes(&self, self_ty: TypeId) -> Option<Vec<TypeId>> {
-        let tt = self.tysys.type_table.borrow();
-        let shape = tt.template_shape_of_type(self_ty)?;
-        Some(shape.holes.iter().map(|hole| hole.ty).collect())
-    }
-
-=======
-    /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectVariant)
-        {
-            return false;
-        }
-        VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
-    }
-
-    /// Whether `prefix::method` names a `ReflectTemplate` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_template_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectTemplate)
-        {
-            return false;
-        }
-        TemplateMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
->>>>>>> origin/main
     }
 
     /// Resolve a `ReflectTemplate::<T>::method()` trait-qualified static call to
@@ -1662,7 +1476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let spec = match self.tysys.on_bound_of(trait_)? {
             OnBoundTrait::ReflectTemplate => {
-                let holes = self.reflect_template_holes(subject)?;
+                let holes = self.tysys.reflect_template_holes(subject)?;
                 return match assoc_name {
                     REFLECT_HOLES_ASSOC => {
                         Some(self.tysys.type_table.borrow_mut().make_tuple(holes))
@@ -1723,100 +1537,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | OnBoundTrait::RefMut
             | OnBoundTrait::Inspect => return None,
         };
-<<<<<<< HEAD
-||||||| 03599b796
-        if trait_name == template_trait {
-            let holes = self.reflect_template_holes(subject)?;
-            return match assoc_name {
-                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectTemplateHole,
-                    subject,
-                    &holes,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == struct_trait {
-            let members = self.reflect_struct_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_FIELD_TYPES_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_FIELD_SLOTS_ASSOC => {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
-                    Some(tt.make_tuple(slots))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectStructField,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == variant_trait {
-            let members = self.reflect_variant_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_CASE_PAYLOADS_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectVariantCase,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
-=======
-        if trait_name == template_trait {
-            let holes = self.tysys.reflect_template_holes(subject)?;
-            return match assoc_name {
-                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectTemplateHole,
-                    subject,
-                    &holes,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == struct_trait {
-            let members = self.reflect_struct_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_FIELD_TYPES_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_FIELD_SLOTS_ASSOC => {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
-                    Some(tt.make_tuple(slots))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectStructField,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
-        if trait_name == variant_trait {
-            let members = self.reflect_variant_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_CASE_PAYLOADS_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectVariantCase,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
->>>>>>> origin/main
         if assoc_name != REFLECT_MEMBERS_ASSOC {
             return None;
         }
@@ -1911,6 +1631,7 @@ impl TypeSystem {
             Some(trait_name.clone()),
             method.to_string(),
         );
+        let template = tir::TemplateId::derived(module_source.clone(), &method_info);
         let monomorph_info = if type_args.is_empty() {
             None
         } else {
@@ -1929,6 +1650,7 @@ impl TypeSystem {
         FunctionRef {
             module_source,
             name: method_info.to_mangled_name(),
+            template: Some(template),
             monomorph_info,
             method_info: Some(method_info),
         }

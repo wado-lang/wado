@@ -782,37 +782,9 @@ impl SolverBridge {
 
     /// Intern every declaration and module up front, so a query lowers without
     /// interning and a shape nothing lowered is unknown to it.
-<<<<<<< HEAD
     fn intern_declarations(tysys: &TypeSystem, modules: &[ModuleSource], lowering: &mut Lowering) {
-        for def in tysys
-            .all_struct_fields
-            .keys()
-            .chain(tysys.all_variant_cases.keys())
-            .chain(tysys.all_enum_cases.keys())
-            .chain(tysys.all_flags_cases.keys())
-            .chain(tysys.all_newtypes.keys())
-            .chain(tysys.all_generic_newtypes.keys())
-            .chain(tysys.all_resource_types.keys())
-        {
-            lowering.type_decl(*def);
-||||||| 03599b796
-    fn intern_declarations(tysys: &TypeSystem, lowering: &mut Lowering) {
-        for def in tysys
-            .all_struct_fields
-            .keys()
-            .chain(tysys.all_variant_cases.keys())
-            .chain(tysys.all_enum_cases.keys())
-            .chain(tysys.all_flags_cases.keys())
-            .chain(tysys.all_newtypes.keys())
-            .chain(tysys.all_generic_newtypes.keys())
-            .chain(tysys.all_resource_types.keys())
-        {
-            lowering.type_decl(*def);
-=======
-    fn intern_declarations(tysys: &TypeSystem, lowering: &mut Lowering) {
         for def in tysys.data.declarations() {
             lowering.type_decl(def);
->>>>>>> origin/main
         }
         let anonymous = lowering.anonymous_struct();
         lowering.opaque_heads.insert(anonymous);
@@ -1280,8 +1252,13 @@ impl SolverBridge {
             .resource_types
             .iter()
             .filter(|&(&def, _)| table.is_unrestricted_resource(def))
-            .filter_map(|(&def, info)| {
-                lowered(def, 0, &mut std::iter::empty(), &info.module_source)
+            .filter_map(|(&def, _)| {
+                lowered(
+                    def,
+                    0,
+                    &mut std::iter::empty(),
+                    tysys.resolutions.defs().module(def),
+                )
             })
             .collect();
         (out, variants, handles)

@@ -37,24 +37,10 @@ use super::lift::synthesize_lift_map;
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
-<<<<<<< HEAD
-    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
-    cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    export_needs_param_lifting, field_access, flat_types_from_ast_type, flat_types_from_type_id,
-    flatten_export_type, struct_decl_of, type_id_to_ast_type, variant_decl_of, variant_payload,
-    variant_tag, variant_test,
-||||||| 03599b796
-    CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_to_type_id,
-    cm_zero, coerce_flat_lift, coerce_flat_lower, compute_export_flat_param_types,
-    export_needs_param_lifting, field_access, find_struct_decl, find_variant_decl,
-    flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
-    type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
-=======
     CmStdlibNames, LiftContext, LowerContext, binary_add, binary_ne, cm_val_type_from_type_id,
     cm_val_type_to_type_id, cm_zero, coerce_flat_lift, coerce_flat_lower,
     export_needs_param_lifting, field_access, flat_types_from_type_id, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
->>>>>>> origin/main
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
@@ -839,7 +825,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 lift_ctx,
             )
         }
-<<<<<<< HEAD
         Type::Named(_) => {
             let target = type_table_cell.borrow().get(target_type_id).clone();
             let flat = |type_id| (local_ref(flat_param_locals[0], "$p", type_id), 1);
@@ -859,161 +844,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                         let raw = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
                         let lifted = binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL);
                         (lifted, 1)
-||||||| 03599b796
-        Type::Named(named) => match named.name.as_str() {
-            "i32" | "u32" => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
-            "i64" | "u64" => (local_ref(flat_param_locals[0], "$p", TypeTable::I64), 1),
-            "f32" => (local_ref(flat_param_locals[0], "$p", TypeTable::F32), 1),
-            "f64" => (local_ref(flat_param_locals[0], "$p", TypeTable::F64), 1),
-            "i8" | "u8" | "i16" | "u16" => {
-                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
-            }
-            "bool" => {
-                let raw = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
-                let lifted = binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL);
-                (lifted, 1)
-            }
-            "char" => (local_ref(flat_param_locals[0], "$p", TypeTable::CHAR), 1),
-            "()" => {
-                let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
-                (unit, 0)
-            }
-            _ => {
-                // Struct parameter: flatten to concatenation of field flat
-                // values per the canonical ABI. Iterate the TIR struct decl
-                // and recursively lift each field, then construct a
-                // `StructLiteral`. Resource handles, enums, flags, and
-                // unknown types fall through to i32 passthrough.
-                if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
-                    let mut offset = 0;
-                    let mut fields_out = Vec::with_capacity(struct_decl.fields.len());
-                    // Precompute each field's AST surface under the `TypeTable`
-                    // borrow and drop it before recursing, so an inner list lift
-                    // can `borrow_mut` through the `LiftContext`. Resolve the
-                    // struct's own type id here too: `target_type_id` may arrive
-                    // as a reference wrapper, and `StructLiteral` needs the concrete one.
-                    let (field_ast_tys, struct_type_id) = {
-                        let tt = type_table_cell.borrow();
-                        let field_tys: Vec<Type> = struct_decl
-                            .fields
-                            .iter()
-                            .map(|f| {
-                                type_id_to_ast_type(f.type_id, &tt, lift_ctx.cm_interface_registry)
-                            })
-                            .collect();
-                        // Prefer the already-registered TypeId so the WIR
-                        // `struct_type_map` lookup hits — the
-                        // `find_struct_by_name` index is populated when
-                        // the elaborator first processed the struct decl,
-                        // and `target_type_id` may arrive as a reference
-                        // wrapper or an unregistered intern.
-                        let stid = tt
-                            .find_struct_by_name(&struct_decl.name, &struct_decl.module_source)
-                            .unwrap_or(target_type_id);
-                        (field_tys, stid)
-                    };
-                    for (field, field_ast_ty) in struct_decl.fields.iter().zip(field_ast_tys.iter())
-                    {
-                        let (lifted, consumed) = synthesize_lift_from_flat_params(
-                            field_ast_ty,
-                            &flat_param_locals[offset..],
-                            &flat_types[offset..],
-                            field.type_id,
-                            next_local,
-                            stmts,
-                            locals,
-                            tir_modules,
-                            lift_ctx,
-                        );
-                        fields_out.push(TirStructField {
-                            name: field.name.clone(),
-                            value: lifted,
-                            field_index: field.index,
-                        });
-                        offset += consumed;
-=======
-        Type::Named(named) => match named.name.as_str() {
-            "i32" | "u32" => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
-            "i64" | "u64" => (local_ref(flat_param_locals[0], "$p", TypeTable::I64), 1),
-            "f32" => (local_ref(flat_param_locals[0], "$p", TypeTable::F32), 1),
-            "f64" => (local_ref(flat_param_locals[0], "$p", TypeTable::F64), 1),
-            "i8" | "u8" | "i16" | "u16" => {
-                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
-            }
-            "bool" => {
-                let raw = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
-                let lifted = binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL);
-                (lifted, 1)
-            }
-            "char" => (local_ref(flat_param_locals[0], "$p", TypeTable::CHAR), 1),
-            "()" => {
-                let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
-                (unit, 0)
-            }
-            _ => {
-                // Struct parameter: flatten to concatenation of field flat
-                // values per the canonical ABI. Iterate the TIR struct decl
-                // and recursively lift each field, then construct a
-                // `StructLiteral`. Resource handles, enums, flags, and
-                // unknown types pass their one flat value through.
-                let (struct_decl, variant_decl) = {
-                    let tt = type_table_cell.borrow();
-                    match tt.get(tt.peel_refs(target_type_id)) {
-                        ResolvedType::Struct { def, type_args } => {
-                            (struct_decl_of(*def, type_args, tir_modules), None)
-                        }
-                        ResolvedType::Variant { def } => (None, variant_decl_of(*def, tir_modules)),
-                        _ => (None, None),
-                    }
-                };
-                if let Some(struct_decl) = struct_decl {
-                    let mut offset = 0;
-                    let mut fields_out = Vec::with_capacity(struct_decl.fields.len());
-                    // Precompute each field's AST surface under the `TypeTable`
-                    // borrow and drop it before recursing, so an inner list lift
-                    // can `borrow_mut` through the `LiftContext`. Resolve the
-                    // struct's own type id here too: `target_type_id` may arrive
-                    // as a reference wrapper, and `StructLiteral` needs the concrete one.
-                    let (field_ast_tys, struct_type_id) = {
-                        let tt = type_table_cell.borrow();
-                        let field_tys: Vec<Type> = struct_decl
-                            .fields
-                            .iter()
-                            .map(|f| {
-                                type_id_to_ast_type(f.type_id, &tt, lift_ctx.cm_interface_registry)
-                            })
-                            .collect();
-                        // Prefer the already-registered TypeId so the WIR
-                        // `struct_type_map` lookup hits — the
-                        // `find_struct_by_name` index is populated when
-                        // the elaborator first processed the struct decl,
-                        // and `target_type_id` may arrive as a reference
-                        // wrapper or an unregistered intern.
-                        let stid = tt
-                            .find_struct_by_name(&struct_decl.name, &struct_decl.module_source)
-                            .unwrap_or(target_type_id);
-                        (field_tys, stid)
-                    };
-                    for (field, field_ast_ty) in struct_decl.fields.iter().zip(field_ast_tys.iter())
-                    {
-                        let (lifted, consumed) = synthesize_lift_from_flat_params(
-                            field_ast_ty,
-                            &flat_param_locals[offset..],
-                            &flat_types[offset..],
-                            field.type_id,
-                            next_local,
-                            stmts,
-                            locals,
-                            tir_modules,
-                            lift_ctx,
-                        );
-                        fields_out.push(TirStructField {
-                            name: field.name.clone(),
-                            value: lifted,
-                            field_index: field.index,
-                        });
-                        offset += consumed;
->>>>>>> origin/main
                     }
                     PrimitiveType::F16 | PrimitiveType::Bf16 | PrimitiveType::V128 => {
                         unreachable!("`{primitive:?}` is rejected at the CM boundary")
@@ -1023,7 +853,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
                     (unit, 0)
                 }
-<<<<<<< HEAD
                 ResolvedType::Struct { def, type_args } => {
                     let struct_decl = struct_decl_of(def, &type_args, tir_modules)
                         .expect("an export's record type has a declaration");
@@ -1043,23 +872,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                     let variant_decl = variant_decl_of(def, tir_modules)
                         .expect("an export's variant type has a declaration");
                     lift_variant_from_flat_params(
-||||||| 03599b796
-                // Named `variant` (sum type with payloads): reconstruct the GC
-                // value from flat params. The CM `variant` flat ABI is
-                // `(disc: i32, ...joined-payload-flats)`; each case's payload
-                // shares the joined slots positionally, so lift the active
-                // case's payload recursively from `flat[1..]`.
-                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
-                    return lift_variant_from_flat_params(
-=======
-                // Named `variant` (sum type with payloads): reconstruct the GC
-                // value from flat params. The CM `variant` flat ABI is
-                // `(disc: i32, ...joined-payload-flats)`; each case's payload
-                // shares the joined slots positionally, so lift the active
-                // case's payload recursively from `flat[1..]`.
-                if let Some(variant_decl) = variant_decl {
-                    return lift_variant_from_flat_params(
->>>>>>> origin/main
                         &variant_decl,
                         flat_param_locals,
                         flat_types,
@@ -1071,10 +883,17 @@ pub(super) fn synthesize_lift_from_flat_params(
                         lift_ctx,
                     )
                 }
-                ResolvedType::Enum { .. }
-                | ResolvedType::Flags { .. }
-                | ResolvedType::Resource { .. }
-                | ResolvedType::GenericResource { .. } => flat(TypeTable::I32),
+                ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => flat(TypeTable::I32),
+                ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+                    let handle = flat(cm_val_type_to_type_id(flat_types[0]));
+                    if type_table_cell
+                        .borrow()
+                        .is_unrestricted_handle(target_type_id)
+                    {
+                        return (handle_from_f64(handle.0, target_type_id), 1);
+                    }
+                    handle
+                }
                 other @ (ResolvedType::Never
                 | ResolvedType::Newtype { .. }
                 | ResolvedType::GenericInstance { .. }
@@ -1091,21 +910,6 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::Error) => {
                     unreachable!("a named CM type lifts into `{other:?}`")
                 }
-<<<<<<< HEAD
-||||||| 03599b796
-                // Resource handles, enums, unknown types → i32 passthrough
-                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
-=======
-                let scalar = cm_val_type_to_type_id(flat_types[0]);
-                let flat = local_ref(flat_param_locals[0], "$p", scalar);
-                if type_table_cell
-                    .borrow()
-                    .is_unrestricted_handle(target_type_id)
-                {
-                    return (handle_from_f64(flat, target_type_id), 1);
-                }
-                (flat, 1)
->>>>>>> origin/main
             }
         }
         Type::Generic(generic) => match generic.name.as_str() {

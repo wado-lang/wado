@@ -37,45 +37,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &scope.tysys.type_table,
                     );
 
-<<<<<<< HEAD
-                    let module_source = scope.current_module_source.clone();
-                    let def = scope.def_at(struct_decl.id);
-                    scope.sem.decls.local_struct_fields.insert(
-                        def,
-                        StructFieldInfo {
-                            name: struct_decl.name.clone(),
-                            module_source,
-                            defined_at: struct_decl.id,
-                            fields,
-                            field_ast_ids,
-                            field_defaults,
-                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
-                            type_params: RealTypeParams::of(&struct_decl.type_params),
-                            type_param_type_ids,
-                        },
-||||||| 03599b796
-                    let module_source = scope.current_module_source.clone();
-                    let def = scope.def_of_item(struct_decl.id);
-                    scope.sem.decls.local_struct_fields.insert(
-                        def,
-                        StructFieldInfo {
-                            name: struct_decl.name.clone(),
-                            module_source,
-                            defined_at: struct_decl.id,
-                            fields,
-                            field_ast_ids,
-                            field_defaults,
-                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
-                            type_params: RealTypeParams::of(&struct_decl.type_params),
-                            type_param_type_ids,
-                        },
-=======
                     let info = StructFieldInfo::of_decl(
                         scope.current_module_source.clone(),
                         struct_decl,
                         fields,
                         type_param_type_ids,
->>>>>>> origin/main
                     );
                     let def = scope.tysys.def_at(struct_decl.id);
                     scope.sem.decls.local.struct_fields.insert(def, info);
@@ -86,58 +52,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let def = self.tysys.def_at(newtype_decl.id);
                     if newtype_decl.type_params.is_empty() {
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-<<<<<<< HEAD
-                        let def = self.tysys.resolutions.defs().def_at(newtype_decl.id);
-                        let newtype_id = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_newtype(def, base_type_id);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .register_decl_type(newtype_decl.id, newtype_id);
-                        self.sem.decls.local_newtypes.insert(def, newtype_id);
-                    } else {
-                        // Generic newtype: store definition for lazy instantiation
-                        self.sem.decls.local_generic_newtypes.insert(
-                            self.def_at(newtype_decl.id),
-                            GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
-||||||| 03599b796
-                        let def = self
-                            .tysys
-                            .resolutions
-                            .defs()
-                            .of_ast_id(newtype_decl.id)
-                            .expect("a newtype declaration has an identity");
-                        let newtype_id = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_newtype(def, base_type_id);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .register_decl_type(newtype_decl.id, newtype_id);
-                        self.sem.decls.local_newtypes.insert(def, newtype_id);
-                    } else {
-                        // Generic newtype: store definition for lazy instantiation
-                        self.sem.decls.local_generic_newtypes.insert(
-                            self.def_of_item(newtype_decl.id),
-                            GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
-=======
                         self.sem.decls.local.declare_newtype(
                             &self.tysys.type_table,
                             def,
                             newtype_decl.id,
                             base_type_id,
->>>>>>> origin/main
                         );
                     } else {
                         self.sem
@@ -162,16 +81,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
 
                     let module_source = scope.current_module_source.clone();
-<<<<<<< HEAD
-                    let def = scope.def_at(variant_decl.id);
-                    scope.sem.decls.local_variant_cases.insert(
-||||||| 03599b796
-                    let def = scope.def_of_item(variant_decl.id);
-                    scope.sem.decls.local_variant_cases.insert(
-=======
                     let def = scope.tysys.def_at(variant_decl.id);
                     scope.sem.decls.local.variant_cases.insert(
->>>>>>> origin/main
                         def,
                         VariantInfo::of_decl(
                             module_source.clone(),
@@ -189,41 +100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     drop(scope);
                 }
                 Item::Enum(enum_decl) => {
-<<<<<<< HEAD
-                    // Collect enum cases (no field types, just names and indices)
-                    let cases: Vec<EnumCaseData> = enum_decl
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .map(|(index, case)| EnumCaseData {
-                            name: case.name.clone(),
-                            index: index as u32,
-                            ast_id: case.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_enum_cases.insert(
-                        self.def_at(enum_decl.id),
-                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
-||||||| 03599b796
-                    // Collect enum cases (no field types, just names and indices)
-                    let cases: Vec<EnumCaseData> = enum_decl
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .map(|(index, case)| EnumCaseData {
-                            name: case.name.clone(),
-                            index: index as u32,
-                            ast_id: case.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_enum_cases.insert(
-                        self.def_of_item(enum_decl.id),
-                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
-=======
                     self.sem.decls.local.enum_cases.insert(
                         self.tysys.def_at(enum_decl.id),
                         EnumInfo::of_decl(self.current_module_source.clone(), enum_decl),
->>>>>>> origin/main
                     );
                     register_enum_compiler_items(
                         &self.tysys.type_table,
@@ -237,60 +116,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if flags_decl.flags.len() > FlagsInfo::MAX_MEMBERS {
                         continue;
                     }
-<<<<<<< HEAD
-                    // Create a distinct Flags type (not a newtype over u32)
-                    let def = self.tysys.resolutions.defs().def_at(flags_decl.id);
-                    let flags_type = self.tysys.type_table.borrow_mut().make_flags(def);
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_decl_type(flags_decl.id, flags_type);
-                    // Add to newtypes so it can be used as a type name
-                    self.sem.decls.local_newtypes.insert(def, flags_type);
-                    // Store member info with bitmask values (1 << index)
-                    let members: Vec<FlagsMemberData> = flags_decl
-                        .flags
-                        .iter()
-                        .enumerate()
-                        .map(|(i, m)| FlagsMemberData {
-                            name: m.name.clone(),
-                            bitmask: 1u32 << i,
-                            ast_id: m.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_flags_cases.insert(
-||||||| 03599b796
-                    // Create a distinct Flags type (not a newtype over u32)
-                    let def = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(flags_decl.id)
-                        .expect("a flags declaration has an identity");
-                    let flags_type = self.tysys.type_table.borrow_mut().make_flags(def);
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_decl_type(flags_decl.id, flags_type);
-                    // Add to newtypes so it can be used as a type name
-                    self.sem.decls.local_newtypes.insert(def, flags_type);
-                    // Store member info with bitmask values (1 << index)
-                    let members: Vec<FlagsMemberData> = flags_decl
-                        .flags
-                        .iter()
-                        .enumerate()
-                        .map(|(i, m)| FlagsMemberData {
-                            name: m.name.clone(),
-                            bitmask: 1u32 << i,
-                            ast_id: m.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_flags_cases.insert(
-=======
                     let def = self.tysys.def_at(flags_decl.id);
                     self.sem.decls.local.declare_flags(
                         &self.tysys.type_table,
->>>>>>> origin/main
                         def,
                         self.current_module_source.clone(),
                         flags_decl,
@@ -323,28 +151,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // method declarations against the trait as their owner type
                     // — the trait body is the only place a serde protocol
                     // method and its owning trait are both in scope.
-<<<<<<< HEAD
-                    let defs = self.tysys.resolutions.defs();
-                    let owner_head = FqTypeName::declared(defs, defs.def_at(trait_decl.id));
-||||||| 03599b796
-                    let owner_head = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(trait_decl.id)
-                        .map(|def| FqTypeName::declared(self.tysys.resolutions.defs(), def));
-=======
                     let owner_head = FqTypeName::declared(
                         self.tysys.resolutions.defs(),
                         self.tysys.def_at(trait_decl.id),
                     );
->>>>>>> origin/main
                     for method in &trait_decl.methods {
                         register_method_compiler_item(
                             &self.tysys.type_table,
                             &method.attrs,
                             &method.name,
-                            (defs.def_at(method.id), None),
+                            (self.tysys.def_at(method.id), None),
                             &trait_decl.name,
                             &owner_head,
                             &self.current_module_source,

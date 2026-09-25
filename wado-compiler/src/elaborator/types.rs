@@ -298,13 +298,6 @@ pub(crate) struct FlagsInfo {
     pub(super) members: Vec<FlagsMemberData>,
 }
 
-<<<<<<< HEAD
-/// A declared `resource`, by its declaration.
-||||||| 03599b796
-/// Resource info: module source and method names
-/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
-/// Keep it for when wasi:sockets registration is re-enabled.
-=======
 impl FlagsInfo {
     /// The most members a declaration holds: each one's bitmask is `1 << index`.
     pub(super) const MAX_MEMBERS: usize = u32::BITS as usize;
@@ -336,10 +329,7 @@ impl FlagsInfo {
     }
 }
 
-/// Resource info: module source and method names
-/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
-/// Keep it for when wasi:sockets registration is re-enabled.
->>>>>>> origin/main
+/// A declared `resource`, by its declaration.
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
@@ -2826,6 +2816,7 @@ impl MethodInfo {
     pub(super) fn undeclared(return_type: TypeId) -> Self {
         Self {
             method_def: None,
+            impl_block: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![],
@@ -3794,57 +3785,6 @@ pub(crate) struct TypeLookup<'a> {
     /// Namespace-import aliases (`use ns from "..."`), by which a `ns::Type`
     /// reference canonicalizes to `ns$Type` (`sem::imports::canonical_ns_ref`).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
-<<<<<<< HEAD
-    pub(crate) all_newtypes: &'a IndexMap<DefId, TypeId>,
-    pub(crate) all_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
-    pub(crate) all_variant_cases: &'a IndexMap<DefId, VariantInfo>,
-    pub(crate) all_enum_cases: &'a IndexMap<DefId, EnumInfo>,
-    pub(crate) all_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
-    pub(crate) all_resource_types: &'a IndexMap<DefId, ResourceInfo>,
-    pub(crate) all_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
-    /// This walk's own additions, keyed by declaration like the `all_*` tables
-    /// above. See `ModuleDecls::local_struct_fields`.
-    pub(crate) local_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
-    pub(crate) local_newtypes: &'a IndexMap<DefId, TypeId>,
-    pub(crate) local_enum_cases: &'a IndexMap<DefId, EnumInfo>,
-    pub(crate) local_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
-    pub(crate) local_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
-    pub(crate) local_variant_cases: &'a IndexMap<DefId, VariantInfo>,
-    /// Fields of the anonymous shapes this walk interned, by shape id.
-    pub(crate) anon_struct_fields: &'a IndexMap<AnonStructId, StructFieldInfo>,
-    /// The local items in scope at the walk's position, highest precedence.
-    pub(crate) fn_local_items: &'a IndexMap<String, DefId>,
-    /// The trait declarations, which answer which bound declares an associated
-    /// type. `None` for the collection passes that run before they exist.
-    pub(crate) decls: Option<&'a TraitEnv>,
-||||||| 03599b796
-    pub(crate) all_newtypes: &'a IndexMap<DefId, TypeId>,
-    pub(crate) all_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
-    pub(crate) all_variant_cases: &'a IndexMap<DefId, VariantInfo>,
-    pub(crate) all_enum_cases: &'a IndexMap<DefId, EnumInfo>,
-    pub(crate) all_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
-    pub(crate) all_resource_types: &'a IndexMap<DefId, ResourceInfo>,
-    pub(crate) all_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
-    /// This walk's own additions, keyed by declaration like the `all_*` tables
-    /// above. See `ModuleDecls::local_struct_fields`.
-    pub(crate) local_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
-    pub(crate) local_newtypes: &'a IndexMap<DefId, TypeId>,
-    pub(crate) local_enum_cases: &'a IndexMap<DefId, EnumInfo>,
-    pub(crate) local_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
-    pub(crate) local_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
-    pub(crate) local_variant_cases: &'a IndexMap<DefId, VariantInfo>,
-    /// Fields of the anonymous shapes this walk interned, by shape id.
-    pub(crate) anon_struct_fields: &'a IndexMap<AnonStructId, StructFieldInfo>,
-    /// The local items in scope at the walk's position, highest precedence.
-    pub(crate) fn_local_items: &'a IndexMap<String, DefId>,
-    /// The declaration indexes — the frame derivation, for a caller holding a
-    /// rendered head rather than the site that wrote one. They hold what
-    /// modules *declare*, so no import alias can steer them, and they decline
-    /// when several modules declare the name. `None` for the collection passes
-    /// that run before the indexes exist; every name they resolve is written,
-    /// so its site answers.
-    pub(crate) decls: Option<&'a TraitEnv>,
-=======
     pub(crate) program: &'a DataDecls,
     /// This walk's own additions, read ahead of `program`: its local data
     /// declarations, anonymous shapes and function-local items.
@@ -3852,7 +3792,6 @@ pub(crate) struct TypeLookup<'a> {
     /// The declaration indexes, for a caller holding a rendered head rather than
     /// its site. No import alias steers them; a name several modules declare misses.
     pub(crate) decls: &'a TraitEnv,
->>>>>>> origin/main
 }
 
 impl<'a> TypeLookup<'a> {
@@ -4052,34 +3991,14 @@ impl<'a> TypeLookup<'a> {
         self.data_of(def, |d| &d.newtypes).copied()
     }
 
-<<<<<<< HEAD
-    /// Which of `bounds` declares `assoc_name`. `None` before the trait
-    /// declarations exist, since no bound can be asked what it declares then.
-||||||| 03599b796
-    /// Which of `bounds` declares `assoc_name`. `None` where the declaration
-    /// indexes are absent, since no bound can be asked what it declares then.
-=======
     /// Which of `bounds` declares `assoc_name`.
->>>>>>> origin/main
     pub(super) fn bound_declaring_assoc_type(
         &self,
         bounds: &[ast::TraitBound],
         assoc_name: &str,
     ) -> Option<DefId> {
-<<<<<<< HEAD
-        self.decls?
-            .bound_declaring_assoc_type(bounds, assoc_name, self.resolutions)
-||||||| 03599b796
-        self.decls?
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.declaration_at(Some(bound.id), &bound.name)
-            })
-=======
         self.decls
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.declaration_at(Some(bound.id), &bound.name)
-            })
->>>>>>> origin/main
+            .bound_declaring_assoc_type(bounds, assoc_name, self.resolutions)
     }
 
     /// The declaration a type reference names.
@@ -4097,25 +4016,7 @@ impl<'a> TypeLookup<'a> {
             return Some(*def);
         }
         self.resolutions
-<<<<<<< HEAD
             .resolve_in(self.current_module_source, name)
-||||||| 03599b796
-            .imported_as(self.current_module_source, name)
-            .or_else(|| {
-                self.decls?
-                    .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
-            })
-            .or_else(|| self.resolutions.prelude_decl(name))
-=======
-            .imported_as(self.current_module_source, name)
-            .or_else(|| {
-                self.decls
-                    .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
-            })
-            .or_else(|| self.resolutions.prelude_decl(name))
->>>>>>> origin/main
     }
 }
 
@@ -4183,6 +4084,8 @@ pub(super) struct ResolvedTraitMethod {
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.
     pub(super) impl_name: String,
+    /// That type's `TypeId`. `None` when the receiver is a type parameter.
+    pub(super) impl_type_id: Option<TypeId>,
     /// How the dispatched method's name spells its receiver: the matched
     /// block's, or the binder where the receiver is a type parameter.
     pub(super) receiver: FqTypeName,
@@ -4218,6 +4121,7 @@ impl ResolvedTraitMethod {
             impl_def: None,
             impl_name: param.to_string(),
             impl_type_id: None,
+            receiver: FqTypeName::binder(param),
             self_kind: info.self_kind,
             return_type: info.return_type,
             param_types: info.param_types,
@@ -4243,6 +4147,7 @@ impl ResolvedTraitMethod {
             impl_def: Some(info.impl_def),
             impl_name,
             impl_type_id: Some(impl_type_id),
+            receiver: info.receiver,
             self_kind: info.self_kind,
             return_type: info.output_type,
             param_types: info.rhs_type.into_iter().collect(),

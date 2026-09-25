@@ -29,60 +29,9 @@ shape. Each module's doc says how it works.
 | WIR Optimize         | WIR              | `wir_optimize/`                                 |
 | Codegen              | Component bytes  | `codegen/`                                      |
 
-<<<<<<< HEAD
-| Phase                  | Output          | Module(s)                                        |
-| ---------------------- | --------------- | ------------------------------------------------ |
-| Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
-| Bind                   | AST + bindings  | `bind.rs`                                        |
-| Loader                 | All modules     | `loader.rs`                                      |
-| Analyze                | `SymbolTable`   | `analyze.rs`                                     |
-| Resolve                | Declarations    | `defs.rs`, `resolve.rs`                          |
-| Annotate               | `Semantics`     | `semantics.rs`, `elaborator/`                    |
-| Liveness               | Reachability    | `elaborator/liveness.rs`                         |
-| Reify                  | `TirModule`     | `elaborator/reify.rs`                            |
-| Effect Check           | (validation)    | `effect_check.rs`                                |
-| Synthesis              | TIR (extended)  | `synthesis/`                                     |
-| Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
-| Link                   | `FlatPackage`   | `link.rs`                                        |
-| Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
-| Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
-| Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
-| Pre-lower Prune        | `FlatPackage`   | `prelower_reach.rs`                              |
-| Lower                  | `NirPackage`    | `lower/`                                         |
-| Optimize               | `NirPackage`    | `optimize/`                                      |
-| WIR Build              | `WirPackage`    | `wir_build/`                                     |
-| WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
-| Codegen                | Component bytes | `codegen/`                                       |
-||||||| 03599b796
-| Phase                  | Output          | Module(s)                                        |
-| ---------------------- | --------------- | ------------------------------------------------ |
-| Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
-| Bind                   | AST + bindings  | `bind.rs`                                        |
-| Loader                 | All modules     | `loader.rs`                                      |
-| Analyze                | `SymbolTable`   | `analyze.rs`                                     |
-| Resolve                | Declarations    | `defs.rs`, `resolve.rs`                          |
-| Annotate               | `Semantics`     | `semantics.rs`, `elaborator/`                    |
-| Liveness               | Reachability    | `elaborator/liveness.rs`                         |
-| Reify                  | `TirModule`     | `elaborator/reify.rs`                            |
-| Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
-| Synthesis              | TIR (extended)  | `synthesis/`                                     |
-| Effect Check           | TIR (validated) | `effect_check.rs`                                |
-| Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
-| Link                   | `FlatPackage`   | `link.rs`                                        |
-| Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
-| Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
-| Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
-| Pre-lower Prune        | `FlatPackage`   | `prelower_reach.rs`                              |
-| Lower                  | `NirPackage`    | `lower/`                                         |
-| Optimize               | `NirPackage`    | `optimize/`                                      |
-| WIR Build              | `WirPackage`    | `wir_build/`                                     |
-| WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
-| Codegen                | Component bytes | `codegen/`                                       |
-=======
 The driver is `compile_with_options` in `src/lib.rs`. It loads the modules,
 compiles any inline providers, and hands the rest to `compile_after_load`. The
 LSP runs the same phases up to liveness and stops there.
->>>>>>> origin/main
 
 ## IRs
 
@@ -169,73 +118,11 @@ Synthesis generates the TIR the user does not write:
 
 ## Link and Monomorphize
 
-<<<<<<< HEAD
-`synthesis/reflect_bridge.rs` is the one exception to synthesis running before
-monomorphize: a generic type's value bridges are named after the concrete
-subject and member types, so they exist only per instantiation
-([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md)).
-
-Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate, from two funnels into the shared `TypeTable::bound_driven_synth_requests` set (one per `TypeTable`, project-wide, since each module gets a fresh `Elaborator`):
-
-- A satisfied bound: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord`/`Default` bound is satisfied. `Eq`/`Ord`/serde recurse through members via one walker, `walk_structural_derive_members`, shared with marker validation and reason-chain diagnostics; `Default` instead checks that every field carries a default expression (`auto_derive_default_struct_type`). A direct `S::default()` call records at static-method resolution (`method_call.rs`), since it reaches no bound check.
-- A body-less marker: `impl Eq/Ord/Default/Serialize/Deserialize for T;` all validate eligibility immediately at the marker's own span (`Elaborator::record_explicit_derive_request` — a compile error if `T` isn't eligible) and then record into the same set, keyed by the target type's defining module.
-
-`Inspect` is _total_ (WEP): `on_bound_of` classifies it, `type_implements_trait_inner` short-circuits `true` for any type, and generation stays unconditional — so a `T: Inspect` bound always holds and `impl Inspect for T;` markers are accepted, without gating. It records no demand request. `#` selects no trait: it sets `Formatter.alternate`, which each impl reads.
-
-Two passes read the demand set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`/`Default`, gating generation on set membership (`SynthesisCtx::should_synthesize`) instead of its former unconditional sweep.
-
-A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl indexes like any other, so every gate that means "a real impl already covers this" must count only methodful impls: `SynthesisCtx::has_real_impl` (module-scoped, for `Eq`/`Ord`/`Default` generation dedup), `has_methodful_impl_anywhere` (module-agnostic, so a body-less format marker never suppresses the eager format body while a real `impl Display for String` does), and `Elaborator::has_real_trait_impl_for_type` (module-agnostic — a serde impl legitimately lives outside the type's module, e.g. `core:serde`'s `impl Serialize for i128`).
-
-## Effect Check
-
-`check_semantics` (`effect_check.rs`) runs over `Semantics`, after annotate and before synthesis, so the batch driver and the LSP share it. It checks that every function declares the effects it requires, and that no default expression or global initializer performs an effect its own handlers do not answer. Synthesized code is never checked, since it is not in `Semantics`. What a function retains is not checked here at all: the body states it, and `lower::plan` infers it ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
-
-## Effect Dispatch (post-check)
-
-`synthesis::effect_dispatch::synthesize_post_check` runs after synthesis and before link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers).
-
-## Link → Monomorphize → Erase
-
-- `link.rs` merges per-module TIR into a single `FlatPackage`. After link, functions and types are addressed by global indices.
-- `monomorphize/` walks call sites, instantiates generic structs and functions with concrete type arguments, and rewrites references. Generic structs are keyed by `(name, ModuleSource)`; generic functions are keyed by `(ModuleSource, String)`, where the string is the bare method name for methods and a module-qualified `FreeFunctionName` for free functions. The `ModuleSource` is always the body's home module (where the template is registered in `Package::functions`), so same-named generics from different modules coexist. The dispatch loop panics if a queued generic has no template at its `(module_source, name)` key — every generic must be defined somewhere reachable (e.g. in `core:prelude` for built-in shapes like the tuple, whose reserved base name is `[]`). Variadic `TupleSpread` nodes are expanded here. `name.rs` produces stable mangled names (`Box$i32`, `identity$1`, …).
-- `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
-||||||| 03599b796
-`synthesis/reflect_bridge.rs` is the one exception to synthesis running before
-monomorphize: a generic type's value bridges are named after the concrete
-subject and member types, so they exist only per instantiation
-([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md)).
-
-Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate, from two funnels into the shared `TypeTable::bound_driven_synth_requests` set (one per `TypeTable`, project-wide, since each module gets a fresh `Elaborator`):
-
-- A satisfied bound: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord`/`Default` bound is satisfied. `Eq`/`Ord`/serde recurse through members via one walker, `walk_structural_derive_members`, shared with marker validation and reason-chain diagnostics; `Default` instead checks that every field carries a default expression (`auto_derive_default_struct_type`). A direct `S::default()` call records at static-method resolution (`method_call.rs`), since it reaches no bound check.
-- A body-less marker: `impl Eq/Ord/Default/Serialize/Deserialize for T;` all validate eligibility immediately at the marker's own span (`Elaborator::record_explicit_derive_request` — a compile error if `T` isn't eligible) and then record into the same set, keyed by the target type's defining module.
-
-`Inspect` is _total_ (WEP): `classify_on_bound_trait` classifies it, `type_implements_trait_inner` short-circuits `true` for any type, and generation stays unconditional — so a `T: Inspect` bound always holds and `impl Inspect for T;` markers are accepted, without gating. It records no demand request. `#` selects no trait: it sets `Formatter.alternate`, which each impl reads.
-
-Two passes read the demand set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`/`Default`, gating generation on set membership (`SynthesisCtx::should_synthesize`) instead of its former unconditional sweep.
-
-A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl indexes like any other, so every gate that means "a real impl already covers this" must count only methodful impls: `SynthesisCtx::has_real_impl` (module-scoped, for `Eq`/`Ord`/`Default` generation dedup), `has_methodful_impl_anywhere` (module-agnostic, so a body-less format marker never suppresses the eager format body while a real `impl Display for String` does), and `Elaborator::has_real_trait_impl_for_type` (module-agnostic — a serde impl legitimately lives outside the type's module, e.g. `core:serde`'s `impl Serialize for i128`).
-
-## Effect Check
-
-`check_effects` (`effect_check.rs`) runs after synthesis and before monomorphize. It validates that every function declares the effects it actually requires. Synthesized CM boundary code is exempted. A separate `check_default_purity` runs earlier, immediately before synthesis, to gate auto-derived `Default::default()` bodies on pure field defaults. What a function retains is not checked here at all: the body states it, and `lower::plan` infers it ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
-
-## Effect Dispatch (post-check)
-
-`synthesis::effect_dispatch::synthesize_post_check` runs between the effect check and link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers). This pass is split out of the main synthesis stage so that effect-check sees the original `WithHandler` shape and can validate which effects are satisfied locally.
-
-## Link → Monomorphize → Erase
-
-- `link.rs` merges per-module TIR into a single `FlatPackage`. After link, functions and types are addressed by global indices.
-- `monomorphize/` walks call sites, instantiates generic structs and functions with concrete type arguments, and rewrites references. Generic structs are keyed by `(name, ModuleSource)`; generic functions are keyed by `(ModuleSource, String)`, where the string is the bare method name for methods and a module-qualified `FreeFunctionName` for free functions. The `ModuleSource` is always the body's home module (where the template is registered in `Package::functions`), so same-named generics from different modules coexist. The dispatch loop panics if a queued generic has no template at its `(module_source, name)` key — every generic must be defined somewhere reachable (e.g. in `core:prelude` for built-in shapes like the tuple, whose reserved base name is `[]`). Variadic `TupleSpread` nodes are expanded here. `name.rs` produces stable mangled names (`Box$i32`, `identity$1`, …).
-- `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
-=======
 Link merges the modules into one package. Compile-time parameters (`#[param]`)
 then take their `-D` values. Monomorphize instantiates each generic item per
 concrete type argument and expands variadic packs. Then newtypes collapse to
 their base type and flags to `u32`. Dispatch needed the distinction, and nothing
 after it does. Functions nothing reaches are dropped before lower.
->>>>>>> origin/main
 
 ## Lower
 

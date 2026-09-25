@@ -22,27 +22,13 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-<<<<<<< HEAD
 use crate::elaborator::trait_query::assoc_const_owner;
-use crate::elaborator::types::{
-    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
-||||||| 03599b796
-use crate::elaborator::types::{
-    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
-=======
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias,
->>>>>>> origin/main
 };
-<<<<<<< HEAD
-use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::resolve::Resolutions;
-||||||| 03599b796
-use crate::name::{mangle_local_item_name, namespace_member_alias};
-=======
->>>>>>> origin/main
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
 use crate::{hashmap, tir};
@@ -263,15 +249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Give a local struct its identity before any of its block's
     /// declarations are resolved, so a type may name one written later.
     fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-<<<<<<< HEAD
-        let def = self.tysys.resolutions.defs().def_at(struct_decl.id);
-||||||| 03599b796
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
-=======
         let def = self.tysys.def_at(struct_decl.id);
->>>>>>> origin/main
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
         // generic struct: its usage sites mint separate `GenericInstance`
         // TypeIds, and this one exists so `type_id_of_decl` has something to
@@ -335,39 +313,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-<<<<<<< HEAD
-        let def = self.tysys.resolutions.defs().def_at(struct_decl.id);
-        let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
-            return;
-        };
-        info.fields = fields;
-        info.field_ast_ids = field_ast_ids;
-        info.field_defaults = field_defaults;
-        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
-        // Local structs have no `Item::Struct` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // statement handling (`reify_local_struct`) is what discovers and
-        // builds this declaration's `TirStruct`, from the `local_struct_fields`
-        // entry just recorded above (annotate records facts; reify is the
-        // sole TIR producer, matching every other declaration kind).
-||||||| 03599b796
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
-        let Some(info) = self.sem.decls.local_struct_fields.get_mut(&def) else {
-            return;
-        };
-        info.fields = fields;
-        info.field_ast_ids = field_ast_ids;
-        info.field_defaults = field_defaults;
-        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
-        // Local structs have no `Item::Struct` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // statement handling (`reify_local_struct`) is what discovers and
-        // builds this declaration's `TirStruct`, from the `local_struct_fields`
-        // entry just recorded above (annotate records facts; reify is the
-        // sole TIR producer, matching every other declaration kind).
-=======
         let def = self.tysys.def_at(struct_decl.id);
         self.sem
             .decls
@@ -376,7 +321,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get_mut(&def)
             .expect("`declare_local_struct` ran over this block first")
             .fields = fields;
->>>>>>> origin/main
     }
 
     /// Report what a signature's written types cannot mean.
@@ -462,35 +406,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A generic one names no single type: each instantiation resolves the
         // base AST with its arguments substituted, so what is recorded is the
         // declaration — the same entry a module-level generic newtype makes.
-        let def = self.tysys.resolutions.defs().def_at(newtype_decl.id);
+        let def = self.tysys.def_at(newtype_decl.id);
         if !newtype_decl.type_params.is_empty() {
-<<<<<<< HEAD
-            self.sem.decls.local_generic_newtypes.insert(
-                def,
-                GenericNewtypeInfo {
-                    type_params: RealTypeParams::of(&newtype_decl.type_params),
-                    base_type_ast: newtype_decl.ty.clone(),
-                },
-            );
-||||||| 03599b796
-            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-                return true;
-            };
-            self.sem.decls.local_generic_newtypes.insert(
-                def,
-                GenericNewtypeInfo {
-                    type_params: RealTypeParams::of(&newtype_decl.type_params),
-                    base_type_ast: newtype_decl.ty.clone(),
-                },
-            );
-=======
-            let def = self.tysys.def_at(newtype_decl.id);
             self.sem
                 .decls
                 .local
                 .generic_newtypes
                 .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
->>>>>>> origin/main
             self.sem
                 .decls
                 .fn_local_items
@@ -501,55 +423,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == TypeTable::UNKNOWN {
             return false;
         }
-<<<<<<< HEAD
-        // Same as the local struct: the head is this declaration's identity.
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_newtype(def, base_type_id);
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(newtype_decl.id, type_id);
-        // Durable entry: some trait-bound synthesis (e.g. the auto-derived
-        // `Display` a template string needs) re-resolves a newtype's base type
-        // rather than reading `ResolvedType` directly, so it must be
-        // discoverable post-declaration the same way struct field info is
-        // (see `resolve_local_struct`).
-        self.sem.decls.local_newtypes.insert(def, type_id);
-||||||| 03599b796
-        // Same as the local struct: the head is this declaration's identity.
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_newtype(def, base_type_id);
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(newtype_decl.id, type_id);
-        // Durable entry: some trait-bound synthesis (e.g. the auto-derived
-        // `Display` a template string needs) re-resolves a newtype's base type
-        // rather than reading `ResolvedType` directly, so it must be
-        // discoverable post-declaration the same way struct field info is
-        // (see `resolve_local_struct`).
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        self.sem.decls.local_newtypes.insert(def, type_id);
-=======
-        let def = self.tysys.def_at(newtype_decl.id);
         self.sem.decls.local.declare_newtype(
             &self.tysys.type_table,
             def,
             newtype_decl.id,
             base_type_id,
         );
->>>>>>> origin/main
         self.sem
             .decls
             .fn_local_items

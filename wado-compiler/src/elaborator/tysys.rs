@@ -92,16 +92,6 @@ pub(crate) struct TypeSystem {
 }
 
 impl TypeSystem {
-<<<<<<< HEAD
-||||||| 03599b796
-    /// Check if a name refers to a known type (struct, variant, enum,
-    /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
-    /// lookup instead of scanning all module maps.
-    pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
-        self.known_type_names_cache.contains(name)
-    }
-
-=======
     /// A [`TypeLookup`] standing in `module`, reading `walk`'s additions ahead
     /// of the program's declarations.
     pub(crate) fn type_lookup<'s>(
@@ -120,14 +110,6 @@ impl TypeSystem {
         }
     }
 
-    /// Check if a name refers to a known type (struct, variant, enum,
-    /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
-    /// lookup instead of scanning all module maps.
-    pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
-        self.known_type_names_cache.contains(name)
-    }
-
->>>>>>> origin/main
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order, or `None` if it names no registered struct. Keyed by the type
     /// itself rather than a spelling of it, which is what every caller holds:

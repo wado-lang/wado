@@ -56,30 +56,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_method_dispatch
             .contains_key(&tagged.id)
         {
-<<<<<<< HEAD
-            let _ = self.emit(TypeError::TemplateTagNotCallable {
-                span: tagged.tag.span(),
-            });
-||||||| 03599b796
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "a template tag must name a function or a static method".to_string(),
-                span: tagged.tag.span(),
-            });
-=======
             if self.logger.offered_error_count() == reported {
                 return self.emit_not_a_tag(&tagged.tag);
             }
->>>>>>> origin/main
             return TypeTable::ERROR;
         }
         result
     }
 
     fn emit_not_a_tag(&self, tag: &ast::Expr) -> TypeId {
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: "a template tag must name a function or a static method".to_string(),
-            span: tag.span(),
-        });
+        let _ = self.emit(TypeError::TemplateTagNotCallable { span: tag.span() });
         TypeTable::ERROR
     }
 

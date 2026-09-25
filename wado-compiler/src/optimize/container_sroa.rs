@@ -27,20 +27,9 @@ use super::arena_query::{
     is_pure_operand, operand_read_locals, reachable_blocks, strip_one_value_copy,
 };
 use super::gate::{FunctionGate, GatedPass};
-<<<<<<< HEAD
-use crate::compiler_item::CompilerItem;
-||||||| 03599b796
-=======
-use crate::compiler_item::SeqField;
->>>>>>> origin/main
+use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::value_copy;
-<<<<<<< HEAD
-use crate::name::{FqTraitName, LocalMethodName};
-||||||| 03599b796
-use crate::name::FqTraitName;
-=======
-use crate::name::{FqTraitName, minted_what};
->>>>>>> origin/main
+use crate::name::{FqTraitName, LocalMethodName, minted_what};
 use crate::nir::NirField;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{CtfeBuiltin, build_ctfe_builtin_map};

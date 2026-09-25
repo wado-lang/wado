@@ -866,24 +866,10 @@ arguments.
 ### Reify still resolves names
 
 The completeness rule holds for the facts that exist; what is left is the
-<<<<<<< HEAD
-facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads and
+facts that do not. Reify carries `symbols` and `loaded_modules` for 9 reads and
 runs `type_lookup()` at 14 sites, in a phase whose contract is that it resolves
 no names. Its one surviving resolution, `resolve_global_type`, reads a global's
 declared type in that global's own module scope.
-||||||| 03599b796
-facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads,
-runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
-effect name that is a parameter resolves — in a phase whose contract is that it
-resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
-global's declared type in that global's own module scope.
-=======
-facts that do not. Reify carries `symbols` and `loaded_modules` for 9 reads,
-runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
-effect name that is a parameter resolves — in a phase whose contract is that it
-resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
-global's declared type in that global's own module scope.
->>>>>>> origin/main
 
 The reads that remain are also fail-safe where the contract is fail-loud: 66
 `unwrap_or*` defaults against 43 `.expect`s. Most are legitimately optional

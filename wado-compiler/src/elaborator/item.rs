@@ -33,17 +33,7 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-<<<<<<< HEAD
-use crate::tir::{ResolvedType, StructDef, TirTypeParam};
-use crate::{hashmap, tir};
-||||||| 03599b796
-use crate::resolve::head_site;
-use crate::tir::{ResolvedType, StructDef, TirTypeParam};
-use crate::{hashmap, tir};
-=======
-use crate::resolve::head_site;
 use crate::tir::{ResolvedType, TirTypeParam};
->>>>>>> origin/main
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -69,106 +59,6 @@ pub(super) fn extract_compiler_item<H: CompilerHost>(
     items.into_iter().next()
 }
 
-<<<<<<< HEAD
-/// Body-walk placeholder for a function / method / test. The
-/// body walk records the signature facts (`fn_param_types`,
-/// `fn_return_types`, `decl_type_params`, `function_effects`,
-/// `method_names`, …) and resolves the body for its side-effect fact
-/// recording, but no longer assembles the function's TIR — reify is the
-/// sole producer. No caller reads the returned `TirFunction`, so a minimal
-/// shell with the right name + span satisfies the signature.
-fn placeholder_function(name: String, span: Span) -> TirFunction {
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![],
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: vec![],
-        retains: vec![],
-        immediates: vec![],
-        trap: None,
-        linear_memory: None,
-        body: None,
-        span,
-        local_count: 0,
-        locals: vec![],
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        inline_hint: tir::InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        declared_return_convention: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
-}
-
-||||||| 03599b796
-/// Body-walk placeholder for a function / method / test. The
-/// body walk records the signature facts (`fn_param_types`,
-/// `fn_return_types`, `decl_type_params`, `function_effects`,
-/// `method_names`, …) and resolves the body for its side-effect fact
-/// recording, but no longer assembles the function's TIR — reify is the
-/// sole producer. No caller reads the returned `TirFunction`, so a minimal
-/// shell with the right name + span satisfies the signature.
-fn placeholder_function(name: String, span: Span) -> TirFunction {
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        monomorph_info: None,
-        method_info: None,
-        params: vec![],
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: vec![],
-        retains: vec![],
-        immediates: vec![],
-        trap: None,
-        linear_memory: None,
-        body: None,
-        span,
-        local_count: 0,
-        locals: vec![],
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        inline_hint: tir::InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        declared_return_convention: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
-}
-
-=======
->>>>>>> origin/main
 /// Push a [`RegisterError`] into the diagnostic stream. Duplicate
 /// registrations are kept as errors because they always indicate a
 /// stdlib bug (two declarations claiming the same anchor); kind
@@ -402,85 +292,6 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-<<<<<<< HEAD
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Trait, module_source, span, logger)
-    else {
-        return;
-    };
-    // Single-method traits cache the method's name so the synthesiser
-    // can construct `<Trait>::<method>` calls without hard-coding the
-    // source-side spelling. Multi-method traits leave it unset.
-    let method_name = if methods.len() == 1 {
-        Some(methods[0].name.clone())
-    } else {
-        None
-    };
-    // For each associated type, capture both its source-side name and the
-    // source-side names of all its trait bounds. The synthesiser identifies
-    // assoc types by their bound (a `#[compiler_item("...")]`-registered
-    // trait whose current spelling also comes from the registry), so both
-    // ends stay rename-stable.
-    let assoc_types = assoc_types
-        .iter()
-        .map(|a| TraitAssocType {
-            name: a.name.clone(),
-            bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
-        })
-        .collect();
-    let fq = {
-        let type_table = type_table.borrow();
-        let defs = type_table.defs();
-        Some(FqTraitName::declared(defs, defs.def_at(decl)))
-    };
-    let resolved = Resolved::Trait {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-        fq,
-        method_name,
-        assoc_types,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-||||||| 03599b796
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Trait, module_source, span, logger)
-    else {
-        return;
-    };
-    // Single-method traits cache the method's name so the synthesiser
-    // can construct `<Trait>::<method>` calls without hard-coding the
-    // source-side spelling. Multi-method traits leave it unset.
-    let method_name = if methods.len() == 1 {
-        Some(methods[0].name.clone())
-    } else {
-        None
-    };
-    // For each associated type, capture both its source-side name and the
-    // source-side names of all its trait bounds. The synthesiser identifies
-    // assoc types by their bound (a `#[compiler_item("...")]`-registered
-    // trait whose current spelling also comes from the registry), so both
-    // ends stay rename-stable.
-    let assoc_types = assoc_types
-        .iter()
-        .map(|a| TraitAssocType {
-            name: a.name.clone(),
-            bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
-        })
-        .collect();
-    let fq = type_table
-        .borrow()
-        .defs()
-        .of_ast_id(decl)
-        .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
-    let resolved = Resolved::Trait {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        decl,
-        fq,
-        method_name,
-        assoc_types,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-=======
     register_annotated(
         type_table,
         attrs,
@@ -499,11 +310,11 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
                     bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
                 })
                 .collect();
-            let fq = type_table
-                .borrow()
-                .defs()
-                .of_ast_id(decl)
-                .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
+            let fq = {
+                let type_table = type_table.borrow();
+                let defs = type_table.defs();
+                Some(FqTraitName::declared(defs, defs.def_at(decl)))
+            };
             Resolved::Trait {
                 module_source: module_source.clone(),
                 name: name.to_string(),
@@ -514,7 +325,6 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
             }
         },
     );
->>>>>>> origin/main
 }
 
 /// Register a free function's `#[compiler_item(...)]` annotation, if any.
@@ -536,32 +346,12 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
         module_source,
         span,
         logger,
-<<<<<<< HEAD
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Function {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        def: Some(def),
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-||||||| 03599b796
-    ) else {
-        return;
-    };
-    let resolved = Resolved::Function {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-=======
         || Resolved::Function {
             module_source: module_source.clone(),
             name: name.to_string(),
+            def: Some(def),
         },
     );
->>>>>>> origin/main
 }
 
 /// Register an impl-block method's `#[compiler_item(...)]` annotation, if any.
@@ -576,74 +366,8 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     span: Span,
     logger: &Logger<'_, H>,
 ) {
-<<<<<<< HEAD
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Method, module_source, span, logger)
-    else {
-        return;
-    };
-    let resolved = Resolved::Method {
-        module_source: module_source.clone(),
-        owner_type: owner_type.to_string(),
-        owner_head: Some(owner_head.clone()),
-        name: method_name.to_string(),
-        def: Some(def),
-        block,
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a single variant case's `#[compiler_item("...")]` annotation.
-///
-/// `parent_type` is the variant the case belongs to (e.g. `"Option"`).
-/// `case_index` is the zero-based position of the case in its declared
-/// order, which downstream consumers (pattern matching, variant
-/// construction) need in addition to the case name.
-pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    parent_type: &str,
-    case_name: &str,
-    case_index: u32,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-||||||| 03599b796
-    let Some(item) = compiler_item_on(attrs, CompilerItemKind::Method, module_source, span, logger)
-    else {
-        return;
-    };
-    let resolved = Resolved::Method {
-        module_source: module_source.clone(),
-        owner_type: owner_type.to_string(),
-        owner_head: Some(owner_head.clone()),
-        name: method_name.to_string(),
-    };
-    bind_compiler_item(type_table, item, resolved, module_source, span, logger);
-}
-
-/// Register a single variant case's `#[compiler_item("...")]` annotation.
-///
-/// `parent_type` is the variant the case belongs to (e.g. `"Option"`).
-/// `case_index` is the zero-based position of the case in its declared
-/// order, which downstream consumers (pattern matching, variant
-/// construction) need in addition to the case name.
-pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
-    type_table: &RefCell<TypeTable>,
-    attrs: &[Attribute],
-    parent_type: &str,
-    case_name: &str,
-    case_index: u32,
-    module_source: &ModuleSource,
-    span: Span,
-    logger: &Logger<'_, H>,
-) {
-    let Some(item) = compiler_item_on(
-=======
     register_annotated(
         type_table,
->>>>>>> origin/main
         attrs,
         CompilerItemKind::Method,
         module_source,
@@ -654,6 +378,8 @@ pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
             owner_type: owner_type.to_string(),
             owner_head: Some(owner_head.clone()),
             name: method_name.to_string(),
+            def: Some(def),
+            block,
         },
     );
 }
@@ -1075,9 +801,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let trait_decl = impl_block
             .trait_type
             .as_ref()
-<<<<<<< HEAD
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
-        let impl_def = scope.def_at(impl_block.id);
+        let impl_def = scope.tysys.def_at(impl_block.id);
         scope
             .tysys
             .type_table
@@ -1094,35 +819,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .impl_sigs
             .insert(impl_def, sig.clone());
         scope.sem.decls.impl_sigs.insert(impl_def, sig);
-||||||| 03599b796
-            .and_then(head_site)
-            .and_then(|site| scope.tysys.resolutions.declared(site));
-        let impl_def = scope.def_at(impl_block.id);
-        scope.sem.decls.impl_sigs.insert(
-            impl_def,
-            ImplSig {
-                target_type_args,
-                trait_type_args,
-                associated_types,
-                target_fq,
-                trait_decl,
-            },
-        );
-=======
-            .and_then(head_site)
-            .and_then(|site| scope.tysys.resolutions.declared(site));
-        let impl_def = scope.tysys.def_at(impl_block.id);
-        scope.sem.decls.impl_sigs.insert(
-            impl_def,
-            ImplSig {
-                target_type_args,
-                trait_type_args,
-                associated_types,
-                target_fq,
-                trait_decl,
-            },
-        );
->>>>>>> origin/main
     }
 
     /// Require the impl's target and trait reference to name, between them, every
@@ -1421,29 +1117,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// question: whether an impl reaches a receiver reads its recorded target.
     pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
         let mut block = self.enter_impl_params_scope(impl_block);
-        let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
+        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
         block.record_impl_sig(impl_block, impl_is_concrete);
     }
 
     /// Record the canonical signature of every method in `impl_block`, in its own
     /// frame, so dispatch never re-resolves one from the caller's (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
-<<<<<<< HEAD
-        let impl_def = self.def_at(impl_block.id);
-        let mut block = self.enter_impl_params_scope(impl_block);
-||||||| 03599b796
-        let impl_def = self.def_at(impl_block.id);
-        let mut block = self.enter_inherited_type_param_scope();
-        block.annotate_ctx.trait_ctx.type_params.clear();
-        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        block.register_impl_block_params(impl_block);
-=======
         let impl_def = self.tysys.def_at(impl_block.id);
-        let mut block = self.enter_inherited_type_param_scope();
-        block.annotate_ctx.trait_ctx.type_params.clear();
-        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        block.register_impl_block_params(impl_block);
->>>>>>> origin/main
+        let mut block = self.enter_impl_params_scope(impl_block);
 
         let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
 
@@ -1728,66 +1410,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .struct_field_types
             .insert(struct_decl.id, struct_field_types);
-<<<<<<< HEAD
-
-        TirStruct {
-            def: StructDef::Decl(self.tysys.resolutions.defs().def_at(struct_decl.id)),
-            type_args: Vec::new(),
-            name: struct_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: struct_decl.visibility,
-            type_params: vec![],
-            monomorph_info: None,
-            fields: vec![],
-            span: struct_decl.span,
-            wire_name_policy: None,
-        }
-    }
-
-    /// Operation signatures the decl pass recorded for the declaration at
-    /// `decl_id`.
-    fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self.def_at(decl_id);
-        self.sem
-            .decls
-            .effect_ops
-            .get(&decl)
-            .cloned()
-            .expect("the decl pass records every interface / resource declaration's operations")
-||||||| 03599b796
-
-        TirStruct {
-            def: StructDef::Decl(
-                self.tysys
-                    .resolutions
-                    .defs()
-                    .of_ast_id(struct_decl.id)
-                    .expect("a `struct` declaration is declared"),
-            ),
-            type_args: Vec::new(),
-            name: struct_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: struct_decl.visibility,
-            type_params: vec![],
-            monomorph_info: None,
-            fields: vec![],
-            span: struct_decl.span,
-            wire_name_policy: None,
-        }
-    }
-
-    /// Operation signatures the decl pass recorded for the declaration at
-    /// `decl_id`.
-    fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self.def_at(decl_id);
-        self.sem
-            .decls
-            .effect_ops
-            .get(&decl)
-            .cloned()
-            .expect("the decl pass records every interface / resource declaration's operations")
-=======
->>>>>>> origin/main
     }
 
     /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
@@ -1809,13 +1431,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
             type_id: self_slot,
-<<<<<<< HEAD
-            declaring_trait: Some(scope.tysys.resolutions.defs().def_at(trait_decl.id)),
-||||||| 03599b796
-            declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
-=======
             declaring_trait: Some(scope.tysys.def_at(trait_decl.id)),
->>>>>>> origin/main
         };
         scope.set_self_binding(declaring);
         scope.bind_param(
@@ -2331,65 +1947,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .sem
             .decls
             .effect_ops
-<<<<<<< HEAD
-            .insert(decl.id, operations.clone());
-        TirEffect {
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            span: decl.span,
-        }
-    }
-
-    pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
-        let operations = self.declared_effect_ops(decl.id);
-        self.sem
-            .types
-            .effect_ops
-            .insert(decl.id, operations.clone());
-        TirResource {
-            def: self.tysys.resolutions.defs().def_at(decl.id),
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            is_generic: !decl.type_params.is_empty(),
-            span: decl.span,
-        }
-||||||| 03599b796
-            .insert(decl.id, operations.clone());
-        TirEffect {
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            span: decl.span,
-        }
-    }
-
-    pub(super) fn resolve_resource_decl(&mut self, decl: &ast::ResourceDecl) -> TirResource {
-        let operations = self.declared_effect_ops(decl.id);
-        self.sem
-            .types
-            .effect_ops
-            .insert(decl.id, operations.clone());
-        TirResource {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(decl.id)
-                .expect("a `resource` declaration is declared"),
-            name: decl.name.clone(),
-            visibility: decl.visibility,
-            operations,
-            is_generic: !decl.type_params.is_empty(),
-            span: decl.span,
-        }
-=======
             .get(&self.tysys.def_at(decl_id))
             .cloned()
             .expect("the decl pass records every interface / resource declaration's operations");
         self.sem.types.effect_ops.insert(decl_id, operations);
->>>>>>> origin/main
     }
 
     /// Resolve a global variable declaration for its fact-recording side
@@ -2426,57 +1987,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .decl_type_params
             .insert(variant_decl.id, type_params);
-<<<<<<< HEAD
-
-        register_variant_compiler_item(
-            &self.tysys.type_table,
-            &variant_decl.attrs,
-            variant_decl.id,
-            &variant_decl.name,
-            &self.current_module_source,
-            variant_decl.span,
-            self.logger,
-        );
-
-        TirVariantDecl {
-            def: self.tysys.resolutions.defs().def_at(variant_decl.id),
-            name: variant_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: variant_decl.visibility,
-            type_params: vec![],
-            cases: vec![],
-            span: variant_decl.span,
-            wire_name_policy: None,
-        }
-||||||| 03599b796
-
-        register_variant_compiler_item(
-            &self.tysys.type_table,
-            &variant_decl.attrs,
-            variant_decl.id,
-            &variant_decl.name,
-            &self.current_module_source,
-            variant_decl.span,
-            self.logger,
-        );
-
-        TirVariantDecl {
-            def: self
-                .tysys
-                .resolutions
-                .defs()
-                .of_ast_id(variant_decl.id)
-                .expect("a `variant` declaration is declared"),
-            name: variant_decl.name.clone(),
-            module_source: self.current_module_source.clone(),
-            visibility: variant_decl.visibility,
-            type_params: vec![],
-            cases: vec![],
-            span: variant_decl.span,
-            wire_name_policy: None,
-        }
-=======
->>>>>>> origin/main
     }
 
     /// Populate `func`'s generic-inference caches without resolving its body, so
@@ -2699,23 +2209,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let effects = scope.resolve_effects(&func.effects);
 
-<<<<<<< HEAD
-        let func_key = func.id;
-        scope.sem.types.function_effects.insert(func_key, effects);
-||||||| 03599b796
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the function's `AstId`.
-        let func_key = func.id;
-        scope.sem.types.function_effects.insert(func_key, effects);
-=======
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the function's `AstId`.
         scope.sem.types.function_effects.insert(func.id, effects);
->>>>>>> origin/main
 
         // Record what `task return` delivers, so reify can set
         // `task_return_type` for resource-store inference.
@@ -2751,67 +2245,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.clear_fn_local_items();
 
         self.resolve_block(&test_decl.body, &mut ctx, None);
-<<<<<<< HEAD
-
-        let tir_test = TirTest {
-            name: test_decl.name.clone(),
-            function_name: function_name.clone(),
-            line: test_decl.span.line,
-            span: test_decl.span,
-            expect_trap,
-            is_todo,
-            timeout_ms,
-            is_synopsis,
-        };
-
-        Some((
-            placeholder_function(function_name, test_decl.span),
-            tir_test,
-        ))
-    }
-
-    /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag
-    /// for [i32, i32]`): every target argument pins a position (`arg_pins`).
-    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
-        let Some(args) = impl_target_args(impl_ty) else {
-            return false;
-        };
-        !args.is_empty() && args.iter().all(|a| self.tysys.arg_pins(a))
-||||||| 03599b796
-
-        let tir_test = TirTest {
-            name: test_decl.name.clone(),
-            function_name: function_name.clone(),
-            line: test_decl.span.line,
-            span: test_decl.span,
-            expect_trap,
-            is_todo,
-            timeout_ms,
-            is_synopsis,
-        };
-
-        Some((
-            placeholder_function(function_name, test_decl.span),
-            tir_test,
-        ))
-    }
-
-    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
-    /// every argument is concrete. Its methods are per-instantiation functions
-    /// named `List<u8>::method` and called directly. The tuple arm carries
-    /// coherence Rule 1: the variadic template is skipped for that arity.
-    ///
-    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
-    /// nothing else: this names the method, matching decides which receivers
-    /// reach that name, and a second answer mints one name from two functions.
-    pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
-        let Some(args) = impl_target_args(impl_ty) else {
-            return false;
-        };
-        !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
-=======
->>>>>>> origin/main
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully
@@ -2898,7 +2331,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         let mut ctx = FunctionContext::new(return_type, display_name);
-<<<<<<< HEAD
         // `resume` is valid only in a handler method body (WEP 2026-04-11).
         if let Some(handled) = trait_name.and_then(FqTraitName::canonical)
             && let kind = scope.tysys.resolutions.defs().kind(handled)
@@ -2912,66 +2344,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .resource_method_sig(handled, &func.name)
                 .filter(|op| op.is_async)
                 .map(|op| op.cm_name.is_some());
-||||||| 03599b796
-        // Mark this context as a handler method body when the surrounding
-        // impl block targets an effect or resource declaration. `resume`
-        // is only valid inside such bodies (see WEP 2026-04-11). Resources
-        // share the handler-method semantics with effects: an
-        // `impl Fields for CountingFields` method is a one-shot handler
-        // body just like `impl Counter for BaseCounter`.
-        //
-        if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.decl_key_or_local(name);
-            let declares =
-                |index: &hashmap::IndexSet<DefId>| canonical_key.filter(|key| index.contains(key));
-            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
-            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
-            if effect_decl.is_some() || resource_decl.is_some() {
-                ctx.in_handler_method = true;
-            }
-            let (decl_ref, is_resource_effect) = match (effect_decl, resource_decl) {
-                (Some(d), _) => (Some(d), false),
-                (None, Some(d)) => (Some(d), true),
-                (None, None) => (None, false),
-            };
-            let async_op = decl_ref.and_then(|decl| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
-=======
-        // Mark this context as a handler method body when the surrounding
-        // impl block targets an effect or resource declaration. `resume`
-        // is only valid inside such bodies (see WEP 2026-04-11). Resources
-        // share the handler-method semantics with effects: an
-        // `impl Fields for CountingFields` method is a one-shot handler
-        // body just like `impl Counter for BaseCounter`.
-        if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.decl_key_or_local(name);
-            let declares =
-                |index: &hashmap::IndexSet<DefId>| canonical_key.filter(|key| index.contains(key));
-            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
-            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
-            if effect_decl.is_some() || resource_decl.is_some() {
-                ctx.in_handler_method = true;
-            }
-            let (decl_ref, is_resource_effect) = match (effect_decl, resource_decl) {
-                (Some(d), _) => (Some(d), false),
-                (None, Some(d)) => (Some(d), true),
-                (None, None) => (None, false),
-            };
-            let async_op = decl_ref.and_then(|decl| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
->>>>>>> origin/main
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {
@@ -3048,23 +2420,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let effects = scope.resolve_effects(&func.effects);
 
-<<<<<<< HEAD
-        let method_key = func.id;
-        scope.sem.types.function_effects.insert(method_key, effects);
-||||||| 03599b796
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the method's `AstId`.
-        let method_key = func.id;
-        scope.sem.types.function_effects.insert(method_key, effects);
-=======
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the method's `AstId`.
         scope.sem.types.function_effects.insert(func.id, effects);
->>>>>>> origin/main
 
         drop(scope);
 
@@ -3089,12 +2445,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
-    /// [i32, i32]`): every argument answers [`Self::impl_arg_pins_a_position`].
+    /// [i32, i32]`): every target argument pins a position (`arg_pins`).
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.impl_arg_pins_a_position(a))
+        !args.is_empty() && args.iter().all(|a| self.arg_pins(a))
     }
 }
 

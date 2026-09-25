@@ -9,17 +9,8 @@ use std::sync::Arc;
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-<<<<<<< HEAD
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
-||||||| 03599b796
-use crate::compiler_host::{CompilerHost, LogLevel};
-use crate::component_model::CmInterfaceRegistry;
-=======
-use crate::bail_with;
-use crate::compiler_host::{Code, CompilerHost, LogLevel};
-use crate::component_model::{CmInterfaceRegistry, declares_cm_binding};
->>>>>>> origin/main
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -29,7 +20,7 @@ use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
-use crate::logger::{Bail, Logger};
+use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
 use crate::resolve::Resolutions;
@@ -1179,14 +1170,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             Err(_) => (IndexMap::default(), false),
         }
     };
-    let lower_ok = lower_ok
-        && register_user_cm_modules(
-            &mut state.tysys.cm_interface_registry,
-            &load_result.modules,
-            logger,
-        )
-        .is_ok();
-
     // Take an immutable snapshot of the type table at the end of lowering.
     // LSP queries read this snapshot; any further lowering (none today) would
     // continue interning into the shared `Rc<RefCell<TypeTable>>` held by
@@ -1238,19 +1221,21 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     }
 }
 
-<<<<<<< HEAD
-/// Register the program's own `#[cm]` bindings into the analysis' registry, the
-/// one every consumer reads. False once one is refused, with its diagnostic.
+/// Register the CM bindings the program's own modules and its dependencies
+/// declare into the analysis' registry. False once one is refused.
 fn register_user_cm_bindings<H: CompilerHost>(
     state: &mut AnnotateState,
     modules: &IndexMap<ModuleSource, Module>,
     logger: &Logger<'_, H>,
 ) -> bool {
-    // The stdlib's are in the shared registry, and a component dependency's are
-    // folded in by `fold_component_interfaces`.
     let bindings: Vec<(&ModuleSource, &Module)> = modules
         .iter()
-        .filter(|(source, module)| source.is_program() && declares_cm_binding(module))
+        .filter(|(source, module)| {
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_binding(module)
+        })
         .collect();
     if bindings.is_empty() {
         return true;
@@ -1263,7 +1248,7 @@ fn register_user_cm_bindings<H: CompilerHost>(
     let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
     if let Err(error) = registry.register_user_cm_modules(&bindings, &tysys.resolutions) {
         return match error {
-            UserCmError::TakenInterface(msg) => refuse(Code::DuplicateDefinition, msg),
+            UserCmError::Duplicate(msg) => refuse(Code::DuplicateDefinition, msg),
             UserCmError::UnboundType(msg) => refuse(Code::CmBoundaryType, msg),
         };
     }
@@ -1273,42 +1258,6 @@ fn register_user_cm_bindings<H: CompilerHost>(
         .iter()
         .try_for_each(|(_, module)| registry.validate_cm_function_names(module))
         .map_or_else(|msg| refuse(Code::UnknownType, msg), |()| true)
-||||||| 03599b796
-=======
-/// Register the CM bindings the program's own modules declare, for the back end
-/// and WIT emission to read.
-fn register_user_cm_modules<H: CompilerHost>(
-    registry: &mut Arc<CmInterfaceRegistry>,
-    modules: &IndexMap<ModuleSource, Module>,
-    logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
-    let modules: Vec<(&ModuleSource, &Module)> = modules
-        .iter()
-        .filter(|(source, module)| {
-            !source.is_core()
-                && !source.is_binding()
-                && !source.is_wasm_asset()
-                && declares_cm_binding(module)
-        })
-        .collect();
-    if modules.is_empty() {
-        return Ok(());
-    }
-    let registry = Arc::make_mut(registry);
-    for (source, module) in &modules {
-        registry
-            .register_user_cm_decls(module, source)
-            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
-    }
-    // Only once every module is registered: an `interface` naming a resource's
-    // operations may sit in a module other than the one declaring it.
-    for (_, module) in &modules {
-        registry
-            .validate_cm_function_names(module)
-            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
-    }
-    Ok(())
->>>>>>> origin/main
 }
 
 /// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —

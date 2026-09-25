@@ -19,13 +19,7 @@ use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
-<<<<<<< HEAD
-||||||| 03599b796
-use crate::ast::AstId;
-=======
 use super::util;
-use crate::ast::AstId;
->>>>>>> origin/main
 use crate::defs::DefId;
 use crate::name::FqTypeName;
 use crate::token::Span;
@@ -827,7 +821,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) {
         let Some(trait_decl_type_params) = implementing
             .declaring_trait
-            .and_then(|trait_| self.trait_decl_type_params_of(&trait_))
+            .and_then(|trait_| self.tysys.trait_decl_type_params_of(&trait_))
         else {
             return;
         };
