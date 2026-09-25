@@ -47,6 +47,28 @@ pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..B
     return Tensor { data: out, extents };
 }
 
+/// `Gather` along axis 0: the row of `data` each index names, as an embedding
+/// looks a token up. A negative index counts from the end.
+pub fn gather_rows<E, Row, ..Rest, ..Ix>(data: &Tensor<E, [Row, ..Rest]>, indices: &Tensor<i64, [..Ix]>) -> Tensor<E, [..Ix, ..Rest]> {
+    let rows = data.extents[0] as i64;
+    let mut extents = indices.extents;
+    let mut width = 1;
+    for let i of 1..<data.extents.len() {
+        extents.push(data.extents[i]);
+        width *= data.extents[i];
+    }
+    let mut out = List::<E>::with_capacity(indices.data.len() * width);
+    for let index of indices.data {
+        let row = if index < 0 { index + rows } else { index };
+        assert 0 <= row < rows;
+        let base = row as i32 * width;
+        for let k of 0..<width {
+            out.push(data.data[base + k]);
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
 pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
     if a.extents != b.extents {
         return stretched_zip(a.data, a.extents, b.data, b.extents, op);

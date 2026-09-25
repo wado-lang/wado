@@ -4,6 +4,7 @@ use {
     Window,
     conv,
     conv_bias,
+    gather_rows,
     map,
     matmul,
     max_pool,
@@ -28,6 +29,22 @@ struct Inner {
 
 fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
     return Tensor { data, extents };
+}
+
+test "gather_rows looks up one row per index, counting a negative one from the end" {
+    let table: Tensor<f32, [Row, Col]> = tensor([3, 2], [0.0, 1.0, 10.0, 11.0, 20.0, 21.0]);
+    let ids: Tensor<i64, [Batch, Inner]> = Tensor { data: [2, 0, -1], extents: [1, 3] };
+
+    let picked: Tensor<f32, [Batch, Inner, Col]> = gather_rows(&table, &ids);
+    assert picked.extents == [1, 3, 2] as List<i32>;
+    assert picked.data == [20.0, 21.0, 0.0, 1.0, 20.0, 21.0] as List<f32>;
+}
+
+#[expect_trap]
+test "gather_rows traps on an index past the table" {
+    let table: Tensor<f32, [Row, Col]> = tensor([1, 2], [0.0, 1.0]);
+    let ids: Tensor<i64, [Inner]> = Tensor { data: [1], extents: [1] };
+    let _: Tensor<f32, [Inner, Col]> = gather_rows(&table, &ids);
 }
 
 test "matmul contracts the trailing axis" {

@@ -540,6 +540,32 @@ test "an int64 input is held as i64 through the layout kernels and Cast converts
     assert out.contains("let Y = map(&U, |v| v as f32);");
 }
 
+test "an embedding lookup is a row gather, and a folded index tensor is a literal" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W, float[4, 8] P, int64[1, 4] Q = {0, 1, 2, 3}> {
+        E = Gather(W, I)
+        F = Gather(P, Q)
+        Y = Add(E, F)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("I", ["Batch", "Seq"]),
+        rule("Q", ["Batch", "Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+        rule("P", ["Seq", "Hidden"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let E = gather_rows(&weights.W, I);");
+    assert out.contains("let Q = Tensor::<i64, [Batch, Seq]> { data: [0, 1, 2, 3], extents: [1, 4] };");
+    assert out.contains("let F = gather_rows(&weights.P, &Q);");
+}
+
+test "Gather along any axis but the first stops the build" {
+    let source = `g (int64[2] I) => (float[16, 2] Y) <float[16, 8] W> {
+        Y = Gather<axis = 1>(W, I)
+    }`;
+    let layout: List<LayoutRule> = [rule("I", ["Pick"]), rule("W", ["Vocab", "Hidden"])];
+    assert `${generate(source, layout).unwrap_err()}` == "Y = Gather: no kernel for this operator";
+}
+
 test "a Cast to the element a tensor already has computes nothing" {
     let source = `g (float[2] X) => (float[2] Y) {
         C = Cast<to = 1>(X)

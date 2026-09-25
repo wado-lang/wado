@@ -458,6 +458,22 @@ test "arithmetic on an int64 tensor stops the build" {
     assert reshaped(source, [rule("M", ["Key"])]).unwrap_err() == "Y = Add: operand M is i64, and Add computes in f32";
 }
 
+test "Gather along axis 0 puts the indices' axes where the row's was" {
+    let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    let layout: List<LayoutRule> = [rule("I", ["Batch", "Seq"]), rule("W", ["Vocab", "Hidden"])];
+    assert reshaped(source, layout).unwrap() == "Batch=1,Seq=4,Hidden=8";
+}
+
+test "Gather indexing with floats stops the build" {
+    let source = `g (float[4] I) => (float[4, 8] Y) <float[16, 8] W> {
+        Y = Gather(W, I)
+    }`;
+    let layout: List<LayoutRule> = [rule("I", ["Seq"]), rule("W", ["Vocab", "Hidden"])];
+    assert reshaped(source, layout).unwrap_err() == "Y = Gather: operand I is f32, and Gather indexes with i64";
+}
+
 test "an output declared as an element other than the one computed stops the build" {
     let source = `g (int64[4] M) => (float[4] Y) {
         Y = Identity(M)

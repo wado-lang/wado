@@ -4,8 +4,8 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, KERNEL_ELEMENT, Known, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
-use { Checked, gemm_options, has_bias, read_at_build_time, transpose_perm, window_of } from "./infer.wado";
+use { Graph, Known, Node, ValueInfo, element_of, static_extents } from "./graph.wado";
+use { Checked, gather_axis, gemm_options, has_bias, read_at_build_time, transpose_perm, window_of } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -125,7 +125,7 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.blank();
 
     let axes = axis_names(graph, shapes);
-    let names = Names::of(graph, &checked.known, &axes)?;
+    let names = Names::of(graph, checked, &axes)?;
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
     }
@@ -165,7 +165,7 @@ struct Names {
 }
 
 impl Names {
-    fn of(graph: &Graph, known: &TreeMap<String, Known>, axes: &List<String>) -> Result<Names, EmitError> {
+    fn of(graph: &Graph, checked: &Checked, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
@@ -186,9 +186,12 @@ impl Names {
             names.take(&mut taken, &vi.name)?;
         }
         for let node of &graph.nodes {
-            if !known.contains_key(node.outputs[0]) {
+            if !checked.known.contains_key(node.outputs[0]) {
                 names.take(&mut taken, &node.outputs[0])?;
             }
+        }
+        for let tensor of literal_tensors(checked) {
+            names.take(&mut taken, &tensor)?;
         }
         return Result::Ok(names);
     }
@@ -366,8 +369,6 @@ struct Operands {
     /// A folded float of one element, as the literal that replaces it. It
     /// allocates no tensor: every operator reading one folds it into a closure.
     scalars: TreeMap<String, String>,
-    /// Every other folded tensor, which no kernel reads yet.
-    unfolded: TreeSet<String>,
 }
 
 impl Operands {
@@ -401,13 +402,10 @@ fn emit_forward(
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
         scalars: TreeMap::<String, String>::new(),
-        unfolded: TreeSet::<String>::new(),
     };
     for let [name, k] of checked.known.entries() {
-        if let Floats(v) = k.elements && v.len() == 1 {
-            exprs.scalars[*name] = float_literal(v[0]);
-        } else {
-            exprs.unfolded.insert(*name);
+        if let Some(literal) = scalar_literal(k) {
+            exprs.scalars[*name] = literal;
         }
     }
     let result = graph.outputs[0].name;
@@ -439,6 +437,11 @@ fn emit_forward(
     for let line of widened {
         w.line(&line);
     }
+    for let tensor of literal_tensors(checked) {
+        let ident = names.get(&tensor);
+        w.line(`let ${ident} = ${literal_tensor(checked, &tensor)};`);
+        exprs.values[tensor] = ident;
+    }
     for let node of &graph.nodes {
         let produced = node.outputs[0];
         if checked.known.contains_key(produced) {
@@ -464,6 +467,57 @@ fn emit_forward(
     w.line(`return ${returned};`);
     w.end();
     return Result::Ok(());
+}
+
+/// A folded float of one element as the literal a closure folds in, or `None`
+/// for any other folded tensor.
+fn scalar_literal(k: &Known) -> Option<String> {
+    if let Floats(v) = k.elements && v.len() == 1 {
+        return Option::Some(float_literal(v[0]));
+    }
+    return null;
+}
+
+/// The folded tensors a kernel reads as a tensor, which `forward` binds as
+/// literals. Stage 0 gave a shape to each one a kernel reads.
+fn literal_tensors(checked: &Checked) -> List<String> {
+    let mut tensors: List<String> = [];
+    for let [name, k] of checked.known.entries() {
+        if checked.shapes.contains_key(*name) && scalar_literal(k) matches { None } {
+            tensors.push(*name);
+        }
+    }
+    return tensors;
+}
+
+/// A folded tensor spelled out as a `Tensor` literal, under the shape stage 0
+/// gave it.
+fn literal_tensor(checked: &Checked, tensor: &String) -> String {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    let mut spelled: List<String> = [];
+    match checked.known.get(*tensor).unwrap().elements {
+        Ints(v) => {
+            for let x of v {
+                spelled.push(`${x}`);
+            }
+        },
+        Floats(v) => {
+            for let x of v {
+                spelled.push(float_literal(x));
+            }
+        },
+        Bools(v) => {
+            for let x of v {
+                spelled.push(`${x}`);
+            }
+        },
+    }
+    let mut extents: List<i32> = [];
+    for let axis of shape.axes {
+        extents.push(axis.static_extent());
+    }
+    let element = checked.primitives.get(*tensor).unwrap();
+    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: [${spelled.join(", ")}], extents: ${int_list(&extents)} }`;
 }
 
 /// Whether a boundary tensor is held in something other than what the kernels
@@ -527,6 +581,17 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         let to = checked.primitives.get(node.outputs[0]).unwrap();
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
     }
+    if op == "Gather" {
+        let Ok(axis) = gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()) else {
+            // Stage 0 read the same attribute and stopped the build there.
+            unreachable();
+        };
+        if axis != 0 {
+            builtin::cold_path();
+            return Result::Err(EmitError::Operator(UnimplementedOperator { node: node.outputs[0], op }));
+        }
+        return Result::Ok(`gather_rows(${exprs.reference(&node.inputs[0])}, ${exprs.reference(&node.inputs[1])})`);
+    }
     if op == "MaxPool" || op == "Conv" {
         return Result::Ok(window_call(node, shapes, exprs));
     }
@@ -574,17 +639,13 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
 }
 
-/// A `Constant` is a literal rather than a tensor, so only an operator that
+/// A folded scalar is a literal rather than a tensor, so only an operator that
 /// already writes a closure over its other operand has anywhere to put one.
 /// Every other operand position stops the build here rather than at the
 /// lookup that would find no tensor.
 fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
     for let [index, input] of node.inputs.into_iter().enumerate() {
-        let scalar = exprs.scalars.contains_key(input);
-        if read_at_build_time(node, index) || !scalar && !exprs.unfolded.contains(input) {
-            continue;
-        }
-        if scalar && folds_constant(node, index, exprs) {
+        if read_at_build_time(node, index) || !exprs.scalars.contains_key(input) || folds_constant(node, index, exprs) {
             continue;
         }
         builtin::cold_path();

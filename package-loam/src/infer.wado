@@ -312,7 +312,13 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
             to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
     }
-    if is_layout(&op) {
+    if op == "Gather" {
+        let indices = node.inputs[1];
+        if let Some(p) = primitives.get(indices) && p != "i64" {
+            return Result::Err(refusal(node, `operand ${indices} is ${p}, and Gather indexes with i64`));
+        }
+    }
+    if is_layout(&op) || op == "Gather" {
         return Result::Ok(primitives.get(node.inputs[0]));
     }
     for let [index, input] of node.inputs.into_iter().enumerate() {
@@ -479,6 +485,21 @@ fn infer_node(
         arity(node, 1)?;
         return flatten(node, &operand_at(node, shapes, 0)?, schema);
     }
+    if op == "Gather" {
+        arity(node, 2)?;
+        let data = operand_at(node, shapes, 0)?;
+        let indices = operand_at(node, shapes, 1)?;
+        let axis = gather_axis(node, data.rank())?;
+        let mut axes: List<Axis> = [];
+        for let i of 0..<axis {
+            axes.push(data.axes[i]);
+        }
+        axes.extend(&indices.axes);
+        for let i of axis + 1..<data.rank() {
+            axes.push(data.axes[i]);
+        }
+        return Result::Ok(Shape { axes });
+    }
     if op == "Unsqueeze" || op == "Squeeze" {
         let operand = operand_at(node, shapes, 0)?;
         let input = static_extents_of(node, &operand)?;
@@ -584,13 +605,7 @@ fn reshape(node: &Node, operand: &Shape, known: &TreeMap<String, Known>, schema:
 /// another, either of which may be empty and so extent 1.
 fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
     let total = static_count(node, operand)?;
-    let written = int_attr(node, "axis", 1)?;
-    let rank = operand.rank() as i64;
-    let resolved = if written < 0 { written + rank } else { written };
-    if !(0 <= resolved <= rank) {
-        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
-    }
-    let axis = resolved as i32;
+    let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
     let mut leading = 1;
     for let i of 0..<axis {
         leading *= operand.axes[i].static_extent();
@@ -803,6 +818,22 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError>
 /// `Transpose`'s `perm`: the axis order the output takes. ONNX defaults it to
 /// the reversed order, and `emit` reads it again to pick the kernel, so this
 /// is where the attribute is understood rather than in either stage alone.
+/// The operand axis `Gather` indexes along.
+pub fn gather_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
+/// The `axis` attribute, where a negative one counts from `rank` and the
+/// operator reads at most `last`.
+fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
+    let written = int_attr(node, "axis", fallback)?;
+    let resolved = if written < 0 { written + rank as i64 } else { written };
+    if !(0 <= resolved <= last as i64) {
+        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
+    }
+    return Result::Ok(resolved as i32);
+}
+
 pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
     let Some(attr) = node.attr("perm") else {
         let mut reversed: List<i32> = [];

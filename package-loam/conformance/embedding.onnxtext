@@ -1,0 +1,18 @@
+# A transformer's input embedding as GPT-2's exporter writes it: token rows
+# plus position rows, the positions a Range over the input's own shape.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+embedding (int64[1, 3] ids) => (float[1, 3, 2] Y)
+<float[4, 2] wte = {0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5}, float[3, 2] wpe = {10.0, 20.0, 30.0, 40.0, 50.0, 60.0}>
+{
+    S = Shape(ids)
+    I = Constant<value_int = 1>()
+    N = Gather(S, I)
+    Z = Constant<value_int = 0>()
+    O = Constant<value_int = 1>()
+    R = Range(Z, N, O)
+    A = Constant<value_ints = [0]>()
+    pos = Unsqueeze(R, A)
+    T = Gather(wte, ids)
+    P = Gather(wpe, pos)
+    Y = Add(T, P)
+}
