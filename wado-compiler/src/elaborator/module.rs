@@ -294,6 +294,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.register_module_assoc_types(module);
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
+                self.record_impl_block_sig(impl_block);
+            }
+        }
+        for item in &module.items {
+            if let Item::Impl(impl_block) = item {
                 let mut scope = self.enter_impl_scope(impl_block);
 
                 if impl_block.trait_type.is_some() {

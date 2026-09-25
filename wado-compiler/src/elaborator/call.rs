@@ -1011,10 +1011,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // The same resolution the call itself uses, not a second
                     // one: two resolutions of one call disagree, which is what
                     // the edge then records.
+                    let receiver_args = self.expected_receiver_args(prefix, None, expected_type);
                     let selected = self
                         .resolve_static_callee(StaticQuery {
                             site: receiver_site,
                             arg_types: &args,
+                            receiver_args: &receiver_args,
                             ..StaticQuery::of(prefix, suffix)
                         })
                         .found()
@@ -2828,7 +2830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // This report runs before any resolution, so where several impls
         // declare the name it has no pick to read: complaining about one of
         // their slots names a declaration the arguments may not even select.
-        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique)
+        let Some(sig) = self.static_call_sig(prefix, suffix, receiver_key, SigChoice::Unique, &[])
         else {
             return;
         };
@@ -2845,11 +2847,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
+        // `impl_type_args` is indexed by slot, which a parameter nested in the
+        // target or pushed past a concrete argument holds out of declaration order.
+        let slot_of = |id: TypeId| match self.tysys.type_table.borrow().get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                *index as usize
+            }
+            other => panic!("a declaring slot is a type parameter, found {other:?}"),
+        };
         let mut names: Vec<String> = declaring_slots
             .iter()
-            .enumerate()
-            .filter(|&(i, _)| unresolved(self, impl_type_args.get(i)))
-            .map(|(_, (name, _))| name.clone())
+            .filter(|&&(_, id)| unresolved(self, impl_type_args.get(slot_of(id))))
+            .map(|(name, _)| name.clone())
             .collect();
         let type_level_unresolved = !names.is_empty();
         names.extend(
@@ -3282,12 +3291,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         // An unwritten turbofish leaves the impl level to infer as well, which
         // the method's own slot count says nothing about.
+        let expected_args =
+            self.expected_receiver_args(callee.type_name, callee.receiver_key, expected_type);
         let own_slots = self
             .static_call_sig(
                 callee.type_name,
                 callee.method_name,
                 callee.receiver_key,
                 SigChoice::Any,
+                &expected_args,
             )
             .map_or(0, |sig| sig.own_type_params().len());
         if !explicit.is_empty() && !turbofish_leaves_slot(&explicit, own_slots) {
@@ -3305,6 +3317,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut method_type_args = explicit;
         merge_turbofish_type_args(&mut method_type_args, &method_args);
         (impl_args, method_type_args)
+    }
+
+    /// Whether `struct_name::method_name` is declared, but by no block reaching
+    /// a receiver with `receiver_args`.
+    pub(super) fn declared_by_no_reaching_block(
+        &self,
+        struct_name: &str,
+        method_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        receiver_args: &[TypeId],
+    ) -> bool {
+        let sig = |args| {
+            self.static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any, args)
+        };
+        !receiver_args.is_empty() && sig(receiver_args).is_none() && sig(&[]).is_some()
+    }
+
+    /// The receiver's arguments a bare `Type::method(..)` call must produce,
+    /// read off `expected` where it is an instance of `Type`; empty otherwise.
+    fn expected_receiver_args(
+        &self,
+        type_name: &str,
+        receiver_key: Option<&ImplTargetKey>,
+        expected: Option<TypeId>,
+    ) -> Vec<TypeId> {
+        let Some(expected) = expected else {
+            return Vec::new();
+        };
+        let Some(def) = self.type_decl_key(expected) else {
+            return Vec::new();
+        };
+        let expected_key = ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def);
+        let receiver = receiver_key
+            .cloned()
+            .unwrap_or_else(|| self.impl_target(type_name));
+        if expected_key != receiver {
+            return Vec::new();
+        }
+        self.tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(expected)
+            .unwrap_or_default()
     }
 
     /// Infer the type args of a `Type::method(...)` static call whose
@@ -3353,8 +3408,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
+        let expected_args = self.expected_receiver_args(struct_name, receiver_key, expected_type);
+        // The resolution reads these arguments and finds nothing to call.
+        if self.declared_by_no_reaching_block(
+            struct_name,
+            method_name,
+            receiver_key,
+            &expected_args,
+        ) {
+            return (expected_args, vec![]);
+        }
         let Some(sig) = self
-            .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+            .static_call_sig(
+                struct_name,
+                method_name,
+                receiver_key,
+                SigChoice::Any,
+                &expected_args,
+            )
             .or_else(|| {
                 let key = receiver_key
                     .cloned()
@@ -3398,7 +3469,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
-        (inferred[..split].to_vec(), inferred[split..].to_vec())
+        (
+            self.declaring_slot_values(&sig, &inferred[..split]),
+            inferred[split..].to_vec(),
+        )
+    }
+
+    /// The declaring block's slots filled with `values` (one per declared
+    /// parameter), indexed as the method's frame numbers them: the receiver's
+    /// arguments at the target's positions, then the slots past them. A
+    /// parameter nested in the target, or one a concrete argument pushes past
+    /// its declaration order, is found by its slot, not its place in `values`.
+    fn declaring_slot_values(&self, sig: &MethodSig, values: &[TypeId]) -> Vec<TypeId> {
+        let declared = sig.declaring_type_params();
+        let slot_of = |id: TypeId| match self.tysys.type_table.borrow().get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                Some(*index)
+            }
+            _ => None,
+        };
+        let slots: IndexMap<u32, TypeId> = declared
+            .iter()
+            .zip(values)
+            .filter_map(|(&(_, id), &value)| Some((slot_of(id)?, value)))
+            .collect();
+        let target = sig
+            .declaring_impl
+            .and_then(|def| self.tysys.signatures.impl_sig(def))
+            .map(|impl_sig| impl_sig.target_type_args.clone())
+            .unwrap_or_default();
+        let mut table = self.tysys.type_table.borrow_mut();
+        let mut out: Vec<TypeId> = target
+            .iter()
+            .map(|&arg| table.substitute_type_params(arg, &slots))
+            .collect();
+        for slot in out.len() as u32..sig.method_slot_base {
+            let own = declared
+                .iter()
+                .find(|&&(_, id)| {
+                    matches!(table.get(id), ResolvedType::TypeParam { index, .. }
+                        | ResolvedType::TypePack { index, .. } if *index == slot)
+                })
+                .map(|&(_, id)| id);
+            let Some(value) = slots.get(&slot).copied().or(own) else {
+                break;
+            };
+            out.push(value);
+        }
+        out
     }
 
     /// Enforce the visibility ladder on a qualified `Type::method(...)` call.
@@ -3487,10 +3605,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_key: Option<&ImplTargetKey>,
         choice: SigChoice,
+        receiver_args: &[TypeId],
     ) -> Option<MethodSig> {
         match (choice, receiver_key) {
-            (SigChoice::Any, Some(key)) => self.qualified_method_sig_keyed(key, method_name),
-            (SigChoice::Any, None) => self.qualified_method_sig(struct_name, method_name),
+            (SigChoice::Any, Some(key)) => {
+                self.qualified_method_sig_reaching(key, method_name, receiver_args)
+            }
+            (SigChoice::Any, None) => self.qualified_method_sig_reaching(
+                &self.impl_target(struct_name),
+                method_name,
+                receiver_args,
+            ),
             (SigChoice::Unique, Some(key)) => {
                 self.unique_qualified_method_sig_keyed(key, method_name)
             }
@@ -3518,11 +3643,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &ImplTargetKey,
         method_name: &str,
     ) -> Option<MethodSig> {
+        self.qualified_method_sig_reaching(key, method_name, &[])
+    }
+
+    /// [`Self::qualified_method_sig_keyed`] among the declarations whose block
+    /// reaches a receiver with `receiver_args`; empty arguments admit every block.
+    pub(super) fn qualified_method_sig_reaching(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        receiver_args: &[TypeId],
+    ) -> Option<MethodSig> {
         let trait_env = &self.tysys.trait_env;
         // Receiver-less first: an instance method reaches the impl ladder
         // below, which declines an overloaded name rather than taking the
         // first indexed one.
-        if let Some(entry) = self.static_method_entries(key, method_name).next() {
+        if let Some(entry) = self
+            .static_method_entries(key, method_name)
+            .find(|entry| self.declaration_reaches(entry.method_id, receiver_args))
+        {
             return self.tysys.signatures.method_sig(entry.method_id).cloned();
         }
         if let Some((_, _, decl_id, _)) = trait_env.resource_static(key, method_name) {
@@ -3536,6 +3675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // separates, so a single signature is not this lookup's to pick.
         let mut declared = self
             .qualified_method_decl_ids(key, method_name)
+            .filter(|&def| self.declaration_reaches(def, receiver_args))
             .filter_map(|def| self.tysys.signatures.method_sig(def).cloned());
         if let Some(sig) = declared.next()
             && declared.next().is_none()

@@ -63,7 +63,8 @@ fn generic_function_key(
 ///
 /// Generic impls on one head name their methods alike (`impl<T> Pair<T, i32>`
 /// and `impl<T> Pair<T, i64>` both emit `Pair::f`), so a key reaches one
-/// template per block, and the receiver's arguments choose among them.
+/// template per block, and the receiver's arguments choose among them. A
+/// synthesized body names no block and answers where no written one reaches.
 #[derive(Default, Clone)]
 pub(crate) struct Templates {
     by_key: IndexMap<GenericFunctionKey, Vec<Rc<RefCell<TirFunction>>>>,
@@ -83,11 +84,6 @@ impl Templates {
             Some(at) => group[at] = Rc::clone(func_rc),
             None => group.push(Rc::clone(func_rc)),
         }
-        assert!(
-            group.len() == 1 || group.iter().all(|t| t.borrow().impl_origin.is_some()),
-            "templates sharing `{}` must each come from a generic impl block",
-            func.name
-        );
     }
 
     fn contains(&self, key: &GenericFunctionKey) -> bool {
@@ -99,42 +95,36 @@ impl Templates {
         self.by_key.get(key).map_or(&[], Vec::as_slice)
     }
 
-    /// The one template `key` names for a receiver with `impl_args`.
+    /// The one template `key` names for a receiver with `impl_args`: the block
+    /// reaching it, else the synthesized body.
     fn get(
         &self,
         key: &GenericFunctionKey,
         impl_args: &[TypeId],
         type_table: &TypeTable,
     ) -> Option<&Rc<RefCell<TirFunction>>> {
-        let mut reaching = self.named(key).iter().filter(|t| {
-            t.borrow()
-                .impl_origin
-                .as_ref()
-                .is_none_or(|origin| origin.reaches(impl_args, type_table))
-        });
-        let found = reaching.next();
-        reaching.next().is_none().then_some(found).flatten()
-    }
-
-    /// The template `key` names when only one block declares it, for a call
-    /// whose arguments are the block's binder values rather than the receiver's.
-    fn sole(&self, key: &GenericFunctionKey) -> Option<&Rc<RefCell<TirFunction>>> {
-        match self.named(key) {
+        let named = self.named(key);
+        let reaching: Vec<_> = named
+            .iter()
+            .filter(|t| {
+                t.borrow()
+                    .impl_origin
+                    .as_ref()
+                    .is_some_and(|origin| origin.reaches(impl_args, type_table))
+            })
+            .collect();
+        let found = if reaching.is_empty() {
+            named
+                .iter()
+                .filter(|t| t.borrow().impl_origin.is_none())
+                .collect()
+        } else {
+            reaching
+        };
+        match found.as_slice() {
             [only] => Some(only),
             _ => None,
         }
-    }
-
-    /// [`Self::get`], else [`Self::sole`]: the template `key` names in one
-    /// module, whichever kind of arguments the call carries.
-    fn resolve(
-        &self,
-        key: &GenericFunctionKey,
-        impl_args: &[TypeId],
-        type_table: &TypeTable,
-    ) -> Option<&Rc<RefCell<TirFunction>>> {
-        self.get(key, impl_args, type_table)
-            .or_else(|| self.sole(key))
     }
 
     fn keys(&self) -> impl Iterator<Item = &GenericFunctionKey> {
@@ -518,7 +508,7 @@ impl Monomorphizer {
                     // making the literal `(module_source, name)` lookup total: a
                     // miss is a producer bug, surfaced as the panic below.
                     let lookup_key = (key.module_source.clone(), key.name.clone());
-                    let generic_func = generic_functions.resolve(
+                    let generic_func = generic_functions.get(
                         &lookup_key,
                         &key.impl_type_args,
                         &module.type_table.borrow(),

@@ -47,7 +47,8 @@ use crate::elaborator::reify::Reify;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::elaborator::trait_env::{
-    ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of, written_arg_nodes,
+    ImplHeader, ImplTargetKey, TraitEnv, inherent_impl_overlaps, is_user_local,
+    namespace_imports_of, written_arg_nodes,
 };
 use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
@@ -1300,6 +1301,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Construct a per-module `Elaborator` over the shared driver state;
     /// the module-identity fields are set by the `annotate_module_*` entry
     /// points.
+    /// Hand a module's impl facts to the decl passes after it, whose bound and
+    /// supertrait checks ask which impls reach a receiver.
+    fn publish_impl_sigs(state: &mut AnnotateState, module_source: &ModuleSource) {
+        let Some(sem) = state.module_semantics.get(module_source) else {
+            return;
+        };
+        let signatures = Rc::make_mut(&mut state.tysys.signatures);
+        let mut type_table = state.tysys.type_table.borrow_mut();
+        for (def, sig) in &sem.decls.impl_sigs {
+            signatures.impl_sigs.insert(*def, sig.clone());
+            type_table.record_impl_target(*def, sig.target_type_args.clone());
+        }
+    }
+
     fn module_elaborator(
         state: &AnnotateState,
         sem: ModuleSemantics,
@@ -1388,6 +1403,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // knowledge regardless of module order.
         for module_source in &sorted_sources {
             if is_stdlib_snapshot_hit(module_source) {
+                Self::publish_impl_sigs(state, module_source);
                 continue;
             }
             let module = modules.get(module_source).expect("module should exist");
@@ -1456,18 +1472,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             sem.imports.namespace_imports = namespace_imports;
             sem.decls.imported_functions = imported_functions;
 
-            let mut elaborator =
-                Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
-
-            let errors_before = logger.offered_error_count();
-            elaborator.annotate_module_decls(module, module_source.clone());
-            if logger.offered_error_count() > errors_before {
-                decl_failed.insert(module_source.clone());
-            }
-            let saved_sem = elaborator.sem;
+            let saved_sem = {
+                let mut elaborator =
+                    Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
+                let errors_before = logger.offered_error_count();
+                elaborator.annotate_module_decls(module, module_source.clone());
+                if logger.offered_error_count() > errors_before {
+                    decl_failed.insert(module_source.clone());
+                }
+                elaborator.sem
+            };
             state
                 .module_semantics
                 .insert(module_source.clone(), saved_sem);
+            Self::publish_impl_sigs(state, module_source);
         }
 
         {
@@ -1514,6 +1532,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             signatures.inherit_trait_param_defaults(state.tysys.resolutions.defs());
             state.tysys.signatures = Rc::new(signatures);
+        }
+        for (module_source, violation) in inherent_impl_overlaps(
+            state.tysys.resolutions.defs(),
+            &state.tysys.trait_env.impl_headers,
+            &state.tysys.signatures,
+            &state.tysys.type_table.borrow(),
+        ) {
+            let _ = logger.error_in(&module_source, violation);
+            decl_failed.insert(module_source);
         }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.

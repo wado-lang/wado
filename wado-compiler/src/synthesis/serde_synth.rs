@@ -224,12 +224,22 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     }
 }
 
+/// The trait methods a written impl declares for every instance of its head;
+/// one reaching only some leaves the rest to the derivation.
 fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
+    let tt = module.type_table.borrow();
     module
         .functions
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
+            if func
+                .impl_origin
+                .as_ref()
+                .is_some_and(|origin| !tt.impl_target_covers_every_instance(&origin.target_args))
+            {
+                return None;
+            }
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().map(|trait_name| {
                     mangle_local_trait_method(

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, AstVisitor, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
+use crate::elaborator::sig::Signatures;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -16,7 +17,7 @@ use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 
@@ -265,6 +266,26 @@ impl ImplHeader {
     /// receiver's module.
     pub(super) fn is_concrete(&self) -> bool {
         self.type_params.is_empty()
+    }
+
+    /// Whether the target reaches every instance of its head: its arguments,
+    /// if any, are distinct parameters of the block.
+    pub(super) fn covers_every_instance(&self) -> bool {
+        let args = match &self.ty {
+            Type::Named(_) => return true,
+            Type::Generic(g) => &g.args,
+            Type::NamespacedGeneric(g) => &g.args,
+            _ => return false,
+        };
+        let mut seen = IndexSet::default();
+        args.iter().all(|arg| {
+            let name = match arg {
+                Type::Named(n) => &n.name,
+                Type::TypePackSpread(name, _) => name,
+                _ => return false,
+            };
+            self.type_params.iter().any(|p| &p.name == name) && seen.insert(name.clone())
+        })
     }
 
     /// Whether the block writes a trait at all, whatever it resolves to.
@@ -1154,11 +1175,6 @@ impl TraitEnv {
 
         violations.extend(check_impl_coherence(&impl_headers, resolutions));
         violations.extend(check_variadic_impl_overlap(defs, &impl_headers));
-        violations.extend(check_inherent_impl_collisions(
-            defs,
-            &impl_headers,
-            resolutions,
-        ));
 
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
@@ -1436,14 +1452,24 @@ impl TraitEnv {
     }
 
     /// Whether any impl on `receiver` implements `trait_` with methods.
-    /// [`Self::has_methodful_impl_by_receiver`] narrows it to one module.
     pub(crate) fn has_any_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
     ) -> bool {
+        self.methodful_impls_by_receiver(receiver, trait_)
+            .next()
+            .is_some()
+    }
+
+    /// Every impl on `receiver` that implements `trait_` with methods.
+    pub(crate) fn methodful_impls_by_receiver<'a>(
+        &'a self,
+        receiver: &'a name::Receiver,
+        trait_: DefId,
+    ) -> impl Iterator<Item = DefId> + 'a {
         self.entries_by_receiver(receiver)
-            .any(|entry| self.methodful_header_matches(entry, trait_))
+            .filter(move |&entry| self.methodful_header_matches(entry, trait_))
     }
 
     /// `key` itself when it declares a trait, else `None` — the question the
@@ -1458,16 +1484,19 @@ impl TraitEnv {
         self.trait_def(&fq.canonical()?)
     }
 
-    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls
-    /// `module_source` itself writes.
-    pub(crate) fn has_methodful_impl_by_receiver(
+    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls that
+    /// reach every instance of `receiver`, and that `module_source` writes
+    /// where it is given. A derived body answers wherever no such impl does.
+    pub(crate) fn has_covering_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
-        module_source: &ModuleSource,
+        module_source: Option<&ModuleSource>,
     ) -> bool {
         self.entries_by_receiver(receiver).any(|entry| {
-            self.defs.module(entry) == module_source && self.methodful_header_matches(entry, trait_)
+            module_source.is_none_or(|module| self.defs.module(entry) == module)
+                && self.methodful_header_matches(entry, trait_)
+                && self.impl_headers[&entry].covers_every_instance()
         })
     }
 
@@ -2443,103 +2472,61 @@ fn check_variadic_impl_overlap(
     violations
 }
 
-/// Whether the target names one of the impl's own type parameters, making the
-/// impl generic over the head rather than written for one instantiation.
-fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
-    // A generic's own head names a type, not a parameter, so only its arguments
-    // are asked — `List<T>` mentions `T`, and `List` itself mentions nothing.
-    ty.any(&mut |ty| match ty {
-        ast::Type::Named(named) => params.contains(named.name.as_str()),
-        ast::Type::TypePackSpread(name, _) => params.contains(name.as_str()),
-        ast::Type::Generic(_)
-        | ast::Type::NamespacedGeneric(_)
-        | ast::Type::Tuple(_)
-        | ast::Type::Function(_)
-        | ast::Type::Reference(_)
-        | ast::Type::MutReference(_)
-        | ast::Type::Infer(_)
-        | ast::Type::Error(_) => false,
-    })
-}
-
-/// An inherent `impl Box_<i32>` and an inherent `impl<T> Box_<T>` defining the
-/// same method both own the name `Box_<i32>::a`. A trait impl would force one
-/// signature on both, letting coherence Rule 1 pick the specific one; an
-/// inherent impl carries no such contract, so a generic caller type-checked
-/// against the general method would link to a differently-typed function.
-/// Rejected, as in Rust. Keyed by the resolved [`ImplTargetKey`], never the
-/// written head — two modules' `Box_` are two types, and a spelling cannot say so.
-fn check_inherent_impl_collisions(
+/// The methods an inherent impl defines again for a receiver an earlier
+/// inherent impl reaches, which carry no trait contract to agree on.
+pub(super) fn inherent_impl_overlaps(
     defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    resolutions: &Resolutions,
+    signatures: &Signatures,
+    type_table: &TypeTable,
 ) -> Vec<(ModuleSource, TypeError)> {
-    let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
-        IndexMap::default();
-    let mut instantiations = Vec::new();
-
-    for header in impl_headers.values() {
+    let mut by_target: IndexMap<name::Receiver, Vec<(&ImplHeader, TypeId)>> = IndexMap::default();
+    for (def, header) in impl_headers {
         if header.trait_.is_some() {
             continue;
         }
-        let params: IndexSet<&str> = header.type_params.iter().map(|p| p.name.as_str()).collect();
-        if target_mentions_impl_param(&header.ty, &params) {
-            generic_methods_by_target
-                .entry(&header.target)
+        if let Some(sig) = signatures.impl_sig(*def) {
+            // An `impl &T` defines its methods on `T`, so it keys by the pointee.
+            let pointee = type_table.peel_refs(sig.target);
+            by_target
+                .entry(type_table.impl_receiver_key(pointee))
                 .or_default()
-                .extend(header.methods.iter().map(|m| m.name.as_str()));
-        } else if is_user_local(&header.module) {
-            instantiations.push(header);
+                .push((header, pointee));
         }
     }
-
     let mut violations = Vec::new();
-
-    // Two inherent impls minting one function name are one definition
-    // downstream, which monomorphization asserts away with a panic. Keyed on
-    // what the definition side mints, since the target's *arguments* answer a
-    // different question and discard the pointee of a reference target.
-    let mut minted: IndexSet<(String, &str)> = IndexSet::default();
-    for header in &instantiations {
-        let peeled = match &header.ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        let receiver = written_type_arg(peeled, resolutions);
-        for method in &header.methods {
-            if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::DuplicateInherentMethod {
-                        // What this impl wrote: the minted head is one
-                        // string for both, so it names neither.
-                        self_type_name: written_type_source(&header.ty),
-                        method_name: method.name.clone(),
-                        span: method.span,
-                    },
-                ));
+    for blocks in by_target.values() {
+        for (at, &(later, later_target)) in blocks.iter().enumerate() {
+            if !is_user_local(&later.module) {
+                continue;
+            }
+            let mut reported: IndexSet<&str> = IndexSet::default();
+            for &(earlier, earlier_target) in &blocks[..at] {
+                if !type_table.targets_overlap(earlier_target, later_target) {
+                    continue;
+                }
+                for method in &later.methods {
+                    if earlier.methods.iter().any(|m| m.name == method.name)
+                        && reported.insert(method.name.as_str())
+                    {
+                        violations.push((
+                            later.module.clone(),
+                            TypeError::DuplicateInherentMethod {
+                                self_type_name: match &later.ty {
+                                    Type::Reference(_) | Type::MutReference(_) => {
+                                        written_type_source(&later.ty)
+                                    }
+                                    _ => later.target.display_name(defs).to_string(),
+                                },
+                                method_name: method.name.clone(),
+                                span: method.span,
+                            },
+                        ));
+                    }
+                }
             }
         }
     }
-
-    for header in instantiations {
-        let Some(generic_methods) = generic_methods_by_target.get(&header.target) else {
-            continue;
-        };
-        for method in &header.methods {
-            if generic_methods.contains(method.name.as_str()) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::DuplicateInherentMethod {
-                        self_type_name: header.target.display_name(defs).to_string(),
-                        method_name: method.name.clone(),
-                        span: method.span,
-                    },
-                ));
-            }
-        }
-    }
-
     violations
 }
 
@@ -2813,7 +2800,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
 /// wrote (WEP 2026-08-12 §9).
 ///
 /// Renders the AST, so nothing reads it back into a declaration.
-fn written_type_source(ty: &ast::Type) -> String {
+pub(super) fn written_type_source(ty: &ast::Type) -> String {
     let list = |args: &[ast::Type]| {
         args.iter()
             .map(written_type_source)

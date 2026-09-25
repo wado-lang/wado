@@ -552,6 +552,17 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// Two of one trait's impls, each generic over the receiver's head, that
+    /// both reach it. Neither is written for the receiver, so rank 2 cannot
+    /// order them and only an impl written for it answers.
+    AmbiguousHeadImpls {
+        trait_name: String,
+        receiver: String,
+        /// Each impl's target as written, in declaration order.
+        targets: Vec<String>,
+        span: Span,
+    },
+
     /// An impl applies, and the calling module has imported none of the traits
     /// that would answer: the scope gate of WEP 2026-09-01. Names each trait,
     /// since importing one is the fix.
@@ -1678,6 +1689,23 @@ impl TypeError {
                     bounds
                         .iter()
                         .map(|b| format!("'{b}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousHeadImpls {
+                trait_name,
+                receiver,
+                targets,
+                span,
+            } => (
+                Code::AmbiguousCandidate,
+                format!(
+                    "ambiguous impls of '{trait_name}' for '{receiver}': the ones for {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    targets
+                        .iter()
+                        .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
                 ),

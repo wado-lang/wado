@@ -843,6 +843,9 @@ pub struct TypeTable {
     /// declaration. Lives on the shared `TypeTable` because elaboration runs one
     /// `Elaborator` per module.
     bound_driven_synth_requests: IndexSet<(TypeHead, ModuleSource, DefId)>,
+    /// The arguments each impl block's target writes, a binder as its own
+    /// `TypeParam`: what decides which instances of the head the block reaches.
+    impl_targets: IndexMap<DefId, Vec<TypeId>>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
@@ -1003,6 +1006,7 @@ impl TypeTable {
             type_by_symbol: IndexMap::default(),
             symbol_by_type: TypeMap::default(),
             bound_driven_synth_requests: IndexSet::default(),
+            impl_targets: IndexMap::default(),
             variant_case_index: IndexMap::default(),
             anon_structs: Vec::new(),
             anon_struct_index: IndexMap::default(),
@@ -6206,78 +6210,266 @@ pub struct ImplOrigin {
 }
 
 impl ImplOrigin {
-    /// Whether a receiver with these type arguments reaches the block: each
-    /// position the target pins is that argument, and a binder written twice
-    /// takes one argument. A target writing no position pins none.
+    /// Whether a receiver with these type arguments reaches the block. A
+    /// receiver bringing no arguments reaches only a target writing none.
     pub fn reaches(&self, receiver_args: &[TypeId], type_table: &TypeTable) -> bool {
-        if self.target_args.is_empty() {
+        self.target_args.is_empty()
+            || (!receiver_args.is_empty()
+                && type_table
+                    .impl_target_binding(&self.target_args, receiver_args)
+                    .is_some())
+    }
+}
+
+impl TypeTable {
+    /// Record the arguments impl block `def`'s target writes.
+    pub fn record_impl_target(&mut self, def: DefId, target_args: Vec<TypeId>) {
+        self.impl_targets.insert(def, target_args);
+    }
+
+    /// Whether impl block `def` reaches `instance`, a receiver type; a block
+    /// whose target was never recorded reaches every instance.
+    pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
+        let Some(written) = self.impl_targets.get(&def) else {
             return true;
-        }
-        let mut bound = IndexMap::default();
-        binds_all(type_table, &self.target_args, receiver_args, &mut bound)
+        };
+        let instance = self.peel_refs(instance);
+        let args = match self.get(instance) {
+            ResolvedType::Struct { type_args, .. } => type_args.clone(),
+            _ => self.nominal_type_args(instance).unwrap_or_default(),
+        };
+        self.impl_target_binding(written, &args).is_some()
     }
-}
 
-/// Whether each of `args` is what the matching `written` spells, a binder at
-/// any depth standing for one type throughout.
-fn binds_all(
-    tt: &TypeTable,
-    written: &[TypeId],
-    args: &[TypeId],
-    bound: &mut IndexMap<u32, FqTypeName>,
-) -> bool {
-    written.len() == args.len()
-        && written
-            .iter()
-            .zip(args)
-            .all(|(&w, &a)| binds(tt, w, a, bound))
-}
-
-fn binds(
-    tt: &TypeTable,
-    written: TypeId,
-    arg: TypeId,
-    bound: &mut IndexMap<u32, FqTypeName>,
-) -> bool {
-    match (tt.get(written), tt.get(arg)) {
-        (ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. }, _) => {
-            let arg = tt.fq_type_name(arg);
-            *bound.entry(*index).or_insert_with(|| arg.clone()) == arg
-        }
-        (ResolvedType::Ref(w), ResolvedType::Ref(a))
-        | (ResolvedType::MutRef(w), ResolvedType::MutRef(a))
-        | (ResolvedType::Reactive(w), ResolvedType::Reactive(a))
-        | (ResolvedType::BuiltinArray(w), ResolvedType::BuiltinArray(a)) => {
-            binds(tt, *w, *a, bound)
-        }
-        (
-            ResolvedType::Function {
-                is_mut: w_mut,
-                params: w_params,
-                return_type: w_ret,
-                effects: w_effects,
-            },
-            ResolvedType::Function {
-                is_mut: a_mut,
-                params: a_params,
-                return_type: a_ret,
-                effects: a_effects,
-            },
-        ) => {
-            w_mut == a_mut
-                && w_effects == a_effects
-                && binds_all(tt, w_params, a_params, bound)
-                && binds(tt, *w_ret, *a_ret, bound)
-        }
-        _ => match (tt.generic_type_args(written), tt.generic_type_args(arg)) {
-            (Some(w), Some(a)) => {
-                tt.fq_base_type_name(written).head() == tt.fq_base_type_name(arg).head()
-                    && binds_all(tt, &w, &a, bound)
+    /// Whether an impl target writing `written` reaches every instance of its
+    /// head: its arguments are distinct binders.
+    pub fn impl_target_covers_every_instance(&self, written: &[TypeId]) -> bool {
+        let mut seen = IndexSet::default();
+        written.iter().all(|&arg| match self.get(arg) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                seen.insert(*index)
             }
-            _ => tt.fq_type_name(written) == tt.fq_type_name(arg),
-        },
+            _ => false,
+        })
+    }
+
+    /// What an impl target writing `written` binds at a receiver with
+    /// `receiver_args`, or `None` where it does not reach it. Each position the
+    /// target pins is that argument, and a binder written twice takes one
+    /// argument. A target writing no position, or a receiver whose arguments
+    /// are not known, pins none; the slots past the target's positions, which a
+    /// static call also carries, pin none, and neither does a pack's tail.
+    pub fn impl_target_binding(
+        &self,
+        written: &[TypeId],
+        receiver_args: &[TypeId],
+    ) -> Option<IndexMap<u32, TypeId>> {
+        if written.is_empty() || receiver_args.is_empty() {
+            return Some(IndexMap::default());
+        }
+        let fixed = written
+            .iter()
+            .position(|&w| self.is_type_pack(w))
+            .unwrap_or(written.len());
+        if receiver_args.len() < written.len() && fixed == written.len() {
+            return None;
+        }
+        self.bind_type_params(&written[..fixed], receiver_args.get(..fixed)?)
+    }
+
+    /// The type-parameter slots `concrete` fills where `written` has them, at
+    /// any depth: `T` from `List<String>` against `List<T>`. `None` where the
+    /// two differ outside a slot, or one slot would take two types.
+    pub fn bind_type_params(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+    ) -> Option<IndexMap<u32, TypeId>> {
+        let mut bound = IndexMap::default();
+        self.bind_all(written, concrete, &mut bound)
+            .then_some(bound)
+    }
+
+    fn bind_all(
+        &self,
+        written: &[TypeId],
+        concrete: &[TypeId],
+        bound: &mut IndexMap<u32, TypeId>,
+    ) -> bool {
+        written.len() == concrete.len()
+            && written
+                .iter()
+                .zip(concrete)
+                .all(|(&w, &c)| self.bind_one(w, c, bound))
+    }
+
+    fn bind_one(
+        &self,
+        written: TypeId,
+        concrete: TypeId,
+        bound: &mut IndexMap<u32, TypeId>,
+    ) -> bool {
+        match (self.get(written), self.get(concrete)) {
+            (ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. }, _) => {
+                let prior = *bound.entry(*index).or_insert(concrete);
+                self.type_key(prior) == self.type_key(concrete)
+            }
+            // An `_` or an unresolvable name: nothing written to match against.
+            (ResolvedType::Unknown | ResolvedType::Error, _) => true,
+            (ResolvedType::Ref(w), ResolvedType::Ref(c))
+            | (ResolvedType::MutRef(w), ResolvedType::MutRef(c))
+            | (ResolvedType::Reactive(w), ResolvedType::Reactive(c))
+            | (ResolvedType::BuiltinArray(w), ResolvedType::BuiltinArray(c)) => {
+                self.bind_one(*w, *c, bound)
+            }
+            (
+                ResolvedType::Function {
+                    is_mut: w_mut,
+                    params: w_params,
+                    return_type: w_ret,
+                    effects: w_effects,
+                },
+                ResolvedType::Function {
+                    is_mut: c_mut,
+                    params: c_params,
+                    return_type: c_ret,
+                    effects: c_effects,
+                },
+            ) => {
+                w_mut == c_mut
+                    && w_effects == c_effects
+                    && self.bind_all(w_params, c_params, bound)
+                    && self.bind_one(*w_ret, *c_ret, bound)
+            }
+            _ => match (
+                self.generic_type_args(written),
+                self.generic_type_args(concrete),
+            ) {
+                (Some(w), Some(c)) => {
+                    self.fq_base_type_name(written).head()
+                        == self.fq_base_type_name(concrete).head()
+                        && self.bind_all(&w, &c, bound)
+                }
+                // A head written bare (`impl Slot<Box>`) constrains the head alone.
+                (None, Some(_))
+                    if self.peel_refs(written) == written
+                        && self.decl_of_type(written).is_some() =>
+                {
+                    self.fq_base_type_name(written).head()
+                        == self.fq_base_type_name(concrete).head()
+                }
+                _ => self.type_key(written) == self.type_key(concrete),
+            },
+        }
+    }
+
+    /// Whether one type is an instance of both `a` and `b`, the type parameters
+    /// of each standing for any type and apart from the other's, even where
+    /// they share an id: two impl targets that reach a common receiver.
+    pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {
+        let mut subst = IndexMap::default();
+        self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
+    }
+
+    fn unify_apart(&self, a: Term, b: Term, subst: &mut IndexMap<(Side, u32), Term>) -> bool {
+        let (a, b) = (self.walk_term(a, subst), self.walk_term(b, subst));
+        let var = |(side, id): Term| match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                Some((side, *index))
+            }
+            _ => None,
+        };
+        match (var(a), var(b)) {
+            (Some(x), Some(y)) if x == y => return true,
+            (Some(x), _) => return !self.occurs(x, b, subst) && subst.insert(x, b).is_none(),
+            (_, Some(y)) => return !self.occurs(y, a, subst) && subst.insert(y, a).is_none(),
+            (None, None) => {}
+        }
+        let pair = |x: TypeId, y: TypeId, subst: &mut IndexMap<(Side, u32), Term>| {
+            self.unify_apart((a.0, x), (b.0, y), subst)
+        };
+        let all = |xs: &[TypeId], ys: &[TypeId], subst: &mut IndexMap<(Side, u32), Term>| {
+            xs.len() == ys.len() && xs.iter().zip(ys).all(|(&x, &y)| pair(x, y, subst))
+        };
+        match (self.get(a.1), self.get(b.1)) {
+            (ResolvedType::Unknown | ResolvedType::Error, _)
+            | (_, ResolvedType::Unknown | ResolvedType::Error) => true,
+            (ResolvedType::Ref(x), ResolvedType::Ref(y))
+            | (ResolvedType::MutRef(x), ResolvedType::MutRef(y))
+            | (ResolvedType::Reactive(x), ResolvedType::Reactive(y))
+            | (ResolvedType::BuiltinArray(x), ResolvedType::BuiltinArray(y)) => pair(*x, *y, subst),
+            (
+                ResolvedType::Function {
+                    is_mut: x_mut,
+                    params: x_params,
+                    return_type: x_ret,
+                    effects: x_effects,
+                },
+                ResolvedType::Function {
+                    is_mut: y_mut,
+                    params: y_params,
+                    return_type: y_ret,
+                    effects: y_effects,
+                },
+            ) => {
+                x_mut == y_mut
+                    && x_effects == y_effects
+                    && all(x_params, y_params, subst)
+                    && pair(*x_ret, *y_ret, subst)
+            }
+            _ => match (self.generic_type_args(a.1), self.generic_type_args(b.1)) {
+                (Some(x), Some(y)) => {
+                    self.fq_base_type_name(a.1).head() == self.fq_base_type_name(b.1).head()
+                        && all(&x, &y, subst)
+                }
+                _ => self.type_key(a.1) == self.type_key(b.1),
+            },
+        }
+    }
+
+    /// `term` past every parameter the substitution has bound.
+    fn walk_term(&self, mut term: Term, subst: &IndexMap<(Side, u32), Term>) -> Term {
+        while let ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } =
+            self.get(term.1)
+            && let Some(&next) = subst.get(&(term.0, *index))
+        {
+            term = next;
+        }
+        term
+    }
+
+    /// Whether the parameter `var` appears in `term`, bindings followed: binding
+    /// it there would make a type contain itself.
+    fn occurs(&self, var: (Side, u32), term: Term, subst: &IndexMap<(Side, u32), Term>) -> bool {
+        let (side, id) = self.walk_term(term, subst);
+        let inside = |ids: &[TypeId]| ids.iter().any(|&i| self.occurs(var, (side, i), subst));
+        match self.get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                (side, *index) == var
+            }
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner)
+            | ResolvedType::BuiltinArray(inner) => inside(&[*inner]),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => inside(params) || inside(&[*return_type]),
+            _ => self.generic_type_args(id).is_some_and(|args| inside(&args)),
+        }
     }
 }
+
+/// Which of two impl targets a type parameter belongs to, in
+/// [`TypeTable::targets_overlap`].
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Side {
+    Left,
+    Right,
+}
+
+type Term = (Side, TypeId);
 
 #[derive(Debug, Clone)]
 pub struct TirFunction {

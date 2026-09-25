@@ -147,6 +147,8 @@ pub(super) struct StaticTraitRef {
     /// `None` where no trait supplies the name, which an inherent declaration
     /// answers with a trait-less one.
     pub(super) selected: Option<StaticMethodRef>,
+    /// The declaration the resolution named, inherent or supplied by a trait.
+    pub(super) declaration: Option<DefId>,
     pub(super) return_type: TypeId,
     /// The lists this same resolution read, so a site that mangles from
     /// `selected` and records from these cannot describe two declarations.
@@ -275,9 +277,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         // A qualified spelling names a trait, so the receiver's own declaration
         // is not what it asks for and no case of the name shadows the answer.
-        let mut candidates = match required_trait {
-            Some(_) => Vec::new(),
-            None => self.own_candidates(&key, method_name),
+        let mut candidates = if required_trait.is_some() {
+            Vec::new()
+        } else {
+            let receiver_args = self
+                .receiver_declaring_args(receiver_type, receiver_args)
+                .unwrap_or_default();
+            self.own_candidates(&key, method_name, &receiver_args)
         };
 
         // A case or member the receiver declares is written on the type, and
@@ -358,14 +364,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declarations the receiver makes itself: its inherent impl, the
-    /// statics a `resource` declares, and one it inherits along its chain —
-    /// the index holds only a resource's own, so the chain is walked.
-    fn own_candidates(&self, key: &ImplTargetKey, method_name: &str) -> Vec<Candidate> {
+    /// The declarations the receiver makes itself: its inherent impls reaching
+    /// `receiver_args`, the statics a `resource` declares, and one it inherits
+    /// along its chain — the index holds only a resource's own, so the chain is
+    /// walked.
+    fn own_candidates(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        receiver_args: &[TypeId],
+    ) -> Vec<Candidate> {
         let inherent = self
             .impl_method_entries(key, method_name)
             .filter(|entry| entry.is_inherent())
             .map(|entry| entry.method_id)
+            .filter(|&method| self.declaration_reaches(method, receiver_args))
             .collect::<Vec<_>>();
         let resource_static = self
             .tysys
@@ -529,6 +542,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let lookup = self.resolve_static_callee(query);
         let return_type = lookup.return_type();
+        let declaration = lookup
+            .found()
+            .and_then(|callee| callee.method_ref.method_id);
         let selected = lookup
             .found()
             .map(|callee| callee.method_ref.clone())
@@ -543,6 +559,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (params, _) = lookup.params();
         Ok(StaticTraitRef {
             selected,
+            declaration,
             return_type,
             params,
         })

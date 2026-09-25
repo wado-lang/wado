@@ -10,15 +10,17 @@ use super::program::{
 use crate::hashmap::IndexSet;
 
 /// Add to `program` the impls of `trait_` that `declarations` derive, in
-/// declaration order. A declaration with an impl already derives nothing.
+/// declaration order. A declaration an impl covers at every instance derives
+/// nothing; one covered at some instances derives for the rest.
 pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
         .values()
         .filter(|def| def.trait_ == Some(trait_))
         .filter_map(|def| match &def.target {
-            SolverType::Decl(head, _) => Some(*head),
-            SolverType::Param(_)
+            SolverType::Decl(head, args) if covers_every_instance(args) => Some(*head),
+            SolverType::Decl(..)
+            | SolverType::Param(_)
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
@@ -62,6 +64,19 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             break;
         }
     }
+}
+
+/// Whether a target's arguments are distinct parameters, which every instance
+/// of its head matches.
+fn covers_every_instance(args: &[SolverType]) -> bool {
+    let mut seen = IndexSet::default();
+    args.iter().all(|arg| match arg {
+        SolverType::Param(index) | SolverType::Pack(index) => seen.insert(*index),
+        SolverType::Decl(..)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. } => false,
+    })
 }
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
@@ -264,6 +279,26 @@ mod tests {
         p.push_impl(concrete(EQ, decl(POINT)));
         let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// `impl Eq for Wrapper<i32>` covers one instance: the rest still derive,
+    /// and the derived impl yields where the written one reaches.
+    #[test]
+    fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
+        let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
+        let mut p = prelude();
+        p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
+        );
+        let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
+        assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
+        assert_eq!(
+            asked(wrapper_of(SolverType::Decl(LIST, vec![decl(I32)]))),
+            Some(1)
+        );
     }
 
     /// A marker demands the derivation and answers for it, so nothing is

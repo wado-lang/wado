@@ -1,0 +1,31 @@
+// Two trait impls, each generic over the head, that both reach `Pair<String, i32>`
+// tie at the generality rank, so the call is ambiguous.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Name {
+    fn name(&self) -> String;
+}
+
+impl<T> Name for Pair<T, i32> {
+    fn name(&self) -> String {
+        return "pinned";
+    }
+}
+
+impl<A, B> Name for Pair<A, B> {
+    fn name(&self) -> String {
+        return "open";
+    }
+}
+
+export fn run() {
+    let p: Pair<String, i32> = Pair { a: "x", b: 2 };
+    let _ = p.name();
+}
+
+__DATA__
+{"compile_error": ":27:13: analysis error: ambiguous impls of 'Name' for 'Pair<String, i32>': the ones for 'Pair<T, i32>' and 'Pair<A, B>' both reach it, and nothing ranks them; write 'impl Name for Pair<String, i32>'", "compile_error_codes": ["AMBIGUOUS_CANDIDATE"]}

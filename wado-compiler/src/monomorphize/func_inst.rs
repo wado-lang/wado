@@ -342,10 +342,8 @@ fn blanket_receiver_satisfies(
 /// call site's module — and falling back to `TraitEnv::impl_module_for` for a
 /// cross-module trait impl, or to `type_module_hint` for an inherent method,
 /// which lives with its receiver type. Returns the template alone, not its
-/// module: the caller decides where the concrete copy lands. `impl_args`
-/// choose among the blocks a name reaches when they are the receiver's; a
-/// static call on a bare receiver passes the block's binder values instead,
-/// which choose nothing, and takes the one template its name reaches.
+/// module: the caller decides where the concrete copy lands. `impl_args`, the
+/// receiver's arguments, choose among the blocks a name reaches.
 fn lookup_template_with_trait_fallback<'a>(
     generic_functions: &'a Templates,
     trait_env: &TraitEnv,
@@ -367,11 +365,9 @@ fn lookup_template_with_trait_fallback<'a>(
         blanket_receiver,
         type_table,
     );
-    let key = |module: &ModuleSource| (module.clone(), name.to_string());
-    modules
-        .iter()
-        .find_map(|m| generic_functions.get(&key(m), impl_args, type_table))
-        .or_else(|| modules.iter().find_map(|m| generic_functions.sole(&key(m))))
+    modules.iter().find_map(|m| {
+        generic_functions.get(&((*m).clone(), name.to_string()), impl_args, type_table)
+    })
 }
 
 /// The modules a template may live in, most specific first: `module_hint`,
@@ -2096,6 +2092,16 @@ impl Monomorphizer {
                 substitution.insert(param.index, arg);
             }
         }
+        // A parameter nested in the target (`T` in `Pair<List<T>, i32>`) sits
+        // past the receiver's positions, and is read out of the argument there.
+        if let Some(origin) = &generic.impl_origin
+            && let Some(positions) = key.impl_type_args.get(..origin.target_args.len())
+            && let Some(bound) = type_table.bind_type_params(&origin.target_args, positions)
+        {
+            for (slot, ty) in bound {
+                substitution.entry(slot).or_insert(ty);
+            }
+        }
 
         let offset = method_param_offset(&generic.impl_type_params);
         for (param, &arg) in generic.type_params.iter().zip(key.method_type_args.iter()) {
@@ -2563,6 +2569,8 @@ impl Monomorphizer {
                                 self.functions.generic_or_concrete_impl_module(
                                     &new_info,
                                     receiver_module.as_ref(),
+                                    concrete_type_id,
+                                    type_table,
                                 );
                             let blanket = if generic_or_concrete.is_none() {
                                 trait_name_for_blanket.and_then(|tn| {
@@ -3688,9 +3696,12 @@ impl Monomorphizer {
         // impl, a generic one lives in the receiver type's own module — how
         // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
         let trait_name_for_blanket = new_info.trait_decl();
-        let generic_or_concrete = self
-            .functions
-            .generic_or_concrete_impl_module(&new_info, receiver_module.as_ref());
+        let generic_or_concrete = self.functions.generic_or_concrete_impl_module(
+            &new_info,
+            receiver_module.as_ref(),
+            receiver_type_id,
+            type_table,
+        );
         // Module and receiver param must be read off this same blanket: the
         // call-site type-param head matches only a direct `T::method` call.
         let blanket = if generic_or_concrete.is_none() {
@@ -3871,8 +3882,12 @@ impl Monomorphizer {
                 )
             })
             .or_else(|| {
-                self.functions
-                    .generic_or_concrete_impl_module(&new_info, receiver_hint.as_ref())
+                self.functions.generic_or_concrete_impl_module(
+                    &new_info,
+                    receiver_hint.as_ref(),
+                    receiver_type_id,
+                    type_table,
+                )
             })
             .unwrap_or(module_source);
         *method_func = FunctionRef {

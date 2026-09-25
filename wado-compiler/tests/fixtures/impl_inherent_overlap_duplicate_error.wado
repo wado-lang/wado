@@ -1,0 +1,27 @@
+// Two generic inherent impls that both reach `Pair<String, i32>` define `f`
+// twice, and an inherent impl carries no trait contract to rank them (finding 4).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Pair<T, i32> {
+    fn f(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<A, B> Pair<A, B> {
+    fn f(&self) -> i32 {
+        return 2;
+    }
+}
+
+export fn run() {
+    let p: Pair<String, i32> = Pair { a: "x", b: 0 };
+    let _ = p.f();
+}
+
+__DATA__
+{"compile_error": "duplicate definition of `f` for `Pair`"}

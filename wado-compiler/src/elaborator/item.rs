@@ -1,6 +1,7 @@
 //! Item-level resolution (structs, functions, methods, globals, variants, tests).
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::attribute::{self, WIRE};
@@ -887,6 +888,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             &impl_block.type_params,
         );
 
+        let target = scope.resolve_type(&impl_block.ty);
         let target_type_args = scope.resolve_written_type_args(&impl_block.ty);
         let trait_type_args = impl_block
             .trait_type
@@ -926,16 +928,18 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .as_ref()
             .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.def_at(impl_block.id);
-        scope.sem.decls.impl_sigs.insert(
-            impl_def,
-            ImplSig {
-                target_type_args,
-                trait_type_args,
-                associated_types,
-                target_fq,
-                trait_decl,
-            },
-        );
+        let sig = ImplSig {
+            target,
+            target_type_args,
+            trait_type_args,
+            associated_types,
+            target_fq,
+            trait_decl,
+        };
+        Rc::make_mut(&mut scope.tysys.signatures)
+            .impl_sigs
+            .insert(impl_def, sig.clone());
+        scope.sem.decls.impl_sigs.insert(impl_def, sig);
     }
 
     /// Require the impl's target and trait reference to name, between them, every
@@ -1193,6 +1197,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Resolve and record `impl_block`'s own declaration facts in its frame.
+    /// Ahead of every other impl question the module asks: whether an impl
+    /// reaches a receiver reads its recorded target.
+    pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
+        let mut block = self.enter_inherited_type_param_scope();
+        block.annotate_ctx.trait_ctx.type_params.clear();
+        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        block.register_impl_block_params(impl_block);
+        let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
+        block.record_impl_sig(impl_block, impl_is_concrete);
+    }
+
     /// Resolve and record the canonical signature of every method in
     /// `impl_block`, in the impl's own frame.
     ///
@@ -1208,7 +1224,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
 
-        block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
             return;
         }

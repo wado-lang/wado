@@ -2325,6 +2325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         };
         let selected = resolution.selected;
+        let declaration = resolution.declaration;
         let trait_name_opt = selected.as_ref().and_then(|r| r.trait_name.clone());
 
         let mangled_func_name = MethodName::format_local(
@@ -2414,14 +2415,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The `#[cm("...")]` import the callee binds, off the signature this
         // call resolved to, at the receiver it resolved at.
-        method_info.cm_name = static_receiver
-            .as_ref()
-            .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
+        method_info.cm_name = declaration
+            .and_then(|def| self.tysys.signatures.method_sig(def).cloned())
+            .or_else(|| {
+                static_receiver
+                    .as_ref()
+                    .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
+            })
             .and_then(|sig| sig.cm_name);
 
-        // The selection covers trait impls only; an inherent static has none
-        // and reaches the index instead.
-        if let Some(method_def) = selected.as_ref().and_then(|r| r.method_id).or_else(|| {
+        if let Some(method_def) = declaration.or_else(|| {
             let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
             self.qualified_method_decl_id(&receiver, &static_call.method)
                 .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
@@ -2469,7 +2472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.sem.types.static_method_dispatch.insert(
             key,
             StaticMethodDispatch {
-                method_def: selected.as_ref().and_then(|r| r.method_id),
+                method_def: declaration,
                 // The scope annotate resolved these defaults in, so reify
                 // resolves them in the same one.
                 defaults_module,
@@ -3012,7 +3015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let header = &env.impl_headers[key];
             header.is_trait_impl()
                 && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
-                && !self.impl_at_other_instantiation(header, receiver_args)
+                && !self.impl_at_other_instantiation(*key, receiver_args)
         });
         keys
     }
@@ -3574,6 +3577,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) else {
             return TypeTable::ERROR;
         };
+        let declaration = resolution.declaration;
+        if declaration.is_none()
+            && resolution.return_type == TypeTable::UNKNOWN
+            && self.declared_by_no_reaching_block(
+                &actual_struct_name,
+                method_name,
+                receiver_key.as_ref(),
+                impl_type_args,
+            )
+        {
+            let _ = self.emit(TypeError::UnknownFunction {
+                name: format!("{actual_struct_name}::{method_name}"),
+                span,
+            });
+            return TypeTable::ERROR;
+        }
 
         // An inherent impl may live in any module of the package that owns the
         // type, and its methods are registered under that module. So the
@@ -3581,12 +3600,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // home only where none is (`cross_module_inherent_static.wado`).
         let method_ref = resolution.selected.unwrap_or_else(|| {
             let target = self.static_receiver_key(&actual_struct_name, receiver_key.as_ref());
-            let module = self
-                .static_method_entries(&target, method_name)
-                .find(|e| e.is_inherent())
-                .map(|e| e.module.clone())
+            let module = declaration
+                .map(|def| self.tysys.resolutions.defs().module(def).clone())
+                .or_else(|| {
+                    self.static_method_entries(&target, method_name)
+                        .find(|e| e.is_inherent())
+                        .map(|e| e.module.clone())
+                })
                 .unwrap_or_else(|| self.declaring_module_at(Some(call_id), &actual_struct_name));
-            StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
+            StaticMethodRef::new(module, &actual_struct_name, method_name, None, declaration)
         });
 
         // A concrete block hosts its function under the head it wrote:
@@ -3639,12 +3661,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // index answers for one kind of method, and an instance one reached
         // qualified then lost its binding and left reify emitting a call to a
         // name nothing declares.
-        let callee_sig = self.static_call_sig(
-            &actual_struct_name,
-            method_name,
-            receiver_key.as_ref(),
-            SigChoice::Any,
-        );
+        let callee_sig = declaration
+            .and_then(|def| self.tysys.signatures.method_sig(def).cloned())
+            .or_else(|| {
+                self.static_call_sig(
+                    &actual_struct_name,
+                    method_name,
+                    receiver_key.as_ref(),
+                    SigChoice::Any,
+                    impl_type_args,
+                )
+            });
         let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
         // From the resolution that named the callee. Asking again by the base's

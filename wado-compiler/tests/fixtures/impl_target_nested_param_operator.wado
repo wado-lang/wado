@@ -1,0 +1,29 @@
+// An operator impl whose target nests its type parameter inside an argument
+// binds the parameter to what the operands hold there.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Add for Pair<List<T>, i32> {
+    type Output = Pair<List<T>, i32>;
+
+    fn add(&self, rhs: &Self) -> Self::Output {
+        let mut a: List<T> = self.a;
+        for let x of rhs.a {
+            a.push(x);
+        }
+        return Pair { a, b: self.b + rhs.b };
+    }
+}
+
+test "the operands' element type" {
+    let p: Pair<List<String>, i32> = Pair { a: ["x"], b: 1 };
+    let q: Pair<List<String>, i32> = Pair { a: ["y"], b: 2 };
+    let r = p + q;
+    assert r.a.len() == 2 && r.a[1] == "y" && r.b == 3;
+}
+
+__DATA__
+{"test": {}}

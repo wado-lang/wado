@@ -101,11 +101,29 @@ impl FuncInstState {
     /// path to distinguish "the receiver type has a non-blanket impl,
     /// fall through to the receiver's module" from "no impl at all, use
     /// the blanket's module".
+    ///
+    /// `None` where the head's written impls reach other instances than
+    /// `instance` only, which a blanket or a derived body answers instead.
     pub fn generic_or_concrete_impl_module(
         &self,
         info: &LocalMethodName,
         type_module: Option<&ModuleSource>,
+        instance: TypeId,
+        type_table: &TypeTable,
     ) -> Option<ModuleSource> {
+        if let Some(trait_) = info.trait_decl() {
+            let instance = type_table.peel_refs(instance);
+            let head = type_table.impl_receiver_key(instance);
+            let mut written = self
+                .trait_env
+                .methodful_impls_by_receiver(&head, trait_)
+                .peekable();
+            if written.peek().is_some()
+                && !written.any(|block| type_table.impl_reaches_instance(block, instance))
+            {
+                return None;
+            }
+        }
         self.trait_env
             .any_impl_module_of(info, type_module)
             .cloned()
@@ -541,7 +559,7 @@ impl Monomorphizer {
     }
 
     /// Whether the declaration `tid` names carries its own `impl <trait> for`
-    /// block. The impl index keys the head as source writes it, so the query
+    /// block reaching `tid`. The impl index keys the head as source writes it, so the query
     /// goes through [`TypeTable::impl_receiver_key`] rather than a mangled
     /// name — which would carry the declaring module the index never stores.
     pub(super) fn has_own_trait_impl(
@@ -552,7 +570,8 @@ impl Monomorphizer {
     ) -> bool {
         self.functions
             .trait_env
-            .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(tid), trait_)
+            .methodful_impls_by_receiver(&type_table.impl_receiver_key(tid), trait_)
+            .any(|block| type_table.impl_reaches_instance(block, tid))
     }
 
     /// The first newtype link at or below `type_id` writing its own impl of

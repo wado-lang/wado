@@ -31,7 +31,7 @@ pub(crate) struct AssocConstSig {
 /// it *says*, never anything computed from a use site. AST survives inside an
 /// entry only where the value is irreducibly AST — parameter defaults,
 /// associated-const values, `__DATA__`. Assembled from `ModuleDecls` digests.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Signatures {
     /// Canonical free-function signatures, keyed by the declaration. The
     /// entries are shared with the per-module digests they are assembled from
@@ -436,6 +436,9 @@ impl TraitSig {
 /// method it declares, and a use site reads them without naming a method.
 #[derive(Clone, Debug)]
 pub(crate) struct ImplSig {
+    /// The impl target as a whole, its reference included, a slot appearing as
+    /// its own `TypeParam` / `TypePack`.
+    pub(crate) target: TypeId,
     /// The impl target's type arguments (`K`, `V` in `impl … for Map<K, V>`).
     /// A slot appears as its own `TypeParam` / `TypePack`, so aligning a
     /// receiver's arguments against this list says which slot each fills.
@@ -497,38 +500,48 @@ impl ImplSig {
     /// alignment, shared by [`Self::instantiate`] and by the instantiation
     /// of any [`MethodSig`] the block declares.
     ///
-    /// Target position `i` binds a slot only where the impl wrote a type
-    /// parameter there; a concrete argument (`u8` in `impl List<u8>`) binds
-    /// nothing, which is what makes a partially-concrete target expressible.
+    /// Each target position binds the slots its argument holds, at any depth:
+    /// `T` in `impl … for Pair<List<T>, i32>` takes `String` from a
+    /// `Pair<List<String>, i32>`. A concrete argument (`u8` in `impl List<u8>`)
+    /// binds nothing, which is what makes a partially-concrete target
+    /// expressible; a position the receiver leaves open binds nothing either.
     pub(crate) fn slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> IndexMap<u32, TypeId> {
         let table = type_table.borrow();
-        self.target_type_args
-            .iter()
-            .zip(receiver_args)
-            .filter_map(|(&declared, &concrete)| match table.get(declared) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    Some((*index, concrete))
+        let mut slots = IndexMap::default();
+        for (&declared, &concrete) in self.target_type_args.iter().zip(receiver_args) {
+            if let Some(bound) = table.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
                 }
-                _ => None,
-            })
-            .collect()
+            }
+        }
+        slots
     }
 
     /// [`Self::slots`] where `receiver_args` are a *spelled* argument list, as
-    /// a turbofish writes them; `None` where this block's target cannot align
-    /// with one — a blanket, `&`-target or variadic-tuple block writes no
-    /// `target_type_args` and binds its slots from the receiver differently.
+    /// a turbofish writes them, or a static call's slot list: the receiver's
+    /// positions, then the slots past them by index. `None` where this block's
+    /// target cannot align with one — a blanket, `&`-target or variadic-tuple
+    /// block writes no `target_type_args` and binds its slots from the receiver
+    /// differently.
     pub(crate) fn spelled_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        (!self.target_type_args.is_empty() && self.target_type_args.len() == receiver_args.len())
-            .then(|| self.slots(type_table, receiver_args))
+        let positions = self.target_type_args.len();
+        if positions == 0 || receiver_args.len() < positions {
+            return None;
+        }
+        let mut slots = self.slots(type_table, &receiver_args[..positions]);
+        for (slot, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
+            slots.entry(slot).or_insert(arg);
+        }
+        Some(slots)
     }
 }
 
@@ -691,6 +704,7 @@ mod tests {
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
         ImplSig {
+            target: TypeTable::UNKNOWN,
             target_type_args: vec![TypeTable::U8, v],
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),

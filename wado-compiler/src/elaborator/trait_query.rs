@@ -1588,8 +1588,14 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_: DefId,
     ) -> bool {
-        self.trait_env
-            .has_any_methodful_impl_by_receiver(type_key, trait_)
+        let table = self.type_table.borrow();
+        let reaches = |block| subject.is_none_or(|ty| table.impl_reaches_instance(block, ty));
+        let written = self
+            .trait_env
+            .methodful_impls_by_receiver(type_key, trait_)
+            .any(reaches);
+        drop(table);
+        written
             || self.blanket_trait_impl_applies(
                 ctx,
                 scope,
@@ -1645,7 +1651,7 @@ impl TypeSystem {
                 // trait satisfied (#1785).
                 if header.trait_def() == Some(trait_)
                     && self.header_answers_bound_args(header, wanted)
-                    && self.inherent_impl_type_args_match(&header.ty, type_args)
+                    && self.impl_reaches(entry, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
                         scope,
@@ -2922,10 +2928,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // The receiver is keyed by head, so every impl on
                         // `List<_>` answers here, including ones implementing
                         // an instantiation this one contradicts.
-                        if !self
-                            .tysys
-                            .inherent_impl_type_args_match(&header.ty, Some(&concrete_type_args))
-                        {
+                        if !self.tysys.impl_reaches(entry, Some(&concrete_type_args)) {
                             continue;
                         }
                         let slots = ImplParamSlots::of(&header.ty, &header.type_params);

@@ -3437,9 +3437,10 @@ impl SynthesisCtx<'_, '_, '_> {
     }
 
     /// `true` when a *methodful* impl already covers `<trait_name> for
-    /// <type_name>` (within `scope`) or this pass emitted one. A body-less
-    /// `impl Trait for Type;` marker does not count — it must not block the
-    /// body it asks for.
+    /// <type_name>` (within `scope`) at every instance, or this pass emitted
+    /// one. A body-less `impl Trait for Type;` marker does not count — it must
+    /// not block the body it asks for — and neither does an impl reaching some
+    /// instances only, since the derived body answers for the rest.
     fn has_methodful_impl(
         &self,
         receiver: &FqTypeName,
@@ -3450,16 +3451,13 @@ impl SynthesisCtx<'_, '_, '_> {
         let Some(trait_) = self.trait_env.trait_def(trait_key) else {
             return self.pending_has(receiver, trait_key);
         };
-        let real = match scope {
-            ImplScope::CurrentModule => {
-                self.trait_env
-                    .has_methodful_impl_by_receiver(&type_key, trait_, &self.module)
-            }
-            ImplScope::AnyModule => self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&type_key, trait_),
+        let module = match scope {
+            ImplScope::CurrentModule => Some(&self.module),
+            ImplScope::AnyModule => None,
         };
-        real || self.pending_has(receiver, trait_key)
+        self.trait_env
+            .has_covering_methodful_impl_by_receiver(&type_key, trait_, module)
+            || self.pending_has(receiver, trait_key)
     }
 
     /// Module-scoped methodful check, for the `Eq` / `Ord` / `Default`

@@ -5245,9 +5245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_default();
         let mut keys =
             self.impl_keys_of_from(&self.impl_target_of(target_type, target_name), from_name);
-        keys.retain(|key| {
-            !self.impl_at_other_instantiation(&self.tysys.trait_env.impl_headers[key], &target_args)
-        });
+        keys.retain(|&key| !self.impl_at_other_instantiation(key, &target_args));
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()
