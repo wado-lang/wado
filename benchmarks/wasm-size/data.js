@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790336119371,
+  "lastUpdate": 1790343755661,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59765,6 +59765,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/014361be8a2d7ac51bf76fb508ac26be50dd6d40"
         },
         "date": 1790336118638,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "16877fd5c45584ce00edf25b0045a48c75b92180",
+          "message": "Merge pull request #2162 from wado-lang/claude/web-dom-tide-continuation-g9c29t\n\nfeat(web): pass Wado closures to web:dom as callbacks, so event listeners work in the browser and in SurfaceDom",
+          "timestamp": "2026-09-25T22:20:19+09:00",
+          "tree_id": "7f67c995e46d64166d4579ea3b09d45a8573f529",
+          "url": "https://github.com/wado-lang/wado/commit/16877fd5c45584ce00edf25b0045a48c75b92180"
+        },
+        "date": 1790343755262,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
