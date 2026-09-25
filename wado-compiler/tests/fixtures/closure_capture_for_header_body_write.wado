@@ -1,0 +1,54 @@
+// A binding a `for` header declares is one per iteration, so a body's write
+// lands on its own iteration's copy, whether or not it runs.
+
+export fn run() {
+    let mut untaken: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        if builtin::black_box(false) {
+            i = 5;
+        }
+        untaken.push(|| i);
+    }
+    assert untaken[0]() == 0;
+    assert untaken[1]() == 1;
+
+    let mut before: List<fn() -> i32> = [];
+    for let mut i = 0; i < 20; i += 1 {
+        i += 10;
+        before.push(|| i);
+    }
+    assert before[0]() == 10;
+    assert before[1]() == 21;
+
+    let mut after: List<fn() -> i32> = [];
+    for let mut i = 0; i < 20; i += 1 {
+        after.push(|| i);
+        i += 10;
+    }
+    assert after[0]() == 10;
+    assert after[1]() == 21;
+
+    let mut skipped: List<fn() -> i32> = [];
+    for let mut i = 0; i < 4; i += 1 {
+        skipped.push(|| i);
+        if i % 2 == 0 {
+            i += 1;
+            continue;
+        }
+    }
+    assert skipped[0]() == 1;
+    assert skipped[1]() == 3;
+
+    let mut chained: List<fn() -> i32> = [];
+    let items: List<i32> = [1, 2];
+    let mut at = 0;
+    for ; let Some(mut x) = items.get(at); at += 1 {
+        chained.push(|| x);
+        x *= 10;
+    }
+    assert chained[0]() == 10;
+    assert chained[1]() == 20;
+}
+
+__DATA__
+{}
