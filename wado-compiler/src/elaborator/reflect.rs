@@ -17,8 +17,8 @@ use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::synthesis::template::has_reflect_kind;
 use crate::synthesis::traits::{
-    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
-    REFLECT_MEMBERS_ASSOC,
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
+    REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
 };
 use crate::{hashmap, tir};
 
@@ -577,19 +577,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         reflect_trait: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let trait_ = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_def(reflect_trait)?;
+        let trait_ = self.tysys.compiler_trait_def(reflect_trait)?;
         let pack_ast = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(type_param_name)?
             .iter()
-            .filter(|b| self.tysys.fq_trait_name_at(b.id, &b.name).canonical() == Some(trait_))
+            .filter(|b| self.tysys.resolutions.declared(b.id) == Some(trait_))
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)
             .find_map(|assoc| match &assoc.ty {
@@ -1534,10 +1529,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        use crate::synthesis::traits::{
-            REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
-            REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
-        };
         if matches!(
             self.tysys.type_table.borrow().get(subject),
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }

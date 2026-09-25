@@ -3075,10 +3075,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // synthesis phase that runs after elaboration, so the
                         // registry is empty here; compute the subject's.
                         let resolved = resolved.or_else(|| {
-                            let trait_ = self
-                                .tysys
-                                .fq_trait_name_at(bound.id, &bound.name)
-                                .canonical()?;
+                            let trait_ = self.tysys.resolutions.declared(bound.id)?;
                             self.concrete_reflect_assoc_type(owner_ty, trait_, &assoc.name)
                         });
                         if let Some(resolved) = resolved {

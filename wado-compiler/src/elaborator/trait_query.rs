@@ -3008,11 +3008,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             // The bound's own site says which trait declares the constraint.
-            let Some(trait_) = self
-                .tysys
-                .fq_trait_name_at(bound.id, &bound.name)
-                .canonical()
-            else {
+            let Some(trait_) = self.tysys.resolutions.declared(bound.id) else {
                 continue;
             };
             let registered = self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
