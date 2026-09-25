@@ -2003,24 +2003,14 @@ pub enum UseItem {
         interface_name: String,
         /// Span of the interface name identifier — where the item starts.
         name_span: Span,
+        /// The whole item, through its closing `}`.
+        span: Span,
         functions: Vec<UseItemSimple>,
     },
     /// Wildcard import: `use _ from "..."` (load module for side effects only)
     Wildcard,
     /// Namespace import: `use name from "..."` (import entire module as namespace)
     Namespace { name: String },
-}
-
-impl UseItem {
-    /// Where the item starts in source. `None` for the forms that *are* the
-    /// whole import list (`use _`, `use name`), which have no gap to sit in.
-    pub fn start(&self) -> Option<usize> {
-        match self {
-            UseItem::Simple { name_span, .. } => Some(name_span.start),
-            UseItem::InterfaceFunctions { name_span, .. } => Some(name_span.start),
-            UseItem::Wildcard | UseItem::Namespace { .. } => None,
-        }
-    }
 }
 
 /// Simple use item (used within effect function imports)

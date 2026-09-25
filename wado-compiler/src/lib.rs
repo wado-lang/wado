@@ -1241,11 +1241,8 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
-    // For the `core:kiln/generator` target world, walk the entry module's
-    // `pub struct Options` and produce a structural descriptor that the CLI
-    // provider caches on disk. An `Options` it cannot describe fails the
-    // compile: no options table could be validated against it, so running
-    // the generator would only trap on the fields it left out.
+    // An `Options` no descriptor describes fails here: no options table could
+    // be validated against it, so the generator would trap on a missing field.
     let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
         (Some(tw), Some(reg)) => reg.is_generator_world(tw),
         _ => false,

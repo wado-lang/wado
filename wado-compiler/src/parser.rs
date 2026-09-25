@@ -1609,11 +1609,12 @@ impl Parser {
 
                 // Parse function list inside Effect::{...}
                 let functions = self.parse_use_item_simple_list()?;
-                self.expect(&TokenKind::RBrace)?;
+                let close = self.expect(&TokenKind::RBrace)?.span;
 
                 items.push(UseItem::InterfaceFunctions {
                     interface_name: name,
                     name_span,
+                    span: name_span.merge(&close),
                     functions,
                 });
             } else {

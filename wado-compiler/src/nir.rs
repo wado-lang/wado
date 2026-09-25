@@ -81,14 +81,8 @@ impl FunctionRef {
         }
     }
 
-    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
-    /// declared anywhere else may share the name, a wasm-asset export included.
     pub fn intrinsic(&self) -> Option<&str> {
-        self.module_source.is_core_builtin().then(|| {
-            self.monomorph_info
-                .as_ref()
-                .map_or(self.name.as_str(), |m| m.generic_name.as_str())
-        })
+        DeclarationLookup::from(self).intrinsic()
     }
 
     /// Whether this is the `core:builtin` intrinsic `builtin`.

@@ -5159,14 +5159,8 @@ impl FunctionRef {
         }
     }
 
-    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
-    /// declared anywhere else may share the name, a wasm-asset export included.
     pub fn intrinsic(&self) -> Option<&str> {
-        self.module_source.is_core_builtin().then(|| {
-            self.monomorph_info
-                .as_ref()
-                .map_or(self.name.as_str(), |m| m.generic_name.as_str())
-        })
+        DeclarationLookup::from(self).intrinsic()
     }
 
     /// Whether this is the `core:builtin` intrinsic `builtin`.
@@ -6576,6 +6570,16 @@ pub struct DeclarationLookup<'a> {
     pub name: &'a str,
     /// The generic declaration a monomorphized instance came from.
     pub generic_name: Option<&'a str>,
+}
+
+impl<'a> DeclarationLookup<'a> {
+    /// The `core:builtin` intrinsic this is, plain or monomorphized. A function
+    /// declared anywhere else may share the name, a wasm-asset export included.
+    pub fn intrinsic(self) -> Option<&'a str> {
+        self.module_source
+            .is_core_builtin()
+            .then(|| self.generic_name.unwrap_or(self.name))
+    }
 }
 
 impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {

@@ -608,6 +608,32 @@ fn test_format_use_with_keeps_interior_comments() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A comment ending an entry's line stays on that line, for the list entries
+/// that carry no id: a `with` clause's, and an `Effect::{...}` import.
+#[test]
+fn test_format_use_with_keeps_trailing_comments() {
+    let source = r#"use {
+    a,  // x
+    Stdout::{ write_via_stream },  // y
+    d,
+} from "./x.g4"
+    with {
+        generator: {
+            options: {
+                n: 4,  // four heads
+                m: 2,  /* two */
+                l: [
+                    "a",  // first
+                    "b",
+                ],
+            },
+        },
+    };
+"#;
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+}
+
 /// A `test` item carrying a leading comment and an outer attribute must format
 /// idempotently — the blank line between the comment and the attribute must not
 /// grow on repeated passes. Regression test: `Item::Test` was missing from

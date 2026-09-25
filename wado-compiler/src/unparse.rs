@@ -252,6 +252,15 @@ pub struct Unparser<'a> {
     reserved_width: Option<(usize, usize)>,
 }
 
+/// Where a list entry's line-end comment is found.
+#[derive(Clone, Copy)]
+enum Trailing {
+    /// The trivia map's trailing comments of this node.
+    Of(AstId),
+    /// Pending comments on the line this span ends, for an entry with no id.
+    After(Span),
+}
+
 impl<'a> Unparser<'a> {
     pub fn new() -> Self {
         Self::default()
@@ -374,7 +383,7 @@ impl<'a> Unparser<'a> {
     }
 
     /// Emit the delimited list at `span` one entry per line. `anchors` gives each
-    /// entry its source start and the id a same-line trailing comment attaches to.
+    /// entry the span it starts with and where its line-end comment is found.
     fn emit_entries_per_line<T, A, E>(
         &mut self,
         [open_delim, close_delim]: [&str; 2],
@@ -383,26 +392,26 @@ impl<'a> Unparser<'a> {
         anchors: A,
         mut emit: E,
     ) where
-        A: Fn(&T) -> (Option<usize>, Option<AstId>),
+        A: Fn(&T) -> (Span, Trailing),
         E: FnMut(&mut Self, &T),
     {
         self.output.push_str(open_delim);
         self.output.push('\n');
         self.indent_level += 1;
+        let anchored: Vec<_> = entries.iter().map(anchors).collect();
         let mut lo = span.start;
-        for entry in entries {
-            let (start, trailing_id) = anchors(entry);
-            match start {
-                Some(start) => {
-                    self.open_entry_line(lo, start);
-                    lo = start;
-                }
-                None => self.write_indent(),
-            }
+        for (i, entry) in entries.iter().enumerate() {
+            let (start, trailing) = anchored[i];
+            self.open_entry_line(lo, start.start);
+            lo = start.start;
             emit(self, entry);
             self.output.push(',');
-            if let Some(id) = trailing_id {
-                self.emit_trailing_for_inline(id);
+            match trailing {
+                Trailing::Of(id) => self.emit_trailing_for_inline(id),
+                Trailing::After(end) => {
+                    let next = anchored.get(i + 1).map(|(next, _)| *next);
+                    self.emit_line_end_comments(end, next, span.end);
+                }
             }
             self.output.push('\n');
         }
@@ -621,12 +630,14 @@ impl<'a> Unparser<'a> {
             ["{", "}"],
             u.items_span.unwrap_or(u.span),
             &u.items,
-            |item| {
-                let id = match item {
-                    UseItem::Simple { id, .. } => Some(*id),
-                    _ => None,
-                };
-                (item.start(), id)
+            |item| match item {
+                UseItem::Simple { id, name_span, .. } => (*name_span, Trailing::Of(*id)),
+                UseItem::InterfaceFunctions {
+                    name_span, span, ..
+                } => (*name_span, Trailing::After(*span)),
+                UseItem::Wildcard | UseItem::Namespace { .. } => {
+                    unreachable!("`use _` and `use name` have no list to wrap")
+                }
             },
             Unparser::unparse_use_item,
         );
@@ -803,7 +814,7 @@ impl<'a> Unparser<'a> {
             ["{", "}"],
             span,
             &entries,
-            |(_, entry)| (Some(entry.key_span.start), None),
+            |(_, entry)| (entry.key_span, Trailing::After(entry.value_span)),
             |s, (key, entry)| {
                 s.output.push_str(key);
                 s.output.push_str(": ");
@@ -818,7 +829,7 @@ impl<'a> Unparser<'a> {
             ["[", "]"],
             span,
             items,
-            |item| (Some(item.span.start), None),
+            |item| (item.span, Trailing::After(item.span)),
             |s, item| s.unparse_attr_value_wrapped(&item.value, item.span),
         );
     }
@@ -851,7 +862,7 @@ impl<'a> Unparser<'a> {
             ["(", ")"],
             params_span,
             params,
-            |p| (Some(p.span.start), Some(p.id)),
+            |p| (p.span, Trailing::Of(p.id)),
             Unparser::unparse_param,
         );
         emit_after(self);
@@ -1846,7 +1857,7 @@ impl<'a> Unparser<'a> {
                 ["[", "]"],
                 tuple_lit.span,
                 elements,
-                |e| (Some(e.span().start), Some(e.id())),
+                |e| (e.span(), Trailing::Of(e.id())),
                 Unparser::unparse_expr,
             );
             return;
@@ -2181,7 +2192,7 @@ impl<'a> Unparser<'a> {
             ["(", ")"],
             span,
             args,
-            |a| (Some(a.span().start), Some(a.id())),
+            |a| (a.span(), Trailing::Of(a.id())),
             Unparser::unparse_expr,
         );
     }
@@ -2608,7 +2619,7 @@ impl<'a> Unparser<'a> {
             ["{", "}"],
             s.span,
             &s.members(),
-            |m| (Some(m.span().start), Some(m.value_id())),
+            |m| (m.span(), Trailing::Of(m.value_id())),
             |s, m| s.emit_literal_member(m),
         );
     }
@@ -2896,6 +2907,21 @@ impl<'a> Unparser<'a> {
                     self.emit_comment(comment);
                 }
             }
+        }
+    }
+
+    /// Emit the pending comments in `end.end..hi` that start on `end`'s last
+    /// line, save one the `next` entry follows on its line: the trivia map's rule.
+    fn emit_line_end_comments(&mut self, end: Span, next: Option<Span>, hi: usize) {
+        let hi = next.map_or(hi, |next| next.start);
+        for comment in &self.pending_comments_in(end.end, hi) {
+            let interior = next.is_some_and(|next| next.line == comment.span.end_line());
+            if comment.span.line != end.end_line() || interior {
+                continue;
+            }
+            self.emitted_comments.insert(comment.span.start);
+            self.output.push_str("  ");
+            self.emit_comment(comment);
         }
     }
 
