@@ -1,0 +1,533 @@
+//! A path tracer after "Ray Tracing in One Weekend": diffuse, metal and glass
+//! spheres on a checkered floor, with depth of field, written as PNG and shown
+//! inline on the terminal.
+//!
+//!     wado run example/raytracer.wado
+//!     wado run example/raytracer.wado --samples 64 --width 960 --height 540
+//!     wado run example/raytracer.wado --seed 7 --grid 3 --aperture 0
+//!
+//! Vectors are `f32x4` lanes `[x, y, z, 0]`. Spheres are stored four to a
+//! pack, one coordinate per `f32x4`, so one ray tests four spheres per step.
+//! `core:prng` seeds the scene and every sample, so a seed replays an image
+//! exactly.
+//!
+//! Options (`core:args`): `--width`, `--height`, `--samples` (per pixel),
+//! `--depth` (bounces), `--seed`, `--grid` (small spheres span ±grid),
+//! `--aperture`, `--out`, `--view` (auto / kitty / iterm / ansi / off) and
+//! `--columns`.
+
+use { println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { from_env } from "core:args";
+use { f32x4, i32x4 } from "core:simd";
+use { Xoshiro256pp, Seed, Seedable, Rng } from "core:prng";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock, Mark } from "wasi:clocks";
+use { TerminalStdout } from "wasi:cli";
+use { Image, View, encode, show } from "./png.wado";
+
+struct Options {
+    width: i32 = 480,
+    height: i32 = 270,
+    samples: i32 = 16,
+    depth: i32 = 8,
+    seed: u64 = 2026,
+    grid: i32 = 5,
+    aperture: f32 = 0.08,
+    out: String = "raytracer.png",
+    view: View = View::Auto,
+    columns: i32 = 100,
+}
+
+type Vec3 = f32x4;
+
+fn v3(x: f32, y: f32, z: f32) -> Vec3 {
+    return [x, y, z, 0.0];
+}
+
+fn splat(s: f32) -> Vec3 {
+    return f32x4::splat(s) as Vec3;
+}
+
+impl Vec3 {
+    fn x(&self) -> f32 {
+        return self.extract_lane(0);
+    }
+
+    fn y(&self) -> f32 {
+        return self.extract_lane(1);
+    }
+
+    fn z(&self) -> f32 {
+        return self.extract_lane(2);
+    }
+
+    fn scale(&self, s: f32) -> Vec3 {
+        return *self * splat(s);
+    }
+
+    fn dot(&self, other: &Vec3) -> f32 {
+        let p = *self * *other;
+        return p.extract_lane(0) + p.extract_lane(1) + p.extract_lane(2);
+    }
+
+    fn cross(&self, o: &Vec3) -> Vec3 {
+        return v3(
+            self.y() * o.z() - self.z() * o.y(),
+            self.z() * o.x() - self.x() * o.z(),
+            self.x() * o.y() - self.y() * o.x(),
+        );
+    }
+
+    fn length(&self) -> f32 {
+        return f32::sqrt(self.dot(self));
+    }
+
+    fn unit(&self) -> Vec3 {
+        return self.scale(1.0 / self.length());
+    }
+
+    fn reflect(&self, n: &Vec3) -> Vec3 {
+        return *self - n.scale(2.0 * self.dot(n));
+    }
+
+    /// Snell's law for a unit vector entering a surface with normal `n`,
+    /// where `eta` is the ratio of refractive indices.
+    fn refract(&self, n: &Vec3, eta: f32) -> Vec3 {
+        let cos_theta = f32::min(-self.dot(n), 1.0);
+        let perp = (*self + n.scale(cos_theta)).scale(eta);
+        let parallel = n.scale(-f32::sqrt(f32::abs(1.0 - perp.dot(&perp))));
+        return perp + parallel;
+    }
+}
+
+struct Ray {
+    origin: Vec3,
+    dir: Vec3,
+}
+
+impl Ray {
+    fn at(&self, t: f32) -> Vec3 {
+        return self.origin + self.dir.scale(t);
+    }
+}
+
+variant Material {
+    Diffuse(Vec3),
+    Metal([Vec3, f32]),
+    Glass(f32),
+    Checker([Vec3, Vec3]),
+}
+
+/// Four spheres, one coordinate per lane. An empty lane has radius² −1, whose
+/// discriminant is always negative, so it never reports a hit.
+struct SpherePack {
+    cx: f32x4,
+    cy: f32x4,
+    cz: f32x4,
+    r2: f32x4,
+}
+
+struct Scene {
+    packs: List<SpherePack>,
+    centers: List<Vec3>,
+    radii: List<f32>,
+    materials: List<Material>,
+    floor: Material,
+}
+
+struct Hit {
+    t: f32,
+    point: Vec3,
+    normal: Vec3,
+    front: bool,
+    material: Material,
+}
+
+global T_MIN: f32 = 0.001;
+global T_MAX: f32 = 1.0e30;
+
+impl Scene {
+    fn new(floor: Material) -> Scene {
+        return Scene { packs: [], centers: [], radii: [], materials: [], floor };
+    }
+
+    fn add(&mut self, center: Vec3, radius: f32, material: Material) {
+        self.centers.push(center);
+        self.radii.push(radius);
+        self.materials.push(material);
+    }
+
+    /// Packs the spheres four to a `SpherePack`.
+    fn build(&mut self) {
+        self.packs.clear();
+        for let base of (0..<(self.centers.len() + 3) / 4).map(|p| p * 4) {
+            let mut lanes: [List<f32>, List<f32>, List<f32>, List<f32>] = [[], [], [], []];
+            for let i of base..<base + 4 {
+                if i < self.centers.len() {
+                    let c = self.centers[i];
+                    lanes.0.push(c.x());
+                    lanes.1.push(c.y());
+                    lanes.2.push(c.z());
+                    lanes.3.push(self.radii[i] * self.radii[i]);
+                } else {
+                    lanes.0.push(0.0);
+                    lanes.1.push(0.0);
+                    lanes.2.push(0.0);
+                    lanes.3.push(-1.0);
+                }
+            }
+            self.packs.push(SpherePack {
+                cx: [lanes.0[0], lanes.0[1], lanes.0[2], lanes.0[3]],
+                cy: [lanes.1[0], lanes.1[1], lanes.1[2], lanes.1[3]],
+                cz: [lanes.2[0], lanes.2[1], lanes.2[2], lanes.2[3]],
+                r2: [lanes.3[0], lanes.3[1], lanes.3[2], lanes.3[3]],
+            });
+        }
+    }
+
+    /// The nearest sphere the ray meets within (`T_MIN`, `t_max`), as its
+    /// index and distance, testing four spheres per pack.
+    fn nearest_sphere(&self, ray: &Ray, t_max: f32) -> Option<[i32, f32]> {
+        let ox = f32x4::splat(ray.origin.x());
+        let oy = f32x4::splat(ray.origin.y());
+        let oz = f32x4::splat(ray.origin.z());
+        let dx = f32x4::splat(ray.dir.x());
+        let dy = f32x4::splat(ray.dir.y());
+        let dz = f32x4::splat(ray.dir.z());
+        let zero = f32x4::splat(0.0);
+        let lo = f32x4::splat(T_MIN);
+        let mut best_t = t_max;
+        let mut best: i32 = -1;
+        for let p of 0..<self.packs.len() {
+            let pack = &self.packs[p];
+            let ocx = ox - pack.cx;
+            let ocy = oy - pack.cy;
+            let ocz = oz - pack.cz;
+            let b = ocx * dx + ocy * dy + ocz * dz;
+            let c = ocx * ocx + ocy * ocy + ocz * ocz - pack.r2;
+            let disc = b * b - c;
+            let real: i32x4 = disc.gt(&zero);
+            if real.bitmask() == 0 {
+                continue;
+            }
+            let root = disc.max(&zero).sqrt();
+            let near = -b - root;
+            let far = -b + root;
+            let t = near.bitselect(&near.gt(&lo), &far);
+            let hit: i32x4 = real & t.gt(&lo) & t.lt(&f32x4::splat(best_t));
+            let mask = hit.bitmask();
+            if mask == 0 {
+                continue;
+            }
+            for let lane of 0..<4 {
+                if mask >> lane & 1 == 1 && t.extract_lane(lane) < best_t {
+                    best_t = t.extract_lane(lane);
+                    best = p * 4 + lane;
+                }
+            }
+        }
+        return if best >= 0 { Option::Some([best, best_t]) } else { null };
+    }
+
+    fn hit(&self, ray: &Ray) -> Option<Hit> {
+        // The floor is the plane y = 0, facing up.
+        let floor_t = if ray.dir.y() < 0.0 { -ray.origin.y() / ray.dir.y() } else { T_MAX };
+        let floor_t = if floor_t > T_MIN { floor_t } else { T_MAX };
+        if let Some([i, t]) = self.nearest_sphere(ray, floor_t) {
+            let point = ray.at(t);
+            let outward = (point - self.centers[i]).scale(1.0 / self.radii[i]);
+            let front = ray.dir.dot(&outward) < 0.0;
+            let normal = if front { outward } else { -outward };
+            return Option::Some(Hit { t, point, normal, front, material: self.materials[i] });
+        }
+        if floor_t < T_MAX {
+            return Option::Some(Hit {
+                t: floor_t,
+                point: ray.at(floor_t),
+                normal: v3(0.0, 1.0, 0.0),
+                front: true,
+                material: self.floor,
+            });
+        }
+        return null;
+    }
+}
+
+fn rand(rng: &mut Xoshiro256pp) -> f32 {
+    return rng.random_f64() as f32;
+}
+
+fn random_in_unit_sphere(rng: &mut Xoshiro256pp) -> Vec3 {
+    loop {
+        let p = v3(rand(rng) * 2.0 - 1.0, rand(rng) * 2.0 - 1.0, rand(rng) * 2.0 - 1.0);
+        if p.dot(&p) < 1.0 {
+            return p;
+        }
+    }
+}
+
+fn random_in_unit_disk(rng: &mut Xoshiro256pp) -> Vec3 {
+    loop {
+        let p = v3(rand(rng) * 2.0 - 1.0, rand(rng) * 2.0 - 1.0, 0.0);
+        if p.dot(&p) < 1.0 {
+            return p;
+        }
+    }
+}
+
+/// Schlick's approximation of the reflectance of glass at an angle.
+fn reflectance(cosine: f32, eta: f32) -> f32 {
+    let r0 = (1.0 - eta) / (1.0 + eta);
+    let r0 = r0 * r0;
+    return r0 + (1.0 - r0) * f32::pow(1.0 - cosine, 5.0);
+}
+
+/// Where a ray goes after meeting a surface, and how much light it keeps;
+/// `null` when the surface absorbs it.
+fn scatter(ray: &Ray, hit: &Hit, rng: &mut Xoshiro256pp) -> Option<[Ray, Vec3]> {
+    return match hit.material {
+        Diffuse(albedo) => {
+            let dir = hit.normal + random_in_unit_sphere(rng).unit();
+            Option::Some([
+                Ray { origin: hit.point, dir: dir.unit() },
+                albedo,
+            ]);
+        },
+        Checker([a, b]) => {
+            let parity = (f32::floor(hit.point.x()) + f32::floor(hit.point.z())) as i32 & 1;
+            let dir = hit.normal + random_in_unit_sphere(rng).unit();
+            Option::Some([
+                Ray { origin: hit.point, dir: dir.unit() },
+                if parity == 0 { a } else { b },
+            ]);
+        },
+        Metal([albedo, fuzz]) => {
+            let dir = ray.dir.reflect(&hit.normal) + random_in_unit_sphere(rng).scale(fuzz);
+            if dir.dot(&hit.normal) > 0.0 {
+                Option::Some([
+                    Ray { origin: hit.point, dir: dir.unit() },
+                    albedo,
+                ]);
+            } else {
+                null;
+            }
+        },
+        Glass(ior) => {
+            let eta = if hit.front { 1.0 / ior } else { ior };
+            let cos_theta = f32::min(-ray.dir.dot(&hit.normal), 1.0);
+            let sin_theta = f32::sqrt(1.0 - cos_theta * cos_theta);
+            let dir = if eta * sin_theta > 1.0 || reflectance(cos_theta, eta) > rand(rng) {
+                ray.dir.reflect(&hit.normal);
+            } else {
+                ray.dir.refract(&hit.normal, eta);
+            };
+            Option::Some([
+                Ray { origin: hit.point, dir: dir.unit() },
+                splat(1.0),
+            ]);
+        },
+    };
+}
+
+fn sky(ray: &Ray) -> Vec3 {
+    let t = 0.5 * (ray.dir.y() + 1.0);
+    return splat(1.0).scale(1.0 - t) + v3(0.5, 0.7, 1.0).scale(t);
+}
+
+/// The light arriving along `ray`, following up to `depth` bounces.
+fn trace(scene: &Scene, ray: Ray, depth: i32, rng: &mut Xoshiro256pp, rays: &mut i64) -> Vec3 {
+    let mut ray = ray;
+    let mut throughput = splat(1.0);
+    for let _ of 0..<depth {
+        *rays += 1;
+        let Some(hit) = scene.hit(&ray) else {
+            return throughput * sky(&ray);
+        };
+        let Some([next, attenuation]) = scatter(&ray, &hit, rng) else {
+            return splat(0.0);
+        };
+        throughput = throughput * attenuation;
+        ray = next;
+    }
+    return splat(0.0);
+}
+
+struct Camera {
+    origin: Vec3,
+    corner: Vec3,
+    horizontal: Vec3,
+    vertical: Vec3,
+    u: Vec3,
+    v: Vec3,
+    lens_radius: f32,
+}
+
+impl Camera {
+    fn new(from: Vec3, at: Vec3, vfov_deg: f32, aspect: f32, aperture: f32) -> Camera {
+        let h = f32::tan(vfov_deg * 0.017453292 / 2.0);
+        let view_h = 2.0 * h;
+        let view_w = aspect * view_h;
+        let w = (from - at).unit();
+        let u = v3(0.0, 1.0, 0.0).cross(&w).unit();
+        let v = w.cross(&u);
+        let focus = (from - at).length();
+        let horizontal = u.scale(view_w * focus);
+        let vertical = v.scale(view_h * focus);
+        let corner = from - horizontal.scale(0.5) - vertical.scale(0.5) - w.scale(focus);
+        return Camera { origin: from, corner, horizontal, vertical, u, v, lens_radius: aperture / 2.0 };
+    }
+
+    fn ray(&self, s: f32, t: f32, rng: &mut Xoshiro256pp) -> Ray {
+        let lens = random_in_unit_disk(rng).scale(self.lens_radius);
+        let offset = self.u.scale(lens.x()) + self.v.scale(lens.y());
+        let origin = self.origin + offset;
+        let dir = self.corner + self.horizontal.scale(s) + self.vertical.scale(t) - origin;
+        return Ray { origin, dir: dir.unit() };
+    }
+}
+
+/// Three large spheres, one of each material, amid a field of small random ones.
+fn random_scene(grid: i32, rng: &mut Xoshiro256pp) -> Scene {
+    let mut scene = Scene::new(Material::Checker([
+        v3(0.85, 0.85, 0.8),
+        v3(0.18, 0.2, 0.25),
+    ]));
+    scene.add(v3(0.0, 1.0, 0.0), 1.0, Material::Glass(1.5));
+    scene.add(v3(-4.0, 1.0, 0.0), 1.0, Material::Diffuse(v3(0.8, 0.25, 0.15)));
+    scene.add(v3(4.0, 1.0, 0.0), 1.0, Material::Metal([v3(0.8, 0.75, 0.6), 0.0]));
+    for let a of -grid..<grid {
+        for let b of -grid..<grid {
+            let center = v3(a as f32 + 0.9 * rand(rng), 0.2, b as f32 + 0.9 * rand(rng));
+            if f32::abs(center.z()) < 1.2
+                && (f32::abs(center.x()) < 1.2 || f32::abs(f32::abs(center.x()) - 4.0) < 1.2) {
+                continue;
+            }
+            let pick = rand(rng);
+            let material = if pick < 0.7 {
+                Material::Diffuse(v3(rand(rng) * rand(rng), rand(rng) * rand(rng), rand(rng) * rand(rng)));
+            } else if pick < 0.9 {
+                Material::Metal([
+                    v3(0.5 + rand(rng) / 2.0, 0.5 + rand(rng) / 2.0, 0.5 + rand(rng) / 2.0),
+                    rand(rng) * 0.3,
+                ]);
+            } else {
+                Material::Glass(1.5);
+            };
+            scene.add(center, 0.2, material);
+        }
+    }
+    scene.build();
+    return scene;
+}
+
+fn render(opts: &Options, scene: &Scene, camera: &Camera, rays: &mut i64) -> Image {
+    let mut img = Image::new(opts.width, opts.height);
+    let weight = 1.0 / opts.samples as f32;
+    for let y of 0..<opts.height {
+        // One stream per row, so a row renders the same whatever came before it.
+        let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(opts.seed * 1_000_003 + y as u64));
+        for let x of 0..<opts.width {
+            let mut color = splat(0.0);
+            for let _ of 0..<opts.samples {
+                let s = (x as f32 + rand(&mut rng)) / (opts.width - 1) as f32;
+                let t = ((opts.height - 1 - y) as f32 + rand(&mut rng)) / (opts.height - 1) as f32;
+                let ray = camera.ray(s, t, &mut rng);
+                color = color + trace(scene, ray, opts.depth, &mut rng, rays);
+            }
+            // Gamma 2: the square root of the linear average.
+            let c = color.scale(weight).max(&splat(0.0)).sqrt();
+            img.set(x, y, [
+                c.x() as f64,
+                c.y() as f64,
+                c.z() as f64,
+            ]);
+        }
+    }
+    return img;
+}
+
+fn elapsed_ms(start: Mark) -> u64 with MonotonicClock {
+    return (MonotonicClock::now() - start) as u64 / 1_000_000;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, TerminalStdout) {
+    let opts = match from_env::<Options>() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln(`raytracer: ${e}`);
+            return;
+        },
+    };
+    let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(opts.seed));
+    let scene = random_scene(opts.grid, &mut rng);
+    let aspect = opts.width as f32 / opts.height as f32;
+    let camera = Camera::new(v3(13.0, 2.0, 3.0), v3(0.0, 1.0, 0.0), 20.0, aspect, opts.aperture);
+
+    let start = MonotonicClock::now();
+    let mut rays: i64 = 0;
+    let img = render(&opts, &scene, &camera, &mut rays);
+    let ms = elapsed_ms(start);
+    let png = encode(&img);
+    if let Err(e) = fs::write(&opts.out, &png) {
+        eprintln(`raytracer: ${e}`);
+        return;
+    }
+    show(&img, &png, opts.view, opts.columns);
+    let mrays = rays as f64 / f64::max(ms as f64, 1.0) / 1000.0;
+    println(
+        `${scene.centers.len()} spheres, ${opts.width}x${opts.height} × ${opts.samples} spp: ${rays} rays in ${ms} ms (${mrays:.2} Mrays/s) → ${opts.out}`,
+    );
+}
+
+test "a ray meets the nearest of several spheres" {
+    let mut scene = Scene::new(Material::Diffuse(splat(0.5)));
+    let depths: List<f32> = [-10.0, -4.0, -7.0, -20.0, -5.0];
+    for let z of depths {
+        scene.add(v3(0.0, 1.0, z), 1.0, Material::Glass(1.5));
+    }
+    scene.build();
+    let ray = Ray {
+        origin: v3(0.0, 1.0, 0.0),
+        dir: v3(0.0, 0.0, -1.0),
+    };
+    assert scene.nearest_sphere(&ray, T_MAX) matches { Some([1, t]) && f32::abs(t - 3.0) < 1e-4 };
+}
+
+test "an empty lane never reports a hit" {
+    let mut scene = Scene::new(Material::Diffuse(splat(0.5)));
+    scene.add(v3(0.0, 0.0, -5.0), 1.0, Material::Glass(1.5));
+    scene.build();
+    let ray = Ray {
+        origin: v3(0.0, 0.0, 0.0),
+        dir: v3(0.0, 0.0, 1.0),
+    };
+    assert scene.nearest_sphere(&ray, T_MAX) matches { None };
+}
+
+test "a ray from inside a sphere leaves through its far side" {
+    let mut scene = Scene::new(Material::Diffuse(splat(0.5)));
+    scene.add(v3(0.0, 5.0, 0.0), 2.0, Material::Glass(1.5));
+    scene.build();
+    let ray = Ray {
+        origin: v3(0.0, 5.0, 0.0),
+        dir: v3(1.0, 0.0, 0.0),
+    };
+    assert scene.hit(&ray) matches { Some(h) && !h.front && f32::abs(h.t - 2.0) < 1e-4 };
+}
+
+test "a downward ray lands on the floor" {
+    let scene = Scene::new(Material::Diffuse(splat(0.5)));
+    let ray = Ray {
+        origin: v3(0.0, 2.0, 0.0),
+        dir: v3(0.0, -1.0, 0.0),
+    };
+    assert scene.hit(&ray) matches { Some(h) && f32::abs(h.t - 2.0) < 1e-4 && h.normal.y() == 1.0 };
+}
+
+test "refraction bends toward the normal entering glass" {
+    let dir = v3(1.0, -1.0, 0.0).unit();
+    let bent = dir.refract(&v3(0.0, 1.0, 0.0), 1.0 / 1.5);
+    assert f32::abs(bent.length() - 1.0) < 1e-4;
+    assert f32::abs(bent.x()) < f32::abs(dir.x());
+}
