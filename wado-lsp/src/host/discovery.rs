@@ -76,6 +76,21 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+/// `path` made absolute, each `..` taken as the filesystem takes it: past a
+/// symlink, not lexically. What follows the last `..` stays as written.
+fn resolve_parent_dirs(path: &Path) -> PathBuf {
+    let path = absolutize(path);
+    let components: Vec<Component> = path.components().collect();
+    let Some(last) = components.iter().rposition(|c| *c == Component::ParentDir) else {
+        return normalize_path(&path);
+    };
+    let head: PathBuf = components[..=last].iter().collect();
+    let tail: PathBuf = components[last + 1..].iter().collect();
+    // A path that does not exist has no filesystem answer, only the lexical one.
+    let base = std::fs::canonicalize(&head).unwrap_or_else(|_| normalize_path(&head));
+    normalize_path(&base.join(tail))
+}
+
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
 /// `member_dir` belongs to a workspace; otherwise parse it standalone.
 ///
@@ -101,7 +116,7 @@ pub fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(P
     if read_workspace_members(member_content).is_some() {
         return None;
     }
-    let member_dir = normalize_path(&absolutize(member_dir));
+    let member_dir = resolve_parent_dirs(member_dir);
     let mut dir = member_dir.clone();
     while dir.pop() {
         let candidate = dir.join(MANIFEST_FILENAME);
@@ -391,6 +406,22 @@ mod tests {
         let via_parents = member_dir.join("tests/nested/../..");
         let manifest = resolve_member_manifest(&via_parents, member_toml).unwrap();
         assert_eq!(manifest.package.unwrap().version, "0.4.0");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_parent_dir_past_a_symlink_is_the_one_the_filesystem_reaches() {
+        let (tmp, member_dir) = workspace_with_member("member");
+        let member_toml = "[package]\nname = \"member\"\n";
+        std::fs::write(member_dir.join(MANIFEST_FILENAME), member_toml).unwrap();
+        std::fs::create_dir(member_dir.join("sub")).unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let link = outside.path().join("link");
+        std::os::unix::fs::symlink(member_dir.join("sub"), &link).unwrap();
+
+        let manifest = resolve_member_manifest(&link.join(".."), member_toml).unwrap();
+        assert_eq!(manifest.package.unwrap().version, "0.4.0");
+        drop(tmp);
     }
 
     #[test]
