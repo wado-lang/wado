@@ -79,10 +79,10 @@ fn "stream_write_hello.wado/run"() with Stdout {
     let ws: i32;
     let evt_ptr: i32;
     let status_31: i32;
-    let handle_38: i32;
-    let packed_40: i64;
-    let rx_41: i32;
-    let tx_42: i32;
+    let handle_39: i32;
+    let packed_41: i64;
+    let rx_42: i32;
+    let tx_43: i32;
     let i: i32;
     rx_5 = builtin::i32_wrap_i64(local.tee packed_4("wasi/stream-new"()));
     tx_6 = builtin::i32_wrap_i64(packed_4 >> 32_i64);
@@ -108,26 +108,26 @@ fn "stream_write_hello.wado/run"() with Stdout {
         "wasi/waitable-set-drop"(ws);
         result = status_31;
     }
-    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >>u 4, result: $inline_cm_copy_result_10: block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >>u 4, result: $inline_cm_copy_result_11: block -> "core:prelude/types.wado//enum:CopyResult" {
         let $match_scrut_0: i32;
         $match_scrut_0 = result & 15;
         if $match_scrut_0 == 0 {
-            break $inline_cm_copy_result_10: 0;
+            break $inline_cm_copy_result_11: 0;
         } else if $match_scrut_0 == 1 {
-            break $inline_cm_copy_result_10: 1;
+            break $inline_cm_copy_result_11: 1;
         } else {
         }
-        break $inline_cm_copy_result_10: 2;
+        break $inline_cm_copy_result_11: 2;
     } });
     drop("mem/realloc"(ptr_11, len_12, 1, 0));
     "wasi/stream-drop-writable"(tx_6);
-    rx_41 = builtin::i32_wrap_i64(local.tee packed_40("wasi/stream-new"()));
-    tx_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
-    handle_38 = "stream_write_hello.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
+    rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
+    tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
+    handle_39 = "stream_write_hello.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:stream_write_hello.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"(tx_42, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_38);
+    "core:rt/write_string_to_stream"(tx_43, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_39);
 }
 
 fn "stream_write_hello.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -165,8 +165,8 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let evt_ptr: i32;
     let status_24: i32;
     let i: i32;
-    let $sroa_written_count_36: i32;
-    let $sroa_written_result_37: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_37: i32;
+    let $sroa_written_result_38: "core:prelude/types.wado//enum:CopyResult";
     len_2 = $mv$data$end - $mv$data$start;
     if len_2 == 0 {
         return 0;
@@ -197,22 +197,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(ws);
                 result = status_24;
             }
-            $sroa_written_count_36 = result >>u 4;
-            $sroa_written_result_37 = $inline_cm_copy_result_7: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_37 = result >>u 4;
+            $sroa_written_result_38 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
-                    break $inline_cm_copy_result_7: 0;
+                    break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_7: 1;
+                    break $inline_cm_copy_result_8: 1;
                 } else {
                 }
-                break $inline_cm_copy_result_7: 2;
+                break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_36;
-            if (($sroa_written_result_37 != 0) | ($sroa_written_count_36 <= 0)) | (taken >= len_2) {
+            taken = taken + $sroa_written_count_37;
+            if (($sroa_written_result_38 != 0) | ($sroa_written_count_37 <= 0)) | (taken >= len_2) {
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_37;
+                return $sroa_written_result_38;
             }
             continue l10;
         };

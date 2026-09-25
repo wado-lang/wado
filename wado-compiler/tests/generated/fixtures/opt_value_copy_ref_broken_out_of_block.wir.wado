@@ -302,8 +302,8 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let evt_ptr: i32;
     let status_24: i32;
     let i: i32;
-    let $sroa_written_count_36: i32;
-    let $sroa_written_result_37: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_37: i32;
+    let $sroa_written_result_38: "core:prelude/types.wado//enum:CopyResult";
     len_2 = $mv$data$end - $mv$data$start;
     if len_2 == 0 {
         return 0;
@@ -334,22 +334,22 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(ws);
                 result = status_24;
             }
-            $sroa_written_count_36 = result >>u 4;
-            $sroa_written_result_37 = $inline_cm_copy_result_7: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_37 = result >>u 4;
+            $sroa_written_result_38 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
-                    break $inline_cm_copy_result_7: 0;
+                    break $inline_cm_copy_result_8: 0;
                 } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_7: 1;
+                    break $inline_cm_copy_result_8: 1;
                 } else {
                 }
-                break $inline_cm_copy_result_7: 2;
+                break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_36;
-            if (($sroa_written_result_37 != 0) | ($sroa_written_count_36 <= 0)) | (taken >= len_2) {
+            taken = taken + $sroa_written_count_37;
+            if (($sroa_written_result_38 != 0) | ($sroa_written_count_37 <= 0)) | (taken >= len_2) {
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_37;
+                return $sroa_written_result_38;
             }
             continue l32;
         };
