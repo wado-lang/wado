@@ -1,5 +1,5 @@
 // A handler claims the primitive even when a stdlib wrapper is what calls it.
-// `read_to_end`, `write_all` and `write_raw_all` are impl bodies over a type
+// `read_to_end` and `write_all` are impl bodies over a type
 // parameter, so their `#[cm]` calls name no concrete receiver until monomorphize
 // mints the instance — effect-dispatch rewriting has to run again over those, or
 // the call reaches the canonical past the installed handler.
@@ -52,6 +52,11 @@ impl StreamWritable<u8> for MockStream {
         let count = data.len();
         self.log.extend_from_slice(data);
         resume StreamWrite { count: count, result: CopyResult::Completed }
+    }
+    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+        let _ = this;
+        self.log.extend_from_slice(data);
+        resume CopyResult::Completed
     }
     fn drop(&mut self, this: &StreamWritable<u8>) {
         let _ = this;

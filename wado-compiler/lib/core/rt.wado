@@ -27,6 +27,7 @@ use {
     Waitable,
     WaitableSet,
     cm_subtask_settled,
+    write_copy_is_final,
 } from "core:prelude/types.wado";
 
 /// Split a packed `future.new` result (`readable | writable << 32`) into the
@@ -98,7 +99,7 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
 /// Each call to waitable-set.wait delivers one transition, so we loop until
 /// the subtask leaves the in-flight states.
 internal fn wait_for_subtask(packed: i32) with (WaitableSet, Subtask) {
-    let handle = packed >> 4;
+    let handle = (packed as u32 >> 4) as i32;
     if handle != 0 {
         let subtask = handle as Subtask;
         let ws = WaitableSet::new();
@@ -174,7 +175,13 @@ internal fn cm_lower_string(s: String) -> i64 {
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(bytes, 0, ptr, len);
-    return ptr as i64 | len as i64 << 32;
+    return pack_ptr_len(ptr, len);
+}
+
+/// `(ptr | (len << 32))`, the pointer taken unsigned: one past 2 GiB would
+/// otherwise sign-extend over the length.
+fn pack_ptr_len(ptr: i32, len: i32) -> i64 {
+    return (ptr as u32) as i64 | len as i64 << 32;
 }
 
 /// Lowers `data[start..<start + len]` of a GC array to CM linear memory.
@@ -183,7 +190,7 @@ internal fn cm_lower_string(s: String) -> i64 {
 internal fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(data, start, ptr, len);
-    return ptr as i64 | len as i64 << 32;
+    return pack_ptr_len(ptr, len);
 }
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
@@ -310,7 +317,7 @@ internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
     if result == -1 {
         result = cm_await_blocked(handle);
     }
-    let count = result >> 4;
+    let count = (result as u32 >> 4) as i32;
     let arr = memory_to_gc_array(ptr, count);
     let freed = builtin::realloc(ptr, max, 1, 0);
     return StreamChunk {
@@ -332,13 +339,14 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
 }
 
 /// One `stream.write` of `count` elements from `ptr`, awaiting a BLOCKED copy.
+/// The count is the word's upper 28 bits, so it is shifted out unsigned.
 internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
     let mut result = builtin::stream_write(handle, ptr, count);
     if result == -1 {
         result = cm_await_blocked(handle);
     }
     return StreamWrite {
-        count: result >> 4,
+        count: (result as u32 >> 4) as i32,
         result: cm_copy_result(result),
     };
 }
@@ -356,6 +364,29 @@ internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) -> StreamWrite 
     let written = cm_stream_write_once(handle, ptr, raw_len);
     let freed = builtin::realloc(ptr, raw_len, 1, 0);
     return written;
+}
+
+/// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
+global CM_COPY_MAX: i32 = (1 << 28) - 1;
+
+/// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is
+/// lowered once, since a reader may take a short prefix of each copy.
+#[compiler_item("cm_stream_write_raw_all_u8")]
+internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResult {
+    let len = data.len();
+    if len == 0 {
+        return CopyResult::Completed;
+    }
+    let ptr = cm_lower_list_u8(data.internal_repr(), data.internal_start(), len) as i32;
+    let mut taken = 0;
+    loop {
+        let written = cm_stream_write_once(handle, ptr + taken, i32::min(len - taken, CM_COPY_MAX));
+        taken += written.count;
+        if write_copy_is_final(&written) || taken >= len {
+            let freed = builtin::realloc(ptr, len, 1, 0);
+            return written.result;
+        }
+    }
 }
 
 /// CM adapter for ErrorContext::new(msg).

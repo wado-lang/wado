@@ -1040,6 +1040,13 @@ value-semantics `write` makes. The slice references its backing array
 only the CM lowering copy remains. `T` must be a byte: any other element
 type is a compile error, and `write` is what carries it.
 
+#### `fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
+
+`#[cm("stream-write-raw-all")]`
+
+`write_all` for a view, lowered once however many copies the reader
+takes it in. Returns the result of the copy that ended the loop.
+
 #### `fn cancel_write(&self)`
 
 `#[cm("stream-cancel-write")]`
@@ -1058,12 +1065,6 @@ Drop the writable end, signaling end-of-stream.
 
 Write every element, or stop early when the readable end drops.
 Returns the result of the copy that ended the loop.
-
-#### `pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
-
-`write_all` for elements already held in one array, without its
-value-semantics copy. The tail view skips `Slice::slice`, whose clamp
-these offsets cannot need and every program that prints would pay for.
 
 ### `pub resource WaitableSet`
 

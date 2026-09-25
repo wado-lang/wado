@@ -27,6 +27,19 @@ test "bytes round-trip" {
     assert fs::read(&path).unwrap() == bytes;
 }
 
+// One Component Model copy moves at most 2^28 - 1 elements, and the host takes
+// a prefix of each, so a long buffer is many copies, neither a trap nor a
+// quadratic re-lowering of the rest.
+#[timeout_ms(30000)]
+test "a file longer than one stream copy is written whole" {
+    let dir = scratch("long");
+    let path = `${dir}/long.bin`;
+    let length = 1 << 28;
+    fs::write(&path, &ByteList::filled(length, 7)).unwrap();
+    assert fs::metadata(&path).unwrap().size == length as u64;
+    fs::remove_file(&path).unwrap();
+}
+
 test "bytes that are not UTF-8 do not read as text" {
     let dir = scratch("not-utf8");
     let path = `${dir}/raw.bin`;

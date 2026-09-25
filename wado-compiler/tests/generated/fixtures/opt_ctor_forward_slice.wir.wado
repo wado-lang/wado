@@ -80,7 +80,7 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let result: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_40: i32;
+    let status_42: i32;
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     subtask = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(rx_6);
@@ -92,7 +92,7 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
             i = i + 1;
             continue l1;
         };
-    }; builtin::i64_extend_i32_s(ptr_23) | 21474836480_i64));
+    }; builtin::i64_extend_i32_u(ptr_23) | 21474836480_i64));
     raw_len = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     result = "wasi/stream-write"(tx_7, ptr_12, raw_len);
     if result == -1 {
@@ -100,22 +100,22 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
         "wasi/waitable-join"(tx_7, ws);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(ws, evt_ptr));
-        status_40 = builtin::load_i32(evt_ptr + 4);
+        status_42 = builtin::load_i32(evt_ptr + 4);
         drop("mem/realloc"(evt_ptr, 8, 4, 0));
         "wasi/waitable-join"(tx_7, 0);
         "wasi/waitable-set-drop"(ws);
-        result = status_40;
+        result = status_42;
     }
-    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >> 4, result: $inline_cm_copy_result_13: block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >>u 4, result: $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
         let $match_scrut_0: i32;
         $match_scrut_0 = result & 15;
         if $match_scrut_0 == 0 {
-            break $inline_cm_copy_result_13: 0;
+            break $inline_cm_copy_result_14: 0;
         } else if $match_scrut_0 == 1 {
-            break $inline_cm_copy_result_13: 1;
+            break $inline_cm_copy_result_14: 1;
         } else {
         }
-        break $inline_cm_copy_result_13: 2;
+        break $inline_cm_copy_result_14: 2;
     } });
     drop("mem/realloc"(ptr_12, raw_len, 1, 0));
     "wasi/stream-drop-writable"(tx_7);

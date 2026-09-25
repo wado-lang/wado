@@ -115,15 +115,23 @@ impl Stream<T> {
 impl StreamWritable<T> {
     /// Write every element, or stop early if the readable end drops.
     pub fn write_all(&self, data: List<T>) -> CopyResult;
-
-    /// The same loop over `write_raw`, for elements already in one array.
-    pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult;
 }
 ```
 
 These are ordinary Wado, generic over the element type, and are what most call
 sites use. A call site that streams — bounded memory, incremental work — writes
 the loop over `read` itself.
+
+`write_all` offers at most `STREAM_CHUNK_ELEMENTS` per copy. Each copy lowers
+what it offers, and a reader may take a short prefix, so offering the whole rest
+would make the loop quadratic.
+
+`write_raw_all` is the same loop for elements already in one array, and it is a
+`#[cm]` member rather than Wado. A loop in Wado cannot hold a linear-memory
+pointer, so it would lower the view again on every copy. `core:rt` lowers it
+once and advances the pointer, each copy capped at the Canonical ABI's
+`2^28 - 1`. A file write is the case that needs it: wasmtime's filesystem
+stream takes 8 KiB per copy.
 
 `write_raw` and `write_raw_all` hand the backing array to the canonical as it
 stands, which lines up with the CM buffer only for bytes. A wider element is a
@@ -220,11 +228,6 @@ Neutral:
 - A non-byte `write_raw` has no lowering. `synthesize_lower_list_to_buffer` reads
   its length and elements through `List` alone, so nothing sources them from a
   slice.
-- `write_all` and `write_raw_all` re-lower the untransferred tail on every
-  iteration, where the loop inside the compiler lowered once and advanced a
-  pointer. Against a reader taking short prefixes that is quadratic in the
-  bytes copied. A loop in Wado cannot hold the linear-memory pointer the old one
-  advanced, and the decision above requires `write_raw` itself to stay one copy.
 - `STREAM_CHUNK_ELEMENTS` is 4096 for every payload, where the call sites this
   WEP replaced picked per site (`read(65536)` for bytes, `read(16)` for
   records). The read helper allocates `max * elem_size` up front, so one number

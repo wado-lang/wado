@@ -667,6 +667,8 @@ pub enum CompilerItem {
     CmStreamWriteU8,
     /// `core:rt::cm_stream_write_raw_u8`.
     CmStreamWriteRawU8,
+    /// `core:rt::cm_stream_write_raw_all_u8`.
+    CmStreamWriteRawAllU8,
     /// `core:rt::cm_error_context_new`.
     CmErrorContextNew,
     /// `core:rt::cm_error_context_debug_message`.
@@ -899,6 +901,7 @@ impl CompilerItem {
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
         Self::CmStreamWriteRawU8,
+        Self::CmStreamWriteRawAllU8,
         Self::CmErrorContextNew,
         Self::CmErrorContextDebugMessage,
         Self::CmWaitableSetWait,
@@ -1070,6 +1073,7 @@ impl CompilerItem {
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
             Self::CmStreamWriteRawU8 => "cm_stream_write_raw_u8",
+            Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
             Self::CmErrorContextNew => "cm_error_context_new",
             Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
             Self::CmWaitableSetWait => "cm_waitable_set_wait",
@@ -1165,6 +1169,7 @@ impl CompilerItem {
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawU8
+            | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
@@ -1427,6 +1432,7 @@ impl CompilerItem {
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawU8
+            | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
