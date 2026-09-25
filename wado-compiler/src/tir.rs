@@ -4433,7 +4433,6 @@ impl TypeTable {
     /// `Newtype`, a pack's mapped element, and the bindings a projection carries
     /// to be answered are not what a use site is still waiting on. Reading them
     /// as such left `Ok(v)` in `f32::from_str_lenient` with no resolved type.
-    /// A projection's base is: `?T::Value` waits on `?T`.
     pub fn contains_infer_var(&self, id: TypeId) -> bool {
         match self.get(id) {
             ResolvedType::InferVar(_) => true,
