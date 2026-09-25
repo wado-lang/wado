@@ -315,12 +315,19 @@ pub struct EnumCase<T> {
     value: T,
     case_name: String,
     wire_override: Option<String>,
+    wire_discriminant: i32,
 }
 
 impl<T: ReflectEnum> EnumCase<T> {
     /// The case's discriminant.
     pub fn discriminant(&self) -> i32 {
         return self.discriminant;
+    }
+
+    /// The discriminant a format writes: the case's `#[wire(number = N)]`, or
+    /// its discriminant where it carries none.
+    pub fn wire_discriminant(&self) -> i32 {
+        return self.wire_discriminant;
     }
 
     /// Whether `v` is this case.
@@ -609,6 +616,9 @@ impl<T: Inspect> Inspect for EnumCase<T> {
         struct_field_end(f);
         struct_field(f, "wire_override", false);
         inspect_wire_override(&self.wire_override, f);
+        struct_field_end(f);
+        struct_field(f, "wire_discriminant", false);
+        self.wire_discriminant.inspect(f);
         struct_field_end(f);
         struct_close(f);
     }

@@ -1540,6 +1540,13 @@ pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
         .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
+/// An enum case's `#[wire(number = N)]`, where it fits the `int32` a protobuf
+/// enum value is.
+#[must_use]
+pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
+    wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
+}
+
 /// One entry per field, in declaration order, as `StructInfo` holds them.
 #[must_use]
 pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {

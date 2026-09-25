@@ -1384,6 +1384,16 @@ impl Parser {
                                 self.advance();
                                 AttrArg::KeyNumber(value, number)
                             }
+                            TokenKind::Minus
+                                if matches!(self.peek_nth(1).kind, TokenKind::NumberLit(_)) =>
+                            {
+                                self.advance();
+                                let TokenKind::NumberLit(number) = self.peek_kind().clone() else {
+                                    unreachable!("the lookahead saw a number");
+                                };
+                                self.advance();
+                                AttrArg::KeyNumber(value, format!("-{number}"))
+                            }
                             _ => {
                                 // `part_of = arr` names something in the source,
                                 // so it stays unquoted and keeps its own shape.

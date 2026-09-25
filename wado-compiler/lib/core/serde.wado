@@ -1094,7 +1094,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 return s.serialize_unit_variant(
                     &Reflect::<E>::type_name(),
                     &name,
-                    case.discriminant(),
+                    case.wire_discriminant(),
                 );
             }
         }
@@ -1259,7 +1259,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
             // policy are both compile-time facts and it folds to a literal.
             // Behind a helper taking the run-time key it would not.
             let matched = match &key {
-                CaseKey::Disc(d) => *d == case.discriminant(),
+                CaseKey::Disc(d) => *d == case.wire_discriminant(),
                 CaseKey::Name(n) => wire_name(&case, policy) == *n,
             };
             if matched {

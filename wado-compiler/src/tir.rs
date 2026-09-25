@@ -7058,6 +7058,9 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
+    /// `#[wire(number = N)]` — the discriminant a format writes for this case.
+    /// An enum numbers every case or none.
+    pub wire_number: Option<i32>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)

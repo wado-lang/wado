@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
+use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::ast::{
@@ -38,7 +39,7 @@ use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
+    WIRE_NUMBER_RESERVED, wire_case_number_of, wire_number_of, wire_number_written,
 };
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
@@ -911,6 +912,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify an `enum E { … }` declaration. Pure projection from the
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
+        let wire_numbers = self.checked_case_numbers(&enum_decl.cases);
         TirEnum {
             def: self
                 .tysys
@@ -932,6 +934,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     index: i as u32,
                     span: case.span,
                     wire_name_override: wire_name_override_of(&case.attrs),
+                    wire_number: wire_numbers[i],
                 })
                 .collect(),
             span: enum_decl.span,
@@ -2083,56 +2086,94 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// anything else is reported here. See
     /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
     fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
-        let written: Vec<Option<&str>> = fields
+        let members: Vec<NumberedMember<'_>> = fields
             .iter()
-            .map(|field| wire_number_written(&field.attrs))
+            .map(|f| NumberedMember { name: &f.name, span: &f.span, attrs: &f.attrs })
             .collect();
-        self.check_numbers_are_all_or_none(fields, &written);
+        self.checked_numbers(
+            &members,
+            "a struct numbers every field or none",
+            wire_number_of,
+            wire_number_fault,
+        )
+    }
 
-        let mut numbers: Vec<Option<u32>> = Vec::with_capacity(fields.len());
-        let mut taken: Vec<(u32, &str)> = Vec::new();
-        for (field, written) in fields.iter().zip(&written) {
+    /// Each enum case's `#[wire(number = N)]`, by case position, under the
+    /// struct rule: every case or none, and no number twice.
+    fn checked_case_numbers(&self, cases: &[ast::EnumCase]) -> Vec<Option<i32>> {
+        let members: Vec<NumberedMember<'_>> = cases
+            .iter()
+            .map(|c| NumberedMember { name: &c.name, span: &c.span, attrs: &c.attrs })
+            .collect();
+        self.checked_numbers(
+            &members,
+            "an enum numbers every case or none",
+            wire_case_number_of,
+            |written| format!("`#[wire(number = {written})]`: an enum case number is an `i32`"),
+        )
+    }
+
+    fn checked_numbers<N: Copy + PartialEq + Display>(
+        &self,
+        members: &[NumberedMember<'_>],
+        all_or_none: &str,
+        number_of: fn(&[ast::Attribute]) -> Option<N>,
+        fault: impl Fn(&str) -> String,
+    ) -> Vec<Option<N>> {
+        let written: Vec<Option<&str>> = members
+            .iter()
+            .map(|m| wire_number_written(m.attrs))
+            .collect();
+        self.check_numbers_are_all_or_none(members, &written, all_or_none);
+
+        let mut numbers: Vec<Option<N>> = Vec::with_capacity(members.len());
+        let mut taken: Vec<(N, &str)> = Vec::new();
+        for (member, written) in members.iter().zip(&written) {
             let Some(written) = *written else {
                 numbers.push(None);
                 continue;
             };
-            let Some(number) = wire_number_of(&field.attrs) else {
-                self.wire_number_error(&field.span, wire_number_fault(written));
+            let Some(number) = number_of(member.attrs) else {
+                self.wire_number_error(member.span, fault(written));
                 numbers.push(None);
                 continue;
             };
             if let Some((_, owner)) = taken.iter().find(|(taken, _)| *taken == number) {
                 self.wire_number_error(
-                    &field.span,
+                    member.span,
                     format!("`#[wire(number = {number})]` is already `{owner}`'s number"),
                 );
                 numbers.push(None);
                 continue;
             }
-            taken.push((number, &field.name));
+            taken.push((number, member.name));
             numbers.push(Some(number));
         }
         numbers
     }
 
-    /// One numbered field makes the rest owe a number, since a format that
-    /// reads numbers has nothing to put on the wire for a field without one.
-    fn check_numbers_are_all_or_none(&self, fields: &[ast::StructField], written: &[Option<&str>]) {
+    /// One numbered member makes the rest owe a number, since a format that
+    /// reads numbers has nothing to put on the wire for a member without one.
+    fn check_numbers_are_all_or_none(
+        &self,
+        members: &[NumberedMember<'_>],
+        written: &[Option<&str>],
+        all_or_none: &str,
+    ) {
         let Some(numbered) = written
             .iter()
             .position(Option::is_some)
-            .map(|index| &fields[index].name)
+            .map(|index| members[index].name)
         else {
             return;
         };
-        for (field, written) in fields.iter().zip(written) {
+        for (member, written) in members.iter().zip(written) {
             if written.is_none() {
                 self.wire_number_error(
-                    &field.span,
+                    member.span,
                     format!(
-                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: \
-                         a struct numbers every field or none",
-                        field.name
+                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: {all_or_none}",
+                        member.name
                     ),
                 );
             }
@@ -11704,6 +11745,13 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
 }
 
 /// Why a written field number is not one, said to whoever wrote it.
+/// A struct field or an enum case, as `#[wire(number = N)]` checking reads it.
+struct NumberedMember<'a> {
+    name: &'a str,
+    span: &'a Span,
+    attrs: &'a [ast::Attribute],
+}
+
 fn wire_number_fault(written: &str) -> String {
     if written
         .parse::<u32>()

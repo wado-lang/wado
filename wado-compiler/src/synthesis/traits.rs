@@ -2484,7 +2484,12 @@ fn generate_enum_reflect_impls(
             cases: e
                 .cases
                 .iter()
-                .map(|c| (c.name.clone(), c.index, c.wire_name_override.clone()))
+                .map(|c| ReflectEnumCaseRow {
+                    name: c.name.clone(),
+                    index: c.index,
+                    wire_name_override: c.wire_name_override.clone(),
+                    wire_discriminant: c.wire_number.unwrap_or(c.index as i32),
+                })
                 .collect(),
             span: e.span,
             wire_name_policy: e.wire_name_policy.clone(),
@@ -2514,11 +2519,18 @@ struct ReflectEnumTarget {
     def: DefId,
     /// The head every synthesised method of this target hangs off.
     receiver: FqTypeName,
-    /// Per-case `(name, index, #[wire(name)])`; a case's discriminant is
-    /// its index.
-    cases: Vec<(String, u32, Option<String>)>,
+    cases: Vec<ReflectEnumCaseRow>,
     span: Span,
     wire_name_policy: Option<String>,
+}
+
+/// One case of a `ReflectEnumTarget`; its discriminant is its index.
+struct ReflectEnumCaseRow {
+    name: String,
+    index: u32,
+    wire_name_override: Option<String>,
+    /// The case's `#[wire(number = N)]`, or its index where it carries none.
+    wire_discriminant: i32,
 }
 
 /// Which payload-free kind an env was resolved for: one env type serves both,
@@ -2710,7 +2722,13 @@ fn generate_enum_members_fn(
     let rows = target
         .cases
         .iter()
-        .map(|(case_name, index, wire_name_override)| {
+        .map(|case| {
+            let ReflectEnumCaseRow {
+                name: case_name,
+                index,
+                wire_name_override,
+                wire_discriminant,
+            } = case;
             let wire_override = {
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
@@ -2756,6 +2774,18 @@ fn generate_enum_members_fn(
                     name: "wire_override".to_string(),
                     value: wire_override,
                     field_index: 3,
+                },
+                TirStructField {
+                    name: "wire_discriminant".to_string(),
+                    value: TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: i64::from(*wire_discriminant).cast_unsigned(),
+                            repr: wire_discriminant.to_string(),
+                        },
+                        TypeTable::I32,
+                        span,
+                    ),
+                    field_index: 4,
                 },
             ]
         })
@@ -2824,7 +2854,7 @@ fn generate_enum_from_discriminant_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
-    for (case_name, index, _) in &target.cases {
+    for ReflectEnumCaseRow { name: case_name, index, .. } in &target.cases {
         let comparison = TirExpr::new(
             TirExprKind::Binary {
                 op: TirBinaryOp::Eq,
