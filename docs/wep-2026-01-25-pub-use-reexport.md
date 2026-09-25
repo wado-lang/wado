@@ -75,29 +75,16 @@ pub use {Stdout} from "wasi:cli";
 | ------------------------ | ------------- | ------------------ | ----------------- |
 | `fn foo()`               | Yes           | No                 | No                |
 | `pub fn foo()`           | Yes           | Yes                | No                |
-| `export fn foo()`        | Yes           | No                 | Yes               |
-| `pub export fn foo()`    | Yes           | Yes                | Yes               |
+| `export fn foo()`        | Yes           | Yes                | Yes               |
 | `use {x} from "..."`     | Yes           | No                 | -                 |
 | `pub use {x} from "..."` | Yes           | Yes                | -                 |
-
-### Namespace Re-export
-
-Namespace re-export is also supported:
-
-```wado
-// Re-export entire module as namespace
-pub use utils from "./utils.wado";
-
-// Users can then access via namespace
-use {utils} from "mylib";
-utils::helper();
-```
 
 ### Restrictions
 
 1. Cannot re-export private (non-`pub`) items from other modules
-2. Cannot add `export` to re-exports (re-exports are module-level only)
-3. Wildcard re-export (`pub use * from "..."`) is not supported (consistent with import rules)
+2. Cannot add `export` to re-exports (re-exports are module-level only): `export use` is a compile error
+3. A namespace cannot be re-exported. `use utils from "./utils.wado"` names a module, not an item, so `pub use utils from …` and `internal use utils from …` are compile errors. Re-export the members by name instead: `pub use { helper } from "./utils.wado"`.
+4. A wildcard import binds no name, so `pub use _ from …` and `internal use _ from …` are compile errors
 
 ## Consequences
 
