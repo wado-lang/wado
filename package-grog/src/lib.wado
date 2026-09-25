@@ -1,6 +1,1317 @@
-//! Grog — Protocol Buffers for Wado: a `.proto` schema read into declarations,
-//! and those declarations written as the Wado source `core:protobuf` encodes.
+//! Grog's runtime: the Protocol Buffers wire format, which the code Grog
+//! generates from a `.proto` encodes and decodes through.
 
-pub use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
-pub use { read } from "./parse.wado";
-pub use { EmitError, emit } from "./emit.wado";
+use { TreeMap } from "core:collections";
+
+/// The largest field number a tag carries, from the specification's
+/// "Assigning Field Numbers".
+global FIELD_NUMBER_MAX: u64 = 536870911;
+
+/// How deep messages and groups may nest before a decode gives up, as
+/// protobuf's own parsers default to.
+global DEPTH_LIMIT: i32 = 100;
+
+/// What follows a tag, as the wire format numbers them.
+pub enum WireType {
+    Varint,
+    I64,
+    Len,
+    SGroup,
+    EGroup,
+    I32,
+}
+
+fn wire_type_of(bits: u64) -> Option<WireType> {
+    return match bits {
+        0 => Option::Some(WireType::Varint),
+        1 => Option::Some(WireType::I64),
+        2 => Option::Some(WireType::Len),
+        3 => Option::Some(WireType::SGroup),
+        4 => Option::Some(WireType::EGroup),
+        5 => Option::Some(WireType::I32),
+        _ => null,
+    };
+}
+
+fn bits_of(wire_type: WireType) -> u64 {
+    return match wire_type {
+        Varint => 0,
+        I64 => 1,
+        Len => 2,
+        SGroup => 3,
+        EGroup => 4,
+        I32 => 5,
+    };
+}
+
+/// Why an input is not a message of the type it was decoded as.
+pub struct DecodeError {
+    /// The byte offset the problem was found at.
+    pub offset: i32,
+    pub reason: String,
+}
+
+impl Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`${self.reason} at byte ${self.offset}`);
+    }
+}
+
+impl Error for DecodeError {
+}
+
+/// A message type Grog generated.
+pub trait Message with () {
+    /// The encoded length of the fields, recording each length-prefixed
+    /// message's own in `s` for `write` to read back.
+    fn size(&self, s: &mut Sizer) -> i32;
+
+    fn write(&self, w: &mut Writer);
+
+    /// Decode the field `r` stands on. `false` hands it back as an unknown field.
+    fn merge_field(&mut self, number: i32, r: &mut Reader) -> Result<bool, DecodeError>;
+
+    /// The fields this message's schema does not declare, kept as they were read.
+    fn unknown_fields(&mut self) -> &mut ByteList;
+}
+
+/// An enum type Grog generated.
+pub trait Enumeration with () {
+    fn number(&self) -> i32;
+
+    /// `None` for a number a closed enum does not declare. An open enum
+    /// holds every number, so it always answers.
+    fn from_number(number: i32) -> Option<Self>;
+
+    /// The value an unset field reads as: the enum's first.
+    fn first() -> Self;
+}
+
+/// How one protobuf scalar type sits on the wire. The type implementing it
+/// only names the encoding; `Value` is the Wado type it encodes.
+pub trait Scalar with () {
+    type Value;
+
+    fn wire_type() -> WireType;
+
+    fn zero() -> Self::Value;
+
+    /// Whether a field with implicit presence leaves `v` off the wire.
+    fn is_zero(v: &Self::Value) -> bool;
+
+    /// The bytes `put` writes.
+    fn len(v: &Self::Value) -> i32;
+
+    fn put(w: &mut Writer, v: &Self::Value);
+
+    /// `None` for a value the type does not hold: a closed enum's undeclared number.
+    fn take(r: &mut Reader) -> Result<Option<Self::Value>, DecodeError>;
+}
+
+/// The whole encoding of `message`.
+pub fn encode<M: Message>(message: &M) -> ByteList {
+    let mut s = Sizer { sizes: [] };
+    let n = message.size(&mut s);
+    let mut w = Writer { buf: List::<u8>::with_capacity(n) as ByteList, sizes: s.sizes, next: 0 };
+    message.write(&mut w);
+    assert w.buf.len() == n;
+    assert w.next == w.sizes.len();
+    return w.buf;
+}
+
+/// A message of type `M` read out of `input`.
+pub fn decode<M: Message + Default, S: AsByteSlice>(input: S) -> Result<M, DecodeError> {
+    let mut message = M::default();
+    merge(&mut message, input)?;
+    return Result::Ok(message);
+}
+
+/// Read `input` into `message` as protobuf merges: a scalar is replaced, a
+/// message merged, a repeated field appended to.
+pub fn merge<M: Message, S: AsByteSlice>(message: &mut M, input: S) -> Result<(), DecodeError> {
+    let bytes = input.as_byte_slice();
+    let mut r = Reader {
+        input: bytes,
+        pos: 0,
+        end: bytes.len(),
+        tag_start: 0,
+        value_start: 0,
+        number: 0,
+        wire_type: WireType::Varint,
+        depth: 0,
+        stray: [],
+    };
+    return merge_fields(message, &mut r, 0);
+}
+
+/// Read fields into `message` up to the reader's end, or for a group up to the
+/// end-group tag numbered `group`.
+fn merge_fields<M: Message>(message: &mut M, r: &mut Reader, group: i32) -> Result<(), DecodeError> {
+    while r.pos < r.end {
+        r.read_tag()?;
+        if r.wire_type == WireType::EGroup {
+            if r.number != group {
+                return r.fail("an end-group tag closes no group opened for it");
+            }
+            return Result::Ok(());
+        }
+        let [tag_start, value_start, number, wire_type] = [r.tag_start, r.value_start, r.number, r.wire_type];
+        if !message.merge_field(number, r)? {
+            // A field declined after reading into it is read again from its value.
+            r.pos = value_start;
+            r.number = number;
+            r.wire_type = wire_type;
+            r.skip_value()?;
+            message.unknown_fields().extend_from_slice(r.input.slice(tag_start, r.pos) as Slice<u8>);
+        }
+        if !r.stray.is_empty() {
+            message.unknown_fields().extend(&r.stray);
+            r.stray.truncate(0);
+        }
+    }
+    if group != 0 {
+        return r.fail("a group is not closed");
+    }
+    return Result::Ok(());
+}
+
+fn varint_len(value: u64) -> i32 {
+    let mut rest = value;
+    let mut len = 1;
+    while rest >= 128 {
+        rest = rest >> 7;
+        len += 1;
+    }
+    return len;
+}
+
+fn tag_len(number: i32) -> i32 {
+    return varint_len(number as u64 << 3);
+}
+
+fn packed_len<T: Scalar>(values: &List<T::Value>) -> i32 {
+    let mut n = 0;
+    for let v of values {
+        n += T::len(v);
+    }
+    return n;
+}
+
+/// The first pass of an encode: every length-prefixed message's length, in the
+/// order `Writer` meets them.
+pub struct Sizer {
+    sizes: List<i32>,
+}
+
+impl Sizer {
+    pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i32 {
+        return tag_len(number) + T::len(v);
+    }
+
+    pub fn implicit<T: Scalar>(&mut self, number: i32, v: &T::Value) -> i32 {
+        if T::is_zero(v) {
+            return 0;
+        }
+        return self.scalar::<T>(number, v);
+    }
+
+    pub fn optional<T: Scalar>(&mut self, number: i32, v: &Option<T::Value>) -> i32 {
+        if let Some(value) = v {
+            return self.scalar::<T>(number, value);
+        }
+        return 0;
+    }
+
+    pub fn repeated<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
+        let mut n = 0;
+        for let v of values {
+            n += self.scalar::<T>(number, v);
+        }
+        return n;
+    }
+
+    pub fn packed<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) -> i32 {
+        if values.is_empty() {
+            return 0;
+        }
+        let payload = packed_len::<T>(values);
+        return tag_len(number) + varint_len(payload as u64) + payload;
+    }
+
+    pub fn message<M: Message>(&mut self, number: i32, m: &M) -> i32 {
+        let slot = self.sizes.len();
+        self.sizes.push(0);
+        let n = m.size(self);
+        self.sizes[slot] = n;
+        return tag_len(number) + varint_len(n as u64) + n;
+    }
+
+    pub fn optional_message<M: Message>(&mut self, number: i32, m: &Option<M>) -> i32 {
+        if let Some(present) = m {
+            return self.message(number, present);
+        }
+        return 0;
+    }
+
+    pub fn messages<M: Message>(&mut self, number: i32, ms: &List<M>) -> i32 {
+        let mut n = 0;
+        for let m of ms {
+            n += self.message(number, m);
+        }
+        return n;
+    }
+
+    pub fn group<M: Message>(&mut self, number: i32, m: &M) -> i32 {
+        return 2 * tag_len(number) + m.size(self);
+    }
+
+    pub fn optional_group<M: Message>(&mut self, number: i32, m: &Option<M>) -> i32 {
+        if let Some(present) = m {
+            return self.group(number, present);
+        }
+        return 0;
+    }
+
+    pub fn groups<M: Message>(&mut self, number: i32, ms: &List<M>) -> i32 {
+        let mut n = 0;
+        for let m of ms {
+            n += self.group(number, m);
+        }
+        return n;
+    }
+
+    /// A `map<K, V>` field: one entry message per key, the key numbered 1 and
+    /// the value 2, both always written.
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(
+        &mut self,
+        number: i32,
+        map: &TreeMap<K, V>,
+    ) -> i32 {
+        let mut n = 0;
+        for let [k, v] of map.entries() {
+            let entry = self.scalar::<KS>(1, k) + self.scalar::<VS>(2, v);
+            n += tag_len(number) + varint_len(entry as u64) + entry;
+        }
+        return n;
+    }
+
+    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) -> i32 {
+        let mut n = 0;
+        for let [k, v] of map.entries() {
+            let slot = self.sizes.len();
+            self.sizes.push(0);
+            let entry = self.scalar::<KS>(1, k) + self.message(2, v);
+            self.sizes[slot] = entry;
+            n += tag_len(number) + varint_len(entry as u64) + entry;
+        }
+        return n;
+    }
+}
+
+/// The second pass of an encode, which writes what `Sizer` measured.
+pub struct Writer {
+    buf: ByteList,
+    sizes: List<i32>,
+    next: i32,
+}
+
+impl Writer {
+    fn varint(&mut self, value: u64) {
+        let mut rest = value;
+        while rest >= 128 {
+            self.buf.push((rest & 0x7f | 0x80) as u8);
+            rest = rest >> 7;
+        }
+        self.buf.push(rest as u8);
+    }
+
+    fn fixed32(&mut self, value: u32) {
+        self.buf.push(value as u8);
+        self.buf.push((value >> 8) as u8);
+        self.buf.push((value >> 16) as u8);
+        self.buf.push((value >> 24) as u8);
+    }
+
+    fn fixed64(&mut self, value: u64) {
+        self.fixed32(value as u32);
+        self.fixed32((value >> 32) as u32);
+    }
+
+    fn length_delimited(&mut self, bytes: ByteSlice) {
+        self.varint(bytes.len() as u64);
+        self.buf.extend_from_slice(bytes as Slice<u8>);
+    }
+
+    fn tag(&mut self, number: i32, wire_type: WireType) {
+        self.varint(number as u64 << 3 | bits_of(wire_type));
+    }
+
+    fn take_size(&mut self) -> i32 {
+        let n = self.sizes[self.next];
+        self.next += 1;
+        return n;
+    }
+
+    pub fn scalar<T: Scalar>(&mut self, number: i32, v: &T::Value) {
+        self.tag(number, T::wire_type());
+        T::put(self, v);
+    }
+
+    pub fn implicit<T: Scalar>(&mut self, number: i32, v: &T::Value) {
+        if !T::is_zero(v) {
+            self.scalar::<T>(number, v);
+        }
+    }
+
+    pub fn optional<T: Scalar>(&mut self, number: i32, v: &Option<T::Value>) {
+        if let Some(value) = v {
+            self.scalar::<T>(number, value);
+        }
+    }
+
+    pub fn repeated<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) {
+        for let v of values {
+            self.scalar::<T>(number, v);
+        }
+    }
+
+    pub fn packed<T: Scalar>(&mut self, number: i32, values: &List<T::Value>) {
+        if values.is_empty() {
+            return;
+        }
+        self.tag(number, WireType::Len);
+        self.varint(packed_len::<T>(values) as u64);
+        for let v of values {
+            T::put(self, v);
+        }
+    }
+
+    pub fn message<M: Message>(&mut self, number: i32, m: &M) {
+        self.tag(number, WireType::Len);
+        let n = self.take_size();
+        self.varint(n as u64);
+        m.write(self);
+    }
+
+    pub fn optional_message<M: Message>(&mut self, number: i32, m: &Option<M>) {
+        if let Some(present) = m {
+            self.message(number, present);
+        }
+    }
+
+    pub fn messages<M: Message>(&mut self, number: i32, ms: &List<M>) {
+        for let m of ms {
+            self.message(number, m);
+        }
+    }
+
+    pub fn group<M: Message>(&mut self, number: i32, m: &M) {
+        self.tag(number, WireType::SGroup);
+        m.write(self);
+        self.tag(number, WireType::EGroup);
+    }
+
+    pub fn optional_group<M: Message>(&mut self, number: i32, m: &Option<M>) {
+        if let Some(present) = m {
+            self.group(number, present);
+        }
+    }
+
+    pub fn groups<M: Message>(&mut self, number: i32, ms: &List<M>) {
+        for let m of ms {
+            self.group(number, m);
+        }
+    }
+
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(&mut self, number: i32, map: &TreeMap<K, V>) {
+        for let [k, v] of map.entries() {
+            self.tag(number, WireType::Len);
+            self.varint((tag_len(1) + KS::len(k) + tag_len(2) + VS::len(v)) as u64);
+            self.scalar::<KS>(1, k);
+            self.scalar::<VS>(2, v);
+        }
+    }
+
+    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message>(&mut self, number: i32, map: &TreeMap<K, M>) {
+        for let [k, v] of map.entries() {
+            self.tag(number, WireType::Len);
+            let n = self.take_size();
+            self.varint(n as u64);
+            self.scalar::<KS>(1, k);
+            self.message(2, v);
+        }
+    }
+
+    /// Bytes already encoded, written as they are: a message's unknown fields.
+    pub fn raw(&mut self, bytes: &ByteList) {
+        self.buf.extend(bytes);
+    }
+}
+
+/// A decode in progress, standing on the field whose tag it read last.
+pub struct Reader {
+    input: ByteSlice,
+    pos: i32,
+    /// Where the message being read ends.
+    end: i32,
+    tag_start: i32,
+    value_start: i32,
+    number: i32,
+    wire_type: WireType,
+    depth: i32,
+    /// Fields read out of a packed run that the message keeps as unknown.
+    stray: ByteList,
+}
+
+impl Reader {
+    fn fail<T>(&self, reason: String) -> Result<T, DecodeError> {
+        return Result::Err(DecodeError { offset: self.pos, reason });
+    }
+
+    fn varint(&mut self) -> Result<u64, DecodeError> {
+        let mut value: u64 = 0;
+        let mut shift: u64 = 0;
+        while self.pos < self.end {
+            let byte = self.input[self.pos];
+            self.pos += 1;
+            // The tenth byte carries the one bit 64 is not a multiple of 7 short of.
+            if shift == 63 && byte > 1 {
+                return self.fail("a varint overflows 64 bits");
+            }
+            value = value | (byte & 0x7f) as u64 << shift;
+            if byte < 128 {
+                return Result::Ok(value);
+            }
+            shift += 7;
+        }
+        return self.fail("the input ends inside a varint");
+    }
+
+    fn advance(&mut self, n: i32) -> Result<i32, DecodeError> {
+        if n > self.end - self.pos {
+            return self.fail("the input ends inside a field");
+        }
+        let at = self.pos;
+        self.pos += n;
+        return Result::Ok(at);
+    }
+
+    fn fixed32(&mut self) -> Result<u32, DecodeError> {
+        let at = self.advance(4)?;
+        let b = &self.input;
+        return Result::Ok(b[at] as u32 | b[at + 1] as u32 << 8 | b[at + 2] as u32 << 16 | b[at + 3] as u32 << 24);
+    }
+
+    fn fixed64(&mut self) -> Result<u64, DecodeError> {
+        let low = self.fixed32()?;
+        let high = self.fixed32()?;
+        return Result::Ok(low as u64 | high as u64 << 32);
+    }
+
+    /// A length prefix, checked against what is left of the message.
+    fn length(&mut self) -> Result<i32, DecodeError> {
+        let n = self.varint()?;
+        if n > (self.end - self.pos) as u64 {
+            return self.fail("a length runs past the end of its message");
+        }
+        return Result::Ok(n as i32);
+    }
+
+    fn length_delimited(&mut self) -> Result<ByteSlice, DecodeError> {
+        let n = self.length()?;
+        let at = self.advance(n)?;
+        return Result::Ok(self.input.slice(at, at + n));
+    }
+
+    fn read_tag(&mut self) -> Result<(), DecodeError> {
+        self.tag_start = self.pos;
+        let tag = self.varint()?;
+        let Some(wire_type) = wire_type_of(tag & 7) else {
+            return self.fail("a tag names no wire type");
+        };
+        let number = tag >> 3;
+        if number == 0 || number > FIELD_NUMBER_MAX {
+            return self.fail("a tag's field number is out of range");
+        }
+        self.number = number as i32;
+        self.wire_type = wire_type;
+        self.value_start = self.pos;
+        return Result::Ok(());
+    }
+
+    fn skip_value(&mut self) -> Result<(), DecodeError> {
+        match self.wire_type {
+            Varint => {
+                self.varint()?;
+            },
+            I64 => {
+                self.advance(8)?;
+            },
+            Len => {
+                self.length_delimited()?;
+            },
+            I32 => {
+                self.advance(4)?;
+            },
+            SGroup => {
+                let number = self.number;
+                self.enter()?;
+                loop {
+                    if self.pos >= self.end {
+                        return self.fail("a group is not closed");
+                    }
+                    self.read_tag()?;
+                    if self.wire_type == WireType::EGroup {
+                        if self.number != number {
+                            return self.fail("an end-group tag closes no group opened for it");
+                        }
+                        break;
+                    }
+                    self.skip_value()?;
+                }
+                self.depth -= 1;
+            },
+            EGroup => unreachable(),
+        }
+        return Result::Ok(());
+    }
+
+    fn enter(&mut self) -> Result<(), DecodeError> {
+        self.depth += 1;
+        if self.depth > DEPTH_LIMIT {
+            return self.fail("messages nest too deep");
+        }
+        return Result::Ok(());
+    }
+
+    /// Read a length-prefixed message into `m`.
+    fn merge_nested<M: Message>(&mut self, m: &mut M) -> Result<(), DecodeError> {
+        let n = self.length()?;
+        let outer = self.end;
+        self.end = self.pos + n;
+        self.enter()?;
+        merge_fields(m, self, 0)?;
+        self.depth -= 1;
+        self.end = outer;
+        return Result::Ok(());
+    }
+
+    fn merge_group<M: Message>(&mut self, m: &mut M) -> Result<(), DecodeError> {
+        let number = self.number;
+        self.enter()?;
+        merge_fields(m, self, number)?;
+        self.depth -= 1;
+        return Result::Ok(());
+    }
+
+    /// One scalar, or `None` when the field is unknown to this schema: another
+    /// wire type, or a closed enum's undeclared number.
+    pub fn scalar<T: Scalar>(&mut self) -> Result<Option<T::Value>, DecodeError> {
+        if self.wire_type != T::wire_type() {
+            return Result::Ok(null);
+        }
+        return T::take(self);
+    }
+
+    /// A repeated scalar, packed or not: a parser reads both whichever the
+    /// schema writes.
+    pub fn repeated<T: Scalar>(&mut self, list: &mut List<T::Value>) -> Result<bool, DecodeError> {
+        let element = T::wire_type();
+        if self.wire_type == WireType::Len && element != WireType::Len {
+            let n = self.length()?;
+            let outer = self.end;
+            self.end = self.pos + n;
+            while self.pos < self.end {
+                let start = self.pos;
+                match T::take(self)? {
+                    Some(v) => list.push(v),
+                    None => self.keep_unpacked(element, start),
+                }
+            }
+            self.end = outer;
+            return Result::Ok(true);
+        }
+        if self.wire_type != element {
+            return Result::Ok(false);
+        }
+        let Some(v) = T::take(self)? else {
+            return Result::Ok(false);
+        };
+        list.push(v);
+        return Result::Ok(true);
+    }
+
+    /// A packed element the type does not hold, kept as the unpacked field it
+    /// would have been.
+    fn keep_unpacked(&mut self, element: WireType, start: i32) {
+        let mut w = Writer { buf: [], sizes: [], next: 0 };
+        w.tag(self.number, element);
+        self.stray.extend(&w.buf);
+        self.stray.extend_from_slice(self.input.slice(start, self.pos) as Slice<u8>);
+    }
+
+    /// A message field, merged into what `slot` already holds.
+    pub fn message<M: Message>(&mut self, slot: &mut M) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::Len {
+            return Result::Ok(false);
+        }
+        self.merge_nested(slot)?;
+        return Result::Ok(true);
+    }
+
+    pub fn optional_message<M: Message + Default>(&mut self, slot: &mut Option<M>) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::Len {
+            return Result::Ok(false);
+        }
+        if *slot matches { None } {
+            *slot = Option::Some(M::default());
+        }
+        if let Some(m) = slot {
+            self.merge_nested(m)?;
+        }
+        return Result::Ok(true);
+    }
+
+    pub fn messages<M: Message + Default>(&mut self, list: &mut List<M>) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::Len {
+            return Result::Ok(false);
+        }
+        let mut m = M::default();
+        self.merge_nested(&mut m)?;
+        list.push(m);
+        return Result::Ok(true);
+    }
+
+    pub fn group<M: Message>(&mut self, slot: &mut M) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::SGroup {
+            return Result::Ok(false);
+        }
+        self.merge_group(slot)?;
+        return Result::Ok(true);
+    }
+
+    pub fn optional_group<M: Message + Default>(&mut self, slot: &mut Option<M>) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::SGroup {
+            return Result::Ok(false);
+        }
+        if *slot matches { None } {
+            *slot = Option::Some(M::default());
+        }
+        if let Some(m) = slot {
+            self.merge_group(m)?;
+        }
+        return Result::Ok(true);
+    }
+
+    pub fn groups<M: Message + Default>(&mut self, list: &mut List<M>) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::SGroup {
+            return Result::Ok(false);
+        }
+        let mut m = M::default();
+        self.merge_group(&mut m)?;
+        list.push(m);
+        return Result::Ok(true);
+    }
+
+    /// Enter a map entry, returning the end of the message it sits in.
+    fn open_entry(&mut self) -> Result<i32, DecodeError> {
+        let n = self.length()?;
+        let outer = self.end;
+        self.end = self.pos + n;
+        self.enter()?;
+        return Result::Ok(outer);
+    }
+
+    fn close_entry(&mut self, outer: i32) {
+        self.depth -= 1;
+        self.end = outer;
+    }
+
+    /// One entry of a `map<K, V>` field. An entry whose value a closed enum
+    /// does not hold is kept whole as an unknown field.
+    pub fn map<KS: Scalar<Value = K>, VS: Scalar<Value = V>, K: Ord, V>(
+        &mut self,
+        map: &mut TreeMap<K, V>,
+    ) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::Len {
+            return Result::Ok(false);
+        }
+        let outer = self.open_entry()?;
+        let mut key = KS::zero();
+        let mut value = VS::zero();
+        let mut held = true;
+        while self.pos < self.end {
+            self.read_tag()?;
+            if self.number == 1 && self.wire_type == KS::wire_type() {
+                match KS::take(self)? {
+                    Some(k) => key = k,
+                    None => held = false,
+                }
+            } else if self.number == 2 && self.wire_type == VS::wire_type() {
+                match VS::take(self)? {
+                    Some(v) => value = v,
+                    None => held = false,
+                }
+            } else if self.wire_type == WireType::EGroup {
+                return self.fail("an end-group tag closes no group opened for it");
+            } else {
+                self.skip_value()?;
+            }
+        }
+        self.close_entry(outer);
+        if !held {
+            return Result::Ok(false);
+        }
+        map[key] = value;
+        return Result::Ok(true);
+    }
+
+    pub fn message_map<KS: Scalar<Value = K>, K: Ord, M: Message + Default>(
+        &mut self,
+        map: &mut TreeMap<K, M>,
+    ) -> Result<bool, DecodeError> {
+        if self.wire_type != WireType::Len {
+            return Result::Ok(false);
+        }
+        let outer = self.open_entry()?;
+        let mut key = KS::zero();
+        let mut value = M::default();
+        while self.pos < self.end {
+            self.read_tag()?;
+            if self.number == 1 && self.wire_type == KS::wire_type() {
+                if let Some(k) = KS::take(self)? {
+                    key = k;
+                }
+            } else if self.number == 2 && self.wire_type == WireType::Len {
+                self.merge_nested(&mut value)?;
+            } else if self.wire_type == WireType::EGroup {
+                return self.fail("an end-group tag closes no group opened for it");
+            } else {
+                self.skip_value()?;
+            }
+        }
+        self.close_entry(outer);
+        map[key] = value;
+        return Result::Ok(true);
+    }
+}
+
+pub struct Int32 {
+}
+
+impl Scalar for Int32 {
+    type Value = i32;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> i32 {
+        return 0;
+    }
+
+    fn is_zero(v: &i32) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i32) -> i32 {
+        return varint_len(*v as i64 as u64);
+    }
+
+    fn put(w: &mut Writer, v: &i32) {
+        w.varint(*v as i64 as u64);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+        return Result::Ok(Option::Some(r.varint()? as i32));
+    }
+}
+
+pub struct Int64 {
+}
+
+impl Scalar for Int64 {
+    type Value = i64;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> i64 {
+        return 0;
+    }
+
+    fn is_zero(v: &i64) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i64) -> i32 {
+        return varint_len(*v as u64);
+    }
+
+    fn put(w: &mut Writer, v: &i64) {
+        w.varint(*v as u64);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+        return Result::Ok(Option::Some(r.varint()? as i64));
+    }
+}
+
+pub struct UInt32 {
+}
+
+impl Scalar for UInt32 {
+    type Value = u32;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> u32 {
+        return 0;
+    }
+
+    fn is_zero(v: &u32) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &u32) -> i32 {
+        return varint_len(*v as u64);
+    }
+
+    fn put(w: &mut Writer, v: &u32) {
+        w.varint(*v as u64);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<u32>, DecodeError> {
+        return Result::Ok(Option::Some(r.varint()? as u32));
+    }
+}
+
+pub struct UInt64 {
+}
+
+impl Scalar for UInt64 {
+    type Value = u64;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> u64 {
+        return 0;
+    }
+
+    fn is_zero(v: &u64) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &u64) -> i32 {
+        return varint_len(*v);
+    }
+
+    fn put(w: &mut Writer, v: &u64) {
+        w.varint(*v);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<u64>, DecodeError> {
+        return Result::Ok(Option::Some(r.varint()?));
+    }
+}
+
+fn zigzag_32(v: i32) -> u64 {
+    return (v << 1 ^ v >> 31) as u32 as u64;
+}
+
+fn unzigzag_32(v: u64) -> i32 {
+    let n = v as u32;
+    return (n >> 1) as i32 ^ -((n & 1) as i32);
+}
+
+fn zigzag_64(v: i64) -> u64 {
+    return (v << 1 ^ v >> 63) as u64;
+}
+
+fn unzigzag_64(v: u64) -> i64 {
+    return (v >> 1) as i64 ^ -((v & 1) as i64);
+}
+
+pub struct SInt32 {
+}
+
+impl Scalar for SInt32 {
+    type Value = i32;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> i32 {
+        return 0;
+    }
+
+    fn is_zero(v: &i32) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i32) -> i32 {
+        return varint_len(zigzag_32(*v));
+    }
+
+    fn put(w: &mut Writer, v: &i32) {
+        w.varint(zigzag_32(*v));
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+        return Result::Ok(Option::Some(unzigzag_32(r.varint()?)));
+    }
+}
+
+pub struct SInt64 {
+}
+
+impl Scalar for SInt64 {
+    type Value = i64;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> i64 {
+        return 0;
+    }
+
+    fn is_zero(v: &i64) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i64) -> i32 {
+        return varint_len(zigzag_64(*v));
+    }
+
+    fn put(w: &mut Writer, v: &i64) {
+        w.varint(zigzag_64(*v));
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+        return Result::Ok(Option::Some(unzigzag_64(r.varint()?)));
+    }
+}
+
+pub struct Fixed32 {
+}
+
+impl Scalar for Fixed32 {
+    type Value = u32;
+
+    fn wire_type() -> WireType {
+        return WireType::I32;
+    }
+
+    fn zero() -> u32 {
+        return 0;
+    }
+
+    fn is_zero(v: &u32) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &u32) -> i32 {
+        return 4;
+    }
+
+    fn put(w: &mut Writer, v: &u32) {
+        w.fixed32(*v);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<u32>, DecodeError> {
+        return Result::Ok(Option::Some(r.fixed32()?));
+    }
+}
+
+pub struct Fixed64 {
+}
+
+impl Scalar for Fixed64 {
+    type Value = u64;
+
+    fn wire_type() -> WireType {
+        return WireType::I64;
+    }
+
+    fn zero() -> u64 {
+        return 0;
+    }
+
+    fn is_zero(v: &u64) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &u64) -> i32 {
+        return 8;
+    }
+
+    fn put(w: &mut Writer, v: &u64) {
+        w.fixed64(*v);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<u64>, DecodeError> {
+        return Result::Ok(Option::Some(r.fixed64()?));
+    }
+}
+
+pub struct SFixed32 {
+}
+
+impl Scalar for SFixed32 {
+    type Value = i32;
+
+    fn wire_type() -> WireType {
+        return WireType::I32;
+    }
+
+    fn zero() -> i32 {
+        return 0;
+    }
+
+    fn is_zero(v: &i32) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i32) -> i32 {
+        return 4;
+    }
+
+    fn put(w: &mut Writer, v: &i32) {
+        w.fixed32(*v as u32);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i32>, DecodeError> {
+        return Result::Ok(Option::Some(r.fixed32()? as i32));
+    }
+}
+
+pub struct SFixed64 {
+}
+
+impl Scalar for SFixed64 {
+    type Value = i64;
+
+    fn wire_type() -> WireType {
+        return WireType::I64;
+    }
+
+    fn zero() -> i64 {
+        return 0;
+    }
+
+    fn is_zero(v: &i64) -> bool {
+        return *v == 0;
+    }
+
+    fn len(v: &i64) -> i32 {
+        return 8;
+    }
+
+    fn put(w: &mut Writer, v: &i64) {
+        w.fixed64(*v as u64);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<i64>, DecodeError> {
+        return Result::Ok(Option::Some(r.fixed64()? as i64));
+    }
+}
+
+pub struct Bool {
+}
+
+impl Scalar for Bool {
+    type Value = bool;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> bool {
+        return false;
+    }
+
+    fn is_zero(v: &bool) -> bool {
+        return !*v;
+    }
+
+    fn len(v: &bool) -> i32 {
+        return 1;
+    }
+
+    fn put(w: &mut Writer, v: &bool) {
+        w.varint(if *v { 1 } else { 0 });
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<bool>, DecodeError> {
+        return Result::Ok(Option::Some(r.varint()? != 0));
+    }
+}
+
+pub struct Float {
+}
+
+impl Scalar for Float {
+    type Value = f32;
+
+    fn wire_type() -> WireType {
+        return WireType::I32;
+    }
+
+    fn zero() -> f32 {
+        return 0.0;
+    }
+
+    /// By bits, as protobuf compares: `-0.0` is written.
+    fn is_zero(v: &f32) -> bool {
+        return v.to_bits() == 0;
+    }
+
+    fn len(v: &f32) -> i32 {
+        return 4;
+    }
+
+    fn put(w: &mut Writer, v: &f32) {
+        w.fixed32(v.to_bits());
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<f32>, DecodeError> {
+        return Result::Ok(Option::Some(f32::from_bits(r.fixed32()?)));
+    }
+}
+
+pub struct Double {
+}
+
+impl Scalar for Double {
+    type Value = f64;
+
+    fn wire_type() -> WireType {
+        return WireType::I64;
+    }
+
+    fn zero() -> f64 {
+        return 0.0;
+    }
+
+    fn is_zero(v: &f64) -> bool {
+        return v.to_bits() == 0;
+    }
+
+    fn len(v: &f64) -> i32 {
+        return 8;
+    }
+
+    fn put(w: &mut Writer, v: &f64) {
+        w.fixed64(v.to_bits());
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<f64>, DecodeError> {
+        return Result::Ok(Option::Some(f64::from_bits(r.fixed64()?)));
+    }
+}
+
+/// `string`, which a Wado `String` holds only as UTF-8, whatever the schema's syntax.
+pub struct Str {
+}
+
+impl Scalar for Str {
+    type Value = String;
+
+    fn wire_type() -> WireType {
+        return WireType::Len;
+    }
+
+    fn zero() -> String {
+        return "";
+    }
+
+    fn is_zero(v: &String) -> bool {
+        return v.is_empty();
+    }
+
+    fn len(v: &String) -> i32 {
+        return varint_len(v.len() as u64) + v.len();
+    }
+
+    fn put(w: &mut Writer, v: &String) {
+        w.length_delimited(v.as_byte_slice());
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<String>, DecodeError> {
+        let bytes = r.length_delimited()?;
+        let Ok(text) = String::from_utf8_slice(bytes) else {
+            return r.fail("a string field is not UTF-8");
+        };
+        return Result::Ok(Option::Some(text));
+    }
+}
+
+pub struct Bytes {
+}
+
+impl Scalar for Bytes {
+    type Value = ByteList;
+
+    fn wire_type() -> WireType {
+        return WireType::Len;
+    }
+
+    fn zero() -> ByteList {
+        return b"";
+    }
+
+    fn is_zero(v: &ByteList) -> bool {
+        return v.is_empty();
+    }
+
+    fn len(v: &ByteList) -> i32 {
+        return varint_len(v.len() as u64) + v.len();
+    }
+
+    fn put(w: &mut Writer, v: &ByteList) {
+        w.length_delimited(v.as_byte_slice());
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<ByteList>, DecodeError> {
+        return Result::Ok(Option::Some(r.length_delimited()?.to_list() as ByteList));
+    }
+}
+
+/// An enum field of type `E`, on the wire as its number.
+pub struct Enum<E> {
+}
+
+impl<E: Enumeration> Scalar for Enum<E> {
+    type Value = E;
+
+    fn wire_type() -> WireType {
+        return WireType::Varint;
+    }
+
+    fn zero() -> E {
+        return E::first();
+    }
+
+    fn is_zero(v: &E) -> bool {
+        return v.number() == 0;
+    }
+
+    fn len(v: &E) -> i32 {
+        return varint_len(v.number() as i64 as u64);
+    }
+
+    fn put(w: &mut Writer, v: &E) {
+        w.varint(v.number() as i64 as u64);
+    }
+
+    fn take(r: &mut Reader) -> Result<Option<E>, DecodeError> {
+        return Result::Ok(E::from_number(r.varint()? as i32));
+    }
+}

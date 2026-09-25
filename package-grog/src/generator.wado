@@ -1,5 +1,5 @@
-//! Kiln generator entry for Grog. Reads a `.proto` schema and emits the Wado
-//! declarations `core:protobuf` encodes.
+//! Kiln generator entry for Grog. Reads a `.proto` schema and emits Wado
+//! declarations that Grog's runtime encodes.
 
 use { Request, Response, Error, OutputFile, KilnHost, read_text } from "core:kiln";
 use { EmitError, emit } from "./emit.wado";
@@ -13,8 +13,9 @@ export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
             return Result::Err(Error::InvalidSchema(`grog: '${path}' is not UTF-8: ${e}`));
         },
     };
+    let runtime = runtime_of(&req.module).map_err(|e| at(&path, e))?;
     let file = read(&source).map_err(|e| at(&path, EmitError::Invalid(e)))?;
-    let generated = emit(&file).map_err(|e| at(&path, e))?;
+    let generated = emit(&file, runtime).map_err(|e| at(&path, e))?;
     let files: List<OutputFile> = [
         OutputFile {
             path: `${stem(&path)}.wado`,
@@ -23,6 +24,26 @@ export fn generate(req: Request) -> Result<Response, Error> with KilnHost {
         },
     ];
     return Result::Ok(Response { files });
+}
+
+/// The package spec the generated code imports the runtime from: the one Grog
+/// was invoked under, since the consumer's `[dependencies]` names it the same.
+fn runtime_of(module: &String) -> Result<String, EmitError> {
+    let view = module.as_str_slice();
+    let Some(colon) = view.find(":") else {
+        return Result::Err(EmitError::Unsupported(
+            ` Grog was named by the path [object Object]; name it by the package spec its runtime is a dependency under`,
+        ));
+    };
+    let mut end = view.len();
+    for let mut i = colon + 1; i < view.len(); i += 1 {
+        let c = view.slice(i, i + 1);
+        if c == "@" || c == "/" {
+            end = i;
+            break;
+        }
+    }
+    return Result::Ok(view.slice(0, end).to_string());
 }
 
 /// What the schema is wrong about, said against the file it was read from.

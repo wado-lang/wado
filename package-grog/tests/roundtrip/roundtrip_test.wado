@@ -1,0 +1,244 @@
+// Schemas compiled by Grog, encoded and decoded by its runtime.
+use { TreeMap } from "core:collections";
+use grog from "lib:grog";
+use { Account, AccountAddress, AccountContact, Status } from "./demo.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use legacy from "./legacy.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use descriptor from "../../tests/proto/protobuf/src/google/protobuf/descriptor.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use pbstruct from "../../tests/proto/protobuf/src/google/protobuf/struct.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use onnx from "../../tests/proto/onnx/onnx/onnx.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+
+fn hex(bytes: &ByteList) -> String {
+    let mut out = "";
+    for let b of bytes {
+        out.push_str(&`${b:02x}`);
+    }
+    return out;
+}
+
+fn unhex(text: String) -> ByteList {
+    let mut out: ByteList = b"";
+    let view = text.as_str_slice();
+    for let mut i = 0; i < view.len(); i += 2 {
+        out.push(u8::from_str_radix(view.slice(i, i + 2), 16).unwrap());
+    }
+    return out;
+}
+
+test "an empty proto3 message is no bytes" {
+    assert grog::encode(&Account {}).len() == 0;
+}
+
+test "implicit fields are written only when set" {
+    assert hex(&grog::encode(&Account { id: 150, status: Status::Active })) == "0896015001";
+}
+
+test "every mapping round-trips" {
+    let mut limits = TreeMap::<String, i32>::new();
+    limits["daily"] = 10;
+    let account = Account {
+        id: 7,
+        name: "Ada",
+        balance: Option::Some(0),
+        delta: -3,
+        checksum: 0xdeadbeef,
+        offset: -1,
+        ratio: 0.5,
+        verified: true,
+        avatar: b"\x89PNG",
+        status: Status::Retired,
+        tags: ["a", "b"],
+        limits,
+        address: Option::Some(AccountAddress { city: "Kyoto", zip: 6000000 }),
+        history: [
+            AccountAddress { city: "Osaka" },
+        ],
+        contact: Option::Some(AccountContact::Phone(81)),
+        scores: [1, -1, 300],
+    };
+    assert grog::decode::<Account>(&grog::encode(&account)).unwrap() == account;
+}
+
+test "sint32 is zigzag and sfixed32 fixed on the wire" {
+    assert hex(&grog::encode(&Account { delta: -3 })) == "2005";
+    assert hex(&grog::encode(&Account { offset: -1 })) == "35ffffffff";
+}
+
+test "explicit presence writes a zero" {
+    assert hex(&grog::encode(&Account { balance: Option::Some(0) })) == "1800";
+}
+
+test "a repeated scalar is packed in proto3 and read either way" {
+    assert hex(&grog::encode(&Account { scores: [1, -1] })) == "8a01020201";
+    let unpacked = grog::decode::<Account>(&unhex("880102880101")).unwrap();
+    assert unpacked.scores == [1, -1];
+}
+
+test "a oneof holds its last member" {
+    let back = grog::decode::<Account>(&unhex("7a0161800102")).unwrap();
+    assert back.contact == Option::Some(AccountContact::Phone(2));
+}
+
+test "an open enum keeps a number it does not declare" {
+    let back = grog::decode::<Account>(&unhex("5007")).unwrap();
+    assert back.status == Status::Unrecognized(7);
+    assert hex(&grog::encode(&back)) == "5007";
+}
+
+test "an undeclared field survives a round trip" {
+    let input = unhex("0801a0063fa20603616263");
+    let back = grog::decode::<Account>(&input).unwrap();
+    assert back.id == 1;
+    assert hex(&grog::encode(&back)) == hex(&input);
+}
+
+test "a message merges field by field" {
+    let mut account = grog::decode::<Account>(&unhex("0801")).unwrap();
+    grog::merge(&mut account, &unhex("12026869")).unwrap();
+    assert account.id == 1;
+    assert account.name == "hi";
+}
+
+test "a truncated or malformed input is refused" {
+    assert grog::decode::<Account>(&unhex("08")) matches { Err(_) };
+    assert grog::decode::<Account>(&unhex("1205ab")) matches { Err(_) };
+    assert grog::decode::<Account>(&unhex("0f")) matches { Err(_) };
+    assert grog::decode::<Account>(&unhex("1201ff")) matches { Err(_) };
+}
+
+test "proto2 writes every set field, zeros included" {
+    let record = legacy::Record { id: Option::Some(0), level: Option::Some(legacy::Level::Low) };
+    assert hex(&grog::encode(&record)) == "08001001";
+}
+
+test "a closed enum's undeclared number is an unknown field" {
+    let input = unhex("08011009");
+    let back = grog::decode::<legacy::Record>(&input).unwrap();
+    assert back.level matches { None };
+    assert hex(&grog::encode(&back)) == hex(&input);
+}
+
+test "proto2 repeated scalars are unpacked unless asked" {
+    let record = legacy::Record { counts: [1, 2], packed_counts: [3, 4] };
+    assert hex(&grog::encode(&record)) == "200120022a020304";
+}
+
+test "a group is delimited by tags" {
+    let record = legacy::Record {
+        note: Option::Some(legacy::RecordNote { text: Option::Some("n") }),
+        tag: [
+            legacy::RecordTag { name: Option::Some("a") },
+            legacy::RecordTag {},
+        ],
+    };
+    let bytes = grog::encode(&record);
+    assert hex(&bytes) == "333a016e34434a0161444344";
+    assert grog::decode::<legacy::Record>(&bytes).unwrap() == record;
+}
+
+test "onnx.proto round-trips a model" {
+    let model = onnx::ModelProto {
+        ir_version: Option::Some(10),
+        producer_name: Option::Some("grog"),
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("g"),
+            node: [
+                onnx::NodeProto {
+                    op_type: Option::Some("Relu"),
+                    input: ["x"],
+                    output: ["y"],
+                },
+            ],
+            initializer: [
+                onnx::TensorProto {
+                    dims: [2],
+                    data_type: Option::Some(1),
+                    float_data: [1.0, -2.0],
+                },
+            ],
+        }),
+    };
+    assert grog::decode::<onnx::ModelProto>(&grog::encode(&model)).unwrap() == model;
+}
+
+test "descriptor.proto describes itself" {
+    let file = descriptor::FileDescriptorProto {
+        name: Option::Some("demo.proto"),
+        package: Option::Some("demo"),
+        message_type: [
+            descriptor::DescriptorProto {
+                name: Option::Some("Point"),
+                field: [
+                    descriptor::FieldDescriptorProto {
+                        name: Option::Some("x"),
+                        number: Option::Some(1),
+                        label: Option::Some(descriptor::FieldDescriptorProtoLabel::Optional),
+                        type: Option::Some(descriptor::FieldDescriptorProtoType::Sint32),
+                    },
+                ],
+            },
+        ],
+        syntax: Option::Some("proto3"),
+    };
+    assert grog::decode::<descriptor::FileDescriptorProto>(&grog::encode(&file)).unwrap() == file;
+}
+
+test "struct.proto nests values through a map and a oneof" {
+    let mut fields = TreeMap::<String, pbstruct::Value>::new();
+    fields["n"] = pbstruct::Value { kind: Option::Some(pbstruct::ValueKind::NumberValue(1.5)) };
+    let value = pbstruct::Value {
+        kind: Option::Some(pbstruct::ValueKind::ListValue(pbstruct::ListValue {
+            values: [
+                pbstruct::Value { kind: Option::Some(pbstruct::ValueKind::NullValue(pbstruct::NullValue::NullValue)) },
+                pbstruct::Value { kind: Option::Some(pbstruct::ValueKind::StructValue(pbstruct::Struct { fields })) },
+            ],
+        })),
+    };
+    assert grog::decode::<pbstruct::Value>(&grog::encode(&value)).unwrap() == value;
+}
+
+/// `depth` lists, each holding the next: a `Value` whose `list_value` holds
+/// one `Value`, `depth` times over.
+fn nested_lists(depth: i32) -> ByteList {
+    let mut inner: ByteList = b"";
+    for let _ of 0..<depth {
+        let mut list: ByteList = b"";
+        list.push(0x0a);
+        push_varint(&mut list, inner.len());
+        list.extend(&inner);
+        let mut value: ByteList = b"";
+        value.push(0x32);
+        push_varint(&mut value, list.len());
+        value.extend(&list);
+        inner = value;
+    }
+    return inner;
+}
+
+fn push_varint(out: &mut ByteList, n: i32) {
+    let mut rest = n;
+    while rest >= 128 {
+        out.push((rest & 0x7f | 0x80) as u8);
+        rest = rest >> 7;
+    }
+    out.push(rest as u8);
+}
+
+test "nesting past the depth limit is refused" {
+    assert grog::decode::<pbstruct::Value>(&nested_lists(40)) matches { Ok(_) };
+    assert grog::decode::<pbstruct::Value>(&nested_lists(60)) matches { Err(_) };
+}

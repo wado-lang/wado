@@ -92,6 +92,7 @@ impl Reader {
         return Result::Err(`${self.line(decl)}: edition "${year}" is not one Grog reads`);
     }
 
+    /// A message, or a group's body, which is a message named for the group.
     fn read_message(&mut self, def: i32, outer: &List<String>) -> Result<(), String> {
         let mut path = *outer;
         path.push(self.text(self.child(def, protobuf::RK_IDENT)));
@@ -108,6 +109,7 @@ impl Reader {
                 fields.push(self.read_field(item, null)?);
             } else if kind == protobuf::RK_GROUP {
                 fields.push(self.read_group(item, null)?);
+                nested.push(item);
             } else if kind == protobuf::RK_MAP_FIELD {
                 fields.push(self.read_map_field(item)?);
             } else if kind == protobuf::RK_ONEOF {
@@ -125,6 +127,7 @@ impl Reader {
                         fields.push(self.read_field(inner, Option::Some(name))?);
                     } else if inner_kind == protobuf::RK_GROUP {
                         fields.push(self.read_group(inner, Option::Some(name))?);
+                        nested.push(inner);
                     }
                 }
             } else if kind == protobuf::RK_MESSAGE_DEF || kind == protobuf::RK_ENUM_DEF {
@@ -135,10 +138,10 @@ impl Reader {
         }
         self.messages.push(MessageDecl { path, fields, features, line: self.line(def) });
         for let item of nested {
-            if self.s.kind(item) == protobuf::RK_MESSAGE_DEF {
-                self.read_message(item, &path)?;
-            } else {
+            if self.s.kind(item) == protobuf::RK_ENUM_DEF {
                 self.read_enum(item, &path)?;
+            } else {
+                self.read_message(item, &path)?;
             }
         }
         return Result::Ok(());
@@ -152,6 +155,7 @@ impl Reader {
             label: self.label_of(node),
             type_: type_of(self.text(self.child(node, protobuf::RK_TYPE_REF))),
             oneof,
+            packed: self.packed_option(node),
             features: self.field_features(node),
             line: self.line(node),
         });
@@ -189,9 +193,12 @@ impl Reader {
         let mut path = *outer;
         path.push(self.text(self.child(def, protobuf::RK_IDENT)));
         let mut values: List<EnumValue> = [];
+        let mut features = Features {};
         for let element of self.nodes(self.child(def, protobuf::RK_ENUM_BODY)) {
             let item = self.only_node(element);
-            if item >= 0 && self.s.kind(item) == protobuf::RK_ENUM_VALUE {
+            if item >= 0 && self.s.kind(item) == protobuf::RK_OPTION_DECL {
+                self.read_feature(&mut features, item);
+            } else if item >= 0 && self.s.kind(item) == protobuf::RK_ENUM_VALUE {
                 let number_node = self.child(item, protobuf::RK_SIGNED_INT);
                 let Some(number) = int_value(&self.text(number_node)) else {
                     return Result::Err(`${self.line(item)}: ${self.text(number_node)} is not an enum number`);
@@ -199,7 +206,7 @@ impl Reader {
                 values.push(EnumValue { name: self.text(self.child(item, protobuf::RK_IDENT)), number });
             }
         }
-        self.enums.push(EnumDecl { path, values, line: self.line(def) });
+        self.enums.push(EnumDecl { path, values, features, line: self.line(def) });
         return Result::Ok(());
     }
 
@@ -243,6 +250,20 @@ impl Reader {
         return features;
     }
 
+    /// The `packed` option a field writes, if any.
+    fn packed_option(&self, node: i32) -> Option<bool> {
+        let options = self.s.find_child(node, protobuf::RK_FIELD_OPTIONS);
+        if options < 0 {
+            return null;
+        }
+        for let option of self.nodes_of(options, protobuf::RK_FIELD_OPTION) {
+            if self.text(self.child(option, protobuf::RK_OPTION_NAME)) == "packed" {
+                return Option::Some(self.text(self.child(option, protobuf::RK_CONSTANT)) == "true");
+            }
+        }
+        return null;
+    }
+
     /// An `optionDecl` or a `fieldOption` setting a feature Grog reads.
     fn read_feature(&self, features: &mut Features, option: i32) {
         let name = self.text(self.child(option, protobuf::RK_OPTION_NAME));
@@ -251,6 +272,10 @@ impl Reader {
             features.field_presence = Option::Some(value);
         } else if name == "features.message_encoding" {
             features.message_encoding = Option::Some(value);
+        } else if name == "features.repeated_field_encoding" {
+            features.repeated_field_encoding = Option::Some(value);
+        } else if name == "features.enum_type" {
+            features.enum_type = Option::Some(value);
         }
     }
 
