@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790352700852,
+  "lastUpdate": 1790366323981,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59853,6 +59853,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a183287244137a9119e0d9c6f150e586b4950a5f"
         },
         "date": 1790352699882,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "71580bd9659f81700b96b722755e6a2f461e94a1",
+          "message": "Merge pull request #2163 from wado-lang/claude/agents-wep-organization-8wboe2\n\ndocs: split the spec into 13 spec-*.md files, WEPs become proposals, generated docs index",
+          "timestamp": "2026-09-26T04:31:52+09:00",
+          "tree_id": "65da4607516515c199601ba7fd5e1678b6062668",
+          "url": "https://github.com/wado-lang/wado/commit/71580bd9659f81700b96b722755e6a2f461e94a1"
+        },
+        "date": 1790366323354,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
