@@ -16,7 +16,7 @@ use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_use_decl_source, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{namespace_member_alias, validate_module_path};
+use crate::name::{mangle_local_method, namespace_member_alias, validate_module_path};
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
@@ -885,7 +885,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.check_function_declarations(module, source);
             if !takes_names_from_elsewhere(source) {
                 for (name, span) in keyword_named_declarations(module) {
-                    let _ = self.reject_keyword_name(source, &name, span);
+                    let _ = self
+                        .logger
+                        .error_in(source, AnalyzeError::KeywordName { name, span });
                 }
             }
         }
@@ -1003,7 +1005,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             ..
                         } => {
                             for func_item in functions {
-                                let source_name = format!("{}::{}", interface_name, func_item.name);
+                                let source_name =
+                                    mangle_local_method(interface_name, &func_item.name);
                                 let export_name =
                                     func_item.alias.as_ref().unwrap_or(&func_item.name);
                                 self.symbols.register_reexport(
@@ -1110,6 +1113,37 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// resolves it picks one on its own terms — which is how the same spelling
     /// came to mean different things in different parts of the compiler. An
     /// alias resolves it, so the program says which one it meant.
+    /// Imports `lookup_name` from `module_source` into `from` as `import_name`,
+    /// or reports why it cannot.
+    #[allow(clippy::too_many_arguments)]
+    fn import_symbol(
+        &mut self,
+        from: &ModuleSource,
+        module_source: &ModuleSource,
+        lookup_name: &str,
+        import_name: &str,
+        name_span: Span,
+        local_span: Span,
+        visibility: Visibility,
+    ) -> Result<(), Bail> {
+        let Some(symbol) = self.symbols.lookup_in_module(module_source, lookup_name) else {
+            return self.logger.error_in(
+                from,
+                AnalyzeError::ImportNotFound {
+                    module_source: module_source.clone(),
+                    name: lookup_name.to_string(),
+                    span: name_span,
+                },
+            );
+        };
+        let key = symbol.defined_at;
+        self.check_import_visibility(from, module_source, lookup_name, name_span)?;
+        self.check_reexport_widening(from, module_source, lookup_name, visibility, name_span)?;
+        self.reject_import_collision(from, import_name, local_span)?;
+        self.symbols.register_import(from, import_name, key);
+        Ok(())
+    }
+
     fn reject_import_collision(
         &self,
         module_source: &ModuleSource,
@@ -1203,41 +1237,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             local_span,
                             ..
                         } => {
-                            if let Some(symbol) =
-                                self.symbols.lookup_in_module(&module_source, name)
-                            {
-                                let key = symbol.defined_at;
-                                let import_name = alias.as_ref().unwrap_or(name);
-                                self.check_import_visibility(
-                                    from_module_source,
-                                    &module_source,
-                                    name,
-                                    *name_span,
-                                )?;
-                                self.check_reexport_widening(
-                                    from_module_source,
-                                    &module_source,
-                                    name,
-                                    use_decl.visibility,
-                                    *name_span,
-                                )?;
-                                self.reject_import_collision(
-                                    from_module_source,
-                                    import_name,
-                                    *local_span,
-                                )?;
-                                self.symbols
-                                    .register_import(from_module_source, import_name, key);
-                            } else {
-                                self.logger.error_in(
-                                    from_module_source,
-                                    AnalyzeError::ImportNotFound {
-                                        module_source: module_source.clone(),
-                                        name: name.clone(),
-                                        span: *name_span,
-                                    },
-                                )?;
-                            }
+                            self.import_symbol(
+                                from_module_source,
+                                &module_source,
+                                name,
+                                alias.as_ref().unwrap_or(name),
+                                *name_span,
+                                *local_span,
+                                use_decl.visibility,
+                            )?;
                         }
                         UseItem::InterfaceFunctions {
                             interface_name,
@@ -1245,49 +1253,15 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             ..
                         } => {
                             for func_item in functions {
-                                let lookup_name = format!("{}::{}", interface_name, func_item.name);
-                                if let Some(symbol) =
-                                    self.symbols.lookup_in_module(&module_source, &lookup_name)
-                                {
-                                    let key = symbol.defined_at;
-                                    let import_name =
-                                        func_item.alias.as_ref().unwrap_or(&func_item.name);
-                                    self.check_import_visibility(
-                                        from_module_source,
-                                        &module_source,
-                                        &lookup_name,
-                                        func_item.name_span,
-                                    )?;
-                                    self.check_reexport_widening(
-                                        from_module_source,
-                                        &module_source,
-                                        &lookup_name,
-                                        use_decl.visibility,
-                                        func_item.name_span,
-                                    )?;
-                                    // Registered under the bare member name
-                                    // like a `Simple` import, so it collides
-                                    // with a declaration the same way.
-                                    self.reject_import_collision(
-                                        from_module_source,
-                                        import_name,
-                                        func_item.local_span,
-                                    )?;
-                                    self.symbols.register_import(
-                                        from_module_source,
-                                        import_name,
-                                        key,
-                                    );
-                                } else {
-                                    self.logger.error_in(
-                                        from_module_source,
-                                        AnalyzeError::ImportNotFound {
-                                            module_source: module_source.clone(),
-                                            name: lookup_name,
-                                            span: func_item.name_span,
-                                        },
-                                    )?;
-                                }
+                                self.import_symbol(
+                                    from_module_source,
+                                    &module_source,
+                                    &mangle_local_method(interface_name, &func_item.name),
+                                    func_item.alias.as_ref().unwrap_or(&func_item.name),
+                                    func_item.name_span,
+                                    func_item.local_span,
+                                    use_decl.visibility,
+                                )?;
                             }
                         }
                         UseItem::Wildcard => {

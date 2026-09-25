@@ -20,6 +20,7 @@ use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
+use crate::resolve::Resolutions;
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -451,7 +452,7 @@ struct OwnedEffectData {
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
+    interface_cm_fq: IndexMap<DefId, Option<String>>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -602,8 +603,8 @@ impl OwnedEffectData {
             }
         }
 
-        let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
-            IndexMap::default();
+        let defs = sem.resolutions().map(Resolutions::defs);
+        let mut interface_cm_fq: IndexMap<DefId, Option<String>> = IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
@@ -614,7 +615,9 @@ impl OwnedEffectData {
                     continue;
                 };
                 let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
-                interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
+                if let Some(def) = defs.and_then(|defs| defs.of_ast_id(decl.id)) {
+                    interface_cm_fq.insert(def, cm_fq.clone());
+                }
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
                     module_source: src.clone(),
@@ -696,7 +699,7 @@ struct EffectIndex<'a> {
     effect_by_name: &'a IndexMap<String, EffectRef>,
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
+    interface_cm_fq: &'a IndexMap<DefId, Option<String>>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
@@ -719,11 +722,9 @@ fn interface_at<'a>(
     index: &EffectIndex<'a>,
     def: DefId,
 ) -> Option<(ModuleSource, String, &'a Option<String>)> {
-    let resolutions = sem.resolutions()?;
-    let defs = resolutions.defs();
-    let key = (defs.module(def).clone(), defs.name(def).to_string());
-    let cm_fq = index.interface_cm_fq.get(&key)?;
-    Some((key.0, key.1, cm_fq))
+    let cm_fq = index.interface_cm_fq.get(&def)?;
+    let defs = sem.resolutions()?.defs();
+    Some((defs.module(def).clone(), defs.name(def).to_string(), cm_fq))
 }
 
 /// The effects `with E => h do` grants to its body.

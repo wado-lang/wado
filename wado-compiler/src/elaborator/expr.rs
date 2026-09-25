@@ -10,7 +10,9 @@ use crate::ast::{
 };
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::name::{
+    FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
+};
 use crate::tir::{
     FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
 };
@@ -3196,7 +3198,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return Some(Pat::Opaque);
                 }
-                let is_bare = variant_qualifier.is_none() && !variant_name.contains("::");
+                let is_bare =
+                    variant_qualifier.is_none() && split_local_method(variant_name).is_none();
                 return is_bare.then_some(Pat::Wild);
             };
             return Some(match &const_expr {

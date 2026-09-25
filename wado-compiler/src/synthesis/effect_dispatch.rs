@@ -991,7 +991,7 @@ fn build_resource_fallback_call(
         .cm_name
         .clone()
         .expect("build_resource_fallback_call: caller checked op.cm_name.is_some()");
-    let is_instance = op.params.first().is_some_and(|p| p.name == "self");
+    let is_instance = op.params.first().is_some_and(TirParam::is_self);
 
     // Trait/resource type args list, derived from the dispatch label
     // (e.g. label "Stream<u8>" → ["u8"]). The label encodes the

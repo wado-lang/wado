@@ -1970,7 +1970,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     } => {
                         self.record_use_reference(&source, *id, interface_name);
                         for function in functions {
-                            let member = format!("{interface_name}::{}", function.name);
+                            let member = name::mangle_local_method(interface_name, &function.name);
                             self.record_use_reference(&source, function.id, &member);
                         }
                     }

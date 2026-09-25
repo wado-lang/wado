@@ -167,7 +167,7 @@ impl CompilerHost for FilesystemHost {
 /// A `CompilerHost` serving the given sources, keyed by the path the loader asks for.
 pub struct MapHost {
     pub sources: indexmap::IndexMap<String, String>,
-    pub diagnostics: Mutex<Vec<Diagnostic>>,
+    diagnostics: Mutex<Vec<Diagnostic>>,
 }
 
 impl MapHost {

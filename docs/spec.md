@@ -157,10 +157,10 @@ for let of of arr {
 }
 ```
 
-`resume` is contextual too, but it begins an expression (`resume value`), so a
-name spelled `resume` could be declared and never read. Only a field or a
-method, reached through `.`, may take it. A variable, parameter, item, case or
-import named `resume` is an error.
+A variable, parameter, item, case or import may not be named `resume`. Only a
+field or a method, reached through `.`, may take the name. The reason is that
+`resume` begins an expression (`resume value`), so such a name could never be
+read.
 
 ### Statements and Expressions
 

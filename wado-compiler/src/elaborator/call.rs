@@ -8,7 +8,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -779,7 +779,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some((interface, operation)) = self.dispatched_operation(bare)
         {
             let declared = self.tysys.resolutions.defs().name(interface);
-            let spelled = format!("{declared}::{operation}");
+            let spelled = mangle_local_method(declared, &operation);
             callee_kind = CalleeIdentKind::Operation {
                 interface,
                 operation,
@@ -1008,20 +1008,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatches on `effective_name` (after any `Self::` / `T::`
         // prefix rewriting) while `ident` is kept around for LSP
         // segment-edge recording and other AST-id needs.
-        let imported_operation = match &callee_kind {
-            CalleeIdentKind::Operation {
-                interface,
-                operation,
-                ..
-            } => {
-                if let Some(member) = self.tysys.resolutions.declared_if_walked(ident.id)
-                    && self.record_reference_to_decl(ident.id, member, ident.span)
-                {
-                    return TypeTable::ERROR;
-                }
-                Some(self.effect_operation_callee(*interface, operation))
+        let imported_operation = if let CalleeIdentKind::Operation { .. } = &callee_kind {
+            let member = self
+                .tysys
+                .resolutions
+                .declared_if_walked(ident.id)
+                .expect("`operation_at` read the imported operation's declaration");
+            if self.record_reference_to_decl(ident.id, member, ident.span) {
+                return TypeTable::ERROR;
             }
-            _ => None,
+            let (interface, op) = operation
+                .as_ref()
+                .expect("`operation_decl` answers for an operation callee");
+            Some(self.effect_operation_callee(*interface, op))
+        } else {
+            None
         };
         let (callee_opt, display_name): (Option<CalleeRef>, String) = if let Some(callee) =
             imported_operation
@@ -1579,7 +1580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         || self.namespace_member(prefix, type_name).is_some();
                     if !names_a_member {
                         let _ = self.emit(TypeError::UnknownFunction {
-                            name: format!("{prefix}::{suffix}"),
+                            name: effective_name.to_string(),
                             span: call.span,
                         });
                         return TypeTable::ERROR;
@@ -1655,7 +1656,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     if !resolved.resolves() {
                         let _ = self.emit(TypeError::UnknownFunction {
-                            name: format!("{prefix}::{suffix}"),
+                            name: effective_name.to_string(),
                             span: call.span,
                         });
                         return TypeTable::ERROR;

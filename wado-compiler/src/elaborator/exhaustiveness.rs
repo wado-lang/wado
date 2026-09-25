@@ -326,9 +326,8 @@ fn split_domain<'p, R: MatrixRow<'p>>(rows: &[R], domain: IntDomain) -> Vec<Ctor
         .collect()
 }
 
-/// `rows` specialized to each of `ctors`, which [`signature`] and
-/// [`split_domain`] list in order. A row reaches only the constructors its head
-/// can take, so a long match of literals costs its length rather than its square.
+/// `rows` specialized to each of `ctors`, which [`signature`] and [`split_domain`]
+/// list in order. A row reaches only the constructors its head can take.
 fn specialize_each<'p, R: MatrixRow<'p>>(rows: &[R], ctors: &[Ctor]) -> Vec<Vec<R>> {
     let mut out: Vec<Vec<R>> = std::iter::repeat_with(Vec::new).take(ctors.len()).collect();
     for row in rows {
@@ -357,7 +356,12 @@ fn specialize_each<'p, R: MatrixRow<'p>>(rows: &[R], ctors: &[Ctor]) -> Vec<Vec<
                 ctors.partition_point(|c| piece(c).1 < *lo)
                     ..ctors.partition_point(|c| piece(c).0 <= *hi)
             }
-            _ => 0..ctors.len(),
+            Pat::Wild
+            | Pat::Bool(_)
+            | Pat::Product { .. }
+            | Pat::Narrow(_)
+            | Pat::Opaque
+            | Pat::Or(_) => 0..ctors.len(),
         };
         for i in reach {
             out[i].extend(specialize_row(row.pats(), &ctors[i]).map(|pats| row.with_pats(pats)));

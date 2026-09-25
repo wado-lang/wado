@@ -159,9 +159,7 @@ fn imported_global_resolves_through_escape_reentry() {
     assert!(
         sem.is_complete(),
         "imported global through escape-reentry must resolve; diagnostics: {:#?}",
-        host.diagnostics
-            .lock()
-            .unwrap()
+        host.diagnostics()
             .iter()
             .map(|d| &d.message)
             .collect::<Vec<_>>(),

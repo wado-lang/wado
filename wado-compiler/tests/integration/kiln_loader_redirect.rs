@@ -60,7 +60,7 @@ pub fn greet() {}
 
     let sem = build_with_invocations(entry, "entry.wado", &host, idx);
     if !sem.is_complete() {
-        let diags = host.diagnostics.lock().unwrap().clone();
+        let diags = host.diagnostics();
         panic!(
             "semantics did not complete; diagnostics: {:#?}",
             diags.iter().map(|d| &d.message).collect::<Vec<_>>()
@@ -108,7 +108,7 @@ pub fn helper() {}
     );
 
     let sem = build_with_invocations(entry, "entry.wado", &host, idx);
-    let diags = host.diagnostics.lock().unwrap().clone();
+    let diags = host.diagnostics();
     assert!(
         sem.is_complete(),
         "semantics did not complete; diagnostics: {:#?}",

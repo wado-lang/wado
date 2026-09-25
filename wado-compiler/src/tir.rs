@@ -6789,7 +6789,7 @@ impl TirFunction {
     /// Whether the first parameter is the `self` receiver.
     #[inline]
     pub fn takes_self(&self) -> bool {
-        self.params.first().is_some_and(|p| p.name == "self")
+        self.params.first().is_some_and(TirParam::is_self)
     }
 
     /// Returns true if this is a trait method (implements a trait)
@@ -6889,6 +6889,14 @@ pub struct TirParam {
     /// them — reads `false` here whatever the type says, and must ask the type.
     pub is_mut_ref: bool,
     pub span: Span,
+}
+
+impl TirParam {
+    /// Whether this is the `self` receiver.
+    #[must_use]
+    pub fn is_self(&self) -> bool {
+        self.name == "self"
+    }
 }
 
 #[derive(Debug, Clone)]
