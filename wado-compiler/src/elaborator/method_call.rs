@@ -1937,21 +1937,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        // Handle custom variant construction: Shape::Circle(5.0) or MyVariant::Unit
-        // No matching case falls through to method lookup (`AppError::from(e)`).
-        if builds_own_case
-            && let ResolvedType::Variant { .. } =
-                self.tysys.type_table.borrow().get(target_type_id).clone()
-            && let Some(variant_info) = self.tysys.variant_of_type(target_type_id)
-            && let Some((_, case_data)) = variant_info.case_named(&static_call.method)
-        {
-            if !self.check_case_arity(case_data, args.len(), static_call.span) {
-                return TypeTable::ERROR;
-            }
-            return target_type_id;
-        }
-
-        // Handle generic variant construction: Result::<i32, String>::Ok(42)
+        // A static call's head carries a turbofish, so only a generic variant builds a
+        // case here (`Result::<i32, String>::Ok(42)`); no match falls through to lookup.
         let is_generic_instance = matches!(
             self.tysys.type_table.borrow().get(target_type_id),
             ResolvedType::GenericInstance { .. }
