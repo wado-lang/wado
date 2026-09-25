@@ -62,9 +62,9 @@ fn push_chunk(out: &mut ByteList, kind: ByteList, data: &ByteList) {
 }
 
 fn paeth(a: i32, b: i32, c: i32) -> i32 {
-    let pa = if b > c { b - c } else { c - b };
-    let pb = if a > c { a - c } else { c - a };
-    let pc = if a + b > c + c { a + b - c - c } else { c + c - a - b };
+    let pa = i32::abs(b - c);
+    let pb = i32::abs(a - c);
+    let pc = i32::abs(a + b - c - c);
     if pa <= pb && pa <= pc {
         return a;
     }

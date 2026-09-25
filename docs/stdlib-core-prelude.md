@@ -2041,6 +2041,11 @@ True for a NaN, quiet or signaling.
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn abs(x: i64) -> i64`
+
+The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
+as negating it does.
+
 #### `pub fn clz(x: i64) -> i64`
 
 Counts the leading zeros in this integer.
@@ -2281,6 +2286,11 @@ Counts the number of set bits (population count).
 
 `value` confined to `low..=high`. Traps when `low > high`.
 
+#### `pub fn abs(x: i8) -> i8`
+
+The magnitude of `x`. `MIN` has none in `i8` and wraps to itself,
+as negating it does.
+
 #### `pub fn to_string(&self) -> String`
 
 #### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
@@ -2376,6 +2386,11 @@ Counts the number of set bits (population count).
 #### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i16) -> i16`
+
+The magnitude of `x`. `MIN` has none in `i16` and wraps to itself,
+as negating it does.
 
 #### `pub fn to_string(&self) -> String`
 
@@ -2476,6 +2491,11 @@ Counts the number of set bits (population count).
 #### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i32) -> i32`
+
+The magnitude of `x`. `MIN` has none in `i32` and wraps to itself,
+as negating it does.
 
 #### `pub fn clz(x: i32) -> i32`
 
@@ -3826,6 +3846,11 @@ The smaller of two values.
 #### `pub fn clamp(value: i128, low: i128, high: i128) -> i128`
 
 `value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn abs(x: i128) -> i128`
+
+The magnitude of `x`. `MIN` has none in `i128` and wraps to itself,
+as negating it does.
 
 #### `pub fn low(&self) -> u64`
 

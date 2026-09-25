@@ -290,7 +290,7 @@ fn format_offset_suffix(offset_seconds: i64) -> String {
 /// Format a signed offset second count as `±HH:MM`, spelling zero `"+00:00"`.
 fn format_offset(offset_seconds: i64) -> String {
     let sign = if offset_seconds < 0 { "-" } else { "+" };
-    let magnitude = if offset_seconds < 0 { -offset_seconds } else { offset_seconds };
+    let magnitude = i64::abs(offset_seconds);
     return `${sign}${magnitude / 3600:02}:${magnitude % 3600 / 60:02}`;
 }
 
