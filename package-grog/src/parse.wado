@@ -1,0 +1,360 @@
+//! A `.proto` file's parse tree, read into `schema.wado`'s declarations.
+
+use protobuf from "../grammar/Protobuf.g4"
+    with {
+        generator: { module: "../../package-gale/src/generator.wado" },
+    };
+use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
+
+/// Read a `.proto` file. A syntax error comes back as its first diagnostic,
+/// `line:col: message`.
+pub fn read<S: AsStrSlice>(source: S) -> Result<ProtoFile, String> {
+    let result = protobuf::parse(source);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        return Result::Err(`${d.line}:${d.col}: ${d.message}`);
+    }
+    let mut reader = Reader {
+        s: &result.cst,
+        toks: &result.tokens,
+        starts: protobuf::line_starts(result.tokens.chars),
+        messages: [],
+        enums: [],
+    };
+    return reader.read_file();
+}
+
+struct Reader {
+    s: &protobuf::CstStore,
+    toks: &protobuf::TokenStream,
+    starts: List<i32>,
+    messages: List<MessageDecl>,
+    enums: List<EnumDecl>,
+}
+
+impl Reader {
+    fn read_file(&mut self) -> Result<ProtoFile, String> {
+        let mut syntax = Syntax::Proto2;
+        let mut package = "";
+        let mut imports: List<String> = [];
+        let mut features = Features {};
+        for let c of self.nodes(0) {
+            let kind = self.s.kind(c);
+            if kind == protobuf::RK_SYNTAX_DECL {
+                syntax = self.read_syntax(c)?;
+            } else if kind == protobuf::RK_EDITION_DECL {
+                syntax = self.read_edition(c)?;
+            } else if kind == protobuf::RK_TOP_LEVEL {
+                let item = self.only_node(c);
+                if item < 0 {
+                    continue;
+                }
+                let item_kind = self.s.kind(item);
+                if item_kind == protobuf::RK_IMPORT_DECL {
+                    imports.push(self.string_under(item));
+                } else if item_kind == protobuf::RK_PACKAGE_DECL {
+                    package = self.text(self.child(item, protobuf::RK_FULL_IDENT));
+                } else if item_kind == protobuf::RK_OPTION_DECL {
+                    self.read_feature(&mut features, item);
+                } else if item_kind == protobuf::RK_MESSAGE_DEF {
+                    self.read_message(item, &[])?;
+                } else if item_kind == protobuf::RK_ENUM_DEF {
+                    self.read_enum(item, &[])?;
+                }
+            }
+        }
+        return Result::Ok(ProtoFile {
+            syntax,
+            package,
+            imports,
+            features,
+            messages: self.messages,
+            enums: self.enums,
+        });
+    }
+
+    fn read_syntax(&self, decl: i32) -> Result<Syntax, String> {
+        let name = self.string_under(decl);
+        if name == "proto2" {
+            return Result::Ok(Syntax::Proto2);
+        }
+        if name == "proto3" {
+            return Result::Ok(Syntax::Proto3);
+        }
+        return Result::Err(`${self.line(decl)}: syntax "${name}" is neither "proto2" nor "proto3"`);
+    }
+
+    fn read_edition(&self, decl: i32) -> Result<Syntax, String> {
+        let year = self.string_under(decl);
+        if year == "2023" || year == "2024" || year == "2026" {
+            return Result::Ok(Syntax::Edition(year));
+        }
+        return Result::Err(`${self.line(decl)}: edition "${year}" is not one Grog reads`);
+    }
+
+    fn read_message(&mut self, def: i32, outer: &List<String>) -> Result<(), String> {
+        let mut path = *outer;
+        path.push(self.text(self.child(def, protobuf::RK_IDENT)));
+        let mut fields: List<Field> = [];
+        let mut features = Features {};
+        let mut nested: List<i32> = [];
+        for let element of self.nodes(self.child(def, protobuf::RK_MESSAGE_BODY)) {
+            let item = self.only_node(element);
+            if item < 0 {
+                continue;
+            }
+            let kind = self.s.kind(item);
+            if kind == protobuf::RK_FIELD {
+                fields.push(self.read_field(item, null));
+            } else if kind == protobuf::RK_GROUP {
+                fields.push(self.read_group(item, null));
+            } else if kind == protobuf::RK_MAP_FIELD {
+                fields.push(self.read_map_field(item));
+            } else if kind == protobuf::RK_ONEOF {
+                let name = self.text(self.child(item, protobuf::RK_IDENT));
+                for let member of self.nodes(item) {
+                    if self.s.kind(member) != protobuf::RK_ONEOF_ELEMENT {
+                        continue;
+                    }
+                    let inner = self.only_node(member);
+                    if inner < 0 {
+                        continue;
+                    }
+                    let inner_kind = self.s.kind(inner);
+                    if inner_kind == protobuf::RK_ONEOF_FIELD {
+                        fields.push(self.read_field(inner, Option::Some(name)));
+                    } else if inner_kind == protobuf::RK_GROUP {
+                        fields.push(self.read_group(inner, Option::Some(name)));
+                    }
+                }
+            } else if kind == protobuf::RK_MESSAGE_DEF || kind == protobuf::RK_ENUM_DEF {
+                nested.push(item);
+            } else if kind == protobuf::RK_OPTION_DECL {
+                self.read_feature(&mut features, item);
+            }
+        }
+        self.messages.push(MessageDecl { path, fields, features, line: self.line(def) });
+        for let item of nested {
+            if self.s.kind(item) == protobuf::RK_MESSAGE_DEF {
+                self.read_message(item, &path)?;
+            } else {
+                self.read_enum(item, &path)?;
+            }
+        }
+        return Result::Ok(());
+    }
+
+    /// A `field` or a `oneofField`: the latter has no label.
+    fn read_field(&self, node: i32, oneof: Option<String>) -> Field {
+        return Field {
+            name: self.text(self.child(node, protobuf::RK_IDENT)),
+            number: self.int_after_eq(node),
+            label: self.label_of(node),
+            type_: type_of(self.text(self.child(node, protobuf::RK_TYPE_REF))),
+            oneof,
+            features: self.field_features(node),
+            line: self.line(node),
+        };
+    }
+
+    fn read_group(&self, node: i32, oneof: Option<String>) -> Field {
+        let name = self.text(self.child(node, protobuf::RK_IDENT));
+        return Field {
+            name: name.to_ascii_lowercase(),
+            number: self.int_after_eq(node),
+            label: self.label_of(node),
+            type_: FieldType::Group(name),
+            oneof,
+            features: self.field_features(node),
+            line: self.line(node),
+        };
+    }
+
+    fn read_map_field(&self, node: i32) -> Field {
+        let types = self.nodes_of(node, protobuf::RK_TYPE_REF);
+        return Field {
+            name: self.text(self.child(node, protobuf::RK_IDENT)),
+            number: self.int_after_eq(node),
+            label: Label::Repeated,
+            type_: FieldType::Map([
+                self.text(types[0]),
+                type_of(self.text(types[1])),
+            ]),
+            features: self.field_features(node),
+            line: self.line(node),
+        };
+    }
+
+    fn read_enum(&mut self, def: i32, outer: &List<String>) -> Result<(), String> {
+        let mut path = *outer;
+        path.push(self.text(self.child(def, protobuf::RK_IDENT)));
+        let mut values: List<EnumValue> = [];
+        for let element of self.nodes(self.child(def, protobuf::RK_ENUM_BODY)) {
+            let item = self.only_node(element);
+            if item >= 0 && self.s.kind(item) == protobuf::RK_ENUM_VALUE {
+                let number_node = self.child(item, protobuf::RK_SIGNED_INT);
+                let Some(number) = int_value(&self.text(number_node)) else {
+                    return Result::Err(`${self.line(item)}: ${self.text(number_node)} is not an enum number`);
+                };
+                values.push(EnumValue { name: self.text(self.child(item, protobuf::RK_IDENT)), number });
+            }
+        }
+        self.enums.push(EnumDecl { path, values, line: self.line(def) });
+        return Result::Ok(());
+    }
+
+    fn label_of(&self, node: i32) -> Label {
+        let label = self.s.find_child(node, protobuf::RK_LABEL);
+        if label < 0 {
+            return Label::None;
+        }
+        let text = self.text(label);
+        if text == "optional" {
+            return Label::Optional;
+        }
+        if text == "required" {
+            return Label::Required;
+        }
+        return Label::Repeated;
+    }
+
+    /// The field number: the one `INT` token directly under the field.
+    fn int_after_eq(&self, node: i32) -> i32 {
+        for let mut c = self.s.first_child(node); c >= 0; c = self.s.next_sibling(c) {
+            if self.s.is_token(c) && self.toks.kind_at(self.s.token_index(c)) == protobuf::TK_INT {
+                return int_value(&self.toks.token_text(self.s.token_index(c))).unwrap_or(0);
+            }
+        }
+        return 0;
+    }
+
+    fn field_features(&self, node: i32) -> Features {
+        let mut features = Features {};
+        let options = self.s.find_child(node, protobuf::RK_FIELD_OPTIONS);
+        if options >= 0 {
+            for let option of self.nodes_of(options, protobuf::RK_FIELD_OPTION) {
+                self.read_feature(&mut features, option);
+            }
+        }
+        return features;
+    }
+
+    /// An `optionDecl` or a `fieldOption` setting a feature Grog reads.
+    fn read_feature(&self, features: &mut Features, option: i32) {
+        let name = self.text(self.child(option, protobuf::RK_OPTION_NAME));
+        let value = self.text(self.child(option, protobuf::RK_CONSTANT));
+        if name == "features.field_presence" {
+            features.field_presence = Option::Some(value);
+        } else if name == "features.message_encoding" {
+            features.message_encoding = Option::Some(value);
+        }
+    }
+
+    fn line(&self, node: i32) -> i32 {
+        return protobuf::line_col_at(&self.starts, self.s.span(node).start).0;
+    }
+
+    fn child(&self, node: i32, kind: protobuf::NodeKind) -> i32 {
+        let found = self.s.find_child(node, kind);
+        assert found >= 0, `rule ${kind} under rule ${self.s.kind(node)}`;
+        return found;
+    }
+
+    fn nodes(&self, node: i32) -> List<i32> {
+        let mut out: List<i32> = [];
+        for let mut c = self.s.first_child(node); c >= 0; c = self.s.next_sibling(c) {
+            if self.s.is_node(c) {
+                out.push(c);
+            }
+        }
+        return out;
+    }
+
+    fn nodes_of(&self, node: i32, kind: protobuf::NodeKind) -> List<i32> {
+        let mut out: List<i32> = [];
+        for let c of self.nodes(node) {
+            if self.s.kind(c) == kind {
+                out.push(c);
+            }
+        }
+        return out;
+    }
+
+    /// The one rule a wrapper rule (`topLevel`, `messageElement`, …) holds, or
+    /// -1 where it holds a bare `;`.
+    fn only_node(&self, node: i32) -> i32 {
+        for let mut c = self.s.first_child(node); c >= 0; c = self.s.next_sibling(c) {
+            if self.s.is_node(c) {
+                return c;
+            }
+        }
+        return -1;
+    }
+
+    /// Every token under a node, run together with nothing between them.
+    fn text(&self, node: i32) -> String {
+        let mut out = "";
+        self.push_text(&mut out, node);
+        return out;
+    }
+
+    fn push_text(&self, out: &mut String, node: i32) {
+        for let mut c = self.s.first_child(node); c >= 0; c = self.s.next_sibling(c) {
+            if self.s.is_token(c) {
+                self.toks.push_token_text(out, self.s.token_index(c));
+            } else {
+                self.push_text(out, c);
+            }
+        }
+    }
+
+    /// The value of the `strLit` under a node, its pieces joined.
+    fn string_under(&self, node: i32) -> String {
+        let mut out = "";
+        let lit = self.child(node, protobuf::RK_STR_LIT);
+        for let mut c = self.s.first_child(lit); c >= 0; c = self.s.next_sibling(c) {
+            let quoted = self.toks.token_text(self.s.token_index(c));
+            let view = quoted.as_str_slice();
+            out.push_str(&view.slice(1, view.len() - 1).to_string());
+        }
+        return out;
+    }
+}
+
+fn type_of(name: String) -> FieldType {
+    if is_scalar(&name) {
+        return FieldType::Scalar(name);
+    }
+    return FieldType::Named(name);
+}
+
+pub fn is_scalar(name: &String) -> bool {
+    let scalars: List<String> = [
+        "double", "float", "int32", "int64", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32",
+        "sfixed64", "bool", "string", "bytes",
+    ];
+    return scalars.contains_str(name);
+}
+
+/// A `signedInt` or an `INT` as protoc reads it: `0x` is hex, a leading `0`
+/// octal. `None` past `i32`, which no field or enum number reaches.
+fn int_value(text: &String) -> Option<i32> {
+    let view = text.as_str_slice();
+    let negative = view.len() > 0 && view.slice(0, 1) == "-";
+    let digits = if negative { view.slice(1, view.len()) } else { view };
+    let parsed = if digits.len() > 2 && (digits.slice(0, 2) == "0x" || digits.slice(0, 2) == "0X") {
+        i64::from_str_radix(digits.slice(2, digits.len()), 16);
+    } else if digits.len() > 1 && digits.slice(0, 1) == "0" {
+        i64::from_str_radix(digits.slice(1, digits.len()), 8);
+    } else {
+        i64::from_str(digits);
+    };
+    let Ok(magnitude) = parsed else {
+        return null;
+    };
+    let value = if negative { -magnitude } else { magnitude };
+    if value < i32::MIN as i64 || value > i32::MAX as i64 {
+        return null;
+    }
+    return Option::Some(value as i32);
+}
