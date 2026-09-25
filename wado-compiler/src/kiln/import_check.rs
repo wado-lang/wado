@@ -178,7 +178,7 @@ pub fn inject_kiln_request_adapter(
     let module_param = param(module, "module", module_ty);
     let options_param = has_options.then(|| param(module, "options", options_type));
 
-    // `Request { primary, inputs, options }`, where `options` is the typed
+    // `Request { primary, inputs, module, options }`, where `options` is the typed
     // `options` argument (or a literal `NoOptions {}` for a no-options
     // generator). Same-scope shadowing rebinds `<param_name>` to `Request<T>`.
     let ident_field = |module: &mut Module, name: &str| StructLiteralField {

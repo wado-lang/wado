@@ -39,7 +39,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 /// Ergonomic form: the author writes `fn generate(req: Request<Options>)`
 /// and the compiler's `kiln::import_check::inject_kiln_request_adapter`
 /// phase rewrites it into the flat typed parameters
-/// `(primary, inputs, options)` of the generator's synthesized world before
+/// `(primary, inputs, module, options)` of the generator's synthesized world before
 /// analyze runs.
 const ADAPTER_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";

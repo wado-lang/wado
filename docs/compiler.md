@@ -159,7 +159,8 @@ import. See [WEP: WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md).
 Kiln turns an input file (a schema, a grammar, a Wado dialect) into `.wado`
 source. A generator is an ordinary Wado package targeting the
 `core:kiln/generator` world. `wado-cli` builds and runs it, and caches the
-output by its inputs, options, and the generator's source. The compiler holds
+output by its inputs, options, the name it was invoked by, and the generator's
+source. The compiler holds
 only the pure-data half: the invocations, their order, cache keys, and option
 checks. It redirects an import to the generated source. See
 [WEP: Kiln](./wep-2026-04-12-kiln.md).

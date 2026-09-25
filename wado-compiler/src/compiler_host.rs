@@ -544,7 +544,7 @@ pub struct DependencyIndex {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Carries the `generate(primary, inputs, options)` arguments in a
+/// Carries the `generate(primary, inputs, module, options)` arguments in a
 /// wasmtime-independent form; the host lifts/lowers at its own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
