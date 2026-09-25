@@ -422,9 +422,7 @@ impl Emitter {
         return match &self.file.syntax {
             Proto2 => false,
             Proto3 => true,
-            Edition(_) => !(self.inherited(&decl.features, &decl.path, |f| f.enum_type) matches {
-                Some(t) && t == "CLOSED"
-            }),
+            Edition(_) => !self.inherited(&decl.features, &decl.path, |f| f.enum_type) matches { Some(t) && t == "CLOSED" },
         };
     }
 
@@ -517,8 +515,11 @@ impl Emitter {
             Scalar([wado, runtime, zero]) => {
                 match self.presence(decl, field) {
                     Implicit => Result::Ok([wado, zero, access(n, "implicit", Take::Stored("v"), `::<${runtime}>`)]),
-                    Explicit => Result::Ok([`Option<${wado}>`, "null", access(n, "optional", Take::Stored("Option::Some(v)"), `::<${runtime}>`)]),
-                };
+                    Explicit => {
+                        let optional = access(n, "optional", Take::Stored("Option::Some(v)"), `::<${runtime}>`);
+                        Result::Ok([`Option<${wado}>`, "null", optional]);
+                    },
+                }
             },
             Message([wado, group]) => {
                 let put = if group { "optional_group" } else { "optional_message" };
@@ -543,19 +544,13 @@ impl Emitter {
         }
         self.uses_map = true;
         let [key_wado, key_runtime, _] = scalar(key);
-        return match self.resolve_type(decl, field, value)? {
-            Scalar([wado, runtime, _]) => Result::Ok([
-                `TreeMap<${key_wado}, ${wado}>`,
-                "TreeMap::new()",
-                access(field.number, "map", Take::Into("map"), `::<${key_runtime}, ${runtime}, ${key_wado}, ${wado}>`),
-            ]),
+        let [wado, put, types] = match self.resolve_type(decl, field, value)? {
+            Scalar([wado, runtime, _]) => [wado, "map", `::<${key_runtime}, ${runtime}, ${key_wado}, ${wado}>`],
             // An entry's value is length-prefixed whatever the message's encoding.
-            Message([wado, _]) => Result::Ok([
-                `TreeMap<${key_wado}, ${wado}>`,
-                "TreeMap::new()",
-                access(field.number, "message_map", Take::Into("message_map"), `::<${key_runtime}, ${key_wado}, ${wado}>`),
-            ]),
+            Message([wado, _]) => [wado, "message_map", `::<${key_runtime}, ${key_wado}, ${wado}>`],
         };
+        let map = `TreeMap<${key_wado}, ${wado}>`;
+        return Result::Ok([map, "TreeMap::new()", access(field.number, put, Take::Into(put), types)]);
     }
 
     /// A `oneof` member: its case, and how its value sits on the wire.
@@ -602,8 +597,7 @@ impl Emitter {
                 };
                 return match named.kind {
                     Message => Result::Ok(Resolved::Message([
-                        named.name,
-                        ty matches { Group(_) } || self.delimited(decl, field),
+                        named.name, ty matches { Group(_) } || self.delimited(decl, field),
                     ])),
                     Enum(first) => Result::Ok(Resolved::Scalar([named.name, `${RUNTIME}::Enum<${named.name}>`, first])),
                 };
@@ -650,15 +644,13 @@ impl Emitter {
 
     /// Whether a repeated scalar is written as one length-prefixed run.
     fn packed(&self, decl: &MessageDecl, field: &Field) -> bool {
-        if field.type_ matches { Scalar(s) && (s == "string" || s == "bytes") } {
+        if field.type_ matches { Scalar(s) && s == "string" || s == "bytes" } {
             return false;
         }
         return match &self.file.syntax {
             Proto2 => field.packed matches { Some(true) },
-            Proto3 => !(field.packed matches { Some(false) }),
-            Edition(_) => !(self.feature(decl, field, |f| f.repeated_field_encoding) matches {
-                Some(e) && e == "EXPANDED"
-            }),
+            Proto3 => !field.packed matches { Some(false) },
+            Edition(_) => !self.feature(decl, field, |f| f.repeated_field_encoding) matches { Some(e) && e == "EXPANDED" },
         };
     }
 

@@ -18,7 +18,9 @@ test "nested declarations flatten by path" {
 }
 
 test "a map is a TreeMap" {
-    let out = generate("syntax = \"proto3\"; message M { map<sint32, M> children = 1; map<string, E> e = 2; } enum E { Z = 0; }");
+    let out = generate(
+        "syntax = \"proto3\"; message M { map<sint32, M> children = 1; map<string, E> e = 2; } enum E { Z = 0; }",
+    );
     assert out.contains("use { TreeMap } from \"core:collections\";");
     assert out.contains("pub children: TreeMap<i32, M> = TreeMap::new(),");
     assert out.contains("n += s.message_map::<grog::SInt32, i32, M>(1, &self.children);");
@@ -109,7 +111,9 @@ test "flattened names that collide are refused" {
 }
 
 test "a group is a message delimited by tags" {
-    let out = generate("syntax = \"proto2\"; message M { optional group G = 1 { optional int32 x = 2; } repeated group H = 3 {} }");
+    let out = generate(
+        "syntax = \"proto2\"; message M { optional group G = 1 { optional int32 x = 2; } repeated group H = 3 {} }",
+    );
     assert out.contains("pub struct MG {");
     assert out.contains("pub g: Option<MG> = null,");
     assert out.contains("n += s.optional_group(1, &self.g);");
@@ -289,18 +293,26 @@ test "a closed enum refuses a number it does not declare" {
 }
 
 test "packing follows the syntax, the option and the feature" {
-    let proto3 = generate("syntax = \"proto3\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = false]; repeated string c = 3; }");
+    let proto3 = generate(
+        "syntax = \"proto3\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = false]; repeated string c = 3; }",
+    );
     assert proto3.contains("s.packed::<grog::Int32>(1, &self.a);");
     assert proto3.contains("s.repeated::<grog::Int32>(2, &self.b);");
     assert proto3.contains("s.repeated::<grog::Str>(3, &self.c);");
-    let proto2 = generate("syntax = \"proto2\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = true]; }");
+    let proto2 = generate(
+        "syntax = \"proto2\"; message M { repeated int32 a = 1; repeated int32 b = 2 [packed = true]; }",
+    );
     assert proto2.contains("s.repeated::<grog::Int32>(1, &self.a);");
     assert proto2.contains("s.packed::<grog::Int32>(2, &self.b);");
-    let edition = generate("edition = \"2023\"; message M { repeated int32 a = 1; repeated int32 b = 2 [features.repeated_field_encoding = EXPANDED]; }");
+    let edition = generate(
+        "edition = \"2023\"; message M { repeated int32 a = 1; repeated int32 b = 2 [features.repeated_field_encoding = EXPANDED]; }",
+    );
     assert edition.contains("s.packed::<grog::Int32>(1, &self.a);");
     assert edition.contains("s.repeated::<grog::Int32>(2, &self.b);");
 }
 
 test "a field named for the unknown fields is suffixed" {
-    assert generate("syntax = \"proto3\"; message M { int32 unknown_fields = 1; }").contains("pub unknown_fields_: i32 = 0,");
+    assert generate("syntax = \"proto3\"; message M { int32 unknown_fields = 1; }").contains(
+        "pub unknown_fields_: i32 = 0,",
+    );
 }

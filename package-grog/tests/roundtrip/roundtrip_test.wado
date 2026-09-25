@@ -83,7 +83,9 @@ test "explicit presence writes a zero" {
 }
 
 test "a repeated scalar is packed in proto3 and read either way" {
-    assert hex(&grog::encode(&Account { scores: [1, -1] })) == "8a01020201";
+    assert hex(&grog::encode(&Account {
+        scores: [1, -1],
+    })) == "8a01020201";
     let unpacked = grog::decode::<Account>(&unhex("880102880101")).unwrap();
     assert unpacked.scores == [1, -1];
 }
@@ -121,7 +123,10 @@ test "a truncated or malformed input is refused" {
 }
 
 test "proto2 writes every set field, zeros included" {
-    let record = legacy::Record { id: Option::Some(0), level: Option::Some(legacy::Level::Low) };
+    let record = legacy::Record {
+        id: Option::Some(0),
+        level: Option::Some(legacy::Level::Low),
+    };
     assert hex(&grog::encode(&record)) == "08001001";
 }
 
@@ -133,7 +138,10 @@ test "a closed enum's undeclared number is an unknown field" {
 }
 
 test "proto2 repeated scalars are unpacked unless asked" {
-    let record = legacy::Record { counts: [1, 2], packed_counts: [3, 4] };
+    let record = legacy::Record {
+        counts: [1, 2],
+        packed_counts: [3, 4],
+    };
     assert hex(&grog::encode(&record)) == "200120022a020304";
 }
 
