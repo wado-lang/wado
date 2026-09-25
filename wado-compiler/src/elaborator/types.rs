@@ -809,7 +809,7 @@ pub enum TypeError {
 
     /// `Trait::<T>::method()` on a trait declaring parameters of its own. The
     /// turbofish is that trait's argument list, so it names no receiver; a
-    /// static's receiver is written out instead (`docs/spec.md`, "A trait's
+    /// static's receiver is written out instead (`docs/spec-traits.md`, "A trait's
     /// associated function").
     StaticNeedsWrittenReceiver {
         trait_name: String,
