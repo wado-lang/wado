@@ -165,6 +165,16 @@ fn stretched_strides(extents: &List<i32>, rank: i32) -> List<i32> {
     return strides;
 }
 
+/// The axis a merge makes of `Parts`, a tuple of axis markers.
+pub struct Merged<Parts> {}
+
+/// The same elements under another axis list. A regrouping keeps row-major
+/// order, so no element moves.
+pub fn reshape<From, To>(t: &Tensor<f32, From>, extents: List<i32>) -> Tensor<f32, To> {
+    assert element_count(&extents) == t.data.len();
+    return Tensor { data: t.data, extents };
+}
+
 pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
     assert t.extents.len() == 2;
     let rows = t.extents[0];

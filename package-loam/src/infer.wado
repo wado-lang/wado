@@ -76,8 +76,16 @@ pub struct OutputCountConflict {
     pub given: i32,
 }
 
+/// A node whose operands or target this Loam cannot act on, and why.
+pub struct Refusal {
+    pub node: String,
+    pub op: String,
+    pub reason: String,
+}
+
 pub variant InferError {
     Unnamed(UnnamedTensor),
+    Refused(Refusal),
     AxisCount(AxisCountConflict),
     UnknownOperator(String),
     UnrankedTensor(String),
@@ -103,6 +111,12 @@ impl Display for AxisCountConflict {
         f.write_str(
             `${self.tensor}: the schema names ${self.named} axes and the graph gives ${self.dims} dimensions`,
         );
+    }
+}
+
+impl Display for Refusal {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: ${self.reason}`);
     }
 }
 
@@ -160,6 +174,7 @@ impl Display for InferError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             Unnamed(e) => e.fmt(f),
+            Refused(e) => e.fmt(f),
             AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
@@ -195,7 +210,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
                 given: node.outputs.len(),
             }));
         }
-        shapes[node.outputs[0]] = infer_node(node, &shapes)?;
+        shapes[node.outputs[0]] = infer_node(node, &shapes, graph, schema)?;
     }
     for let vi of &graph.outputs {
         let Some(produced) = shapes.get(vi.name) else {
@@ -308,8 +323,16 @@ fn extent_of(dim: &Dim, axis: &String) -> Extent {
     };
 }
 
-fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, InferError> {
+fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schema: &Schema) -> Result<Shape, InferError> {
     let op = node.op;
+    if op == "Reshape" {
+        arity(node, 2)?;
+        return reshape(node, &operand(node, shapes, 0)?, graph, schema);
+    }
+    if op == "Flatten" {
+        arity(node, 1)?;
+        return flatten(node, &operand(node, shapes, 0)?, schema);
+    }
     if op == "MatMul" {
         let [a, b] = binary_operands(node, shapes)?;
         if a.rank() == 0 || b.rank() == 0 {
@@ -357,6 +380,119 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
+}
+
+/// `Reshape` regroups the operand's axes onto the target shape the graph
+/// carries.
+fn reshape(node: &Node, operand: &Shape, graph: &Graph, schema: &Schema) -> Result<Shape, InferError> {
+    let target = node.inputs[1];
+    let Some(written) = graph.integers.get(target) else {
+        return Result::Err(refusal(node, `the target shape ${target} is not an int64 initializer the graph carries`));
+    };
+    let total = static_count(node, operand)?;
+    return regrouped(node, operand, &reshape_targets(node, operand, &written, total)?, schema);
+}
+
+/// `Flatten` regroups the axes ahead of `axis` into one and the rest into
+/// another, either of which may be empty and so extent 1.
+fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
+    let total = static_count(node, operand)?;
+    let written = match node.attr("axis") {
+        Some(a) => i32::from_str(&a.values[0]).unwrap_or(i32::MIN),
+        None => 1,
+    };
+    let axis = if written < 0 { written + operand.rank() } else { written };
+    if !(0 <= axis <= operand.rank()) {
+        return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${operand.rank()}`));
+    }
+    let mut leading = 1;
+    for let i of 0..<axis {
+        leading *= operand.axes[i].static_extent();
+    }
+    return regrouped(node, operand, &[leading, (total / leading as i64) as i32], schema);
+}
+
+/// The operand's element count, which a regrouping reads from static extents.
+fn static_count(node: &Node, operand: &Shape) -> Result<i64, InferError> {
+    let mut total: i64 = 1;
+    for let axis of operand.axes {
+        let Static(e) = axis.extent else {
+            return Result::Err(refusal(
+                node,
+                `axis ${axis.name} is ${axis.extent}, and a regrouping reads static extents`,
+            ));
+        };
+        total *= e as i64;
+    }
+    return Result::Ok(total);
+}
+
+/// The operand's axes regrouped onto `targets`. An axis no regrouping
+/// determines is the output layout's to name.
+fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema) -> Result<Shape, InferError> {
+    let output = node.outputs[0];
+    let mut axes: List<Axis> = [];
+    for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
+        if let Some(axis) = found {
+            axes.push(axis);
+            continue;
+        }
+        let Some(names) = schema.axes_for(&output) else {
+            return Result::Err(refusal(
+                node,
+                `axis ${i} regroups none of the operand's axes, so a layout pattern must name ${output}'s`,
+            ));
+        };
+        if names.len() != targets.len() {
+            return Result::Err(InferError::AxisCount(AxisCountConflict {
+                tensor: output,
+                named: names.len(),
+                dims: targets.len(),
+            }));
+        }
+        axes.push(Axis { name: names[i], extent: Extent::Static(targets[i]) });
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// The target shape's extents as ONNX reads them: `0` copies the operand's
+/// extent at that position unless `allowzero` is set, and one `-1` is what the
+/// others leave of the element count.
+fn reshape_targets(node: &Node, operand: &Shape, written: &List<i64>, total: i64) -> Result<List<i32>, InferError> {
+    let allow_zero = node.attr("allowzero") matches { Some(a) && a.values.first() == Option::Some("1") };
+    let mut targets: List<i32> = [];
+    let mut inferred = -1;
+    let mut known: i64 = 1;
+    for let [i, w] of written.into_iter().enumerate() {
+        if *w == -1 && inferred < 0 {
+            inferred = i;
+            targets.push(1);
+            continue;
+        }
+        let e = if *w == 0 && !allow_zero && i < operand.rank() { operand.axes[i].static_extent() as i64 } else { *w };
+        if !(0 <= e <= i32::MAX as i64) {
+            return Result::Err(refusal(node, `the target shape holds ${*w}`));
+        }
+        targets.push(e as i32);
+        known *= e;
+    }
+    if inferred >= 0 && known != 0 && total % known == 0 {
+        targets[inferred] = (total / known) as i32;
+        known = total;
+    }
+    if known != total {
+        let mut spelled: List<String> = [];
+        for let w of *written {
+            spelled.push(`${w}`);
+        }
+        return Result::Err(refusal(node, `${total} elements cannot take the shape [${spelled.join(", ")}]`));
+    }
+    return Result::Ok(targets);
+}
+
+fn refusal(node: &Node, reason: String) -> InferError {
+    builtin::cold_path();
+    return InferError::Refused(Refusal { node: node_name(node), op: node.op, reason });
 }
 
 /// A `Constant`'s single element. Loam reads the one-element case, which is

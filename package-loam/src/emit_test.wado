@@ -211,6 +211,25 @@ g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
     assert out.contains("zip_suffix::<[Batch], [Chan, Row, Col]>(X, &weights.B, |x, y| x + y)");
 }
 
+test "Reshape relabels the tensor under the merged axis" {
+    let source = `
+g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
+<int64[2] S = {1, 256}>
+{
+    Y = Reshape(X, S)
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Chan", "Row", "Col"])]).unwrap();
+
+    assert out.contains("let Y = reshape::<[Batch, Chan, Row, Col], [Batch, Merged<[Chan, Row, Col]>]>(X, [1, 256]);");
+    assert out.contains("-> Tensor<f32, [Batch, Merged<[Chan, Row, Col]>]> {");
+    // A merged axis is spelled with its parts' markers, never declared itself.
+    assert out.contains("pub struct Chan {}");
+    assert !emitted(&out).contains("pub struct Merged");
+    // The target shape is read at build time, so no weight carries it.
+    assert !emitted(&out).contains("pub S:");
+}
+
 test "Gemm lowers to a matmul under its transpose flags" {
     let source = `
 g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)

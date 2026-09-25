@@ -1,8 +1,10 @@
 use {
+    Merged,
     Tensor,
     map,
     matmul,
     narrow,
+    reshape,
     sigmoid_f32,
     transpose2,
     widen,
@@ -103,6 +105,14 @@ test "zip_suffix_lhs keeps the operand order the operator wrote" {
     let c = zip_suffix_lhs::<[Row], [Col]>(&a, &b, |x, y| x - y);
     assert c.extents == [2, 2] as List<i32>;
     assert c.data == [9.0, 18.0, 7.0, 16.0] as List<f32>;
+}
+
+test "reshape keeps the elements in order under the new extents" {
+    let a: Tensor<f32, [Row, Col]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+
+    let b = reshape::<[Row, Col], [Merged<[Row, Col]>]>(&a, [6]);
+    assert b.extents == [6] as List<i32>;
+    assert b.data == a.data;
 }
 
 test "transpose2 swaps the two axes and their extents" {

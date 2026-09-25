@@ -495,6 +495,17 @@ fn axis_names_of(axes: &List<Axis>) -> List<String> {
 fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
     check_constants_fold(node, exprs)?;
+    if op == "Reshape" || op == "Flatten" {
+        let from = shapes.get(node.inputs[0]).unwrap();
+        let to = shapes.get(node.outputs[0]).unwrap();
+        let mut extents: List<String> = [];
+        for let axis of to.axes {
+            extents.push(`${axis.static_extent()}`);
+        }
+        return Result::Ok(
+            `reshape::<[${axis_list(&from)}], [${axis_list(&to)}]>(${exprs.reference(&node.inputs[0])}, [${extents.join(", ")}])`,
+        );
+    }
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
         // The kernel's signature is `[..Bs, M, K]` against `[..Bs, K, N]`, so
@@ -823,8 +834,16 @@ fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &Tree
     let Some(shape) = shapes.get(*tensor) else {
         return;
     };
-    for let axis of &shape.axes {
-        if seen.insert(axis.name) {
+    push_markers(names, seen, &shape.axes);
+}
+
+/// A merged axis is spelled with its parts' markers, so the parts are what the
+/// module declares.
+fn push_markers(names: &mut List<String>, seen: &mut TreeSet<String>, axes: &List<Axis>) {
+    for let axis of *axes {
+        if !axis.parts.is_empty() {
+            push_markers(names, seen, &axis.parts);
+        } else if seen.insert(axis.name) {
             names.push(axis.name);
         }
     }

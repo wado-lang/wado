@@ -8,6 +8,33 @@ use { Extent } from "./extent.wado";
 pub struct Axis {
     pub name: String,
     pub extent: Extent,
+    /// The axes a merge put side by side, in order; empty for an axis of its own.
+    pub parts: List<Axis> = [],
+}
+
+impl Axis {
+    /// One axis standing for `parts`, which a merge produces. Its name is the
+    /// type the generated module spells it with. See WEP 2026-09-20 § "A
+    /// Regrouped Axis Is Named by Its Parts".
+    pub fn merged(parts: List<Axis>, extent: i32) -> Axis {
+        assert parts.len() >= 2;
+        let mut names: List<String> = [];
+        for let p of parts {
+            names.push(p.name);
+        }
+        return Axis {
+            name: `Merged<[${names.join(", ")}]>`,
+            extent: Extent::Static(extent),
+            parts,
+        };
+    }
+
+    pub fn static_extent(&self) -> i32 {
+        let Static(e) = self.extent else {
+            unreachable();
+        };
+        return e;
+    }
 }
 
 pub struct Shape {
@@ -47,6 +74,59 @@ impl Shape {
             axes.push(self.axes[p]);
         }
         return Shape { axes };
+    }
+
+    /// `Reshape` onto `targets`, whose product is this shape's element count,
+    /// every extent being static. An output axis whose boundaries meet a run
+    /// of the operand's parts is that run, merged where it is several; `None`
+    /// is an axis no regrouping determines.
+    pub fn regroup(&self, targets: &List<i32>) -> List<Option<Axis>> {
+        let parts = self.parts();
+        let mut out: List<Option<Axis>> = [];
+        let mut next = 0;
+        let mut consumed: i64 = 1;
+        let mut produced: i64 = 1;
+        for let target of *targets {
+            let aligned = consumed == produced;
+            produced *= target as i64;
+            if target == 1 {
+                let takes_unit = aligned && next < parts.len() && parts[next].extent.is_one();
+                out.push(if takes_unit { Option::Some(parts[next]) } else { null });
+                if takes_unit {
+                    next += 1;
+                }
+                continue;
+            }
+            let mut run: List<Axis> = [];
+            while next < parts.len() && consumed < produced {
+                consumed *= parts[next].static_extent() as i64;
+                if !parts[next].extent.is_one() {
+                    run.push(parts[next]);
+                }
+                next += 1;
+            }
+            if !aligned || consumed != produced {
+                out.push(null);
+            } else if run.len() == 1 {
+                out.push(Option::Some(run[0]));
+            } else {
+                out.push(Option::Some(Axis::merged(run, target)));
+            }
+        }
+        return out;
+    }
+
+    /// The axes with each merged one replaced by the parts it was made of.
+    fn parts(&self) -> List<Axis> {
+        let mut parts: List<Axis> = [];
+        for let axis of self.axes {
+            if axis.parts.is_empty() {
+                parts.push(axis);
+            } else {
+                parts.extend(&axis.parts);
+            }
+        }
+        return parts;
     }
 
     /// The axis `back` positions from the end, `0` being the last.
