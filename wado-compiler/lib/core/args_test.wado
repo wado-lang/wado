@@ -426,6 +426,13 @@ test "a repeatable enum option converts each occurrence" {
     assert r matches { Ok(o) && o.layer == [Shade::Light, Shade::DarkBlue] };
 }
 
+test "an enum option naming no case reports InvalidValue" {
+    let bad = parse::<EnumOpts>(["--shade", "indigo"]);
+    assert bad matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue && e.message == "invalid value for option --shade: 'indigo'" };
+    let r = parse::<EnumOpts>(["--layer", "light", "--layer=indigo"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
 test "an enum option without a value reports MissingValue" {
     let r = parse::<EnumOpts>(["--shade", "--tint", "light"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };

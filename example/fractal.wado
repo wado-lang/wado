@@ -12,7 +12,7 @@
 //! spiral / dendrite), `--julia-re` and `--julia-im`, `--out`, `--view`
 //! (auto / kitty / iterm / ansi / off) and `--columns`.
 
-use { println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { from_env } from "core:args";
 use { f64x2, i64x2 } from "core:simd";
 use fs from "core:fs";
@@ -55,6 +55,19 @@ struct Options {
     columns: i32 = 100,
 }
 
+impl Options {
+    /// Why these options cannot render, if they cannot.
+    fn problem(&self) -> Option<String> {
+        if self.width < 1 || self.height < 1 || self.samples < 1 || self.columns < 1 {
+            return Option::Some("--width, --height, --samples and --columns must be positive");
+        }
+        if !(self.zoom > 0.0 && self.zoom.is_finite()) {
+            return Option::Some("--zoom must be positive and finite");
+        }
+        return null;
+    }
+}
+
 /// The region of the plane an image covers: `zoom` 1 spans 3.2 units across.
 struct Viewport {
     center_x: f64,
@@ -83,9 +96,9 @@ variant Set {
 
 global BAILOUT: f64 = 256.0;
 
-/// Smooth escape time for two points at once, or -1 for a point that never
+/// Smooth escape time for two points at once, None for a point that never
 /// escaped. Lanes are frozen as they escape, so the loop runs until both have.
-fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [f64, f64] {
+fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [Option<f64>, Option<f64>] {
     let [mut zr, mut zi, cr, ci] = match *set {
         Mandelbrot => [
             f64x2::splat(0.0),
@@ -122,20 +135,20 @@ fn escape_time(set: &Set, x: f64x2, y: f64x2, max_iter: i32) -> [f64, f64] {
 }
 
 /// The continuous iteration count `n + 1 - log2(log|z|)`, which removes the
-/// banding an integer count leaves.
-fn smooth(count: f64, mag: f64) -> f64 {
+/// banding an integer count leaves. A point escaping at once would go below 0.
+fn smooth(count: f64, mag: f64) -> Option<f64> {
     if mag <= BAILOUT {
-        return -1.0;
+        return null;
     }
-    return count + 1.0 - f64::log2(0.5 * f64::ln(mag));
+    return Option::Some(f64::max(0.0, count + 1.0 - f64::log2(0.5 * f64::ln(mag))));
 }
 
 /// A cosine gradient `a + b·cos(2π(c·t + d))` (after Inigo Quilez), from
 /// smooth escape time to RGB; interior points are black.
-fn colorize(palette: Palette, t: f64) -> [f64, f64, f64] {
-    if t < 0.0 {
+fn colorize(palette: Palette, time: Option<f64>) -> [f64, f64, f64] {
+    let Some(t) = time else {
         return [0.0, 0.0, 0.0];
-    }
+    };
     let s = f64::sqrt(t) * 0.18;
     let [d0, d1, d2] = match palette {
         Fire => [0.0, 0.15, 0.25],
@@ -188,21 +201,23 @@ fn elapsed_ms(start: Mark) -> u64 with MonotonicClock {
     return (MonotonicClock::now() - start) as u64 / 1_000_000;
 }
 
-export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, TerminalStdout) {
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(`fractal: ${message}`);
+    exit_error();
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, TerminalStdout, Exit) {
     let opts = match from_env::<Options>() {
         Ok(o) => o,
-        Err(e) => {
-            eprintln(`fractal: ${e}`);
-            return;
-        },
+        Err(e) => fail(`${e}`),
     };
+    if let Some(problem) = opts.problem() {
+        fail(problem);
+    }
     let set = match [opts.julia_re, opts.julia_im] {
         [Some(re), Some(im)] => Set::Julia([re, im]),
         [None, None] => Set::Mandelbrot,
-        _ => {
-            eprintln("fractal: --julia-re and --julia-im go together");
-            return;
-        },
+        _ => fail("--julia-re and --julia-im go together"),
     };
     // The Mandelbrot set leans left of the origin; a Julia set is centred on it.
     let default_x = if set matches { Mandelbrot } { -0.6 } else { 0.0 };
@@ -216,8 +231,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
     let render_ms = elapsed_ms(start);
     let png = encode(&img);
     if let Err(e) = fs::write(&opts.out, &png) {
-        eprintln(`fractal: ${e}`);
-        return;
+        fail(`${e}`);
     }
     show(&img, &png, opts.view, opts.columns);
     println(
@@ -226,26 +240,40 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
     );
 }
 
+test "options that cannot render are refused" {
+    assert Options {}.problem() matches { None };
+    assert Options { width: 0 }.problem() matches { Some(_) };
+    assert Options { samples: -1 }.problem() matches { Some(_) };
+    assert Options { columns: 0 }.problem() matches { Some(_) };
+    assert Options { zoom: 0.0 }.problem() matches { Some(_) };
+    assert Options { zoom: f64::NAN }.problem() matches { Some(_) };
+}
+
 test "points inside the set never escape" {
     let [a, b] = escape_time(&Set::Mandelbrot, [0.0, -1.0], f64x2::splat(0.0), 200);
-    assert a == -1.0;
-    assert b == -1.0;
+    assert a matches { None };
+    assert b matches { None };
 }
 
 test "points outside escape, farther ones sooner" {
     let [near, far] = escape_time(&Set::Mandelbrot, [0.3, 2.0], f64x2::splat(0.0), 200);
-    assert near > far;
-    assert far > 0.0;
+    assert far matches { Some(f) && f > 0.0 };
+    assert near.unwrap() > far.unwrap();
+}
+
+test "a point far outside escapes at once, and still counts as outside" {
+    let [t, _] = escape_time(&Set::Mandelbrot, [100.0, 0.0], f64x2::splat(0.0), 200);
+    assert t matches { Some(v) && v >= 0.0 };
 }
 
 test "lanes escape independently" {
     let [inside, outside] = escape_time(&Set::Mandelbrot, [0.0, 2.0], f64x2::splat(0.0), 200);
-    assert inside == -1.0;
-    assert outside > 0.0;
+    assert inside matches { None };
+    assert outside matches { Some(t) && t > 0.0 };
 }
 
 test "the Julia set of c = 0 is the unit disk" {
     let [inside, outside] = escape_time(&Set::Julia([0.0, 0.0]), [0.9, 1.1], f64x2::splat(0.0), 200);
-    assert inside == -1.0;
-    assert outside > 0.0;
+    assert inside matches { None };
+    assert outside matches { Some(t) && t > 0.0 };
 }

@@ -16,7 +16,7 @@
 //! `--aperture`, `--out`, `--view` (auto / kitty / iterm / ansi / off) and
 //! `--columns`.
 
-use { println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { println, eprintln, exit_error, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { from_env } from "core:args";
 use { f32x4, i32x4 } from "core:simd";
 use { Xoshiro256pp, Seed, Seedable, Rng } from "core:prng";
@@ -37,6 +37,16 @@ struct Options {
     out: String = "raytracer.png",
     view: View = View::Auto,
     columns: i32 = 100,
+}
+
+impl Options {
+    /// Why these options cannot render, if they cannot.
+    fn problem(&self) -> Option<String> {
+        if self.width < 1 || self.height < 1 || self.samples < 1 || self.columns < 1 {
+            return Option::Some("--width, --height, --samples and --columns must be positive");
+        }
+        return null;
+    }
 }
 
 type Vec3 = f32x4;
@@ -413,8 +423,8 @@ fn render(opts: &Options, scene: &Scene, camera: &Camera, rays: &mut i64) -> Ima
         for let x of 0..<opts.width {
             let mut color = splat(0.0);
             for let _ of 0..<opts.samples {
-                let s = (x as f32 + rand(&mut rng)) / (opts.width - 1) as f32;
-                let t = ((opts.height - 1 - y) as f32 + rand(&mut rng)) / (opts.height - 1) as f32;
+                let s = (x as f32 + rand(&mut rng)) / opts.width as f32;
+                let t = ((opts.height - 1 - y) as f32 + rand(&mut rng)) / opts.height as f32;
                 let ray = camera.ray(s, t, &mut rng);
                 color = color + trace(scene, ray, opts.depth, &mut rng, rays);
             }
@@ -434,14 +444,19 @@ fn elapsed_ms(start: Mark) -> u64 with MonotonicClock {
     return (MonotonicClock::now() - start) as u64 / 1_000_000;
 }
 
-export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, TerminalStdout) {
+fn fail(message: String) -> ! with (Stderr, Exit) {
+    eprintln(`raytracer: ${message}`);
+    exit_error();
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, TerminalStdout, Exit) {
     let opts = match from_env::<Options>() {
         Ok(o) => o,
-        Err(e) => {
-            eprintln(`raytracer: ${e}`);
-            return;
-        },
+        Err(e) => fail(`${e}`),
     };
+    if let Some(problem) = opts.problem() {
+        fail(problem);
+    }
     let mut rng = Xoshiro256pp::from_seed(Seed::from_u64(opts.seed));
     let scene = random_scene(opts.grid, &mut rng);
     let aspect = opts.width as f32 / opts.height as f32;
@@ -453,14 +468,20 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock, Ter
     let ms = elapsed_ms(start);
     let png = encode(&img);
     if let Err(e) = fs::write(&opts.out, &png) {
-        eprintln(`raytracer: ${e}`);
-        return;
+        fail(`${e}`);
     }
     show(&img, &png, opts.view, opts.columns);
     let mrays = rays as f64 / f64::max(ms as f64, 1.0) / 1000.0;
     println(
         `${scene.centers.len()} spheres, ${opts.width}x${opts.height} × ${opts.samples} spp: ${rays} rays in ${ms} ms (${mrays:.2} Mrays/s) → ${opts.out}`,
     );
+}
+
+test "options that cannot render are refused" {
+    assert Options {}.problem() matches { None };
+    assert Options { height: 0 }.problem() matches { Some(_) };
+    assert Options { samples: 0 }.problem() matches { Some(_) };
+    assert Options { columns: -3 }.problem() matches { Some(_) };
 }
 
 test "a ray meets the nearest of several spheres" {

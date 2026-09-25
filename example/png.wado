@@ -24,6 +24,7 @@ pub struct Image {
 
 impl Image {
     pub fn new(width: i32, height: i32) -> Image {
+        assert width > 0 && height > 0;
         return Image { width, height, rgb: ByteList::filled(width * height * 3, 0) };
     }
 
@@ -165,6 +166,7 @@ fn detect() -> View with (Environment, TerminalStdout) {
 /// Displays `img`, whose encoding is `png`, inline on the terminal. The ANSI
 /// fallback scales the image to fit `columns` character cells.
 pub fn show(img: &Image, png: &ByteList, view: View, columns: i32) with (Stdout, Environment, TerminalStdout) {
+    assert columns > 0;
     let resolved = if view matches { Auto } { detect() } else { view };
     match resolved {
         Kitty => print(kitty_escape(png)),

@@ -135,6 +135,9 @@ pub struct ArgvDeserializer {
     /// First argv-specific error, taking priority over the generated
     /// `Deserialize` code's `DeserializeError` (which only knows MissingField).
     err: Option<ArgsError>,
+    /// What an unknown case means for the latest variant: a bad value when an
+    /// `--option` named it (`null` for a subcommand, whose unknown case is its own kind).
+    unknown_case: Option<ArgsError>,
 }
 
 /// A decomposed `--name[=value]` long-option token.
@@ -592,8 +595,13 @@ impl Deserializer for ArgvDeserializer {
         // An enum-valued `--option` names its case the way any option names its value.
         if self.cur_is_option {
             let tag = self.take_value()?;
+            self.unknown_case = Option::Some(ArgsError {
+                kind: ArgsErrorKind::InvalidValue,
+                message: `invalid value for option --${self.cur_name}: '${tag}'`,
+            });
             return Result::Ok(ArgvVariantAccess { de: self, tag });
         }
+        self.unknown_case = null;
         // Externally tagged: the next bare token is the case tag. A subcommand
         // field is reached as a positional slot (`#[wire(positional)]`), so the
         // token the outer `next_field` saw is the tag.
@@ -655,10 +663,14 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         consumed,
         forced: null,
         err: null,
+        unknown_case: null,
     };
     let r = T::deserialize(&mut de);
     if let Some(e) = de.err {
         return Result::Err(e);
+    }
+    if let Err(e) = r && e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
+        return Result::Err(bad);
     }
     return Result::Ok(r?);
 }

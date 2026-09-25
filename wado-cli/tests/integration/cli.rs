@@ -682,6 +682,30 @@ fn test_run_cat_prints_each_file() {
         .stdout(hello.repeat(2));
 }
 
+/// Like cat(1), `example/cat.wado` reports a file it cannot open, prints the
+/// rest, and exits with a failure.
+#[test]
+fn test_run_cat_fails_on_a_missing_file() {
+    let hello = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../example/hello.wado"
+    ))
+    .unwrap();
+    wado()
+        .args([
+            "run",
+            "example/cat.wado",
+            "example/no-such-file",
+            "example/hello.wado",
+        ])
+        .assert()
+        .failure()
+        .stdout(hello)
+        .stderr(predicates::str::contains(
+            "cat: example/no-such-file: cannot open: ErrorCode::NoEntry",
+        ));
+}
+
 /// `core:args::from_env` parses what follows the program name.
 #[test]
 fn test_run_args_reach_from_env() {
