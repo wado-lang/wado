@@ -463,8 +463,8 @@ pub enum CompilerItem {
     ReflectStructMembers,
     /// `ReflectStruct::from_fields` — assemble a struct from its field-value tuple.
     ReflectStructFromFields,
-    /// `ReflectStruct::defaults` — the declared field defaults as `[..Option<F>]`.
-    ReflectStructDefaults,
+    /// `ReflectStruct::default_slot` — one field's declared default, in `[..Option<F>]`.
+    ReflectStructDefaultSlot,
     /// `ReflectStruct::empty_slots` — `[..Option<F>]` with every slot empty.
     ReflectStructEmptySlots,
     /// `ReflectTemplate::members` — the per-hole member tuple.
@@ -817,7 +817,7 @@ impl CompilerItem {
         Self::TreeMapEntries,
         Self::ReflectStructMembers,
         Self::ReflectStructFromFields,
-        Self::ReflectStructDefaults,
+        Self::ReflectStructDefaultSlot,
         Self::ReflectStructEmptySlots,
         Self::ReflectTemplateMembers,
         Self::ReflectTemplateTail,
@@ -1040,7 +1040,7 @@ impl CompilerItem {
             Self::TreeMapEntries => "tree_map_entries",
             Self::ReflectStructMembers => "reflect_struct_members",
             Self::ReflectStructFromFields => "reflect_struct_from_fields",
-            Self::ReflectStructDefaults => "reflect_struct_defaults",
+            Self::ReflectStructDefaultSlot => "reflect_struct_default_slot",
             Self::ReflectStructEmptySlots => "reflect_struct_empty_slots",
             Self::ReflectTemplateMembers => "reflect_template_members",
             Self::ReflectTemplateTail => "reflect_template_tail",
@@ -1238,7 +1238,7 @@ impl CompilerItem {
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
-            | Self::ReflectStructDefaults
+            | Self::ReflectStructDefaultSlot
             | Self::ReflectStructEmptySlots
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail
@@ -1517,7 +1517,7 @@ impl CompilerItem {
             | Self::TreeMapEntries
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
-            | Self::ReflectStructDefaults
+            | Self::ReflectStructDefaultSlot
             | Self::ReflectStructEmptySlots
             | Self::ReflectTemplateMembers
             | Self::ReflectTemplateTail

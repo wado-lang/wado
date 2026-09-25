@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copy the `.proto` files Grog's tests read out of the `vendor/protobuf` and
-# `vendor/onnx` submodules, which CI does not check out.
-#
-# The tests say which files: every `../tests/proto/<submodule>/...` path they
-# name is fetched from `vendor/<submodule>/...`, so naming a new schema in a
-# test and running this brings it in. A file here that no test names is
-# reported, not deleted.
-#
-# Usage: mise run sync-proto-corpus
+# Copy each `../tests/proto/<submodule>/...` path Grog's tests name from
+# `vendor/<submodule>/...`, which CI does not check out. Run: mise run sync-proto-corpus
 
 DEST=package-grog/tests/proto
 

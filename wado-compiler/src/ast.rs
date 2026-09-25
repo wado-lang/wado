@@ -1547,12 +1547,6 @@ pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
     wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
 }
 
-/// The value a format writes for an enum case: its number, or its position.
-#[must_use]
-pub fn wire_discriminant(number: Option<i32>, index: u32) -> i32 {
-    number.unwrap_or(index as i32)
-}
-
 /// `#[wire(encoding = "…")]`: how a numbered format writes an integer field,
 /// which protobuf's `sint*`, `fixed*` and `sfixed*` each need.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

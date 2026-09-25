@@ -153,12 +153,10 @@ written rather than where the bytes are produced. See
 
 `#[compiler_item("serialize_struct_field")]`
 
-#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, encoding: WireEncoding, has_default: bool, name: S, value: &T) -> Result<(), SerializeError>`
+#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, encoding: WireEncoding, default: &Option<T>, name: S, value: &T) -> Result<(), SerializeError>`
 
-The same field, with the numeric wire key `#[wire(number = N)]` gave
-it, or `0` where it has none, its `#[wire(encoding = …)]`, and whether
-it declares a default. A format keyed by name drops all three, which is
-what this default does.
+The same field with its `#[wire(...)]` number and encoding and its
+declared default, which a format keyed by name drops.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
@@ -220,9 +218,8 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
-Serialize the value an `Option::Some` holds. A format where presence
-is on the wire (protobuf's explicit presence) tells it apart from the
-same value held directly; every other writes the value.
+The value an `Option::Some` holds, which a format with explicit
+presence on the wire writes even when it is the zero.
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 

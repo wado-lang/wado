@@ -283,13 +283,19 @@ pub trait SerializeStruct with () {
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
-    /// The same field with its `#[wire(...)]` number, encoding, and implicit
-    /// presence, which a format keyed by name drops.
+    /// Whether writing `value` depends on the field's declared default, which is
+    /// evaluated only then and passed to `field_numbered`. A format keyed by name never reads it.
+    fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError> {
+        return Result::Ok(false);
+    }
+
+    /// The same field with its `#[wire(...)]` number and encoding, and its
+    /// declared default where `reads_default` asked for it.
     fn field_numbered<T: Serialize, S: AsStrSlice>(
         &mut self,
         number: i32,
         encoding: WireEncoding,
-        implicit: bool,
+        default: &Option<T>,
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
@@ -1065,10 +1071,11 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
         let mut st = s.begin_struct(&Reflect::<T>::type_name(), members.len())?;
-        for let f of members {
+        for let [i, f] of members.enumerate() {
             let name = wire_name(&f, policy);
             let value = f.get(self);
-            st.field_numbered(f.wire_number(), f.wire_encoding(), f.default_is_zero(), &name, &value)?;
+            let default = if st.reads_default(&value)? { ReflectStruct::<T>::default_slot(i)[i] } else { null };
+            st.field_numbered(f.wire_number(), f.wire_encoding(), &default, &name, &value)?;
         }
         return st.end();
     }
@@ -1214,13 +1221,10 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
             }
         }
         sd.end()?;
-        // A slot the wire left empty falls back to its declared default. `i`
-        // is constant per unrolled arm, so only that field's default is
-        // reached.
         return Result::Ok(ReflectStruct::<T>::from_fields(
             [for let [i, slot] of slots.enumerate() { match slot {
                 Some(value) => value,
-                None => match ReflectStruct::<T>::defaults()[i] {
+                None => match ReflectStruct::<T>::default_slot(i)[i] {
                     Some(fallback) => fallback,
                     None => {
                         return Result::Err(DeserializeError::missing_field(

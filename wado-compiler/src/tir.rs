@@ -7029,9 +7029,6 @@ pub struct TirField {
     pub serde_number: Option<u32>,
     /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
     pub serde_encoding: WireEncoding,
-    /// The declared default is the type's zero, so a numbered format leaves
-    /// that zero off the wire: protobuf's implicit presence.
-    pub default_is_zero: bool,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
@@ -7058,7 +7055,6 @@ impl TirField {
             serde_positional: false,
             serde_number: None,
             serde_encoding: WireEncoding::Plain,
-            default_is_zero: false,
             default_expr: None,
         }
     }

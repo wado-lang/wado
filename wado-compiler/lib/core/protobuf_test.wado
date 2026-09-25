@@ -1,6 +1,7 @@
 use {
     WireType,
     from_bytes,
+    is_assignable_field_number,
     to_bytes,
     read_fixed32,
     read_fixed64,
@@ -59,6 +60,17 @@ test "a tag carries the field number and what follows it" {
     assert tag_len(1) == 1;
     assert tag_len(15) == 1;
     assert tag_len(16) == 2;
+}
+
+test "a schema numbers fields from 1 up to 2^29 - 1, skipping the reserved range" {
+    assert !is_assignable_field_number(0);
+    assert is_assignable_field_number(1);
+    assert is_assignable_field_number(18999);
+    assert !is_assignable_field_number(19000);
+    assert !is_assignable_field_number(19999);
+    assert is_assignable_field_number(20000);
+    assert is_assignable_field_number(536870911);
+    assert !is_assignable_field_number(536870912);
 }
 
 test "zigzag moves the sign into the low bit" {
@@ -561,4 +573,16 @@ test "a default other than the zero is always written" {
     let m = Tuned { retries: 0 };
     assert encode(&m) == "0800" + "1001";
     assert decode::<Tuned>(to_bytes(&m).unwrap()).retries == 0;
+}
+
+struct Computed {
+    #[wire(number = 1)]
+    cast: i64 = 0 as i64,
+    #[wire(number = 2)]
+    called: i32 = i32::max(1, 0),
+}
+
+test "a default is judged by its value, however it is written" {
+    assert encode(&Computed {}) == "1001";
+    assert encode(&Computed { called: 0 }) == "1000";
 }

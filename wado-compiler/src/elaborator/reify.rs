@@ -40,8 +40,8 @@ use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_discriminant,
-    wire_encoding_written, wire_number_of, wire_number_written,
+    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_encoding_written, wire_number_of,
+    wire_number_written,
 };
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
@@ -1100,26 +1100,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Field types and type-param bounds come from
-    /// `sem.decls.local_struct_fields` — the durable fact
-    /// `resolve_local_struct` recorded under this declaration's own identity.
-    /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
-    /// expressions are read straight from the AST here, exactly matching
-    /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
-    /// doesn't carry attributes, only `(name, type, visibility)`.
+    /// A function-local struct as TIR: its field types from what
+    /// `resolve_local_struct` recorded, its attributes from the AST.
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(info) = self
+        let info = self
             .tysys
             .resolutions
             .defs()
             .of_ast_id(struct_decl.id)
             .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
             .cloned()
-        else {
-            // `resolve_local_struct` inserts this unconditionally for every
-            // local struct declaration annotate resolved.
-            return;
-        };
+            .expect("resolve_local_struct records every local struct annotate resolved");
         // Field-default expressions resolve in a per-struct `FunctionContext`
         // (no self, no other fields in scope), matching `reify_struct`.
         let mut field_ctx =
@@ -1166,7 +1157,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             monomorph_info: None,
             fields,
             span: struct_decl.span,
-            wire_name_policy: None,
+            wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
         });
     }
 
@@ -2103,46 +2094,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
             serde_number: wire_number,
             serde_encoding: self.checked_wire_encoding(field, type_id),
-            default_is_zero: default_expr.as_deref().is_some_and(|e| self.is_zero(e)),
             default_expr,
         }
-    }
-
-    /// Whether a reified default is its type's zero: `0`, `0.0`, `false`, an
-    /// empty string, bytes or list, `null`, or the enum case whose wire number is 0.
-    fn is_zero(&self, expr: &TirExpr) -> bool {
-        match &expr.kind {
-            TirExprKind::IntLiteral { value, .. } => *value == 0,
-            TirExprKind::FloatLiteral { value, .. } => value.to_bits() == 0,
-            TirExprKind::BoolLiteral(b) => !b,
-            TirExprKind::StringLiteral(s) => s.is_empty(),
-            TirExprKind::BytesLiteral(b) => b.is_empty(),
-            TirExprKind::Null => true,
-            TirExprKind::EnumConstruct {
-                enum_type,
-                case_index,
-                ..
-            } => self.enum_case_wire_number(*enum_type, *case_index) == 0,
-            // `[]` coerced to a collection through `From<Array<T>>`.
-            TirExprKind::Call { args, .. } => {
-                matches!(args.as_slice(), [arg] if matches!(&arg.expr.kind, TirExprKind::ArrayLiteral { elements } if elements.is_empty()))
-            }
-            _ => false,
-        }
-    }
-
-    /// The number an enum case goes on the wire as: its `#[wire(number = N)]`,
-    /// or its position.
-    fn enum_case_wire_number(&self, enum_type: TypeId, case_index: u32) -> i32 {
-        let def = self
-            .tysys
-            .type_def(enum_type)
-            .expect("an enum literal's type is a declared enum");
-        let info = self
-            .type_lookup()
-            .enum_cases_of(def)
-            .expect("an enum literal's type is a declared enum");
-        wire_discriminant(info.cases[case_index as usize].wire_number, case_index)
     }
 
     /// A field's `#[wire(encoding = "…")]`, checked against the integer the

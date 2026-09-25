@@ -107,11 +107,10 @@ pub trait ReflectStruct: Reflect with () {
     #[compiler_item("reflect_struct_from_fields")]
     fn from_fields(fields: Self::FieldTypes) -> Self;
 
-    /// The declared field defaults (`f: T = expr`), `None` where a field
-    /// declares none. Read per field, so only a slot the wire left empty
-    /// evaluates its default.
-    #[compiler_item("reflect_struct_defaults")]
-    fn defaults() -> Self::FieldSlots;
+    /// Empty slots but `index`, which holds that field's declared default
+    /// (`f: T = expr`) if it has one. No other field's default is evaluated.
+    #[compiler_item("reflect_struct_default_slot")]
+    fn default_slot(index: i32) -> Self::FieldSlots;
 
     /// All slots empty. Starting here is what makes a filled slot mean "the
     /// wire wrote this", so a repeat is visible without a second record.
@@ -484,7 +483,6 @@ pub struct StructField<T, F> {
     is_secret: bool,
     wire_number: i32,
     wire_encoding: WireEncoding,
-    default_is_zero: bool,
 }
 
 impl<T, F> StructField<T, F> {
@@ -512,12 +510,6 @@ impl<T, F> StructField<T, F> {
     /// The field's `#[wire(encoding = …)]`.
     pub fn wire_encoding(&self) -> WireEncoding {
         return self.wire_encoding;
-    }
-
-    /// Whether the declared default is the type's zero, which a numbered
-    /// format then leaves off the wire.
-    pub fn default_is_zero(&self) -> bool {
-        return self.default_is_zero;
     }
 
     /// The value of this field in `v`.
@@ -616,9 +608,6 @@ impl<T, F> Inspect for StructField<T, F> {
         struct_field_end(f);
         struct_field(f, "wire_encoding", false);
         self.wire_encoding.inspect(f);
-        struct_field_end(f);
-        struct_field(f, "default_is_zero", false);
-        self.default_is_zero.inspect(f);
         struct_field_end(f);
         struct_close(f);
     }

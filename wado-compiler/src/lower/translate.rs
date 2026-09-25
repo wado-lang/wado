@@ -716,7 +716,7 @@ impl Translator<'_> {
             monomorph_info: s.monomorph_info.as_ref().map(convert_monomorph_info),
             fields: s.fields.iter().map(|f| fctx.convert_field(f)).collect(),
             span: s.span,
-            wire_name_policy: s.wire_name_policy.clone(),
+            wire_name_policy: s.wire_name_policy,
         }
     }
 

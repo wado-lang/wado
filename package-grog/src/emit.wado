@@ -2,6 +2,8 @@
 //! message and an enum per enum, each at the top level.
 
 use { TreeMap } from "core:collections";
+use { is_assignable_field_number } from "core:protobuf";
+use { apply_case } from "core:serde";
 use { CodeWriter, EnumSpec, FieldSpec, StructSpec, Vis, is_keyword, is_reserved, wado } from "lib:wadopoet";
 use { is_scalar } from "./parse.wado";
 use { EnumDecl, EnumValue, Features, Field, FieldType, Label, MessageDecl, ProtoFile, Syntax } from "./schema.wado";
@@ -35,7 +37,7 @@ pub fn emit(file: &ProtoFile) -> Result<String, EmitError> {
     }
     for let decl of &file.messages {
         let name = e.claim(&decl.path, decl.line)?;
-        e.names[e.full_name(&decl.path)] = Named { name, zero: null };
+        e.names[e.full_name(&decl.path)] = Named { name, default: null };
         e.features[decl.path.join(".")] = decl.features;
     }
     let mut w = CodeWriter::new();
@@ -53,10 +55,10 @@ pub fn emit(file: &ProtoFile) -> Result<String, EmitError> {
     return Result::Ok(w.to_string());
 }
 
-/// A declaration's Wado name, and for an enum the case its zero value is.
+/// A declaration's Wado name, and for an enum the case it defaults to.
 struct Named {
     name: String,
-    zero: Option<String>,
+    default: Option<String>,
 }
 
 struct PlannedCase {
@@ -140,43 +142,34 @@ impl Emitter {
 
     fn plan_enum(&mut self, decl: &EnumDecl) -> Result<EnumPlan, EmitError> {
         let name = self.claim(&decl.path, decl.line)?;
-        let prefix = `${screaming_snake(&decl.path[decl.path.len() - 1])}_`;
+        let prefix = `${apply_case(CaseStyle::ScreamingSnake, &decl.path[decl.path.len() - 1])}_`;
         let mut cases: List<PlannedCase> = [];
         let mut aliases: List<[String, String]> = [];
+        let mut named_by = TreeMap::<String, EnumValue>::new();
         if decl.values.is_empty() {
             return Result::Err(EmitError::Invalid(`${decl.line}: ${decl.path.join(".")} declares no value`));
         }
         for let value of &decl.values {
             let case = case_name(&value.name, &prefix);
-            let mut aliased = false;
-            for let c of &cases {
-                if c.value.number == value.number {
-                    if c.name != case {
-                        aliases.push([case, c.name]);
-                    }
-                    aliased = true;
-                    break;
+            let aliased = cases.into_iter().find(|c| c.value.number == value.number);
+            if let Some(other) = named_by.get_str(&case) {
+                if aliased matches { Some(c) && c.name == case } {
+                    continue;
                 }
-                if c.name == case {
-                    return Result::Err(
-                        EmitError::Invalid(
-                            `${decl.line}: ${decl.path.join(".")}: '${c.value.name}' and '${value.name}' are both ${case} in Wado`,
-                        ),
-                    );
-                }
+                return Result::Err(
+                    EmitError::Invalid(
+                        `${decl.line}: ${decl.path.join(".")}: '${other.name}' and '${value.name}' are both ${case} in Wado`,
+                    ),
+                );
             }
-            if !aliased {
-                cases.push(PlannedCase { name: case, value: *value });
+            named_by[case] = *value;
+            match aliased {
+                Some(c) => aliases.push([case, c.name]),
+                None => cases.push(PlannedCase { name: case, value: *value }),
             }
         }
-        let mut zero = &cases[0];
-        for let c of &cases {
-            if c.value.number == 0 {
-                zero = c;
-                break;
-            }
-        }
-        self.names[self.full_name(&decl.path)] = Named { name, zero: Option::Some(`${name}::${zero.name}`) };
+        // Protobuf defaults an enum to its first value, which proto3 and open enums require to be 0.
+        self.names[self.full_name(&decl.path)] = Named { name, default: Option::Some(`${name}::${cases[0].name}`) };
         return Result::Ok(EnumPlan { name, cases, aliases });
     }
 
@@ -189,7 +182,7 @@ impl Emitter {
         let mut numbered: List<[i32, String]> = [];
         for let field of &decl.fields {
             let n = field.number;
-            if n < 1 || n > 536_870_911 || 19_000 <= n && n <= 19_999 {
+            if !is_assignable_field_number(n) {
                 return Result::Err(EmitError::Invalid(
                     `${field.line}: ${field.name}: ${n} is not a field number the wire format admits`,
                 ));
@@ -230,9 +223,9 @@ impl Emitter {
     }
 
     fn map_field(&self, decl: &MessageDecl, field: &Field, out: &mut FieldSpec) -> Result<(), EmitError> {
-        let [ty, zero] = self.type_of(decl, field, &field.type_, &mut out.attrs)?;
+        let [ty, default] = self.type_of(decl, field, &field.type_, &mut out.attrs)?;
         // A map entry is always length-prefixed, so only a field of its own is checked.
-        if zero matches { None } && self.delimited(decl, field) {
+        if default matches { None } && self.delimited(decl, field) {
             return Result::Err(
                 EmitError::Unsupported(
                     `${field.line}: ${field.name}: a DELIMITED message is a group on the wire, which core:protobuf does not read`,
@@ -246,13 +239,13 @@ impl Emitter {
         }
         let mut presence = self.presence(decl, field);
         // A oneof member and a message both have presence whatever the syntax says.
-        if field.oneof matches { Some(_) } || zero matches { None } && presence matches { Implicit } {
+        if field.oneof matches { Some(_) } || default matches { None } && presence matches { Implicit } {
             presence = Presence::Explicit;
         }
         match presence {
             Implicit => {
                 out.type_str = ty;
-                out.default = zero;
+                out.default = default;
             },
             Explicit => {
                 out.type_str = `Option<${ty}>`;
@@ -282,26 +275,26 @@ impl Emitter {
         let mut spec = StructSpec::new(&name, Vis::Pub);
         let mut key_field = FieldSpec::new_pub("key", "");
         key_field.attrs.push("wire(number = 1)");
-        let [key_ty, key_zero] = self.type_of(decl, field, &FieldType::Scalar(*key), &mut key_field.attrs)?;
+        let [key_ty, key_default] = self.type_of(decl, field, &FieldType::Scalar(*key), &mut key_field.attrs)?;
         key_field.type_str = key_ty;
-        key_field.default = key_zero;
+        key_field.default = key_default;
         let mut value_field = FieldSpec::new_pub("value", "");
         value_field.attrs.push("wire(number = 2)");
-        let [value_ty, value_zero] = self.type_of(decl, field, value, &mut value_field.attrs)?;
-        if value_zero matches { None } {
+        let [value_ty, value_default] = self.type_of(decl, field, value, &mut value_field.attrs)?;
+        if value_default matches { None } {
             value_field.type_str = `Option<${value_ty}>`;
             value_field.default = Option::Some("null");
         } else {
             value_field.type_str = value_ty;
-            value_field.default = value_zero;
+            value_field.default = value_default;
         }
         spec.add_field_spec(key_field);
         spec.add_field_spec(value_field);
         return Result::Ok(spec);
     }
 
-    /// A field type's Wado spelling and its zero, `None` for a message, which
-    /// has no zero to omit. An encoding the type needs lands in `attrs`.
+    /// A field type's Wado spelling and its default, `None` for a message, which
+    /// has none. An encoding the type needs lands in `attrs`.
     fn type_of(
         &self,
         decl: &MessageDecl,
@@ -311,11 +304,11 @@ impl Emitter {
     ) -> Result<[String, Option<String>], EmitError> {
         match ty {
             Scalar(s) => {
-                let [wado_type, zero, encoding] = scalar(s);
+                let [wado_type, default, encoding] = scalar(s);
                 if let Some(e) = encoding {
                     attrs.push(`wire(encoding = "${e}")`);
                 }
-                return Result::Ok([wado_type, Option::Some(zero)]);
+                return Result::Ok([wado_type, Option::Some(default)]);
             },
             Named(n) => {
                 let Some(named) = self.resolve(n, decl) else {
@@ -325,7 +318,7 @@ impl Emitter {
                         ),
                     );
                 };
-                return Result::Ok([named.name, named.zero]);
+                return Result::Ok([named.name, named.default]);
             },
             Group(g) => {
                 return Result::Err(EmitError::Unsupported(
@@ -402,7 +395,7 @@ impl Emitter {
     }
 }
 
-/// A scalar's Wado type, its zero, and the encoding it needs beyond the
+/// A scalar's Wado type, its default, and the encoding it needs beyond the
 /// varint or length prefix its Wado type implies.
 fn scalar(name: &String) -> [String, String, Option<String>] {
     return match name.as_str_slice() {
@@ -430,21 +423,6 @@ fn is_map_key(name: &String) -> bool {
         "double" | "float" | "bytes" => false,
         _ => is_scalar(name),
     };
-}
-
-/// `FieldPresence` as `FIELD_PRESENCE`, the prefix protobuf's style guide puts
-/// on each of an enum's values.
-fn screaming_snake(name: &String) -> String {
-    let mut out = "";
-    let mut previous = ' ';
-    for let c of name.chars() {
-        if c.is_ascii_uppercase() && (previous.is_ascii_lowercase() || previous.is_ascii_digit()) {
-            out.push('_');
-        }
-        out.push(c.to_ascii_uppercase());
-        previous = c;
-    }
-    return out;
 }
 
 /// An enum value's case name: its enum's prefix dropped, the rest PascalCased.

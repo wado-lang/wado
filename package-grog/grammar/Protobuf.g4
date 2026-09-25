@@ -1,13 +1,5 @@
-// The `.proto` schema language: proto2, proto3, and editions 2023 and 2024 in
-// one grammar. Productions follow `vendor/protobuf-spec/content/reference/
-// protobuf/`, one spec per syntax; this is their union, and the `syntax` or
-// `edition` statement decides which rules the generator applies.
-//
-// Every keyword is contextual: `message message = 1;` declares a field named
-// `message` of type `message`, so `ident` admits each keyword token.
-//
-// An option's value may be a text-format message (`{ a: 1 }`), which the specs
-// name through `MessageValue` without spelling out. `textMessage` covers it.
+// The union of the proto2, proto3 and editions specs under `vendor/protobuf-spec`.
+// Every keyword is contextual (`message message = 1;`), so `ident` admits each.
 grammar Protobuf;
 
 proto : (syntaxDecl | editionDecl)? topLevel* EOF ;

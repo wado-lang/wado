@@ -263,7 +263,24 @@ fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
         | AttrTarget::Variant
         | AttrTarget::Flags
         | AttrTarget::Newtype => &["name_policy"],
-        _ => unreachable!("`wire` on {} is misplaced", target.describe()),
+        AttrTarget::Module
+        | AttrTarget::Function
+        | AttrTarget::Param
+        | AttrTarget::GenericParam
+        | AttrTarget::Global
+        | AttrTarget::Let
+        | AttrTarget::Test
+        | AttrTarget::FlagsVariant
+        | AttrTarget::TupleType
+        | AttrTarget::BuiltinType
+        | AttrTarget::Trait
+        | AttrTarget::Interface
+        | AttrTarget::Resource
+        | AttrTarget::World
+        | AttrTarget::Impl
+        | AttrTarget::AssociatedConst
+        | AttrTarget::AssociatedType
+        | AttrTarget::Use => unreachable!("`wire` on {} is misplaced", target.describe()),
     }
 }
 

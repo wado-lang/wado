@@ -26,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding, wire_discriminant};
+use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -501,9 +501,8 @@ struct ReflectFieldInfo {
     wire_encoding: WireEncoding,
     is_secret: bool,
     has_default: bool,
-    default_is_zero: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
-    /// context — `defaults()` relocates its locals into the synthesized body.
+    /// context — `default_slot()` relocates its locals into the synthesized body.
     default_expr: Option<Box<TirExpr>>,
 }
 
@@ -554,11 +553,10 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     wire_encoding: f.serde_encoding,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
-                    default_is_zero: f.default_is_zero,
                     default_expr: f.default_expr.clone(),
                 })
                 .collect(),
-            wire_name_policy: s.wire_name_policy.clone(),
+            wire_name_policy: s.wire_name_policy,
             span: s.span,
         })
         .collect()
@@ -667,7 +665,7 @@ fn generate_struct_reflect_methods(
         fields_tuple_type,
         span,
     );
-    let defaults_fn = generate_struct_defaults_fn(
+    let default_slot_fn = generate_struct_default_slot_fn(
         type_table,
         env,
         reflect_trait_name,
@@ -700,7 +698,7 @@ fn generate_struct_reflect_methods(
         type_name_fn,
         members_fn,
         from_fields_fn,
-        defaults_fn,
+        default_slot_fn,
         empty_slots_fn,
         wire_name_policy_fn,
     ];
@@ -768,7 +766,7 @@ pub(crate) const REFLECT_MEMBERS_ASSOC: &str = "Members";
 pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
 
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
-/// under `Option`, the shape `defaults()` returns and a streaming build fills.
+/// under `Option`, the shape `default_slot()` returns and a streaming build fills.
 pub(crate) const REFLECT_FIELD_SLOTS_ASSOC: &str = "FieldSlots";
 
 /// `ReflectTemplate`'s payload-pack associated type (`type Holes`): the hole
@@ -793,7 +791,7 @@ struct ReflectSynthEnv {
     type_name_method: String,
     members_method: String,
     from_fields_method: String,
-    defaults_method: String,
+    default_slot_method: String,
     empty_slots_method: String,
     wire_name_policy_method: String,
 }
@@ -832,8 +830,8 @@ impl ReflectSynthEnv {
             from_fields_method: items
                 .method_name(CompilerItem::ReflectStructFromFields)
                 .to_string(),
-            defaults_method: items
-                .method_name(CompilerItem::ReflectStructDefaults)
+            default_slot_method: items
+                .method_name(CompilerItem::ReflectStructDefaultSlot)
                 .to_string(),
             empty_slots_method: items
                 .method_name(CompilerItem::ReflectStructEmptySlots)
@@ -1072,15 +1070,6 @@ fn generate_struct_members_fn(
                     ),
                     field_index: 6,
                 },
-                TirStructField {
-                    name: "default_is_zero".to_string(),
-                    value: TirExpr::new(
-                        TirExprKind::BoolLiteral(f.default_is_zero),
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    field_index: 7,
-                },
             ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
@@ -1117,13 +1106,13 @@ fn generate_struct_members_fn(
     )
 }
 
-/// Build `S^ReflectStruct::defaults() -> [Option<F_0>, …]`:
-/// `return [Option::Some(<default_0>), Option::None, …];`.
+/// Build `S^ReflectStruct::default_slot(index) -> [Option<F_0>, …]`:
+/// `return [match index { 0 => Option::Some(<default_0>), _ => Option::None }, …];`.
 ///
 /// A default expression is reified in the struct's own context, numbered from
 /// zero, so its locals are re-allocated into this function's table before they
-/// are embedded — otherwise two fields' defaults would share slot 0.
-fn generate_struct_defaults_fn(
+/// are embedded — otherwise two fields' defaults would share one slot.
+fn generate_struct_default_slot_fn(
     type_table: &RefCell<TypeTable>,
     env: &ReflectSynthEnv,
     reflect_trait_name: &FqTraitName,
@@ -1133,11 +1122,19 @@ fn generate_struct_defaults_fn(
     slots_tuple_type: TypeId,
     span: Span,
 ) -> TirFunction {
-    let method_info = trait_method_info(receiver, reflect_trait_name, &env.defaults_method);
+    let method_info = trait_method_info(receiver, reflect_trait_name, &env.default_slot_method);
     let qualified_name = method_info.to_mangled_name();
 
-    let mut next_local: u32 = 0;
-    let mut locals: Vec<TirLocal> = Vec::new();
+    let params = vec![TirParam {
+        name: "index".to_string(),
+        type_id: TypeTable::I32,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    }];
+    let mut locals = locals_from_params(&params);
+    let mut next_local = locals.len() as u32;
     let items = type_table.borrow().compiler_items().clone();
     let elements = fields
         .iter()
@@ -1146,7 +1143,26 @@ fn generate_struct_defaults_fn(
             Some(default) => {
                 let mut value = default.as_ref().clone();
                 relocate_synthetic_locals(&mut value, &mut next_local, &mut locals);
-                option_some(value, slot_type, &items)
+                let arm = |pattern, body| TirMatchArm {
+                    pattern,
+                    guard: None,
+                    body,
+                    span,
+                };
+                TirExpr::new(
+                    TirExprKind::Match {
+                        expr: Box::new(local_expr(0, "index", TypeTable::I32, span)),
+                        arms: vec![
+                            arm(
+                                TirPattern::Literal(TirLiteralPattern::I128(i128::from(f.index))),
+                                option_some(value, slot_type, &items),
+                            ),
+                            arm(TirPattern::Wildcard, common::option_none(slot_type, &items)),
+                        ],
+                    },
+                    slot_type,
+                    span,
+                )
             }
             None => common::option_none(slot_type, &items),
         })
@@ -1167,11 +1183,11 @@ fn generate_struct_defaults_fn(
     );
 
     // One tuple literal reads as large to the cost heuristic, but a caller
-    // indexes one slot and the rest fold away — only once the call is inlined.
+    // passes a constant index, and every other arm folds away once inlined.
     let mut function = make_synthetic_method(
         qualified_name,
         method_info,
-        vec![],
+        params,
         slots_tuple_type,
         body,
         locals,
@@ -1880,7 +1896,7 @@ fn collect_reflect_variant_targets(module: &TirModule) -> Vec<ReflectVariantTarg
                 })
                 .collect(),
             span: v.span,
-            wire_name_policy: v.wire_name_policy.clone(),
+            wire_name_policy: v.wire_name_policy,
         })
         .collect()
 }
@@ -2529,11 +2545,11 @@ fn generate_enum_reflect_impls(
                     name: c.name.clone(),
                     index: c.index,
                     wire_name_override: c.wire_name_override.clone(),
-                    wire_discriminant: wire_discriminant(c.wire_number, c.index),
+                    wire_discriminant: c.wire_number.unwrap_or(c.index as i32),
                 })
                 .collect(),
             span: e.span,
-            wire_name_policy: e.wire_name_policy.clone(),
+            wire_name_policy: e.wire_name_policy,
         })
         .collect();
     if targets.is_empty() {
@@ -3001,7 +3017,7 @@ fn generate_newtype_reflect_impls(
                 receiver: FqTypeName::declared(tt.defs(), nt.def),
                 display_name: tt.def_name(nt.def).to_string(),
                 type_params: nt.type_params.clone(),
-                wire_name_policy: nt.wire_name_policy.clone(),
+                wire_name_policy: nt.wire_name_policy,
                 span: nt.span,
             })
             .collect()
@@ -3119,7 +3135,7 @@ fn generate_flags_reflect_impls(
                     .map(|m| (m.name.clone(), m.bitmask))
                     .collect(),
                 span: f.span,
-                wire_name_policy: f.wire_name_policy.clone(),
+                wire_name_policy: f.wire_name_policy,
             })
         })
         .collect();
