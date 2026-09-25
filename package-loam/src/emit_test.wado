@@ -231,6 +231,22 @@ g (float[1, 16, 4, 4] X) => (float[1, 256] Y)
     assert !emitted(&out).contains("pub S:");
 }
 
+test "a shape only the build reads is bound nowhere" {
+    let source = `
+g (float[1, 16, 4, 4] X, float[1, 256] Z) => (float[1, 256] Y)
+{
+    S = Shape(Z)
+    Y = Reshape(X, S)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("Z", ["Batch", "Flat"]),
+    ]).unwrap();
+
+    assert !emitted(&out).contains("let S =");
+}
+
 test "Conv and MaxPool lower to their kernels under the window stage 0 read" {
     let source = `
 g (float[1, 1, 28, 28] X) => (float[1, 8, 14, 14] Y)

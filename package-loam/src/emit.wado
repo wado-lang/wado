@@ -107,7 +107,9 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.blank();
 
     let axes = axis_names(graph, shapes);
-    let names = Names::of(graph, checked, &axes)?;
+    let scalars = scalar_literals(checked);
+    let literals = literal_tensors(graph, checked, &scalars);
+    let names = Names::of(graph, checked, &literals, &axes)?;
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
     }
@@ -116,7 +118,7 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.raw(&GRAPH_BANNER);
 
     emit_weights(&mut w, graph, checked, &names, &held);
-    emit_forward(&mut w, graph, checked, &names, &held)?;
+    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals)?;
     return Result::Ok(w.to_string());
 }
 
@@ -147,7 +149,7 @@ struct Names {
 }
 
 impl Names {
-    fn of(graph: &Graph, checked: &Checked, axes: &List<String>) -> Result<Names, EmitError> {
+    fn of(graph: &Graph, checked: &Checked, literals: &List<String>, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
@@ -172,7 +174,7 @@ impl Names {
                 names.take(&mut taken, &node.outputs[0])?;
             }
         }
-        for let tensor of literal_tensors(graph, checked, &scalar_literals(checked)) {
+        for let tensor of *literals {
             names.take(&mut taken, &tensor)?;
         }
         return Result::Ok(names);
@@ -377,12 +379,14 @@ fn emit_forward(
     checked: &Checked,
     names: &Names,
     held: &TreeMap<String, String>,
+    scalars: TreeMap<String, String>,
+    literals: &List<String>,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
-        scalars: scalar_literals(checked),
+        scalars,
     };
     let result = graph.outputs[0].name;
     let mut forward = FnSpec::new("forward", Vis::Pub);
@@ -413,7 +417,7 @@ fn emit_forward(
     for let line of widened {
         w.line(&line);
     }
-    for let tensor of literal_tensors(graph, checked, &exprs.scalars) {
+    for let tensor of *literals {
         let ident = names.get(&tensor);
         w.line(`let ${ident} = ${literal_tensor(checked, &tensor)};`);
         exprs.values[tensor] = ident;
