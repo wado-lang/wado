@@ -281,7 +281,7 @@ Take:
 
 Refuse:
 
-- An inventory of hidden operations. Checked against `spec.md`, and not needed.
+- An inventory of hidden operations. Checked against the specification, and not needed.
   The operations that change what a program means are already specified there,
   each with its own section: bound-driven derivation of `Eq` / `Ord` / `Default`
   / `Serialize`, integer, float, sequence and collection literal coercion, and

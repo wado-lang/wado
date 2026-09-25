@@ -377,8 +377,9 @@ Refuse:
 - The `proposed` advancement rule. `docs/AGENTS.md` already requires an
   unfinished mechanism to be a "Known gap" stating what is missing and what it
   would take to close. That is the same obligation.
-- An authority header on `spec.md`. Taken and landed while this survey was open,
-  so it is no longer work to schedule. `spec.md` now opens by saying that it is
+- An authority header on the specification. Taken and landed while this survey
+  was open, so it is no longer work to schedule. `spec-overview.md` now opens by
+  saying that it is
   normative, that a disagreement with the implementation is a defect belonging to
   whichever side is wrong, and where the WEPs, the cheatsheet and the generated
   stdlib pages stand relative to it.

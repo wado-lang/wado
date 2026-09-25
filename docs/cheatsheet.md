@@ -1669,7 +1669,7 @@ error. The path functions resolve nothing. See
 use fs from "core:fs";
 use { Preopens } from "core:fs";                 // the effect, re-exported: no wasi import
 
-let text = fs::read_to_string("docs/spec.md")?;  // Result<String, FsError>
+let text = fs::read_to_string("docs/spec-overview.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
 fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
                                                  // (a non-regular file is refused)
