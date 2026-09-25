@@ -8,4 +8,9 @@ Loam compiles an ONNX graph into Wado source through Kiln. The design lives in
 - Do not read the code of open-source projects: no ML framework, runtime,
   exporter or kernel library. Their licenses do not reach this repository, and
   code written after reading them is a derivative.
-- Published papers may be read.
+- Published papers may be read, and so may the ONNX specification: the
+  operator definitions and `onnx.proto`.
+- An existing implementation may be run as an oracle, as onnxruntime is to
+  produce expected outputs, so long as its code is not read.
+- Test data and models may be copied in and read, each directory carrying its
+  source and license, as `tests/onnx/` and `tests/models/` do.
