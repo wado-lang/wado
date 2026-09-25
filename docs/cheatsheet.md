@@ -1828,8 +1828,11 @@ struct Account {
 
 let bytes = to_bytes(&Account { id: 150 })?;       // [0x08, 0x96, 0x01]
 let back = from_bytes::<Account>(&bytes)?;
+```
 
-// Grog, as a Kiln generator
+Grog, as a Kiln generator, writes `Account` from a `.proto` instead:
+
+```wado
 use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
 ```
 
