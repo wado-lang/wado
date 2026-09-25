@@ -26,10 +26,16 @@ fn error_handler() { panic("error"); }
 Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited. See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
 
 ```wado
-#[benign(InsecureSeed)]
-fn hash_seed() -> u64 {
-    let [seed, _] = InsecureSeed::get_insecure_seed(); // not required of callers
-    return seed;
+pub struct HashIndex {
+    seed: u64, // private, and iteration order never reads it
+}
+
+impl HashIndex {
+    #[benign(InsecureSeed)]
+    pub fn new() -> HashIndex {
+        let [seed, _] = InsecureSeed::get_insecure_seed(); // not required of callers
+        return HashIndex { seed };
+    }
 }
 ```
 

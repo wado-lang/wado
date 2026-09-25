@@ -377,7 +377,7 @@ A type parameter `Pk` is _uncovered_ at position `i` if the type at position `i`
 
 ### Rationale
 
-The orphan rule prevents two packages from independently providing `impl Trait for Type` for the same `(Trait, Type)` pair, which would make method resolution ambiguous when both packages are used together. By requiring at least one of the trait or the self type to be local, every valid implementation is "owned" by exactly one package.
+The orphan rule prevents two packages from independently providing `impl Trait for Type` for the same `(Trait, Type)` pair, which would make method resolution ambiguous when both packages are used together. By requiring something local, either the trait or a type the sequence rule reaches, every valid implementation is "owned" by exactly one package.
 
 The sequence rule (RFC 2451 style) allows `impl From<LocalError> for String` — even though `String` is foreign — because `LocalError` appears in the trait's type argument at position A1 with no uncovered type parameter before it. This makes it unnecessary to define a mirror `Into` trait just to work around stricter rules.
 

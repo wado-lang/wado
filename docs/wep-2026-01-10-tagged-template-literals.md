@@ -268,7 +268,7 @@ fn info<T: ReflectTemplate<Holes = [..V]>, ..V: Serialize>(t: T) with Log {
 A tag with no use for holes constrains the pack to the empty tuple.
 
 ```wado
-fn regex<T: ReflectTemplate<Holes = ()>>(t: T) -> Regex {
+fn regex<T: ReflectTemplate<Holes = []>>(t: T) -> Regex {
     return Regex::compile(ReflectTemplate::<T>::tail()).unwrap();
 }
 ```

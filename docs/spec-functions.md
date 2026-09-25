@@ -265,7 +265,7 @@ A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 hole. Every answer but `get` and `fmt` is a constant.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
-empty tuple (`()`, for a tag that reads only `tail()`). A concrete tuple
+empty tuple (`[]`, for a tag that reads only `tail()`). A concrete tuple
 (`Holes = [List<i32>]`) is an error at the call.
 
 A hole's type may not mention a type parameter of the enclosing item, since the

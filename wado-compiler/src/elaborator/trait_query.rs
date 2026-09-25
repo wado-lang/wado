@@ -3047,12 +3047,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .fq_trait_name_at(bound.id, &bound.name)
                 .canonical();
-            let Some(actual) = trait_key.and_then(|key| {
+            let registered = trait_key.and_then(|key| {
                 self.tysys.type_table.borrow().resolve_assoc_type_of_trait(
                     type_arg,
                     &key,
                     &constraint.name,
                 )
+            });
+            let Some(actual) = registered.or_else(|| {
+                self.concrete_reflect_assoc_type(type_arg, &bound.name, &constraint.name)
             }) else {
                 continue;
             };
@@ -3073,12 +3076,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 continue;
             }
-            let (expected_name, actual_name) = (
-                self.tysys.type_id_to_string(expected),
-                self.tysys.type_id_to_string(actual),
+            let (type_name, expected_name, actual_name) = (
+                tt.type_name(type_arg),
+                tt.type_name(expected),
+                tt.type_name(actual),
             );
             drop(tt);
-            let type_name = self.tysys.type_id_to_string(type_arg);
             let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
                 type_name,
                 trait_name: bound.name.clone(),

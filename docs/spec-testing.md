@@ -132,8 +132,7 @@ This is useful for verifying that invalid operations are correctly rejected at r
 #[expect_trap]
 test "panics on null dereference" {
     let opt: Option<i32> = null;
-    // force a trap by accessing None without checking
-    panic("expected None but got value");
+    opt.unwrap();
 }
 ```
 
