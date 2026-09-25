@@ -2026,10 +2026,9 @@ impl FunctionTranslator<'_, '_> {
         type_args: &[tir::TypeId],
         args: &[CallArg],
     ) -> Option<ExprKind> {
-        use crate::tir::matches_builtin;
         let mi = func.monomorph_info.as_ref();
 
-        if matches_builtin(&func.name, mi, "variant_tag") && args.len() == 1 {
+        if func.is_builtin_named("variant_tag") && args.len() == 1 {
             // The `&V` receiver matches the marker's argument, so `discriminant`
             // is the single lowering for the tag read.
             let arg_ty = args[0].expr.type_id;
@@ -2078,7 +2077,7 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
-        if matches_builtin(&func.name, mi, "struct_field_get") {
+        if func.is_builtin_named("struct_field_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "struct_field_get");
             let name = {
                 let tt = self.base.type_table.borrow();
@@ -2092,7 +2091,7 @@ impl FunctionTranslator<'_, '_> {
 
         // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
         // the shape only.
-        if matches_builtin(&func.name, mi, "hole_get") {
+        if func.is_builtin_named("hole_get") {
             let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
                 let tt = self.base.type_table.borrow();
@@ -2103,7 +2102,7 @@ impl FunctionTranslator<'_, '_> {
             };
             return Some(self.bridge_call(ta[0], name, args, "hole_get"));
         }
-        if matches_builtin(&func.name, mi, "hole_fmt") {
+        if func.is_builtin_named("hole_fmt") {
             let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
             let name =
                 hole_fmt_helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
@@ -2111,9 +2110,9 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let helper_name_for: fn(&str, &str) -> String =
-            if matches_builtin(&func.name, mi, "variant_case_extract") {
+            if func.is_builtin_named("variant_case_extract") {
                 case_extract_helper_name
-            } else if matches_builtin(&func.name, mi, "variant_case_construct") {
+            } else if func.is_builtin_named("variant_case_construct") {
                 case_construct_helper_name
             } else {
                 return None;

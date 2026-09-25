@@ -412,13 +412,7 @@ fn collect_array_clone_element_types(
             // builtin like `array_clone` has no per-`T` record, so the
             // descriptor's `monomorph_info` is generic — only the node knows `T`).
             let func = callee_descriptor(descriptors, *func_id);
-            if func.module_source.is_core_builtin()
-                && (nir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
-                    || nir::matches_builtin(
-                        &func.name,
-                        func.monomorph_info.as_ref(),
-                        "array_clone_prefix",
-                    ))
+            if (func.is_builtin_named("array_clone") || func.is_builtin_named("array_clone_prefix"))
                 && let Some(elem) = type_args.first().copied()
             {
                 out.insert(elem);
@@ -1973,7 +1967,7 @@ fn lazy_guard_global(
         return None;
     };
     let callee = callee_descriptor(descriptors, *func_id);
-    if !(callee.module_source.is_core_builtin() && callee.name == "is_uninitialized") {
+    if !callee.is_builtin_named("is_uninitialized") {
         return None;
     }
     let [arg] = args.as_slice() else {
