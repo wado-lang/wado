@@ -47,7 +47,7 @@ use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, TypeHead};
 use crate::resolve::{Resolution, head_site};
 use crate::unparse::binary_op_str;
 
-/// The values [`Elaborator::is_replace_on_assign_place_type`] answers for, which
+/// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
 /// every refused `&mut` into a larger value names.
 pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
     "a replace-on-assign type (primitive, enum, flags, fn)";
@@ -1544,69 +1544,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-<<<<<<< HEAD
-    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
-    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
-    /// shared GC struct, so mutation through the payload lands.
-    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
-        let table = self.tysys.type_table.borrow();
-        let replaces_on_assign = |ty: &ResolvedType| {
-            matches!(
-                ty,
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Function { .. }
-            )
-        };
-        if replaces_on_assign(table.get(type_id)) {
-            return true;
-        }
-        let base = table.representation_head(type_id);
-        replaces_on_assign(table.get(base))
-    }
-
     /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
     /// `*x`, and any nesting of those. `None` past a reference step.
     fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
-||||||| 1fb3cfbb5f
-    /// A type nothing survives a `&mut` copy of — primitive, enum, flags, or
-    /// fn, or a newtype over one. A `variant` is excluded: its payload is a
-    /// shared GC struct, so mutation through the payload lands.
-    pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
-        let table = self.tysys.type_table.borrow();
-        let replaces_on_assign = |ty: &ResolvedType| {
-            matches!(
-                ty,
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Function { .. }
-            )
-        };
-        if replaces_on_assign(table.get(type_id)) {
-            return true;
-        }
-        let base = table.representation_head(type_id);
-        replaces_on_assign(table.get(base))
-    }
-
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
-    /// any nesting of those. A reference step ends the walk; `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report.
-    pub(super) fn place_roots_at_immutable_binding(
-        &self,
-        expr: &ast::Expr,
-        ctx: &FunctionContext,
-    ) -> Option<String> {
-=======
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
-    /// any nesting of those. A reference step ends the walk; `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report.
-    pub(super) fn place_roots_at_immutable_binding(
-        &self,
-        expr: &ast::Expr,
-        ctx: &FunctionContext,
-    ) -> Option<String> {
->>>>>>> origin/main
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
             && matches!(
                 self.tysys.type_table.borrow().get(ty),

@@ -11,13 +11,7 @@ use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
-<<<<<<< HEAD
-use super::Elaborator;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
-||||||| 1fb3cfbb5f
-use super::Elaborator;
-=======
->>>>>>> origin/main
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
@@ -1055,7 +1049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow_mut()
                 .intern(ResolvedType::Ref(type_id)),
             RefBinding::MutRef => {
-                if self.is_replace_on_assign_place_type(type_id) {
+                if self.tysys.is_replace_on_assign_place_type(type_id) {
                     let _ = self.emit(TypeError::CannotAssign {
                         message: format!(
                             "cannot bind '{name}' as a mutable reference to {REPLACE_ON_ASSIGN_TYPE}: \
