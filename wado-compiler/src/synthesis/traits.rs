@@ -15,7 +15,7 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, Receiver, RefKind, TypeHead};
 use crate::package::Package;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
+    CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm,
     TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField, TirTypeParam, TypeId,
     TypeTable,
@@ -35,8 +35,8 @@ use crate::name::{
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
-use crate::synthesis::template::{blanket_dispatch_for, trait_call_template};
-use crate::tir::{StructDef, TemplateShape, TraitRef};
+use crate::synthesis::template::{blanket_dispatch_for, ref_blanket_call, trait_call_template};
+use crate::tir::{StructDef, TemplateId, TemplateShape, TraitRef};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -4838,24 +4838,20 @@ fn trait_call_on_type(
             } else {
                 resolve_impl_module_via_env(value_type, trait_name, tt, trait_env, module_source)
             };
-            let monomorph_info = if needs_ref_monomorph {
-                match &resolved {
-                    ResolvedType::Ref(inner_id) | ResolvedType::MutRef(inner_id) => {
-                        let base_info =
-                            trait_method_info(&info.fq_base_struct_name(), trait_name, method_name);
-                        Some(MonomorphInfo {
-                            generic_name: base_info.to_mangled_name(),
-                            impl_type_args: vec![*inner_id],
-                            method_type_args: vec![],
-                            is_blanket: true,
-                        })
-                    }
-                    _ => None,
+            let monomorph_info = match &resolved {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) if needs_ref_monomorph => {
+                    let ref_kind = RefKind::from_resolved(&resolved).expect("ref classify");
+                    Some(ref_blanket_call(ref_kind, trait_name, method_name, *inner, vec![], tt).1)
                 }
-            } else {
-                None
+                _ => None,
             };
             let template = trait_call_template(trait_env, &info, value_type, &impl_module, tt);
+            // A written block is the one answering these trait arguments, where
+            // the receiver alone can reach several (`Eq for &T`, `Eq<String> for &T`).
+            let impl_module = match &template {
+                Some(template @ TemplateId::Declared { .. }) => template.home(&trait_env.defs),
+                _ => impl_module,
+            };
             (impl_module, monomorph_info, template)
         };
 

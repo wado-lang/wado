@@ -962,10 +962,7 @@ impl LocalMethodName {
     /// inherent method.
     #[must_use]
     pub fn trait_decl(&self) -> Option<DefId> {
-        self.trait_name.as_ref().map(|t| {
-            t.canonical()
-                .expect("elaboration rejects a trait reaching no declaration")
-        })
+        self.trait_name.as_ref().map(FqTraitName::called_decl)
     }
 
     /// The typed receiver shape — the query consumers use to reason about the
@@ -2953,6 +2950,26 @@ impl FqTypeName {
         head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
     }
 
+    /// Whether some substitution for either side's binders and projections
+    /// makes the two names one type. A binder stands for the rest of a type
+    /// after the references written before it.
+    #[must_use]
+    pub fn unifies_with(&self, other: &FqTypeName) -> bool {
+        let open = |name: &FqTypeName| {
+            matches!(name.head, TypeHead::Binder { .. } | TypeHead::Projection { .. })
+        };
+        if open(self) {
+            return other.reference.starts_with(&self.reference);
+        }
+        if open(other) {
+            return self.reference.starts_with(&other.reference);
+        }
+        self.reference == other.reference
+            && self.head == other.head
+            && self.args.len() == other.args.len()
+            && self.args.iter().zip(&other.args).all(|(a, b)| a.unifies_with(b))
+    }
+
     /// The base, associated-type name, and declaring trait this projects off,
     /// `None` for any other shape.
     #[must_use]
@@ -3327,6 +3344,14 @@ impl FqTraitName {
             TraitHead::Declared(head) => Some(head.def()),
             TraitHead::Binder(_) => None,
         }
+    }
+
+    /// The trait a method call names. Elaboration rejects one reaching no
+    /// declaration, so only a bound's binder is `None` for [`Self::canonical`].
+    #[must_use]
+    pub fn called_decl(&self) -> DefId {
+        self.canonical()
+            .expect("elaboration rejects a trait reaching no declaration")
     }
 
     #[must_use]

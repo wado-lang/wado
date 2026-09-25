@@ -6401,6 +6401,7 @@ impl Parser {
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
+        self.errors.append(&mut parser.errors);
         // An interpolation holds ordinary code, and its spans index the file,
         // so what it read as a keyword belongs to the enclosing module.
         self.contextual_keywords

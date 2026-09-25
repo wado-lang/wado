@@ -4,7 +4,7 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
-use std::borrow::Borrow;
+use std::borrow::{Borrow, Cow};
 use std::sync::Arc;
 
 use crate::ast::{self, AstVisitor, Item, Module, Type};
@@ -1337,24 +1337,35 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<usize> {
-        let defaults = &self.decl_header_of(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = &self.impl_headers[&entry];
-            if header.trait_def() != Some(trait_) {
-                return None;
-            }
-            let default_at =
-                |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
-            let args = header.trait_arg_ids();
-            let answers = wanted.iter().enumerate().all(|(i, want)| {
-                let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
-                    return false;
-                };
-                effective.head_only() == want.head_only()
-            });
-            // The count the impl's own name spells, not every argument
-            // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-            answers.then(|| non_default_named_arg_count(args, &default_at))
+            (header.trait_def() == Some(trait_) && self.block_answers(entry, trait_, wanted))
+                // The count the impl's own name spells, not every argument
+                // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
+                .then(|| {
+                    non_default_named_arg_count(header.trait_arg_ids(), &|i| {
+                        self.default_arg_at(trait_, i, &header.target_id)
+                    })
+                })
+        })
+    }
+
+    /// The trait's declared default at `index`, `Self` read as `target`.
+    fn default_arg_at(
+        &self,
+        trait_: DefId,
+        index: usize,
+        target: &name::FqTypeName,
+    ) -> Option<name::FqTypeName> {
+        let header = self.decl_header_of(&trait_)?;
+        Some(header.default_args.get(index)?.as_ref()?.at(target))
+    }
+
+    /// Whether the impl `block` of `trait_` answers a use wanting `wanted`.
+    fn block_answers(&self, block: DefId, trait_: DefId, wanted: &[name::FqTypeName]) -> bool {
+        let header = &self.impl_headers[&block];
+        trait_args_answer(header.trait_arg_ids(), wanted, &|i| {
+            self.default_arg_at(trait_, i, &header.target_id)
         })
     }
 
@@ -1445,19 +1456,25 @@ impl TraitEnv {
         Some(TemplateId::in_block(def, block))
     }
 
-    /// The block on `receiver` whose body answers `method` of `trait_` where
-    /// `reaches` admits, a concrete one before a generic one (coherence Rule 1).
+    /// The block on `receiver` whose body answers `method` of `trait_<wanted>`
+    /// where `reaches` admits, a concrete one before a generic one (coherence
+    /// Rule 1). An inherent block answers with no `trait_` and no `wanted`.
     pub(crate) fn answering_template(
         &self,
         receiver: &name::Receiver,
         trait_: Option<DefId>,
+        wanted: &[name::FqTypeName],
         method: &str,
         reaches: impl Fn(DefId) -> bool,
     ) -> Option<TemplateId> {
         let mut generic = None;
         for &block in self.all_by_receiver.get(receiver).into_iter().flatten() {
             let header = &self.impl_headers[&block];
-            if header.is_synthesize_request || header.trait_def() != trait_ || !reaches(block) {
+            if header.is_synthesize_request
+                || header.trait_def() != trait_
+                || trait_.is_some_and(|trait_| !self.block_answers(block, trait_, wanted))
+                || !reaches(block)
+            {
                 continue;
             }
             let Some(template) = self.method_template(block, method) else {
@@ -1533,28 +1550,26 @@ impl TraitEnv {
     }
 
     /// The universal ref blanket (`impl<T> Trait for &T`) answering
-    /// `trait_<wanted>` on `receiver`. `Eq` has two: `Eq for &T`, `Eq<String> for &T`.
+    /// `trait_<wanted>`, the one writing the fewest open arguments first. `Eq`
+    /// has two: `Eq for &T` and `Eq<String> for &T`.
     pub(crate) fn universal_ref_blanket(
         &self,
         trait_: DefId,
-        receiver: &name::FqTypeName,
+        ref_kind: name::RefKind,
         wanted: &[name::FqTypeName],
     ) -> Option<&BlanketImpl> {
-        let is_mut = receiver.references().first() == Some(&name::RefKind::Mut);
-        let defaults = &self.decl_header_of(&trait_)?.default_args;
-        let default_at = |index: usize| Some(defaults.get(index)?.as_ref()?.at(receiver));
-        self.blanket_impls.get(&trait_)?.iter().find(|b| {
-            let written_args = self.impl_headers[&b.def].trait_arg_ids();
-            b.receiver == BlanketReceiver::Ref { is_mut }
-                && (0..defaults.len()).all(|i| {
-                    let written = written_args.get(i).cloned().or_else(|| default_at(i));
-                    let want = wanted.get(i).cloned().or_else(|| default_at(i));
-                    written
-                        .as_ref()
-                        .is_some_and(name::FqTypeName::mentions_binder)
-                        || written == want
-                })
-        })
+        let is_mut = ref_kind == name::RefKind::Mut;
+        self.blanket_impls
+            .get(&trait_)?
+            .iter()
+            .filter(|b| {
+                b.receiver == BlanketReceiver::Ref { is_mut }
+                    && self.block_answers(b.def, trait_, wanted)
+            })
+            .min_by_key(|b| {
+                let written = self.impl_headers[&b.def].trait_arg_ids();
+                written.iter().filter(|arg| arg.mentions_binder()).count()
+            })
     }
 
     /// The blanket impl block `def` declares, if it is one.
@@ -2585,14 +2600,33 @@ pub(super) fn header_answers_bound_args(
     resolutions: &Resolutions,
     wanted: &[name::FqTypeName],
 ) -> bool {
-    let default_at = |i: usize| declared_default_arg(params, i, Some(target), resolutions);
+    trait_args_answer(written, wanted, &|i| {
+        declared_default_arg(params, i, Some(target), resolutions)
+    })
+}
+
+/// Whether an impl writing `written` answers a use wanting `wanted`: at every
+/// position each side's argument, or the declared default where it wrote none,
+/// unify. A position the use leaves open with no default constrains nothing.
+pub(super) fn trait_args_answer(
+    written: &[name::FqTypeName],
+    wanted: &[name::FqTypeName],
+    default_at: &dyn Fn(usize) -> Option<name::FqTypeName>,
+) -> bool {
+    fn arg_at<'a>(
+        args: &'a [name::FqTypeName],
+        i: usize,
+        default_at: &dyn Fn(usize) -> Option<name::FqTypeName>,
+    ) -> Option<Cow<'a, name::FqTypeName>> {
+        args.get(i)
+            .map(Cow::Borrowed)
+            .or_else(|| default_at(i).map(Cow::Owned))
+    }
     (0..written.len().max(wanted.len())).all(|i| {
-        // A position the bound leaves open and the trait gives no default is
-        // one no bound can name, so every impl answers there.
-        let Some(asks) = wanted.get(i).cloned().or_else(|| default_at(i)) else {
+        let Some(asks) = arg_at(wanted, i, default_at) else {
             return true;
         };
-        written.get(i).cloned().or_else(|| default_at(i)) == Some(asks)
+        arg_at(written, i, default_at).is_some_and(|written| written.unifies_with(&asks))
     })
 }
 

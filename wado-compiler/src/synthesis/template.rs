@@ -983,16 +983,11 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // A `&T` / `&mut T` over a bare type parameter formats transparently as
-        // the pointee (`T^Inspect`), not through the `&`-prefixing ref blanket:
-        // in generic code `&T` is a borrow of a `T`, so `${v:?}` on a `&T`
-        // parameter renders the `T`. A reference over a *concrete* type keeps the
-        // ref blanket (`${&x:?}` → `&42`).
+        // In generic code `&T` and `&X::Item` borrow a value of the pointee, so
+        // they format as it. A reference over any other type keeps the ref
+        // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
-            if matches!(
-                tt.borrow().get(inner),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            ) =>
+            if tt.borrow().receiver_head_awaits_substitution(inner) =>
         {
             let local_name = method_name_for_type(inner, trait_name, method_name, ctx.tt);
             let impl_module = trait_impl_module(&local_name, inner, ctx);
@@ -1004,29 +999,12 @@ fn method_call_info_for_type(
             }
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let ref_kind =
-                RefKind::from_resolved(&tt.borrow().get(type_id).clone()).expect("ref classify");
-            let inner_name = tt.borrow().fq_type_name(inner);
-            let local_name = LocalMethodName::new_ref(
-                ref_kind,
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[inner_name]);
-            let generic_name = LocalMethodName::new_ref(
-                ref_kind,
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            )
-            .to_mangled_name();
+            let ref_kind = RefKind::from_resolved(&resolved).expect("ref classify");
+            let (local_name, monomorph_info) =
+                ref_blanket_call(ref_kind, trait_name, method_name, inner, vec![], &tt.borrow());
             MethodCallInfo {
                 local_name,
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name,
-                    impl_type_args: vec![inner],
-                    method_type_args: vec![],
-                    is_blanket: true,
-                }),
+                monomorph_info: Some(monomorph_info),
                 impl_module: ModuleSource::format(),
                 template: trait_method_template(
                     ctx.trait_env,
@@ -1060,6 +1038,31 @@ fn method_call_info_for_type(
     }
 }
 
+/// The name and instance of a call through the universal `&T` blanket, keyed
+/// by its pointee.
+pub(crate) fn ref_blanket_call(
+    ref_kind: RefKind,
+    trait_name: &FqTraitName,
+    method_name: &str,
+    pointee: TypeId,
+    method_type_args: Vec<TypeId>,
+    tt: &TypeTable,
+) -> (LocalMethodName, MonomorphInfo) {
+    let generic =
+        LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
+    let generic_name = generic.to_mangled_name();
+    let method_type_arg_names: Vec<FqTypeName> =
+        method_type_args.iter().map(|&arg| tt.fq_type_name(arg)).collect();
+    let local_name = generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    let monomorph_info = MonomorphInfo {
+        generic_name,
+        impl_type_args: vec![pointee],
+        method_type_args,
+        is_blanket: true,
+    };
+    (local_name, monomorph_info)
+}
+
 /// The template `receiver.method()` of `trait_` instantiates: a written block,
 /// a blanket, else a newtype's base's; `None` where a derived body answers.
 pub(crate) fn trait_method_template(
@@ -1069,19 +1072,23 @@ pub(crate) fn trait_method_template(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<TemplateId> {
-    let trait_ = trait_name.canonical()?;
+    let trait_ = trait_name.called_decl();
     if let Some(template) = trait_env.answering_template(
         &tt.impl_receiver_key(receiver),
         Some(trait_),
+        trait_name.args(),
         method,
         |block| tt.impl_reaches_instance(block, receiver),
     ) {
         return Some(template);
     }
-    let blanket = match tt.get(receiver) {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-            trait_env.universal_ref_blanket(trait_, &tt.fq_type_name(receiver), trait_name.args())
-        }
+    let resolved = tt.get(receiver);
+    let blanket = match resolved {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(
+            trait_,
+            RefKind::from_resolved(resolved).expect("ref classify"),
+            trait_name.args(),
+        ),
         // A newtype inherits its base's answer before any blanket but one
         // keyed on its own reflected shape (WEP 2026-09-01).
         ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
@@ -1159,7 +1166,7 @@ fn inherent_method_template(
     tt: &TypeTable,
 ) -> Option<TemplateId> {
     trait_env
-        .answering_template(&tt.impl_receiver_key(receiver), None, method, |block| {
+        .answering_template(&tt.impl_receiver_key(receiver), None, &[], method, |block| {
             tt.impl_reaches_instance(block, receiver)
         })
         .or_else(|| match tt.get(receiver) {

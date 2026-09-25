@@ -24,7 +24,7 @@ use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_value_blanket, trait_call_template,
+    ranked_value_blanket, ref_blanket_call, trait_call_template,
 };
 use crate::tir;
 use crate::tir::TemplateId;
@@ -2265,49 +2265,83 @@ impl Monomorphizer {
         let Some(trait_) = trait_fq.canonical() else {
             return false;
         };
-        let Some(blanket) = self.functions.trait_env.universal_ref_blanket(
-            trait_,
-            &type_table.fq_type_name(self_tid),
-            trait_fq.args(),
-        ) else {
+        let Some(blanket) =
+            self.functions
+                .trait_env
+                .universal_ref_blanket(trait_, ref_kind, trait_fq.args())
+        else {
             return false;
         };
-        // Mirror the template ref arm (`method_call_info_for_type`): the call
-        // name carries the shape + inner type; `call_rewrite` resolves it to the
-        // queued `&<inner>^Trait::method` instance via the blanket `monomorph_info`.
-        let inner_name = type_table.fq_type_name(inner);
-        let ref_info =
-            LocalMethodName::new_ref(ref_kind, Some(trait_fq.clone()), info.method_name.clone())
-                .with_struct_type_args(&[inner_name]);
-        let generic_name =
-            LocalMethodName::new_ref(ref_kind, Some(trait_fq.clone()), info.method_name.clone())
-                .to_mangled_name();
-        // The method's own type arguments belong to the call, not to the
-        // blanket, and are written in the enclosing body's type parameters, so
-        // they take the same substitution the receiver did.
-        let method_type_args: Vec<TypeId> = method_func
+        let method_type_args = self.substituted_method_type_args(method_func, substitution, type_table);
+        let (ref_info, monomorph_info) = ref_blanket_call(
+            ref_kind,
+            trait_fq,
+            &info.method_name,
+            inner,
+            method_type_args,
+            type_table,
+        );
+        *method_func = FunctionRef {
+            module_source: blanket.module.clone(),
+            name: ref_info.to_mangled_name(),
+            template: self
+                .functions
+                .trait_env
+                .method_template(blanket.def, &info.method_name),
+            monomorph_info: Some(monomorph_info),
+            method_info: Some(ref_info),
+        };
+        true
+    }
+
+    /// The call's own method type arguments at this instance. They are written
+    /// in the enclosing body's parameters, as the receiver is.
+    fn substituted_method_type_args(
+        &self,
+        method_func: &FunctionRef,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) -> Vec<TypeId> {
+        method_func
             .monomorph_info
             .iter()
             .flat_map(|m| &m.method_type_args)
             .map(|arg| self.substitute_type(*arg, substitution, type_table))
-            .collect();
-        let template = self
-            .functions
-            .trait_env
-            .method_template(blanket.def, &info.method_name);
-        *method_func = FunctionRef {
-            module_source: blanket.module.clone(),
-            name: ref_info.to_mangled_name(),
-            template,
-            monomorph_info: Some(MonomorphInfo {
-                generic_name,
-                impl_type_args: vec![inner],
-                method_type_args,
-                is_blanket: true,
-            }),
-            method_info: Some(ref_info),
+            .collect()
+    }
+
+    /// A call through a universal `&T` blanket at this instance: the `&` head
+    /// stays, and only the pointee it is keyed by takes the substitution.
+    fn substitute_ref_blanket_pointee(
+        &self,
+        method_func: &mut FunctionRef,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &mut TypeTable,
+    ) {
+        let [pointee] = method_func
+            .monomorph_info
+            .as_ref()
+            .expect("a `&T` blanket call is keyed by its pointee")
+            .impl_type_args[..]
+        else {
+            panic!("a `&T` blanket is keyed by one pointee");
         };
-        true
+        let ref_kind = info.ref_receiver().expect("a `&T` blanket call has a ref receiver");
+        let trait_name = info.trait_name.as_ref().expect("a `&T` blanket call names its trait");
+        let pointee = self.substitute_type(pointee, substitution, type_table);
+        let method_type_args = self.substituted_method_type_args(method_func, substitution, type_table);
+        let (ref_info, monomorph_info) = ref_blanket_call(
+            ref_kind,
+            trait_name,
+            &info.method_name,
+            pointee,
+            method_type_args,
+            type_table,
+        );
+        method_func.name = ref_info.to_mangled_name();
+        method_func.monomorph_info = Some(monomorph_info);
+        method_func.method_info = Some(ref_info);
     }
 
     /// The name with the template's type parameters replaced in the trait's
@@ -2392,15 +2426,10 @@ impl Monomorphizer {
         shorter().unwrap_or(info)
     }
 
-    /// Whether `func` calls a universal `&T` blanket at a pointee the
-    /// substitution cannot reach, which leaves it already concrete.
-    fn is_concrete_ref_blanket_call(&self, func: &FunctionRef, type_table: &TypeTable) -> bool {
-        let (
-            Some(TemplateId::Declared {
-                block: Some(block), ..
-            }),
-            Some(monomorph),
-        ) = (&func.template, &func.monomorph_info)
+    fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
+        let Some(TemplateId::Declared {
+            block: Some(block), ..
+        }) = &func.template
         else {
             return false;
         };
@@ -2408,11 +2437,6 @@ impl Monomorphizer {
             .trait_env
             .blanket_of_block(*block)
             .is_some_and(|blanket| matches!(blanket.receiver, BlanketReceiver::Ref { .. }))
-            && !monomorph
-                .impl_type_args
-                .iter()
-                .chain(&monomorph.method_type_args)
-                .any(|&arg| type_table.contains_type_param(arg))
     }
 
     /// Resolve a method call in a generic body to its concrete target after
@@ -2435,9 +2459,11 @@ impl Monomorphizer {
         };
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
-        if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table)
-            || self.is_concrete_ref_blanket_call(method_func, type_table)
-        {
+        if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
+            return;
+        }
+        if self.is_universal_ref_blanket_call(method_func) {
+            self.substitute_ref_blanket_pointee(method_func, &info, substitution, type_table);
             return;
         }
 
