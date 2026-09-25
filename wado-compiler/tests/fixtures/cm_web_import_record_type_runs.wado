@@ -1,0 +1,40 @@
+// A `web:*` interface that declares a record exports that type beside its
+// functions, and the host accepts it.
+
+use { println } from "core:cli";
+
+#[cm("web:demo/global#pair")]
+struct Pair {
+    #[cm("a")]
+    a: i32,
+}
+
+#[cm("web:demo/global")]
+interface Dom {
+    #[cm("web:demo/global#touch")]
+    fn touch(p: Pair) -> i32;
+}
+
+struct Fake {}
+
+impl Dom for Fake {
+    fn touch(&mut self, p: Pair) -> i32 {
+        resume p.a + 1
+    }
+}
+
+fn poke() -> i32 with Dom {
+    return Dom::touch(Pair { a: 41 });
+}
+
+export fn run() with Stdout {
+    let mut f = Fake {};
+    with Dom => &mut f do {
+        println(`${poke()}`);
+    }
+}
+
+__DATA__
+{
+  "stdout": "42\n"
+}

@@ -1,5 +1,5 @@
 // Narrowing tests a handle, so the scrutinee is the value, not a reference.
-use { Element, Node } from "web:dom";
+use { Element, Node } from "wado-lang:web";
 
 fn kind(n: &Node) -> i32 {
     if let el: Element = n {
@@ -11,4 +11,9 @@ fn kind(n: &Node) -> i32 {
 export fn run() {}
 
 __DATA__
-{"compile_error": "a type pattern narrows a resource value, not a reference to one"}
+{
+  "compile_error": "a type pattern narrows a resource value, not a reference to one",
+  "dependencies": {
+    "wado-lang:web": "../../../package-web/src/lib.wado"
+  }
+}

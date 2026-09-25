@@ -1,10 +1,7 @@
-//! The first committed grammar that is ATN-class at its LR loop AND has the
-//! mid-operand shape. The continuation gate rides the static LR dispatch, so
-//! this rule keeps its per-alternative precedence and the simulator decides
-//! the loop entry — which leaves the climbing cases diverging from ANTLR4, the
-//! LR operator-precedence gap `perf.md` tracks. Expected trees are the
-//! published ANTLR4 jar's (black-box oracle); a case Gale reads differently is
-//! `#[TODO]`.
+//! Both `between` shapes in one LR rule. The atom makes the loop entry
+//! ATN-class, so the simulator, not the static continuation gate, decides how
+//! far the LR alternative's `expr[0]` operand climbs as well.
+//! Expected trees are the published ANTLR4 jar's (black-box oracle).
 
 use g from "./grammars/lr_atn_mid_operand.g4"
     with {
@@ -16,11 +13,6 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
-}
-
-fn assert_parses<S: AsStrSlice>(input: S) {
-    let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
 }
 
 test "the between atom keeps its own and" {
@@ -35,25 +27,47 @@ test "the mid operand stops at the enclosing and" {
     assert_tree("a between b and c ;", "(stat (expr (expr a) between (expr b) and (expr c)) ;)");
 }
 
-// Acceptance is asserted outside the `#[TODO]`s below, so a regression from
-// "wrong tree" to "rejected" fails instead of staying a pending todo.
-test "the climbing cases parse" {
-    assert_parses("a between b and c and d ;");
-    assert_parses("between a and b and c ;");
-}
-
-#[TODO]
 test "the mid operand climbs the shared and when one is left over" {
     assert_tree(
         "a between b and c and d ;",
         "(stat (expr (expr a) between (expr (expr b) and (expr c)) and (expr d)) ;)",
     );
+    assert_tree(
+        "a between b and c and d and e ;",
+        "(stat (expr (expr a) between (expr (expr (expr b) and (expr c)) and (expr d)) and (expr e)) ;)",
+    );
 }
 
-#[TODO]
 test "the atom's first operand climbs the shared and when one is left over" {
     assert_tree(
         "between a and b and c ;",
         "(stat (expr between (expr (expr a) and (expr b)) and (expr c)) ;)",
+    );
+}
+
+test "an and after a nested between goes to the outer between" {
+    assert_tree(
+        "a between b and c and d between e and f ;",
+        "(stat (expr (expr (expr a) between (expr (expr b) and (expr c)) and (expr d)) between (expr e) and (expr f)) ;)",
+    );
+    assert_tree(
+        "a between b and between c and d and e ;",
+        "(stat (expr (expr a) between (expr (expr b) and (expr between (expr c) and (expr d))) and (expr e)) ;)",
+    );
+    assert_tree(
+        "a between b and c between d and e and f ;",
+        "(stat (expr (expr a) between (expr (expr (expr b) and (expr c)) between (expr d) and (expr e)) and (expr f)) ;)",
+    );
+    assert_tree(
+        "a and b between c and d and e ;",
+        "(stat (expr (expr (expr a) and (expr b)) between (expr (expr c) and (expr d)) and (expr e)) ;)",
+    );
+    assert_tree(
+        "a between between b and c and d and e ;",
+        "(stat (expr (expr a) between (expr between (expr (expr b) and (expr c)) and (expr d)) and (expr e)) ;)",
+    );
+    assert_tree(
+        "between a and b between c and d and e ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) between (expr c) and (expr d)) and (expr e)) ;)",
     );
 }

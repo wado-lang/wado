@@ -1,8 +1,7 @@
 //! A rule alternative that can match nothing is viable everywhere, so its arm
-//! carries no lookahead test. Where it belongs is not a property of the rule —
-//! ANTLR4 takes it in one caller and not another on the same input — so no
-//! static order is the answer. Gale keeps alternative order; the divergent
-//! caller is `#[TODO]`, for the ATN simulator's full-context decision.
+//! carries no lookahead test. Whether to take it is not a property of the
+//! rule: ANTLR4 takes it in one caller and not in another on the same input.
+//! So the ATN simulator decides it with full context.
 //!
 //! Trees from the published ANTLR4 jar (`scripts/antlr4-oracle.sh`).
 
@@ -28,11 +27,8 @@ test "nullable-first: the lookahead still picks the alternative that has one" {
     assert_tree("q", "(s q r)");
 }
 
-#[TODO]
 test "nullable-first: the caller's continuation can rule the empty match out" {
     // `q b`: alternative 0 matches empty, but EOF follows and `b` is left
-    // over, so ANTLR4 takes `B`. Gale's decision is one per rule and cannot
-    // vary by call site — the same arm order that gets `p b` right gets this
-    // wrong. Resolvable only by the follow-aware decision the ATN makes.
+    // over, so ANTLR4 takes `B`.
     assert_tree("q b", "(s q (r b))");
 }

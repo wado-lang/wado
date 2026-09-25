@@ -28,6 +28,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tagged_templates
             .insert(tagged.id, template_ty);
 
+        // A closure-typed binding would resolve as an indirect call, which
+        // reify cannot build the template into.
+        if let ast::Expr::Ident(ident) = &tagged.tag
+            && self.callee_value(ident, ctx).is_some()
+        {
+            return self.emit_not_a_tag(&tagged.tag);
+        }
+
         let call = ast::CallExpr {
             id: tagged.id,
             callee: tagged.tag.clone(),
@@ -36,26 +44,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             has_trailing_comma: false,
             span: tagged.span,
         };
+        let reported = self.logger.offered_error_count();
         let result =
             self.resolve_call_with_args(&call, ctx, expected_type, Some(vec![template_ty]));
 
-        // Reify rebuilds the call from the dispatch fact, so a path that
-        // records none is a tag reify cannot build: a variant case, a
-        // closure-typed binding, an abstract `T::method`. Each resolves as
-        // some other call kind, which either accepts the template silently or
-        // reports an arity it never had.
+        // Reify rebuilds the call from the dispatch fact. A call without one
+        // either reported why or was a variant case, which is silent.
         if !self
             .sem
             .types
             .static_method_dispatch
             .contains_key(&tagged.id)
         {
+<<<<<<< HEAD
             let _ = self.emit(TypeError::TemplateTagNotCallable {
                 span: tagged.tag.span(),
             });
+||||||| 03599b796
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: "a template tag must name a function or a static method".to_string(),
+                span: tagged.tag.span(),
+            });
+=======
+            if self.logger.offered_error_count() == reported {
+                return self.emit_not_a_tag(&tagged.tag);
+            }
+>>>>>>> origin/main
             return TypeTable::ERROR;
         }
         result
+    }
+
+    fn emit_not_a_tag(&self, tag: &ast::Expr) -> TypeId {
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: "a template tag must name a function or a static method".to_string(),
+            span: tag.span(),
+        });
+        TypeTable::ERROR
     }
 
     /// The template's shape, or `None` where a hole cannot be a member of one:

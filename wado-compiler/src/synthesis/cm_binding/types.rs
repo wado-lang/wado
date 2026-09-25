@@ -21,8 +21,18 @@ use crate::tir::{
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
+<<<<<<< HEAD
 use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
+||||||| 03599b796
+use crate::name::{FqTraitName, FqTypeName};
+use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
+=======
+use crate::name::{FqTraitName, FqTypeName};
+use crate::synthesis::common::{
+    binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
+};
+>>>>>>> origin/main
 use crate::tir::StructDef;
 
 /// Snapshot of the stdlib type / variant names CM binding matches against,
@@ -430,6 +440,11 @@ pub fn cm_type_to_type_id(
                 .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
+        }
+        Type::Reference(inner) | Type::MutReference(inner)
+            if registry.extern_handle(ty).is_some() =>
+        {
+            cm_type_to_type_id(inner, type_table, registry, wasi_package)
         }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
@@ -982,22 +997,48 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 }
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
-/// gives it. A type arriving as several values is not one store.
+/// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
 pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> &'static str {
-    if flatten_param_type(ty, cm_interface_registry, names).len() != 1 {
-        return "i32_store";
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return "i64_store";
     }
-    match cm_layout_with_registry(ty, cm_interface_registry).0 {
-        1 => "i32_store8",
-        2 => "i32_store16",
-        4 => "i32_store",
-        8 => "i64_store",
-        other => panic!("a one-value CM type cannot be {other} bytes wide: {ty:?}"),
+    match flatten_param_type(ty, cm_interface_registry, names)[..] {
+        [TypeTable::F64] => "f64_store",
+        [TypeTable::F32] => "f32_store",
+        [TypeTable::I64] => "i64_store",
+        [TypeTable::I32] => match cm_layout_with_registry(ty, cm_interface_registry).0 {
+            1 => "i32_store8",
+            2 => "i32_store16",
+            4 => "i32_store",
+            other => panic!("a one-`i32` CM type cannot be {other} bytes wide: {ty:?}"),
+        },
+        ref flat => panic!("`{ty:?}` flattens to {flat:?}, not one scalar"),
     }
+}
+
+/// The load that reads back a one-value CM type with no sized declaration, and
+/// the type it yields. The inverse of [`scalar_store_op`].
+pub(super) fn handle_load_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> (&'static str, TypeId) {
+    if cm_interface_registry.extern_handle(ty).is_some() {
+        return ("i64_load", TypeTable::U64);
+    }
+    let [flat] = cm_interface_registry.cm_flatten(ty)[..] else {
+        panic!("a handle is one flat value: {ty:?}");
+    };
+    let load = match flat {
+        cm_abi::CmValType::I32 => "i32_load",
+        cm_abi::CmValType::I64 => "i64_load",
+        cm_abi::CmValType::F32 => "f32_load",
+        cm_abi::CmValType::F64 => "f64_load",
+    };
+    (load, cm_val_type_to_type_id(flat))
 }
 
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
@@ -1007,6 +1048,7 @@ pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> boo
     matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
 }
 
+<<<<<<< HEAD
 /// Flat CM ABI types of a boundary type the world declares, the AST-side twin
 /// of [`flat_types_from_type_id`]. Comparing the two says whether an export's
 /// own type lowers to the values the world's does.
@@ -1112,6 +1154,114 @@ fn flatten_export_type_inner(
     }
 }
 
+||||||| 03599b796
+/// Flat CM ABI types of a boundary type the world declares, the AST-side twin
+/// of [`flat_types_from_type_id`]. Comparing the two says whether an export's
+/// own type lowers to the values the world's does.
+pub(super) fn flat_types_from_ast_type(
+    ty: &Type,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) -> Vec<cm_abi::CmValType> {
+    let mut out = Vec::new();
+    flatten_export_type(ty, &mut out, tir_modules, type_table);
+    out
+}
+
+/// Recursively flatten an export type to CM ABI flat values.
+///
+/// Thin wrapper that builds the [`CmStdlibNames`] snapshot once and delegates
+/// to the recursive inner function, so recursion does not rebuild it per level.
+pub(super) fn flatten_export_type(
+    ty: &Type,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+) {
+    let names = CmStdlibNames::from_type_table(type_table);
+    flatten_export_type_inner(ty, out, tir_modules, type_table, &names);
+}
+
+fn flatten_export_type_inner(
+    ty: &Type,
+    out: &mut Vec<cm_abi::CmValType>,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+    type_table: &TypeTable,
+    names: &CmStdlibNames,
+) {
+    match ty {
+        Type::Named(named) if named.name == names.string => {
+            out.push(cm_abi::CmValType::I32); // ptr
+            out.push(cm_abi::CmValType::I32); // len
+        }
+        Type::Named(named) => match named.name.as_str() {
+            "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
+                out.push(cm_abi::CmValType::I32);
+            }
+            "i64" | "u64" => out.push(cm_abi::CmValType::I64),
+            "f32" => out.push(cm_abi::CmValType::F32),
+            "f64" => out.push(cm_abi::CmValType::F64),
+            "()" => {} // unit — no values
+            _ => {
+                // Check if it's a variant type defined in TIR modules
+                if let Some(variant_decl) = find_variant_decl(&named.name, tir_modules) {
+                    flatten_variant_type(&variant_decl, out, tir_modules, type_table, names);
+                } else if let Some(struct_decl) = find_struct_decl(&named.name, tir_modules) {
+                    flatten_struct_type(&struct_decl, out, tir_modules, type_table, names);
+                } else if let Some(nt_type_id) = find_newtype_type_id(&named.name, tir_modules) {
+                    // A newtype flattens as its base, not the i32 fallback below,
+                    // so the flat signature matches the canonical ABI.
+                    flat_types_from_type_id_inner(nt_type_id, out, tir_modules, type_table, names);
+                } else {
+                    // Resource handles, enums, unknown → i32
+                    out.push(cm_abi::CmValType::I32);
+                }
+            }
+        },
+        Type::Generic(generic) if generic.name == names.array || names.is_tree_map(generic) => {
+            // `map<K, V>` despecializes to `list<tuple<K, V>>` and carries that
+            // type's `(ptr, count)`.
+            out.push(cm_abi::CmValType::I32); // ptr
+            out.push(cm_abi::CmValType::I32); // len
+        }
+        Type::Generic(generic) if generic.name == names.option && generic.args.len() == 1 => {
+            out.push(cm_abi::CmValType::I32); // discriminant
+            flatten_export_type_inner(&generic.args[0], out, tir_modules, type_table, names);
+        }
+        Type::Generic(generic) if generic.name == names.result && generic.args.len() == 2 => {
+            out.push(cm_abi::CmValType::I32); // discriminant
+            let mut ok_flat = Vec::new();
+            let mut err_flat = Vec::new();
+            flatten_export_type_inner(
+                &generic.args[0],
+                &mut ok_flat,
+                tir_modules,
+                type_table,
+                names,
+            );
+            flatten_export_type_inner(
+                &generic.args[1],
+                &mut err_flat,
+                tir_modules,
+                type_table,
+                names,
+            );
+            out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
+        }
+        // Stream / Future / Own / Borrow and other generics are i32 handles.
+        Type::Generic(_) => out.push(cm_abi::CmValType::I32),
+        Type::Tuple(elems) => {
+            for elem in elems {
+                flatten_export_type_inner(elem, out, tir_modules, type_table, names);
+            }
+        }
+        Type::Reference(_) | Type::MutReference(_) => out.push(cm_abi::CmValType::I32),
+        _ => {}
+    }
+}
+
+=======
+>>>>>>> origin/main
 /// Flatten a variant type: discriminant + union of all case payloads.
 fn flatten_variant_type(
     variant_decl: &TirVariantDecl,
@@ -1210,7 +1360,13 @@ fn flat_types_from_type_id_inner(
                 );
             }
         }
-        ResolvedType::Resource { .. } => out.push(cm_abi::CmValType::I32),
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            out.push(if type_table.is_unrestricted_handle(type_id) {
+                cm_abi::CmValType::F64
+            } else {
+                cm_abi::CmValType::I32
+            });
+        }
         ResolvedType::Enum { .. } => out.push(cm_abi::CmValType::I32),
         ResolvedType::Variant { def } => {
             if let Some(variant_decl) = variant_decl_of(*def, tir_modules) {
@@ -1260,14 +1416,13 @@ fn flat_types_from_type_id_inner(
                 _ => out.push(cm_abi::CmValType::I32),
             }
         }
-        ResolvedType::Newtype { base_type, .. } => {
+        ResolvedType::Newtype { base_type, .. }
+        | ResolvedType::Ref(base_type)
+        | ResolvedType::MutRef(base_type) => {
             flat_types_from_type_id_inner(*base_type, out, tir_modules, type_table, names);
         }
         ResolvedType::Flags { .. } => {
             // Flags are u32 at the CM ABI level
-            out.push(cm_abi::CmValType::I32);
-        }
-        ResolvedType::GenericResource { .. } => {
             out.push(cm_abi::CmValType::I32);
         }
         _ => {} // Never, Error, Unknown, etc.
@@ -1327,48 +1482,6 @@ pub(super) fn struct_decl_of(
         }
     }
     declaration.cloned()
-}
-
-/// Find a variant declaration by name across all TIR modules. For a name off
-/// an AST type, which names no declaration on its own; every caller holding a
-/// resolved type keys on [`variant_decl_of`] instead.
-pub(super) fn find_variant_decl(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TirVariantDecl> {
-    tir_modules
-        .values()
-        .flat_map(|module| &module.variants)
-        .find(|variant| variant.name == name)
-        .cloned()
-}
-
-/// Find a struct declaration by name across all TIR modules — the name-keyed
-/// counterpart of [`struct_decl_of`], for an AST type's spelling.
-pub(super) fn find_struct_decl(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TirStruct> {
-    tir_modules
-        .values()
-        .flat_map(|module| &module.structs)
-        .find(|s| s.name == name)
-        .cloned()
-}
-
-/// Find the `TypeId` of a newtype declaration by name across all TIR modules.
-pub(super) fn find_newtype_type_id(
-    name: &str,
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-) -> Option<TypeId> {
-    // A generic declaration names no single type, so it is not a candidate at
-    // all — reading its `None` after matching the name would let it shadow a
-    // concrete declaration of the same name and flatten that one as `i32`.
-    tir_modules
-        .values()
-        .flat_map(|module| &module.newtypes)
-        .filter(|nt| nt.name == name)
-        .find_map(|nt| nt.type_id)
 }
 
 /// Create a `VariantTag` TIR expression (extracts i32 discriminant).
@@ -1449,14 +1562,7 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
             TypeTable::F32,
             synth_span(),
         ),
-        cm_abi::CmValType::F64 => TirExpr::new(
-            TirExprKind::FloatLiteral {
-                value: 0.0,
-                repr: "0.0".to_string(),
-            },
-            TypeTable::F64,
-            synth_span(),
-        ),
+        cm_abi::CmValType::F64 => f64_const(0.0),
     }
 }
 
@@ -1578,18 +1684,6 @@ pub(super) fn type_id_to_ast_type(
     }
 }
 
-pub(super) fn compute_export_flat_param_types(
-    params: &[(String, Type)],
-    tir_modules: &IndexMap<ModuleSource, TirModule>,
-    type_table: &TypeTable,
-) -> Vec<cm_abi::CmValType> {
-    let mut out = Vec::new();
-    for (_name, ty) in params {
-        flatten_export_type(ty, &mut out, tir_modules, type_table);
-    }
-    out
-}
-
 /// Whether a parameter needs CM flat-ABI lifting at the export boundary — that
 /// is, whether its flat representation is anything but a single-slot passthrough
 /// of the same Wasm value type. Handle-shaped types (resource, enum, flags) and
@@ -1599,11 +1693,11 @@ pub(super) fn param_needs_lifting(type_id: TypeId, tt: &TypeTable) -> bool {
     match tt.get(type_id) {
         ResolvedType::Primitive(prim) => matches!(prim, PrimitiveType::Bool),
         ResolvedType::Unit => true,
-        // Single-i32 handle-shaped types flow through.
-        ResolvedType::Resource { .. }
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::GenericResource { .. } => false,
+        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+            tt.is_unrestricted_handle(type_id)
+        }
+        // One-scalar handle-shaped types flow through.
+        ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => false,
         // `ResolvedType::Newtype` unwraps at the CM boundary, so recurse on
         // the base type rather than treating the newtype itself as
         // opaque.
@@ -1637,16 +1731,11 @@ mod tests {
             cm_package_from_source("wasi:filesystem/types@0.3.0"),
             Some((CmNamespace::Wasi, "filesystem"))
         );
-        assert_eq!(
-            cm_package_from_source("web:dom/types"),
-            Some((CmNamespace::Web, "dom"))
-        );
         // `core:` is not a `CmNamespace`; the kiln lookups own those.
         assert_eq!(cm_package_from_source("core:kiln/types@0.1.0"), None);
         assert_eq!(cm_package_from_source("my:pkg/iface"), None);
     }
 
-    /// A module name alone cannot tell `wasi:dom/node` from `web:dom/node`.
     #[test]
     fn a_cm_interface_module_carries_the_namespace_that_owns_it() {
         assert_eq!(
@@ -1655,10 +1744,6 @@ mod tests {
                 Some(CmNamespace::Wasi),
                 "sockets/ip_name_lookup.wado".into()
             ))
-        );
-        assert_eq!(
-            cm_interface_module("web:dom/node"),
-            Some((Some(CmNamespace::Web), "dom/node.wado".into()))
         );
         // A `core:` module carries no `CmNamespace`, and must not pair with one.
         assert_eq!(

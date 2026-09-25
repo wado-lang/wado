@@ -71,8 +71,8 @@ test "the ATN dump builds off the lowering the dump already has" {
     synthesize_implicit_tokens(&mut merged);
     let [lowered, _] = lower_pipeline(&mut merged);
     let report = render_atn_dump(&merged, &lowered);
-    assert str_contains(&report, "rule 0 'a'"), report;
-    assert str_contains(&report, "rule 1 'c'"), report;
+    assert report.contains("rule 0 'a'"), report;
+    assert report.contains("rule 1 'c'"), report;
 }
 
 /// Render a hand-built `Grammar` as is. Not `cmd_dump`'s pipeline —
@@ -105,27 +105,6 @@ fn no_lit_tokens() -> List<LitToken> {
     return [];
 }
 
-fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len > h_len {
-        return false;
-    }
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            return true;
-        }
-    }
-    return false;
-}
-
 fn alt_of(elements: List<Element>) -> Alternative {
     return Alternative {
         label: null,
@@ -147,10 +126,10 @@ test "render_dump shows simple rule name and shape" {
 
     let report = dump_grammar(&g);
 
-    assert str_contains(&report, "value"), report;
-    assert str_contains(&report, "Simple"), report;
+    assert report.contains("value"), report;
+    assert report.contains("Simple"), report;
     // No diagnostics: the summary reports none.
-    assert str_contains(&report, "warnings: none"), report;
+    assert report.contains("warnings: none"), report;
 }
 
 test "render_dump shows Direct dispatch for disjoint multi-alt" {
@@ -169,12 +148,12 @@ test "render_dump shows Direct dispatch for disjoint multi-alt" {
 
     let report = dump_grammar(&g);
 
-    assert str_contains(&report, "expr"), report;
-    assert str_contains(&report, "Direct"), report;
+    assert report.contains("expr"), report;
+    assert report.contains("Direct"), report;
     // Each disjoint alt's first set appears.
-    assert str_contains(&report, "TK_INT"), report;
-    assert str_contains(&report, "TK_STRING"), report;
-    assert str_contains(&report, "warnings: none"), report;
+    assert report.contains("TK_INT"), report;
+    assert report.contains("TK_STRING"), report;
+    assert report.contains("warnings: none"), report;
 }
 
 test "render_dump shows Tournament and overlap warning" {
@@ -202,14 +181,14 @@ test "render_dump shows Tournament and overlap warning" {
 
     let report = dump_grammar(&g);
 
-    assert str_contains(&report, "Tournament"), report;
+    assert report.contains("Tournament"), report;
     // The diagnostic is inlined on the rule and listed in the summary.
-    assert str_contains(&report, "warning"), report;
+    assert report.contains("warning"), report;
     // The diagnostic names the rule and the shared lookahead token.
-    assert str_contains(&report, "'r'"), report;
-    assert str_contains(&report, "TK_ID"), report;
+    assert report.contains("'r'"), report;
+    assert report.contains("TK_ID"), report;
     // Summary shows a non-empty warnings section.
-    assert str_contains(&report, "warnings ("), report;
+    assert report.contains("warnings ("), report;
 }
 
 test "render_dump shows prediction tree for overlap group" {
@@ -238,15 +217,15 @@ test "render_dump shows prediction tree for overlap group" {
     let report = dump_grammar(&g);
 
     // The overlap-group prediction tree is rendered as its own section.
-    assert str_contains(&report, "prediction"), report;
+    assert report.contains("prediction"), report;
     // The Consume on the shared ID prefix is named.
-    assert str_contains(&report, "Consume"), report;
+    assert report.contains("Consume"), report;
     // The disambiguating Dispatch at depth 1 surfaces both branch
     // tokens and Leaf alt indices.
-    assert str_contains(&report, "Dispatch"), report;
-    assert str_contains(&report, "Leaf"), report;
-    assert str_contains(&report, "TK_INT"), report;
-    assert str_contains(&report, "TK_STRING"), report;
+    assert report.contains("Dispatch"), report;
+    assert report.contains("Leaf"), report;
+    assert report.contains("TK_INT"), report;
+    assert report.contains("TK_STRING"), report;
 }
 
 test "render_dump shows prediction tree for LR atom overlap" {
@@ -279,11 +258,11 @@ test "render_dump shows prediction tree for LR atom overlap" {
 
     let report = dump_grammar(&g);
 
-    assert str_contains(&report, "LeftRecursive"), report;
-    assert str_contains(&report, "prediction"), report;
-    assert str_contains(&report, "Consume"), report;
-    assert str_contains(&report, "TK_INT"), report;
-    assert str_contains(&report, "TK_STRING"), report;
+    assert report.contains("LeftRecursive"), report;
+    assert report.contains("prediction"), report;
+    assert report.contains("Consume"), report;
+    assert report.contains("TK_INT"), report;
+    assert report.contains("TK_STRING"), report;
 }
 
 test "render_dump annotates an Ambiguous leaf with its halt reason" {
@@ -330,13 +309,13 @@ test "render_dump annotates an Ambiguous leaf with its halt reason" {
     let report = dump_grammar(&g);
 
     // The Ambiguous leaf still lists its alts ...
-    assert str_contains(&report, "Ambiguous(["), report;
+    assert report.contains("Ambiguous(["), report;
     // ... and now carries a halt reason after the em dash.
-    assert str_contains(&report, "Ambiguous([alt 0, alt 1]) — "), report;
+    assert report.contains("Ambiguous([alt 0, alt 1]) — "), report;
     // `r`'s shared `expr` prefix is an opaque-rule-ref halt.
-    assert str_contains(&report, "opaque rule-ref prefix"), report;
+    assert report.contains("opaque rule-ref prefix"), report;
     // `expr`'s `ID` vs `ID PLUS ID` is an at-end-vs-branch conflict.
-    assert str_contains(&report, "at-end vs branch conflict"), report;
+    assert report.contains("at-end vs branch conflict"), report;
 }
 
 test "render_dump inlines a group-scoped diagnostic under its owning rule" {
@@ -353,10 +332,10 @@ STR : '\"' ;";
     let report = dump_source(&g);
 
     let head = section_of(&report, "r");
-    assert str_contains(&head, "warning: overlap-tournament"), report;
-    assert str_contains(&head, "TK_ID"), report;
+    assert head.contains("warning: overlap-tournament"), report;
+    assert head.contains("TK_ID"), report;
     // And it is still listed once in the summary, under the group's label.
-    assert str_contains(&report, "General group rGroup0:"), report;
+    assert report.contains("General group rGroup0:"), report;
 }
 
 /// The `rule <name>` section of a dump report: from its header line to the
@@ -398,16 +377,16 @@ STR : '\"' ;";
     let report = dump_source(&g);
 
     let r = section_of(&report, "r");
-    assert str_contains(&r, "rule r — "), r;
-    assert !str_contains(&r, "rule r2 — "), r;
-    assert !str_contains(&r, "warnings ("), r;
+    assert r.contains("rule r — "), r;
+    assert !r.contains("rule r2 — "), r;
+    assert !r.contains("warnings ("), r;
 
     // The last rule's section still stops before the summary.
     let r2 = section_of(&report, "r2");
-    assert str_contains(&r2, "rule r2 — "), r2;
-    assert !str_contains(&r2, "warnings ("), r2;
+    assert r2.contains("rule r2 — "), r2;
+    assert !r2.contains("warnings ("), r2;
     // ... which is where the group-scoped diagnostic is also listed.
-    assert str_contains(&report, "General group rGroup0:"), report;
+    assert report.contains("General group rGroup0:"), report;
 }
 
 test "render_dump keeps an at-end alt out of an expanded opaque dispatch" {
@@ -426,8 +405,28 @@ Y : 'Y' ;
 Z : 'Z' ;";
     let report = dump_source(&g);
 
-    assert str_contains(&report, "Ambiguous([alt 2, alt 0, alt 1]) — at-end vs branch conflict"), report;
-    assert !str_contains(&report, "Leaf(alt "), report;
+    assert report.contains("Ambiguous([alt 2, alt 0, alt 1]) — at-end vs branch conflict"), report;
+    assert !report.contains("Leaf(alt "), report;
+}
+
+test "render_dump offers an open-ended alt on a token it does not name" {
+    // `A? . C` admits every token through its `.`, so `b` is its token too:
+    // the second token separates it from `B D` and `B E`, and only there is
+    // `[TK_C]` a branch.
+    let g = "grammar W;
+r : A? . C | B D | B E ;
+A : 'a' ;
+B : 'b' ;
+C : 'c' ;
+D : 'd' ;
+E : 'e' ;";
+    let r = section_of(&dump_source(&g), "r");
+
+    assert r.contains("overlap group [alt 0, alt 1, alt 2]"), r;
+    assert r.contains("Dispatch[d=1]"), r;
+    assert r.contains("[TK_C] →"), r;
+    assert r.contains("Leaf(alt 1)"), r;
+    assert r.contains("Leaf(alt 2)"), r;
 }
 
 test "render_dump shows LR loop-entry dispatch with conflict-min" {
@@ -442,12 +441,12 @@ ID : [a-z]+ ;";
     let report = dump_source(&g);
 
     // Per-LR-alt precedence loop-entry bound.
-    assert str_contains(&report, "conflict-min="), report;
+    assert report.contains("conflict-min="), report;
     // The loop-entry section itself.
-    assert str_contains(&report, "loop-entry:"), report;
+    assert report.contains("loop-entry:"), report;
     // Both '.'-led suffixes land in one overlap group, flagged as
     // precedence-disambiguated (not token-led).
-    assert str_contains(&report, "overlapping suffix first-sets"), report;
+    assert report.contains("overlapping suffix first-sets"), report;
 }
 
 test "render_dump renders a multi-token tail-greedy repeat rule" {
@@ -466,10 +465,10 @@ X : 'x' ;
 Y : 'y' ;";
     let report = dump_source(&g);
 
-    assert str_contains(&report, "prog"), report;
-    assert str_contains(&report, "item"), report;
+    assert report.contains("prog"), report;
+    assert report.contains("item"), report;
     // The retired variant section must NOT appear.
-    assert !str_contains(&report, "follow-variants:"), report;
+    assert !report.contains("follow-variants:"), report;
 }
 
 test "render_dump keeps a lossy repeat-body entry off the common-terminal path" {
@@ -483,7 +482,7 @@ a : ('x' 'y' | 'x' 'z')? 'p'
   ;";
     let report = dump_source(&g);
 
-    assert !str_contains(&report, "Consume(TK_LIT_y)"), report;
+    assert !report.contains("Consume(TK_LIT_y)"), report;
 }
 
 test "render_dump walks a multi-token repeat body reached through an opaque rule-ref" {
@@ -498,7 +497,7 @@ q : ID ('::' ID)* ;
 ID : [a-z]+ ;";
     let p = section_of(&dump_source(&g), "p");
 
-    assert !str_contains(&p, "Leaf(alt 0)"), p;
-    assert !str_contains(&p, "Leaf(alt 1)"), p;
-    assert str_contains(&p, "Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix"), p;
+    assert !p.contains("Leaf(alt 0)"), p;
+    assert !p.contains("Leaf(alt 1)"), p;
+    assert p.contains("Ambiguous([alt 0, alt 1]) — opaque rule-ref prefix"), p;
 }

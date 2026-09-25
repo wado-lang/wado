@@ -229,7 +229,427 @@ None. Every open item is a known gap below.
 
 ### A list or map export parameter is lifted through linear memory
 
+<<<<<<< HEAD
 The lift of a `list` or `map` reads its `(ptr, len)` pair from linear memory. An
 export parameter arrives as two flat values instead, so the binding allocates
 eight bytes, stores the pair there, lifts from it and frees it. Each such
 parameter costs an allocation and a free per call.
+||||||| 03599b796
+Export adapters currently handle two cases:
+
+#### Void exports (`() -> ()`)
+
+Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`. Those exports lift through `result<>`, and 0 is its Ok discriminant.
+
+A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Whether a result is there at all comes from the export's declared result in both places, so the canon and `canon lift` agree on its presence.
+
+The two resolve it differently. `lib_task_return_valtype` takes the declared type; `emit_world_exports` preserves local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`. Interning makes those the same component type.
+
+#### Result-returning exports (`(...) -> Result<T, E>`)
+
+Used by Service world's `handle()`. The binding:
+
+1. Calls the user function (passing through parameters)
+2. Tests the Result discriminant
+3. Ok: lowers T to flat CM values via `synthesize_lower_to_flat`, calls `task-return`
+4. Err: lowers E (variant, struct, or primitive) to flat CM values, calls `task-return`
+
+The lowering is fully generic — `synthesize_lower_to_flat` recurses into any type structure (primitives, strings, options, structs, variants) without hard-coded type names.
+
+#### The `task-return` canon
+
+One `canon task.return` carries one result type, so the import is keyed by the export whose result it delivers: `task-return:handle`, `task-return:ping`. A `--lib` world can then export `ping()` beside `label() -> String`, each with its own signature. WIR translation types each canon from the flat arguments at its call site, so no signature has to be agreed on ahead of the call.
+
+The empty key is the one shared canon, for the deliveries whose result is `result<>`: a test export, and a WASI export taking no params and returning unit. That result is fixed rather than read off an export, so a test world carrying hundreds of deliveries still needs only the one canon.
+
+### What's Generic vs What's Specific
+
+| Component                          | Generic?         | Notes                                                                    |
+| ---------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `synthesize_lower_to_flat`         | Yes              | Recursive, type-driven. Only hard-codes `"String"` for `cm_lower_string` |
+| `synthesize_variant_lower_to_flat` | Yes              | Iterates variant cases from declaration                                  |
+| `flatten_*` flat type computation  | Yes              | Type-structure-based                                                     |
+| `cm_abi.rs` layout computation     | Yes              | Pure Canonical ABI spec                                                  |
+| Result Ok/Err dispatch             | Intentional      | Result is a language primitive with fixed case ordering                  |
+| `task-return` in all adapters      | Async assumption | WASI P3 is async-only; needs change for sync                             |
+
+## Remaining Work: Generic CM Exports
+
+The current export binding synthesis works for the two hosted worlds (Command, Service). To support **arbitrary world exports** — including publishing Wado libraries as `.wasm` components — the following work is needed.
+
+### Parameter Lifting
+
+Current adapters pass user function parameters through unchanged. This works because:
+
+- Command world `run()` takes no parameters
+- Service world `handle(request: Request)` receives a resource handle (i32), which needs no lifting
+
+For generic exports with composite parameters, the binding must **lift flat CM params to Wado types**:
+
+```wado
+// User writes:
+export fn greet(name: String) -> String { ... }
+
+// Adapter must synthesize:
+fn $cm_export__greet(name_ptr: i32, name_len: i32) {
+    let name = internal::memory_to_gc_string(name_ptr, name_len);
+    let result = greet(name);
+    // lower result...
+}
+```
+
+This requires:
+
+- [x] Compute flat parameter types from the world export's WIT signature
+- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export binding
+- [x] Map flat params to binding function parameters
+
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, List, Option, and tuples. The export binding now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed binding params with lifting code.
+
+### Non-Result Return Types
+
+Current adapters handle `()` and `Result<T, E>`. For generic exports, any return type should work:
+
+```wado
+export fn add(a: i32, b: i32) -> i32 { ... }
+export fn get_name() -> String { ... }
+export fn get_pair() -> [String, i32] { ... }
+```
+
+This requires:
+
+- [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
+- [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
+
+Implemented via `synthesize_general_export_binding` which handles non-Result return types. The binding calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
+
+### Sync Export Support
+
+All current adapters assume WASI P3 async semantics (`task-return`). For publishing `.wasm` components consumed by non-async hosts, sync exports are needed:
+
+```
+// Async (current): binding calls task-return with flat values
+cm_raw_call task-return(disc, val1, val2, ...);
+
+// Sync: binding returns flat values directly
+return (val1, val2, ...);
+```
+
+This requires:
+
+- [ ] Detect whether the target world is async (P3) or sync (P2/standalone)
+- [ ] Sync adapters return flat values or write to outptr instead of calling `task-return`
+- [ ] Sync adapters use `canon lift` / `canon lower` rather than `task-return`
+
+### Export Validation
+
+- [x] Validate that user's export function parameter count matches the world declaration
+- [x] Validate parameter types match (beyond count)
+- [x] Validate return type compatibility
+- [x] Produce clear error messages for type mismatches
+
+`validate_world_signature_compatibility` decides all of it in one place. The arity has to match, and then every type has to lower to the same flat CM values as the world's — the criterion the adapters already read the boundary by, so a program it rejects is one whose adapter would have read the boundary's words against a layout that is not theirs. `flat_types_from_ast_type` flattens the world's declared type and `flat_types_from_type_id` the export's own; the two are compared as sequences.
+
+Flat shapes alone are too coarse for one case: `i32` and `Result<(), ()>` both flatten to a single `i32`, so a world declaring a `Result` needs the export to return one as well. Unit stands in only where the world's `Ok` payload is itself unit, which is all the `Ok(())` wrap fills — `wasi:cli/command`'s `Result<(), ()>` takes it, `wasi:http/service`'s `Result<Response, ErrorCode>` does not. The rule holds for `async` exports as well as sync ones.
+
+An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one: both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first.
+
+What counts as an answer differs. Missing-return needs a `return` on every path. This one needs a single `task return` anywhere, because delivering under a branch is what `task return` is for. A path that misses it traps at the boundary, and no static answer improves on that.
+
+### Summary
+
+| Task                        | Difficulty | Status  | Notes                                                |
+| --------------------------- | ---------- | ------- | ---------------------------------------------------- |
+| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`                   |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`                  |
+| Sync export support         | Medium     | Pending | World metadata for async/sync distinction            |
+| Export signature validation | Low        | Done    | Arity, parameter types and return type all validated |
+
+The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support.
+
+### Known Limitations and Edge Cases
+
+#### Parameter Lifting Gaps
+
+`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, List (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
+
+- **Struct parameters (non-String)**: Treated as i32 passthrough. Should lift each field from consecutive flat params.
+- **Result parameters**: Falls through to unit default. Unlikely in practice (Result is typically a return type, not a parameter).
+- **Variant parameters**: Treated as i32 passthrough. Should lift discriminant + case-specific payloads.
+
+These gaps are safe for current worlds (Command, Service) but would need to be addressed for custom worlds with complex parameter types.
+
+#### Flat Return Type Mismatch in General Adapter
+
+`synthesize_general_export_binding` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
+
+- `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
+- The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
+- If `error-context` has more flat slots than the Ok payload, the binding may provide too few args
+
+In practice this is safe because:
+
+- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_binding`)
+- `error-context` is typically i32 (1 slot), and most return types have >= 1 slot
+
+To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.
+
+#### List Lifting Uses Temporary Linear Memory
+
+For `List<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
+
+- Requires `builtin::realloc` to be linked (always true for programs with linear memory)
+- Allocates and immediately frees 8 bytes (wasteful but correct)
+- Could be optimized with a direct `synthesize_lift_list_from_flat` that takes ptr/len as locals
+
+#### Call-Site Flattening for Multi-Flat Parameters
+
+Import adapters use two strategies depending on the parameter type:
+
+- **Adapter-internal lowering** (String, List\<u8\>): The binding accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and List have well-defined Wado TypeIds that codegen can convert to Wasm types.
+- **Call-site flattening** (Option\<T\>, other multi-flat types): The binding accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
+
+The call-site flattening approach was chosen for Option\<T\> because binding-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the binding would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
+
+By flattening at the call site:
+
+- `null` → `[i32(0), i32(0), ...]` (discriminant=0, zero payload)
+- `OptionSome(value)` → `[i32(1), value, ...]` (discriminant=1, inner value)
+
+The binding body becomes a simple pass-through for these parameters. This avoids the GC-to-scalar type mismatch entirely.
+
+Current limitation: only literal `null` and `OptionSome` expressions are supported at call sites. Arbitrary `Option<T>` variables would require runtime null-check logic at the rewrite site, which is not yet implemented.
+
+#### No Type-Level Validation
+
+Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The binding would generate incorrect lifting code (treating i32 as String).
+
+## Consequences
+
+### Benefits
+
+- **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
+- **Optimization**: Adapter functions go through lower → optimize → wir_optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
+- **Debuggability**: `wado dump --tir-resolved` and `wado dump --nir-lowered` show the full CM glue as Wado code.
+- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles binding functions like any other function.
+- **WIR-compatible**: CM bindings are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
+
+### Risks
+
+- **Canonical ABI correctness**: Layout computation must match the CM spec exactly. Mitigated by unit tests (37 in `cm_abi.rs`) and E2E tests against wasmtime.
+- **Performance**: Synthesized TIR may produce suboptimal Wasm compared to hand-written codegen. Mitigated by the optimizer and golden fixture comparison.
+
+## Related WEPs
+
+- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md) — Moves stream/future/waitable-set canonical operations from `builtin.wado` to `#[canonical]` attributes on resource methods, complementing the import/export binding synthesis here.
+- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns built on the export binding synthesis and CM async primitives.
+=======
+Export adapters currently handle two cases:
+
+#### Void exports (`() -> ()`)
+
+Used by Command world's `run()` and test functions. The binding calls the user function, then calls `task-return(0)`. Those exports lift through `result<>`, and 0 is its Ok discriminant.
+
+A `--lib` export can instead declare no result at all, as `export async fn ping()` does. It lifts through no CM type, so it flattens to no slot and delivers with `task-return()`, against a canon carrying no result type. Whether a result is there at all comes from the export's declared result in both places, so the canon and `canon lift` agree on its presence.
+
+The two resolve it differently. `lib_task_return_valtype` takes the declared type; `emit_world_exports` preserves local newtypes. A `pub type Meters = i32` result reaches the lift as the named `meters` and the canon as bare `s32`. Interning makes those the same component type.
+
+#### Result-returning exports (`(...) -> Result<T, E>`)
+
+Used by Service world's `handle()`. The binding:
+
+1. Calls the user function (passing through parameters)
+2. Tests the Result discriminant
+3. Ok: lowers T to flat CM values via `synthesize_lower_to_flat`, calls `task-return`
+4. Err: lowers E (variant, struct, or primitive) to flat CM values, calls `task-return`
+
+The lowering is fully generic — `synthesize_lower_to_flat` recurses into any type structure (primitives, strings, options, structs, variants) without hard-coded type names.
+
+#### The `task-return` canon
+
+One `canon task.return` carries one result type, so the import is keyed by the export whose result it delivers: `task-return:handle`, `task-return:ping`. A `--lib` world can then export `ping()` beside `label() -> String`, each with its own signature. WIR translation types each canon from the flat arguments at its call site, so no signature has to be agreed on ahead of the call.
+
+The empty key is the one shared canon, for the deliveries whose result is `result<>`: a test export, and a WASI export taking no params and returning unit. That result is fixed rather than read off an export, so a test world carrying hundreds of deliveries still needs only the one canon.
+
+### What's Generic vs What's Specific
+
+| Component                          | Generic?         | Notes                                                                    |
+| ---------------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `synthesize_lower_to_flat`         | Yes              | Recursive, type-driven. Only hard-codes `"String"` for `cm_lower_string` |
+| `synthesize_variant_lower_to_flat` | Yes              | Iterates variant cases from declaration                                  |
+| `flatten_*` flat type computation  | Yes              | Type-structure-based                                                     |
+| `cm_abi.rs` layout computation     | Yes              | Pure Canonical ABI spec                                                  |
+| Result Ok/Err dispatch             | Intentional      | Result is a language primitive with fixed case ordering                  |
+| `task-return` in all adapters      | Async assumption | WASI P3 is async-only; needs change for sync                             |
+
+## Remaining Work: Generic CM Exports
+
+The current export binding synthesis works for the two hosted worlds (Command, Service). To support **arbitrary world exports** — including publishing Wado libraries as `.wasm` components — the following work is needed.
+
+### Parameter Lifting
+
+Current adapters pass user function parameters through unchanged. This works because:
+
+- Command world `run()` takes no parameters
+- Service world `handle(request: Request)` receives a resource handle (i32), which needs no lifting
+
+For generic exports with composite parameters, the binding must **lift flat CM params to Wado types**:
+
+```wado
+// User writes:
+export fn greet(name: String) -> String { ... }
+
+// Adapter must synthesize:
+fn $cm_export__greet(name_ptr: i32, name_len: i32) {
+    let name = internal::memory_to_gc_string(name_ptr, name_len);
+    let result = greet(name);
+    // lower result...
+}
+```
+
+This requires:
+
+- [x] Compute flat parameter types from the world export's WIT signature
+- [x] Generate `synthesize_lift_from_flat_params` for each parameter in the export binding
+- [x] Map flat params to binding function parameters
+
+Implemented via `synthesize_lift_from_flat_params` which lifts flat CM params (i32/i64/f32/f64) to Wado-typed values. Handles primitives, bool, char, String, resources, List, Option, and tuples. The export binding now detects when param lifting is needed (via `export_needs_param_lifting`) and generates flat-typed binding params with lifting code.
+
+### Non-Result Return Types
+
+Current adapters handle `()` and `Result<T, E>`. For generic exports, any return type should work:
+
+```wado
+export fn add(a: i32, b: i32) -> i32 { ... }
+export fn get_name() -> String { ... }
+export fn get_pair() -> [String, i32] { ... }
+```
+
+This requires:
+
+- [x] `synthesize_lower_to_flat` for non-Result returns (the function exists, just not wired for direct returns)
+- [ ] Handle return-via-flat-params vs return-via-outptr (CM spec: if flat count > `MAX_FLAT_RESULTS`, use an outptr)
+
+Implemented via `synthesize_general_export_binding` which handles non-Result return types. The binding calls the user function, lowers the return value to flat CM values, and calls `task-return(0, ...flat_values)` — wrapping in Ok since CM exports wrap returns in `result<T, error-context>`.
+
+### Sync Export Support
+
+All current adapters assume WASI P3 async semantics (`task-return`). For publishing `.wasm` components consumed by non-async hosts, sync exports are needed:
+
+```
+// Async (current): binding calls task-return with flat values
+cm_raw_call task-return(disc, val1, val2, ...);
+
+// Sync: binding returns flat values directly
+return (val1, val2, ...);
+```
+
+This requires:
+
+- [ ] Detect whether the target world is async (P3) or sync (P2/standalone)
+- [ ] Sync adapters return flat values or write to outptr instead of calling `task-return`
+- [ ] Sync adapters use `canon lift` / `canon lower` rather than `task-return`
+
+### Export Validation
+
+- [x] Validate that user's export function parameter count matches the world declaration
+- [x] Validate parameter types match (beyond count)
+- [x] Validate return type compatibility
+- [x] Produce clear error messages for type mismatches
+
+`validate_world_signature_compatibility` decides all of it in one place. The arity has to match, and then every type has to lower to the same flat CM values as the world's — the criterion the adapters already read the boundary by, so a program it rejects is one whose adapter would have read the boundary's words against a layout that is not theirs. `CmInterfaceRegistry::cm_flatten` flattens the world's declared type and `flat_types_from_type_id` the export's own; the two are compared as sequences.
+
+Flat shapes alone are too coarse for one case: `i32` and `Result<(), ()>` both flatten to a single `i32`, so a world declaring a `Result` needs the export to return one as well. Unit stands in only where the world's `Ok` payload is itself unit, which is all the `Ok(())` wrap fills — `wasi:cli/command`'s `Result<(), ()>` takes it, `wasi:http/service`'s `Result<Response, ErrorCode>` does not. The rule holds for `async` exports as well as sync ones.
+
+An `export async fn` also has to carry a `task return`. The check sits beside the missing-return one: both ask whether a body can produce the result its signature promises, and both exempt a body that provably exits on every path first.
+
+What counts as an answer differs. Missing-return needs a `return` on every path. This one needs a single `task return` anywhere, because delivering under a branch is what `task return` is for. A path that misses it traps at the boundary, and no static answer improves on that.
+
+### Summary
+
+| Task                        | Difficulty | Status  | Notes                                                |
+| --------------------------- | ---------- | ------- | ---------------------------------------------------- |
+| Parameter lifting           | Medium     | Done    | `synthesize_lift_from_flat_params`                   |
+| Non-Result return types     | Low        | Done    | `synthesize_general_export_binding`                  |
+| Sync export support         | Medium     | Pending | World metadata for async/sync distinction            |
+| Export signature validation | Low        | Done    | Arity, parameter types and return type all validated |
+
+The type-driven synthesizer (`synthesize_lift`, `synthesize_lower_to_flat`, flat type computation) is already generic. The remaining work is sync export support.
+
+### Known Limitations and Edge Cases
+
+#### Parameter Lifting Gaps
+
+`synthesize_lift_from_flat_params` handles primitives, bool, char, String, resources, List (with linear memory round-trip), Option, and tuples. The following types are **not yet implemented**:
+
+- **Struct parameters (non-String)**: Treated as i32 passthrough. Should lift each field from consecutive flat params.
+- **Result parameters**: Falls through to unit default. Unlikely in practice (Result is typically a return type, not a parameter).
+- **Variant parameters**: Treated as i32 passthrough. Should lift discriminant + case-specific payloads.
+
+These gaps are safe for current worlds (Command, Service) but would need to be addressed for custom worlds with complex parameter types.
+
+#### Flat Return Type Mismatch in General Adapter
+
+`synthesize_general_export_binding` computes flat return types from the **user function's return type**, not from the world's `result<T, error-context>` wrapper. This means:
+
+- `task-return(0, ...T_flat)` provides `1 + |T_flat|` args
+- The CM expects `1 + max(|T_flat|, |E_flat|)` args (union of Ok and Err payloads)
+- If `error-context` has more flat slots than the Ok payload, the binding may provide too few args
+
+In practice this is safe because:
+
+- Current worlds use `Result<(), ()>` (no error-context) or `Result<T, E>` (handled by `synthesize_result_export_binding`)
+- `error-context` is typically i32 (1 slot), and most return types have >= 1 slot
+
+To fix: compute flat return types from the world's full `result<T, error-context>` type, and zero-fill any extra slots.
+
+#### List Lifting Uses Temporary Linear Memory
+
+For `List<T>` where T is not u8, `synthesize_lift_from_flat_params` writes flat params (ptr, len) to a temporary 8-byte linear memory block, then calls `synthesize_lift` which reads from that block. This:
+
+- Requires `builtin::realloc` to be linked (always true for programs with linear memory)
+- Allocates and immediately frees 8 bytes (wasteful but correct)
+- Could be optimized with a direct `synthesize_lift_list_from_flat` that takes ptr/len as locals
+
+#### Call-Site Flattening for Multi-Flat Parameters
+
+Import adapters use two strategies depending on the parameter type:
+
+- **Adapter-internal lowering** (String, List\<u8\>): The binding accepts a single Wado-level parameter and lowers it internally to multiple flat CM args (ptr + len). This works because String and List have well-defined Wado TypeIds that codegen can convert to Wasm types.
+- **Call-site flattening** (Option\<T\>, other multi-flat types): The binding accepts pre-flattened i32 params, and the call-site rewrite transforms Wado-level args into flat values before passing them.
+
+The call-site flattening approach was chosen for Option\<T\> because binding-internal lowering faces a fundamental type mismatch: Wado's `null` literal generates `ref.null` (a GC nullable reference) at the Wasm level, but the binding would need to accept it as a parameter and extract an i32 discriminant + payload. Converting between GC references and i32 scalars requires non-trivial unwrapping logic (pattern matching, unboxing) that the TIR synthesizer cannot easily generate for all Option\<T\> instantiations.
+
+By flattening at the call site:
+
+- `null` → `[i32(0), i32(0), ...]` (discriminant=0, zero payload)
+- `OptionSome(value)` → `[i32(1), value, ...]` (discriminant=1, inner value)
+
+The binding body becomes a simple pass-through for these parameters. This avoids the GC-to-scalar type mismatch entirely.
+
+Current limitation: only literal `null` and `OptionSome` expressions are supported at call sites. Arbitrary `Option<T>` variables would require runtime null-check logic at the rewrite site, which is not yet implemented.
+
+#### No Type-Level Validation
+
+Parameter count is validated, but parameter types and return type compatibility are not checked. For example, the compiler won't error if the user declares `export fn run(x: String)` but the world expects `run(x: i32)`. The binding would generate incorrect lifting code (treating i32 as String).
+
+## Consequences
+
+### Benefits
+
+- **Extensibility**: Any Canonical ABI type is supported by the recursive synthesizer — no per-type hand-coding.
+- **Optimization**: Adapter functions go through lower → optimize → wir_optimize, so the optimizer can inline small adapters, eliminate dead branches, and propagate constants.
+- **Debuggability**: `wado dump --tir-resolved` and `wado dump --nir-lowered` show the full CM glue as Wado code.
+- **Simpler codegen**: Codegen no longer needs to know about CM lifting/lowering. It compiles binding functions like any other function.
+- **WIR-compatible**: CM bindings are ordinary TIR functions that translate to WIR without special handling in `wir_build`.
+
+### Risks
+
+- **Canonical ABI correctness**: Layout computation must match the CM spec exactly. Mitigated by unit tests (37 in `cm_abi.rs`) and E2E tests against wasmtime.
+- **Performance**: Synthesized TIR may produce suboptimal Wasm compared to hand-written codegen. Mitigated by the optimizer and golden fixture comparison.
+
+## Related WEPs
+
+- [WEP: Redesign Wasm CM Builtins as Resource Canonical Attributes](wep-2026-03-01-cm-resource-canonical-attrs.md) — Moves stream/future/waitable-set canonical operations from `builtin.wado` to `#[canonical]` attributes on resource methods, complementing the import/export binding synthesis here.
+- [WEP: WASI HTTP Integration](wep-2026-02-21-wasi-http.md) — HTTP handler patterns built on the export binding synthesis and CM async primitives.
+>>>>>>> origin/main

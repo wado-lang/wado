@@ -1,0 +1,24 @@
+// `.zip()` on a tuple the call returns binds it to a temporary that only reify
+// allocates, so every local after it sits one index past annotate's count. A
+// later mut-capturing closure used to be held to annotate's index and crash.
+
+use { println, Stdout } from "core:cli";
+
+fn pair() -> [[i32, i32], [String, String]] {
+    return [[1, 2], ["a", "b"]];
+}
+
+fn take(mut f: fn mut()) -> i32 {
+    f();
+    return 1;
+}
+
+export fn run() with Stdout {
+    let z = pair().zip();
+    let mut c = 1;
+    let n = take(|| { c = 2; });
+    println(`${z.0.1} ${c} ${n}`);
+}
+
+__DATA__
+{"stdout": "a 2 1\n"}

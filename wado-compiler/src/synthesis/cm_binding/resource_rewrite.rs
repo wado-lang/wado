@@ -1832,7 +1832,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
 
 impl CmMethodRewriter<'_> {
     /// Rewrite a CM call — `recv.method(args)` or `Type::method(args)` — to a
-    /// builtin/internal call, casting the handle it operates on to the `i32` the
+    /// builtin/internal call, casting the handle it operates on to the scalar the
     /// canonical import takes.
     fn rewrite_call(&self, expr: &mut TirExpr, target: BindingTarget) {
         let TirExprKind::Call { args, .. } = &mut expr.kind else {
@@ -1841,13 +1841,13 @@ impl CmMethodRewriter<'_> {
         let mut taken_args: Vec<TirExpr> =
             std::mem::take(args).into_iter().map(|a| a.expr).collect();
         if let Some(handle) = taken_args.first_mut()
-            && is_cm_handle(self.tt, handle.type_id)
+            && let Some(scalar) = handle_scalar(self.tt, handle.type_id)
         {
             let taken = std::mem::replace(
                 handle,
                 TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
             );
-            *handle = cast(taken, TypeTable::I32);
+            *handle = cast(taken, scalar);
         }
 
         *expr = match target {
@@ -1864,15 +1864,11 @@ impl CmMethodRewriter<'_> {
     }
 }
 
-/// Whether a type is a resource handle. `args[0]` is one exactly where the
-/// member declares a receiver: a constructor's first argument is a value
-/// (`ErrorContext::new(message)`), which casting would corrupt.
-fn is_cm_handle(tt: &TypeTable, type_id: TypeId) -> bool {
-    let peeled = peel_newtypes(tt, tt.peel_refs(type_id));
-    matches!(
-        tt.get(peeled),
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-    )
+/// The scalar a resource handle is, where `type_id` is one. `args[0]` is one
+/// exactly where the member declares a receiver: a constructor's first argument
+/// is a value (`ErrorContext::new(message)`), which casting would corrupt.
+fn handle_scalar(tt: &TypeTable, type_id: TypeId) -> Option<TypeId> {
+    tt.handle_scalar(peel_newtypes(tt, tt.peel_refs(type_id)))
 }
 
 /// Rewrite a `Future::<T>::new()` / `Stream::<T>::new()` static call into

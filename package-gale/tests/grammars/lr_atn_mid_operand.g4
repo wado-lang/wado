@@ -5,8 +5,7 @@
 // ATN-class at its loop entry, and `expr 'between' expr 'and' expr` is the
 // mid-operand shape whose operand wants to climb the shared `'and'`. The
 // mid-operand continuation gate rides the static LR dispatch, so it does not
-// stamp this rule and the simulator decides the loop entry alone — which is
-// why the climbing cases still diverge from ANTLR4.
+// stamp this rule, and the simulator decides the loop entry with full context.
 grammar LrAtnMidOperand;
 
 stat : expr ';' ;

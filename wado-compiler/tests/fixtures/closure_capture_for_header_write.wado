@@ -1,0 +1,39 @@
+// A `for` header's write reaches a closure built in the body unless it lands on
+// a binding the header declares, which each iteration holds a copy of.
+
+export fn run() {
+    let mut n = 0;
+    let mut updated: List<fn() -> i32> = [];
+    for let mut k = 0; k < 2; n += 1 {
+        updated.push(|| n);
+        k += 1;
+    }
+    assert updated[0]() == 2;
+    assert updated[1]() == 2;
+
+    let mut c = 0;
+    let mut tested: List<fn() -> i32> = [];
+    for let mut k = 0; t: { c += 1; c < 3 }; k += 1 {
+        tested.push(|| c);
+    }
+    assert tested[0]() == 3;
+    assert tested[1]() == 3;
+
+    let mut m = 0;
+    let mut undeclared: List<fn() -> i32> = [];
+    for ; m < 2; m += 1 {
+        undeclared.push(|| m);
+    }
+    assert undeclared[0]() == 2;
+    assert undeclared[1]() == 2;
+
+    let mut own: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        own.push(|| i);
+    }
+    assert own[0]() == 0;
+    assert own[1]() == 1;
+}
+
+__DATA__
+{}

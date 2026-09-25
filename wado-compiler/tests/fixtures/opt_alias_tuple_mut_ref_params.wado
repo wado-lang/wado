@@ -1,0 +1,22 @@
+// Two `&mut` tuple parameters may name one tuple, so a write through `b` must
+// invalidate what store-load forwarding knows of `a.0`. A tuple pointee is a
+// generic instance rather than a struct, and was left out of the alias groups.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn t(a: &mut [i32, i32], b: &mut [i32, i32]) -> i32 {
+    a.0 = 1;
+    b.0 = 2;
+    return a.0;
+}
+
+export fn run() with Stdout {
+    let mut tt = [builtin::black_box(0), 0];
+    println(`${t(&mut tt, &mut tt)}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n"
+}

@@ -1,0 +1,18 @@
+// Eliding a single-field box moves its initializer past the statements between
+// it and the field read. One of those writing a local the initializer also
+// writes decides which write lands last, so the move must not reorder them.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let c = builtin::black_box(true);
+    let mut t = builtin::black_box(0);
+    let r = &(if c { t = 1; 5 } else { 5 });
+    t = 2;
+    let z = *r * 100 + t;
+    println(`${z} ${t}`);
+}
+
+__DATA__
+{
+    "stdout": "502 2\n"
+}

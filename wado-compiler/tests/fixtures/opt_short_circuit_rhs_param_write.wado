@@ -1,0 +1,23 @@
+// The right side of `&&` runs only when the left is true, so a local it assigns
+// holds either value afterwards. Here the local is a parameter assigned for the
+// first time in that right side, and must not be read as the assigned 5 when
+// the right side did not run.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn f(mut p: i32, c: bool) -> i32 {
+    let b = c && (blk: { p = 5; true });
+    if b {
+        return p + 100;
+    }
+    return p;
+}
+
+export fn run() with Stdout {
+    println(`${f(builtin::black_box(1), builtin::black_box(false))}`);
+    println(`${f(builtin::black_box(1), builtin::black_box(true))}`);
+}
+
+__DATA__
+{"stdout": "1\n105\n"}

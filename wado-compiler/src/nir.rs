@@ -12,7 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{FunctionId, LocalMethodName, closure_call_method_info, closure_call_name};
+use crate::name::{
+    FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
+};
 use crate::nir_arena::{Body, ExprBody};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
@@ -662,10 +664,22 @@ impl NirLocal {
     /// name is available.
     pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
         Self {
-            name: format!("$local_{index}"),
+            name: minted_name("local", index),
             type_id,
             is_mut,
         }
+    }
+
+    /// Push onto `locals` a local a pass mints, named by [`minted_name`] from
+    /// `what` and the index it takes, returning that index.
+    pub fn push_minted(locals: &mut Vec<Self>, what: &str, type_id: TypeId, is_mut: bool) -> u32 {
+        let index = u32::try_from(locals.len()).expect("local index overflow");
+        locals.push(Self {
+            name: minted_name(what, index),
+            type_id,
+            is_mut,
+        });
+        index
     }
 }
 

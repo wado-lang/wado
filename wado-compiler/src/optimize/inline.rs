@@ -16,10 +16,11 @@
 //! halve the body. Such a callee then receives no inlining itself: growing a
 //! body worth more copied than called past the budget destroys it, one-way.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::inline_block_label;
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -757,6 +758,31 @@ fn collect_inner_labels(callee: &Body, node: NodeRef, labels: &mut IndexSet<Stri
     callee.for_each_child(node, |c| collect_inner_labels(callee, c, labels));
 }
 
+/// Mints the labels of one caller's inlined blocks. A block encloses the call's
+/// arguments, so its label must differ from every label a break there can name.
+#[derive(Default)]
+struct InlineLabels {
+    taken: Option<IndexSet<String>>,
+    serial: u32,
+}
+
+impl InlineLabels {
+    fn fresh(&mut self, caller: &Body, callee: &str) -> String {
+        let taken = self.taken.get_or_insert_with(|| {
+            let mut taken = IndexSet::default();
+            collect_inner_labels(caller, NodeRef::Block(caller.root), &mut taken);
+            taken
+        });
+        loop {
+            let label = inline_block_label(callee, self.serial);
+            self.serial += 1;
+            if !taken.contains(&label) {
+                return label;
+            }
+        }
+    }
+}
+
 /// Whether the folds `view` licenses delete a loop — directly, or inside a
 /// call they turn into a literal. The model prices a loop at three
 /// instructions; what it is worth is however many times it spins, so size
@@ -1484,6 +1510,46 @@ fn splice_growth(size: usize, sites: usize) -> usize {
     size * sites.saturating_sub(1)
 }
 
+/// The callees this round splices, and what the re-scan of one splice may still
+/// add to it.
+#[derive(Clone, Copy)]
+struct Candidates<'a> {
+    bodies: &'a IndexMap<FuncId, NirFunction>,
+    /// Each candidate's written price, net of the call site it replaces.
+    net_price: &'a IndexMap<FuncId, usize>,
+    rescan_cap: usize,
+    /// What the re-scan under way may still splice, or `None` outside one.
+    rescan_left: Option<&'a Cell<usize>>,
+}
+
+impl<'a> Candidates<'a> {
+    /// Spend `id`'s price from the re-scan under way, if there is one and it
+    /// can pay.
+    fn charge(&self, id: FuncId) -> bool {
+        let Some(left) = self.rescan_left else {
+            return true;
+        };
+        let price = self.net_price[&id];
+        if price > left.get() {
+            return false;
+        }
+        left.set(left.get() - price);
+        true
+    }
+
+    /// Inside a fresh splice: charged to the re-scan under way, or to `left`
+    /// when this splice starts one.
+    fn rescanning<'b>(self, left: &'b Cell<usize>) -> Candidates<'b>
+    where
+        'a: 'b,
+    {
+        Candidates {
+            rescan_left: Some(self.rescan_left.unwrap_or(left)),
+            ..self
+        }
+    }
+}
+
 /// Inline eligible functions at their call sites
 ///
 /// The `inline_threshold` parameter controls the maximum number of statements
@@ -1508,6 +1574,7 @@ pub fn inline_functions(
     // `(module, name)` lookup, no entry-point fallback, no collision between two
     // functions that happen to share a name.
     let mut inline_candidates: IndexMap<FuncId, NirFunction> = IndexMap::default();
+    let mut net_price: IndexMap<FuncId, usize> = IndexMap::default();
 
     // Also collect function_strings for each candidate (to update caller's
     // strings after inlining). `function_strings` is keyed by `(module, name)`;
@@ -1645,6 +1712,16 @@ pub fn inline_functions(
                     forced: func.inline_hint == InlineHint::Always,
                 });
             }
+            let hot = match func.inline_hint {
+                InlineHint::Always => inline_cost(
+                    func.body.as_ref().expect("a candidate has a body"),
+                    &type_table,
+                    descriptors,
+                    &spliced,
+                ),
+                InlineHint::Auto | InlineHint::Hint | InlineHint::Never => verdict.hot,
+            };
+            net_price.insert(id, net_cost(hot, func.params.len()));
             inline_candidates.insert(id, func.clone());
         }
     }
@@ -1718,6 +1795,14 @@ pub fn inline_functions(
     let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
     let inline_call_immutability = CallImmutability::new(project, &inline_type_table);
+    let candidates = Candidates {
+        bodies: &inline_candidates,
+        net_price: &net_price,
+        // A threshold's worth of threshold-sized callees: a call tree that
+        // doubles per level exceeds it within a few levels.
+        rescan_cap: inline_threshold * inline_threshold,
+        rescan_left: None,
+    };
 
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
@@ -1740,8 +1825,7 @@ pub fn inline_functions(
                 address_taken: std::mem::take(&mut func.address_taken_locals),
                 stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             };
-            // Counter for generating unique inline labels
-            let mut inline_counter: u32 = 0;
+            let mut labels = InlineLabels::default();
             // Calls in this body that mutate no caller-reachable state, taken
             // *before* the splice (the call exprs survive as `reval.call_expr`
             // keys). Drives the graph-preserving gate below.
@@ -1761,12 +1845,12 @@ pub fn inline_functions(
                 inline_calls_in_block(
                     body,
                     root,
-                    &inline_candidates,
+                    candidates,
                     descriptors,
                     &mut frame,
                     &project.type_table.borrow(),
                     &mut inlined_funcs,
-                    &mut inline_counter,
+                    &mut labels,
                     &mut reval,
                     false,
                 );
@@ -1861,12 +1945,12 @@ struct CallerFrame {
 fn inline_calls_in_block(
     body: &mut Body,
     block: BlockId,
-    candidates: &IndexMap<FuncId, NirFunction>,
+    candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     mut cold: bool,
 ) {
@@ -1913,7 +1997,7 @@ fn inline_calls_in_block(
                     frame,
                     type_table,
                     inlined_funcs,
-                    inline_counter,
+                    labels,
                     reval,
                     cold,
                 );
@@ -1932,7 +2016,7 @@ fn inline_calls_in_block(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             ),
@@ -1946,7 +2030,7 @@ fn inline_calls_in_block(
                         frame,
                         type_table,
                         inlined_funcs,
-                        inline_counter,
+                        labels,
                         reval,
                         cold,
                     );
@@ -1959,7 +2043,7 @@ fn inline_calls_in_block(
                     frame,
                     type_table,
                     inlined_funcs,
-                    inline_counter,
+                    labels,
                     reval,
                     cold,
                 );
@@ -1972,7 +2056,7 @@ fn inline_calls_in_block(
                         frame,
                         type_table,
                         inlined_funcs,
-                        inline_counter,
+                        labels,
                         reval,
                         cold,
                     );
@@ -1986,7 +2070,7 @@ fn inline_calls_in_block(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             ),
@@ -1996,44 +2080,38 @@ fn inline_calls_in_block(
 }
 
 /// Top-level inline of a statement value: try to inline the call, and if it
-/// fires, re-scan the inlined body for nested opportunities. Returns the
-/// (possibly new) value expression id.
+/// fires, re-scan the inlined body for nested opportunities, as far as the
+/// re-scan cap pays for. Returns the (possibly new) value expression id.
 #[allow(clippy::too_many_arguments)]
 fn inline_top_level(
     body: &mut Body,
     value: ExprId,
-    candidates: &IndexMap<FuncId, NirFunction>,
+    candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> ExprId {
     let result = try_inline_call_expr(
-        body,
-        value,
-        candidates,
-        frame,
-        type_table,
-        inline_counter,
-        reval,
-        cold,
+        body, value, candidates, frame, type_table, labels, reval, cold,
     );
     if let Some((new_id, inlined_key)) = result {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }
+        let left = Cell::new(candidates.rescan_cap);
         inline_calls_in_expr(
             body,
             new_id,
-            candidates,
+            candidates.rescanning(&left),
             descriptors,
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
@@ -2047,7 +2125,7 @@ fn inline_top_level(
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
@@ -2176,21 +2254,10 @@ fn build_inlined_labeled_block(
     call_span: Span,
     call_expr: ExprId,
     frame: &mut CallerFrame,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
 ) -> ExprId {
-    let sanitized_name: String = func_name
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    let label = format!("$inline_{}_{}", sanitized_name, *inline_counter);
-    *inline_counter += 1;
+    let label = labels.fresh(caller, func_name);
 
     let local_offset = frame.local_count;
     let callee_param_count = candidate.params.len() as u32;
@@ -2288,10 +2355,10 @@ fn build_inlined_labeled_block(
 fn try_inline_call_expr(
     caller: &mut Body,
     call_id: ExprId,
-    candidates: &IndexMap<FuncId, NirFunction>,
+    candidates: Candidates<'_>,
     frame: &mut CallerFrame,
     type_table: &TypeTable,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) -> Option<(ExprId, FuncId)> {
@@ -2311,10 +2378,13 @@ fn try_inline_call_expr(
         };
     // The call's stamped `func_id` is the exact callee identity; look the
     // candidate up directly (no `(module, name)` resolution).
-    let candidate = candidates.get(&func_id)?;
+    let candidate = candidates.bodies.get(&func_id)?;
     // A cold call site keeps the call: inlining there only bloats the hot
     // caller. An explicit `#[inline(always)]` wins over the suppression.
     if cold && candidate.inline_hint != InlineHint::Always {
+        return None;
+    }
+    if !candidates.charge(func_id) {
         return None;
     }
     let callee = candidate.body.as_ref()?;
@@ -2380,7 +2450,7 @@ fn try_inline_call_expr(
         call_span,
         call_id,
         frame,
-        inline_counter,
+        labels,
         reval,
     );
     Some((inlined, func_id))
@@ -3056,12 +3126,12 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
 fn inline_calls_in_expr(
     body: &mut Body,
     e: ExprId,
-    candidates: &IndexMap<FuncId, NirFunction>,
+    candidates: Candidates<'_>,
     descriptors: &[FunctionRef],
     frame: &mut CallerFrame,
     type_table: &TypeTable,
     inlined_funcs: &mut Vec<FuncId>,
-    inline_counter: &mut u32,
+    labels: &mut InlineLabels,
     reval: &mut Vec<InlineRevalInfo>,
     cold: bool,
 ) {
@@ -3080,7 +3150,7 @@ fn inline_calls_in_expr(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             );
@@ -3094,7 +3164,7 @@ fn inline_calls_in_expr(
                 frame,
                 type_table,
                 inlined_funcs,
-                inline_counter,
+                labels,
                 reval,
                 cold,
             );
@@ -3113,21 +3183,14 @@ fn inline_calls_in_expr(
             frame,
             type_table,
             inlined_funcs,
-            inline_counter,
+            labels,
             reval,
             cold,
         );
     }
-    if let Some((new_id, inlined_key)) = try_inline_call_expr(
-        body,
-        e,
-        candidates,
-        frame,
-        type_table,
-        inline_counter,
-        reval,
-        cold,
-    ) {
+    if let Some((new_id, inlined_key)) =
+        try_inline_call_expr(body, e, candidates, frame, type_table, labels, reval, cold)
+    {
         if !inlined_funcs.contains(&inlined_key) {
             inlined_funcs.push(inlined_key);
         }

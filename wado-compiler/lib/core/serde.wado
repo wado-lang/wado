@@ -546,6 +546,11 @@ pub trait Deserializer with () {
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError>;
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>;
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>;
+    /// Rounds what the input spells once, to nearest, into a half. Reading an
+    /// `f32` and narrowing it would round twice.
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>;
+    /// `deserialize_f16`, into a bf16.
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>;
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;
     fn deserialize_char(&mut self) -> Result<char, DeserializeError>;
     fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
@@ -871,17 +876,15 @@ impl Deserialize for f64 {
     }
 }
 
-// The wire carries an `f32`, so reading one back rounds. `from_f32` rounds to
-// nearest rather than refusing, which is what an interchange format asks for.
 impl Deserialize for f16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<f16, DeserializeError> {
-        return Result::Ok(f16::from_f32(d.deserialize_f32()?));
+        return d.deserialize_f16();
     }
 }
 
 impl Deserialize for bf16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<bf16, DeserializeError> {
-        return Result::Ok(bf16::from_f32(d.deserialize_f32()?));
+        return d.deserialize_bf16();
     }
 }
 

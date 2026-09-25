@@ -31,6 +31,12 @@ test "all-false predicates at an ATN decision fail no-viable" {
     assert r.output == "", `no alt action should run: '${r.output}'`;
 }
 
+test "a scan excludes the gated alt from the ATN decision as the parse does" {
+    let r = ap::parse_scanned("abckx");
+    assert r.ok(), "clean parse";
+    assert r.output == "abcx", `expected the ungated alt under the first caller alt: '${r.output}'`;
+}
+
 test "a context-dependent predicate is honoured at the ATN decision" {
     // `$mode` (seeded to 1 by @init) is in scope at the ATN dispatch, so the
     // condition is evaluated there — not silently dropped.

@@ -1,0 +1,70 @@
+// A default naming an earlier `&mut` parameter reads the place the call
+// borrows, and the borrow stays in the call for the callee to write back.
+
+struct S {
+    o: Option<i32>,
+}
+
+global mut order: i32 = 0;
+
+fn peek(o: &Option<i32>) -> i32 {
+    return match o { Some(v) => *v, None => 0 };
+}
+
+fn put(o: &mut Option<i32>, v: i32 = peek(o) + 1) {
+    *o = Some(v);
+}
+
+fn push_by(v: &mut List<i32>, by: i32, n: i32 = v.len() + by) {
+    v.push(n);
+}
+
+fn push2(v: &mut List<i32>, n: i32 = v.len()) {
+    v.push(n);
+    v.push(n);
+}
+
+fn bump(c: &mut i32, by: i32 = *c) {
+    *c += by;
+}
+
+fn via(p: &mut Option<i32>) {
+    put(&mut *p);
+}
+
+fn slot() -> i32 {
+    order = order * 10 + 1;
+    return 1;
+}
+
+fn step() -> i32 {
+    order = order * 10 + 2;
+    return 5;
+}
+
+export fn run() {
+    let mut s = S { o: None };
+    put(&mut s.o);
+    put(&mut s.o);
+    assert s.o == Some(2);
+
+    via(&mut s.o);
+    assert s.o == Some(3);
+
+    let mut ls: List<List<i32>> = [[], [7]];
+    push_by(&mut ls[slot()], step());
+    assert ls[1] == [7, 6];
+    assert order == 12;
+
+    let mut xs: List<i32> = [];
+    push2(&mut xs);
+    push2(&mut xs);
+    assert xs == [0, 0, 2, 2];
+
+    let mut x = builtin::black_box(3);
+    bump(&mut x);
+    assert x == 6;
+}
+
+__DATA__
+{}

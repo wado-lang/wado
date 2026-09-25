@@ -1,0 +1,242 @@
+//! A default naming an earlier parameter reads the value the call supplied for
+//! it. The argument is evaluated once, in its place among the others, and every
+//! form a default may take reads that one value: an operator, a control form, a
+//! closure capturing it, a later default, a field of it, a reference through it.
+
+use { scaled } from "./sub/default_arg_earlier_param_once_lib.wado";
+
+global mut trace: i32 = 0;
+
+fn tick(tag: i32) -> i32 {
+    trace = trace * 10 + tag;
+    return tag;
+}
+
+fn twice(a: i32, b: i32 = a + a) -> i32 {
+    return b;
+}
+
+fn mix(a: i32, b: i32, c: i32 = a * 10 + b) -> i32 {
+    return c;
+}
+
+fn chain(a: i32, b: i32 = a + 1, c: i32 = b * a) -> i32 {
+    return c;
+}
+
+fn apply(a: i32, f: fn(i32) -> i32 = |v| v + a) -> i32 {
+    return f(1);
+}
+
+fn clamped(a: i32, b: i32 = if a > 0 { a } else { 0 }) -> i32 {
+    return b;
+}
+
+fn sign(a: i32, s: i32 = match a { 0 => 0, _ => 1 }) -> i32 {
+    return s;
+}
+
+fn found(a: i32, r: i32 = find: {
+    if a > 5 { break find: a; }
+    -1
+}) -> i32 {
+    return r;
+}
+
+test "an argument a default names is evaluated once" {
+    trace = 0;
+    assert twice(tick(4)) == 8;
+    assert trace == 4;
+}
+
+test "arguments keep their order around a default naming them" {
+    trace = 0;
+    assert mix(tick(1), tick(2)) == 12;
+    assert trace == 12;
+}
+
+test "a default naming an earlier default reads the argument once" {
+    trace = 0;
+    assert chain(tick(3)) == 12;
+    assert trace == 3;
+}
+
+fn stamped(a: i32, n: i32 = tick(a), m: i32 = n * 10) -> i32 {
+    return m;
+}
+
+test "a default a later default names runs once" {
+    trace = 0;
+    assert stamped(3) == 30;
+    assert trace == 3;
+}
+
+test "a closure default captures an earlier parameter" {
+    trace = 0;
+    assert apply(tick(5)) == 6;
+    assert trace == 5;
+    assert apply(5, |v| v * 2) == 2;
+    assert scaled(4) == 24;
+}
+
+test "a control form in a default reads an earlier parameter" {
+    trace = 0;
+    assert clamped(tick(7)) == 7;
+    assert clamped(-3) == 0;
+    assert sign(0) == 0;
+    assert sign(tick(2)) == 1;
+    assert found(tick(9)) == 9;
+    assert found(1) == -1;
+    assert trace == 729;
+}
+
+struct Acc {
+    base: i32,
+}
+
+fn make_acc(tag: i32) -> Acc {
+    tick(tag);
+    return Acc { base: 100 };
+}
+
+impl Acc {
+    fn add(&self, a: i32, b: i32 = a * 2) -> i32 {
+        return self.base + a + b;
+    }
+
+    fn bump(&mut self, by: i32, doubled: i32 = by * 2) {
+        self.base += by + doubled;
+    }
+
+    fn grow(&mut self, by: i32 = 5) {
+        self.base += by;
+    }
+
+    fn make(a: i32, b: i32 = a + 1) -> Acc {
+        return Acc { base: a * 10 + b };
+    }
+}
+
+trait Scale {
+    fn scale(&self, a: i32, b: i32 = a + a) -> i32;
+}
+
+impl Scale for Acc {
+    fn scale(&self, a: i32, b: i32) -> i32 {
+        return self.base + b;
+    }
+}
+
+test "a method's default reads its argument once, after the receiver" {
+    trace = 0;
+    assert make_acc(7).add(tick(1)) == 103;
+    assert trace == 71;
+}
+
+test "a `&mut self` method's default leaves the receiver written through" {
+    trace = 0;
+    let mut acc = Acc { base: 0 };
+    acc.bump(tick(2));
+    assert acc.base == 6;
+    assert trace == 2;
+}
+
+struct Shelf {
+    accs: List<Acc>,
+    rows: List<List<Acc>>,
+}
+
+test "a place receiver's subscripts run ahead of the arguments" {
+    trace = 0;
+    let mut accs: List<Acc> = [Acc { base: 0 }, Acc { base: 0 }];
+    accs[tick(1)].bump(tick(2));
+    assert accs[1].base == 6;
+    assert trace == 12;
+
+    trace = 0;
+    let mut shelf = Shelf { accs, rows: [[Acc { base: 0 }], [Acc { base: 0 }, Acc { base: 0 }]] };
+    shelf.accs[tick(0)].bump(tick(3));
+    assert shelf.accs[0].base == 9;
+    shelf.rows[tick(1)][tick(1)].bump(tick(4));
+    assert shelf.rows[1][1].base == 12;
+    assert trace == 3114;
+
+    shelf.accs[1].grow();
+    assert shelf.accs[1].base == 11;
+}
+
+test "a static method's default reads its argument once" {
+    trace = 0;
+    assert Acc::make(tick(8)).base == 89;
+    assert trace == 8;
+}
+
+test "a trait method's default reads its argument once" {
+    trace = 0;
+    let acc = Acc { base: 100 };
+    assert acc.scale(tick(6)) == 112;
+    assert Scale::scale(&acc, tick(4)) == 108;
+    assert trace == 64;
+}
+
+interface Echo {
+    fn echo(a: i32, b: i32 = a + a) -> i32;
+}
+
+struct Doubler {}
+
+impl Echo for Doubler {
+    fn echo(&mut self, a: i32, b: i32) -> i32 {
+        resume b
+    }
+}
+
+test "an operation's default reads its argument once" {
+    trace = 0;
+    let mut d = Doubler {};
+    with Echo => &mut d do {
+        assert Echo::echo(tick(7)) == 14;
+    }
+    assert trace == 7;
+}
+
+struct Pt {
+    x: i32,
+    y: i32,
+}
+
+fn make_pt(tag: i32) -> Pt {
+    tick(tag);
+    return Pt { x: tag, y: 1 };
+}
+
+fn total(p: Pt, s: i32 = p.x + p.y) -> i32 {
+    return s;
+}
+
+fn moved(mut p: Pt, before: i32 = p.x) -> i32 {
+    p.x += 10;
+    return p.x + before;
+}
+
+fn grow(p: &mut Pt, by: i32 = p.x) {
+    p.x += by;
+}
+
+test "a default reads a field of an argument evaluated once" {
+    trace = 0;
+    assert total(make_pt(9)) == 10;
+    assert trace == 9;
+}
+
+test "a `mut` parameter a default names still receives a copy" {
+    let q = Pt { x: 3, y: 0 };
+    assert moved(q) == 16;
+    assert q.x == 3;
+}
+
+test "a default reads through a `&mut` argument" {
+    let mut q = Pt { x: 3, y: 0 };
+    grow(&mut q);
+    assert q.x == 6;
+}

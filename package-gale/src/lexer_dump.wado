@@ -1,4 +1,4 @@
-//! `gale dump --lexer` rendering: per lexer rule, `lexer_rule_route` and the
+//! `gale dump --lexer` rendering: per lexer rule, its route and the
 //! `lexer_rule_plan` tree `gen_lexer` emits from, read out.
 //!
 //! Not reported: a repeat directly under another repeat or a `~`. No sequence
@@ -14,8 +14,6 @@ use {
     LexerRepeatElement,
 } from "./ir.wado";
 use {
-    LitToken,
-    KeywordInfo,
     LexerRuleRoute,
     LexerAltsEmit,
     LexerRepeatEmit,
@@ -24,7 +22,7 @@ use {
     collect_keyword_rules,
     resolve_ci,
     lexer_try_fn_name,
-    lexer_rule_route,
+    lexer_rule_routes,
     lexer_alt_suffix,
     find_fragment,
     lexer_rule_plan,
@@ -35,6 +33,7 @@ use {
     LexerElemPlan,
 } from "./lexer_gen.wado";
 use { grammar_needs_latn, build_latn } from "./latn.wado";
+use { canonicalize_for_analysis } from "./codegen.wado";
 use { TreeMap } from "core:collections";
 
 /// Read-only inputs every walk step needs. Assembled once from the grammar,
@@ -42,9 +41,7 @@ use { TreeMap } from "core:collections";
 struct DumpCtx {
     rules: List<LexerRule>,
     grammar_opts: List<GrammarOption>,
-    keywords: List<KeywordInfo>,
-    lit_tokens: List<LitToken>,
-    grammar_ci: bool,
+    routes: List<LexerRuleRoute>,
     /// `name -> latn rule index` for the rules routed to the runtime lexer
     /// simulator instead of a static matcher.
     atn_class: TreeMap<String, i32>,
@@ -59,6 +56,7 @@ struct DumpOut {
     route_matcher: i32 = 0,
     route_keyword: i32 = 0,
     route_literal: i32 = 0,
+    route_subsumed: i32 = 0,
     route_inlined_fragment: i32 = 0,
     route_recursive_fragment: i32 = 0,
     route_virtual: i32 = 0,
@@ -70,29 +68,34 @@ struct DumpOut {
     group_arm_scoring: i32 = 0,
     alts_first_match: i32 = 0,
     alts_maximal_munch: i32 = 0,
+    char_sets: i32 = 0,
 }
 
-/// Render the per-rule lexer emit report for a grammar.
-///
-/// Takes the surface `Grammar` alone, deriving every input `gen_lexer` reads
-/// the way `generate` derives it.
-pub fn render_lexer_dump(grammar: &Grammar) -> String {
+/// Render the per-rule lexer emit report for an assembled grammar, canonicalized
+/// and read the way `generate` does for `gen_lexer`.
+pub fn render_lexer_dump(assembled: &Grammar) -> String {
+    let mut grammar = *assembled;
+    canonicalize_for_analysis(&mut grammar);
     let empty_opts: List<GrammarOption> = [];
     let ctx = DumpCtx {
         rules: grammar.lexer_rules,
         grammar_opts: grammar.options,
-        keywords: collect_keyword_rules(&grammar.lexer_rules, &grammar.options),
-        lit_tokens: collect_literal_tokens(&grammar.parser_rules),
-        grammar_ci: resolve_ci(&grammar.options, &empty_opts),
-        atn_class: latn_rule_indices(grammar),
+        routes: lexer_rule_routes(
+            &grammar.lexer_rules,
+            &collect_keyword_rules(&grammar.lexer_rules, &grammar.options),
+            &collect_literal_tokens(&grammar.parser_rules),
+            &grammar.options,
+            resolve_ci(&grammar.options, &empty_opts),
+        ),
+        atn_class: latn_rule_indices(&grammar),
     };
 
     let mut o = DumpOut {
         text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
     };
     o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
-    for let rule of &grammar.lexer_rules {
-        render_rule(&mut o, &ctx, rule);
+    for let mut i = 0; i < ctx.rules.len(); i += 1 {
+        render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i]);
     }
     render_summary(&mut o);
     return o.text;
@@ -114,16 +117,7 @@ fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
     return out;
 }
 
-fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
-    let route = lexer_rule_route(
-        rule,
-        &ctx.rules,
-        &ctx.keywords,
-        &ctx.lit_tokens,
-        &ctx.grammar_opts,
-        ctx.grammar_ci,
-    );
-
+fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRuleRoute) {
     o.text.push_str(`rule ${rule.name} — `);
     // An ATN-class rule has a matcher, but its body is one `latn_match` call:
     // the static strategies below never apply to it.
@@ -132,11 +126,11 @@ fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
         o.text.push_str(`ATN-class: latn_match (latn rule ${idx})\n`);
         return;
     }
-    count_route(o, &route);
-    o.text.push_str(&route_label(rule, &route));
+    count_route(o, route);
+    o.text.push_str(&route_label(rule, route));
     o.text.push('\n');
 
-    if route_emits_body(&route) {
+    if route_emits_body(route) {
         walk_rule_body(o, ctx, rule);
     }
 }
@@ -149,6 +143,7 @@ fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
         Virtual => o.route_virtual += 1,
         Keyword(_) => o.route_keyword += 1,
         SharedLiteral(_) => o.route_literal += 1,
+        Subsumed(_) => o.route_subsumed += 1,
     }
 }
 
@@ -161,6 +156,10 @@ fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
         Virtual => "virtual token: no text to match",
         Keyword(k) => `keyword classifier (carrier ${k.carrier})${also_matcher_suffix(k.also_matcher, &try_fn)}`,
         SharedLiteral(l) => `shared literal matcher (${l.const_name})${also_matcher_suffix(l.also_matcher, &try_fn)}`,
+        Subsumed(s) => `subsumed by ${s.by.join(", ")}: never the longest match${also_matcher_suffix(
+            s.also_matcher,
+            &try_fn,
+        )}`,
     };
 }
 
@@ -180,6 +179,7 @@ fn route_emits_body(route: &LexerRuleRoute) -> bool {
         Virtual | InlinedFragment => false,
         Keyword(k) => k.also_matcher,
         SharedLiteral(l) => l.also_matcher,
+        Subsumed(s) => s.also_matcher,
     };
 }
 
@@ -303,6 +303,15 @@ fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &Lexer
             };
             render_elem(o, ctx, &n.element, &nested.inner);
         },
+        CharSet(set) => {
+            if !elem matches { Not(_) } {
+                o.char_sets += 1;
+                decision_line(
+                    o,
+                    `set ${elem_text(elem, 0)} — one class test of ${set.ranges.len()} ranges: every arm is one char`,
+                );
+            }
+        },
         Leaf => {
         },
     }
@@ -344,6 +353,7 @@ fn alts_emit_label(emit: LexerAltsEmit) -> String {
         FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
         FirstMatchSingleArm => "first-match: one arm",
         FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
+        FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
     };
 }
 
@@ -377,10 +387,10 @@ fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
 // ==========================================================================
 
 fn render_summary(o: &mut DumpOut) {
-    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
+    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, subsumed ${o.route_subsumed}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
     let repeats = `greedy repeat: plain ${o.repeat_plain}, lookahead-aware ${o.repeat_lookahead}; non-greedy repeat: ${o.repeat_non_greedy}`;
     let groups = `alternation + suffix: first-match ${o.group_first_match}, arm scoring ${o.group_arm_scoring}`;
-    let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}`;
+    let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}; char set ${o.char_sets}`;
     o.text.push_str(`\nstrategies:\n  ${routes}\n  ${repeats}\n  ${groups}\n  ${alts}\n`);
 }
 

@@ -49,6 +49,8 @@ use {
     write_decimal_prec,
     write_exp_prec,
     u64_bit_len,
+    BINARY32,
+    BINARY64,
 } from "core:prelude/fpfmt.wado";
 
 // Deterministic math functions imported directly from the bundled
@@ -120,7 +122,7 @@ use {
     ParseFloatError,
     parse_i64_radix,
     parse_u64_radix,
-    parse_f64_from_str,
+    parse_float_bits,
     lenient_int_preprocess,
     lenient_float_preprocess,
 } from "core:prelude/intparse.wado";
@@ -262,12 +264,6 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
     f.write_char(if upper { 'E' } else { 'e' });
     f.write_display(&exponent);
     f.apply_padding(mark);
-}
-
-/// The magnitude of a signed value, `MIN` included — negating `MIN` overflows,
-/// but its magnitude is an ordinary u64.
-fn abs_to_u64(val: i64) -> u64 {
-    return (if val < 0 { 0 - val } else { val }) as u64;
 }
 
 /// Count digits of a u64 value (as raw i64 bits) in the given power-of-2 base.
@@ -662,6 +658,7 @@ impl LenientFromStr for char {
 }
 
 impl i8 {
+    pub const BITS: i32 = 8;
     pub const MAX: i8 = 127;
     pub const MIN: i8 = -128;
 
@@ -677,6 +674,12 @@ impl i8 {
     pub fn clamp(value: i8, low: i8, high: i8) -> i8 {
         assert low <= high;
         return i8::min(i8::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i8` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i8) -> i8 {
+        return if x < 0 { -x } else { x };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -717,6 +720,7 @@ impl LenientFromStr for i8 {
 }
 
 impl u8 {
+    pub const BITS: i32 = 8;
     pub const MAX: u8 = 255;
     pub const MIN: u8 = 0;
 
@@ -824,6 +828,7 @@ impl LenientFromStr for u8 {
 }
 
 impl i16 {
+    pub const BITS: i32 = 16;
     pub const MAX: i16 = 32767;
     pub const MIN: i16 = -32768;
 
@@ -839,6 +844,12 @@ impl i16 {
     pub fn clamp(value: i16, low: i16, high: i16) -> i16 {
         assert low <= high;
         return i16::min(i16::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i16` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i16) -> i16 {
+        return if x < 0 { -x } else { x };
     }
 
     fn fmt_into(&self, f: &mut Formatter) {
@@ -879,6 +890,7 @@ impl LenientFromStr for i16 {
 }
 
 impl u16 {
+    pub const BITS: i32 = 16;
     pub const MAX: u16 = 65535;
     pub const MIN: u16 = 0;
 
@@ -934,6 +946,7 @@ impl LenientFromStr for u16 {
 }
 
 impl i32 {
+    pub const BITS: i32 = 32;
     pub const MAX: i32 = 2147483647;
     pub const MIN: i32 = -2147483648;
 
@@ -949,6 +962,12 @@ impl i32 {
     pub fn clamp(value: i32, low: i32, high: i32) -> i32 {
         assert low <= high;
         return i32::min(i32::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i32` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i32) -> i32 {
+        return if x < 0 { -x } else { x };
     }
 
     /// Counts the leading zeros in this integer.
@@ -968,7 +987,7 @@ impl i32 {
 
     fn fmt_decimal(&self, f: &mut Formatter) {
         let is_negative = *self < 0;
-        let abs_val = abs_to_u64(*self as i64);
+        let abs_val = i64::abs(*self as i64) as u64;
         let digit_count = count_digits_u64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
@@ -1012,6 +1031,7 @@ impl LenientFromStr for i32 {
 }
 
 impl u32 {
+    pub const BITS: i32 = 32;
     pub const MAX: u32 = 4294967295;
     pub const MIN: u32 = 0;
 
@@ -1074,6 +1094,7 @@ impl LenientFromStr for u32 {
 }
 
 impl i64 {
+    pub const BITS: i32 = 64;
     pub const MAX: i64 = 9223372036854775807;
     pub const MIN: i64 = -9223372036854775808;
 
@@ -1089,6 +1110,12 @@ impl i64 {
     pub fn clamp(value: i64, low: i64, high: i64) -> i64 {
         assert low <= high;
         return i64::min(i64::max(value, low), high);
+    }
+
+    /// The magnitude of `x`. `MIN` has none in `i64` and wraps to itself,
+    /// as negating it does.
+    pub fn abs(x: i64) -> i64 {
+        return if x < 0 { -x } else { x };
     }
 
     /// Counts the leading zeros in this integer.
@@ -1109,7 +1136,7 @@ impl i64 {
     fn fmt_decimal(&self, f: &mut Formatter) {
         let value = *self;
         let is_negative = value < 0;
-        let abs_val = abs_to_u64(value);
+        let abs_val = i64::abs(value) as u64;
         let digit_count = count_digits_u64(abs_val);
         let offset = f.prepare_int_write(is_negative, "", digit_count);
         write_decimal_digits(f.buf.internal_raw_bytes_mut(), offset, abs_val, digit_count);
@@ -1153,6 +1180,7 @@ impl LenientFromStr for i64 {
 }
 
 impl u64 {
+    pub const BITS: i32 = 64;
     pub const MAX: u64 = 18446744073709551615;
     pub const MIN: u64 = 0;
 
@@ -1262,6 +1290,7 @@ fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
 }
 
 impl f32 {
+    pub const BITS: i32 = 32;
     pub const PI: f32 = 3.14159265358979323846;
     pub const TAU: f32 = 6.28318530717958647692;
     pub const E: f32 = 2.71828182845904523536;
@@ -1276,6 +1305,21 @@ impl f32 {
     pub const INFINITY: f32 = 1.0 / 0.0;
     pub const NEG_INFINITY: f32 = -1.0 / 0.0;
     pub const NAN: f32 = 0.0 / 0.0;
+    pub const MAX: f32 = 3.40282347e38;
+    pub const MIN: f32 = -3.40282347e38;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f32 = 1.17549435e-38;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f32 = 1.1920929e-7;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 24;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 6;
+    pub const MIN_EXP: i32 = -125;
+    pub const MAX_EXP: i32 = 128;
+    pub const MIN_10_EXP: i32 = -37;
+    pub const MAX_10_EXP: i32 = 38;
 
     fn fmt_into(&self, f: &mut Formatter) {
         if f.precision >= 0 {
@@ -1287,7 +1331,7 @@ impl f32 {
             fmt_float_special(f, is_neg, kind, "0");
             return;
         }
-        let abs_f = if is_neg { -*self } else { *self };
+        let abs_f = f32::abs(*self);
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -1308,7 +1352,7 @@ impl f32 {
             fmt_float_special(f, is_neg, kind, "0.0");
             return;
         }
-        let abs_f = if is_neg { -*self } else { *self };
+        let abs_f = f32::abs(*self);
         let result = short32(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -1560,7 +1604,7 @@ impl FromStr for f32 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
-        return Result::Ok(parse_f64_from_str(&s.as_str_slice())? as f32);
+        return Result::Ok(f32::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY32)? as u32));
     }
 }
 
@@ -1574,6 +1618,7 @@ impl LenientFromStr for f32 {
 }
 
 impl f64 {
+    pub const BITS: i32 = 64;
     pub const PI: f64 = 3.14159265358979323846;
     pub const TAU: f64 = 6.28318530717958647692;
     pub const E: f64 = 2.71828182845904523536;
@@ -1588,6 +1633,21 @@ impl f64 {
     pub const INFINITY: f64 = 1.0 / 0.0;
     pub const NEG_INFINITY: f64 = -1.0 / 0.0;
     pub const NAN: f64 = 0.0 / 0.0;
+    pub const MAX: f64 = 1.7976931348623157e308;
+    pub const MIN: f64 = -1.7976931348623157e308;
+    /// The smallest positive normal value.
+    pub const MIN_POSITIVE: f64 = 2.2250738585072014e-308;
+    /// The gap between 1.0 and the next larger value.
+    pub const EPSILON: f64 = 2.220446049250313e-16;
+    pub const RADIX: i32 = 2;
+    /// Significand bits, the implicit leading one included.
+    pub const MANTISSA_DIGITS: i32 = 53;
+    /// Decimal digits that survive a round trip through the type.
+    pub const DIGITS: i32 = 15;
+    pub const MIN_EXP: i32 = -1021;
+    pub const MAX_EXP: i32 = 1024;
+    pub const MIN_10_EXP: i32 = -307;
+    pub const MAX_10_EXP: i32 = 308;
     /// The largest integer exactly representable in f64: 2^53 - 1.
     /// Mirrors JS `Number.MAX_SAFE_INTEGER`.
     pub const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
@@ -1606,7 +1666,7 @@ impl f64 {
             fmt_float_special(f, is_neg, kind, "0");
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = f64::abs(value);
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -1628,7 +1688,7 @@ impl f64 {
             fmt_float_special(f, is_neg, kind, "0.0");
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = f64::abs(value);
         let result = short(abs_f);
         let d = result.digits;
         let p = result.exponent;
@@ -1665,7 +1725,7 @@ impl f64 {
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = f64::abs(value);
         let result = fixed_width_for_prec(abs_f, precision);
         let d = result.digits;
         let p = result.exponent;
@@ -1697,7 +1757,7 @@ impl f64 {
             f.apply_padding(mark);
             return;
         }
-        let abs_f = if is_neg { -value } else { value };
+        let abs_f = f64::abs(value);
         let mark = f.mark();
         fmt_float_sign(f, is_neg);
         if precision >= 0 {
@@ -1947,7 +2007,7 @@ impl FromStr for f64 {
     type Err = ParseFloatError;
 
     fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(&s.as_str_slice());
+        return Result::Ok(f64::from_bits(parse_float_bits(&s.as_str_slice(), &BINARY64)?));
     }
 }
 
@@ -2225,13 +2285,13 @@ impl UpperExp for f64 {
 
 impl LowerExp for i8 {
     pub fn fmt_lower_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
     }
 }
 
 impl UpperExp for i8 {
     pub fn fmt_upper_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
     }
 }
 
@@ -2249,13 +2309,13 @@ impl UpperExp for u8 {
 
 impl LowerExp for i16 {
     pub fn fmt_lower_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
     }
 }
 
 impl UpperExp for i16 {
     pub fn fmt_upper_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
     }
 }
 
@@ -2273,13 +2333,13 @@ impl UpperExp for u16 {
 
 impl LowerExp for i32 {
     pub fn fmt_lower_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), false);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, false);
     }
 }
 
 impl UpperExp for i32 {
     pub fn fmt_upper_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self as i64), true);
+        write_int_exp(f, *self < 0, i64::abs(*self as i64) as u64, true);
     }
 }
 
@@ -2297,13 +2357,13 @@ impl UpperExp for u32 {
 
 impl LowerExp for i64 {
     pub fn fmt_lower_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self), false);
+        write_int_exp(f, *self < 0, i64::abs(*self) as u64, false);
     }
 }
 
 impl UpperExp for i64 {
     pub fn fmt_upper_exp(&self, f: &mut Formatter) {
-        write_int_exp(f, *self < 0, abs_to_u64(*self), true);
+        write_int_exp(f, *self < 0, i64::abs(*self) as u64, true);
     }
 }
 

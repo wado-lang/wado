@@ -2,9 +2,9 @@
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
 use { TreeMap, TreeSet } from "core:collections";
-use { CodeWriter, FnSpec, StructSpec, Vis, is_reserved } from "lib:wadopoet";
+use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
-use { Graph, Node, ValueInfo } from "./graph.wado";
+use { Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, element_of, static_extents } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
@@ -137,21 +137,6 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     return Result::Ok(w.to_string());
 }
 
-/// The one element type the kernels have arithmetic for. Everything a node
-/// produces is in it, and a boundary held in another is converted past it.
-global KERNEL_ELEMENT: String = "f32";
-
-/// The Wado primitive a boundary tensor is held in, or `None` for an element
-/// type no kernel reaches. Half precision is held and widened, never computed.
-fn element_of(dtype: &String) -> Option<String> {
-    return match dtype.as_str_slice() {
-        "float" => Option::Some(KERNEL_ELEMENT),
-        "float16" => Option::Some("f16"),
-        "bfloat16" => Option::Some("bf16"),
-        _ => null,
-    };
-}
-
 /// What each boundary tensor is held in, and where an element type no kernel
 /// reaches stops the build. A node's own output is f32, so only these are kept.
 fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError> {
@@ -165,7 +150,7 @@ fn boundary_elements(graph: &Graph) -> Result<TreeMap<String, String>, EmitError
                     dtype: vi.dtype,
                 }));
             };
-            held[vi.name] = element;
+            held[vi.name] = element.primitive;
         }
     }
     return Result::Ok(held);
@@ -321,7 +306,7 @@ fn sanitize(name: &String) -> String {
     return `t_${out}`;
 }
 
-/// The graph's initializers, as the struct a caller fills from a checkpoint.
+/// The graph's initializers, as the struct `forward` reads them from.
 fn emit_weights(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -334,8 +319,54 @@ fn emit_weights(
         weights.add_pub_field(names.get(&vi.name), tensor_type(shapes, held, &vi.name));
     }
     w.blank();
-    w.line("/// The graph's initializers. The caller fills these.");
+    w.line("/// The graph's initializers.");
     weights.emit(w);
+    emit_embedded(w, graph, shapes, names, held);
+}
+
+/// `Weights::embedded()`, where the graph carries every initializer's data.
+/// The compiler folds each payload's byte literal into a data segment.
+fn emit_embedded(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    names: &Names,
+    held: &TreeMap<String, String>,
+) {
+    for let vi of &graph.initializers {
+        if vi.data matches { None } {
+            return;
+        }
+    }
+    w.blank();
+    ImplSpec::new("Weights").emit_begin(w);
+    w.line("/// The weights the graph carries.");
+    FnSpec::new("embedded", Vis::Pub).set_return_type("Weights").emit_begin(w);
+    w.begin("return Weights");
+    for let vi of &graph.initializers {
+        let Some(data) = vi.data else {
+            unreachable();
+        };
+        let element = held.get(vi.name).unwrap();
+        let axes = axis_list(&shapes.get(vi.name).unwrap());
+        w.begin(`${names.get(&vi.name)}: Tensor::<${element}, [${axes}]>`);
+        w.line(`data: List::<${element}>::from_le_bytes(${byte_string_literal(&data)}),`);
+        w.line(`extents: [${extent_list(&vi.rank)}],`);
+        w.end_with(",");
+    }
+    w.end_with(";");
+    w.end();
+    w.end();
+}
+
+/// A tensor's extents as a list literal's elements. Both readers attach data
+/// only to a tensor whose every extent is stated.
+fn extent_list(rank: &Rank) -> String {
+    let mut spelled: List<String> = [];
+    for let e of static_extents(rank).unwrap() {
+        spelled.push(`${e}`);
+    }
+    return spelled.join(", ");
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a

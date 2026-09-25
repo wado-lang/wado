@@ -188,30 +188,6 @@ pub(crate) fn parse_i128_literal(repr: &str) -> Result<i128, String> {
     i128::try_from(unsigned).map_err(|_| format!("integer literal out of range: {repr}"))
 }
 
-/// Parse a float literal string into an f64 value.
-pub(super) fn parse_float_literal(repr: &str) -> Result<f64, String> {
-    let clean = normalize_numeric_literal(repr);
-
-    // Handle hex/binary/octal literals as float values (not bit patterns)
-    if let Some(hex) = clean.strip_prefix("0x") {
-        let value =
-            u64::from_str_radix(hex, 16).map_err(|_| format!("invalid hex literal: {repr}"))?;
-        return Ok(value as f64);
-    } else if let Some(bin) = clean.strip_prefix("0b") {
-        let value =
-            u64::from_str_radix(bin, 2).map_err(|_| format!("invalid binary literal: {repr}"))?;
-        return Ok(value as f64);
-    } else if let Some(oct) = clean.strip_prefix("0o") {
-        let value =
-            u64::from_str_radix(oct, 8).map_err(|_| format!("invalid octal literal: {repr}"))?;
-        return Ok(value as f64);
-    }
-
-    clean
-        .parse()
-        .map_err(|_| format!("invalid float literal: {repr}"))
-}
-
 /// Check if a number literal can only be a float (has decimal point or negative exponent).
 pub(super) fn is_float_only_literal(repr: &str) -> bool {
     if repr.contains('.') {
@@ -243,4 +219,36 @@ pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
 /// Unpack i128 into (low, high) pair for codegen.
 pub(super) fn unpack_i128(value: i128) -> (u64, i64) {
     (value as u64, (value >> 64) as i64)
+}
+
+/// Run `body` with `owner`'s `field` set to `value`, answering its result and
+/// what the field then held. The enclosing value returns even on a panic.
+pub(super) fn replaced<O, T, R>(
+    owner: &mut O,
+    field: for<'s> fn(&'s mut O) -> &'s mut T,
+    value: T,
+    body: impl FnOnce(&mut O) -> R,
+) -> (R, T) {
+    struct Restore<'r, O, T> {
+        owner: &'r mut O,
+        field: for<'s> fn(&'s mut O) -> &'s mut T,
+        saved: Option<T>,
+    }
+    impl<O, T> Drop for Restore<'_, O, T> {
+        fn drop(&mut self) {
+            if let Some(saved) = self.saved.take() {
+                *(self.field)(self.owner) = saved;
+            }
+        }
+    }
+    let saved = std::mem::replace(field(owner), value);
+    let mut guard = Restore {
+        owner,
+        field,
+        saved: Some(saved),
+    };
+    let result = body(guard.owner);
+    let saved = guard.saved.take().expect("enclosing value present");
+    let left = std::mem::replace(field(guard.owner), saved);
+    (result, left)
 }

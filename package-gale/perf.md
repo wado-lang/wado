@@ -141,10 +141,12 @@ arm, arms' ranges disjoint):
   stack, which `classify` reads inside the override loop and nowhere else. A
   query with no rule-context capture leaves that loop empty, so the walk is
   unobservable: `hl_cover_unvisited`'s token sweep reaches the same captures.
-  `gen_highlight` now emits the call only when the query resolved an override.
+  `gen_highlight` emitted the call only when the query resolved an override.
   Skipping the walk **without** also gating `hl_cover_unvisited`'s sort is a
   _loss_ (1.553–1.615) — the sweep alone is already in start order, and sorting
-  ~2900 captures costs more than the walk did.
+  ~2900 captures costs more than the walk did. The gate has since been removed.
+  Every query in the tree carries a rule context, so no generated parser took
+  the skip, and the second path cost more to reason about than it saved.
 - **Escape HTML by byte run (+1.8%).** `highlight_html` drove a `StrCharIter`
   and called `escape_html_char`, which called `String::push` — three calls per
   source character, ~40K per iteration. The escapable set is ASCII, so a byte
@@ -198,12 +200,12 @@ Whole branch against `origin/main`, four alternating pairs, ranges disjoint:
 The mask test also retires the "multi-token guard re-test" item below as a
 cost: the re-tested `_kind_set_37` is now a subtract and a compare.
 
-One lever is left in the highlight half. `HighlightVisitor::new` re-resolves a
-fully static mapping on every call, ~170 `capture_id_of` scans plus the
-`class_text` rewrites, about 2.5% of the profile. The compile-time engine
-cannot fold it, its 10K-step budget being far under the string compares that
-takes, so the fix is `highlight_gen` emitting the resolved `default_ids` and
-`capture_classes` tables directly.
+The last lever in the highlight half has landed too. `HighlightVisitor::new`
+used to re-resolve a fully static mapping on every call: ~170 `capture_id_of`
+scans plus the `class_text` rewrites, about 2.5% of the profile. The
+compile-time engine could not fold it, because its 10K-step budget is far below
+the string compares that takes. `highlight_gen` now emits the resolved tables as
+the `HIGHLIGHT_MAPPING` global, and the visitor borrows it.
 
 ### Live profile (`syntax_highlight`, 2999 leaf samples @1 ms, 2026-09-02)
 
@@ -255,30 +257,26 @@ re-measure before committing. Candidates read off the profile above:
   leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
   branches are sorted and come first), so this is a worst case rather than a
   benchmark-visible cost. A sorted interval table with a binary search would bound it.
-- **A guarded alt re-tests the token its partition guard already matched
-  (landed for the single-token guard, 2026-09-03).**
-  `gen_scan_multi_alt` binds `alt_kind = pos < tokens.len() ? tokens[pos] :
-  TK_EOF` and branches on it; a single-token partition
-  (`groups_tokens[g] == [TK_IDENTIFIER]`, say) whose winning alt's first
-  element is a `Token` of that exact kind re-read the same comparison —
-  `if pos >= tokens.len() || tokens[pos] != TK_IDENTIFIER { break try_0; }`
-  right after the branch that already established it. `guard_implies_first_token`
-  (`parser_gen.wado`) elides that element and starts the alt body at
-  `pos = start + 1`. Extending it past a single-token guard needs proving the
-  alt's first element accepts every token the guard admits — a check the
-  landed version does not make, so it stays at exactly one token. Isolated on
-  `sqlite_parse`, three alternating pairs, best-of-three: **1.150 → 1.120
-  ms/iter (+2.6%)**, all 3 rounds disjoint; 18 sites elide in the SQLite
-  parser (`scan_any_name`'s `TK_IDENTIFIER` / `TK_STRING_LITERAL` /
-  `TK_OPEN_PAR` arms among them).
+- **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
+  On the dev profile, one parse takes these times:
 
-  **Left open:** the multi-token case this bullet originally named. Inside
-  `scan_keyword`, `_kind_set_37(tokens[pos])` re-tests a keyword-partition
-  guard that already contains every token `_kind_set_37` would test. Closing
-  it needs the accepted-set-covers-guard-set proof the landed version
-  sidesteps by requiring exactly one token — worth it only if a future
-  profile still shows `_kind_set_*` self-time (2.6–4.7% pre-landing) after
-  the single-token cut.
+  | Rust input   | depth → ms           |
+  | ------------ | -------------------- |
+  | `f(f(…))`    | 12 → 101, 20 → 35875 |
+  | `A { x: … }` | 10 → 77, 14 → 2056   |
+  | `((…))`      | 16 → 379, 20 → 6155  |
+
+  An identifier-led atom scans the whole argument twice. The first scan is
+  `enumerationVariantExpression`'s `Path(args)` in the tournament, and the
+  second is the winning path's call suffix in the LR loop. Each level doubles
+  the work, and the parse-side `_sd_p_*` tournaments multiply it again. SQLite
+  shows the same effect on nested parens and `CASE`, where it is n². Four
+  select alternatives also each scan a plain `SELECT` to its end.
+
+  A packrat memo would make both linear, because a scan decides nothing and is
+  a pure function of its inputs. It would be keyed per scan function on
+  (pos, min_prec, follow, gate), with a dense array per rule. It is deferred
+  because it adds a per-parse cost to every grammar the tournament reaches.
 
 ### Generation-time cost: the generator itself (2026-07)
 
@@ -530,6 +528,10 @@ own shapes:
   under the inline budget: flat, and the WIR shows it still not inlined.
   `.claude/skills/wado-performance/dead-ends.md` has the numbers. Deleting the
   call's _caller_ is what paid.
+- **The simulator at a hot LR loop entry** (2026-07). Routing SQLite's
+  `expr NOT? BETWEEN expr AND expr` mid operand to the simulator took
+  `SELECT … BETWEEN 1 AND 10 AND y = 2` over 40 statements from 41 ms to 2.3 s
+  on the dev profile. That shape is decided on the scan instead (`lr_cont`).
 
 ## Correctness items with a performance flavor
 
@@ -540,27 +542,23 @@ path. Full context in `TODO.md` ("Soundness and compatibility divergence") and
 `antlr4-compatibility.md` (prediction design, soundness invariants).
 
 **A memoised ATN / lookahead DFA is a last resort.** It was the named lever for
-the two entries below before each closed on the compiled scan instead. It is
-unmeasured in Gale, but ANTLR4's lookahead DFA _is_ that cache and still parses
-this grammar and input at 216.991 ms/iter against Gale's 2.535
-(`benchmark/README.md`). Reach for the scan and the runtime FOLLOW gate first.
+an LR mid operand and for the ambiguous `rule?` below before each closed on the
+compiled scan instead. It is unmeasured in Gale, but ANTLR4's lookahead DFA
+_is_ that cache and still parses this grammar and input at 216.991 ms/iter
+against Gale's 2.535 (`benchmark/README.md`). Reach for the scan and the
+runtime FOLLOW gate first.
 
-- **LR operator-precedence chain** (`DropLoopEntryBranchInLRRule_4`):
-  `scan_expr_lr_*` sees `and X` match and commits where ANTLR4 resolves the
-  precedence via full-context prediction at the LR loop entry. The mid-operand
-  half (`expr BETWEEN expr AND expr` against `expr AND expr`) is **closed on the
-  scan, not the simulator (2026-07)**: an LR self-reference that competes with
-  its own alternative's later delimiter drops to `min_prec = 0` and carries the
-  suffix continuation as a mask, so each loop entry scans the operator's suffix
-  and then checks the continuation still stands. The gate rides the static LR
-  dispatch, so a rule already routed to the simulator keeps its precedence and
-  still diverges on the climbing cases — `lr_atn_mid_operand.g4` pins that half,
-  two cases `#[TODO]`. The simulator answer had been priced out for the static
-  half — on the dev profile over 40 statements it took `SELECT … BETWEEN 1 AND
-  10 AND y = 2` from 41 ms to 2.3 s.
-- **`lr_between.g4` is still ATN-class and may not need to be.** Its shared-delimiter
+- **A tournament asks the simulator once per alternative it scans**
+  (`DropLoopEntryBranchInLRRule_4`). Each loop-entry prediction there looks
+  ahead to EOF, since the ambiguity is real, and `stat`'s tournament scans
+  `expr` once for `';'` and once for `'.'`. At 15 lines that is 92 predictions
+  and 0.11 s at `-O2`, quadratic in the input. Deciding `stat` with the
+  simulator would ask each question once. The tournament's longest match and
+  ANTLR4's lowest alternative can disagree, though, so that is a routing
+  decision rather than a tuning one.
+- **`lr_between.g4` is ATN-class and may not need to be.** Its shared-delimiter
   competition sits in an _atom_ alternative (`'between' expr 'and' expr` — no leading
-  self-reference), so the continuation gate above does not reach it. The question it
+  self-reference), so the continuation gate (`lr_cont`) does not reach it. The question it
   asks is the same one, so the same gate may apply; if it does, the simulator comes
   out of grammars that embed it today. Untried.
 - **Ambiguous greedy `rule?` and non-greedy `*?` / `+?` min-match — closed on
@@ -573,8 +571,8 @@ this grammar and input at 216.991 ms/iter against Gale's 2.535
   exiting. Where the scan runs out — the rule's tail — the verdict conjoins
   the rule's classical FOLLOW, which cost one bug fix in `follow_env` (an
   optional's callee was receiving the inner's own FIRST) rather than a second
-  runtime argument. That last conjunct is why a probe may only be stamped where
-  the walk really reaches the rule's tail (soundness invariant 10). Release
+  runtime argument. That last conjunct is why a probe may ask the FOLLOW only
+  where the walk really reaches the rule's tail (soundness invariant 10). Release
   `sqlite_parse` measured unchanged at every step, each arm's own spread moving
   further than any gap between the arms.
 - **Recursive lexer rule with `.+?` / `.*?`**

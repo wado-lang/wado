@@ -307,8 +307,6 @@ impl WasmAssetKind {
 pub enum CmNamespace {
     /// `wasi:*` — the WASI P3 bindings under `lib/wasi/`.
     Wasi,
-    /// `web:*` — the web platform bindings under `lib/web/`.
-    Web,
 }
 
 impl CmNamespace {
@@ -317,7 +315,6 @@ impl CmNamespace {
     pub fn prefix(self) -> &'static str {
         match self {
             Self::Wasi => "wasi",
-            Self::Web => "web",
         }
     }
 
@@ -326,7 +323,6 @@ impl CmNamespace {
     pub fn from_prefix(prefix: &str) -> Option<Self> {
         match prefix {
             "wasi" => Some(Self::Wasi),
-            "web" => Some(Self::Web),
             _ => None,
         }
     }
@@ -889,7 +885,7 @@ mod tests {
     fn every_bundled_namespace_is_a_bundled_specifier() {
         assert!(is_bundled_specifier("core:libm.wat"));
         assert!(is_bundled_specifier("wasi:cli/stdout.wado"));
-        assert!(is_bundled_specifier("web:dom/dom.wat"));
+        assert!(!is_bundled_specifier("web:dom/dom.wat"));
         assert!(!is_bundled_specifier("./libm.wat"));
         assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
         assert!(!is_bundled_specifier("https://example.com/x.wasm"));

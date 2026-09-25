@@ -628,8 +628,8 @@ test "pipeline: assemble_grammar rejects an import naming no supplied input" {
 }
 
 // LL(*) regression-suite grammars (`tests/grammars/ll_*.g4`). Each is a
-// hand-crafted minimal fixture targeting one LL prediction gap. Per
-// CLAUDE.md "Adding a New E2E Test Grammar" the parse leg lives here so
+// hand-crafted minimal fixture targeting one LL prediction gap. Per the
+// e2e-grammar steps in AGENTS.md the parse leg lives here so
 // failures in the g4 frontend surface independently of the kiln-side
 // driver test.
 
@@ -708,10 +708,10 @@ test "parse lr_mid_operand.g4" {
     assert g.name == "LrMidOperand";
     // s, e
     assert g.parser_rules.len() == 2;
-    // `e` is the LR rule: atom, `e 'and' e`, `e 'between' e 'and' e`.
+    // `e` is the LR rule: atom, `e 'and' e`, `e 'or' e`, `e 'between' e 'and' e`.
     assert g.parser_rules[1].name == "e";
-    assert g.parser_rules[1].alternatives.len() == 3;
-    assert g.parser_rules[1].alternatives[2].elements.len() == 5;
+    assert g.parser_rules[1].alternatives.len() == 4;
+    assert g.parser_rules[1].alternatives[3].elements.len() == 5;
 }
 
 test "parse lr_atn_mid_operand.g4" {

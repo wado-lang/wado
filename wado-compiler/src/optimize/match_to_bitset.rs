@@ -169,9 +169,9 @@ impl Build<'_, '_> {
     }
 
     /// A fresh immutable local bound to `value`, as its index and its `let`.
-    fn bind(&mut self, name: &str, ty: TypeId, value: Operand) -> (u32, StmtId) {
-        let name = format!("$bitset_{name}_{}", self.engine.locals().len());
-        let local_index = self.engine.alloc_local(name.clone(), ty, false);
+    fn bind(&mut self, what: &str, ty: TypeId, value: Operand) -> (u32, StmtId) {
+        let local_index = self.engine.alloc_minted_local(what, ty, false);
+        let name = self.engine.local_name(local_index);
         let stmt = self.engine.alloc_stmt(
             StmtKind::Let {
                 name,
@@ -188,7 +188,7 @@ impl Build<'_, '_> {
     }
 
     fn read(&mut self, local_index: u32, ty: TypeId) -> Operand {
-        let name = self.engine.locals()[local_index as usize].name.clone();
+        let name = self.engine.local_name(local_index);
         self.expr(
             ExprKind::Local {
                 index: local_index,
@@ -210,7 +210,7 @@ impl MatchToBitsetRule<'_> {
     ) -> ExprKind {
         let b = &mut Build { engine, span };
 
-        let (key, let_key) = b.bind("key", scrut_type, scrutinee);
+        let (key, let_key) = b.bind("bitset_key", scrut_type, scrutinee);
         let key = b.read(key, scrut_type);
         let key = if scrut_type == TypeTable::I32 {
             key
@@ -220,7 +220,7 @@ impl MatchToBitsetRule<'_> {
         let min = b.int(set.min as u64, TypeTable::I32);
         let off = b.binary(key, NirBinaryOp::Sub, min, TypeTable::I32);
         let off = b.cast(off, TypeTable::U32);
-        let (off, let_off) = b.bind("offset", TypeTable::U32, off);
+        let (off, let_off) = b.bind("bitset_offset", TypeTable::U32, off);
 
         let below = |b: &mut Build, bound: u32| {
             let off = b.read(off, TypeTable::U32);

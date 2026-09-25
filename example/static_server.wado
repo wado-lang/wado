@@ -1,0 +1,200 @@
+// Static file server — serves the directory `wado serve --dir` grants
+//
+// Compile and run with wado serve:
+//   cargo run --bin wado -- serve --dir example/web-browser example/static_server.wado
+//
+// Endpoints:
+//   GET  /<path>  — the file at <path>, `index.html` for a directory
+//   HEAD /<path>  — the same status and headers, without the body
+//
+// A directory named without its trailing `/` redirects to it. A path that
+// names nothing under the directory, or climbs out of it, is 404. Other
+// methods are 405. For a full-featured service, see http_bin.wado.
+
+use { Request, Response, ErrorCode, FieldName, FieldValue, Headers, Trailers, StatusCode, Method } from "wasi:http";
+use { log_stderr } from "core:cli";
+use { Preopens } from "core:fs";
+use fs from "core:fs";
+use { percent_decode, percent_encode } from "core:url";
+
+struct Reply {
+    status: StatusCode,
+    headers: List<[String, String]>,
+    body: ByteList,
+}
+
+export async fn handle(request: Request) -> Result<Response, ErrorCode> with Preopens {
+    let method = request.get_method();
+    let target = request.get_path_with_query().unwrap_or("/");
+    let reply = match method {
+        Get => serve(target, true),
+        Head => serve(target, false),
+        _ => {
+            let mut reply = text(405, "method not allowed");
+            reply.headers.push(["allow", "GET, HEAD"]);
+            reply;
+        },
+    };
+
+    let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let headers = Headers::new();
+    for let [name, value] of reply.headers {
+        headers.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    let [response, _response_tx] = Response::new(headers, Option::Some(body_rx), trailers_future);
+    response.set_status_code(reply.status);
+
+    task return Result::<Response, ErrorCode>::Ok(response);
+
+    body_tx.write_raw_all(reply.body.as_slice());
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+}
+
+/// The reply to a GET of `target`, or to a HEAD where `with_body` is false.
+fn serve(target: String, with_body: bool) -> Reply with Preopens {
+    let Some(path) = file_path(target) else {
+        return text(404, "not found");
+    };
+    let meta = match fs::metadata(&path) {
+        Ok(meta) => meta,
+        Err(e) => {
+            return failure(e);
+        },
+    };
+    match meta.type {
+        File => {
+        },
+        Directory => {
+            return Reply {
+                status: 301,
+                headers: [
+                    ["location", `${url_path(&path)}/`],
+                ],
+                body: [],
+            };
+        },
+        Other => {
+            return text(404, "not found");
+        },
+    }
+    let mut reply = Reply {
+        status: 200,
+        headers: [
+            ["content-type", content_type(&path)],
+        ],
+        body: [],
+    };
+    if with_body {
+        match fs::read(&path) {
+            Ok(body) => reply.body = body,
+            Err(e) => {
+                return failure(e);
+            },
+        }
+    }
+    return reply;
+}
+
+fn failure(e: fs::FsError) -> Reply {
+    if e.kind matches { NotFound } {
+        return text(404, "not found");
+    }
+    log_stderr(`${e}`);
+    return text(500, "internal server error");
+}
+
+/// The file a request target names, relative to the served directory: `None`
+/// where it names none there.
+fn file_path(target: String) -> Option<String> {
+    let path = match target.split_once("?") {
+        Some([path, _]) => path.to_string(),
+        None => target,
+    };
+    let Ok(decoded) = percent_decode(&path) else {
+        return null;
+    };
+    let Some(relative) = decoded.strip_prefix("/") else {
+        return null;
+    };
+    let Ok(mut normalized) = fs::normalize(relative) else {
+        return null;
+    };
+    if normalized.is_empty() || decoded.ends_with("/") {
+        normalized = fs::join(&normalized, "index.html");
+    }
+    return Option::Some(normalized);
+}
+
+/// `path` as the path of a URL: each segment percent-encoded, after a `/`.
+fn url_path(path: &String) -> String {
+    let mut url = "";
+    for let segment of path.split("/") {
+        url.push_str("/");
+        url.push_str(&percent_encode(segment));
+    }
+    return url;
+}
+
+fn content_type<S: AsStrSlice>(path: S) -> String {
+    let Some(extension) = fs::extension(path) else {
+        return "application/octet-stream";
+    };
+    return match extension.to_ascii_lowercase() {
+        "html" => "text/html; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json",
+        "wasm" => "application/wasm",
+        "svg" => "image/svg+xml",
+        "png" => "image/png",
+        "txt" => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    };
+}
+
+fn text(status: StatusCode, message: String) -> Reply {
+    return Reply {
+        status,
+        headers: [
+            ["content-type", "text/plain; charset=utf-8"],
+        ],
+        body: message.bytes().collect(),
+    };
+}
+
+test "a target names a file under the served directory" {
+    assert file_path("/") == Option::Some("index.html");
+    assert file_path("/build/app.js?v=2") == Option::Some("build/app.js");
+    assert file_path("/docs/") == Option::Some("docs/index.html");
+    assert file_path("/docs") == Option::Some("docs");
+    assert file_path("/a%20b.txt") == Option::Some("a b.txt");
+    assert file_path("/a/./b/../c.css") == Option::Some("a/c.css");
+}
+
+test "a target that climbs out of the served directory names nothing" {
+    assert file_path("/../secret") == null;
+    assert file_path("/a/%2E%2E/%2E%2E/secret") == null;
+    assert file_path("/%zz") == null;
+}
+
+test "a target that is not an absolute path names nothing" {
+    assert file_path("") == null;
+    assert file_path("?x") == null;
+    assert file_path("é") == null;
+    assert file_path("*") == null;
+}
+
+test "a redirect names the directory as a URL path" {
+    assert url_path(&"docs") == "/docs";
+    assert url_path(&"a#b/c d") == "/a%23b/c%20d";
+}
+
+test "a file's type comes from its extension, in any case" {
+    assert content_type("index.html") == "text/html; charset=utf-8";
+    assert content_type("INDEX.HTML") == "text/html; charset=utf-8";
+    assert content_type("build/app.js") == "text/javascript; charset=utf-8";
+    assert content_type("build/main.core.wasm") == "application/wasm";
+    assert content_type("LICENSE") == "application/octet-stream";
+}

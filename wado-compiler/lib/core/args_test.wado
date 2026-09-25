@@ -102,6 +102,18 @@ test "lenient scalar conversion" {
     assert c.jobs == 16;
 }
 
+struct HalfCli {
+    scale: f16,
+    gain: bf16,
+}
+impl Deserialize for HalfCli;
+
+test "a half option rounds its text once, leniently" {
+    let r = parse::<HalfCli>(["--scale", "1.00048828125000000000000001", "--gain", "1.003_906_250_000_000_000_000_01"]);
+    assert r matches { Ok(c) && c.scale.to_bits() == 0x3c01 && c.gain.to_bits() == 0x3f81 };
+    assert parse::<HalfCli>(["--scale", "one", "--gain", "1"]) matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
 test "missing required positional reports MissingArgument" {
     let r = parse::<Cli>(["--jobs", "2"]);
     assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingArgument };
@@ -388,4 +400,41 @@ impl Deserialize for ScalarOpt;
 test "a repeated scalar option takes the last occurrence" {
     let r = parse::<ScalarOpt>(["--jobs", "1", "--jobs", "2"]);
     assert r matches { Ok(o) && o.jobs == 2 };
+}
+
+#[wire(name_policy = "kebab-case")]
+enum Shade {
+    Light,
+    DarkBlue,
+}
+
+struct EnumOpts {
+    shade: Shade = Shade::Light,
+    tint: Option<Shade> = null,
+    layer: List<Shade> = [],
+}
+impl Deserialize for EnumOpts;
+
+test "an enum option takes its value from the next token or after `=`" {
+    assert parse::<EnumOpts>(["--shade", "dark-blue"]) matches { Ok(o) && o.shade == Shade::DarkBlue };
+    assert parse::<EnumOpts>(["--shade=dark-blue"]) matches { Ok(o) && o.shade == Shade::DarkBlue };
+    assert parse::<EnumOpts>(["--tint=light"]) matches { Ok(o) && o.tint == Option::Some(Shade::Light) };
+}
+
+test "a repeatable enum option converts each occurrence" {
+    let r = parse::<EnumOpts>(["--layer", "light", "--layer=dark-blue"]);
+    assert r matches { Ok(o) && o.layer == [Shade::Light, Shade::DarkBlue] };
+}
+
+test "an enum option naming no case reports InvalidValue" {
+    let bad = parse::<EnumOpts>(["--shade", "indigo"]);
+    assert bad matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue
+        && e.message == "invalid value for option --shade: 'indigo'" };
+    let r = parse::<EnumOpts>(["--layer", "light", "--layer=indigo"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::InvalidValue };
+}
+
+test "an enum option without a value reports MissingValue" {
+    let r = parse::<EnumOpts>(["--shade", "--tint", "light"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
 }

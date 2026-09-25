@@ -167,8 +167,24 @@ pub fn expand_templates(
     }
 }
 
+<<<<<<< HEAD
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
 /// template shape in `module`, each arm the untagged interpolation of hole `index`.
+||||||| 03599b796
+/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
+/// tagged template shape in `module`: `match index { k => <hole k rendered
+/// through its specifier into f's buffer> }`. `Hole::fmt`'s body carries a
+/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
+/// Each arm is the interpolation the untagged template would emit for that
+/// hole, so the two forms cannot render differently.
+=======
+/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
+/// tagged template shape in `module`: `match index { k => <hole k rendered
+/// through its specifier into f's buffer> }`. `TemplateHole::fmt`'s body carries a
+/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
+/// Each arm is the interpolation the untagged template would emit for that
+/// hole, so the two forms cannot render differently.
+>>>>>>> origin/main
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -211,7 +227,7 @@ pub fn synthesize_hole_fmt_helpers(
     };
     for (struct_type, holes, span) in targets {
         let mut helper = build_hole_fmt_helper(struct_type, &holes, span, &ctx);
-        // The index is a constant at every site `Hole::fmt` reaches after
+        // The index is a constant at every site `TemplateHole::fmt` reaches after
         // `members()` folds, so the splice keeps one arm; as a call it would
         // keep the whole dispatch, and its arms are what the threshold
         // refuses.
@@ -508,7 +524,7 @@ fn build_template_block(
                 expr: resolved,
                 format_spec,
             } => {
-                let inner_type = strip_refs(resolved.type_id, tt);
+                let inner_type = tt.borrow().peel_refs(resolved.type_id);
                 let kind = format_spec
                     .as_ref()
                     .map_or(FormatKind::Display, |spec| spec.kind);
@@ -841,18 +857,7 @@ fn interpolation_dispatch_type(
     if kind == FormatKind::Inspect {
         type_id
     } else {
-        strip_refs(type_id, tt)
-    }
-}
-
-/// Strip all `Ref` and `MutRef` wrappers from a type, returning the inner type.
-fn strip_refs(type_id: TypeId, tt: &Rc<RefCell<TypeTable>>) -> TypeId {
-    let mut current = type_id;
-    loop {
-        match tt.borrow().get(current).clone() {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => current = inner,
-            _ => return current,
-        }
+        tt.borrow().peel_refs(type_id)
     }
 }
 

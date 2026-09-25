@@ -8,11 +8,12 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::name::mut_capture_ref_name;
+use crate::name::capture_ref_name;
 use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
+use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
@@ -91,24 +92,10 @@ pub(super) fn link_parent_captures(
         .collect()
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Whether `ty` is a bare rigid type parameter.
-    ///
-    /// A closure is not constrained by an expected return type of that shape:
-    /// the parameter belongs to the signature the call is instantiating, and
-    /// the closure's own body is what determines it. Seeding the body with it
-    /// would demand that the body produce an opaque type it cannot construct
-    /// — `fold(0, |acc, x| acc + x)` asked the closure to return `Acc`.
-    pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(ty),
-            ResolvedType::TypeParam { .. }
-        )
-    }
-
+impl TypeSystem {
     fn extract_expected_fn(&self, expected_type: Option<TypeId>) -> Option<ExpectedFn> {
         let tid = expected_type?;
-        let tt = self.tysys.type_table.borrow();
+        let tt = self.type_table.borrow();
         // See through newtype layers so a closure assigned to a `type Handler =
         // fn(...)` newtype still gets its parameter types inferred from the
         // underlying fn signature.
@@ -125,7 +112,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             _ => None,
         }
     }
+}
 
+impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a closure parameter's type, defaulting unannotated params to
     /// the expected-type's positional param when one is available.
     fn closure_param_type(
@@ -145,9 +134,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         TypeTable::UNKNOWN
     }
-}
 
-impl<H: CompilerHost> Elaborator<'_, H> {
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
@@ -169,7 +156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         self.reject_closure_defaults(closure);
-        let expected_fn = self.extract_expected_fn(expected_type);
+        let expected_fn = self.tysys.extract_expected_fn(expected_type);
 
         // Collect outer bindings the body assigns to.
         let mut assigned_names: IndexSet<String> = IndexSet::default();
@@ -178,9 +165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // For each assigned name that resolves to an outer `mut` local,
         // record a `MutCapture` (so reify replays the `$ref_<var>`
         // materialisation in the same order) and mark the outer local
-        // address-taken. The `$ref_<var>` local slot is also reserved on
-        // the outer `ctx` so any subsequent local-index accounting in the
-        // parent function stays consistent with what reify will produce.
+        // address-taken.
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
@@ -197,8 +182,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
-                let ref_name = mut_capture_ref_name(var_name);
-                let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
+                let ref_name = capture_ref_name(var_name);
+                ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
                 mut_captures.push(MutCapture {
@@ -206,7 +191,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ref_name: ref_name.clone(),
                     inner_type,
                     ref_type,
-                    ref_index,
                 });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
             }
@@ -243,11 +227,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.reject_unresolved_annotation(ty);
         }
         let declared_return = closure.return_type.as_ref().map(|ty| self.resolve_type(ty));
+        // A bare type parameter belongs to the signature the call instantiates,
+        // and the closure's body determines it: `fold(0, |acc, x| acc + x)`.
         let body_expected = declared_return.or_else(|| {
-            expected_fn
-                .as_ref()
-                .map(|ef| ef.return_type)
-                .filter(|&rt| !self.is_rigid_type_param(rt))
+            expected_fn.as_ref().map(|ef| ef.return_type).filter(|&rt| {
+                !matches!(
+                    self.tysys.type_table.borrow().get(rt),
+                    ResolvedType::TypeParam { .. }
+                )
+            })
         });
         // Seed the closure's return type before walking the body, so a `?`
         // operator in the body (which checks `ctx.return_type` for

@@ -1364,10 +1364,9 @@ impl StoresWalker<'_> {
 
     /// A block's value is its final statement's expression.
     fn block_carries(&self, block: &TirBlock) -> Carried {
-        match block.stmts.last().map(|s| &s.kind) {
-            Some(TirStmtKind::Expr(e)) => self.carried(e),
-            _ => Carried::default(),
-        }
+        block
+            .tail_expr()
+            .map_or_else(Carried::default, |e| self.carried(e))
     }
 
     fn carried_args<'e>(

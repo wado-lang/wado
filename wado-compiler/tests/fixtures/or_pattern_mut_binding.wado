@@ -1,0 +1,88 @@
+// A `mut` binding that an or-pattern's alternatives share is one binding,
+// whichever alternative matched.
+
+variant E {
+    A(i32),
+    B(i32),
+    C,
+}
+
+variant S {
+    P(String),
+    Q(String),
+    R,
+}
+
+fn in_match(e: E) -> i32 {
+    return match e {
+        A(mut v) | B(mut v) => {
+            v += 100;
+            v
+        },
+        C => -1,
+    };
+}
+
+fn in_match_guard(e: E) -> i32 {
+    return match e {
+        A(mut v) | B(mut v) && v > 1 => {
+            v += 100;
+            v
+        },
+        _ => -1,
+    };
+}
+
+fn in_if_let(e: E) -> i32 {
+    if let A(mut v) | B(mut v) = e {
+        v += 100;
+        return v;
+    }
+    return -1;
+}
+
+fn in_let_else(e: E) -> i32 {
+    let A(mut v) | B(mut v) = e else {
+        return -1;
+    };
+    v += 100;
+    return v;
+}
+
+fn in_matches(e: E) -> bool {
+    return e matches { A(mut v) | B(mut v) && v > 1 };
+}
+
+fn string_payload(s: S) -> i32 {
+    return match s {
+        P(mut t) | Q(mut t) => {
+            t.push_str("!");
+            t.len()
+        },
+        R => -1,
+    };
+}
+
+export fn run() {
+    assert in_match(E::A(1)) == 101;
+    assert in_match(E::B(2)) == 102;
+    assert in_match(E::C) == -1;
+    assert in_match_guard(E::A(2)) == 102;
+    assert in_match_guard(E::B(3)) == 103;
+    assert in_match_guard(E::A(1)) == -1;
+    assert in_if_let(E::A(1)) == 101;
+    assert in_if_let(E::B(2)) == 102;
+    assert in_if_let(E::C) == -1;
+    assert in_let_else(E::A(1)) == 101;
+    assert in_let_else(E::B(2)) == 102;
+    assert in_let_else(E::C) == -1;
+    assert in_matches(E::A(2));
+    assert in_matches(E::B(2));
+    assert !in_matches(E::A(1));
+    assert string_payload(S::P("ab")) == 3;
+    assert string_payload(S::Q("abc")) == 4;
+    assert string_payload(S::R) == -1;
+}
+
+__DATA__
+{}

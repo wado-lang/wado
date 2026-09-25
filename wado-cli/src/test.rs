@@ -837,7 +837,7 @@ fn load_module(
             runtime_knobs,
         )?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
-        let linker = Arc::new(runtime::create_linker(&engine)?);
+        let linker = Arc::new(runtime::create_linker(&component)?);
         let profiler = match (profile, profiler_slot) {
             (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
                 let interval = Duration::from_millis(*interval_ms);
@@ -1611,7 +1611,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let module = job.module.as_ref();
 
     let (mut store, stdout_pipe, stderr_pipe) =
-        match runtime::create_test_store(&module.engine, preopened_dirs) {
+        match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
             Ok(v) => v,
             Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
         };

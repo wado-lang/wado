@@ -1,17 +1,19 @@
 //! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
-use std::ops::Deref;
+use std::mem::ManuallyDrop;
+use std::ops::{Deref, DerefMut};
 
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility};
+use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
 use crate::elaborator::call::DefaultTypeBinding;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
+use crate::elaborator::sem::decls::ModuleDecls;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
@@ -20,7 +22,7 @@ use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
-use crate::tir::{AnonStructId, StructDef, TirLocal, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Struct field info: module source and field definitions
@@ -107,6 +109,26 @@ pub(super) fn newtype_member_owner(
 }
 
 impl StructFieldInfo {
+    /// `decl` with its fields resolved to `fields`, in declaration order.
+    pub(crate) fn of_decl(
+        module_source: ModuleSource,
+        decl: &ast::StructDecl,
+        fields: Vec<(String, TypeId, Visibility)>,
+        type_param_type_ids: Vec<TypeId>,
+    ) -> Self {
+        Self {
+            name: decl.name.clone(),
+            module_source,
+            defined_at: decl.id,
+            fields,
+            field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
+            field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
+            field_wire_numbers: wire_numbers_of(&decl.fields),
+            type_params: RealTypeParams::of(&decl.type_params),
+            type_param_type_ids,
+        }
+    }
+
     /// Whether `Default` derives from the field defaults alone: every field
     /// declares one. A fieldless struct qualifies vacuously — it has exactly
     /// one value — which is what makes the `NoFields` marker a usable default
@@ -137,6 +159,32 @@ pub(crate) struct VariantCaseData {
     pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
     pub(crate) ast_id: AstId,
+}
+
+impl VariantCaseData {
+    /// `decl`'s cases, each payload resolved by `payload_of`; a case without
+    /// one carries `()`.
+    pub(crate) fn collect(
+        decl: &ast::VariantDecl,
+        mut payload_of: impl FnMut(&ast::Type) -> TypeId,
+    ) -> Vec<Self> {
+        decl.cases
+            .iter()
+            .map(|case| Self {
+                name: case.name.clone(),
+                payload: case
+                    .payload
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, &mut payload_of),
+                ast_id: case.id,
+            })
+            .collect()
+    }
+
+    /// Whether the case carries a payload, rather than being a unit case.
+    pub(super) fn has_payload(&self, table: &TypeTable) -> bool {
+        !matches!(table.get(self.payload), ResolvedType::Unit)
+    }
 }
 
 /// Variant info: module source, type parameters, and cases
@@ -182,16 +230,45 @@ pub(crate) struct EnumInfo {
     pub(super) case_index: hashmap::IndexMap<String, u32>,
 }
 
-impl EnumInfo {
-    pub(super) fn new(
+impl VariantInfo {
+    pub(super) fn of_decl(
         module_source: ModuleSource,
-        defined_at: AstId,
-        cases: Vec<EnumCaseData>,
+        decl: &ast::VariantDecl,
+        cases: Vec<VariantCaseData>,
+        type_param_type_ids: Vec<TypeId>,
     ) -> Self {
+        Self {
+            name: decl.name.clone(),
+            module_source,
+            defined_at: decl.id,
+            type_params: RealTypeParams::of(&decl.type_params),
+            cases,
+            type_param_type_ids,
+        }
+    }
+
+    /// The case named `name`, with its position.
+    pub(super) fn case_named(&self, name: &str) -> Option<(usize, &VariantCaseData)> {
+        self.cases.iter().enumerate().find(|(_, c)| c.name == name)
+    }
+}
+
+impl EnumInfo {
+    pub(super) fn of_decl(module_source: ModuleSource, decl: &ast::EnumDecl) -> Self {
+        let cases: Vec<EnumCaseData> = decl
+            .cases
+            .iter()
+            .enumerate()
+            .map(|(index, case)| EnumCaseData {
+                name: case.name.clone(),
+                index: index as u32,
+                ast_id: case.id,
+            })
+            .collect();
         let case_index = cases.iter().map(|c| (c.name.clone(), c.index)).collect();
         Self {
             module_source,
-            defined_at,
+            defined_at: decl.id,
             cases,
             case_index,
         }
@@ -221,7 +298,48 @@ pub(crate) struct FlagsInfo {
     pub(super) members: Vec<FlagsMemberData>,
 }
 
+<<<<<<< HEAD
 /// A declared `resource`, by its declaration.
+||||||| 03599b796
+/// Resource info: module source and method names
+/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
+/// Keep it for when wasi:sockets registration is re-enabled.
+=======
+impl FlagsInfo {
+    /// The most members a declaration holds: each one's bitmask is `1 << index`.
+    pub(super) const MAX_MEMBERS: usize = u32::BITS as usize;
+
+    pub(super) fn of_decl(
+        type_id: TypeId,
+        module_source: ModuleSource,
+        decl: &ast::FlagsDecl,
+    ) -> Self {
+        assert!(
+            decl.flags.len() <= Self::MAX_MEMBERS,
+            "a flags declaration wider than a word is rejected before this"
+        );
+        let members = decl
+            .flags
+            .iter()
+            .enumerate()
+            .map(|(i, m)| FlagsMemberData {
+                name: m.name.clone(),
+                bitmask: 1u32 << i,
+                ast_id: m.id,
+            })
+            .collect();
+        Self {
+            type_id,
+            module_source,
+            members,
+        }
+    }
+}
+
+/// Resource info: module source and method names
+/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
+/// Keep it for when wasi:sockets registration is re-enabled.
+>>>>>>> origin/main
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
@@ -237,6 +355,15 @@ pub(crate) struct GenericNewtypeInfo {
     /// [`StructFieldInfo::type_params`].
     pub(super) type_params: RealTypeParams,
     pub(super) base_type_ast: ast::Type,
+}
+
+impl GenericNewtypeInfo {
+    pub(crate) fn of_decl(decl: &ast::Newtype) -> Self {
+        Self {
+            type_params: RealTypeParams::of(&decl.type_params),
+            base_type_ast: decl.ty.clone(),
+        }
+    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -292,6 +419,12 @@ pub enum TypeError {
     TypeMismatch {
         expected: String,
         found: String,
+        span: Span,
+    },
+
+    /// A template passed to a tag whose parameter it cannot satisfy.
+    TagParamNotTemplate {
+        param: String,
         span: Span,
     },
 
@@ -723,6 +856,16 @@ pub enum TypeError {
         assoc_name: String,
         expected: String,
         actual: String,
+        span: Span,
+    },
+
+    /// A reflect member called on a type parameter whose bound binds no pack
+    /// (`T: ReflectTemplate` without `Holes = [..V]`): the member reads one.
+    MissingReflectPackBound {
+        trait_name: String,
+        type_param: String,
+        method: String,
+        pack_bound: String,
         span: Span,
     },
 
@@ -1216,6 +1359,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// `#[cm(..., classes = ...)]` numbers an `extends` tree in a way a handle
+    /// cannot be tested against, or a type pattern narrows to an unnumbered resource.
+    ResourceClasses {
+        message: String,
+        span: Span,
+    },
+
     /// A bare generic function name was used as a value with no expected
     /// `fn(...)` type to drive inference. The function type depends on
     /// type arguments that have not been supplied. The fix is to either
@@ -1313,6 +1463,11 @@ impl TypeError {
             } => (
                 Code::TypeMismatch,
                 format!("type mismatch: expected '{expected}', found '{found}'"),
+                *span,
+            ),
+            TypeError::TagParamNotTemplate { param, span } => (
+                Code::TypeMismatch,
+                format!("a template tag's parameter must be bound by `ReflectTemplate`, not `{param}`"),
                 *span,
             ),
             TypeError::UnknownType { name, span } => {
@@ -1884,6 +2039,20 @@ impl TypeError {
                 ),
                 *span,
             ),
+            TypeError::MissingReflectPackBound {
+                trait_name,
+                type_param,
+                method,
+                pack_bound,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
+                     `{trait_name}<{pack_bound}>`"
+                ),
+                *span,
+            ),
             TypeError::UnknownBound { name, span } => (
                 Code::UnknownType,
                 format!("'{name}' is not a declared trait"),
@@ -2423,6 +2592,9 @@ impl TypeError {
             TypeError::ResourceExtends { message, span } => {
                 (Code::ResourceExtends, message.clone(), *span)
             }
+            TypeError::ResourceClasses { message, span } => {
+                (Code::ResourceClasses, message.clone(), *span)
+            }
             TypeError::AmbiguousResourceMethod {
                 method,
                 resource,
@@ -2648,6 +2820,33 @@ pub(super) struct MethodInfo {
     pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
 }
 
+impl MethodInfo {
+    /// A `&self` method taking nothing that no declaration backs: a tuple
+    /// builtin, or the placeholder a failed lookup continues with.
+    pub(super) fn undeclared(return_type: TypeId) -> Self {
+        Self {
+            method_def: None,
+            return_type,
+            self_kind: ast::SelfKind::Ref,
+            param_types: vec![],
+            param_is_mut: vec![],
+            param_defaults: vec![],
+            param_names: vec![],
+            owner: MethodOwner::Receiver,
+            cm_name: None,
+            is_ref_impl: false,
+            method_type_param_ids: vec![],
+            method_own_params: vec![],
+            impl_module: None,
+            from_concrete_impl: false,
+            consumes_self: false,
+            inherent_visibility: None,
+            defaults_module: None,
+            impl_type_bindings: Vec::new(),
+        }
+    }
+}
+
 /// Labeled block expression target for tracking break types
 #[derive(Debug, Clone)]
 pub(super) struct LabeledBlockTarget {
@@ -2725,11 +2924,8 @@ pub(super) struct FunctionContext {
     /// `assert` label, a `for` body, an iterator local, a template's holes. Read
     /// through [`FunctionContext::fresh_serial`].
     next_internal: u32,
-    /// Stack of labels for re-targeting naked `continue` inside C-style
-    /// `for` bodies. When non-empty, `resolve_continue` emits
-    /// `break <last>` instead of a bare `continue`, so the for-loop's
-    /// `update` expression runs before the next iteration. Empty outside
-    /// a C-style for body.
+    /// The body labels of the enclosing C-style `for`s, innermost last; reify
+    /// lowers a naked `continue` to `break <last>` so `update` runs.
     pub(super) for_continue_labels: Vec<String>,
     /// The binding site whose pattern is being resolved, when it must match
     /// every value. `None` inside `match`, `if let` and `while let`.
@@ -2765,29 +2961,206 @@ pub(super) struct FunctionContext {
     pub(super) variadic_enumerate_indices: Vec<u32>,
 }
 
+/// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
+/// the context, and puts the enclosing value back on drop.
+#[must_use]
+pub(super) struct FieldFrame<'c, T: Default> {
+    ctx: &'c mut FunctionContext,
+    field: fn(&mut FunctionContext) -> &mut T,
+    enclosing: T,
+}
+
+impl<T: Default> Deref for FieldFrame<'_, T> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T: Default> DerefMut for FieldFrame<'_, T> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T: Default> Drop for FieldFrame<'_, T> {
+    fn drop(&mut self) {
+        *(self.field)(self.ctx) = std::mem::take(&mut self.enclosing);
+    }
+}
+
+/// A stretch of the walk with one more entry on a `FunctionContext` stack.
+/// Derefs to the context, and pops the entry on drop.
+#[must_use]
+pub(super) struct StackFrame<'c, T> {
+    ctx: &'c mut FunctionContext,
+    stack: fn(&mut FunctionContext) -> &mut Vec<T>,
+    depth: usize,
+}
+
+impl<T> Deref for StackFrame<'_, T> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T> DerefMut for StackFrame<'_, T> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl<T> Drop for StackFrame<'_, T> {
+    fn drop(&mut self) {
+        let stack = (self.stack)(self.ctx);
+        assert_eq!(stack.len(), self.depth, "a frame pops the entry it pushed");
+        stack.pop();
+    }
+}
+
+/// A labeled block's break target and label, both in scope. Derefs to the
+/// context, and pops both on drop.
+#[must_use]
+pub(super) struct LabeledBlockFrame<'c> {
+    ctx: &'c mut FunctionContext,
+    targets_depth: usize,
+    labels_depth: usize,
+}
+
+impl LabeledBlockFrame<'_> {
+    fn pop(&mut self) -> LabeledBlockTarget {
+        assert_eq!(
+            self.ctx.active_labels.len(),
+            self.labels_depth,
+            "a labeled block pops the label it pushed"
+        );
+        assert_eq!(
+            self.ctx.labeled_block_targets.len(),
+            self.targets_depth,
+            "a labeled block pops the target it pushed"
+        );
+        self.ctx.active_labels.pop();
+        self.ctx
+            .labeled_block_targets
+            .pop()
+            .expect("a labeled block's target is on the stack")
+    }
+
+    /// Leave the block, handing back the breaks it collected.
+    pub(super) fn finish(self) -> LabeledBlockTarget {
+        ManuallyDrop::new(self).pop()
+    }
+}
+
+impl Deref for LabeledBlockFrame<'_> {
+    type Target = FunctionContext;
+    fn deref(&self) -> &FunctionContext {
+        self.ctx
+    }
+}
+
+impl DerefMut for LabeledBlockFrame<'_> {
+    fn deref_mut(&mut self) -> &mut FunctionContext {
+        self.ctx
+    }
+}
+
+impl Drop for LabeledBlockFrame<'_> {
+    fn drop(&mut self) {
+        self.pop();
+    }
+}
+
 impl FunctionContext {
+    pub(super) fn replacing<T: Default>(
+        &mut self,
+        field: fn(&mut FunctionContext) -> &mut T,
+        value: T,
+    ) -> FieldFrame<'_, T> {
+        let enclosing = std::mem::replace(field(self), value);
+        FieldFrame {
+            ctx: self,
+            field,
+            enclosing,
+        }
+    }
+
+    pub(super) fn pushing<T>(
+        &mut self,
+        stack: fn(&mut FunctionContext) -> &mut Vec<T>,
+        entry: T,
+    ) -> StackFrame<'_, T> {
+        stack(self).push(entry);
+        let depth = stack(self).len();
+        StackFrame {
+            ctx: self,
+            stack,
+            depth,
+        }
+    }
+
+    /// A lexical block, whose bindings go out of scope with the frame.
+    pub(super) fn enter_scope(&mut self) -> StackFrame<'_, IndexMap<String, LocalVar>> {
+        self.pushing(|ctx| &mut ctx.scopes, IndexMap::default())
+    }
+
+    /// A stretch where `break label` names a known target.
+    pub(super) fn enter_label(&mut self, label: String) -> StackFrame<'_, String> {
+        self.pushing(|ctx| &mut ctx.active_labels, label)
+    }
+
+    /// A loop's body, where a naked `continue` targets this loop and not an
+    /// enclosing C-style `for`.
+    pub(super) fn enter_loop(&mut self) -> FieldFrame<'_, Vec<String>> {
+        self.replacing(|ctx| &mut ctx.for_continue_labels, Vec::new())
+    }
+
+    /// A stretch where the field `field` selects also holds `items`.
+    fn extending<T: Default + Clone + Extend<I>, I>(
+        &mut self,
+        field: fn(&mut FunctionContext) -> &mut T,
+        items: impl IntoIterator<Item = I>,
+    ) -> FieldFrame<'_, T> {
+        let mut extended = field(self).clone();
+        extended.extend(items);
+        self.replacing(field, extended)
+    }
+
+    /// A stretch where `subscripts` name `&mut` places rather than values read.
+    pub(super) fn marking_mut_places(
+        &mut self,
+        subscripts: &[AstId],
+    ) -> FieldFrame<'_, IndexSet<AstId>> {
+        self.extending(
+            |ctx| &mut ctx.mut_place_subscripts,
+            subscripts.iter().copied(),
+        )
+    }
+
+    /// A variadic loop's body, where `index` is a constant subscript.
+    pub(super) fn enter_enumerate_body(&mut self, index: Option<u32>) -> FieldFrame<'_, Vec<u32>> {
+        self.extending(|ctx| &mut ctx.variadic_enumerate_indices, index)
+    }
+
     /// Enter a labeled block in either position, so a `break LABEL` inside
     /// resolves to the innermost block of that name.
-    pub(super) fn push_labeled_block_frame(
+    pub(super) fn enter_labeled_block(
         &mut self,
         label: String,
         expected_type: Option<TypeId>,
-    ) {
+    ) -> LabeledBlockFrame<'_> {
         self.labeled_block_targets.push(LabeledBlockTarget {
             label: label.clone(),
             break_types: Vec::new(),
             expected_type,
         });
         self.active_labels.push(label);
-    }
-
-    pub(super) fn pop_labeled_block_frame(&mut self) -> LabeledBlockTarget {
-        self.active_labels
-            .pop()
-            .expect("labeled block frame pushed before pop");
-        self.labeled_block_targets
-            .pop()
-            .expect("labeled block frame pushed before pop")
+        LabeledBlockFrame {
+            targets_depth: self.labeled_block_targets.len(),
+            labels_depth: self.active_labels.len(),
+            ctx: self,
+        }
     }
 
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
@@ -2919,16 +3292,6 @@ impl FunctionContext {
         self.next_local
     }
 
-    /// Enter a new scope (for blocks, if/while/for/loop bodies)
-    pub(super) fn enter_scope(&mut self) {
-        self.scopes.push(IndexMap::default());
-    }
-
-    /// Exit the current scope
-    pub(super) fn exit_scope(&mut self) {
-        self.scopes.pop();
-    }
-
     /// Add a local variable to the current scope.
     ///
     /// `defining_ast_id` identifies the source AST node that introduced this
@@ -2982,6 +3345,24 @@ impl FunctionContext {
         index
     }
 
+    /// Reach local `index` as `name` from the current scope too, the way a
+    /// minted local stands for a binding source can spell.
+    pub(super) fn name_local(&mut self, name: String, index: u32) {
+        let TirLocal {
+            type_id, is_mut, ..
+        } = self.locals[index as usize];
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            name,
+            LocalVar {
+                type_id,
+                index,
+                is_mut,
+                defining_ast_id: None,
+            },
+        );
+    }
+
     /// Look up a variable by name (searches from innermost to outermost scope)
     pub(super) fn lookup(&self, name: &str) -> Option<&LocalVar> {
         for scope in self.scopes.iter().rev() {
@@ -2990,6 +3371,14 @@ impl FunctionContext {
             }
         }
         None
+    }
+
+    /// Whether `expr` names the index of an enclosing variadic `.enumerate()`,
+    /// the one non-literal subscript a pack-typed tuple admits.
+    pub(super) fn is_variadic_enumerate_index(&self, expr: &ast::Expr) -> bool {
+        matches!(expr, ast::Expr::Ident(ident)
+            if self.lookup(&ident.name)
+                .is_some_and(|local| self.variadic_enumerate_indices.contains(&local.index)))
     }
 
     /// The binding `name` names here: one this frame owns, or one it reaches
@@ -3007,16 +3396,11 @@ impl FunctionContext {
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        let scopes = std::mem::replace(&mut self.scopes, vec![IndexMap::default()]);
-        let outer_locals = std::mem::take(&mut self.outer_locals);
-        let deref_overrides = std::mem::take(&mut self.deref_overrides);
-        let outer_box_types = std::mem::take(&mut self.outer_box_types);
-        let result = body(self);
-        self.scopes = scopes;
-        self.outer_locals = outer_locals;
-        self.deref_overrides = deref_overrides;
-        self.outer_box_types = outer_box_types;
-        result
+        let mut scopes = self.replacing(|ctx| &mut ctx.scopes, vec![IndexMap::default()]);
+        let mut outer = scopes.replacing(|ctx| &mut ctx.outer_locals, IndexMap::default());
+        let mut derefs = outer.replacing(|ctx| &mut ctx.deref_overrides, IndexMap::default());
+        let mut boxes = derefs.replacing(|ctx| &mut ctx.outer_box_types, IndexMap::default());
+        body(&mut boxes)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.
@@ -3322,6 +3706,80 @@ impl ParamSlot {
     }
 }
 
+/// Every data declaration's resolved shape, keyed by declaration.
+#[derive(Default, Clone)]
+pub(crate) struct DataDecls {
+    pub(crate) newtypes: IndexMap<DefId, TypeId>,
+    pub(crate) generic_newtypes: IndexMap<DefId, GenericNewtypeInfo>,
+    pub(crate) struct_fields: IndexMap<DefId, StructFieldInfo>,
+    pub(crate) variant_cases: IndexMap<DefId, VariantInfo>,
+    pub(crate) enum_cases: IndexMap<DefId, EnumInfo>,
+    pub(crate) flags_cases: IndexMap<DefId, FlagsInfo>,
+    pub(crate) resource_types: IndexMap<DefId, ResourceInfo>,
+}
+
+impl DataDecls {
+    /// Declare `decl` as a distinct flags type, which is also a type name.
+    pub(super) fn declare_flags(
+        &mut self,
+        type_table: &RefCell<TypeTable>,
+        def: DefId,
+        module_source: ModuleSource,
+        decl: &ast::FlagsDecl,
+    ) {
+        let flags_type = type_table.borrow_mut().make_flags(def);
+        type_table
+            .borrow_mut()
+            .register_decl_type(decl.id, flags_type);
+        self.newtypes.insert(def, flags_type);
+        self.flags_cases
+            .insert(def, FlagsInfo::of_decl(flags_type, module_source, decl));
+    }
+
+    /// Declare the concrete newtype `decl_id` over `base`, which is also a type name.
+    pub(crate) fn declare_newtype(
+        &mut self,
+        type_table: &RefCell<TypeTable>,
+        def: DefId,
+        decl_id: AstId,
+        base: TypeId,
+    ) {
+        let newtype_id = type_table.borrow_mut().make_newtype(def, base);
+        type_table
+            .borrow_mut()
+            .register_decl_type(decl_id, newtype_id);
+        self.newtypes.insert(def, newtype_id);
+    }
+
+    /// Every declaration any table holds. A `flags` type is in two.
+    pub(crate) fn declarations(&self) -> impl Iterator<Item = DefId> + '_ {
+        self.known_types()
+            .chain(self.resource_types.keys().copied())
+    }
+
+    /// [`Self::declarations`] less the resources, which impl-block inference
+    /// must not read as a known type name (`impl Request { … }`).
+    pub(crate) fn known_types(&self) -> impl Iterator<Item = DefId> + '_ {
+        let Self {
+            newtypes,
+            generic_newtypes,
+            struct_fields,
+            variant_cases,
+            enum_cases,
+            flags_cases,
+            resource_types: _,
+        } = self;
+        struct_fields
+            .keys()
+            .chain(variant_cases.keys())
+            .chain(enum_cases.keys())
+            .chain(flags_cases.keys())
+            .chain(newtypes.keys())
+            .chain(generic_newtypes.keys())
+            .copied()
+    }
+}
+
 /// Read-only view resolving a type name from a module's perspective without
 /// cloning per-module maps. Precedence, highest first: local additions found
 /// during resolution, the current module's own definitions, then its imports
@@ -3333,12 +3791,10 @@ pub(crate) struct TypeLookup<'a> {
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
     pub(crate) resolutions: &'a Resolutions,
-    /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
-    /// in type position is canonicalized to its `ns$Type` alias before any
-    /// registry lookup (`sem::imports::canonical_ns_ref`). Collection passes
-    /// that have no import context pass an empty map (ns-qualified type
-    /// references only appear in resolved bodies).
+    /// Namespace-import aliases (`use ns from "..."`), by which a `ns::Type`
+    /// reference canonicalizes to `ns$Type` (`sem::imports::canonical_ns_ref`).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
+<<<<<<< HEAD
     pub(crate) all_newtypes: &'a IndexMap<DefId, TypeId>,
     pub(crate) all_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
     pub(crate) all_variant_cases: &'a IndexMap<DefId, VariantInfo>,
@@ -3361,6 +3817,42 @@ pub(crate) struct TypeLookup<'a> {
     /// The trait declarations, which answer which bound declares an associated
     /// type. `None` for the collection passes that run before they exist.
     pub(crate) decls: Option<&'a TraitEnv>,
+||||||| 03599b796
+    pub(crate) all_newtypes: &'a IndexMap<DefId, TypeId>,
+    pub(crate) all_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
+    pub(crate) all_variant_cases: &'a IndexMap<DefId, VariantInfo>,
+    pub(crate) all_enum_cases: &'a IndexMap<DefId, EnumInfo>,
+    pub(crate) all_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
+    pub(crate) all_resource_types: &'a IndexMap<DefId, ResourceInfo>,
+    pub(crate) all_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
+    /// This walk's own additions, keyed by declaration like the `all_*` tables
+    /// above. See `ModuleDecls::local_struct_fields`.
+    pub(crate) local_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
+    pub(crate) local_newtypes: &'a IndexMap<DefId, TypeId>,
+    pub(crate) local_enum_cases: &'a IndexMap<DefId, EnumInfo>,
+    pub(crate) local_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
+    pub(crate) local_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
+    pub(crate) local_variant_cases: &'a IndexMap<DefId, VariantInfo>,
+    /// Fields of the anonymous shapes this walk interned, by shape id.
+    pub(crate) anon_struct_fields: &'a IndexMap<AnonStructId, StructFieldInfo>,
+    /// The local items in scope at the walk's position, highest precedence.
+    pub(crate) fn_local_items: &'a IndexMap<String, DefId>,
+    /// The declaration indexes — the frame derivation, for a caller holding a
+    /// rendered head rather than the site that wrote one. They hold what
+    /// modules *declare*, so no import alias can steer them, and they decline
+    /// when several modules declare the name. `None` for the collection passes
+    /// that run before the indexes exist; every name they resolve is written,
+    /// so its site answers.
+    pub(crate) decls: Option<&'a TraitEnv>,
+=======
+    pub(crate) program: &'a DataDecls,
+    /// This walk's own additions, read ahead of `program`: its local data
+    /// declarations, anonymous shapes and function-local items.
+    pub(crate) walk: &'a ModuleDecls,
+    /// The declaration indexes, for a caller holding a rendered head rather than
+    /// its site. No import alias steers them; a name several modules declare misses.
+    pub(crate) decls: &'a TraitEnv,
+>>>>>>> origin/main
 }
 
 impl<'a> TypeLookup<'a> {
@@ -3373,7 +3865,7 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {
         match head {
             StructDef::Decl(def) => self.struct_fields_of(def),
-            StructDef::Anon(shape) => self.anon_struct_fields.get(&shape),
+            StructDef::Anon(shape) => self.walk.anon_struct_fields.get(&shape),
         }
     }
 
@@ -3519,67 +4011,75 @@ impl<'a> TypeLookup<'a> {
         cycles
     }
 
-    /// The fields of the struct `def` declares.
-    ///
-    /// The declaration is the key: nothing here re-resolves a spelling, so a
-    /// caller that reached `def` off a type cannot land on another module's
-    /// same-named struct.
+    /// `def`'s entry in the table `pick` names, this walk's own ahead of the
+    /// program's. Keyed by declaration, so no spelling is re-resolved.
+    fn data_of<T>(
+        &self,
+        def: DefId,
+        pick: impl Fn(&'a DataDecls) -> &'a IndexMap<DefId, T>,
+    ) -> Option<&'a T> {
+        pick(&self.walk.local)
+            .get(&def)
+            .or_else(|| pick(self.program).get(&def))
+    }
+
     pub(super) fn struct_fields_of(&self, def: DefId) -> Option<&'a StructFieldInfo> {
-        self.local_struct_fields
-            .get(&def)
-            .or_else(|| self.all_struct_fields.get(&def))
+        self.data_of(def, |d| &d.struct_fields)
     }
 
-    /// The cases of the variant `def` declares.
     pub(super) fn variant_cases_of(&self, def: DefId) -> Option<&'a VariantInfo> {
-        self.local_variant_cases
-            .get(&def)
-            .or_else(|| self.all_variant_cases.get(&def))
+        self.data_of(def, |d| &d.variant_cases)
     }
 
-    /// The cases of the enum `def` declares.
     pub(super) fn enum_cases_of(&self, def: DefId) -> Option<&'a EnumInfo> {
-        self.local_enum_cases
-            .get(&def)
-            .or_else(|| self.all_enum_cases.get(&def))
+        self.data_of(def, |d| &d.enum_cases)
     }
 
-    /// The members of the flags type `def` declares.
     pub(super) fn flags_members_of(&self, def: DefId) -> Option<&'a FlagsInfo> {
-        self.local_flags_cases
-            .get(&def)
-            .or_else(|| self.all_flags_cases.get(&def))
+        self.data_of(def, |d| &d.flags_cases)
     }
 
-    /// The resource `def` declares.
     pub(super) fn resource_type_of(&self, def: DefId) -> Option<&'a ResourceInfo> {
-        self.all_resource_types.get(&def)
+        self.data_of(def, |d| &d.resource_types)
     }
 
-    /// The generic newtype `def` declares.
     pub(super) fn generic_newtype_of(&self, def: DefId) -> Option<&'a GenericNewtypeInfo> {
-        self.local_generic_newtypes
-            .get(&def)
-            .or_else(|| self.all_generic_newtypes.get(&def))
+        self.data_of(def, |d| &d.generic_newtypes)
     }
 
     /// The type the newtype (or `flags` type) `def` declares.
     pub(super) fn newtype_of(&self, def: DefId) -> Option<TypeId> {
-        self.local_newtypes
-            .get(&def)
-            .or_else(|| self.all_newtypes.get(&def))
-            .copied()
+        self.data_of(def, |d| &d.newtypes).copied()
     }
 
+<<<<<<< HEAD
     /// Which of `bounds` declares `assoc_name`. `None` before the trait
     /// declarations exist, since no bound can be asked what it declares then.
+||||||| 03599b796
+    /// Which of `bounds` declares `assoc_name`. `None` where the declaration
+    /// indexes are absent, since no bound can be asked what it declares then.
+=======
+    /// Which of `bounds` declares `assoc_name`.
+>>>>>>> origin/main
     pub(super) fn bound_declaring_assoc_type(
         &self,
         bounds: &[ast::TraitBound],
         assoc_name: &str,
     ) -> Option<DefId> {
+<<<<<<< HEAD
         self.decls?
             .bound_declaring_assoc_type(bounds, assoc_name, self.resolutions)
+||||||| 03599b796
+        self.decls?
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.declaration_at(Some(bound.id), &bound.name)
+            })
+=======
+        self.decls
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.declaration_at(Some(bound.id), &bound.name)
+            })
+>>>>>>> origin/main
     }
 
     /// The declaration a type reference names.
@@ -3593,11 +4093,29 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
         let canon = canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
-        if let Some(def) = self.fn_local_items.get(name) {
+        if let Some(def) = self.walk.fn_local_items.get(name) {
             return Some(*def);
         }
         self.resolutions
+<<<<<<< HEAD
             .resolve_in(self.current_module_source, name)
+||||||| 03599b796
+            .imported_as(self.current_module_source, name)
+            .or_else(|| {
+                self.decls?
+                    .decls_named(name)
+                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
+            })
+            .or_else(|| self.resolutions.prelude_decl(name))
+=======
+            .imported_as(self.current_module_source, name)
+            .or_else(|| {
+                self.decls
+                    .decls_named(name)
+                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
+            })
+            .or_else(|| self.resolutions.prelude_decl(name))
+>>>>>>> origin/main
     }
 }
 
@@ -3646,13 +4164,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) receiver: FqTypeName,
 }
 
-/// Complete, Self-substituted description of a trait method lookup, produced by
-/// [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed by
-/// [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Always populated,
-/// so operator dispatch cannot build a method call without argument types.
-///
-/// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
-/// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
+/// A trait method an operator dispatches to, Self-substituted;
+/// [`Elaborator::dispatch_trait_op_method`] builds the call.
 pub(super) struct ResolvedTraitMethod {
     /// The declaration dispatch selected — an `impl` block's method, or the
     /// *trait's* where the receiver is a type parameter and only
@@ -3687,6 +4200,63 @@ pub(super) struct ResolvedTraitMethod {
     /// concrete type. Propagated into `LocalMethodName::is_type_param_receiver`
     /// so monomorphization substitutes it correctly.
     pub(super) is_type_param_receiver: bool,
+}
+
+impl ResolvedTraitMethod {
+    /// A method a type parameter's bound supplies; which impl answers is
+    /// monomorphization's to say.
+    pub(super) fn through_bound(
+        param: &str,
+        trait_name: FqTraitName,
+        method_name: &str,
+        info: MethodInfo,
+    ) -> Self {
+        Self {
+            method_def: info.method_def,
+            trait_name,
+            method_name: method_name.to_string(),
+            impl_def: None,
+            impl_name: param.to_string(),
+            impl_type_id: None,
+            self_kind: info.self_kind,
+            return_type: info.return_type,
+            param_types: info.param_types,
+            is_type_param_receiver: true,
+        }
+    }
+
+    /// `method_name` of the operator impl `found`.
+    pub(super) fn of_operator_impl(
+        tysys: &TypeSystem,
+        found: OperatorImpl,
+        method_name: &str,
+    ) -> Self {
+        let OperatorImpl {
+            info,
+            impl_name,
+            impl_type_id,
+        } = found;
+        Self {
+            method_def: tysys.declared_method(info.impl_def, method_name),
+            trait_name: info.trait_name,
+            method_name: method_name.to_string(),
+            impl_def: Some(info.impl_def),
+            impl_name,
+            impl_type_id: Some(impl_type_id),
+            self_kind: info.self_kind,
+            return_type: info.output_type,
+            param_types: info.rhs_type.into_iter().collect(),
+            is_type_param_receiver: false,
+        }
+    }
+}
+
+/// An operator trait impl, with the type it was found on: the receiver's own,
+/// or a newtype's base where dispatch fell back to it.
+pub(super) struct OperatorImpl {
+    pub(super) info: ArithmeticTraitInfo,
+    pub(super) impl_name: String,
+    pub(super) impl_type_id: TypeId,
 }
 
 /// A `From<Array<E>>` impl a literal can coerce through.

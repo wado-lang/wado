@@ -11,6 +11,7 @@ use {
     Vis,
     wado,
     char_range_pat,
+    byte_string_literal,
 } from "./wadopoet.wado";
 
 
@@ -99,6 +100,25 @@ test "next_id generates unique ids" {
     assert a == 0;
     assert b == 1;
     assert c == 2;
+}
+
+test "hoist_fn defines each distinct key once, where write_hoisted is" {
+    let mut w = CodeWriter::new();
+    let define = |name: &String| `fn ${*name}() {}\n`;
+    let a = w.hoist_fn("x", "f", define);
+    let b = w.hoist_fn("y", "f", define);
+    let again = w.hoist_fn("x", "f", define);
+    w.line("// body");
+    w.write_hoisted();
+    assert a == "f0" && b == "f1" && again == "f0";
+    assert w.to_string() == "// body\nfn f0() {}\nfn f1() {}\n", `got: ${w.to_string()}`;
+}
+
+#[expect_trap]
+test "to_string refuses a hoisted definition never written" {
+    let mut w = CodeWriter::new();
+    w.hoist_fn("x", "f", |name: &String| `fn ${*name}() {}\n`);
+    w.to_string();
 }
 
 test "else_begin for if/else-if chain" {
@@ -544,6 +564,16 @@ test "char_range_pat escapes both endpoints" {
     let mut expected = String::new();
     expected.push_str("'\\t'..='\\n'");
     assert `${char_range_pat('\t'..='\n')}` == expected, `got: ${char_range_pat('\t'..='\n')}`;
+}
+
+test "byte_string_literal keeps printable ASCII and escapes the rest" {
+    assert byte_string_literal(b"a\"\\ \x00\xff\n~") == "b\"a\\x22\\x5c \\x00\\xff\\x0a~\"";
+}
+
+test "byte_string_literal reads back byte for byte" {
+    let bytes = b"\x89PNG\r\n\x1a\n";
+    assert byte_string_literal(&bytes) == "b\"\\x89PNG\\x0d\\x0a\\x1a\\x0a\"";
+    assert byte_string_literal(b"") == "b\"\"";
 }
 
 test "ImplSpec basic" {

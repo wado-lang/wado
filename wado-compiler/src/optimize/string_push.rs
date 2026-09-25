@@ -285,11 +285,7 @@ impl AppendFuseRule {
         }
 
         let total = self.sum_expr(engine, &terms, span);
-        let at = engine.alloc_local(
-            format!("$fuse_at_{}", engine.locals().len()),
-            TypeTable::I32,
-            /* is_mut */ false,
-        );
+        let at = engine.alloc_minted_local("fuse_at", TypeTable::I32, /* is_mut */ false);
         let reserve = self.call(
             engine,
             self.ids.reserve_uninit,
@@ -347,11 +343,7 @@ impl AppendFuseRule {
         span: Span,
         stmts: &mut Vec<StmtId>,
     ) -> u32 {
-        let local = engine.alloc_local(
-            format!("$fuse_len_{}", engine.locals().len()),
-            TypeTable::I32,
-            /* is_mut */ false,
-        );
+        let local = engine.alloc_minted_local("fuse_len", TypeTable::I32, /* is_mut */ false);
         let source = engine.clone_expr(arg);
         let call = engine.alloc_expr(
             ExprKind::method_call(self.ids.len, Operand::Expr(source), false, vec![]),
@@ -538,7 +530,7 @@ fn let_stmt(
     value: Operand,
     span: Span,
 ) -> StmtId {
-    let name = engine.locals()[local as usize].name.clone();
+    let name = engine.local_name(local);
     engine.alloc_stmt(
         StmtKind::Let {
             name,
@@ -554,7 +546,7 @@ fn let_stmt(
 }
 
 fn local_operand(engine: &mut Engine, local: u32, span: Span) -> Operand {
-    let name = engine.locals()[local as usize].name.clone();
+    let name = engine.local_name(local);
     Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, TypeTable::I32, span))
 }
 
@@ -578,10 +570,10 @@ fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
             .map(|f| f.value)
     };
     let repr = field(SeqField::Backing)?;
-    let ExprKind::PackedArray(bytes) = &body.exprs[repr.as_expr()?].kind else {
+    let ExprKind::PackedArray(data) = &body.exprs[repr.as_expr()?].kind else {
         return None;
     };
-    let backing = i32::try_from(bytes.len()).ok()?;
+    let backing = i32::try_from(data.as_bytes()?.len()).ok()?;
     let len = field(SeqField::Len)
         .and_then(|op| body.operand_const_int(op))
         .and_then(|v| i32::try_from(v).ok())

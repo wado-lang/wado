@@ -10,7 +10,14 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+<<<<<<< HEAD
 use crate::defs::DefId;
+||||||| 03599b796
+use crate::defs::{DefId, DefKind};
+=======
+use super::tysys::TypeSystem;
+use crate::defs::{DefId, DefKind};
+>>>>>>> origin/main
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
@@ -48,9 +55,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // here remain in the function frame). A new lexical scope is opened
         // so handler-introduced bindings, if any, don't leak — matches how
         // regular block expressions behave.
-        ctx.enter_scope();
-        self.resolve_block_value(&with_expr.body, ctx, expected_type);
-        ctx.exit_scope();
+        self.resolve_block_value(&with_expr.body, &mut ctx.enter_scope(), expected_type);
 
         // `with ... do { ... }` is an expression: it evaluates to its body
         // block's value. The shared block-result rule types it from the
@@ -118,8 +123,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the handler value expression in the outer scope.
         let handler = self.resolve_expr(&binding.handler, ctx, None);
+<<<<<<< HEAD
         // A handler's `impl Effect for T` is indexed by `T`, not `&T`.
         let handler_type = self.tysys.through_ref(handler);
+||||||| 03599b796
+        let handler_type = self.handler_underlying_type(handler);
+=======
+        let handler_type = self.tysys.handler_underlying_type(handler);
+>>>>>>> origin/main
 
         // Trait/resource type args at this `with E => h do` site (e.g.
         // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
@@ -233,7 +244,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         next_bundle_group: &mut u32,
     ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
+<<<<<<< HEAD
         let handler_type = self.tysys.through_ref(handler);
+||||||| 03599b796
+        let handler_type = self.handler_underlying_type(handler);
+=======
+        let handler_type = self.tysys.handler_underlying_type(handler);
+>>>>>>> origin/main
 
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
@@ -266,7 +283,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let type_name = self.handler_impl_target_name(handler_type);
+        let type_name = self.tysys.handler_impl_target_name(handler_type);
         let effects = self.collect_effect_impls_for_type(handler_type);
 
         if effects.is_empty() {
@@ -328,7 +345,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(trait_ref) = self.tysys.trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
+<<<<<<< HEAD
             if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
+||||||| 03599b796
+            // Accept either an effect or a resource declaration. The
+            // dispatch synthesis pass treats both uniformly.
+            if !(self.tysys.trait_env.effect_decl_index.contains(&trait_ref)
+                || self
+                    .tysys
+                    .trait_env
+                    .resource_decl_index
+                    .contains(&trait_ref))
+            {
+=======
+            // The dispatch synthesis pass treats an effect and a resource alike.
+            if !self.tysys.is_effect_or_resource_decl(trait_ref) {
+>>>>>>> origin/main
                 continue;
             }
             let type_args = self
@@ -373,33 +405,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
         // block written for other arguments answers for nothing.
         let fills = |key: &DefId| {
+<<<<<<< HEAD
             let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
             written.len() == trait_type_args.len()
                 && std::iter::zip(written, trait_type_args)
                     .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
+||||||| 03599b796
+            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
+                sig.trait_type_args.len() == trait_type_args.len()
+                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
+                        .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
+            })
+=======
+            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
+                sig.trait_type_args.len() == trait_type_args.len()
+                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
+                        .all(|(slot, arg)| slot == arg || self.tysys.is_open_slot(*slot))
+            })
+>>>>>>> origin/main
         };
         keys.iter()
             .find(|key| implements(key) && fills(key))
             .copied()
     }
 
-    /// Whether `type_id` is a slot an impl block left for monomorphization,
-    /// rather than a type it committed to.
-    fn is_open_slot(&self, type_id: TypeId) -> bool {
-        matches!(
-            self.tysys.type_table.borrow().get(type_id),
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-        )
-    }
-
     /// The impl-index key for a handler type: its own declaration, not what
     /// the installing module's scope makes of the written name — the handler
     /// may be declared elsewhere, or shadowed by a same-named type here.
     fn handler_impl_target(&self, handler_type: TypeId) -> ImplTargetKey {
-        let name = self.handler_impl_target_name(handler_type);
+        let name = self.tysys.handler_impl_target_name(handler_type);
         self.impl_target_of(handler_type, &DeclName::new(name))
     }
 
+<<<<<<< HEAD
     /// The name an `impl <effect> for <handler>` block is indexed under — the
     /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
@@ -413,6 +451,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+||||||| 03599b796
+    /// The name an `impl <effect> for <handler>` block is indexed under — the
+    /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
+    fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
+        let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
+        match &resolved {
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                self.tysys.type_table.borrow().def_name(*def).to_string()
+            }
+            _ => self.tysys.type_table.borrow().type_name(handler_type),
+        }
+    }
+
+    /// Strip a single leading `&` / `&mut` layer to reach the type that the
+    /// handler value points at. The handler's `impl Effect for T` block is
+    /// indexed by `T`, not `&T`.
+    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
+        match self.tysys.type_table.borrow().get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => type_id,
+        }
+    }
+
+=======
+>>>>>>> origin/main
     /// Annotate `resume value`, which yields `()` — at source level it is
     /// control flow, and dispatch synthesis later lowers it to `Return { value }`
     /// for the ordinary return-type rules to check. Returns a placeholder:
@@ -442,6 +506,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         TypeTable::UNIT
+    }
+}
+
+impl TypeSystem {
+    /// Whether `type_id` is a slot an impl block left for monomorphization,
+    /// rather than a type it committed to.
+    fn is_open_slot(&self, type_id: TypeId) -> bool {
+        matches!(
+            self.type_table.borrow().get(type_id),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
+    }
+
+    /// The name an `impl <effect> for <handler>` block is indexed under — the
+    /// bare head, so `impl<T> Log for Ctx<T>` answers for a `Ctx<i32>` handler.
+    fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
+        let resolved = self.type_table.borrow().get(handler_type).clone();
+        match &resolved {
+            ResolvedType::GenericInstance { def, .. }
+            | ResolvedType::GenericResource { def, .. } => {
+                self.type_table.borrow().def_name(*def).to_string()
+            }
+            _ => self.type_table.borrow().type_name(handler_type),
+        }
+    }
+
+    /// The type a handler value points at, under one `&` or `&mut`: the `T`
+    /// that indexes its `impl Effect for T`.
+    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
+        match self.type_table.borrow().get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => type_id,
+        }
     }
 }
 

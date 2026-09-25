@@ -164,6 +164,37 @@ test "skip 0 yields all" {
     assert result.len() == 3;
 }
 
+test "step_by yields the first element, then every step-th" {
+    let arr: List<i32> = [1, 2, 3, 4, 5, 6, 7];
+    assert arr.iter_value().step_by(3).collect() == [1, 4, 7];
+    assert arr.iter_value().step_by(1).collect() == arr;
+    assert arr.iter_value().step_by(10).collect() == [1];
+}
+
+test "step_by over a range stops before the end" {
+    assert (0..<10).step_by(4).collect() == [0, 4, 8];
+    assert (0..=8).step_by(4).collect() == [0, 4, 8];
+    assert (0..<0).step_by(2).collect() == [];
+    assert ('a'..='e').step_by(2).collect() == ['a', 'c', 'e'];
+}
+
+test "step_by over the characters of a string" {
+    assert "a1b2c3".chars().step_by(2).collect() == ['a', 'b', 'c'];
+}
+
+test "step_by stays exhausted" {
+    let mut it = (0..<3).step_by(2);
+    assert it.next() matches { Some(0) };
+    assert it.next() matches { Some(2) };
+    assert it.next() matches { None };
+    assert it.next() matches { None };
+}
+
+#[expect_trap]
+test "step_by rejects a step of zero" {
+    let _ = (0..<3).step_by(0);
+}
+
 test "chain two iterators" {
     let a: List<i32> = [1, 2, 3];
     let b: List<i32> = [4, 5, 6];

@@ -573,7 +573,7 @@ impl FunctionTranslator<'_, '_> {
                     result_ty: elem_ty.clone(),
                 };
                 let result_wir = self.wir_type(result_type_id);
-                if ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
+                if ref_binding_needs_boxing(&result_wir, &elem_ty)
                     && let WirType::Ref {
                         type_id: box_tid, ..
                     } = result_wir

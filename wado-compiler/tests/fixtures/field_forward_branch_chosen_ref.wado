@@ -1,0 +1,136 @@
+// A store through a reference that a branch, a match, a block or a call chose
+// mutates whichever local's object the reference named. Forwarding a struct
+// literal's field constant past it must see every such channel, not only a
+// plain `let q = o` copy.
+
+use { println, Stdout } from "core:cli";
+
+struct S { f: i32 }
+
+struct Holder { s: &mut S }
+
+#[inline(never)]
+fn pick(a: &mut S, b: &mut S, first: bool) -> &mut S {
+    if first {
+        return a;
+    }
+    return b;
+}
+
+fn via_if() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q: &mut S = if builtin::black_box(false) { &mut o } else { &mut p };
+    q.f = 9;
+    println(`if: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_match() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let mut r = S { f: 5 };
+    let q: &mut S = match builtin::black_box(1) {
+        0 => &mut o,
+        1 => &mut p,
+        _ => &mut r,
+    };
+    q.f = 9;
+    println(`match: o.f = ${o.f} p.f = ${p.f} r.f = ${r.f}`);
+}
+
+fn via_labeled_block() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q: &mut S = pick_block: {
+        if builtin::black_box(true) {
+            break pick_block: &mut p;
+        }
+        &mut o
+    };
+    q.f = 9;
+    println(`block: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_labeled_block_tail() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q: &mut S = pick_block: {
+        if builtin::black_box(false) {
+            break pick_block: &mut p;
+        }
+        &mut o
+    };
+    q.f = 9;
+    println(`block tail: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_select() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q: &mut S = builtin::select(builtin::black_box(false), &mut o, &mut p);
+    q.f = 9;
+    println(`select: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_black_box() with Stdout {
+    let mut o = S { f: 3 };
+    let q: &mut S = builtin::black_box(&mut o);
+    q.f = 9;
+    println(`black_box: o.f = ${o.f}`);
+}
+
+fn via_call() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q = pick(&mut o, &mut p, builtin::black_box(false));
+    q.f = 9;
+    println(`call: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_holder() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let h = Holder { s: if builtin::black_box(false) { &mut o } else { &mut p } };
+    h.s.f = 9;
+    println(`holder: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_closure() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let q: &mut S = if builtin::black_box(false) { &mut o } else { &mut p };
+    let mut set = || q.f = 9;
+    set();
+    println(`closure: o.f = ${o.f} p.f = ${p.f}`);
+}
+
+fn via_nested_if() with Stdout {
+    let mut o = S { f: 3 };
+    let mut p = S { f: 4 };
+    let mut r = S { f: 5 };
+    let q: &mut S = if builtin::black_box(true) {
+        if builtin::black_box(false) { &mut o } else { &mut p }
+    } else {
+        &mut r
+    };
+    q.f = 9;
+    println(`nested: o.f = ${o.f} p.f = ${p.f} r.f = ${r.f}`);
+}
+
+export fn run() with Stdout {
+    via_if();
+    via_match();
+    via_labeled_block();
+    via_labeled_block_tail();
+    via_select();
+    via_black_box();
+    via_call();
+    via_holder();
+    via_closure();
+    via_nested_if();
+}
+
+__DATA__
+{
+    "stdout": "if: o.f = 3 p.f = 9\nmatch: o.f = 3 p.f = 9 r.f = 5\nblock: o.f = 3 p.f = 9\nblock tail: o.f = 9 p.f = 4\nselect: o.f = 3 p.f = 9\nblack_box: o.f = 9\ncall: o.f = 3 p.f = 9\nholder: o.f = 3 p.f = 9\nclosure: o.f = 3 p.f = 9\nnested: o.f = 3 p.f = 9 r.f = 5\n"
+}

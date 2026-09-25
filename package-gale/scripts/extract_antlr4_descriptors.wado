@@ -840,12 +840,25 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     return written.len();
 }
 
-/// True when the descriptor's own `[errors]` report a single-token deletion —
-/// the only case where the compare may normalise Gale's `<skip …>` marker
-/// away, so a deletion Gale invents on its own can never be normalised into a
-/// match. See "Deleted terminals in parse trees" in `antlr4-compatibility.md`.
-fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
-    return parsed.errors.contains("extraneous input");
+/// True when the descriptor's `[errors]` report a recovery that can consume
+/// input. See "Skipped terminals in parse trees" in `antlr4-compatibility.md`.
+fn descriptor_consumes_tokens(parsed: &ParsedDescriptor) -> bool {
+    for let line of parsed.errors.lines() {
+        if !line.starts_with("line ") {
+            continue;
+        }
+        let at = line.slice(5, line.len());
+        let Some(space) = at.find(" ") else {
+            continue;
+        };
+        let message = at.slice(space + 1, at.len());
+        for let prefix of ["extraneous input", "mismatched input", "no viable alternative", "rule "] {
+            if message.starts_with(prefix) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 /// True when `[output]` is a printed parse tree — the only shape a `<skip …>`
@@ -858,7 +871,7 @@ fn output_is_tree_print<S: AsStrSlice>(output: S) -> bool {
 }
 
 /// The expression a tree compare reads its actual value from, wrapped in the
-/// marker normaliser when the descriptor deletes a token.
+/// marker normaliser when the descriptor's recovery consumes tokens.
 fn actual_expr<S: AsStrSlice>(inner: S, strip: bool) -> String {
     if strip {
         return `strip_skip_markers(&${inner})`;
@@ -888,8 +901,8 @@ fn tree_import_names(strip: bool) -> List<String> {
 fn strip_doc_lines(strip: bool) -> List<String> {
     if strip {
         return [
-            "//", "// The descriptor deletes a token, which ANTLR4 renders bare and Gale",
-            "// wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the",
+            "//", "// The descriptor's recovery consumes tokens, which ANTLR4 renders bare and",
+            "// Gale wraps in `<skip …>`. `strip_skip_markers` drops the wrapper (not the",
             "// token) so the compare is over the recovery decision, not the marker.",
         ];
     }
@@ -1811,7 +1824,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                                 &parsed.input,
                                 &parsed.output,
                                 &parsed.start,
-                                descriptor_deletes_tokens(&parsed) && output_is_tree_print(&parsed.output),
+                                descriptor_consumes_tokens(&parsed) && output_is_tree_print(&parsed.output),
                                 &stage_c_triage,
                                 parsed.slave_grammars.len(),
                             ));
@@ -1882,7 +1895,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &parsed.start,
                     &normalised,
                     &sub_rule,
-                    descriptor_deletes_tokens(&parsed),
+                    descriptor_consumes_tokens(&parsed),
                     &stage_b_triage,
                     parsed.slave_grammars.len(),
                 ));
@@ -1893,7 +1906,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
                     &parsed.input,
                     &parsed.start,
                     &normalised,
-                    descriptor_deletes_tokens(&parsed),
+                    descriptor_consumes_tokens(&parsed),
                     &stage_b_triage,
                     parsed.slave_grammars.len(),
                 ));
@@ -2233,7 +2246,7 @@ fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
 ///
 /// Returns `Some(tree)` for the parse-tree case, with ANTLR4's literal
 /// ` <EOF>` token stripped — Gale's `to_string_tree()` omits empty-text
-/// tokens (see `package-gale/CLAUDE.md` "Driver Tests"). Returns `None`
+/// tokens (see `package-gale/AGENTS.md` "Driver tests"). Returns `None`
 /// for everything else.
 ///
 /// The detector is intentionally conservative: any leftover `<…>` token
@@ -2332,7 +2345,7 @@ test "normalize: clean parse tree passes through trimmed" {
 test "normalize: trailing <EOF> token is stripped" {
     // ANTLR4 emits the EOF token literally because `to_string_tree(rule)`
     // includes every consumed terminal, but Gale's runtime drops empty-text
-    // tokens (CLAUDE.md "Driver Tests"). The normaliser bridges this gap
+    // tokens (AGENTS.md "Driver tests"). The normaliser bridges this gap
     // so descriptor `[output]` blocks line up with Gale's actual emission.
     let result = normalize_output_for_stage_b("(s (declarator a) <EOF>)");
     assert result matches { Some(s) && s == "(s (declarator a))" };

@@ -17,9 +17,12 @@ use { Element, Grammar, ParserRule } from "./ir.wado";
 use { PARSER_HANDLE, VALS_LOCAL, to_snake_case } from "./ident.wado";
 use { TreeMap } from "core:collections";
 use { rule_is_left_recursive } from "./action_translate.wado";
+use { ident_words, is_ident_char } from "./text.wado";
 
-/// The generated global the scan mutates, and its struct type.
-pub global SCAN_GATE_HANDLE: String = "SCAN_GATE";
+/// The scan's copy of the gate members: a scan function's `&mut` parameter, and
+/// the parser field it points at. A rendered condition names the parameter.
+pub global SCAN_GATE_HANDLE: String = "gate";
+pub global SCAN_GATE_FIELD: String = "scan_gate";
 pub global SCAN_GATE_TYPE: String = "ScanGate";
 
 /// `<parser handle>.<member> = <int literal>`, with an optional trailing `;` and
@@ -62,7 +65,7 @@ fn parser_member<S: AsStrSlice>(target: S) -> Option<String> {
     if field.is_empty() {
         return null;
     }
-    if field.find_char(|c| !(c == '_' || c.is_ascii_alphanumeric())) matches { Some(_) } {
+    if field.find_char(|c| !is_ident_char(c)) matches { Some(_) } {
         return null;
     }
     return Option::Some(field.to_string());
@@ -90,7 +93,7 @@ fn one_assignment<S: AsStrSlice>(text: S) -> Option<[String, String]> {
 }
 
 /// A parse-side condition rendered for the scan: every simulated member read
-/// re-pointed at `SCAN_GATE`.
+/// re-pointed at the scan gate.
 ///
 /// A Java body reaches a member through a bare name, so the translator renders
 /// it against whichever handle it is given and this finds nothing left to do. A
@@ -111,12 +114,12 @@ pub fn scan_gate_condition<S: AsStrSlice>(code: S, fields: &List<String>) -> Str
 /// Whether a rendered predicate reads nothing but simulated gate fields.
 ///
 /// Take the simulated reads out and see what is left. What a condition may keep
-/// is operators, digits and space; any name still standing is a read the scan
-/// cannot answer — an unsimulated field, or the parser — and leaves the gate
-/// unsimulated, which is the behaviour before this existed.
+/// is operators, numbers, `true` / `false` and space; any other name still
+/// standing is a read the scan cannot answer — an unsimulated field, or the
+/// parser — and leaves the gate unsimulated.
 ///
 /// Longest field first, because one field name can be a prefix of another:
-/// taking `SCAN_GATE.no_struct` out of `SCAN_GATE.no_struct_tail` leaves
+/// taking `gate.no_struct` out of `gate.no_struct_tail` leaves
 /// `_tail`. Asking for a name rather than for the handles is what sees that
 /// leftover — and the parser handle is one letter, so asking whether it appears
 /// anywhere answers yes inside `depth`.
@@ -125,7 +128,11 @@ pub fn reads_only_scan_gate_fields<S: AsStrSlice>(code: S, fields: &List<String>
     for let f of fields.sorted_by(|a: &String, b: &String| b.len().cmp(&a.len())) {
         rest = rest.replace(`${SCAN_GATE_HANDLE}.${f}`, "");
     }
-    return rest.find_char(|c| c == '_' || c.is_ascii_alphabetic()) matches { None };
+    return ident_words(&rest).iter_ref().all(|w| is_constant_word(w));
+}
+
+fn is_constant_word(word: &String) -> bool {
+    return *word == "true" || *word == "false" || word.chars().next().unwrap().is_ascii_digit();
 }
 
 /// A rule that sets a gate field for its own extent and puts it back after.
@@ -373,18 +380,8 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
 /// Java, so a name is refused under both and the safe direction is taken.
 fn mentioned_names<S: AsStrSlice>(text: S) -> List<String> {
     let mut out: List<String> = [];
-    let mut start = -1;
-    for let [index, c] of text.char_indices() {
-        let in_name = c == '_' || c.is_ascii_alphanumeric();
-        if in_name && start < 0 {
-            start = index;
-        } else if !in_name && start >= 0 {
-            push_both_spellings(&mut out, &text.substr_bytes(start, index));
-            start = -1;
-        }
-    }
-    if start >= 0 {
-        push_both_spellings(&mut out, &text.substr_bytes(start, text.len()));
+    for let name of ident_words(text) {
+        push_both_spellings(&mut out, &name);
     }
     return out;
 }

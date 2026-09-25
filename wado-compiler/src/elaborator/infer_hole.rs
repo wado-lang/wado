@@ -13,6 +13,7 @@ use super::Elaborator;
 use super::infer::unify;
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
+use super::tysys::TypeSystem;
 use crate::ast::{AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
@@ -288,26 +289,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the unifier's `or_insert` policy, and refuses an answer that is itself
     /// still a variable.
     pub(super) fn solve_infer_var(&mut self, var: TypeId, answer: TypeId) {
-        if !self.is_usable_answer(answer) {
+        if !self.tysys.is_usable_answer(answer) {
             return;
         }
         if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&var) {
             *slot = Some(answer);
         }
-    }
-
-    /// Whether `answer` can stand as a variable's solution.
-    ///
-    /// Another variable cannot: a variable resolves to a type, not to a
-    /// deferral. Neither can `never`, `unknown` or `error` — each is a type a
-    /// check accepts *anywhere*, so taking one as the answer would fix the
-    /// variable to it and measure every later candidate against it. The
-    /// element type of `[panic(), 1]` is not `!`.
-    fn is_usable_answer(&self, answer: TypeId) -> bool {
-        answer != TypeTable::NEVER
-            && answer != TypeTable::UNKNOWN
-            && answer != TypeTable::ERROR
-            && !self.tysys.type_table.borrow().contains_infer_var(answer)
     }
 
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
@@ -342,7 +329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let usable: Vec<(TypeId, TypeId)> = bindings
             .into_iter()
             .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)))
-            .filter(|&(_, concrete)| self.is_usable_answer(concrete))
+            .filter(|&(_, concrete)| self.tysys.is_usable_answer(concrete))
             .collect();
         for (hole, concrete) in usable {
             if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
@@ -580,6 +567,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for overlay in facts.default_overlays.values_mut() {
             Self::sweep_body_facts(tt, overlay, subst);
         }
+    }
+}
+
+impl TypeSystem {
+    /// Whether `answer` can stand as a variable's solution: not another variable,
+    /// nor `never` / `unknown` / `error`, which every check accepts anywhere.
+    fn is_usable_answer(&self, answer: TypeId) -> bool {
+        answer != TypeTable::NEVER
+            && answer != TypeTable::UNKNOWN
+            && answer != TypeTable::ERROR
+            && !self.type_table.borrow().contains_infer_var(answer)
     }
 }
 

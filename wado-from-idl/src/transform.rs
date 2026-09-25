@@ -640,6 +640,7 @@ impl<'a> Transformer<'a> {
             doc_comment: ty.docs.contents.clone(),
             cm_attr,
             unrestricted: false,
+            classes: None,
             extends: None,
             methods,
         }))

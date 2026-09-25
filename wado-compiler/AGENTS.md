@@ -15,8 +15,8 @@ The Wado compiler crate.
   the user reads. `Display` is for an error the CLI prints itself
   (`CompileError`, `WitEmitError`), or one whose text a `Diagnostic` builder
   reads (`LexError`, `LoadError`).
-- `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
-  phases.
+- `src/codegen.rs` emits the `NirPackage` and `WirPackage` as they are; it
+  knows nothing of the earlier phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go
   through it.
 - Every name the compiler mints for itself starts with one `$`
@@ -50,8 +50,8 @@ The Wado compiler crate.
 `src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
 them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
-filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
-from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
+filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
+`wado-from-idl/AGENTS.md` first.
 
 A module re-exports an effect only where it owns it: `core:cli` hands out
 `Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an

@@ -61,27 +61,6 @@ fn no_lit_tokens() -> List<LitToken> {
     return [];
 }
 
-fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len > h_len {
-        return false;
-    }
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            return true;
-        }
-    }
-    return false;
-}
-
 fn alt_of(elements: List<Element>) -> Alternative {
     return Alternative {
         label: null,
@@ -2483,7 +2462,7 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     }
     // The message should name the shared lookahead token so a grammar
     // author can see why the alts overlapped.
-    assert str_contains(&d.message, "TK_ID"), `message lacks shared token: ${d.message}`;
+    assert d.message.contains("TK_ID"), `message lacks shared token: ${d.message}`;
 }
 
 test "lower raises no diagnostics for disjoint alts" {
@@ -3140,4 +3119,24 @@ test "a wildcard alt keeps the group off the Direct dispatch" {
     } else {
         panic("rule a should lower to Simple");
     }
+}
+
+test "a prefix alt's scan operand climbs from the parse operand's precedence" {
+    let mut g = parse("grammar S;\ne : e '*' e | '-' e | e '+' e | INT ;\nINT : [0-9]+ ;\n").unwrap();
+    assign_atn_call_sites(&mut g);
+    let lit = collect_literal_tokens(&g.parser_rules);
+    let lowered = lower(&g, &lit);
+    let LeftRecursive(l) = &lowered.parser_rules[0] else {
+        panic("rule e should lower to LeftRecursive");
+    };
+    let prefix = &l.atom.alts[0];
+    assert prefix.prefix_self_ref_min_prec == 2, `got ${prefix.prefix_self_ref_min_prec}`;
+    let RuleCall(parse_rc) = &prefix.ops[1] else {
+        panic("parse operand should be a RuleCall");
+    };
+    let RuleCall(scan_rc) = &l.atom.scan_alts[0].elements[1] else {
+        panic("scan operand should be a RuleCall");
+    };
+    assert parse_rc.min_prec_arg == Option::Some(2), `parse operand: ${parse_rc.min_prec_arg:?}`;
+    assert scan_rc.min_prec_arg == parse_rc.min_prec_arg, `scan operand: ${scan_rc.min_prec_arg:?}`;
 }

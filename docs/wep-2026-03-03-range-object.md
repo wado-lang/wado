@@ -561,18 +561,16 @@ arr[..]       // use arr directly (already value semantics)
 
 If demand arises, partial ranges can be added as separate types without breaking existing code.
 
-#### No `step_by` method
+#### Custom steps come from `step_by`
 
-Custom step sizes add complexity. Use C-style `for` for non-unit steps:
+A range has no step of its own. `step_by` is an `Iterator` method, so it works on
+every iterator and not on ranges alone:
 
 ```wado
-// Instead of (0..<100).step_by(2)
-for let mut i = 0; i < 100; i += 2 {
+for let i of (0..<100).step_by(2) {
     // every other number
 }
 ```
-
-A `step_by` combinator can be added later as a method on iterators (not range-specific).
 
 #### No reverse iteration method
 
@@ -619,13 +617,11 @@ For iteration, the `exhausted` flag is only present in `RangeInclusive` and only
 
 1. **No partial ranges**: Users must write `arr.slice(2, arr.len())` instead of `arr[2..<]`
    - **Mitigation**: Can be added later without breaking changes
-2. **No step_by**: Custom step sizes require C-style `for` loops
-   - **Mitigation**: Can be added later as an iterator combinator
-3. **No reverse iteration**: Requires C-style `for` or future `.rev()` combinator
+2. **No reverse iteration**: Requires C-style `for` or future `.rev()` combinator
    - **Mitigation**: Can be added later to the `Iterator` trait
-4. **`RangeInclusive` has extra `exhausted` field**: Adds one i32 of overhead per instance
+3. **`RangeInclusive` has extra `exhausted` field**: Adds one i32 of overhead per instance
    - **Mitigation**: Private field, not visible in constructor syntax; same approach as Rust and Swift
-5. **New `Step` trait**: Adds one more trait to the prelude
+4. **New `Step` trait**: Adds one more trait to the prelude
    - **Mitigation**: Small, focused trait with obvious purpose
 
 ## References

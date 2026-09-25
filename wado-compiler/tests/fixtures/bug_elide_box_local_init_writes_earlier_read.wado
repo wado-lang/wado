@@ -1,0 +1,32 @@
+// Eliding a single-field box moves its initializer to the one field read. Every
+// read the use evaluates before that field then runs ahead of the initializer,
+// so one of a local or global the initializer writes would see the old value.
+use { println, Stdout } from "core:cli";
+
+struct B {
+    v: i32,
+}
+
+global mut G: i32 = 0;
+
+#[inline(never)]
+fn bump(n: i32) -> i32 {
+    G = G + n;
+    return 1;
+}
+
+export fn run() with Stdout {
+    let mut x = builtin::black_box(1);
+    let b = B { v: if builtin::black_box(true) { x = 5; 1 } else { 2 } };
+    let r = x + b.v;
+    println(`${r}`);
+
+    let c = B { v: bump(10) };
+    let s = G + c.v;
+    println(`${s}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n11\n"
+}

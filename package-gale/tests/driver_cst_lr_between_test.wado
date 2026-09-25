@@ -1,6 +1,6 @@
 //! ATN-class LR loop entry: `'between' expr 'and' expr` shares the `'and'`
 //! delimiter with the binary `expr 'and' expr` alternative. Expected trees are
-//! the published ANTLR4 jar's (black-box oracle) — the middle operand climbs the
+//! the published ANTLR4 jar's (black-box oracle). The middle operand climbs the
 //! shared delimiter as long as the alternative can still find its own.
 
 use g from "./grammars/lr_between.g4"
@@ -15,29 +15,52 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-fn assert_parses<S: AsStrSlice>(input: S) {
-    let result = g::parse(input);
-    assert result.ok(), `parse failed for ${input}: ${g::to_string_tree(&result)}`;
-}
-
-// The canonical case: between's mandatory `'and'` must survive the binary
-// `and`-loop. Only the tree is `#[TODO]` — ANTLR4 lets the middle operand take
-// the first `and` since a second is left for between itself, while Gale yields
-// it. Here the competing alternative is an *atom* (`'between' expr 'and' expr`,
-// no leading self-reference), so the continuation gate that closed
-// `lr_mid_operand.g4` does not reach it. Acceptance is asserted outside the
-// `#[TODO]`, so a regression from "wrong tree" to "rejected" fails instead of
-// staying a pending todo.
-test "between with trailing and parses" {
-    assert_parses("between X1 and X2 and X3 ;");
-}
-
-#[TODO]
 test "between with trailing and brackets the middle operand as ANTLR4 does" {
     assert_tree("between X1 and X2 and X3 ;", "(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
+    assert_tree(
+        "between a and b and c and d ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) and (expr c)) and (expr d)) ;)",
+    );
 }
 
-// Plain binary chains still parse.
+// The climb that must stop sits in a nested operand, below a looser `or`.
+test "a nested operand leaves between its and" {
+    assert_tree(
+        "between a or b and c and d ;",
+        "(stat (expr between (expr (expr a) or (expr (expr b) and (expr c))) and (expr d)) ;)",
+    );
+    assert_tree(
+        "between a and b or c and d ;",
+        "(stat (expr between (expr (expr (expr a) and (expr b)) or (expr c)) and (expr d)) ;)",
+    );
+    assert_tree(
+        "between between a and b and c and d ;",
+        "(stat (expr between (expr between (expr (expr a) and (expr b)) and (expr c)) and (expr d)) ;)",
+    );
+}
+
+// Leaving an operand restores the caller's precedence, so an enclosing `or`
+// still takes a tighter `and` as its right operand.
+test "an operand the climb leaves keeps its caller's precedence" {
+    assert_tree(
+        "between X and X or X and X or X and X ;",
+        "(stat (expr between (expr (expr (expr (expr X) and (expr X)) or (expr (expr X) and (expr X))) or (expr X)) and (expr X)) ;)",
+    );
+    assert_tree(
+        "between X or X and X and X or X and X ;",
+        "(stat (expr between (expr (expr (expr X) or (expr (expr (expr X) and (expr X)) and (expr X))) or (expr X)) and (expr X)) ;)",
+    );
+}
+
+// The `and` after `X4` is left by every loop around it, and one prediction
+// answers for all of them.
+test "an exit leaves every enclosing loop that returns into the next" {
+    assert_tree(
+        "between X1 and X2 or between X3 and X4 and between X1 and X2 or between X3 and X4 ;",
+        "(stat (expr between (expr (expr (expr X1) and (expr X2)) or (expr between (expr X3) and (expr X4))) and (expr between (expr X1) and (expr (expr X2) or (expr between (expr X3) and (expr X4))))) ;)",
+    );
+}
+
 test "binary and/or chain parses" {
     assert_tree(
         "X1 and X2 or X3 and X4 ;",

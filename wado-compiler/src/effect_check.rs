@@ -199,7 +199,7 @@ impl MemberTables {
                 }
             }
         }
-        for info in state.tysys.all_variant_cases.values() {
+        for info in state.tysys.data.variant_cases.values() {
             tables.variant_payloads.insert(
                 (info.module_source.clone(), info.name.clone()),
                 info.cases.iter().map(|case| case.payload).collect(),

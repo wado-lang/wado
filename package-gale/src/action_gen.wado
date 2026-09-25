@@ -736,12 +736,12 @@ fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
 /// joined — or `""` when the scan cannot answer them.
 ///
 /// A scan has no parser, so it can only evaluate a condition that reads nothing
-/// but simulated fields. The condition is the dispatch's own, rendered with the
-/// handle pointed at `SCAN_GATE`; whatever names something else — a method, an
-/// unsimulated field, the parser — leaves the scan ungated, as it was before
-/// this existed.
+/// but simulated fields — or nothing at all, which needs no scan gate. The
+/// condition is the dispatch's own, rendered with the handle pointed at the
+/// scan gate; whatever names something else — a method, an unsimulated field,
+/// the parser — leaves the scan ungated.
 pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
-    if !ctx.emit_scan_gate() {
+    if !ctx.emit_actions() {
         return String::new();
     }
     let mut conds: List<String> = [];
@@ -788,36 +788,33 @@ fn body_needs_no_translator<S: AsStrSlice>(text: S, ctx: &GenContext) -> bool {
         || ctx.has_parser_superclass() && body_is_base_calls_only(text, ctx.parser_superclass_name());
 }
 
-/// Emit the `disabled_alts` seed for an ATN-routed decision: each gated alt is
-/// pushed to `_atn_disabled` when its `gate_condition_for` condition is false,
-/// so the simulator never seeds it (both `p` and the seeded `vals` the
-/// condition may read are in scope here). Returns the `, &_atn_disabled`
-/// argument suffix, or `""` when no alt is gated.
-pub fn emit_atn_disabled_seed(
-    w: &mut CodeWriter,
+/// The gates an ATN-routed decision disables alternatives by: each gated alt of
+/// `amb_alts` with its condition, as the parse or a scan can evaluate it.
+pub fn atn_decision_gates(
     amb_alts: &List<i32>,
     alts: &List<Alternative>,
     ctx: &GenContext,
-) -> String {
-    if !ctx.emit_actions() {
-        return String::new();
-    }
+    in_scan: bool,
+) -> List<[i32, String]> {
     let mut gates: List<[i32, String]> = [];
+    if !ctx.emit_actions() {
+        return gates;
+    }
     for let idx of amb_alts {
+        if in_scan {
+            let cond = alt_scan_gate_conditions(&alts[*idx], ctx);
+            if !cond.is_empty() {
+                gates.push([*idx, cond]);
+            }
+            continue;
+        }
         for let a of &alts[*idx].actions {
             if let Some(cond) = gate_condition_for(a, ctx) {
                 gates.push([*idx, cond]);
             }
         }
     }
-    if gates.is_empty() {
-        return String::new();
-    }
-    w.line("let mut _atn_disabled: List<i32> = [];");
-    for let g of &gates {
-        w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
-    }
-    return String::from(", &_atn_disabled");
+    return gates;
 }
 
 /// An alt's gateable alt-initial predicate conditions, translated, in grammar
@@ -944,6 +941,7 @@ pub fn mark_gated_predicates(
     groups: &List<List<i32>>,
     first_sets: &List<List<String>>,
     non_lr_indices: &List<i32>,
+    end_follow: &List<String>,
     ctx: &mut GenContext,
 ) {
     if !ctx.emit_actions() {
@@ -959,7 +957,14 @@ pub fn mark_gated_predicates(
         if group.len() == 1 {
             mark_alt_gate_predicates(&rule.alternatives[non_lr_indices[group[0]]], ctx);
         } else {
-            let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
+            let tree = build_group_prediction_tree(
+                &rule.alternatives,
+                group,
+                first_sets,
+                non_lr_indices,
+                ctx,
+                end_follow,
+            );
             let mut gated: List<i32> = [];
             collect_gated_ambiguous_alts(&tree, &rule.alternatives, rule, ctx, &mut gated);
             for let idx of &gated {
@@ -1012,14 +1017,21 @@ pub fn mark_alt_gate_answered(alt: &Alternative, ctx: &mut GenContext) {
 /// token-led dispatch condition, or "" when off (keeping non-Wado grammars
 /// byte-identical) or the alt has none.
 pub fn alt_gate_and_suffix(alt: &Alternative, ctx: &mut GenContext) -> String {
-    let suffix = alt_gate_suffix_unanswered(alt, ctx);
-    if suffix.is_empty() {
-        return suffix;
+    return and_gate(alt_gate_condition(alt, ctx));
+}
+
+/// An alt's gateable predicates joined into one condition, registered as
+/// answered by it, or "" where it has none.
+pub fn alt_gate_condition(alt: &Alternative, ctx: &mut GenContext) -> String {
+    return join_gate_conds(&alt_initial_gate_conditions(alt, ctx));
+}
+
+/// The ` && <cond>` a rendered gate condition adds to a test, or nothing.
+pub fn and_gate(cond: String) -> String {
+    if cond.is_empty() {
+        return cond;
     }
-    // This suffix is rendered into the caller's own test, so emitting it is
-    // what answers the predicate — one collector, two bookkeepings.
-    mark_alt_gate_answered(alt, ctx);
-    return suffix;
+    return ` && ${cond}`;
 }
 
 /// The same suffix and `pred_<id>` fn without claiming the predicate answered;
@@ -1035,50 +1047,7 @@ pub fn alt_gate_suffix_unanswered(alt: &Alternative, ctx: &mut GenContext) -> St
             conds.push(c);
         }
     }
-    if conds.is_empty() {
-        return String::new();
-    }
-    return ` && ${join_gate_conds(&conds)}`;
-}
-
-/// Emit predicate-gated selection for an interchangeable `Ambiguous` group, in
-/// grammar order: the first alt whose predicates hold wins, an unpredicated alt
-/// is always viable and closes the chain, and all-false is no viable alternative.
-pub fn gen_predicate_gated_dispatch<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    amb_alts: &List<i32>,
-    alts: &List<Alternative>,
-    fn_name: S,
-    ctx: &mut GenContext,
-    rule_display: S1,
-) {
-    let order = amb_alts.sorted();
-    let mut opened = false;
-    for let idx of &order {
-        let conds = alt_initial_gate_conditions(&alts[*idx], ctx);
-        if conds.is_empty() {
-            if !opened {
-                emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-                return;
-            }
-            w.else_begin("else");
-            emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-            w.end();
-            return;
-        }
-        let cond = join_gate_conds(&conds);
-        if !opened {
-            w.begin(`if ${cond}`);
-            opened = true;
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-        emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
-    }
-    w.else_begin("else");
-    w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
-    emit_no_viable_return(w, ctx);
-    w.end();
+    return and_gate(join_gate_conds(&conds));
 }
 
 /// The `, vals` a multi-alt dispatch forwards to an `_alt_<n>` helper so the
@@ -1116,20 +1085,18 @@ pub fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
     }
 }
 
-/// Emit a gated branch body: the trace pick and the tail call into the alt.
-fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
-    w: &mut CodeWriter,
-    idx: i32,
-    fn_name: S,
-    ctx: &GenContext,
-    rule_display: S1,
-) {
-    if ctx.is_trace() {
-        w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
+/// The statements that run alternative `idx` as the rule's finished
+/// alternative: its helper, or what a forwarding helper would do.
+pub fn emit_alt_helper_exit<S: AsStrSlice>(w: &mut CodeWriter, fn_name: S, idx: i32, ctx: &GenContext) {
+    let helper = `${fn_name}_alt_${idx}`;
+    if let Some(forwarded) = ctx.forwarded_call(&helper) {
+        for let stamp of &forwarded.stamps {
+            w.line(stamp);
+        }
+        w.line(&ctx.alt_exit(forwarded.call));
+        return;
     }
-    w.line(
-        `return ${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
-    );
+    w.line(&ctx.alt_exit(`${helper}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)})`));
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.

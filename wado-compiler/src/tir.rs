@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -353,6 +353,9 @@ pub struct TemplateShape {
     pub segments: Vec<String>,
     pub holes: Vec<TemplateHole>,
 }
+
+/// How many characters of a template's text its type name shows.
+const TEMPLATE_NAME_MAX_CHARS: usize = 50;
 
 impl TemplateShape {
     /// The struct field holding hole `k`.
@@ -865,9 +868,9 @@ pub struct TypeTable {
     /// [`Self::cm_decl_in_module_named`]: a caller holding an interface FQ can
     /// spell that without an interner.
     cm_decl_index: IndexMap<(String, Option<CmNamespace>, String), DefId>,
-    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
-    /// handle to a host object, outside the affine resource discipline.
-    unrestricted_resources: IndexSet<DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, with the
+    /// classes their handles carry where they declare them.
+    unrestricted_resources: IndexMap<DefId, Option<HandleClasses>>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -999,7 +1002,7 @@ impl TypeTable {
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
             cm_decl_index: IndexMap::default(),
-            unrestricted_resources: IndexSet::default(),
+            unrestricted_resources: IndexMap::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1158,6 +1161,10 @@ impl TypeTable {
         )
     }
 
+    pub fn is_half(&self, id: TypeId) -> bool {
+        self.primitive_head(id).is_some_and(PrimitiveType::is_half)
+    }
+
     pub fn is_numeric(&self, id: TypeId) -> bool {
         self.is_integer(id) || self.is_float(id)
     }
@@ -1175,15 +1182,65 @@ impl TypeTable {
             .copied()
     }
 
-    pub fn mark_unrestricted_resource(&mut self, def: DefId) {
-        self.unrestricted_resources.insert(def);
+    pub fn mark_unrestricted_resource(&mut self, def: DefId, classes: Option<HandleClasses>) {
+        self.unrestricted_resources.insert(def, classes);
     }
 
     /// Whether `def` declares an unrestricted resource, which no affine check
     /// and no cleanup pass owns.
     #[must_use]
     pub fn is_unrestricted_resource(&self, def: DefId) -> bool {
-        self.unrestricted_resources.contains(&def)
+        self.unrestricted_resources.contains_key(&def)
+    }
+
+    /// The classes an unrestricted resource's handles carry, where it declares them.
+    #[must_use]
+    pub fn handle_classes(&self, def: DefId) -> Option<HandleClasses> {
+        self.unrestricted_resources.get(&def).copied().flatten()
+    }
+
+    /// The classes a narrowing to the resource `target` tests.
+    #[must_use]
+    pub fn narrowing_classes(&self, target: TypeId) -> Option<HandleClasses> {
+        let ResolvedType::Resource { def } = self.get(target) else {
+            unreachable!("only a resource is narrowed to");
+        };
+        self.handle_classes(*def)
+    }
+
+    /// Each class the resource tree holding `def` numbers, with the resource
+    /// whose own class it is.
+    pub fn handle_class_owners(&self, def: DefId) -> impl Iterator<Item = (u16, DefId)> {
+        let root = self
+            .resource_chain(def)
+            .last()
+            .expect("a chain starts at `def`");
+        self.unrestricted_resources
+            .iter()
+            .filter_map(move |(&member, classes)| {
+                let lo = classes.as_ref()?.lo;
+                self.is_resource_subtype(member, root)
+                    .then_some((lo, member))
+            })
+    }
+
+    /// The scalar a resource handle is in the guest: the `u64` bits of the `f64`
+    /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
+    #[must_use]
+    pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
+        match self.get(ty) {
+            ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
+                Some(Self::U64)
+            }
+            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => Some(Self::I32),
+            _ => None,
+        }
+    }
+
+    /// Whether `ty` is an unrestricted resource, whose handle is an `f64` outside the guest.
+    #[must_use]
+    pub fn is_unrestricted_handle(&self, ty: TypeId) -> bool {
+        self.handle_scalar(ty) == Some(Self::U64)
     }
 
     /// Record `child extends parent`, already validated by the caller.
@@ -1246,23 +1303,12 @@ impl TypeTable {
         value != target && self.is_resource_subtype(*target, *value)
     }
 
-    /// The root resource whose `$same` compares `a` and `b` by identity: both
-    /// unrestricted, one extending the other.
+    /// Whether `==` compares `a` and `b` as handles: both unrestricted, one
+    /// extending the other. The host interns handles, so equal means same object.
     #[must_use]
-    pub fn identity_root(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
-        let joined = self.resource_join(a, b)?;
-        let ResolvedType::Resource { def } = self.get(joined) else {
-            return None;
-        };
-        let def = *def;
-        if !self.is_unrestricted_resource(def) {
-            return None;
-        }
-        let root = self
-            .resource_chain(def)
-            .last()
-            .expect("a chain starts at its own resource");
-        Some(self.make_resource(root))
+    pub fn handles_compare(&self, a: TypeId, b: TypeId) -> bool {
+        self.resource_join(a, b)
+            .is_some_and(|joined| self.is_unrestricted_handle(joined))
     }
 
     /// Attach the program's declarations, so a nominal type can render its
@@ -1490,13 +1536,54 @@ impl TypeTable {
     }
 
     /// The spelling an anonymous struct shows a reader —
-    /// `$anon_{x:i32,y:i32}`. The declaration namespace;
+    /// `$anon_{x:i32,y:i32}`, or a template's text. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        self.render_shape(&self.anon_structs[id.0 as usize].shape, &|tt, ty| {
-            tt.type_name(ty)
-        })
+        match &self.anon_structs[id.0 as usize].shape {
+            AnonShape::Template(shape) => self.template_shape_name(shape),
+            shape @ (AnonShape::Fields(_) | AnonShape::Synthetic(_)) => {
+                self.render_shape(shape, &|tt, ty| tt.type_name(ty))
+            }
+        }
+    }
+
+    /// A template shape as its text, each hole spelled as its type and
+    /// specifier, cut to [`TEMPLATE_NAME_MAX_CHARS`] characters.
+    fn template_shape_name(&self, shape: &TemplateShape) -> String {
+        let mut name = String::from("`");
+        let mut room = TEMPLATE_NAME_MAX_CHARS;
+        let mut push = |text: &str| {
+            for c in text.chars() {
+                let shown: String = if c.is_control() {
+                    c.escape_default().collect()
+                } else {
+                    c.into()
+                };
+                let width = shown.chars().count();
+                if width > room {
+                    return false;
+                }
+                room -= width;
+                name.push_str(&shown);
+            }
+            true
+        };
+        let complete = shape.segments.iter().enumerate().all(|(k, segment)| {
+            push(segment)
+                && shape.holes.get(k).is_none_or(|hole| {
+                    let spec = hole
+                        .spec
+                        .as_ref()
+                        .map_or(String::new(), |s| format!(":{s}"));
+                    push(&format!("${{{}{spec}}}", self.type_name(hole.ty)))
+                })
+        });
+        if !complete {
+            name.push_str("...");
+        }
+        name.push('`');
+        name
     }
 
     /// [`Self::anon_struct_name`] in the mangled namespace: every field type is
@@ -3720,8 +3807,7 @@ impl TypeTable {
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
                 ResolvedType::Newtype { .. } => {
-                    let head = self.representation_head(id);
-                    Some(self.monomorphized_struct(head).unwrap_or(head))
+                    Some(self.monomorphized_or_self(self.representation_head(id)))
                 }
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
@@ -3747,6 +3833,11 @@ impl TypeTable {
             return None;
         };
         self.monomorphized_struct_of(*def, type_args)
+    }
+
+    /// [`Self::monomorphized_struct`] where there is one, else `id` itself.
+    pub fn monomorphized_or_self(&self, id: TypeId) -> TypeId {
+        self.monomorphized_struct(id).unwrap_or(id)
     }
 
     /// Get the base type if this is a newtype, or None otherwise
@@ -3918,6 +4009,22 @@ impl TypeTable {
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
         self.representation_head(a) == self.representation_head(b)
+    }
+
+    /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
+    /// newtype over either) reads from little-endian data; `None` for the rest.
+    pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
+        self.primitive_head(self.seq_element(seq)?)
+            .filter(|p| p.data_width().is_some())
+    }
+
+    /// The element type of `Array<T>`, `List<T>`, or a newtype over either.
+    pub fn seq_element(&self, seq: TypeId) -> Option<TypeId> {
+        let head = self.representation_head(seq);
+        match self.get(head) {
+            ResolvedType::BuiltinArray(elem) => Some(*elem),
+            _ => self.as_list(head),
+        }
     }
 
     /// Check if a type is `List<T>` and return the element type if so.
@@ -5648,9 +5755,8 @@ pub enum TirPattern {
         inclusive: bool,
         is_unsigned: bool,
     },
-    /// A type pattern the host decides: holds the scrutinee at the narrower
-    /// `type_id`, and matches only when `test`, which reads that local, holds.
-    /// `name` is the binding it makes, `None` for `_`.
+    /// Holds the scrutinee in `local_index` at `type_id`, matching where `test` on
+    /// it holds: a host type check or a constant's `Eq`. `name` is what it binds.
     Narrow {
         name: Option<String>,
         local_index: u32,
@@ -5756,6 +5862,14 @@ impl TirBlock {
         Self {
             stmts: Vec::new(),
             span,
+        }
+    }
+
+    /// The expression the block evaluates to, where its last statement is one.
+    pub fn tail_expr(&self) -> Option<&TirExpr> {
+        match &self.stmts.last()?.kind {
+            TirStmtKind::Expr(expr) => Some(expr),
+            _ => None,
         }
     }
 }
@@ -6882,6 +6996,14 @@ impl BuiltinDeclarations {
             return Some(declaration);
         }
         self.0.get(&key(call.name))
+    }
+
+    /// Everything `call` declared, or `None` where there is no snapshot.
+    pub fn declaration<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> Option<&BuiltinDeclaration> {
+        self.get(call.into())
     }
 
     /// Whether `call` names a body-less declaration that stated a convention or

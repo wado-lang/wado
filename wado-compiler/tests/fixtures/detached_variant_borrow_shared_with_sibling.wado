@@ -1,0 +1,24 @@
+// A `&mut` to a variant field is a detached temp stored back after the call.
+// Until then the replaced value is in the temp alone, so a sibling argument
+// reaching the same storage would read the old value and have its own write
+// undone by the store back. That call is refused.
+
+struct S {
+    opt: Option<i32>,
+}
+
+fn set_then_sibling(s: &mut S, o: &mut Option<i32>) {
+    *o = Some(1);
+    s.opt = Some(2);
+}
+
+export fn run() {
+    let mut s = S { opt: null };
+    set_then_sibling(&mut s, &mut s.opt);
+    assert s.opt matches { Some(2) };
+}
+
+__DATA__
+{
+    "compile_error": "'set_then_sibling' replaces it, and another argument reaches the same storage"
+}

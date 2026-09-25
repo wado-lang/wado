@@ -417,8 +417,6 @@ fn generate_inline_task_return(
     let shape_ctx = CmShapeContext {
         cm_interface_registry,
         names: &names,
-        tir_modules,
-        type_table,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;

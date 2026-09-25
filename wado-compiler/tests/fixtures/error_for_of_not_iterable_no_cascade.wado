@@ -1,0 +1,22 @@
+// A for-of over a value that cannot be iterated reports that once. Neither the
+// synthetic `into_iter()` nor `next()` adds a diagnostic of its own.
+fn f() -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let g = f;
+    for let x of g() {
+        let _ = x;
+    }
+    for let [i, y] of g().enumerate() {
+        let _ = i + y;
+    }
+}
+
+__DATA__
+{
+    "compile_error": "type 'i32' does not implement IntoIterator",
+    "compile_error_count": 2,
+    "compile_errors_not_contains": ["into_iter", "next", "Iterator`", "enumerate"]
+}

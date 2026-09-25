@@ -12,11 +12,19 @@ use std::sync::Arc;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
+<<<<<<< HEAD
     self, AstVisitor, Block, Expr, GenericParam, Item, Module, Pattern, Stmt, Type,
     declares_unrestricted, walk_expr, walk_stmt, walk_type, wire_numbers_of, world_import_of,
 };
+||||||| 03599b796
+use crate::ast::{self, Item, Module, Type, declares_unrestricted, wire_numbers_of};
+=======
+    self, HandleClasses, Item, Module, Type, declared_handle_classes, declares_unrestricted,
+};
+use crate::bail_with;
+>>>>>>> origin/main
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
@@ -27,22 +35,20 @@ use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::method_lookup::ImplParamSlots;
+use super::sem::decls::ModuleDecls;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
-    RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
-    VariantInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
+    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
-use crate::compiler_item::Resolved;
+use crate::compiler_item::{CompilerItemKind, Resolved};
 use crate::component_model::SourceInterfaceBatch;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::infer_hole::InferHoleTable;
 use crate::elaborator::item::{
-    register_builtin_type_compiler_item, register_enum_case_compiler_item,
-    register_enum_compiler_item, register_newtype_compiler_item, register_resource_compiler_item,
-    register_struct_compiler_item, register_trait_compiler_item, register_tuple_compiler_item,
-    register_variant_case_compiler_item, register_variant_compiler_item,
+    register_enum_compiler_items, register_trait_compiler_item, register_tuple_compiler_item,
+    register_type_compiler_item, register_variant_compiler_items,
 };
 use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
 use crate::elaborator::reify::Reify;
@@ -64,7 +70,7 @@ use crate::semantics::Semantics;
 use crate::signature_reach;
 use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
-use crate::tir::{AnonStructId, StructDef, TirFunction, TraitRef};
+use crate::tir::{StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
@@ -250,6 +256,70 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
         }
     }
+    reject_misnumbered_classes(
+        pending,
+        &committed,
+        resolutions,
+        &type_table.borrow(),
+        logger,
+    );
+}
+
+/// A narrowing tests a handle's class against a range, so a child's range lies
+/// inside its parent's, above the parent's own class, and apart from its siblings'.
+fn reject_misnumbered_classes<H: CompilerHost>(
+    pending: &[PendingExtends],
+    committed: &IndexMap<DefId, DefId>,
+    resolutions: &Resolutions,
+    type_table: &TypeTable,
+    logger: &Logger<'_, H>,
+) {
+    let defs = resolutions.defs();
+    let mut numbered_children: IndexMap<DefId, Vec<(DefId, HandleClasses)>> = IndexMap::default();
+    for clause in pending {
+        let Some(&parent) = committed.get(&clause.child) else {
+            continue;
+        };
+        let (child_name, parent_name) = (&clause.child_name, defs.name(parent));
+        let message = match (
+            type_table.handle_classes(clause.child),
+            type_table.handle_classes(parent),
+        ) {
+            (None, None) => continue,
+            (None, Some(_)) => format!(
+                "`{child_name}` declares no `classes`, but `{parent_name}`, which it extends, does"
+            ),
+            (Some(_), None) => format!(
+                "`{child_name}` declares `classes`, but `{parent_name}`, which it extends, does not"
+            ),
+            (Some(own), Some(outer)) if !outer.encloses(own) => format!(
+                "`{child_name}` numbers classes {own}, which do not lie past `{parent_name}`'s own class {} inside its {outer}",
+                outer.lo
+            ),
+            (Some(own), Some(_)) => {
+                let siblings = numbered_children.entry(parent).or_default();
+                let overlapped = siblings
+                    .iter()
+                    .find(|(_, theirs)| theirs.overlaps(own))
+                    .copied();
+                siblings.push((clause.child, own));
+                let Some((sibling, theirs)) = overlapped else {
+                    continue;
+                };
+                format!(
+                    "`{child_name}` numbers classes {own}, which overlap `{}`'s {theirs} under `{parent_name}`",
+                    defs.name(sibling)
+                )
+            }
+        };
+        let _ = logger.error_in(
+            &clause.module,
+            TypeError::ResourceClasses {
+                message,
+                span: clause.span,
+            },
+        );
+    }
 }
 
 /// A child may not redeclare a method an ancestor declares: one name must
@@ -417,27 +487,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Keyed by the declaration, not by a spelling a module has to be
         // standing in to resolve. `TypeLookup` reaches an entry through
         // `Resolutions`, which is the only thing that turns a name into one.
-        let mut all_newtypes: IndexMap<DefId, TypeId> = snapshot_state
-            .map(|s| (*s.tysys.all_newtypes).clone())
+        let mut data: DataDecls = snapshot_state
+            .map(|s| (*s.tysys.data).clone())
             .unwrap_or_default();
-        let mut all_generic_newtypes: IndexMap<DefId, GenericNewtypeInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_generic_newtypes).clone())
-            .unwrap_or_default();
-        let mut all_struct_fields: IndexMap<DefId, StructFieldInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_struct_fields).clone())
-            .unwrap_or_default();
-        let mut all_variant_cases: IndexMap<DefId, VariantInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_variant_cases).clone())
-            .unwrap_or_default();
-        let mut all_enum_cases: IndexMap<DefId, EnumInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_enum_cases).clone())
-            .unwrap_or_default();
-        let mut all_flags_cases: IndexMap<DefId, FlagsInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_flags_cases).clone())
-            .unwrap_or_default();
-        let mut all_resource_types: IndexMap<DefId, ResourceInfo> = snapshot_state
-            .map(|s| (*s.tysys.all_resource_types).clone())
-            .unwrap_or_default();
+        // The collection passes run ahead of any walk, so no walk adds to them.
+        let no_walk = ModuleDecls::default();
 
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
         let mut resource_method_names: ResourceMethodNames = IndexMap::default();
@@ -452,6 +506,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
+<<<<<<< HEAD
                         // Insert with empty fields first - will be populated in second sub-pass
                         all_struct_fields.insert(
                             resolutions.defs().def_at(struct_decl.id),
@@ -468,7 +523,40 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             },
                         );
                         register_struct_compiler_item(
+||||||| 03599b796
+                        // Insert with empty fields first - will be populated in second sub-pass
+                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
+                            all_struct_fields.insert(
+                                def,
+                                StructFieldInfo {
+                                    name: struct_decl.name.clone(),
+                                    module_source: module_source.clone(),
+                                    defined_at: struct_decl.id,
+                                    fields: Vec::new(),
+                                    field_ast_ids: Vec::new(),
+                                    field_defaults: Vec::new(),
+                                    field_wire_numbers: Vec::new(),
+                                    type_params: RealTypeParams::of(&struct_decl.type_params),
+                                    type_param_type_ids: Vec::new(), // filled in second pass
+                                },
+                            );
+                        }
+                        register_struct_compiler_item(
+=======
+                        // Unresolved until the second sub-pass; the name is what is needed now.
+                        data.struct_fields.insert(
+                            resolutions.defs().def_at(struct_decl.id),
+                            StructFieldInfo::of_decl(
+                                module_source.clone(),
+                                struct_decl,
+                                Vec::new(),
+                                Vec::new(),
+                            ),
+                        );
+                        register_type_compiler_item(
+>>>>>>> origin/main
                             &type_table,
+                            CompilerItemKind::Struct,
                             &struct_decl.attrs,
                             struct_decl.id,
                             &struct_decl.name,
@@ -479,6 +567,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
+<<<<<<< HEAD
                         all_variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
                             VariantInfo {
@@ -491,28 +580,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             },
                         );
                         register_variant_compiler_item(
-                            &type_table,
-                            &variant_decl.attrs,
-                            variant_decl.id,
-                            &variant_decl.name,
-                            module_source,
-                            variant_decl.span,
-                            logger,
-                        );
-                        for (case_index, case) in variant_decl.cases.iter().enumerate() {
-                            register_variant_case_compiler_item(
-                                &type_table,
-                                &case.attrs,
-                                &variant_decl.name,
-                                &case.name,
-                                case_index as u32,
-                                module_source,
-                                case.span,
-                                logger,
+||||||| 03599b796
+                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
+                            all_variant_cases.insert(
+                                def,
+                                VariantInfo {
+                                    name: variant_decl.name.clone(),
+                                    module_source: module_source.clone(),
+                                    defined_at: variant_decl.id,
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
+                                    cases: Vec::new(),
+                                    type_param_type_ids: Vec::new(),
+                                },
                             );
                         }
+                        register_variant_compiler_item(
+=======
+                        data.variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo::of_decl(
+                                module_source.clone(),
+                                variant_decl,
+                                Vec::new(),
+                                Vec::new(),
+                            ),
+                        );
+                        register_variant_compiler_items(
+>>>>>>> origin/main
+                            &type_table,
+                            variant_decl,
+                            module_source,
+                            logger,
+                        );
                     }
                     Item::Enum(enum_decl) => {
+<<<<<<< HEAD
                         // Insert with empty cases first - will be populated in second sub-pass
                         all_enum_cases.insert(
                             resolutions.defs().def_at(enum_decl.id),
@@ -526,22 +628,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             module_source,
                             enum_decl.span,
                             logger,
-                        );
-                        for (case_index, case) in enum_decl.cases.iter().enumerate() {
-                            register_enum_case_compiler_item(
-                                &type_table,
-                                &case.attrs,
-                                &enum_decl.name,
-                                &case.name,
-                                case_index as u32,
-                                module_source,
-                                case.span,
-                                logger,
+||||||| 03599b796
+                        // Insert with empty cases first - will be populated in second sub-pass
+                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
+                            all_enum_cases.insert(
+                                def,
+                                EnumInfo::new(module_source.clone(), enum_decl.id, Vec::new()),
                             );
                         }
+                        register_enum_compiler_item(
+                            &type_table,
+                            &enum_decl.attrs,
+                            enum_decl.id,
+                            &enum_decl.name,
+                            module_source,
+                            enum_decl.span,
+                            logger,
+=======
+                        data.enum_cases.insert(
+                            resolutions.defs().def_at(enum_decl.id),
+                            EnumInfo::of_decl(module_source.clone(), enum_decl),
+>>>>>>> origin/main
+                        );
+                        register_enum_compiler_items(&type_table, enum_decl, module_source, logger);
                     }
                     Item::Resource(resource_decl) => {
                         let def = resolutions.defs().def_at(resource_decl.id);
+<<<<<<< HEAD
                         all_resource_types.insert(
                             def,
                             ResourceInfo {
@@ -577,9 +690,90 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 module: module_source.clone(),
                                 span: resource_decl.span,
                             });
+||||||| 03599b796
+                        if let Some(def) = resolutions.defs().of_ast_id(resource_decl.id) {
+                            all_resource_types.insert(
+                                def,
+                                ResourceInfo {
+                                    name: resource_decl.name.clone(),
+                                    module_source: module_source.clone(),
+                                    defined_at: resource_decl.id,
+                                },
+                            );
+                            if declares_unrestricted(&resource_decl.attrs) {
+                                type_table.borrow_mut().mark_unrestricted_resource(def);
+                            }
+                            let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
+                            if is_generic {
+                                generic_resources.insert(def);
+                            }
+                            // A static is not inherited, so it shadows nothing.
+                            resource_method_names.insert(
+                                def,
+                                resource_decl
+                                    .methods
+                                    .iter()
+                                    .filter(|m| {
+                                        m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                                    })
+                                    .map(|m| (m.name.clone(), m.span))
+                                    .collect(),
+                            );
+                            if let Some(parent) = &resource_decl.parent {
+                                pending_extends.push(PendingExtends {
+                                    child: def,
+                                    child_name: resource_decl.name.clone(),
+                                    child_is_generic: is_generic,
+                                    parent: parent.clone(),
+                                    module: module_source.clone(),
+                                    span: resource_decl.span,
+                                });
+                            }
+=======
+                        data.resource_types.insert(
+                            def,
+                            ResourceInfo {
+                                name: resource_decl.name.clone(),
+                                module_source: module_source.clone(),
+                                defined_at: resource_decl.id,
+                            },
+                        );
+                        if declares_unrestricted(&resource_decl.attrs) {
+                            type_table.borrow_mut().mark_unrestricted_resource(
+                                def,
+                                declared_handle_classes(&resource_decl.attrs),
+                            );
+>>>>>>> origin/main
                         }
-                        register_resource_compiler_item(
+                        let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
+                        if is_generic {
+                            generic_resources.insert(def);
+                        }
+                        // A static is not inherited, so it shadows nothing.
+                        resource_method_names.insert(
+                            def,
+                            resource_decl
+                                .methods
+                                .iter()
+                                .filter(|m| {
+                                    m.params.iter().any(|p| p.self_kind != ast::SelfKind::None)
+                                })
+                                .map(|m| (m.name.clone(), m.span))
+                                .collect(),
+                        );
+                        if let Some(parent) = &resource_decl.parent {
+                            pending_extends.push(PendingExtends {
+                                child: def,
+                                child_name: resource_decl.name.clone(),
+                                child_is_generic: is_generic,
+                                parent: parent.clone(),
+                                module: module_source.clone(),
+                                span: resource_decl.span,
+                            });
+                        }
+                        register_type_compiler_item(
                             &type_table,
+                            CompilerItemKind::Resource,
                             &resource_decl.attrs,
                             resource_decl.id,
                             &resource_decl.name,
@@ -612,8 +806,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::BuiltinTypeDecl(decl) => {
-                        register_builtin_type_compiler_item(
+                        register_type_compiler_item(
                             &type_table,
+                            CompilerItemKind::BuiltinType,
                             &decl.attrs,
                             decl.id,
                             &decl.name,
@@ -623,8 +818,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Newtype(decl) => {
-                        register_newtype_compiler_item(
+                        register_type_compiler_item(
                             &type_table,
+                            CompilerItemKind::Newtype,
                             &decl.attrs,
                             decl.id,
                             &decl.name,
@@ -657,15 +853,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some(entry_module_source),
                     &invocations,
                 );
-                let empty_struct: IndexMap<DefId, StructFieldInfo> = IndexMap::default();
-                let empty_newtype: IndexMap<DefId, TypeId> = IndexMap::default();
-                let empty_enum: IndexMap<DefId, EnumInfo> = IndexMap::default();
-                let empty_flags: IndexMap<DefId, FlagsInfo> = IndexMap::default();
-                let empty_gnt: IndexMap<DefId, GenericNewtypeInfo> = IndexMap::default();
-                let empty_variant: IndexMap<DefId, VariantInfo> = IndexMap::default();
-                let empty_anon_struct: IndexMap<AnonStructId, StructFieldInfo> =
-                    IndexMap::default();
-                let empty_local_items: IndexMap<String, DefId> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -678,49 +865,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let def = resolutions.defs().def_at(newtype_decl.id);
                     if newtype_decl.type_params.is_empty() {
                         // Skip if already resolved (fixpoint convergence).
-                        if all_newtypes.contains_key(&def) {
+                        if data.newtypes.contains_key(&def) {
                             continue;
                         }
                         let lookup = TypeLookup {
                             current_module_source: module_source,
                             resolutions: &resolutions,
                             namespace_imports: &namespace_imports,
-                            all_newtypes: &all_newtypes,
-                            all_struct_fields: &all_struct_fields,
-                            all_variant_cases: &all_variant_cases,
-                            all_enum_cases: &all_enum_cases,
-                            all_flags_cases: &all_flags_cases,
-                            all_resource_types: &all_resource_types,
-                            all_generic_newtypes: &all_generic_newtypes,
-                            local_struct_fields: &empty_struct,
-                            local_newtypes: &empty_newtype,
-                            local_enum_cases: &empty_enum,
-                            local_flags_cases: &empty_flags,
-                            local_generic_newtypes: &empty_gnt,
-                            local_variant_cases: &empty_variant,
-                            anon_struct_fields: &empty_anon_struct,
-                            fn_local_items: &empty_local_items,
-                            decls: Some(&trait_env),
+                            program: &data,
+                            walk: &no_walk,
+                            decls: &trait_env,
                         };
                         let base_type_id = Self::resolve_type_static(
                             &newtype_decl.ty,
                             &mut type_table.borrow_mut(),
                             &lookup,
                         );
-                        let newtype_id = type_table.borrow_mut().make_newtype(def, base_type_id);
-                        type_table
-                            .borrow_mut()
-                            .register_decl_type(newtype_decl.id, newtype_id);
-                        all_newtypes.insert(def, newtype_id);
+                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                         newly_resolved = true;
-                    } else if !all_generic_newtypes.contains_key(&def) {
-                        all_generic_newtypes.insert(
-                            def,
-                            GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
-                        );
+                    } else if !data.generic_newtypes.contains_key(&def) {
+                        data.generic_newtypes
+                            .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
                         newly_resolved = true;
                     }
                 }
@@ -732,7 +897,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // Second sub-pass: resolve struct fields and newtypes.
         // Each module's lookup goes directly through the in-progress shared
-        // tables (`all_*`) via [`TypeLookup`] — no per-module flat-map cloning.
+        // tables via [`TypeLookup`] — no per-module flat-map cloning.
         for (module_source, module) in modules {
             if stdlib_set.contains(module_source) {
                 // Stdlib fields are already resolved in the seeded maps.
@@ -746,61 +911,36 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 &invocations,
             );
 
-            // Helper closure: build a fresh TypeLookup pointed at the
-            // current state of the shared tables. Recreated per call site so
-            // that the previous borrow is released before each `borrow_mut()`
-            // on `type_table`.
-            let empty_struct: IndexMap<DefId, StructFieldInfo> = IndexMap::default();
-            let empty_newtype: IndexMap<DefId, TypeId> = IndexMap::default();
-            let empty_enum: IndexMap<DefId, EnumInfo> = IndexMap::default();
-            let empty_flags: IndexMap<DefId, FlagsInfo> = IndexMap::default();
-            let empty_gnt: IndexMap<DefId, GenericNewtypeInfo> = IndexMap::default();
-            let empty_variant: IndexMap<DefId, VariantInfo> = IndexMap::default();
-            let empty_anon_struct: IndexMap<AnonStructId, StructFieldInfo> = IndexMap::default();
-            let empty_local_items: IndexMap<String, DefId> = IndexMap::default();
-
             for item in &module.items {
+                // Rebuilt per item: the tables it borrows grow between items.
                 let lookup = TypeLookup {
                     current_module_source: module_source,
                     resolutions: &resolutions,
                     namespace_imports: &namespace_imports,
-                    all_newtypes: &all_newtypes,
-                    all_struct_fields: &all_struct_fields,
-                    all_variant_cases: &all_variant_cases,
-                    all_enum_cases: &all_enum_cases,
-                    all_flags_cases: &all_flags_cases,
-                    all_resource_types: &all_resource_types,
-                    all_generic_newtypes: &all_generic_newtypes,
-                    local_struct_fields: &empty_struct,
-                    local_newtypes: &empty_newtype,
-                    local_enum_cases: &empty_enum,
-                    local_flags_cases: &empty_flags,
-                    local_generic_newtypes: &empty_gnt,
-                    local_variant_cases: &empty_variant,
-                    anon_struct_fields: &empty_anon_struct,
-                    fn_local_items: &empty_local_items,
-                    decls: Some(&trait_env),
+                    program: &data,
+                    walk: &no_walk,
+                    decls: &trait_env,
                 };
                 match item {
                     Item::Struct(struct_decl) => {
-                        let mut fields = Vec::new();
-                        let mut field_ast_ids = Vec::new();
-                        let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                         let struct_slots = ParamSlot::list(&struct_decl.type_params);
-                        for field in &struct_decl.fields {
-                            let type_id = Self::resolve_type_static_with_params(
-                                &field.ty,
-                                &mut type_table.borrow_mut(),
-                                &lookup,
-                                &struct_slots,
-                            );
-                            fields.push((field.name.clone(), type_id, field.visibility));
-                            field_ast_ids.push(field.id);
-                            field_defaults.push(field.default.clone());
-                        }
+                        let fields = struct_decl
+                            .fields
+                            .iter()
+                            .map(|field| {
+                                let type_id = Self::resolve_type_static_with_params(
+                                    &field.ty,
+                                    &mut type_table.borrow_mut(),
+                                    &lookup,
+                                    &struct_slots,
+                                );
+                                (field.name.clone(), type_id, field.visibility)
+                            })
+                            .collect();
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
                         let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
+<<<<<<< HEAD
 
                         // Drop lookup so we can mutate `all_struct_fields`.
 
@@ -820,7 +960,38 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             type_param_type_ids,
                         };
                         all_struct_fields.insert(resolutions.defs().def_at(struct_decl.id), info);
+||||||| 03599b796
+
+                        // Drop lookup so we can mutate `all_struct_fields`.
+
+                        // Update the nested map entry with actual fields. The
+                        // next iteration's `lookup` will see the new entry via
+                        // the "current module" path, so no flat-map echo is
+                        // needed.
+                        let info = StructFieldInfo {
+                            name: struct_decl.name.clone(),
+                            module_source: module_source.clone(),
+                            defined_at: struct_decl.id,
+                            fields,
+                            field_ast_ids,
+                            field_defaults,
+                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
+                            type_params: RealTypeParams::of(&struct_decl.type_params),
+                            type_param_type_ids,
+                        };
+                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
+                            all_struct_fields.insert(def, info);
+                        }
+=======
+                        let info = data
+                            .struct_fields
+                            .get_mut(&resolutions.defs().def_at(struct_decl.id))
+                            .expect("the first sub-pass declared every struct");
+                        info.fields = fields;
+                        info.type_param_type_ids = type_param_type_ids;
+>>>>>>> origin/main
                     }
+<<<<<<< HEAD
                     Item::Newtype(newtype_decl) => {
                         let def = resolutions.defs().def_at(newtype_decl.id);
                         if newtype_decl.type_params.is_empty() {
@@ -844,28 +1015,60 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             all_generic_newtypes.insert(def, info);
                         }
+||||||| 03599b796
+                    Item::Newtype(newtype_decl) => {
+                        if newtype_decl.type_params.is_empty() {
+                            // Concrete newtype: resolve immediately
+                            let base_type_id = Self::resolve_type_static(
+                                &newtype_decl.ty,
+                                &mut type_table.borrow_mut(),
+                                &lookup,
+                            );
+                            let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) else {
+                                continue;
+                            };
+                            let newtype_id =
+                                type_table.borrow_mut().make_newtype(def, base_type_id);
+                            type_table
+                                .borrow_mut()
+                                .register_decl_type(newtype_decl.id, newtype_id);
+                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                                all_newtypes.insert(def, newtype_id);
+                            }
+                        } else {
+                            // Generic newtype: store definition for lazy instantiation
+                            let info = GenericNewtypeInfo {
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
+                                base_type_ast: newtype_decl.ty.clone(),
+                            };
+                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
+                                all_generic_newtypes.insert(def, info);
+                            }
+                        }
+=======
+                    // The pre-pass already recorded every generic newtype whole.
+                    Item::Newtype(newtype_decl) if newtype_decl.type_params.is_empty() => {
+                        let base_type_id = Self::resolve_type_static(
+                            &newtype_decl.ty,
+                            &mut type_table.borrow_mut(),
+                            &lookup,
+                        );
+                        let def = resolutions.defs().def_at(newtype_decl.id);
+                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
+>>>>>>> origin/main
                     }
                     Item::Variant(variant_decl) => {
                         let variant_slots = ParamSlot::list(&variant_decl.type_params);
-                        let mut cases = Vec::new();
-                        for case in &variant_decl.cases {
-                            let payload = if let Some(payload_ty) = &case.payload {
-                                Self::resolve_type_static_with_params(
-                                    payload_ty,
-                                    &mut type_table.borrow_mut(),
-                                    &lookup,
-                                    &variant_slots,
-                                )
-                            } else {
-                                TypeTable::UNIT
-                            };
-                            cases.push(VariantCaseData {
-                                name: case.name.clone(),
-                                payload,
-                                ast_id: case.id,
-                            });
-                        }
+                        let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
+                            Self::resolve_type_static_with_params(
+                                payload_ty,
+                                &mut type_table.borrow_mut(),
+                                &lookup,
+                                &variant_slots,
+                            )
+                        });
                         let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
+<<<<<<< HEAD
                         all_variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
                             VariantInfo {
@@ -893,14 +1096,53 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_enum_cases.insert(
                             resolutions.defs().def_at(enum_decl.id),
                             EnumInfo::new(module_source.clone(), enum_decl.id, cases),
+||||||| 03599b796
+                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
+                            all_variant_cases.insert(
+                                def,
+                                VariantInfo {
+                                    name: variant_decl.name.clone(),
+                                    module_source: module_source.clone(),
+                                    defined_at: variant_decl.id,
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
+                                    cases,
+                                    type_param_type_ids,
+                                },
+                            );
+                        }
+                    }
+                    Item::Enum(enum_decl) => {
+                        // Populate enum cases (no field types, just names and indices)
+                        let cases: Vec<EnumCaseData> = enum_decl
+                            .cases
+                            .iter()
+                            .enumerate()
+                            .map(|(index, case)| EnumCaseData {
+                                name: case.name.clone(),
+                                index: index as u32,
+                                ast_id: case.id,
+                            })
+                            .collect();
+                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
+                            all_enum_cases.insert(
+                                def,
+                                EnumInfo::new(module_source.clone(), enum_decl.id, cases),
+                            );
+                        }
+=======
+                        data.variant_cases.insert(
+                            resolutions.defs().def_at(variant_decl.id),
+                            VariantInfo::of_decl(
+                                module_source.clone(),
+                                variant_decl,
+                                cases,
+                                type_param_type_ids,
+                            ),
+>>>>>>> origin/main
                         );
                     }
                     Item::Flags(flags_decl) => {
-                        // A flags value is a single 32-bit word at the CM
-                        // boundary (bitmask `1 << i`), so >32 members has no
-                        // representation. Reject it here rather than shifting
-                        // past the word width.
-                        if flags_decl.flags.len() > 32 {
+                        if flags_decl.flags.len() > FlagsInfo::MAX_MEMBERS {
                             logger.error_in(
                                 module_source,
                                 TypeError::FlagsTooManyMembers {
@@ -909,10 +1151,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     span: flags_decl.name_span,
                                 },
                             )?;
-                            // Skip registering the malformed decl; building its
-                            // `1 << i` bitmasks would overflow the word width.
                             continue;
                         }
+<<<<<<< HEAD
                         // Create a distinct Flags type (not a newtype over u32)
                         let def = resolutions.defs().def_at(flags_decl.id);
                         let flags_type = type_table.borrow_mut().make_flags(def);
@@ -940,6 +1181,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 members,
                             },
                         );
+||||||| 03599b796
+                        // Create a distinct Flags type (not a newtype over u32)
+                        let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) else {
+                            continue;
+                        };
+                        let flags_type = type_table.borrow_mut().make_flags(def);
+                        type_table
+                            .borrow_mut()
+                            .register_decl_type(flags_decl.id, flags_type);
+                        // Add to newtypes so it can be used as a type name in signatures
+                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
+                            all_newtypes.insert(def, flags_type);
+                        }
+                        // Store member info with bitmask values (1 << index)
+                        let members: Vec<FlagsMemberData> = flags_decl
+                            .flags
+                            .iter()
+                            .enumerate()
+                            .map(|(i, m)| FlagsMemberData {
+                                name: m.name.clone(),
+                                bitmask: 1u32 << i,
+                                ast_id: m.id,
+                            })
+                            .collect();
+                        if let Some(def) = resolutions.defs().of_ast_id(flags_decl.id) {
+                            all_flags_cases.insert(
+                                def,
+                                FlagsInfo {
+                                    type_id: flags_type,
+                                    module_source: module_source.clone(),
+                                    members,
+                                },
+                            );
+                        }
+=======
+                        let def = resolutions.defs().def_at(flags_decl.id);
+                        data.declare_flags(&type_table, def, module_source.clone(), flags_decl);
+>>>>>>> origin/main
                     }
                     _ => {}
                 }
@@ -965,7 +1244,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
-            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set);
+            fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set)
+                .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
             (cm_interface_registry, world_registry)
         };
         let builtin_registry = {
@@ -1153,15 +1433,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             logger,
         );
 
-        // Wrap all_* maps in Rc for cheap sharing across per-module elaborators
-        let all_newtypes = Rc::new(all_newtypes);
-        let all_struct_fields = Rc::new(all_struct_fields);
-        let all_variant_cases = Rc::new(all_variant_cases);
-        let all_enum_cases = Rc::new(all_enum_cases);
-        let all_flags_cases = Rc::new(all_flags_cases);
-        let all_resource_types = Rc::new(all_resource_types);
-        let all_generic_newtypes = Rc::new(all_generic_newtypes);
+        let data = Rc::new(data);
 
+<<<<<<< HEAD
         // Every type name the program declares anywhere: the validator below
         // rejects only a name no module declares. Scope is the resolver's.
         let known_type_names = {
@@ -1192,10 +1466,238 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             cache
         };
+||||||| 03599b796
+        // Pre-compute the global known type names cache once (shared across all modules)
+        let known_type_names_cache = {
+            let mut cache = IndexSet::default();
+            for info in all_struct_fields.values() {
+                cache.insert(info.name.clone());
+            }
+            for def in all_variant_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
+            }
+            for def in all_enum_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
+            }
+            for def in all_flags_cases.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
+            }
+            for def in all_newtypes.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
+            }
+            for def in all_generic_newtypes.keys() {
+                cache.insert(resolutions.defs().name(*def).to_string());
+            }
+            for name in PrimitiveType::all_primitive_names() {
+                cache.insert(name.to_string());
+            }
+            cache
+        };
+=======
+        // Pre-compute the global known type names cache once (shared across all modules)
+        let known_type_names_cache: IndexSet<String> = data
+            .known_types()
+            .map(|def| resolutions.defs().name(def).to_string())
+            .chain(
+                PrimitiveType::all_primitive_names()
+                    .iter()
+                    .map(ToString::to_string),
+            )
+            .collect();
+>>>>>>> origin/main
 
+<<<<<<< HEAD
         // Every module's type names are known here, so an unrecognized one is
         // undefined rather than left to become UNKNOWN in pre-resolution.
         Self::validate_type_definitions(modules, &known_type_names, logger, &stdlib_set)?;
+||||||| 03599b796
+        // Per-module *visible* type names: each module's own declared types,
+        // plus the auto-imported prelude, the primitives, and any types the
+        // module explicitly `use`s. Unlike `known_type_names_cache` (a global
+        // union of every module's types), this is not polluted by type names
+        // from unrelated modules, so it correctly tells a free impl type
+        // parameter (`E` in the prelude's `impl Result<T, E>`) apart from a
+        // concrete instantiation argument (`u8` in `impl List<u8>`) even when
+        // a *user* module declares a type named `E`. It is always a subset of
+        // the global cache, so it can only remove false positives.
+        let module_visible_types: IndexMap<ModuleSource, IndexSet<String>> = {
+            // Own-declared type names per module.
+            let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            for info in all_struct_fields.values() {
+                local
+                    .entry(info.module_source.clone())
+                    .or_default()
+                    .insert(info.name.clone());
+            }
+            for def in all_variant_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_enum_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_flags_cases.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_newtypes.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+            for def in all_generic_newtypes.keys() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(*def).clone())
+                    .or_default()
+                    .insert(defs.name(*def).to_string());
+            }
+
+            // The prelude is auto-imported into every module, so its types are
+            // visible everywhere.
+            let is_auto_visible =
+                |ms: &ModuleSource| ms.is_prelude() || ms.is_core_rt() || ms.is_core_builtin();
+            let mut prelude_types: IndexSet<String> = IndexSet::default();
+            for (ms, names) in &local {
+                if is_auto_visible(ms) {
+                    prelude_types.extend(names.iter().cloned());
+                }
+            }
+
+            let defs = resolutions.defs();
+            let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            for ms in modules.keys() {
+                let mut set: IndexSet<String> = IndexSet::default();
+                for prim in PrimitiveType::all_primitive_names() {
+                    set.insert(prim.to_string());
+                }
+                if let Some(own) = local.get(ms) {
+                    set.extend(own.iter().cloned());
+                }
+                set.extend(prelude_types.iter().cloned());
+                // The import tier alone: cases ride a tier only value position
+                // consults, so this one holds exactly the names asked for here.
+                for (local_name, def) in resolutions.imports_in(ms) {
+                    if local
+                        .get(defs.module(def))
+                        .is_some_and(|s| s.contains(defs.name(def)))
+                    {
+                        set.insert(local_name.to_string());
+                    }
+                }
+                visible.insert(ms.clone(), set);
+            }
+            visible
+        };
+
+        // Validate type names in struct fields, variant payloads, and newtype definitions.
+        // At this point all type names from all modules are known, so any unrecognized
+        // Named type is truly undefined. This catches undefined types that would silently
+        // become UNKNOWN in static pre-resolution.
+        // Resource type names are kept separate from known_type_names_cache because
+        // adding them would break is_known_type_name() used in impl block type parameter
+        // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
+        let resource_type_names: IndexSet<String> = all_resource_types
+            .values()
+            .map(|info| info.name.clone())
+            .collect();
+        Self::validate_type_definitions(
+            modules,
+            &known_type_names_cache,
+            &resource_type_names,
+            logger,
+            &stdlib_set,
+        )?;
+=======
+        // Per-module *visible* type names: each module's own declared types,
+        // plus the auto-imported prelude, the primitives, and any types the
+        // module explicitly `use`s. Unlike `known_type_names_cache` (a global
+        // union of every module's types), this is not polluted by type names
+        // from unrelated modules, so it correctly tells a free impl type
+        // parameter (`E` in the prelude's `impl Result<T, E>`) apart from a
+        // concrete instantiation argument (`u8` in `impl List<u8>`) even when
+        // a *user* module declares a type named `E`. It is always a subset of
+        // the global cache, so it can only remove false positives.
+        let module_visible_types: IndexMap<ModuleSource, IndexSet<String>> = {
+            // Own-declared type names per module.
+            let mut local: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            for def in data.known_types() {
+                let defs = resolutions.defs();
+                local
+                    .entry(defs.module(def).clone())
+                    .or_default()
+                    .insert(defs.name(def).to_string());
+            }
+
+            // The prelude is auto-imported into every module, so its types are
+            // visible everywhere.
+            let is_auto_visible =
+                |ms: &ModuleSource| ms.is_prelude() || ms.is_core_rt() || ms.is_core_builtin();
+            let mut prelude_types: IndexSet<String> = IndexSet::default();
+            for (ms, names) in &local {
+                if is_auto_visible(ms) {
+                    prelude_types.extend(names.iter().cloned());
+                }
+            }
+
+            let defs = resolutions.defs();
+            let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
+            for ms in modules.keys() {
+                let mut set: IndexSet<String> = IndexSet::default();
+                for prim in PrimitiveType::all_primitive_names() {
+                    set.insert(prim.to_string());
+                }
+                if let Some(own) = local.get(ms) {
+                    set.extend(own.iter().cloned());
+                }
+                set.extend(prelude_types.iter().cloned());
+                // The import tier alone: cases ride a tier only value position
+                // consults, so this one holds exactly the names asked for here.
+                for (local_name, def) in resolutions.imports_in(ms) {
+                    if local
+                        .get(defs.module(def))
+                        .is_some_and(|s| s.contains(defs.name(def)))
+                    {
+                        set.insert(local_name.to_string());
+                    }
+                }
+                visible.insert(ms.clone(), set);
+            }
+            visible
+        };
+
+        // Validate type names in struct fields, variant payloads, and newtype definitions.
+        // At this point all type names from all modules are known, so any unrecognized
+        // Named type is truly undefined. This catches undefined types that would silently
+        // become UNKNOWN in static pre-resolution.
+        // Resource type names are kept separate from known_type_names_cache because
+        // adding them would break is_known_type_name() used in impl block type parameter
+        // inference (e.g., `impl Request { ... }` would stop recognizing Request's methods).
+        let resource_type_names: IndexSet<String> = data
+            .resource_types
+            .values()
+            .map(|info| info.name.clone())
+            .collect();
+        Self::validate_type_definitions(
+            modules,
+            &known_type_names_cache,
+            &resource_type_names,
+            logger,
+            &stdlib_set,
+        )?;
+>>>>>>> origin/main
 
         // Pre-build function name → index maps for all loaded modules (O(1) lookup)
         let loaded_module_func_indices: IndexMap<ModuleSource, IndexMap<String, usize>> = {
@@ -1272,13 +1774,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let tysys = TypeSystem {
             type_table,
-            all_newtypes,
-            all_generic_newtypes,
-            all_struct_fields,
-            all_variant_cases,
-            all_enum_cases,
-            all_flags_cases,
-            all_resource_types,
+            data,
             resolutions,
             trait_env,
             solver: None,
@@ -1331,10 +1827,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             annotate_ctx: scope::Scope::default(),
             invocations: Rc::clone(&state.invocations),
             interner: Rc::clone(&state.interner),
-            suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
-            assoc_binding_stack: hashmap::IndexSet::default(),
-            bound_closure_stack: hashmap::IndexSet::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }
@@ -1682,7 +2175,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         symbols,
                         modules,
                         logger,
-                        Rc::clone(&state.interner),
                         // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
                         // `reify_module`). The semantic diagnostics (effect
@@ -1722,7 +2214,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
+<<<<<<< HEAD
                         let type_id = tt.make_struct(StructDef::Decl(defs.def_at(struct_decl.id)));
+||||||| 03599b796
+                        // Resolve via struct_fields so the canonical name/module
+                        // from `StructFieldInfo` wins over anything else.
+                        let (name, ms) = defs
+                            .of_ast_id(struct_decl.id)
+                            .and_then(|def| all_struct_fields.get(&def))
+                            .map(|info| (info.name.clone(), info.module_source.clone()))
+                            .unwrap_or_else(|| (struct_decl.name.clone(), module_source.clone()));
+                        let (_, _) = (&name, &ms);
+                        let Some(def) = defs.of_ast_id(struct_decl.id) else {
+                            continue;
+                        };
+                        let type_id = tt.make_struct(StructDef::Decl(def));
+=======
+                        let def = defs.def_at(struct_decl.id);
+                        let type_id = tt.make_struct(StructDef::Decl(def));
+>>>>>>> origin/main
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
@@ -1943,8 +2453,50 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         check.visit_type(&newtype_decl.ty);
                     }
                     Item::Function(func) => {
+<<<<<<< HEAD
                         check.type_params = param_names(&func.type_params);
                         check.function(func);
+||||||| 03599b796
+                        let type_params: Vec<&str> =
+                            func.type_params.iter().map(|p| p.name.as_str()).collect();
+                        for param in &func.params {
+                            Self::validate_ast_type_names(
+                                &param.ty,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+                        if let Some(return_ty) = &func.return_type {
+                            Self::validate_ast_type_names(
+                                return_ty,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+                        if let Some(body) = &func.body {
+                            Self::validate_block_type_names(
+                                body,
+                                &module_known_names,
+                                resource_type_names,
+                                &type_params,
+                                logger,
+                            )?;
+                        }
+=======
+                        let type_params: Vec<&str> =
+                            func.type_params.iter().map(|p| p.name.as_str()).collect();
+                        Self::validate_function_type_names(
+                            func,
+                            &module_known_names,
+                            resource_type_names,
+                            &type_params,
+                            logger,
+                        )?;
+>>>>>>> origin/main
                     }
                     Item::Impl(impl_block) => {
                         let mut type_params = param_names(&impl_block.type_params);
@@ -1958,9 +2510,55 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }));
                         }
                         for method in &impl_block.methods {
+<<<<<<< HEAD
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
                             check.function(method);
+||||||| 03599b796
+                            let mut method_type_params = type_params.clone();
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            for param in &method.params {
+                                Self::validate_ast_type_names(
+                                    &param.ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(return_ty) = &method.return_type {
+                                Self::validate_ast_type_names(
+                                    return_ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(body) = &method.body {
+                                Self::validate_block_type_names(
+                                    body,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+=======
+                            let mut method_type_params = type_params.clone();
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            Self::validate_function_type_names(
+                                method,
+                                &module_known_names,
+                                resource_type_names,
+                                &method_type_params,
+                                logger,
+                            )?;
+>>>>>>> origin/main
                         }
                     }
                     Item::Trait(trait_decl) => {
@@ -1969,9 +2567,64 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         type_params
                             .extend(trait_decl.associated_types.iter().map(|a| a.name.as_str()));
                         for method in &trait_decl.methods {
+<<<<<<< HEAD
                             check.type_params =
                                 [&type_params[..], &param_names(&method.type_params)].concat();
                             check.function(method);
+||||||| 03599b796
+                            let mut method_type_params = type_params.clone();
+                            method_type_params.push("Self");
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            // Add associated type names as type params
+                            for assoc in &trait_decl.associated_types {
+                                method_type_params.push(&assoc.name);
+                            }
+                            for param in &method.params {
+                                Self::validate_ast_type_names(
+                                    &param.ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(return_ty) = &method.return_type {
+                                Self::validate_ast_type_names(
+                                    return_ty,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+                            if let Some(body) = &method.body {
+                                Self::validate_block_type_names(
+                                    body,
+                                    &module_known_names,
+                                    resource_type_names,
+                                    &method_type_params,
+                                    logger,
+                                )?;
+                            }
+=======
+                            let mut method_type_params = type_params.clone();
+                            method_type_params.push("Self");
+                            for p in &method.type_params {
+                                method_type_params.push(p.name.as_str());
+                            }
+                            for assoc in &trait_decl.associated_types {
+                                method_type_params.push(&assoc.name);
+                            }
+                            Self::validate_function_type_names(
+                                method,
+                                &module_known_names,
+                                resource_type_names,
+                                &method_type_params,
+                                logger,
+                            )?;
+>>>>>>> origin/main
                         }
                     }
                     Item::Global(global_decl) => check.visit_type(&global_decl.ty),
@@ -1984,6 +2637,2065 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Ok(())
     }
 
+<<<<<<< HEAD
+||||||| 03599b796
+    /// Validate type names in a block (let-stmt type annotations and cast expressions).
+    fn validate_block_type_names(
+        block: &ast::Block,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        // Local item declarations (`Stmt::Item`) are not in `known_type_names`
+        // (a module-wide set built before any function body is walked), so a
+        // reference to one would otherwise fail this fast pre-check before
+        // the real elaborator (which understands block-scoped visibility) ever
+        // runs. Widen the set with every local item name reachable from this
+        // block, recursively — a coarse over-approximation (it does not
+        // enforce block scoping; the real elaborator still does) is fine here:
+        // this pass only exists to fail fast on *genuinely* unknown names.
+        let local_item_names = Self::collect_local_item_names(block);
+        let widened;
+        let known_type_names = if local_item_names.is_empty() {
+            known_type_names
+        } else {
+            let mut set = known_type_names.clone();
+            set.extend(local_item_names);
+            widened = set;
+            &widened
+        };
+        for stmt in &block.stmts {
+            Self::validate_stmt_type_names(
+                stmt,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Collect the declared names of every local item (`Stmt::Item`)
+    /// reachable from `block`, recursing into nested blocks (`if`/`while`/
+    /// `for`/`loop`/labeled blocks). See `validate_block_type_names`.
+    fn collect_local_item_names(block: &ast::Block) -> IndexSet<String> {
+        fn visit_block(block: &ast::Block, out: &mut IndexSet<String>) {
+            for stmt in &block.stmts {
+                visit_stmt(stmt, out);
+            }
+        }
+        fn item_name(item: &Item) -> Option<&str> {
+            match item {
+                Item::Struct(d) => Some(&d.name),
+                Item::Enum(d) => Some(&d.name),
+                Item::Variant(d) => Some(&d.name),
+                Item::Flags(d) => Some(&d.name),
+                Item::Newtype(d) => Some(&d.name),
+                Item::Trait(d) => Some(&d.name),
+                _ => None,
+            }
+        }
+        fn visit_stmt(stmt: &ast::Stmt, out: &mut IndexSet<String>) {
+            match stmt {
+                ast::Stmt::Item(item) => {
+                    if let Some(name) = item_name(item) {
+                        out.insert(name.to_string());
+                    }
+                }
+                ast::Stmt::If(if_stmt) => {
+                    visit_block(&if_stmt.then_block, out);
+                    if let Some(else_block) = &if_stmt.else_block {
+                        visit_block(else_block, out);
+                    }
+                }
+                ast::Stmt::While(while_stmt) => visit_block(&while_stmt.body, out),
+                ast::Stmt::For(for_stmt) => visit_block(&for_stmt.body, out),
+                ast::Stmt::ForOf(for_of) => visit_block(&for_of.body, out),
+                ast::Stmt::Loop(loop_stmt) => visit_block(&loop_stmt.body, out),
+                ast::Stmt::LabeledBlock(labeled) => visit_block(&labeled.block, out),
+                ast::Stmt::Match(match_expr) => {
+                    for arm in &match_expr.arms {
+                        if let ast::Expr::Block(block) = &arm.body {
+                            visit_block(block, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = IndexSet::default();
+        visit_block(block, &mut out);
+        out
+    }
+
+    /// Validate type names in a statement.
+    fn validate_stmt_type_names(
+        stmt: &ast::Stmt,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match stmt {
+            ast::Stmt::Let(let_stmt) => {
+                if let Some(ty) = &let_stmt.ty {
+                    if let Some(span) = Self::first_infer_span(ty) {
+                        Self::validate_ast_type_names_inner(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                            true,
+                        )?;
+                        logger.error(TypeError::InferInLetAnnotation { span })?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+                if let Some(value) = &let_stmt.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(else_block) = &let_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::Expr(expr_stmt) => {
+                Self::validate_expr_type_names(
+                    &expr_stmt.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::TaskReturn(task_ret) => {
+                Self::validate_expr_type_names(
+                    &task_ret.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::If(if_stmt) => {
+                Self::validate_condition_type_names(
+                    &if_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_stmt.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::While(while_stmt) => {
+                Self::validate_condition_type_names(
+                    &while_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &while_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::For(for_stmt) => {
+                if let Some(init) = &for_stmt.init {
+                    Self::validate_stmt_type_names(
+                        init,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(condition) = &for_stmt.condition {
+                    Self::validate_condition_type_names(
+                        condition,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(update) = &for_stmt.update {
+                    Self::validate_expr_type_names(
+                        update,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_block_type_names(
+                    &for_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::ForOf(for_of) => {
+                Self::validate_expr_type_names(
+                    &for_of.iterable,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &for_of.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Loop(loop_stmt) => {
+                Self::validate_block_type_names(
+                    &loop_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &ast::Expr::Match(match_expr.clone()),
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Assert(assert_stmt) => {
+                Self::validate_expr_type_names(
+                    &assert_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            // A local item's own type references (struct fields, impl/trait
+            // method signatures) are validated by the regular elaboration
+            // pipeline once it resolves the item, not by this early pass.
+            ast::Stmt::Item(_)
+            | ast::Stmt::Break(_)
+            | ast::Stmt::Continue(_)
+            | ast::Stmt::Error(_) => {}
+        }
+        Ok(())
+    }
+
+    /// Validate type names in a condition.
+    fn validate_condition_type_names(
+        condition: &ast::Condition,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match condition {
+            ast::Condition::Expr(expr) => {
+                Self::validate_expr_type_names(
+                    expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Condition::LetChain { elements, .. } => {
+                for elem in elements {
+                    match elem {
+                        ast::ConditionElement::Let { expr, .. } => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                        ast::ConditionElement::Expr(expr) => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate type names in an expression (cast targets, closure params, turbofish, etc.).
+    fn validate_expr_type_names(
+        expr: &ast::Expr,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match expr {
+            ast::Expr::Cast(cast) => {
+                Self::validate_ast_type_names(
+                    &cast.target_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &cast.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Closure(closure) => {
+                for param in &closure.params {
+                    if let Some(ty) = &param.ty {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+                Self::validate_expr_type_names(
+                    &closure.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Call(call) => {
+                for ty in &call.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &call.callee,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &call.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::MethodCall(mc) => {
+                for ty in &mc.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &mc.receiver,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &mc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StaticMethodCall(smc) => {
+                // The target type heads a turbofish (`Result::<_, MyErr>`), so
+                // its direct args allow `_`; deeper positions are strict.
+                match &smc.target_type {
+                    Type::Generic(_) | Type::NamespacedGeneric(_) => {
+                        for arg in written_arg_nodes(&smc.target_type) {
+                            Self::validate_turbofish_type_arg(
+                                arg,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                    other => Self::validate_ast_type_names(
+                        other,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?,
+                }
+                for ty in &smc.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for arg in &smc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Binary(bin) => {
+                Self::validate_expr_type_names(
+                    &bin.left,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &bin.right,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Unary(un) => {
+                Self::validate_expr_type_names(
+                    &un.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Assign(assign) => {
+                Self::validate_expr_type_names(
+                    &assign.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &assign.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::CompoundAssign(ca) => {
+                Self::validate_expr_type_names(
+                    &ca.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &ca.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::ComparisonChain(cc) => {
+                Self::validate_expr_type_names(
+                    &cc.first,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for cmp in &cc.comparisons {
+                    Self::validate_expr_type_names(
+                        &cmp.right,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Index(idx) => {
+                Self::validate_expr_type_names(
+                    &idx.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &idx.index,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::FieldAccess(fa) => {
+                Self::validate_expr_type_names(
+                    &fa.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Block(block) => {
+                Self::validate_block_type_names(
+                    block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::If(if_expr) => {
+                Self::validate_condition_type_names(
+                    &if_expr.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_expr.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_expr.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &match_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arm in &match_expr.arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::validate_expr_type_names(
+                            guard,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                    Self::validate_expr_type_names(
+                        &arm.body,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Matches(matches_expr) => {
+                Self::validate_expr_type_names(
+                    &matches_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(guard) = &matches_expr.guard {
+                    Self::validate_expr_type_names(
+                        guard,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StructLiteral(sl) => {
+                for ty in &sl.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for field in &sl.fields {
+                    Self::validate_expr_type_names(
+                        &field.value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TupleLiteral(tl) => {
+                for elem in &tl.elements {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TupleComprehension(c) => {
+                for elem in [&c.iterable, &c.body] {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TaggedTemplate(t) => {
+                for expr in std::iter::once(&t.tag).chain(t.template.interpolations()) {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TemplateString(ts) => {
+                for expr in ts.interpolations() {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::TryOp(try_op) => {
+                Self::validate_expr_type_names(
+                    &try_op.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Spread(inner, _) => {
+                Self::validate_expr_type_names(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Range(range) => {
+                Self::validate_expr_type_names(
+                    &range.start,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &range.end,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::WithHandler(with_handler) => {
+                // The LHS of `E = h` in a `with` clause is an effect
+                // name, not a type name. The real elaborator validates it
+                // against the effect declaration index in
+                // `resolve_with_handler`; here we only walk the handler
+                // expression and the body for type-name references.
+                for binding in &with_handler.handlers {
+                    Self::validate_expr_type_names(
+                        &binding.handler,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for stmt in &with_handler.body.stmts {
+                    Self::validate_stmt_type_names(
+                        stmt,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Resume(resume) => {
+                Self::validate_expr_type_names(
+                    &resume.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Ident(ident) => {
+                // A bare turbofish value (`pair::<_, bool>`, `ns::pair::<_>`)
+                // has no call to infer from, so a `_` slot here is
+                // unresolvable — validate its type args strictly. A turbofish
+                // on the path's prefix (`Maybe::<_>::Nothing`) does have one:
+                // the expected type fills the slot.
+                for ty in &ident.type_args {
+                    if ident.type_args_on_prefix {
+                        Self::validate_turbofish_type_arg(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+            }
+            ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
+        }
+        Ok(())
+    }
+
+    pub(super) fn first_infer_span(ty: &Type) -> Option<Span> {
+        match ty {
+            Type::Infer(span) => Some(*span),
+            Type::Generic(g) => g.args.iter().find_map(Self::first_infer_span),
+            Type::NamespacedGeneric(ng) => ng.args.iter().find_map(Self::first_infer_span),
+            Type::Reference(inner) | Type::MutReference(inner) => Self::first_infer_span(inner),
+            Type::Tuple(elems) => elems.iter().find_map(Self::first_infer_span),
+            Type::Function(ft) => ft
+                .params
+                .iter()
+                .find_map(Self::first_infer_span)
+                .or_else(|| Self::first_infer_span(&ft.return_type)),
+            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Error(_) => None,
+        }
+    }
+
+    /// Walk an AST type expression and emit errors for unknown Named types.
+    /// Generic type names (List, Result, etc.) are not checked here since they
+    /// may be builtins not present in the type name registry; only their type
+    /// arguments are validated recursively.
+    fn validate_ast_type_names(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        Self::validate_ast_type_names_inner(
+            ty,
+            known_type_names,
+            resource_type_names,
+            type_params,
+            logger,
+            false,
+        )
+    }
+
+    fn validate_ast_type_names_inner(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+        allow_infer: bool,
+    ) -> Result<(), Bail> {
+        match ty {
+            Type::Named(named) => {
+                if named.name == "()" || named.name == "!" || named.name == "Self" {
+                    return Ok(());
+                }
+                if type_params.contains(&named.name.as_str()) {
+                    return Ok(());
+                }
+                if known_type_names.contains(&named.name) {
+                    return Ok(());
+                }
+                if resource_type_names.contains(&named.name) {
+                    return Ok(());
+                }
+                logger.error(TypeError::UnknownType {
+                    name: named.name.clone(),
+                    span: named.span,
+                })?;
+                Ok(())
+            }
+            Type::Generic(generic) => {
+                for arg in &generic.args {
+                    Self::validate_ast_type_names_inner(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::NamespacedGeneric(ng) => {
+                for arg in &ng.args {
+                    Self::validate_ast_type_names_inner(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Self::validate_ast_type_names_inner(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
+            Type::Tuple(elems) => {
+                for elem in elems {
+                    Self::validate_ast_type_names_inner(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::Function(ft) => {
+                for param in &ft.params {
+                    Self::validate_ast_type_names_inner(
+                        param,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Self::validate_ast_type_names_inner(
+                    &ft.return_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
+            Type::Infer(span) => {
+                if !allow_infer {
+                    logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                }
+                Ok(())
+            }
+            Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),
+        }
+    }
+
+    /// Validate a turbofish type argument, where a top-level `_` is allowed
+    /// (it marks an inference slot). Nested `_` is still out of scope, so a
+    /// non-`_` argument is validated strictly via [`Self::validate_ast_type_names`].
+    fn validate_turbofish_type_arg(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match ty {
+            Type::Infer(_) => Ok(()),
+            _ => Self::validate_ast_type_names(
+                ty,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            ),
+        }
+    }
+
+=======
+    /// Validate type names in a function's signature and body.
+    fn validate_function_type_names(
+        func: &ast::Function,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        for ty in func.params.iter().map(|p| &p.ty).chain(&func.return_type) {
+            Self::validate_ast_type_names(
+                ty,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            )?;
+        }
+        if let Some(body) = &func.body {
+            Self::validate_block_type_names(
+                body,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Validate type names in a block (let-stmt type annotations and cast expressions).
+    fn validate_block_type_names(
+        block: &ast::Block,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        // Local item declarations (`Stmt::Item`) are not in `known_type_names`
+        // (a module-wide set built before any function body is walked), so a
+        // reference to one would otherwise fail this fast pre-check before
+        // the real elaborator (which understands block-scoped visibility) ever
+        // runs. Widen the set with every local item name reachable from this
+        // block, recursively — a coarse over-approximation (it does not
+        // enforce block scoping; the real elaborator still does) is fine here:
+        // this pass only exists to fail fast on *genuinely* unknown names.
+        let local_item_names = Self::collect_local_item_names(block);
+        let widened;
+        let known_type_names = if local_item_names.is_empty() {
+            known_type_names
+        } else {
+            let mut set = known_type_names.clone();
+            set.extend(local_item_names);
+            widened = set;
+            &widened
+        };
+        for stmt in &block.stmts {
+            Self::validate_stmt_type_names(
+                stmt,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Collect the declared names of every local item (`Stmt::Item`)
+    /// reachable from `block`, recursing into nested blocks (`if`/`while`/
+    /// `for`/`loop`/labeled blocks). See `validate_block_type_names`.
+    fn collect_local_item_names(block: &ast::Block) -> IndexSet<String> {
+        fn visit_block(block: &ast::Block, out: &mut IndexSet<String>) {
+            for stmt in &block.stmts {
+                visit_stmt(stmt, out);
+            }
+        }
+        fn item_name(item: &Item) -> Option<&str> {
+            match item {
+                Item::Struct(d) => Some(&d.name),
+                Item::Enum(d) => Some(&d.name),
+                Item::Variant(d) => Some(&d.name),
+                Item::Flags(d) => Some(&d.name),
+                Item::Newtype(d) => Some(&d.name),
+                Item::Trait(d) => Some(&d.name),
+                _ => None,
+            }
+        }
+        fn visit_stmt(stmt: &ast::Stmt, out: &mut IndexSet<String>) {
+            match stmt {
+                ast::Stmt::Item(item) => {
+                    if let Some(name) = item_name(item) {
+                        out.insert(name.to_string());
+                    }
+                }
+                ast::Stmt::If(if_stmt) => {
+                    visit_block(&if_stmt.then_block, out);
+                    if let Some(else_block) = &if_stmt.else_block {
+                        visit_block(else_block, out);
+                    }
+                }
+                ast::Stmt::While(while_stmt) => visit_block(&while_stmt.body, out),
+                ast::Stmt::For(for_stmt) => visit_block(&for_stmt.body, out),
+                ast::Stmt::ForOf(for_of) => visit_block(&for_of.body, out),
+                ast::Stmt::Loop(loop_stmt) => visit_block(&loop_stmt.body, out),
+                ast::Stmt::LabeledBlock(labeled) => visit_block(&labeled.block, out),
+                ast::Stmt::Match(match_expr) => {
+                    for arm in &match_expr.arms {
+                        if let ast::Expr::Block(block) = &arm.body {
+                            visit_block(block, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut out = IndexSet::default();
+        visit_block(block, &mut out);
+        out
+    }
+
+    /// Validate type names in a statement.
+    fn validate_stmt_type_names(
+        stmt: &ast::Stmt,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match stmt {
+            ast::Stmt::Let(let_stmt) => {
+                if let Some(ty) = &let_stmt.ty {
+                    if let Some(span) = Self::first_infer_span(ty) {
+                        Self::validate_ast_type_names_inner(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                            true,
+                        )?;
+                        logger.error(TypeError::InferInLetAnnotation { span })?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+                if let Some(value) = &let_stmt.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(else_block) = &let_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::Expr(expr_stmt) => {
+                Self::validate_expr_type_names(
+                    &expr_stmt.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Return(ret) => {
+                if let Some(value) = &ret.value {
+                    Self::validate_expr_type_names(
+                        value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::TaskReturn(task_ret) => {
+                Self::validate_expr_type_names(
+                    &task_ret.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::If(if_stmt) => {
+                Self::validate_condition_type_names(
+                    &if_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_stmt.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_stmt.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Stmt::While(while_stmt) => {
+                Self::validate_condition_type_names(
+                    &while_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &while_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::For(for_stmt) => {
+                if let Some(init) = &for_stmt.init {
+                    Self::validate_stmt_type_names(
+                        init,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(condition) = &for_stmt.condition {
+                    Self::validate_condition_type_names(
+                        condition,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                if let Some(update) = &for_stmt.update {
+                    Self::validate_expr_type_names(
+                        update,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_block_type_names(
+                    &for_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::ForOf(for_of) => {
+                Self::validate_expr_type_names(
+                    &for_of.iterable,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &for_of.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Loop(loop_stmt) => {
+                Self::validate_block_type_names(
+                    &loop_stmt.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &ast::Expr::Match(match_expr.clone()),
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::Assert(assert_stmt) => {
+                Self::validate_expr_type_names(
+                    &assert_stmt.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Stmt::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            // A local item's own type references (struct fields, impl/trait
+            // method signatures) are validated by the regular elaboration
+            // pipeline once it resolves the item, not by this early pass.
+            ast::Stmt::Item(_)
+            | ast::Stmt::Break(_)
+            | ast::Stmt::Continue(_)
+            | ast::Stmt::Error(_) => {}
+        }
+        Ok(())
+    }
+
+    /// Validate type names in a condition.
+    fn validate_condition_type_names(
+        condition: &ast::Condition,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match condition {
+            ast::Condition::Expr(expr) => {
+                Self::validate_expr_type_names(
+                    expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Condition::LetChain { elements, .. } => {
+                for elem in elements {
+                    match elem {
+                        ast::ConditionElement::Let { expr, .. } => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                        ast::ConditionElement::Expr(expr) => {
+                            Self::validate_expr_type_names(
+                                expr,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate type names in an expression (cast targets, closure params, turbofish, etc.).
+    fn validate_expr_type_names(
+        expr: &ast::Expr,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match expr {
+            ast::Expr::Cast(cast) => {
+                Self::validate_ast_type_names(
+                    &cast.target_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &cast.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Closure(closure) => {
+                for param in &closure.params {
+                    if let Some(ty) = &param.ty {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+                Self::validate_expr_type_names(
+                    &closure.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Call(call) => {
+                for ty in &call.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &call.callee,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &call.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::MethodCall(mc) => {
+                for ty in &mc.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_expr_type_names(
+                    &mc.receiver,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arg in &mc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StaticMethodCall(smc) => {
+                // The target type heads a turbofish (`Result::<_, MyErr>`), so
+                // its direct args allow `_`; deeper positions are strict.
+                match &smc.target_type {
+                    Type::Generic(_) | Type::NamespacedGeneric(_) => {
+                        for arg in written_arg_nodes(&smc.target_type) {
+                            Self::validate_turbofish_type_arg(
+                                arg,
+                                known_type_names,
+                                resource_type_names,
+                                type_params,
+                                logger,
+                            )?;
+                        }
+                    }
+                    other => Self::validate_ast_type_names(
+                        other,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?,
+                }
+                for ty in &smc.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for arg in &smc.args {
+                    Self::validate_expr_type_names(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Binary(bin) => {
+                Self::validate_expr_type_names(
+                    &bin.left,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &bin.right,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Unary(un) => {
+                Self::validate_expr_type_names(
+                    &un.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Assign(assign) => {
+                Self::validate_expr_type_names(
+                    &assign.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &assign.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::CompoundAssign(ca) => {
+                Self::validate_expr_type_names(
+                    &ca.target,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &ca.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::ComparisonChain(cc) => {
+                Self::validate_expr_type_names(
+                    &cc.first,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for cmp in &cc.comparisons {
+                    Self::validate_expr_type_names(
+                        &cmp.right,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Index(idx) => {
+                Self::validate_expr_type_names(
+                    &idx.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &idx.index,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::FieldAccess(fa) => {
+                Self::validate_expr_type_names(
+                    &fa.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Block(block) => {
+                Self::validate_block_type_names(
+                    block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::If(if_expr) => {
+                Self::validate_condition_type_names(
+                    &if_expr.condition,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_block_type_names(
+                    &if_expr.then_block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(else_block) = &if_expr.else_block {
+                    Self::validate_block_type_names(
+                        else_block,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Match(match_expr) => {
+                Self::validate_expr_type_names(
+                    &match_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                for arm in &match_expr.arms {
+                    if let Some(guard) = &arm.guard {
+                        Self::validate_expr_type_names(
+                            guard,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                    Self::validate_expr_type_names(
+                        &arm.body,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::Matches(matches_expr) => {
+                Self::validate_expr_type_names(
+                    &matches_expr.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                if let Some(guard) = &matches_expr.guard {
+                    Self::validate_expr_type_names(
+                        guard,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::StructLiteral(sl) => {
+                for ty in &sl.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                for field in &sl.fields {
+                    Self::validate_expr_type_names(
+                        &field.value,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TupleLiteral(tl) => {
+                for elem in &tl.elements {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TupleComprehension(c) => {
+                for elem in [&c.iterable, &c.body] {
+                    Self::validate_expr_type_names(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TaggedTemplate(t) => {
+                for expr in std::iter::once(&t.tag).chain(t.template.interpolations()) {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::TemplateString(ts) => {
+                for expr in ts.interpolations() {
+                    Self::validate_expr_type_names(
+                        expr,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+            }
+            ast::Expr::LabeledBlock(lb) => {
+                Self::validate_block_type_names(
+                    &lb.block,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::TryOp(try_op) => {
+                Self::validate_expr_type_names(
+                    &try_op.expr,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Spread(inner, _) => {
+                Self::validate_expr_type_names(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Range(range) => {
+                Self::validate_expr_type_names(
+                    &range.start,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+                Self::validate_expr_type_names(
+                    &range.end,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::WithHandler(with_handler) => {
+                // The LHS of `E = h` in a `with` clause is an effect
+                // name, not a type name. The real elaborator validates it
+                // against the effect declaration index in
+                // `resolve_with_handler`; here we only walk the handler
+                // expression and the body for type-name references.
+                for binding in &with_handler.handlers {
+                    Self::validate_expr_type_names(
+                        &binding.handler,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
+                Self::validate_block_type_names(
+                    &with_handler.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Resume(resume) => {
+                Self::validate_expr_type_names(
+                    &resume.value,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
+            }
+            ast::Expr::Ident(ident) => {
+                // A bare turbofish value (`pair::<_, bool>`, `ns::pair::<_>`)
+                // has no call to infer from, so a `_` slot here is
+                // unresolvable — validate its type args strictly. A turbofish
+                // on the path's prefix (`Maybe::<_>::Nothing`) does have one:
+                // the expected type fills the slot.
+                for ty in &ident.type_args {
+                    if ident.type_args_on_prefix {
+                        Self::validate_turbofish_type_arg(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    } else {
+                        Self::validate_ast_type_names(
+                            ty,
+                            known_type_names,
+                            resource_type_names,
+                            type_params,
+                            logger,
+                        )?;
+                    }
+                }
+            }
+            ast::Expr::Literal(_) | ast::Expr::Error(_) => {}
+        }
+        Ok(())
+    }
+
+    pub(super) fn first_infer_span(ty: &Type) -> Option<Span> {
+        match ty {
+            Type::Infer(span) => Some(*span),
+            Type::Generic(g) => g.args.iter().find_map(Self::first_infer_span),
+            Type::NamespacedGeneric(ng) => ng.args.iter().find_map(Self::first_infer_span),
+            Type::Reference(inner) | Type::MutReference(inner) => Self::first_infer_span(inner),
+            Type::Tuple(elems) => elems.iter().find_map(Self::first_infer_span),
+            Type::Function(ft) => ft
+                .params
+                .iter()
+                .find_map(Self::first_infer_span)
+                .or_else(|| Self::first_infer_span(&ft.return_type)),
+            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Error(_) => None,
+        }
+    }
+
+    /// Walk an AST type expression and emit errors for unknown Named types.
+    /// Generic type names (List, Result, etc.) are not checked here since they
+    /// may be builtins not present in the type name registry; only their type
+    /// arguments are validated recursively.
+    fn validate_ast_type_names(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        Self::validate_ast_type_names_inner(
+            ty,
+            known_type_names,
+            resource_type_names,
+            type_params,
+            logger,
+            false,
+        )
+    }
+
+    fn validate_ast_type_names_inner(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+        allow_infer: bool,
+    ) -> Result<(), Bail> {
+        match ty {
+            Type::Named(named) => {
+                if named.name == "()" || named.name == "!" || named.name == "Self" {
+                    return Ok(());
+                }
+                if type_params.contains(&named.name.as_str()) {
+                    return Ok(());
+                }
+                if known_type_names.contains(&named.name) {
+                    return Ok(());
+                }
+                if resource_type_names.contains(&named.name) {
+                    return Ok(());
+                }
+                logger.error(TypeError::UnknownType {
+                    name: named.name.clone(),
+                    span: named.span,
+                })?;
+                Ok(())
+            }
+            Type::Generic(generic) => {
+                for arg in &generic.args {
+                    Self::validate_ast_type_names_inner(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::NamespacedGeneric(ng) => {
+                for arg in &ng.args {
+                    Self::validate_ast_type_names_inner(
+                        arg,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Self::validate_ast_type_names_inner(
+                    inner,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
+            Type::Tuple(elems) => {
+                for elem in elems {
+                    Self::validate_ast_type_names_inner(
+                        elem,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Ok(())
+            }
+            Type::Function(ft) => {
+                for param in &ft.params {
+                    Self::validate_ast_type_names_inner(
+                        param,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                        allow_infer,
+                    )?;
+                }
+                Self::validate_ast_type_names_inner(
+                    &ft.return_type,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                    allow_infer,
+                )
+            }
+            Type::Infer(span) => {
+                if !allow_infer {
+                    logger.error(TypeError::InferPlaceholderNotAllowed { span: *span })?;
+                }
+                Ok(())
+            }
+            Type::TypePackSpread(_, _) | Type::Error(_) => Ok(()),
+        }
+    }
+
+    /// Validate a turbofish type argument, where a top-level `_` is allowed
+    /// (it marks an inference slot). Nested `_` is still out of scope, so a
+    /// non-`_` argument is validated strictly via [`Self::validate_ast_type_names`].
+    fn validate_turbofish_type_arg(
+        ty: &Type,
+        known_type_names: &IndexSet<String>,
+        resource_type_names: &IndexSet<String>,
+        type_params: &[&str],
+        logger: &ModuleDiag<'_, '_, H>,
+    ) -> Result<(), Bail> {
+        match ty {
+            Type::Infer(_) => Ok(()),
+            _ => Self::validate_ast_type_names(
+                ty,
+                known_type_names,
+                resource_type_names,
+                type_params,
+                logger,
+            ),
+        }
+    }
+
+>>>>>>> origin/main
     /// Static version of `resolve_type` for use before the elaborator is fully
     /// constructed. Reads type info via [`TypeLookup`] — the same path the
     /// fully-constructed elaborator uses, so name resolution stays in one place.
@@ -2554,7 +5266,7 @@ pub(crate) fn fold_component_interfaces(
     registry: &mut Arc<CmInterfaceRegistry>,
     modules: &IndexMap<ModuleSource, Module>,
     stdlib_set: &IndexSet<ModuleSource>,
-) {
+) -> Result<(), String> {
     for (ms, module) in modules {
         if !matches!(ms, ModuleSource::Wasm { .. }) || stdlib_set.contains(ms) {
             continue;
@@ -2569,9 +5281,10 @@ pub(crate) fn fold_component_interfaces(
                 &world_func_names,
                 &host_leaf_imports,
                 ms,
-            );
+            )?;
         }
     }
+    Ok(())
 }
 
 /// Bare names of the world-level function imports (Phase 9) a component-binding

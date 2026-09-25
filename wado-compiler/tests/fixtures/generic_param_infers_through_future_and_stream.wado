@@ -1,0 +1,34 @@
+// A type parameter under `Future<..>` or `Stream<..>` is inferred from the argument.
+
+use { println, Stdout } from "core:cli";
+
+fn settle<T>(f: Future<T>) -> Option<T> {
+    return f.read();
+}
+
+fn outcome<E>(f: Future<Result<i32, E>>) -> i32 {
+    f.drop();
+    return 1;
+}
+
+fn close<T>(s: Stream<T>) -> i32 {
+    s.drop();
+    return 2;
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<i32>::new();
+    tx.write(42);
+    println(`${settle(rx):?}`);
+
+    let [done_rx, done_tx] = Future::<Result<i32, String>>::new();
+    println(`${outcome(done_rx)}`);
+    done_tx.write(Result::Ok(7));
+
+    let [bytes_rx, bytes_tx] = Stream::<u8>::new();
+    bytes_tx.drop();
+    println(`${close(bytes_rx)}`);
+}
+
+__DATA__
+{"stdout": "Option::Some(42)\n1\n2\n"}

@@ -9,13 +9,15 @@ use std::ops::ControlFlow;
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, non_nan_float, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{is_template_block, plain_block_label};
+use crate::name::{is_template_block, minted_name};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -187,6 +189,100 @@ pub struct ArenaStructPatternField {
     pub pattern: PatId,
 }
 
+/// A constant array given as the little-endian bytes of its elements.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackedData {
+    pub bytes: Vec<u8>,
+    pub elem: PrimitiveType,
+}
+
+impl PackedData {
+    pub fn new(bytes: Vec<u8>, elem: PrimitiveType) -> Self {
+        let width = elem
+            .data_width()
+            .unwrap_or_else(|| panic!("`{}` has no data width", elem.as_str()));
+        assert!(
+            bytes.len().is_multiple_of(width),
+            "packed data is whole `{}` elements",
+            elem.as_str()
+        );
+        Self { bytes, elem }
+    }
+
+    /// The bytes of a `u8` array, which is what a string or byte buffer holds.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        (self.elem == PrimitiveType::U8).then_some(self.bytes.as_slice())
+    }
+
+    pub fn len(&self) -> usize {
+        self.bytes.len() / self.width()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    pub fn width(&self) -> usize {
+        self.elem.data_width().expect("checked at construction")
+    }
+
+    /// The array as a compile-time sequence of `type_id`. `None` past
+    /// [`MAX_SEQ_ELEMENTS`], and where an element is a NaN a `Value` cannot carry.
+    pub fn to_value(&self, type_id: TypeId) -> Option<Value> {
+        if self.len() > MAX_SEQ_ELEMENTS {
+            return None;
+        }
+        let elements = self
+            .element_bits()
+            .map(|bits| self.element(bits))
+            .collect::<Option<Vec<_>>>()?;
+        Value::seq(type_id, elements)
+    }
+
+    /// Each element's bits, zero-extended.
+    pub fn element_bits(&self) -> impl Iterator<Item = u64> + '_ {
+        self.bytes.chunks_exact(self.width()).map(|chunk| {
+            let mut raw = [0u8; 8];
+            raw[..chunk.len()].copy_from_slice(chunk);
+            u64::from_le_bytes(raw)
+        })
+    }
+
+    /// The array `elements` spell, the inverse of [`Self::to_value`]. `None`
+    /// where one is not a value of `elem`.
+    pub fn from_values(elements: &[Value], elem: PrimitiveType) -> Option<Self> {
+        let width = elem
+            .data_width()
+            .expect("a packed element has a data width");
+        let mut bytes = Vec::with_capacity(elements.len() * width);
+        for element in elements {
+            let bits = match *element {
+                Value::Int { value, prim } if prim == elem => value,
+                Value::Float { value, prim } if prim == elem => match prim {
+                    PrimitiveType::F32 => u64::from((value as f32).to_bits()),
+                    PrimitiveType::F64 => value.to_bits(),
+                    _ => unreachable!("a half is held as its bits"),
+                },
+                _ => return None,
+            };
+            bytes.extend_from_slice(&bits.to_le_bytes()[..width]);
+        }
+        Some(Self::new(bytes, elem))
+    }
+
+    fn element(&self, bits: u64) -> Option<Value> {
+        let prim = self.elem;
+        match prim {
+            PrimitiveType::F32 => non_nan_float(f64::from(f32::from_bits(bits as u32)), prim),
+            PrimitiveType::F64 => non_nan_float(f64::from_bits(bits), prim),
+            _ => Some(Value::Int {
+                value: truncate_int(bits, prim),
+                prim,
+            }),
+        }
+    }
+}
+
 /// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
@@ -196,7 +292,7 @@ pub enum ExprKind {
     /// reclaimed by DCE. (Distinct from the unit value, which is a pooled
     /// `ValueKind::Unit` operand.)
     Dead,
-    PackedArray(Vec<u8>),
+    PackedArray(PackedData),
     Local {
         index: u32,
         name: String,
@@ -336,14 +432,14 @@ pub enum ExprKind {
 impl ExprKind {
     /// A block no `break` names. `what` says which construct put the block
     /// there — the caller is the only one who knows — and the block id makes
-    /// the label unique within the body; [`plain_block_label`] spells it.
+    /// the label unique within the body; [`minted_name`] spells it.
     ///
     /// A serial alone would name the block without saying anything about it,
     /// which is what an unlabeled block already did.
     #[must_use]
     pub fn plain_block(block: BlockId, result_type: TypeId, what: &str) -> Self {
         Self::LabeledBlock {
-            label: plain_block_label(what, block.index()),
+            label: minted_name(what, block.index()),
             block,
             result_type,
             role: BlockRole::Plain,
@@ -1753,12 +1849,18 @@ impl Body {
         });
         // An `Expr` tail is never a terminator, so reaching it is the same
         // question as it being there.
-        if let Some(&last) = self.blocks[*block].stmts.last()
-            && let StmtKind::Expr(v) = self.stmts[last].kind
-        {
+        if let Some(v) = self.block_tail(*block) {
             out.push(Some(v));
         }
         Some(out)
+    }
+
+    /// The operand of `block`'s last statement, where that statement is an `Expr`.
+    pub fn block_tail(&self, block: BlockId) -> Option<Operand> {
+        match self.stmts[*self.blocks[block].stmts.last()?].kind {
+            StmtKind::Expr(op) => Some(op),
+            _ => None,
+        }
     }
 
     /// The one operand `e` yields, or `None` where more than one point produces

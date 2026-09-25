@@ -91,6 +91,7 @@ use {
     MultiAltRule,
     LeftRecursiveRule,
     LrAlt,
+    LR_CONT_FORWARD,
     LrDispatchData,
     RuleHeader,
     AltBody,
@@ -137,12 +138,15 @@ use {
     DiagnosticOwner,
     DiagnosticSite,
     Admits,
+    admits_is_everything,
+    admits_is_untestable,
     admits_kinds,
     admits_or_untestable,
     AltClass,
     alt_class_first_set,
     alt_class_is_nullable,
     alt_class_is_open_ended,
+    lr_trailing_prec,
 } from "./gir.wado";
 
 /// True when an element threads a `FollowArg` into a callee: a `RuleRef`,
@@ -903,8 +907,7 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // Route such a rule's loop-entry through the runtime simulator.
     let atn_class = lr_rule_is_atn_class(rule, &non_lr_indices, &lr_alts);
     if atn_class {
-        ctx.mark_needs_atn();
-        ctx.mark_needs_scan_atn();
+        ctx.mark_needs_lr_atn();
     }
 
     // `valid_lr_alts` must line up with the ATN precedence-edge list (which
@@ -912,12 +915,6 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     // pass `atn_class` through.
     let lr_dispatch = compute_lr_dispatch_data(&lr_alts, atn_class);
 
-    // Bake `min_prec_arg` into every self-recursive `RuleCall` op
-    // inside each LR suffix. Mirrors emit's
-    // `compute_lr_self_ref_prec` decision, but resolved once at
-    // lower time so emit consumes the suffix as a structural walk.
-    // Stamps both `suffix.ops` (parse-side `RuleCallOp.min_prec_arg`)
-    // and `scan_suffix.elements` (scan-side `ScanRuleCallElement.min_prec_arg`).
     let mid_operand_gated = stamp_lr_self_ref_min_prec(&mut lr_alts, &rule.name, &rule.snake_name, ctx, atn_class);
     if mid_operand_gated {
         ctx.mark_caller_follow_gate();
@@ -934,14 +931,8 @@ fn lower_lr_rule(rule: &ParserRule, ctx: &mut GenContext) -> LeftRecursiveRule {
     };
 }
 
-/// True when this LR rule's loop-entry is ATN-class: some atom (non-LR) alt
-/// contains a self-reference to the rule immediately followed by a fixed
-/// token (`Literal` / `TokenRef`) that is also a first token of some LR
-/// alt's suffix. In that shape the atom's inner operand and the LR loop
-/// compete for the shared delimiter, and the static first-token dispatch
-/// commits the loop greedily — starving the atom's own trailing literal
-/// (`'between' expr 'and' expr` vs `expr 'and' expr`). The runtime simulator
-/// resolves it with full context.
+/// True when this LR rule's loop entry needs the runtime simulator's full
+/// context, as with `'between' expr 'and' expr` beside `expr 'and' expr`.
 fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: &List<LrAlt>) -> bool {
     // A `.` / `~X`-led LR suffix has a real suffix but an empty static
     // `suffix_first`: the loop-entry can't be decided by a static first-token
@@ -950,6 +941,16 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     for let a of lr_alts {
         if !a.suffix.ops.is_empty() && a.suffix_first.is_empty() {
             return true;
+        }
+    }
+
+    // A suffix that is a proper prefix of another's scans wherever the longer
+    // one does, so no static pick between them is right.
+    for let a of lr_alts {
+        for let b of lr_alts {
+            if lr_suffix_is_proper_prefix(rule, &rule.alternatives[a.alt_index], &rule.alternatives[b.alt_index]) {
+                return true;
+            }
         }
     }
 
@@ -964,6 +965,8 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     if suffix_first_tokens.is_empty() {
         return false;
     }
+    // An atom operand followed by a loop delimiter: the static dispatch would
+    // commit the loop and starve the atom's own delimiter.
     for let idx of non_lr_indices {
         let alt = &rule.alternatives[*idx];
         for let mut i = 0; i + 1 < alt.elements.len(); i += 1 {
@@ -981,33 +984,41 @@ fn lr_rule_is_atn_class(rule: &ParserRule, non_lr_indices: &List<i32>, lr_alts: 
     return false;
 }
 
-/// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element
-/// (`TokenRef` / `Literal`), or `null` for anything else.
+/// Whether `short`'s suffix is a proper prefix of `long`'s, element for element,
+/// each a fixed token or a self-reference.
+fn lr_suffix_is_proper_prefix(rule: &ParserRule, short: &Alternative, long: &Alternative) -> bool {
+    if short.elements.len() < 2 || short.elements.len() >= long.elements.len() {
+        return false;
+    }
+    for let mut i = 1; i < short.elements.len(); i += 1 {
+        let s = &short.elements[i];
+        let l = &long.elements[i];
+        let same = if element_is_self_ref(s, &rule.name) {
+            element_is_self_ref(l, &rule.name);
+        } else {
+            let tok = fixed_token_const_name(s);
+            tok != null && tok == fixed_token_const_name(l);
+        };
+        if !same {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The token constant name (`TK_X` / `LIT_x`) of a fixed-token element,
+/// labeled or not, or `null` for anything else.
 fn fixed_token_const_name(elem: &Element) -> Option<String> {
     return match *elem {
         TokenRef(t) => Option::Some(`TK_${t.name}`),
         Literal(l) => Option::Some(l.const_name),
+        Label(lab) => fixed_token_const_name(&lab.element),
         _ => null,
     };
 }
 
-/// Walk every LR suffix and stamp `min_prec_arg` on self-recursive
-/// calls — both on the parse-side ops (`RuleCallOp.min_prec_arg`)
-/// and on the scan-side elements (`ScanRuleCallElement.min_prec_arg`).
-/// The trailing self-ref (at original alt position
-/// `last_self_ref_idx`) uses the alt's `conflict_min`; non-trailing
-/// self-refs use 0 unless the immediately following op is a fixed
-/// token that also appears in some LR alt's `suffix_first` set (the
-/// BETWEEN…AND-style case where a non-final self-ref must keep its
-/// precedence so the shared delimiter binds correctly). Mirrors
-/// `parser_gen::compute_lr_self_ref_prec`.
-///
-/// Parse-side `suffix.ops` and scan-side `scan_suffix.elements`
-/// walk the same `alt.elements[1..]` in lockstep — index `k` on
-/// each side corresponds to `alt.elements[k+1]`. The per-position
-/// precedence is computed once from the parse-side ops (whose
-/// neighbour tokens drive the BETWEEN…AND decision) and then
-/// stamped onto whichever side carries a self-ref at that position.
+/// Stamps each self-reference in an LR suffix, parse and scan side alike, with its
+/// precedence and continuation gate; returns whether any mid operand is gated.
 fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
     lr_alts: &mut List<LrAlt>,
     rule_name: S,
@@ -1026,6 +1037,7 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
 
         let mut new_ops: List<Op> = [];
         let mut new_scan: List<ScanElement> = [];
+        let mut alt_gated = false;
         for let mut k = 0; k < suffix_len; k += 1 {
             // suffix.ops[k] / scan_suffix.elements[k] correspond to
             // alt.elements[k+1].
@@ -1043,21 +1055,24 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
                     conflict_min,
                     &lr_suffix_first_tokens,
                 );
-                // A mid operand only borrowed the alternative's own precedence
-                // to keep the shared delimiter out of its reach. Let it climb
-                // like ANTLR4's `e[0]` and hand it the continuation it has to
-                // leave behind; the loop gate does the stopping. The gate is
-                // only emitted on the static LR dispatch — an ATN-class loop
-                // runs on `atn_lr_loop_decision`, so dropping `prec` there
-                // would let the operand climb with nothing to stop it.
+                // A mid operand is ANTLR4's `e[0]`, a trailing one its own
+                // precedence. An ATN-class loop decides its climb with full
+                // context; the static dispatch hands a mid operand the
+                // continuation it has to leave behind, and its loop gate stops it.
                 let mut cont_mask = -1;
-                if !atn_class && prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
+                let natural_trailing = lr_trailing_prec(lr_alts[i].own_prec, lr_alts[i].right_associative);
+                if atn_class {
+                    prec = if k + 1 < suffix_len { 0 } else { natural_trailing };
+                } else if alt_gated && k + 1 == suffix_len {
+                    prec = natural_trailing;
+                } else if prec == conflict_min && conflict_min > 0 && k + 1 < suffix_len {
                     let cont = lr_suffix_continuation_mask(&lr_alts[i].suffix.ops, k + 1, ctx);
                     if !cont.is_empty() {
                         if let Some(id) = ctx.intern_follow_mask(&cont) {
                             prec = 0;
                             cont_mask = id;
                             mid_operand_gated = true;
+                            alt_gated = true;
                         }
                     }
                 }
@@ -1117,7 +1132,32 @@ fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
         lr_alts[i].suffix.ops = new_ops;
         lr_alts[i].scan_suffix = ScanBody { ..lr_alts[i].scan_suffix, elements: new_scan };
     }
+    if mid_operand_gated {
+        forward_lr_cont_to_trailing_operands(lr_alts, rule_name, rule_snake);
+    }
     return mid_operand_gated;
+}
+
+/// A trailing operand ends the invocation it sits in, so the continuation that
+/// invocation must leave behind is its own: `a or b` as a mid operand stops `b`
+/// before `and`.
+fn forward_lr_cont_to_trailing_operands<S: AsStrSlice, S1: AsStrSlice>(
+    lr_alts: &mut List<LrAlt>,
+    rule_name: S,
+    rule_snake: S1,
+) {
+    for let mut i = 0; i < lr_alts.len(); i += 1 {
+        let last = lr_alts[i].suffix.ops.len() - 1;
+        if last < 0 || find_self_ref_rule_call(&lr_alts[i].suffix.ops[last], rule_name) matches { None } {
+            continue;
+        }
+        lr_alts[i].suffix.ops[last] = rebind_self_ref_lr_cont(lr_alts[i].suffix.ops[last], LR_CONT_FORWARD);
+        lr_alts[i].scan_suffix.elements[last] = rebind_scan_self_ref_lr_cont(
+            lr_alts[i].scan_suffix.elements[last],
+            rule_snake,
+            LR_CONT_FORWARD,
+        );
+    }
 }
 
 /// Per-depth first sets of the LR suffix ops from `start` — the caller-side
@@ -1164,7 +1204,7 @@ fn op_consumes_one_token(op: &Op) -> bool {
 /// Set `lr_cont_mask` on a self-ref `RuleCall`, peeling the `ListLabel`
 /// wrapper `rebind_self_ref_min_prec` also handles.
 fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
-    if lr_cont_mask < 0 {
+    if lr_cont_mask == -1 {
         return op;
     }
     if let RuleCall(rc) = op {
@@ -1178,7 +1218,7 @@ fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
 
 /// Scan mirror of `rebind_self_ref_lr_cont`.
 fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont_mask: i32) -> ScanElement {
-    if lr_cont_mask < 0 {
+    if lr_cont_mask == -1 {
         return se;
     }
     if let RuleCall(rc) = se {
@@ -1611,8 +1651,18 @@ fn lower_lr_atom(rule: &ParserRule, non_lr_indices: &List<i32>, ctx: &mut GenCon
     // An atom alt ends where the LR suffix loop begins, not at the rule's
     // tail, so no probe here may ask the caller's FOLLOW.
     for let idx of non_lr_indices {
-        alts.push(lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false));
-        scan_alts.push(lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false));
+        let body = lower_alt_body(&rule.alternatives[*idx], *idx, rule, ctx, &case_names, &alt_gc_starts, false);
+        let mut scan = lower_scan_body(&rule.alternatives[*idx], ctx, &rule.name, false);
+        if body.prefix_self_ref_min_prec > 0 {
+            let last = scan.elements.len() - 1;
+            let RuleCall(mut operand) = scan.elements[last] else {
+                panic(`lower_lr_atom: prefix alt ${*idx} of '${rule.name}' does not scan its operand last`);
+            };
+            operand.min_prec_arg = Option::Some(body.prefix_self_ref_min_prec);
+            scan.elements[last] = ScanElement::RuleCall(operand);
+        }
+        alts.push(body);
+        scan_alts.push(scan);
     }
 
     let owner = DiagnosticOwner { rule: rule.name, site: DiagnosticSite::LrAtomDispatch };
@@ -1814,14 +1864,8 @@ fn is_right_associative_alt(alt: &Alternative) -> bool {
     return false;
 }
 
-/// Compute the conflict-floor `min_prec` for `alt`. Left-associative
-/// alts use `own_prec + 1` as the floor (rejecting same-precedence
-/// on the right operand); right-associative use `own_prec` (so
-/// same-precedence nests rightward). Then widen the floor when a
-/// strictly higher-precedence alt's suffix claims one of our suffix's
-/// fixed tokens — see `parser_gen::compute_lr_conflict_min_prec` for
-/// the rationale (essentially: avoid the higher-prec alt grabbing a
-/// shared delimiter at the wrong precedence).
+/// The precedence floor of `alt`'s operands, raised past any higher alt whose
+/// suffix starts with one of `alt`'s own delimiters.
 fn compute_lr_conflict_min_prec(
     alt: &Alternative,
     own_prec: i32,
@@ -1830,16 +1874,12 @@ fn compute_lr_conflict_min_prec(
     ctx: &mut GenContext,
     total_lr: i32,
 ) -> i32 {
-    let mut min_prec: i32 = if is_right_associative_alt(alt) { own_prec } else { own_prec + 1 };
+    let mut min_prec = lr_trailing_prec(own_prec, is_right_associative_alt(alt));
 
     let mut fixed_tokens: List<String> = [];
     for let mut ei = 1; ei < alt.elements.len(); ei += 1 {
-        let elem = &alt.elements[ei];
-        match *elem {
-            TokenRef(t) => fixed_tokens.push(`TK_${t.name}`),
-            Literal(l) => fixed_tokens.push(l.const_name),
-            _ => {
-            },
+        if let Some(t) = fixed_token_const_name(&alt.elements[ei]) {
+            fixed_tokens.push(t);
         }
     }
     if fixed_tokens.is_empty() {
@@ -2283,10 +2323,11 @@ fn lower_scan_group(
             });
         },
         SimpleCst => {
-            return lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
+            let se = lower_simple_cst_scan_group(alts, ctx, outer_follow, follow_is_exact);
+            return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
         General => {
-            return lower_general_scan_group(
+            let se = lower_general_scan_group(
                 alts,
                 ctx,
                 outer_follow,
@@ -2294,8 +2335,44 @@ fn lower_scan_group(
                 enclosing_at_tail,
                 outer_suffix,
             );
+            return with_scan_group_atn_site(se, g, outer_follow, follow_is_exact, ctx);
         },
     }
+}
+
+fn with_scan_group_atn_site(
+    se: ScanElement,
+    g: &GroupElement,
+    outer_follow: &List<String>,
+    follow_is_exact: bool,
+    ctx: &mut GenContext,
+) -> ScanElement {
+    let Group(mut sg) = se else {
+        return se;
+    };
+    let admits = group_empty_alt_admits(&g.alternatives, outer_follow, follow_is_exact, ctx);
+    sg.atn_site = group_atn_site(g, &sg.alt_classes, &admits, ctx);
+    return ScanElement::Group(sg);
+}
+
+/// `g`'s decision site where its empty alternative shares a branch with another,
+/// so only the simulator can tell which the rest of the input takes; else -1.
+fn group_atn_site(
+    g: &GroupElement,
+    classes: &List<AltClass>,
+    admits: &Option<EmptyAltAdmits>,
+    ctx: &mut GenContext,
+) -> i32 {
+    let Some(e) = admits else {
+        return -1;
+    };
+    for let branch of &compute_overlap_groups_of(classes) {
+        if branch.len() > 1 && branch.contains(&e.alt_index) {
+            ctx.mark_needs_scan_atn();
+            return g.atn_decision;
+        }
+    }
+    return -1;
 }
 
 fn lower_general_scan_group(
@@ -2563,18 +2640,24 @@ fn rebind_scan_repeat_caller_follow(
     rule_name: &String = &NO_PROBE_RULE,
 ) -> ScanElement {
     if let Repeat(re) = se {
-        let mut continuation_scan: List<ScanElement> = [];
-        let mut continuation_scannable = false;
-        let mut probe_viable: List<String> = [];
-        let wants_probe = re.non_greedy || re.kind matches { Optional };
-        if wants_probe && reaches_rule_tail {
-            if let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) {
-                continuation_scan = scan;
-                continuation_scannable = true;
-                probe_viable = ctx.rule_follow_for_probe(rule_name);
-                ctx.mark_rule_reads_follow();
-            }
-        }
+        let probe = lower_continuation_probe(
+            re.non_greedy,
+            re.kind,
+            alt_elements,
+            index,
+            ctx,
+            reaches_rule_tail,
+            rule_name,
+        );
+        let probe_contested = optional_probe_contested(
+            re.non_greedy,
+            re.kind,
+            &re.inner_admits,
+            &caller_follow_first,
+            alt_elements,
+            index,
+            ctx,
+        );
         let static_exit_undecided = non_greedy_static_undecided(
             &admits_kinds(&re.inner_admits),
             &caller_follow_first,
@@ -2598,10 +2681,12 @@ fn rebind_scan_repeat_caller_follow(
             caller_follow_first: caller_follow_first,
             gate_caller_follow: re.gate_caller_follow,
             non_greedy: re.non_greedy,
-            continuation_scan,
-            continuation_scannable,
+            continuation_scan: probe.scan,
+            continuation_scannable: probe.scannable,
+            probe_asks_caller: probe.asks_caller,
+            probe_contested,
             static_exit_undecided,
-            probe_viable,
+            probe_viable: probe.viable,
             body_scannable: re.body_scannable,
             duties,
         });
@@ -3110,19 +3195,7 @@ fn lower_op<S: AsStrSlice>(
     outer_suffix: &List<Element> = &NO_OUTER_SUFFIX,
 ) -> Op {
     return match *elem {
-        TokenRef(t) => Op::Token(TokenOp {
-            kind: `TK_${t.name}`,
-            field: dedup_name(&t.field_name, name_counts),
-            dedup_base: t.field_name,
-        }),
-        Literal(l) => {
-            let base = literal_field_name(&l.text);
-            Op::Literal(LiteralOp {
-                kind: l.const_name,
-                field: dedup_name(&base, name_counts),
-                dedup_base: base,
-            });
-        },
+        TokenRef(_) | Literal(_) => lower_token_only_leaf(elem, name_counts),
         RuleRef(r) => Op::RuleCall(RuleCallOp {
             target_name: r.name,
             target_snake: r.snake_name,
@@ -3225,10 +3298,11 @@ fn lower_group_op<S: AsStrSlice>(
             return lower_token_only_group(alts, name_counts, ctx);
         },
         SimpleCst => {
-            return lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
+            let op = lower_simple_cst_group(alts, name_counts, ctx, outer_follow, follow_is_exact);
+            return with_group_atn_site(op, g, ctx);
         },
         General => {
-            return lower_general_group(
+            let op = lower_general_group(
                 alts,
                 name_counts,
                 rule_name,
@@ -3239,8 +3313,18 @@ fn lower_group_op<S: AsStrSlice>(
                 enclosing_at_tail,
                 outer_suffix,
             );
+            return with_group_atn_site(op, g, ctx);
         },
     }
+}
+
+fn with_group_atn_site(op: Op, g: &GroupElement, ctx: &mut GenContext) -> Op {
+    let Group(mut go) = op else {
+        return op;
+    };
+    go.atn_site = group_atn_site(g, &go.scan_group.alt_classes, &go.empty_alt_admits, ctx);
+    go.scan_group.atn_site = go.atn_site;
+    return Op::Group(go);
 }
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
@@ -3563,6 +3647,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
             kind: `TK_${t.name}`,
             field: dedup_name(&t.field_name, counts),
             dedup_base: t.field_name,
+            atn_leaf_site: t.atn_leaf_site,
         }),
         Literal(l) => {
             let base = literal_field_name(&l.text);
@@ -3570,6 +3655,7 @@ fn lower_token_only_leaf(elem: &Element, counts: &mut List<[String, i32]>) -> Op
                 kind: l.const_name,
                 field: dedup_name(&base, counts),
                 dedup_base: base,
+                atn_leaf_site: l.atn_leaf_site,
             });
         },
         _ => panic("lower_token_only_leaf: classifier permitted non-token leaf"),
@@ -4474,15 +4560,24 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     reaches_rule_tail: bool,
     rule_name: S,
 ) -> RepeatOp {
-    let mut continuation_scan: List<ScanElement> = [];
-    let mut continuation_scannable = false;
-    let mut probe_viable: List<String> = [];
-    if let Some(scan) = lower_continuation_scan(rep_op, alt_elements, index, ctx, reaches_rule_tail) {
-        continuation_scan = scan;
-        continuation_scannable = true;
-        probe_viable = ctx.rule_follow_for_probe(rule_name);
-        ctx.mark_rule_reads_follow();
-    }
+    let probe = lower_continuation_probe(
+        rep_op.non_greedy,
+        rep_op.kind,
+        alt_elements,
+        index,
+        ctx,
+        reaches_rule_tail,
+        rule_name,
+    );
+    let probe_contested = optional_probe_contested(
+        rep_op.non_greedy,
+        rep_op.kind,
+        &rep_op.body_admits,
+        &caller_follow_first,
+        alt_elements,
+        index,
+        ctx,
+    );
     let static_exit_undecided = non_greedy_static_undecided(
         &admits_kinds(&rep_op.body_admits),
         &caller_follow_first,
@@ -4503,10 +4598,12 @@ fn patch_repeat_op_caller_follow<S: AsStrSlice>(
         ..*rep_op,
         caller_follow_first,
         caller_follow_second,
-        continuation_scan,
-        continuation_scannable,
+        continuation_scan: probe.scan,
+        continuation_scannable: probe.scannable,
+        probe_asks_caller: probe.asks_caller,
+        probe_contested,
         static_exit_undecided,
-        probe_viable,
+        probe_viable: probe.viable,
         duties,
     };
 }
@@ -4621,26 +4718,63 @@ fn lower_decline_scan(
     };
 }
 
+/// The probe stamps of one Repeat, shared by its parse and scan twins.
+struct ContinuationProbe {
+    scan: List<ScanElement> = [],
+    scannable: bool = false,
+    asks_caller: bool = false,
+    viable: List<String> = [],
+}
+
 /// The continuation for emit's probe, built only for the Repeat kinds whose
-/// decision can need it.
-///
-/// `reaches_rule_tail` is a precondition, not a hint: the probe ends by
-/// asking the caller's FOLLOW, which is the right question only at the
-/// rule's tail. Inside a group the walk stops at that group's end, so
-/// `useTree : (simplePath? PATHSEP)? (STAR | …)` would ask it on `*` and
-/// reject `use foo::*`.
-fn lower_continuation_scan(
-    rep_op: &RepeatOp,
+/// decision can need it, and only where the scan's end settles the exit.
+fn lower_continuation_probe<S: AsStrSlice>(
+    non_greedy: bool,
+    kind: RepeatKind,
     alt_elements: &List<Element>,
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
-) -> Option<List<ScanElement>> {
-    let wants_probe = rep_op.non_greedy || rep_op.kind matches { Optional };
-    if !wants_probe || !reaches_rule_tail {
-        return null;
+    rule_name: S,
+) -> ContinuationProbe {
+    let wants_probe = non_greedy || kind matches { Optional };
+    // Only a tail walk may ask the caller's FOLLOW (invariant 10: a group's walk
+    // ends at the group, `use foo::*`); elsewhere the continuation must consume.
+    if !wants_probe || !reaches_rule_tail && ctx.tail_is_nullable_deep(alt_elements, index + 1) {
+        return ContinuationProbe {};
     }
-    return lower_scan_continuation_elements(alt_elements, index, ctx);
+    let Some(scan) = lower_scan_continuation_elements(alt_elements, index, ctx) else {
+        return ContinuationProbe {};
+    };
+    if !reaches_rule_tail {
+        return ContinuationProbe { scan, scannable: true };
+    }
+    let viable = ctx.rule_follow_for_probe(rule_name);
+    ctx.mark_rule_reads_follow();
+    return ContinuationProbe { scan, scannable: true, asks_caller: true, viable };
+}
+
+/// Whether a greedy `?`'s body and what follows it can start on one token, so
+/// no lookahead test separates entering from skipping.
+fn optional_probe_contested(
+    non_greedy: bool,
+    kind: RepeatKind,
+    body: &Admits,
+    follow: &List<String>,
+    alt_elements: &List<Element>,
+    index: i32,
+    ctx: &mut GenContext,
+) -> bool {
+    if non_greedy || !kind matches { Optional } || admits_is_untestable(body) {
+        return false;
+    }
+    if ctx.elements_reach_open_end(alt_elements, index + 1) {
+        return true;
+    }
+    if admits_is_everything(body) {
+        return !follow.is_empty();
+    }
+    return sets_overlap(&admits_kinds(body), follow);
 }
 
 /// True iff `elem` is a list-label (`+=`). Used by

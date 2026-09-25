@@ -766,6 +766,14 @@ test "comparison: a bare < is not a shift" {
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
+// `NextLT` follows a token, so it is invisible to prediction: the jar also
+// commits to `shl` for `< <T as Tr>::C` and fails the predicate at 1:20.
+test "shift: a mid-alt predicate does not steer prediction" {
+    let r = rlex_prs("fn f(){ let b = x < <T as Tr>::C; }");
+    assert r.diagnostics.len() == 1, `diagnostics: ${r.diagnostics:?}`;
+    assert r.diagnostics[0].message.contains("failed semantic predicate"), `diagnostics: ${r.diagnostics:?}`;
+}
+
 // A shebang is stripped only when what follows `#!` is not `[`, which is what
 // separates it from a crate-level inner attribute. Reading any character there
 // gave the whole first line to the hidden channel, so an attribute on one line
@@ -800,4 +808,11 @@ test "attr: the unsafe attribute wrapper" {
 test "attr: an unsafe attribute with a value" {
     let r = rlex_prs("#[unsafe(export_name = \"g\")]\npub fn f() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+}
+
+// Precise capturing (Rust 2024): `use<..>` in a bound is a capture list.
+test "bound: a precise capture list" {
+    let r = rlex_prs("fn f<'a, T>(t: &'a T) -> impl Sized + use<'a, T, Self,> { t }");
+    assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
+    assert rust::to_string_tree(&r).contains("(useBound use <"), rust::to_string_tree(&r);
 }

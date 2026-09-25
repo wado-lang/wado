@@ -9,7 +9,8 @@
 //!
 //! Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 //! `Option<T> = null`, required/optional/variadic positionals, repeatable
-//! `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
+//! `List<T>` options (`--inc a --inc b`, interspersing allowed), `enum`-valued
+//! options (`--color dark-red`, matched by wire name), and the `--`
 //! end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 //!
 //! Long options only: an option value never starts with `--`, so a missing
@@ -134,6 +135,9 @@ pub struct ArgvDeserializer {
     /// First argv-specific error, taking priority over the generated
     /// `Deserialize` code's `DeserializeError` (which only knows MissingField).
     err: Option<ArgsError>,
+    /// What an unknown case means for the latest variant: a bad value when an
+    /// `--option` named it (`null` for a subcommand, whose unknown case is its own kind).
+    unknown_case: Option<ArgsError>,
 }
 
 /// A decomposed `--name[=value]` long-option token.
@@ -274,6 +278,15 @@ impl ArgvDeserializer {
             message: msg,
         });
         return DeserializeError::invalid_value(msg, -1);
+    }
+
+    /// The next value token, converted with `LenientFromStr`.
+    fn lenient<T: LenientFromStr>(&mut self) -> Result<T, DeserializeError> {
+        let tok = self.take_value()?;
+        if let Ok(v) = T::from_str_lenient(&tok) {
+            return Result::Ok(v);
+        }
+        return Result::Err(self.invalid_value(&tok));
     }
 }
 
@@ -482,67 +495,43 @@ impl Deserializer for ArgvDeserializer {
     }
 
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i32>();
     }
 
     fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i64>();
     }
 
     fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u32>();
     }
 
     fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u64>();
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = i128::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<i128>();
     }
 
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = u128::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<u128>();
     }
 
     fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = f32::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<f32>();
     }
 
     fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = f64::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<f64>();
+    }
+
+    fn deserialize_f16(&mut self) -> Result<f16, DeserializeError> {
+        return self.lenient::<f16>();
+    }
+
+    fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError> {
+        return self.lenient::<bf16>();
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
@@ -552,19 +541,11 @@ impl Deserializer for ArgvDeserializer {
         if bare_flag {
             return Result::Ok(true);
         }
-        let tok = self.take_value()?;
-        if let Ok(v) = bool::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<bool>();
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
-        let tok = self.take_value()?;
-        if let Ok(v) = char::from_str_lenient(&tok) {
-            return Result::Ok(v);
-        }
-        return Result::Err(self.invalid_value(&tok));
+        return self.lenient::<char>();
     }
 
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
@@ -611,6 +592,16 @@ impl Deserializer for ArgvDeserializer {
         type_name: S,
         num_cases: i32,
     ) -> Result<ArgvVariantAccess, DeserializeError> {
+        // An enum-valued `--option` names its case the way any option names its value.
+        if self.cur_is_option {
+            let tag = self.take_value()?;
+            self.unknown_case = Option::Some(ArgsError {
+                kind: ArgsErrorKind::InvalidValue,
+                message: `invalid value for option --${self.cur_name}: '${tag}'`,
+            });
+            return Result::Ok(ArgvVariantAccess { de: self, tag });
+        }
+        self.unknown_case = null;
         // Externally tagged: the next bare token is the case tag. A subcommand
         // field is reached as a positional slot (`#[wire(positional)]`), so the
         // token the outer `next_field` saw is the tag.
@@ -672,23 +663,19 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
         consumed,
         forced: null,
         err: null,
+        unknown_case: null,
     };
     let r = T::deserialize(&mut de);
     if let Some(e) = de.err {
         return Result::Err(e);
     }
+    if let Err(e) = r && e.kind matches { UnknownVariant } && let Some(bad) = de.unknown_case {
+        return Result::Err(bad);
+    }
     return Result::Ok(r?);
 }
 
-/// Parse the process arguments (from `core:cli::args()`, with the program name
-/// dropped) into `T`.
+/// Parse the process arguments (`core:cli::args()`) into `T`.
 pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment {
-    let all = args();
-    let mut argv: List<String> = [];
-    let mut i = 1;
-    while i < all.len() {
-        argv.push(all[i]);
-        i += 1;
-    }
-    return parse::<T>(argv);
+    return parse::<T>(args());
 }

@@ -1,18 +1,35 @@
 # Wado Compiler
 
-The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm component binary. This document gives a high-level overview of the architecture; deeper topics live in their own docs:
+The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm
+component. This document is the map: the phases, the IRs between them, and the
+rules that hold across them. The WEPs linked below say why each phase has its
+shape. Each module's doc says how it works.
 
 - Optimization passes: [optimizer.md](./optimizer.md)
 - `wado format` rules: [formatter.md](./formatter.md)
-- LSP architecture: [WEP 2026-04-18](./wep-2026-04-18-lsp-architecture.md)
 - Language features: [spec.md](./spec.md)
 
 ## Pipeline
 
-A source file enters as `.wado` text and leaves as Wasm component bytes. The
-driver is `compile_after_load` in `src/lib.rs`; the loader runs lex, parse and
-bind per module ahead of it.
+| Phase                | Output           | Where                                           |
+| -------------------- | ---------------- | ----------------------------------------------- |
+| Load                 | AST per module   | `loader.rs`, `lexer.rs`, `parser.rs`, `bind.rs` |
+| Analyze              | Symbol table     | `analyze.rs`                                    |
+| Resolve              | Declarations     | `defs.rs`, `resolve.rs`                         |
+| Annotate             | `Semantics`      | `elaborator/`                                   |
+| Liveness             | Reachability     | `elaborator/`                                   |
+| Reify                | TIR per module   | `elaborator/`                                   |
+| Check                | Diagnostics      | `effect_check.rs`, `resource_move_check.rs`     |
+| Synthesis            | TIR              | `synthesis/`                                    |
+| Link                 | One flat package | `link.rs`                                       |
+| Monomorphize / Erase | Concrete TIR     | `monomorphize/`                                 |
+| Lower                | NIR              | `lower/`                                        |
+| Optimize             | NIR              | `optimize/`                                     |
+| WIR Build            | WIR              | `wir_build/`                                    |
+| WIR Optimize         | WIR              | `wir_optimize/`                                 |
+| Codegen              | Component bytes  | `codegen/`                                      |
 
+<<<<<<< HEAD
 | Phase                  | Output          | Module(s)                                        |
 | ---------------------- | --------------- | ------------------------------------------------ |
 | Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
@@ -36,91 +53,123 @@ bind per module ahead of it.
 | WIR Build              | `WirPackage`    | `wir_build/`                                     |
 | WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
 | Codegen                | Component bytes | `codegen/`                                       |
+||||||| 03599b796
+| Phase                  | Output          | Module(s)                                        |
+| ---------------------- | --------------- | ------------------------------------------------ |
+| Lex / Parse            | AST             | `lexer.rs`, `parser.rs`, `token.rs`, `syntax.rs` |
+| Bind                   | AST + bindings  | `bind.rs`                                        |
+| Loader                 | All modules     | `loader.rs`                                      |
+| Analyze                | `SymbolTable`   | `analyze.rs`                                     |
+| Resolve                | Declarations    | `defs.rs`, `resolve.rs`                          |
+| Annotate               | `Semantics`     | `semantics.rs`, `elaborator/`                    |
+| Liveness               | Reachability    | `elaborator/liveness.rs`                         |
+| Reify                  | `TirModule`     | `elaborator/reify.rs`                            |
+| Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
+| Synthesis              | TIR (extended)  | `synthesis/`                                     |
+| Effect Check           | TIR (validated) | `effect_check.rs`                                |
+| Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
+| Link                   | `FlatPackage`   | `link.rs`                                        |
+| Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
+| Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
+| Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
+| Pre-lower Prune        | `FlatPackage`   | `prelower_reach.rs`                              |
+| Lower                  | `NirPackage`    | `lower/`                                         |
+| Optimize               | `NirPackage`    | `optimize/`                                      |
+| WIR Build              | `WirPackage`    | `wir_build/`                                     |
+| WIR Optimize           | `WirPackage`    | `wir_optimize/`                                  |
+| Codegen                | Component bytes | `codegen/`                                       |
+=======
+The driver is `compile_with_options` in `src/lib.rs`. It loads the modules,
+compiles any inline providers, and hands the rest to `compile_after_load`. The
+LSP runs the same phases up to liveness and stops there.
+>>>>>>> origin/main
 
-## Compilation Units and IRs
+## IRs
 
-| Unit                              | Layer                                                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `Module` (`ast.rs`)               | Surface AST. Preserves source-level syntax to support `wado format`.                                         |
-| `TirModule` (`tir.rs`)            | Typed IR. One per source module, emitted by reify.                                                           |
-| `Package` (`package.rs`)          | Per-module compilation context, used from synthesis through link.                                            |
-| `FlatPackage` (`flat_package.rs`) | Flat list of all functions, types, and globals; used from monomorphize through the lower pipeline's planner. |
-| `NirPackage` (`nir_package.rs`)   | Normalized IR. Output of lower, input to optimize / WIR build / codegen.                                     |
-| `WirPackage` (`wir.rs`)           | Wasm IR — closer to Wasm core instructions, used for emit-time optimization and codegen.                     |
+| IR  | What it is                                                                            |
+| --- | ------------------------------------------------------------------------------------- |
+| AST | Surface syntax, kept as written so `wado format` round-trips.                         |
+| TIR | Typed IR. One per module after reify; one flat package of every item after link.      |
+| NIR | Normalized IR, what the optimizer rewrites. See [WEP: NIR](./wep-2026-05-11-nir.md).  |
+| WIR | Close to Wasm core instructions. See [WEP: WIR Layer](./wep-2026-02-14-wir-layer.md). |
 
-Codegen takes `&NirPackage` + `&WirPackage` (`emit_wasm`) and has no knowledge of earlier phases — the rule that keeps the back end decoupled from the front.
+Codegen reads NIR and WIR only, and knows nothing of the phases before them.
 
-## Frontend (per-module)
+## Frontend
 
-The loader runs `lexer → parser → bind` on every loaded module:
+The parser builds a faithful AST: compound assignments, comparison chains,
+struct shorthand and comments survive as written. Bind resolves local names and
+checks scopes, mutability and use-before-define.
 
-- The lexer extracts the optional `__DATA__` section and tokenizes the rest.
-- The parser builds a faithful AST. Compound assigns, comparison chains, struct shorthand, and `&self` parameters are kept verbatim so `wado format` round-trips.
-- `bind.rs` performs local name resolution, scope/mutability checking, and use-before-define detection.
+The loader reads the entry module and everything it imports: the embedded
+standard library, WASI and Web bindings, local files, package dependencies,
+remote URLs, Wasm assets, and Kiln output. Each file has one identity however
+it was imported. See [WEP: Module Loader](./wep-2026-01-24-module-loader.md).
 
-Comments are trivia, collected by the lexer and keyed to the `AstId` they
-precede (`comment.rs`). `unparse.rs` writes them back, under the rules in
-[formatter.md](./formatter.md).
+## Elaboration
 
-The AST is parser-immutable from this point on. The desugar-replacement surface rewrites — compound assignment (`x += y` → `x = x + y`), `while` / C-style `for` → explicit `loop`, `for x of expr` iteration (the `.into_iter()` / `.next()` dispatch and the `match Some(x) => body, _ => break` shape), the `assert` statement, the `matches` operator, the comparison chain `a < b < c`, template-string interpolations, a tagged template's call on its minted type (`elaborator/tagged_template.rs`), `use … namespace` prefix stripping (`helper::foo`), and `Self::method` / `T::method` (T bound to concrete) static-call dispatch — produce no synthetic AST. Annotate resolves the user AST, tags the site with its `DesugarKind`, and records the facts the rewrite needs (the dispatched callee, the iterator info, the assert capture plan); reify reads those back and emits the `TirExpr` / `TirStmt` shape. The annotate implementations live in `elaborator/{stmt,operators,assert,matches}.rs` (`resolve_while`, `resolve_for`, `resolve_iterator_for_of`, `resolve_compound_assign`, `desugar_assert`, `desugar_matches_expr`, `desugar_comparison_chain`), `Elaborator::strip_ns_prefix` in `elaborator.rs`, and `CalleeIdentKind` / `classify_call_callee` in `elaborator/call.rs` (the prefix is resolved to its concrete type name before parameter-type lookup so argument resolution runs once with the correct expected-type hints). A rewrite that must dispatch a method the source never spells (the for-of `.into_iter()` / `.next()` calls today) reuses the same dispatch a written call takes, via `Elaborator::resolve_method_call_with` (`elaborator/method_call.rs`) — that helper takes a pre-resolved receiver plus a method name and signals "no source AST" with `method_id: None` so no use→def edge is recorded against the synthesis site. Keeping the AST parser-shaped is what lets LSP queries land on the user's text rather than on a synthesised replacement.
+The elaborator resolves, infers, and dispatches, then emits TIR
+([WEP: Elaborator](./wep-2026-05-26-elaborator-rearchitecture.md)):
 
-## Analyze and Elaborate
+- Resolve answers every reference site once, from the module that wrote it. A
+  declaration is identified by a whole-program ID, never by its name
+  ([WEP: Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
+- Annotate covers trait selection, generic inference, method dispatch, coercion,
+  and effect typing. Its facts are attached to AST nodes without changing them.
+- Liveness decides what reify emits and feeds the unused diagnostics.
+- Reify reads the facts back and emits TIR. It infers and decides nothing.
 
-`semantics_of` (`semantics.rs`) is the entry point shared by LSP and batch compilation. It runs `analyze.rs` for the symbol table, then `elaborator/` for the phases below ([WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md)):
+The AST stays as the parser built it. Desugaring (loops, compound assignment,
+`assert`, `matches`, templates, namespace prefixes) produces no synthetic AST:
+annotate records what the rewrite needs on the source node, and reify emits the
+rewritten TIR. That is why hover, go-to-definition, and rename land on the
+user's text, from the same facts the batch compiler uses.
 
-- **Resolve** answers every reference site once, from the module that wrote it, and identifies every declaration (`defs.rs`, `resolve.rs`, [WEP 2026-08-12](./wep-2026-08-12-declaration-identity.md)). Nothing else answers a site; a position that has none derives its `DefId` from a module the caller names.
-- **Annotate** runs a declaration pass over every module — types, `TraitEnv`, `Signatures` — then a body walk whose sole output is a populated `ModuleSemantics`.
-- **Liveness** computes source-level reachability, which gates what reify emits and feeds the unused diagnostics.
-- **Reify** reads the recorded facts back and emits one `TirModule` per module. No inference, no dispatch decisions.
+Every trait call is resolved statically. By the end of the pipeline each call
+targets one concrete function, so there is no vtable
+([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md),
+[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)).
 
-The LSP path stops after liveness and builds no TIR.
+A type parameter is rigid inside the item that declares it: nothing but itself
+is assignable to it. An inference variable is flexible: it takes the type the
+solver finds. Each use of a generic signature replaces its parameters with fresh
+inference variables. No inference variable survives elaboration, and no type
+parameter survives monomorphization.
 
-`attribute.rs` holds the attribute schema: each attribute's name, the declarations it may sit on, and the arguments it takes. Analyze walks every attribute a module writes and rejects an unknown name, a misplaced one, or arguments the schema does not admit. A shape the schema leaves as `AttrArgs::Read` is checked where the attribute is read instead: reify reads `#[param]`, `#[result]`, `#[retain]`, `#[immediate]` and `#[wire]`, and the parser reads `#[cm]` and `#[canonical]` into the `CmBoundary` the attribute carries. Every reader names its attribute through a constant there, so a name is spelled once.
+## Checks
 
-The result, `Semantics`, carries an `AstIndex`, and the `TirModule`s too once reify has run. It holds no fact of its own: a query names a globally-unique `AstId` and a fact kind, and is routed to the `ModuleSemantics` whose walk recorded that fact — the use→def edges among them. The kind is part of the route because one node's kinds need not come from one walk; [WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md) owns the rest of the rule. This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
-
-The elaborator covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.
-
-One trait implemented for one receiver at several argument lists is chosen by the arguments, which are classified before they are elaborated (`elaborator/synth.rs`, [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). That classification is a read-only query: it runs under `Logger::quiet`, and debug builds assert it recorded no fact.
-
-Trait selection is decided by `trait_solver/`, in every build profile. It states coherence, derivation, bound satisfaction, candidate collection and ranking as functions of a self-contained `Program`, which `elaborator/solver_bridge.rs` lowers the compiler's tables into. Method lookup then reads its matches off the impl blocks the order names, and enumerates no others. Bound satisfaction still has two answerers, and debug builds check the solver's `holds` against `type_implements_trait` on every outermost query ([WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
-
-### Rigid and flexible type variables
-
-The type table keeps the two apart, because a type check asks opposite things of them:
-
-- `ResolvedType::TypeParam` is **rigid**. It stands for whatever a caller instantiates the binding item with, so inside that item it is opaque: nothing but itself is assignable to it, in either direction. `let x: T = 5` in a body that declares `T` is a type error.
-- `ResolvedType::InferVar` is **flexible**. It stands for a type the solver has yet to determine, so it accepts and records.
-
-A rigid parameter appears only inside the item that binds it. Every _use_ of a polymorphic signature instantiates its slots into fresh variables first (`elaborator/instantiate.rs`), so a callee's parameter never reaches a check as itself. Without that step the two collapse: `TypeParam` is interned by `(name, index)`, so `fn f<T>`'s `T` and `fn g<T>`'s `T` are one `TypeId`, and a check meeting a bare `T` cannot tell the enclosing body's parameter from a callee's slot.
-
-`check_assignable` therefore defers only what is genuinely undecided — an inference variable, a type pack awaiting expansion, an associated-type projection awaiting its impl, `unknown` / `error` — and compares a rigid parameter nominally.
-
-Two consequences worth knowing when adding a check:
-
-- A value is checked where its expected type is known. A callee's parameter types name its own slots until it is instantiated, so a call site instantiates first and checks the arguments once, against the substituted types. The same holds for a struct literal's fields and a parameter's default.
-- A bare slot is not a constraint. `struct Context<T> { fields: T }` accepts whatever the literal puts in `fields`; that value is what fixes `T`. Where several values fix one slot — two fields naming it, or a sequence literal's elements — they are checked against each other instead.
-
-A _flexible_ variable never survives elaboration: `finalize_infer_holes` substitutes solved ones away and pins unsolved ones to `error` after reporting them, and the backend passes panic on one rather than classifying it. A rigid parameter does survive — it is what a generic body is written in — and dies at monomorphization instead.
-
-Only the recorded facts are swept. The type table keeps every type ever considered, so a pass enumerating it selects with `TypeTable::is_concrete` rather than assuming the table holds only live types.
+Before synthesis, the compiler checks that every function declares the effects
+it performs, that default arguments and global initializers are pure, and that
+no resource is used after it moved
+([WEP: Effect System](./wep-2026-01-27-effect-system-design.md),
+[WEP: Ownership Analysis](./wep-2026-05-21-resource-ownership.md)). What a
+function retains is not checked: lower infers it
+([WEP: Value Semantics](./wep-2026-01-12-value-semantics-and-retention.md)).
 
 ## Synthesis
 
-`synthesis::synthesize` (`synthesis.rs`) generates synthetic TIR that the user does not write:
+Synthesis generates the TIR the user does not write:
 
-| Sub-pass           | File                           | Output                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Trait auto-derives | `synthesis/traits.rs`          | `Eq` / `Ord` / `Default` for bound-driven requests (below); `Inspect` unconditionally (total); `Display` for plain enums (bare case name). Newtypes inherit their base's format traits at the call site (`peel_transparent_newtype` in `synthesis/template.rs`), except `Inspect`, whose `as Name` tag comes from the `ReflectNewtype` blanket in `core:prelude/traits`                                                                                                                                                  |
-| `From` adapters    | `synthesis/from_synth.rs`      | `From` impls from `impl From<T> for U;` declarations                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Serde              | `synthesis/serde_synth.rs`     | The per-struct `FieldSchema` lookup, for bound-driven requests (below; body-less markers record there too). Every body is a `Reflect*` blanket in `core:serde`, not synthesis                                                                                                                                                                                                                                                                                                                                            |
-| Template strings   | `synthesis/template.rs`        | Expands template strings into `Display::fmt` / `Inspect::inspect` calls. The emitted `$tmpl` block is a contract with `optimize::tmpl_hoist`, carried past lowering as a `BlockRole` on the node (see that module's docs). Also mints each tagged template shape's `$hole_fmt` bridge, whose arms are the same interpolations ([WEP 2026-01-10](./wep-2026-01-10-tagged-template-literals.md))                                                                                                                           |
-| Effect dispatch    | `synthesis/effect_dispatch.rs` | Per-effect dispatch infrastructure for handler resolution                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| CM bindings        | `synthesis/cm_binding/`        | Component Model boundary adapters (lift / lower / async export)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Reflect metadata   | `synthesis/traits.rs`          | `Reflect`'s `type_name` and `wire_name_policy` for every kind; the four structure kinds (`ReflectStruct` / `ReflectVariant` / `ReflectEnum` / `ReflectFlags`), each with `members`, its payload / member associated tuples and its value bridges; `ReflectNewtype`'s `Base` ([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md)); and `ReflectTemplate` per tagged template shape, with `members`, `tail` / `raw_tail` and the `$hole_get` bridge ([WEP 2026-01-10](./wep-2026-01-10-tagged-template-literals.md)) |
+- Derived trait impls. `Eq`, `Ord`, `Default`, and serde are derived only
+  where a bound or a use asks for them. `Inspect` holds for every type
+  ([WEP: Trait Derivation](./wep-2026-06-25-trait-derivation.md)).
+- `From` impls declared by `impl From<T> for U;`.
+- Reflection metadata, from which the library derives the rest
+  ([WEP: Reflect Derivation](./wep-2026-06-13-reflect-derivation.md)). A
+  generic type's bridges are made after monomorphization, one per instance.
+- Template strings, expanded into `Display` / `Inspect` calls.
+- Effect handlers, desugared into per-effect dispatch
+  ([WEP: Effect Handler](./wep-2026-04-11-effect-handler.md)).
+- Resource drops. An owned Component Model resource that is still owned at the
+  end of its scope gets a `resource.drop`
+  ([WEP: Resource Lifecycle](./wep-2026-01-12-resource-lifecycle.md)).
+- Component Model boundary adapters: lift, lower, async export, and every
+  canonical operation, as ordinary TIR
+  ([WEP: CM Binding Synthesis](./wep-2026-02-15-cm-binding-synthesis.md)).
 
-Synthesized impls are recorded back into the shared `TraitEnv` so subsequent phases query a single source of truth.
+## Link and Monomorphize
 
+<<<<<<< HEAD
 `synthesis/reflect_bridge.rs` is the one exception to synthesis running before
 monomorphize: a generic type's value bridges are named after the concrete
 subject and member types, so they exist only per instantiation
@@ -150,242 +199,112 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 - `link.rs` merges per-module TIR into a single `FlatPackage`. After link, functions and types are addressed by global indices.
 - `monomorphize/` walks call sites, instantiates generic structs and functions with concrete type arguments, and rewrites references. Generic structs are keyed by `(name, ModuleSource)`; generic functions are keyed by `(ModuleSource, String)`, where the string is the bare method name for methods and a module-qualified `FreeFunctionName` for free functions. The `ModuleSource` is always the body's home module (where the template is registered in `Package::functions`), so same-named generics from different modules coexist. The dispatch loop panics if a queued generic has no template at its `(module_source, name)` key — every generic must be defined somewhere reachable (e.g. in `core:prelude` for built-in shapes like the tuple, whose reserved base name is `[]`). Variadic `TupleSpread` nodes are expanded here. `name.rs` produces stable mangled names (`Box$i32`, `identity$1`, …).
 - `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
+||||||| 03599b796
+`synthesis/reflect_bridge.rs` is the one exception to synthesis running before
+monomorphize: a generic type's value bridges are named after the concrete
+subject and member types, so they exist only per instantiation
+([WEP 2026-06-13](./wep-2026-06-13-reflect-derivation.md)).
+
+Bound-driven requests ([WEP 2026-06-25-trait-derivation](./wep-2026-06-25-trait-derivation.md)) originate during Annotate, from two funnels into the shared `TypeTable::bound_driven_synth_requests` set (one per `TypeTable`, project-wide, since each module gets a fresh `Elaborator`):
+
+- A satisfied bound: `Elaborator::type_implements_trait_inner` (`elaborator/trait_query.rs`) records a `(type, trait)` pair whenever a `T: Serialize`/`Deserialize`/`Eq`/`Ord`/`Default` bound is satisfied. `Eq`/`Ord`/serde recurse through members via one walker, `walk_structural_derive_members`, shared with marker validation and reason-chain diagnostics; `Default` instead checks that every field carries a default expression (`auto_derive_default_struct_type`). A direct `S::default()` call records at static-method resolution (`method_call.rs`), since it reaches no bound check.
+- A body-less marker: `impl Eq/Ord/Default/Serialize/Deserialize for T;` all validate eligibility immediately at the marker's own span (`Elaborator::record_explicit_derive_request` — a compile error if `T` isn't eligible) and then record into the same set, keyed by the target type's defining module.
+
+`Inspect` is _total_ (WEP): `classify_on_bound_trait` classifies it, `type_implements_trait_inner` short-circuits `true` for any type, and generation stays unconditional — so a `T: Inspect` bound always holds and `impl Inspect for T;` markers are accepted, without gating. It records no demand request. `#` selects no trait: it sets `Formatter.alternate`, which each impl reads.
+
+Two passes read the demand set as a snapshot, not a drain (consuming it would starve whichever runs second): `serde_synth::synthesize_serde` claims `Serialize`/`Deserialize`; `traits::synthesize_traits` claims `Eq`/`Ord`/`Default`, gating generation on set membership (`SynthesisCtx::should_synthesize`) instead of its former unconditional sweep.
+
+A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl indexes like any other, so every gate that means "a real impl already covers this" must count only methodful impls: `SynthesisCtx::has_real_impl` (module-scoped, for `Eq`/`Ord`/`Default` generation dedup), `has_methodful_impl_anywhere` (module-agnostic, so a body-less format marker never suppresses the eager format body while a real `impl Display for String` does), and `Elaborator::has_real_trait_impl_for_type` (module-agnostic — a serde impl legitimately lives outside the type's module, e.g. `core:serde`'s `impl Serialize for i128`).
+
+## Effect Check
+
+`check_effects` (`effect_check.rs`) runs after synthesis and before monomorphize. It validates that every function declares the effects it actually requires. Synthesized CM boundary code is exempted. A separate `check_default_purity` runs earlier, immediately before synthesis, to gate auto-derived `Default::default()` bodies on pure field defaults. What a function retains is not checked here at all: the body states it, and `lower::plan` infers it ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
+
+## Effect Dispatch (post-check)
+
+`synthesis::effect_dispatch::synthesize_post_check` runs between the effect check and link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers). This pass is split out of the main synthesis stage so that effect-check sees the original `WithHandler` shape and can validate which effects are satisfied locally.
+
+## Link → Monomorphize → Erase
+
+- `link.rs` merges per-module TIR into a single `FlatPackage`. After link, functions and types are addressed by global indices.
+- `monomorphize/` walks call sites, instantiates generic structs and functions with concrete type arguments, and rewrites references. Generic structs are keyed by `(name, ModuleSource)`; generic functions are keyed by `(ModuleSource, String)`, where the string is the bare method name for methods and a module-qualified `FreeFunctionName` for free functions. The `ModuleSource` is always the body's home module (where the template is registered in `Package::functions`), so same-named generics from different modules coexist. The dispatch loop panics if a queued generic has no template at its `(module_source, name)` key — every generic must be defined somewhere reachable (e.g. in `core:prelude` for built-in shapes like the tuple, whose reserved base name is `[]`). Variadic `TupleSpread` nodes are expanded here. `name.rs` produces stable mangled names (`Box$i32`, `identity$1`, …).
+- `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
+=======
+Link merges the modules into one package. Compile-time parameters (`#[param]`)
+then take their `-D` values. Monomorphize instantiates each generic item per
+concrete type argument and expands variadic packs. Then newtypes collapse to
+their base type and flags to `u32`. Dispatch needed the distinction, and nothing
+after it does. Functions nothing reaches are dropped before lower.
+>>>>>>> origin/main
 
 ## Lower
 
-`prelower_reach.rs` runs first, dropping every function no root reaches so that
-`lower` never translates it. See
-[WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md).
+Lower turns TIR into NIR in two halves. First the planner decides how each
+construct is represented:
 
-`lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` as planner + translator: the planner ([`lower::plan::plan`]) runs the TIR-mutating sub-passes and produces a `LowerPlan` of facts; the translator ([`lower::translate::translate`]) is a single fold from TIR to NIR. See `docs/wep-2026-05-11-nir.md`.
+- A closure becomes a functor struct
+  ([WEP: Closure](./wep-2026-01-16-closure-implementation.md)).
+- A reference to a primitive becomes a box.
+- Each value consumption becomes a move, a copy, or a share.
+- A non-constant global initializer moves into module initialization.
 
-| Sub-pass           | Stage      | File                         | What it does                                                                                                                                                                        |
-| ------------------ | ---------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pattern lowering   | translator | `lower/translate/pattern.rs` | `LetDestructure` / `IfLet` → explicit `Let` + `If` over the scrutinee and destructure temps it mints; runs ahead of the fold                                                        |
-| Global extract     | planner    | `lower/plan/globals.rs`      | Extracts non-constant global initializers into a per-module `$initialize_module` function (one per source module; disambiguated by `module_source`)                                 |
-| Boxing             | planner    | `lower/plan/boxing.rs`       | `&primitive` / `&mut primitive` → `Box<T>` struct operations                                                                                                                        |
-| Closure            | planner    | `lower/plan/closure.rs`      | Closures → `$Closure_N` functor structs with `$call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                          |
-| Initialize modules | planner    | `lower/plan/globals.rs`      | Combines per-module init functions into the top-level `$initialize_modules`                                                                                                         |
-| Value copy         | planner    | `lower/plan/value_copy/`     | Decides move / copy / share per consumption site (freshness, last-use, confinement, read-only-share) and inserts `$value_copy$T` only at `copy` sites; synthesizes the helpers      |
-| String collection  | planner    | `lower/plan/string.rs`       | Collects literals and per-function DCE maps for the data section; emits `StringPlan`                                                                                                |
-| TIR → NIR          | translator | `lower/translate.rs`         | Single fold over TIR producing `NirPackage`. Special-cases that consume `LowerPlan`: wide-int `Match` → if-else chain, `Closure` → `ClosureToCanonical`, `copy_value::<T>` → helper |
+Then the translator folds TIR into NIR in one pass.
 
-## Optimize
+## Backend
 
-`optimize/` runs a fixed-point loop of NIR-level passes (inlining, copy propagation, SROA, LICM, DCE, …). Local rewrites run on a worklist engine (`nir_engine.rs`) over the arena `Body` — a node is revisited only when an edit might have made it reducible — with the position-flexible rules sharing one session (`optimize/peephole.rs`). A per-function dirty-set gate (`optimize/gate.rs`) lets each pass skip functions unchanged since it last ran. See [optimizer.md](./optimizer.md) and [WEP: NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md).
+WIR build translates NIR to WIR and plans the component's imports, exports,
+and adapters. WIR optimize runs the Wasm-shaped passes in
+[optimizer.md](./optimizer.md). Codegen emits the core module with its branch
+hints, wraps it in a component, embeds imported Wasm assets pruned to what the
+component uses, and validates the result.
 
-## WIR Build
+## Component Model
 
-`wir_build/build_wir_package` translates a `NirPackage` into a `WirPackage` in three stages: register types, collect function signatures, then translate each function body via `FunctionTranslator`. The pass is split across sibling files by concern:
+The compiler reads WASI and Web interfaces, worlds, and builtins from their
+declarations in the standard library rather than hardcoding them. A function
+is imported only if the program calls it and every type in its signature is
+supported. A canonical operation such
+as `future.read` is typed per payload, so each payload type gets its own core
+import. See [WEP: WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md).
 
-| File                | Concern                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `context.rs`        | `WirContext` — accumulates types, functions, tables                                   |
-| `types.rs`          | Stage 1: register TIR types as WIR type definitions                                   |
-| `functions.rs`      | Stage 2: collect and register function signatures                                     |
-| `component_plan.rs` | `ComponentPlan`: CM-level structure (imports, exports, adapters)                      |
-| `translate.rs`      | Stage 3 driver and dispatch (`translate_expr` / `translate_stmt` / `translate_block`) |
-| `primitive_ops.rs`  | Literals, binary / unary operators, casts, array indexing                             |
-| `calls.rs`          | Function-ref resolution, builtin intrinsics, indirect calls, closure-to-canonical     |
-| `pattern_match.rs`  | `match` / `if let` / `switch` lowering, variant construct / test / payload            |
+## Kiln
 
-Each helper module calls back into `translate.rs` for sub-expression translation; cross-module access uses `pub(super)` on shared fields.
-
-Type lookup has two contracts. During registration a type may name one a later phase defines, so `type_id_to_wir_type_pending` yields a placeholder that the final fixup pass re-resolves. Everywhere after registration, `type_id_to_wir_type` treats a miss as a bug and panics: registration and lookup derive their keys through the same `name::wir_*_key` helpers, so they cannot drift apart without one of them being wrong.
-
-CM canonical operations (stream / future read + write, waitable-set, error-context) carry no `wir_build` code: they are lowered entirely in the synthesis phase (`synthesis/cm_binding/`) into ordinary TIR that translates like any other function.
-
-## WIR Optimize
-
-`wir_optimize/` runs Wasm-shape-specific passes that need WIR's lower-level view: peephole, init-guard removal, struct elision, array data promotion, parameter SROA, nullable-ref folding, constant forwarding, DCE, and final cleanup. Tuple- and user-struct ABIs are decided before WIR build by the NIR-level `optimize::multi_value_return` and `optimize::multi_value_param` passes, and variant returns are scalarized into tuples at NIR by `optimize::sroa_variant_return`; what stays here is the result-slot flattening that needs the post-`nullable_ref` shape.
-
-## Codegen
-
-`codegen::emit_wasm` produces the final component bytes:
-
-1. `emit.rs` emits core Wasm bytes from WIR, including the branch-hint section.
-2. `component.rs` wraps the core module in a Component Model envelope (imports, exports, adapters, optional WIT bundling, embedded data).
-3. `wado-wasm-embed` rewrites an embedded wasm asset's memory definition into an import and prunes it to the exports the component uses — code, and, where the asset carries a `wado.dataref` map, its data segments byte by byte.
-
-Output is validated with `wasmparser` unless `--no-validate` is set.
-
-## Module Loading and Names
-
-### Module Sources
-
-`name.rs::ModuleSource` distinguishes where a module originated:
-
-| Variant      | Origin                                                         |
-| ------------ | -------------------------------------------------------------- |
-| `Core`       | Embedded core stdlib (`core:prelude`, `core:cli`, …)           |
-| `Wasi`       | Embedded WASI bindings (`wasi:cli`, `wasi:io`, …)              |
-| `Local`      | Path relative to project root (`./geometry.wado`)              |
-| `Remote`     | `http(s)://…` URL, fetched via `host.load_remote()`            |
-| `EntryPoint` | The main file being compiled                                   |
-| `Redirected` | Module routed through a Kiln invocation index                  |
-| `Wasm`       | A `.wat` / `.wasm` asset imported via `use … with { type: … }` |
-
-The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separator) so the same file imported via different paths shares one identity.
-
-### Naming Convention
-
-`name.rs` centralizes mangling so other components do not depend on name shapes:
-
-| Name             | Format                                   | Example                                      |
-| ---------------- | ---------------------------------------- | -------------------------------------------- |
-| Method           | `{impl}/{decl}/{Type}::{method}`         | `./geom.wado/./geom.wado/Point::sum`         |
-| Trait method     | `{impl}/{decl}/{Type}^{Trait}::{method}` | `./geom.wado/./geom.wado/Point^Display::fmt` |
-| Effect operation | `{Effect}::{op}`                         | `Stdout::write_via_stream`                   |
-| WASI canonical   | `wasi:{pkg}/{iface}::{fn}`               | `wasi:cli/stdout::write-via-stream`          |
-| Mangled generic  | `{Base}$T1$T2…`                          | `Box$i32`, `Pair$i32$String`                 |
-
-Every fq name names its subject by the module that declares it, and a type
-written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
-simple name alone is never an identity — two modules may declare the same one.
-
-Every name the compiler mints for itself starts with one `$`
-(`name::INTERNAL_PREFIX`): a local, a label, a global, a synthesized struct or
-function. No Wado identifier holds one, so a minted name collides with nothing an
-author wrote, and no source can `break` to a synthesized label. Inside a function
-body, the digits that make such a name unique come from
-`FunctionContext::fresh_serial`. That serial advances on read, so a desugaring
-nested inside another mints names of its own: a tagged template in a hole, a
-`for-of` over a `for-of`. A per-type bridge spells the type's mangle after its
-kind (`$value_copy$…`, `$hole_get$…`), and `name::is_type_bridge` recognizes it.
-
-What is one is a `crate::defs::DefId`: a dense index into the whole-program
-`DefTable`, built after loading from every module's items. Declaration data
-(fields, cases, members, visibility, span) is keyed by it, `ResolvedType`'s
-nominal variants carry it, and every trait / effect / resource / impl-target
-index in the elaborator is keyed by it — as are the tables a module's own walk
-adds to as it goes, so a consumer reads a declaration without knowing which
-module it stands in, and a function-local `struct Box` and a module-level one
-are two entries rather than one the later insert wins. `FqTypeName` and
-`FqTraitName` carry one too, in a `DeclaredHead` whose equality and hashing
-read the `DefId` alone, and neither has a constructor that takes a spelling. A
-head that names no declaration — a closure environment, an anonymous literal's
-shape — is `TypeHead::Shape`, whose rendering _is_ its identity.
-
-A handful of functions still turn a name into a declaration. WEP 2026-08-12
-lists them with the reason each survives; adding one to that list is a design
-change, not a local convenience.
-
-A method key is `(impl module, declared receiver, trait, method)`, so `{impl}`
-and `{decl}` repeat whenever a type is implemented in the module declaring it —
-the common case. A receiver with no declaring module (a builtin, a tuple) has no
-`{decl}` segment. See WEP 2026-07-29 for why neither segment is removable alone.
-
-The same rule binds names still in their written form. A type name in source is
-relative to the module that wrote it, so a **reference site** — not a consumer —
-is where an identity is derived, once: `crate::resolve::Resolutions` answers
-every site before elaboration begins, keyed by the site's own `AstId`. A written
-type, a bound, an `impl` header's trait and target, a struct literal's type
-name, a qualified path's segments, a pattern's `Type::` qualifier and a bare
-identifier in expression position are all such sites. An `impl`
-block's digest (`ImplHeader`) carries its module, its target's `ImplTargetKey`
-and its trait's, and the whole-program checks (coherence, orphan rules, sealed
-traits, trait-method arity) read the digest instead of re-walking
-`loaded_modules`, because a second walk knows no module and can only compare
-spellings. A consumer holding a bare name with no site goes through the table's
-own scope lookup, so it cannot answer differently from the site. See WEP
-2026-08-10.
-
-## Component Model Registries
-
-Three registries collect declarative information from the standard library and feed both the elaborator and codegen:
-
-- `CmInterfaceRegistry` (`component_model.rs`) — extracts WASI interfaces from `lib/wasi/*.wado`: version pins, async flags, canonical method names, supported types. Codegen drives import generation from this registry; only interfaces whose types are fully supported are imported.
-- `WorldRegistry` (`world_registry.rs`) — collects world definitions (e.g., the `Command` world from `wasi/cli.wado`) and provides export signatures.
-- `BuiltinRegistry` (`builtin_registry.rs`) — collects function signatures from `lib/core/builtin.wado`. Functions tagged `#[canonical("ns", "name")]` import a CM canonical builtin (`wasi`, `mem`, or `bundled`); untagged builtins compile directly to Wasm instructions.
-
-### Canonical intrinsics
-
-`canon future.read` and its siblings are typed — the Component Model instantiates one per `future<T>` — so the core module needs a distinct import per payload type. `CanonicalIntrinsic` (`canonical.rs`) is that identity, and `CmRawCall` carries it from synthesis through TIR and NIR into WIR.
-
-`import_name` renders that identity as the core import name at the end of the path. It is a rendering, not a carrier: nothing parses it back, so it only has to be injective. A payload names a declaration or a structure, and a name carries neither back. So `from_import_name` reads only the payload-less operation a `#[canonical]` annotation states, and refuses anything else.
-
-A payload that classifies as nothing is reported, never defaulted: `classify_future_payload` recognizes the trailers shape structurally and panics otherwise, and `classify_stream_payload` panics rather than falling back to `stream<u8>`. Ask `future_payload_rejection` / `stream_payload_rejection` first so the user gets a diagnostic instead.
+Kiln turns an input file (a schema, a grammar, a Wado dialect) into `.wado`
+source. A generator is an ordinary Wado package targeting the
+`core:kiln/generator` world. `wado-cli` builds and runs it, and caches the
+output by its inputs, options, and the generator's source. The compiler holds
+only the pure-data half: the invocations, their order, cache keys, and option
+checks. It redirects an import to the generated source. See
+[WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## LSP
 
-The language server (`wado-lsp/`) is a thin layer on top of `wado_compiler::semantics`. The `Engine` holds open documents and answers LSP queries (diagnostics, hover, go-to-definition, references, document highlight, semantic tokens). Each query:
-
-1. Composes `parse(source)` → `load(parsed, …, invocations, …)` → `semantics_of(loaded, host, …)` to obtain a `Semantics` snapshot (kiln invocation discovery runs against the parsed entry AST between stages).
-2. Uses `Semantics::cursor_at(module, line, col) → Cursor` to translate a (line, col) into an `AstId` cursor.
-3. Reads pre-computed facts off `Cursor` / `Semantics` (`def_key`, `def_name_span`, `references_to_def`, `is_write_target`, …).
-
-`Engine` itself performs no I/O — every query takes an `&impl CompilerHost`, so the caller decides how imported modules are loaded. `wado-lsp` ships a `FilesystemCompilerHost`; embeddings (VS Code Wasm, browser playground) supply their own host. The `wado-compiler` crate must compile to `wasm32-unknown-unknown` to support those bundled deployments; CI enforces this. See [WEP 2026-04-18: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
-
-## Kiln (Code Generation from Input Files)
-
-Kiln is the compiler's mechanism for turning any input file — a schema (`.proto`, `.graphql`, `.g4`, `.wit`), a Wado dialect, anything a generator understands — into `.wado` source. A **generator** is itself an ordinary Wado package that targets the `core:kiln/generator` world; the compiler builds it to a Wasm component, and the host (`wado-cli`) executes it via wasmtime to produce `.wado` source files. Invocations are content-addressed by their input bytes, options, and the generator's source hash. See [WEP 2026-04-12: Kiln](./wep-2026-04-12-kiln.md).
-
-The compiler-side pieces live in `src/kiln/`:
-
-| Module             | Concern                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------ |
-| `invocation.rs`    | Canonical `Invocation` representation (declaration site + options + input paths)     |
-| `inline.rs`        | Collects inline `use … with { generator: … }` invocations (`InvocationIndex`)        |
-| `plan.rs`          | DAG + topological sort of invocations; rejects cycles                                |
-| `cache.rs`         | Cache-key composition over inputs, options, and the generator's identity hash        |
-| `header.rs`        | Generated-file `#![generated]` header emission and parsing                           |
-| `metadata.rs`      | Persisted per-invocation cache state (`<primary>.kiln.json`)                         |
-| `options.rs`       | Extracts an `OptionsDescriptor` from a generator's `pub struct Options`              |
-| `options_check.rs` | Validates user-supplied options against the descriptor                               |
-| `import_check.rs`  | Refuses `wasi:*` imports inside generator packages; injects the `Request<T>` adapter |
-
-The pipeline driver (`run_generator`, file persistence, cache-state handling) lives in `wado-cli`; `wado-compiler` exports only the pure-data pieces above so it stays `wasm32-unknown-unknown`-clean.
-
-`compile_after_load` integrates Kiln at three spots:
-
-- **Phases 1a–1b (pre-analysis):** when the entry module's target world is `core:kiln/generator`, `import_check` rejects forbidden imports and rewrites `fn generate(req: Request<Options>)` into the wire shape — a `primary` parameter, an `inputs` parameter, and a typed `options: Options` parameter — rebuilding `req` as a local so the author's body is unchanged.
-- **Phase 6c (post-annotate):** if the target world is `core:kiln/generator`, `extract_options_descriptor` walks the resolved `pub struct Options` and produces the descriptor the CLI provider caches on disk, so a later run type-checks a use site's options without recompiling the generator.
-- **Module loading:** when an import target matches an entry in the caller-supplied `InvocationIndex`, the loader resolves it to `ModuleSource::Redirected { uri }` and asks the host to load the generated bytes. This is how `use Foo from "schema.proto" with { generator: ... }` gets wired up after generation.
+`wado-lsp/` is a thin layer over the compiler's `Semantics`: each query parses,
+loads, and elaborates, then reads the facts at the cursor. The engine performs
+no I/O. The caller supplies the host that loads modules, so the engine runs in
+VS Code and in the browser alike. That is why `wado-compiler` must build for
+`wasm32-unknown-unknown`. See
+[WEP: LSP Architecture](./wep-2026-04-18-lsp-architecture.md).
 
 ## Standard Library
 
-The compiler bundles the standard library inside its binary (`stdlib.rs` embeds `lib/`):
+The standard library is Wado source under `lib/`, embedded in the compiler.
+`lib/core/` is written by hand, except `lib/core/kiln/`. `wado-from-idl`
+generates that directory, `lib/wasi/`, and `lib/web/`.
+Deterministic math is a bundled core Wasm module, linked into the component and
+pruned to the functions called
+([WEP: Deterministic libm](./wep-2026-01-10-deterministic-libm.md)).
 
-- `lib/core/` — `prelude`, `cli`, `collections`, `serde`, `json`, `simd`, `zlib`, `base64`, `url`, `router`, `kiln`, `internal`, `builtin`, `allocator`, plus co-located `_test` modules.
-- `lib/wasi/` — Wado bindings for WASI P3 interfaces. Generated from WIT by `wado-from-idl`; regenerate with `mise run update-stdlib-wasi`.
+The world selects the allocator, and `--allocator` overrides it.
 
-## Bundled Math (`wado-bundled-libm`)
-
-The `wado-bundled-libm/` crate compiles a deterministic libm to `wasm32-unknown-unknown`, checked in as `lib/core/libm.wat` (rebuild with `mise run update-bundled`). `core:prelude` name-imports its exports through the ordinary core-wasm asset import (`use { libm_sin as f64_sin, … } from "../libm.wat" with { type: "wat" }`) and attaches them to `f32` / `f64`. The compiler links the asset as a separate core module inside the produced component, pruned to the exports the program actually calls.
-
-The asset also carries a `wado.dataref` custom section — one line per function, naming the rodata ranges that function reads — so the prune reaches its 5.4 KB of tables too, and a program calling `sin` keeps 344 of those bytes. `mise run update-bundled` resolves it from the `linking` and `reloc.CODE` sections of a `--emit-relocs` build and drops those sections, whose byte offsets into code the `.wat` round trip invalidates.
-
-## Allocators
-
-Three allocators live in `lib/core/allocator.wado`, each tagged `#[allocator("name")]`. The compiler picks one by setting that function's `export_name` to `"realloc"`:
-
-| Mode       | Default for            | Behaviour                                                               |
-| ---------- | ---------------------- | ----------------------------------------------------------------------- |
-| `bump`     | CLI                    | Bump pointer with free-rewind; never reclaims general blocks.           |
-| `freelist` | HTTP service worlds    | First-fit free list with block splitting; falls back to bump.           |
-| `debug`    | Test world / E2E tests | Never reuses freed memory; poisons with `0xFF`. Catches use-after-free. |
-
-`--allocator <name>` overrides the defaults.
-
-## In Progress
-
-- [ ] Variant pattern matching: struct payloads not yet supported (single-payload and tuple-payload work).
-- [ ] Function types: parser supports `fn(T) -> U` and closure codegen works, but full first-class function types are incomplete.
-- [ ] Stream/Future: resource declarations exist in `core:prelude/types.wado`, but method resolution (`.new()`, `.read()`, `.write()`, `.close()`, `.drop()`) is still hardcoded in `elaborator/method_call.rs` rather than driven by the resource declarations.
+| Allocator  | Default for             | Behaviour                                            |
+| ---------- | ----------------------- | ---------------------------------------------------- |
+| `bump`     | CLI and other worlds    | Never reclaims.                                      |
+| `freelist` | HTTP service, libraries | Reuses freed blocks.                                 |
+| `debug`    | Test world              | Never reuses freed memory, and poisons it with 0xFF. |
 
 ## Known Limitations
 
-- Implicit struct literals do not work with generic structs: `let b: Box<i32> = { value };` fails. Use `let b: Box<i32> = Box { value };`.
-- GC arrays cannot be passed directly to `stream<u8>` — they must be copied to linear memory first ([component-model#525](https://github.com/WebAssembly/component-model/issues/525)).
-- A very long `||` / `&&` chain aborts the compiler with a stack overflow. It
-  parses as a left-nested binary expression, so every recursive expression walk
-  descends once per operand; 2400 operands need ~256 MiB of stack (measured
-  with `ulimit -s` — the 64 MiB `wado-cli` asks tokio for is not enough). Repro:
-  a `fn` returning `c == 0 || c == 1 || …` with 2400 terms. The pattern path
-  takes the same width, so Gale emits `c matches { … }` for its lexer dispatch.
-
-## Not Yet Implemented
-
-- `?` operator (error propagation)
-- Effect handlers
-- Reactive signals (source values, derived values, effect blocks)
+- A `||` / `&&` chain of thousands of operands overflows the compiler's stack.
+- A GC array cannot be passed to `stream<u8>` directly. It is copied to linear
+  memory first ([component-model#525](https://github.com/WebAssembly/component-model/issues/525)).

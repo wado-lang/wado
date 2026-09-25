@@ -243,8 +243,8 @@ caller never wrote.
 
 A rename replaces a symlink rather than following it. That is the one thing
 this shape does that a truncating write could not: it detaches a link where
-`write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a link
-to `AGENTS.md`, so the difference is a file the next `git status` reports. So
+`write_in_place` refused with `Loop`. A tracked link replaced by a file is a
+change the next `git status` reports. So
 `write` refuses a target that is not a regular file. Every read here already
 refuses one, and a write is not the place to start following links. What that
 refusal promises is in "Time of check, time of use" below.

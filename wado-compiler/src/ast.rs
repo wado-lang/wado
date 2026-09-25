@@ -1744,6 +1744,62 @@ pub fn declares_unrestricted(attrs: &[Attribute]) -> bool {
         .any(|a| a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted))
 }
 
+/// The class numbers `#[cm(..., classes = "lo..=hi")]` gives a resource's
+/// handles: its own is `lo`, the rest belong to the resources extending it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HandleClasses {
+    pub lo: u16,
+    pub hi: u16,
+}
+
+impl HandleClasses {
+    /// The handles one class spans; a handle is `class * STRIDE + index`.
+    pub const STRIDE: f64 = 137_438_953_472.0;
+
+    pub fn parse(value: &str) -> Option<Self> {
+        let (lo, hi) = value.split_once("..=")?;
+        let (lo, hi) = (lo.parse().ok()?, hi.parse().ok()?);
+        (lo <= hi).then_some(Self { lo, hi })
+    }
+
+    /// The half-open interval `[low, high)` of the handle bits these classes tag.
+    /// A non-negative `f64` orders as its bits do, and no other one falls inside.
+    #[must_use]
+    pub fn handle_bounds(self) -> (u64, u64) {
+        (
+            (f64::from(self.lo) * Self::STRIDE).to_bits(),
+            ((f64::from(self.hi) + 1.0) * Self::STRIDE).to_bits(),
+        )
+    }
+
+    /// Whether `inner` lies past this range's own class and inside the rest.
+    #[must_use]
+    pub fn encloses(self, inner: Self) -> bool {
+        self.lo < inner.lo && inner.hi <= self.hi
+    }
+
+    #[must_use]
+    pub fn overlaps(self, other: Self) -> bool {
+        self.lo <= other.hi && other.lo <= self.hi
+    }
+}
+
+impl std::fmt::Display for HandleClasses {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..={}", self.lo, self.hi)
+    }
+}
+
+/// The classes these attributes declare, if any.
+pub fn declared_handle_classes(attrs: &[Attribute]) -> Option<HandleClasses> {
+    attrs.iter().find_map(|a| {
+        if a.name != CM {
+            return None;
+        }
+        a.kv_value("classes").and_then(HandleClasses::parse)
+    })
+}
+
 impl CmBoundary {
     /// Returns the `CmImport` payload if this boundary is an interface import.
     pub fn as_import(&self) -> Option<&CmImport> {

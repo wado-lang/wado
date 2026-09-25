@@ -427,6 +427,14 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
         // live in the value pool, not the skeleton, so `remap_locals` misses
         // them — remap their source indices too.
         body.values.remap_opaque_locals(&remap);
+        if let Some(vg) = body.value_graph.as_mut() {
+            for entry in vg.loop_entry_values.values_mut() {
+                *entry = std::mem::take(entry)
+                    .into_iter()
+                    .filter_map(|(l, v)| Some((remap[l as usize]?, v)))
+                    .collect();
+            }
+        }
     }
 }
 

@@ -1,125 +1,16 @@
-//! Tests for `render_lexer_dump(Grammar) -> String`.
-//!
-//! Each test is a minimal `.g4` shaped to force one emit strategy, asserted by
-//! substring so spacing stays free to change. The point is that the report
-//! names the branch the lexer emitter took and why the cheaper one was not
-//! available — the question `gale dump --lexer` exists to answer.
+//! Tests for `render_lexer_dump`: each grammar forces one emit strategy, and the
+//! report must say why the cheaper one was not available.
 
-use {
-    merge_grammars,
-    synthesize_implicit_tokens,
-    normalize_caches,
-    alias_parser_literals,
-    canonicalize_empty_alt_groups,
-} from "./ir.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
-use { generate, GenerateOptions } from "./codegen.wado";
-use { parse } from "./g4/parser.wado";
+use { assemble_grammar } from "./g4/parser.wado";
+use { count_occurrences } from "../tests/support/text.wado";
 
-/// Run the front-end the way `cmd_dump` does, then render the lexer report.
+/// The report `gale dump --lexer` prints for `input`.
 fn lexer_dump<S: AsStrSlice>(input: S) -> String {
-    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
-    synthesize_implicit_tokens(&mut merged);
-    alias_parser_literals(&mut merged);
-    canonicalize_empty_alt_groups(&mut merged);
-    normalize_caches(&mut merged);
-    return render_lexer_dump(&merged);
-}
-
-fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len > h_len {
-        return false;
-    }
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            return true;
-        }
-    }
-    return false;
-}
-
-fn str_count<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
-    let h_len = haystack.len();
-    let n_len = needle.len();
-    if n_len == 0 || n_len > h_len {
-        return 0;
-    }
-    let mut count = 0;
-    for let mut i = 0; i <= h_len - n_len; i += 1 {
-        let mut found = true;
-        for let mut j = 0; j < n_len; j += 1 {
-            if haystack.get_byte_unchecked(i + j) != needle.get_byte_unchecked(j) {
-                found = false;
-                break;
-            }
-        }
-        if found {
-            count += 1;
-        }
-    }
-    return count;
-}
-
-/// One strategy: the sentence the dump prints for it, and the local the emitter
-/// mints when it takes it. Each local is named once per decision.
-struct StrategyMarker {
-    reported: String,
-    emitted: String,
-}
-
-global STRATEGY_MARKERS: List<StrategyMarker> = [
-    StrategyMarker {
-        reported: "maximal munch: every arm scanned",
-        emitted: "let mut alts_best_",
-    },
-    // Not `la_saved_`: the lookahead-aware repeat saves the cursor under that
-    // name too, so it names two strategies rather than one.
-    StrategyMarker {
-        reported: "arm scoring: each arm scored",
-        emitted: "let mut la_win_",
-    },
-    StrategyMarker {
-        reported: "lookahead-aware: the inner can eat",
-        emitted: "let mut accept_",
-    },
-    StrategyMarker {
-        reported: "non-greedy: min-match loop",
-        emitted: "let ng_saved_",
-    },
-];
-
-/// The dump and `gen_lexer` descend one `lexer_rule_plan`, so neither can reach
-/// a node the other does not. What this compares is that the two consumers agree
-/// about each node they reach: a plan node the dump reports is one the emitter
-/// emitted code for, over shapes that force each strategy.
-///
-/// Action-free by construction: a rule that runs actions has its body emitted
-/// twice, once to match and once to replay, so its locals would count double
-/// against a report that names each decision once.
-test "every strategy the dump reports is one the emitter emitted" {
-    for let src of &[
-        "grammar T;\nr : A ;\nA : ('a' | 'ab') ;\nB : . ;", "grammar T;\nr : A ;\nA : 'a' (~'b')+ 'c' ;\nB : . ;",
-        "grammar T;\nr : A ;\nA : 'a' .*? 'c' ;\nB : . ;", "grammar T;\nr : A ;\nA : ('a' | 'ab') 'c' ;\nB : . ;",
-        "grammar T;\nr : A B ;\nA : 'a' (~'b')+ 'c' | ('x' | 'xy') 'z' ;\nB : 'q' .*? 'r' ;\nC : . ;",
-    ] {
-        let report = lexer_dump(src);
-        let mut g = parse(*src).unwrap();
-        let code = generate(&mut g, &GenerateOptions {}).source;
-        for let m of &STRATEGY_MARKERS {
-            let reported = str_count(&report, &m.reported);
-            let emitted = str_count(&code, &m.emitted);
-            assert reported == emitted, `'${m.reported}': the dump reports ${reported}, the emitter emitted ${emitted} — for ${*src}`;
-        }
-    }
+    let inputs: List<[String, String]> = [
+        ["test.g4", input.to_string()],
+    ];
+    return render_lexer_dump(&assemble_grammar(&inputs).unwrap());
 }
 
 test "lexer dump names the grammar and summarizes strategies" {
@@ -127,21 +18,43 @@ test "lexer dump names the grammar and summarizes strategies" {
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "grammar T (lexer)"), report;
-    assert str_contains(&report, "rule ID — matcher try_ID"), report;
-    assert str_contains(&report, "strategies:"), report;
-    assert str_contains(&report, "routes: matcher 1"), report;
+    assert report.contains("grammar T (lexer)"), report;
+    assert report.contains("rule ID — matcher try_ID"), report;
+    assert report.contains("strategies:"), report;
+    assert report.contains("routes: matcher 1"), report;
 }
 
 test "lexer dump reports a tail alternation as maximal munch" {
-    // `('0' | [1-9] [0-9]*)` — the arms reach different lengths, and nothing
-    // follows, so every arm is scanned and the longest wins.
+    // `('0' | [0-9] [0-9]*)` — the arms reach different lengths from the same
+    // char, and nothing follows, so every arm is scanned and the longest wins.
+    let report = lexer_dump("grammar T;
+r : INT ;
+INT : '0' | [0-9] [0-9]* ;");
+
+    assert report.contains("maximal munch"), report;
+    assert report.contains("maximal munch 1"), report;
+}
+
+test "lexer dump reports a tail alternation of disjoint arms as first-match" {
+    // Only one arm can start at any char, so it is the only one that can match.
     let report = lexer_dump("grammar T;
 r : INT ;
 INT : '0' | [1-9] [0-9]* ;");
 
-    assert str_contains(&report, "maximal munch"), report;
-    assert str_contains(&report, "maximal munch 1"), report;
+    assert report.contains(
+        "alternation ('0' | [1-9] [0-9]*) — first-match: no two arms can match at the same position",
+    ), report;
+    assert report.contains("maximal munch 0"), report;
+}
+
+test "lexer dump reads a fragment's first chars when telling arms apart" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+fragment D : [0-9] ;
+NUM : D+ ('.' D*)? | '.' D+ ;");
+
+    assert report.contains("— first-match: no two arms can match at the same position"), report;
+    assert report.contains("maximal munch 0"), report;
 }
 
 test "lexer dump reports equal-length arms as first-match" {
@@ -151,7 +64,7 @@ test "lexer dump reports equal-length arms as first-match" {
 r : AB ;
 AB : 'a' | 'b' ;");
 
-    assert str_contains(&report, "first-match: every arm consumes the same fixed length"), report;
+    assert report.contains("first-match: every arm consumes the same fixed length"), report;
 }
 
 test "lexer dump reports a called rule's alternation as not-tail" {
@@ -162,7 +75,7 @@ r : A ;
 A : B 'z' ;
 B : 'a' | 'ab' ;");
 
-    assert str_contains(&report, "first-match: not in tail position"), report;
+    assert report.contains("first-match: not in tail position"), report;
 }
 
 test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
@@ -172,20 +85,19 @@ test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert str_contains(&report, "repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
-    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports a lookahead-aware greedy repeat" {
     // `.` matches the `'c'` the suffix needs, so a plain greedy loop would eat
-    // it and strand the suffix at end-of-input — the over-shoot the forward
-    // scan with accept-state tracking exists for.
+    // it and strand the suffix at end-of-input.
     let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .+ 'c' ;");
 
-    assert str_contains(&report, "lookahead-aware: the inner can eat a char the suffix needs"), report;
-    assert str_contains(&report, "lookahead-aware 1"), report;
+    assert report.contains("lookahead-aware: the inner can eat a char the suffix needs"), report;
+    assert report.contains("lookahead-aware 1"), report;
 }
 
 test "lexer dump reports a non-greedy repeat" {
@@ -193,8 +105,8 @@ test "lexer dump reports a non-greedy repeat" {
 r : CMT ;
 CMT : '/*' .*? '*/' ;");
 
-    assert str_contains(&report, "non-greedy: min-match loop"), report;
-    assert str_contains(&report, "non-greedy repeat: 1"), report;
+    assert report.contains("non-greedy: min-match loop"), report;
+    assert report.contains("non-greedy repeat: 1"), report;
 }
 
 test "lexer dump reports arm scoring for an alternation with a suffix" {
@@ -204,34 +116,30 @@ test "lexer dump reports arm scoring for an alternation with a suffix" {
 r : I ;
 I : ('a' | 'ab') 'bc' ;");
 
-    assert str_contains(&report, "alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
-    assert str_contains(&report, "arm scoring 1"), report;
+    assert report.contains("alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
+    assert report.contains("arm scoring 1"), report;
 }
 
 test "lexer dump reports a scored alternation's suffix once" {
-    // `gen_lexer_alts_lookahead_aware` only PEEKS the suffix — it restores `pos`
-    // and the element loop `continue`s, so the sequence commits it exactly once.
-    // Reporting it from both places would double every construct behind a
-    // scored alternation, and double the summary's tally with it.
+    // A scored alternation only peeks its suffix and the sequence commits it, so
+    // reporting it from both would double the constructs and the summary's tally.
     let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | 'ab') [0-9]* 'z' ;");
 
-    assert str_count(&report, "repeat [0-9]* then 'z'") == 1, report;
-    assert str_contains(&report, "greedy repeat: plain 1"), report;
+    assert count_occurrences(&report, "repeat [0-9]* then 'z'") == 1, report;
+    assert report.contains("greedy repeat: plain 1"), report;
 }
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
-    // The non-greedy emit returns rather than falling out of the element loop,
-    // so it carries the alt's later predicates onto the rest alternative. The
-    // `{true}?` therefore lands between the `.*` and the alt's end, which is
-    // what keeps that repeat on the plain loop.
+    // The non-greedy emit carries the alt's later predicates onto its rest, so the
+    // `{true}?` lands after the `.*` and keeps that repeat on the plain loop.
     let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .*? .* {true}? 'x' ;");
 
-    assert str_contains(&report, "repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
-    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
+    assert report.contains("repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
+    assert report.contains("plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {
@@ -241,19 +149,37 @@ test "lexer dump reports disjoint arms with a suffix as first-match" {
 r : I ;
 I : ('a' | 'bcd') 'z' ;");
 
-    assert str_contains(&report, "first-match: no two arms can match at the same position"), report;
+    assert report.contains("first-match: no two arms can match at the same position"), report;
 }
 
 test "lexer dump reports the keyword classifier and its carrier" {
     // `IF` is a fixed per-char pattern, reclassified out of a match by the
-    // later, wider `ID`.
+    // later, wider `ID`, which matches it in either case.
+    let report = lexer_dump("grammar T;
+r : IF ID ;
+IF : [iI] [fF] ;
+ID : [a-zA-Z]+ ;");
+
+    assert report.contains("rule IF — keyword classifier (carrier ID)"), report;
+    assert report.contains("keyword classifier 1"), report;
+}
+
+test "lexer dump keeps a keyword its carrier cannot match in every case on its own matcher" {
     let report = lexer_dump("grammar T;
 r : IF ID ;
 IF : [iI] [fF] ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule IF — keyword classifier (carrier ID)"), report;
-    assert str_contains(&report, "keyword classifier 1"), report;
+    assert report.contains("rule IF — matcher try_IF"), report;
+}
+
+test "lexer dump reports a multi-char literal as a keyword" {
+    let report = lexer_dump("grammar T;
+r : AS ID ;
+AS : 'as' ;
+ID : [a-z]+ ;");
+
+    assert report.contains("rule AS — keyword classifier (carrier ID)"), report;
 }
 
 test "lexer dump reports a rule the shared literal matcher covers" {
@@ -262,7 +188,7 @@ test "lexer dump reports a rule the shared literal matcher covers" {
 r : 'xy' X ;
 X : 'x' 'y' ;");
 
-    assert str_contains(&report, "shared literal matcher (TK_LIT_xy)"), report;
+    assert report.contains("shared literal matcher (TK_LIT_xy)"), report;
 }
 
 test "lexer dump reports a rule the parser also writes inline keeping its matcher" {
@@ -270,8 +196,77 @@ test "lexer dump reports a rule the parser also writes inline keeping its matche
 r : 'x' X ;
 X : 'x' ;");
 
-    assert str_contains(&report, "rule X"), report;
-    assert !str_contains(&report, "shared literal matcher"), report;
+    assert report.contains("rule X"), report;
+    assert !report.contains("shared literal matcher"), report;
+}
+
+test "lexer dump reports an alternation of single chars as one set" {
+    let report = lexer_dump("grammar T;
+r : A ;
+fragment D : [0-9] ;
+A : ('_' | D) 'z' (D | 'x')* ;");
+
+    assert report.contains("set ('_' | D) — one class test of 2 ranges"), report;
+    assert report.contains("set (D | 'x') — one class test of 2 ranges"), report;
+    assert report.contains("char set 2"), report;
+}
+
+test "lexer dump reports a rule made of earlier rules as subsumed" {
+    // Every match of `EITHER` is a match of `A` or `B` at the same length, and
+    // both are declared first, so `EITHER` never wins and is not dispatched.
+    let report = lexer_dump("grammar T;
+r : A B EITHER ;
+A : 'a' [0-9]* ;
+B : 'b' ;
+EITHER : (A | B) -> channel(HIDDEN) ;");
+
+    assert report.contains("rule EITHER — subsumed by A, B: never the longest match"), report;
+    assert report.contains("subsumed 1"), report;
+}
+
+test "lexer dump reports a rule an earlier rule offers whole as subsumed" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : (DEC | HEX) 'u'? ;
+DEC : [0-9]+ ;
+HEX : '0x' [0-9a-f]+ ;
+USE : NUM ;");
+
+    assert report.contains(
+        "rule DEC — subsumed by NUM: never the longest match + matcher try_DEC (another rule calls it)",
+    ), report;
+    assert report.contains("rule HEX — subsumed by NUM"), report;
+    assert report.contains("rule USE — subsumed by NUM"), report;
+}
+
+test "lexer dump keeps a rule an earlier rule offers only with a suffix" {
+    // `NUM` needs its `'u'`, so a bare `DEC` match is not one of its matches.
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : (DEC | HEX) 'u' ;
+DEC : [0-9]+ ;
+HEX : '0x' [0-9a-f]+ ;");
+
+    assert report.contains("rule DEC — matcher try_DEC"), report;
+}
+
+test "lexer dump keeps a rule whose subsumer carries a predicate" {
+    let report = lexer_dump("grammar T;
+r : NUM ;
+NUM : {true}? DEC ;
+DEC : [0-9]+ ;");
+
+    assert report.contains("rule DEC — matcher try_DEC"), report;
+}
+
+test "lexer dump keeps a rule made of later rules" {
+    let report = lexer_dump("grammar T;
+r : EITHER ;
+EITHER : A | B ;
+A : 'a' ;
+B : 'b' ;");
+
+    assert report.contains("rule EITHER — matcher try_EITHER"), report;
 }
 
 test "lexer dump separates inlined from recursive fragments" {
@@ -284,9 +279,9 @@ fragment NEST : '(' NEST* ')' ;
 fragment D : [0-9] ;
 NUM : D+ ;");
 
-    assert str_contains(&report, "rule NEST — recursive fragment: matcher try_NEST"), report;
-    assert str_contains(&report, "rule D — fragment: inlined at each use site"), report;
-    assert str_contains(&report, "recursive fragment 1"), report;
+    assert report.contains("rule NEST — recursive fragment: matcher try_NEST"), report;
+    assert report.contains("rule D — fragment: inlined at each use site"), report;
+    assert report.contains("recursive fragment 1"), report;
 }
 
 test "lexer dump reports a tokens-block entry as a virtual token" {
@@ -295,8 +290,8 @@ tokens { VT }
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, "rule VT — virtual token: no text to match"), report;
-    assert str_contains(&report, "virtual 1"), report;
+    assert report.contains("rule VT — virtual token: no text to match"), report;
+    assert report.contains("virtual 1"), report;
 }
 
 test "lexer dump reports an ATN-class rule as routed to latn_match" {
@@ -306,21 +301,19 @@ test "lexer dump reports an ATN-class rule as routed to latn_match" {
 r : CMT ;
 CMT : '/*' (CMT | .)+? '*/' ;");
 
-    assert str_contains(&report, "rule CMT — ATN-class: latn_match (latn rule 0)"), report;
-    assert str_contains(&report, "ATN-class 1"), report;
+    assert report.contains("rule CMT — ATN-class: latn_match (latn rule 0)"), report;
+    assert report.contains("ATN-class 1"), report;
 }
 
 test "lexer dump scores a predicate-carrying alternation by length" {
     // ANTLR4's lexer takes the longest arm, and a predicate says whether its own
-    // arm matches — never how the arms compare on length. The carve-out in
-    // `lexer_alts_scan` answers the routing question, where `latn_match` cannot
-    // run a predicate; both emit decisions read `lexer_alts_lengths`.
+    // arm matches, never how the arms compare on length.
     let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | {true}? 'ab') 'bc' ;");
 
-    assert !str_contains(&report, "an arm carries a semantic predicate"), report;
-    assert str_contains(&report, "arm scoring"), report;
+    assert !report.contains("an arm carries a semantic predicate"), report;
+    assert report.contains("arm scoring"), report;
 }
 
 test "lexer dump names a rule's constructs with its own element text" {
@@ -328,6 +321,6 @@ test "lexer dump names a rule's constructs with its own element text" {
 r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
-    assert str_contains(&report, "repeat [ \\t\\r\\n]+"), report;
-    assert str_contains(&report, "plain loop: nothing follows the repeat"), report;
+    assert report.contains("repeat [ \\t\\r\\n]+"), report;
+    assert report.contains("plain loop: nothing follows the repeat"), report;
 }

@@ -8,6 +8,7 @@
 //! analysis over-approximates escape: unmodelled constructs, a closure's
 //! captures, and a handler / `resume` body mark the parameters they reach.
 
+use super::analyze::collect_pattern_bindings;
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
@@ -15,7 +16,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
+    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -307,13 +308,33 @@ struct BindingWalker {
     targets: Vec<(u32, TirExpr)>,
 }
 
+impl BindingWalker {
+    /// A pattern binding carries what it was destructured out of.
+    fn bind_pattern(&mut self, pattern: &TirPattern, value: &TirExpr) {
+        let mut locals = IndexSet::default();
+        collect_pattern_bindings(pattern, &mut locals);
+        for local in locals {
+            self.targets.push((local, value.clone()));
+        }
+    }
+}
+
 impl TirRefVisitor for BindingWalker {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-        {
-            self.targets.push((*local_index, value.clone()));
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => self.targets.push((*local_index, value.clone())),
+            TirStmtKind::LetDestructure { pattern, value, .. } => self.bind_pattern(pattern, value),
+            TirStmtKind::Expr(_)
+            | TirStmtKind::Return { .. }
+            | TirStmtKind::If { .. }
+            | TirStmtKind::Loop { .. }
+            | TirStmtKind::Break { .. }
+            | TirStmtKind::Continue
+            | TirStmtKind::LabeledBlock { .. }
+            | TirStmtKind::TaskReturn { .. }
+            | TirStmtKind::VariadicForOf { .. } => {}
         }
         self.walk_stmt(stmt);
     }
@@ -326,6 +347,15 @@ impl TirRefVisitor for BindingWalker {
             && let TirExprKind::Local { index, .. } = &target.kind
         {
             self.targets.push((*index, (**value).clone()));
+        }
+        if let TirExprKind::Match {
+            expr: scrutinee,
+            arms,
+        } = &expr.kind
+        {
+            for arm in arms {
+                self.bind_pattern(&arm.pattern, scrutinee);
+            }
         }
         self.walk_expr(expr);
     }

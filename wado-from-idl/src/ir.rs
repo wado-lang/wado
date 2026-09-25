@@ -1,5 +1,7 @@
 //! Intermediate representation for Wado code generation
 
+use wado_compiler::ast::HandleClasses;
+
 /// A cross-interface type import
 #[derive(Debug, Clone)]
 pub struct WadoImport {
@@ -171,6 +173,9 @@ pub struct WadoResource {
     /// `linearity = "unrestricted"`: a copyable handle that owns nothing,
     /// rather than an affine CM handle. Required on both sides of `extends`.
     pub unrestricted: bool,
+    /// `classes = "lo..=hi"`: the class numbers an unrestricted resource's
+    /// handles carry, its own `lo` and its descendants' the rest.
+    pub classes: Option<HandleClasses>,
     /// The parent resource of a `resource X extends Y`.
     pub extends: Option<String>,
     pub methods: Vec<WadoFunction>,

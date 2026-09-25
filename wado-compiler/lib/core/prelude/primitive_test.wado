@@ -43,14 +43,16 @@ test "f64::from_str overflow underflow" {
     assert f64::from_str("-1e999") matches { Ok(v) && v == f64::NEG_INFINITY };
     assert f64::from_str("1e-999") matches { Ok(v) && v == 0.0 };
 
-    // Boundary: eff_p 350 is within table, 351 overflows
-    assert f64::from_str("1e350") matches { Ok(v) && v.is_finite() };
+    // Inside the pow10 table's domain, and still past f64's range either way.
+    assert f64::from_str("1e350") matches { Ok(v) && v == f64::INFINITY };
     assert f64::from_str("1e351") matches { Ok(v) && v == f64::INFINITY };
     assert f64::from_str("-1e351") matches { Ok(v) && v == f64::NEG_INFINITY };
-
-    // Boundary: eff_p -351 is within table (subnormal), -352 underflows to zero
-    assert f64::from_str("1e-351") matches { Ok(v) && v.is_finite() && v > 0.0 };
+    assert f64::from_str("1e-351") matches { Ok(v) && v == 0.0 };
     assert f64::from_str("1e-352") matches { Ok(v) && v == 0.0 };
+
+    // The largest finite value, and the first decimal past its rounding edge.
+    assert f64::from_str("1.7976931348623157e308") matches { Ok(v) && v.to_bits() == 0x7fefffffffffffff };
+    assert f64::from_str("1.8e308") matches { Ok(v) && v == f64::INFINITY };
 }
 
 test "f64::from_str malformed" {
@@ -649,6 +651,38 @@ test "clamp reaches each integer type's extremes" {
     assert u64::clamp(18446744073709551615, 0, 7) == 7;
 }
 
+test "integer abs is the magnitude, and MIN wraps to itself" {
+    assert i8::abs(-5) == 5;
+    assert i8::abs(i8::MIN) == i8::MIN;
+    assert i16::abs(-300) == 300;
+    assert i16::abs(i16::MIN) == i16::MIN;
+    assert i32::abs(-7) == 7;
+    assert i32::abs(7) == 7;
+    assert i32::abs(0) == 0;
+    assert i32::abs(i32::MIN) == i32::MIN;
+    assert i64::abs(-9_000_000_000) == 9_000_000_000;
+    assert i64::abs(i64::MIN) == i64::MIN;
+    assert i128::abs(-170141183460469231731687303715884105727) == i128::MAX;
+    assert i128::abs(i128::MIN) == i128::MIN;
+    assert i128::abs(42) == 42;
+}
+
+test "integer abs of an opaque value negates at run time" {
+    assert i8::abs(builtin::black_box(-5)) == 5;
+    assert i8::abs(builtin::black_box(i8::MIN)) == i8::MIN;
+    assert i16::abs(builtin::black_box(-300)) == 300;
+    assert i16::abs(builtin::black_box(i16::MIN)) == i16::MIN;
+    assert i32::abs(builtin::black_box(-7)) == 7;
+    assert i32::abs(builtin::black_box(7)) == 7;
+    assert i32::abs(builtin::black_box(0)) == 0;
+    assert i32::abs(builtin::black_box(i32::MIN)) == i32::MIN;
+    assert i64::abs(builtin::black_box(-9_000_000_000)) == 9_000_000_000;
+    assert i64::abs(builtin::black_box(i64::MIN)) == i64::MIN;
+    assert i128::abs(builtin::black_box(-170141183460469231731687303715884105727)) == i128::MAX;
+    assert i128::abs(builtin::black_box(i128::MIN)) == i128::MIN;
+    assert i128::abs(builtin::black_box(42)) == 42;
+}
+
 test "float clamp confines a value to the range" {
     assert f64::clamp(0.5, 0.0, 1.0) == 0.5;
     assert f64::clamp(-1.0, 0.0, 1.0) == 0.0;
@@ -709,4 +743,12 @@ test "from_str reads a view without copying out of it" {
     let view = "id=42,on=true,k=x".as_str_slice();
     assert bool::from_str(view.slice(9, 13)) matches { Ok(v) && v == true };
     assert char::from_str(view.slice(16, 17)) matches { Ok(v) && v == 'x' };
+}
+
+test "BITS is the width in bits" {
+    assert i8::BITS == 8 && u8::BITS == 8;
+    assert i16::BITS == 16 && u16::BITS == 16 && f16::BITS == 16 && bf16::BITS == 16;
+    assert i32::BITS == 32 && u32::BITS == 32 && f32::BITS == 32;
+    assert i64::BITS == 64 && u64::BITS == 64 && f64::BITS == 64;
+    assert i128::BITS == 128 && u128::BITS == 128;
 }

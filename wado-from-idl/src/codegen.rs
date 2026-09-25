@@ -2,6 +2,9 @@
 
 use std::fmt::Write;
 
+use heck::ToShoutySnakeCase;
+use wado_compiler::ast::HandleClasses;
+
 use crate::ir::{
     WadoEnum, WadoFlags, WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource,
     WadoStruct, WadoType, WadoTypeDef, WadoVariant, WadoWorld, WadoWorldExport, WadoWorldExportFn,
@@ -36,6 +39,7 @@ impl WadoCodeGenerator {
             self.write_resource(resource);
             self.writeln("");
         }
+        self.write_handle_classes(&module.resources);
 
         for effect in &module.interfaces {
             self.write_interface(effect);
@@ -195,7 +199,14 @@ impl WadoCodeGenerator {
         } else {
             ""
         };
-        self.writeln(&format!("#[cm(\"{}\"{linearity})]", resource.cm_attr));
+        let classes = resource
+            .classes
+            .map(|classes| format!(", classes = \"{classes}\""))
+            .unwrap_or_default();
+        self.writeln(&format!(
+            "#[cm(\"{}\"{linearity}{classes})]",
+            resource.cm_attr
+        ));
         let extends = resource
             .extends
             .as_ref()
@@ -215,6 +226,30 @@ impl WadoCodeGenerator {
             self.indent -= 1;
             self.writeln("}");
         }
+    }
+
+    /// The numbers a host minting handles for these resources needs, so a host
+    /// written in Wado reads them rather than copying them.
+    fn write_handle_classes(&mut self, resources: &[WadoResource]) {
+        let classes: Vec<(&str, u16)> = resources
+            .iter()
+            .filter_map(|r| Some((r.name.as_str(), r.classes?.lo)))
+            .collect();
+        if classes.is_empty() {
+            return;
+        }
+        self.writeln("/// A handle is `class * HANDLE_CLASS_STRIDE + index`.");
+        self.writeln(&format!(
+            "internal global HANDLE_CLASS_STRIDE: f64 = {:?};",
+            HandleClasses::STRIDE
+        ));
+        for (name, class) in classes {
+            self.writeln(&format!(
+                "internal global {}_CLASS: f64 = {class}.0;",
+                name.to_shouty_snake_case()
+            ));
+        }
+        self.writeln("");
     }
 
     fn write_interface(&mut self, effect: &WadoInterface) {

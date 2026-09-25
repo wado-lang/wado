@@ -1,7 +1,8 @@
 //! Whether a constant aggregate stays safe to share once a callee stashes it
 //! into the heap: nothing in the program writes through the object. See the WEP.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use std::hash::Hash;
 use std::ops::ControlFlow;
 
 use crate::compiler_trace;
@@ -37,13 +38,7 @@ enum Slot {
 /// with a verdict would make the analysis depend on who else held a borrow.
 pub(super) struct SharedEscape<'a> {
     project: &'a NirPackage,
-    /// Settled verdicts, which no assumption stands behind.
     verdicts: RefCell<IndexMap<Slot, bool>>,
-    /// The slots being computed. One asked for again reads `true`, the sound
-    /// seed for a safety property: a cycle carrying no write really does hold.
-    in_flight: RefCell<IndexSet<Slot>>,
-    /// Whether the query in progress leaned on such an assumption.
-    assumed: Cell<bool>,
     /// Per-body seed census, built on first ask. Every slot is asked of every
     /// body, so rediscovering one body's reads per slot is quadratic.
     census: RefCell<IndexMap<usize, BodyCensus>>,
@@ -54,8 +49,6 @@ impl<'a> SharedEscape<'a> {
         Self {
             project,
             verdicts: RefCell::new(IndexMap::default()),
-            in_flight: RefCell::new(IndexSet::default()),
-            assumed: Cell::new(false),
             census: RefCell::new(IndexMap::default()),
         }
     }
@@ -84,65 +77,54 @@ impl<'a> SharedEscape<'a> {
     }
 
     fn slot_ok(&self, slot: &Slot) -> bool {
-        if let Some(&cached) = self.verdicts.borrow().get(slot) {
-            return cached;
-        }
-        if self.in_flight.borrow().contains(slot) {
-            self.assumed.set(true);
-            return true;
-        }
-        self.in_flight.borrow_mut().insert(slot.clone());
-        let outer_assumed = self.assumed.replace(false);
-        let verdict = self.compute_slot(slot);
-        let assumed = self.assumed.get();
-        self.in_flight.borrow_mut().swap_remove(slot);
-        // A verdict resting on a cycle's assumption is only as good as the
-        // query that made it: cache it and a later refutation of the cycle
-        // would leave it stale.
-        if !assumed {
-            self.verdicts.borrow_mut().insert(slot.clone(), verdict);
-        }
-        self.assumed.set(outer_assumed || assumed);
-        verdict
+        settle(slot, &mut self.verdicts.borrow_mut(), |s| self.own_check(s))
     }
 
-    fn compute_slot(&self, slot: &Slot) -> bool {
-        if let Some(declared) = self.declared_slot(slot) {
-            return declared;
+    /// The slots `slot` holds only if they hold too, or `None` where a use of
+    /// it is refused outright.
+    fn own_check(&self, slot: &Slot) -> Option<IndexSet<Slot>> {
+        // A bodyless owner's `Slot::Ret` stays with the walk: a pass-through
+        // hands the object to its caller, where the walk reads it.
+        if let Slot::Param(id, pos) = slot {
+            let owner = self.project.functions[id.index()].borrow();
+            if owner.body.is_none() {
+                return self.declared_check(&owner, *id, *pos);
+            }
         }
         let mut obligations: IndexSet<Slot> = IndexSet::default();
         for (idx, func) in self.project.functions.iter().enumerate() {
             let func = func.borrow();
             if !self.scan_function(slot, idx, &func, &mut obligations) {
                 compiler_trace!("shared_escape", "{slot:?} refused in {}", func.name);
-                return false;
+                return None;
             }
         }
         compiler_trace!("shared_escape", "{slot:?} clear, owes {obligations:?}");
-        obligations.iter().all(|next| self.slot_ok(next))
+        Some(obligations)
     }
 
-    /// The verdict for a parameter of a bodyless owner, which the program walk
-    /// would clear having looked at nothing. `None` leaves it to that walk.
-    fn declared_slot(&self, slot: &Slot) -> Option<bool> {
-        // A bodyless owner's result is no dead end, so `Slot::Ret` stays with
-        // the walk: a pass-through hands the object to its caller, and the walk
-        // is what reads it there.
-        let Slot::Param(id, pos) = slot else {
-            return None;
-        };
-        let owner = self.project.functions[id.index()].borrow();
-        if owner.body.is_some() {
-            return None;
-        }
-        let clauses = self.declared_arg(&owner, *pos);
-        let verdict = clauses.reads && (!clauses.hands_back || self.slot_ok(&Slot::Ret(*id)));
+    /// The check for a parameter of a bodyless owner, which the program walk
+    /// would clear having looked at nothing.
+    fn declared_check(
+        &self,
+        owner: &NirFunction,
+        id: FuncId,
+        pos: usize,
+    ) -> Option<IndexSet<Slot>> {
+        let clauses = self.declared_arg(owner, pos);
+        let check = clauses.reads.then(|| {
+            let mut obligations = IndexSet::default();
+            if clauses.hands_back {
+                obligations.insert(Slot::Ret(id));
+            }
+            obligations
+        });
         compiler_trace!(
             "shared_escape",
-            "{slot:?} bodyless `{}` declares {verdict}",
+            "param {pos} of bodyless `{}` declares {check:?}",
             owner.name
         );
-        Some(verdict)
+        check
     }
 
     /// Taint `func`'s body from `slot` and check every use, collecting the
@@ -241,9 +223,9 @@ impl<'a> SharedEscape<'a> {
             };
         });
         // A body whose last statement is its value returns without a `Return`.
-        if let Some(&last) = body.blocks[body.root].stmts.last()
-            && let StmtKind::Expr(op) = &body.stmts[last].kind
-            && taint.operand(*op)
+        if body
+            .block_tail(body.root)
+            .is_some_and(|op| taint.operand(op))
         {
             returns_tainted = true;
         }
@@ -357,6 +339,56 @@ impl<'a> SharedEscape<'a> {
             hands_back,
         }
     }
+}
+
+/// Whether `root` holds: no node reachable from it through `own_check`'s
+/// obligations is refused. Settles, and caches, every node it reaches.
+//
+// The greatest fixpoint: a cycle carrying no refusal holds, the sound answer
+// for a safety property. Each node is checked once over the life of `verdicts`.
+fn settle<S: Clone + Eq + Hash>(
+    root: &S,
+    verdicts: &mut IndexMap<S, bool>,
+    mut own_check: impl FnMut(&S) -> Option<IndexSet<S>>,
+) -> bool {
+    if let Some(&cached) = verdicts.get(root) {
+        return cached;
+    }
+    let mut owed_by: IndexMap<S, Vec<S>> = IndexMap::default();
+    let mut failing: Vec<S> = Vec::new();
+    let mut reached: IndexSet<S> = IndexSet::default();
+    reached.insert(root.clone());
+    let mut pending = vec![root.clone()];
+    while let Some(node) = pending.pop() {
+        match verdicts.get(&node) {
+            Some(true) => {}
+            Some(false) => failing.push(node),
+            None => match own_check(&node) {
+                None => failing.push(node),
+                Some(obligations) => {
+                    for next in obligations {
+                        owed_by.entry(next.clone()).or_default().push(node.clone());
+                        if reached.insert(next.clone()) {
+                            pending.push(next);
+                        }
+                    }
+                }
+            },
+        }
+    }
+    let mut refused: IndexSet<S> = failing.iter().cloned().collect();
+    while let Some(node) = failing.pop() {
+        for owner in owed_by.get(&node).into_iter().flatten() {
+            if refused.insert(owner.clone()) {
+                failing.push(owner.clone());
+            }
+        }
+    }
+    for node in reached {
+        let holds = !refused.contains(&node);
+        verdicts.insert(node, holds);
+    }
+    verdicts[root]
 }
 
 /// Whether a callee leaves an argument and everything it holds alone, and
@@ -641,5 +673,78 @@ impl BodyCensus {
     fn can_read(&self, seed_field: Option<&str>, seed_call: Option<FuncId>) -> bool {
         seed_field.is_some_and(|f| self.reads_unnamed_field || self.fields_read.contains(f))
             || seed_call.is_some_and(|id| self.callees.contains(&id))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Settle `root` over `graph` (`None` refuses the node), counting checks.
+    fn settle_counting(
+        root: u32,
+        graph: &IndexMap<u32, Option<Vec<u32>>>,
+        verdicts: &mut IndexMap<u32, bool>,
+        checks: &mut u32,
+    ) -> bool {
+        settle(&root, verdicts, |node| {
+            *checks += 1;
+            graph[node]
+                .as_ref()
+                .map(|next| next.iter().copied().collect())
+        })
+    }
+
+    /// Mutually recursive functions passing one parameter around: every slot
+    /// owes every other. Re-exploring the cycle per path is factorial in its size.
+    fn clique(size: u32, refused: Option<u32>) -> IndexMap<u32, Option<Vec<u32>>> {
+        (0..size)
+            .map(|n| {
+                let owes = (Some(n) != refused).then(|| (0..size).filter(|&m| m != n).collect());
+                (n, owes)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_cycle_is_checked_once_per_node() {
+        let graph = clique(12, None);
+        let mut verdicts = IndexMap::default();
+        let mut checks = 0;
+        assert!(settle_counting(0, &graph, &mut verdicts, &mut checks));
+        assert_eq!(checks, 12);
+        assert!(settle_counting(7, &graph, &mut verdicts, &mut checks));
+        assert_eq!(checks, 12, "the first query settled every node it reached");
+    }
+
+    #[test]
+    fn a_refusal_anywhere_in_a_cycle_refuses_all_of_it() {
+        let graph = clique(12, Some(11));
+        let mut verdicts = IndexMap::default();
+        let mut checks = 0;
+        assert!(!settle_counting(0, &graph, &mut verdicts, &mut checks));
+        assert_eq!(checks, 12);
+        assert!(!settle_counting(5, &graph, &mut verdicts, &mut checks));
+        assert_eq!(checks, 12);
+    }
+
+    #[test]
+    fn only_what_reaches_a_refusal_is_refused() {
+        let graph: IndexMap<u32, Option<Vec<u32>>> = [
+            (0, Some(vec![1, 3])),
+            (1, Some(vec![2])),
+            (2, None),
+            (3, Some(vec![3])),
+        ]
+        .into_iter()
+        .collect();
+        let mut verdicts = IndexMap::default();
+        let mut checks = 0;
+        assert!(!settle_counting(0, &graph, &mut verdicts, &mut checks));
+        let expected: IndexMap<u32, bool> = [(0, false), (1, false), (2, false), (3, true)]
+            .into_iter()
+            .collect();
+        assert_eq!(verdicts, expected);
+        assert_eq!(checks, 4);
     }
 }

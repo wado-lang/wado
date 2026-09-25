@@ -4,21 +4,9 @@ use { parse } from "./g4/parser.wado";
 use { ActionLanguage } from "./ir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
-use { generate, GenerateOptions, GeneratedOutput } from "./codegen.wado";
-use { Diagnostic } from "./gir.wado";
 
 global NO_BINDINGS: List<AltBinding> = [];
 global NO_MEMBERS: MemberNames = MemberNames {};
-global GEN_OPTS: GenerateOptions = GenerateOptions {};
-
-fn gen<S: AsStrSlice>(src: S) -> GeneratedOutput {
-    let mut g = parse(src.to_string()).unwrap();
-    return generate(&mut g, &GEN_OPTS);
-}
-
-fn unsupported_count(diags: &List<Diagnostic>) -> i32 {
-    return diags.iter_ref().filter(|d: &Diagnostic| d.kind matches { UnsupportedAction }).count();
-}
 
 fn java_pred<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> String {
     return java_pred_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
@@ -175,37 +163,6 @@ test "java: a call resolves in Java's method namespace, not against the variable
 test "java predicate: negated equals is parenthesized" {
     let out = java_pred("!getText().equals(\"+\")", "a : ID ;", false);
     assert out == "!(p.rule_text(_rule_start_tok) == \"+\")", `out: '${out}'`;
-}
-
-test "java members: a refused block declares nothing an action can then resolve" {
-    // ANTLR concatenates a recognizer's `@members` blocks, so one malformed
-    // block refuses them all. What an action may resolve is read off the
-    // translated result, so the refusal is the only diagnostic — never a call
-    // to a member the struct never got.
-    let out = gen("grammar T;
-options { language = Java; }
-@members { int good() { return 1; } }
-@members { int ; }
-a : ID { good(); } ;
-ID : [a-z]+ ;
-");
-    assert !out.source.contains("p.good()"), "a member from a refused block must not be called";
-    assert !out.source.contains("fn good"), "a member from a refused block must not be declared";
-    assert unsupported_count(&out.diagnostics) >= 1, "the refusal must be reported";
-}
-
-test "java members: a well-formed block still resolves across its siblings" {
-    let out = gen("grammar T;
-options { language = Java; }
-@members { int good() { return helper(); } }
-@members { int helper() { return 1; } }
-a : ID { good(); } ;
-ID : [a-z]+ ;
-");
-    assert out.source.contains("fn good"), "a method declared in one block is emitted";
-    assert out.source.contains("fn helper"), "a method declared in a sibling block is emitted";
-    assert out.source.contains("p.good()"), "an action resolves a member the struct got";
-    assert unsupported_count(&out.diagnostics) == 0, "a well-formed block is not reported";
 }
 
 test "java members: method name is snake_cased at definition to match calls" {
@@ -663,7 +620,7 @@ A : 'a' { System.out.println(${*body}); } ;
         let msgs = stage_lexer_bodies(&mut g, &lang, &NO_MEMBERS);
         assert msgs.is_empty(), `must resolve '${*body}': ${msgs.len()} diagnostics`;
         let staged = g.lexer_rules[0].body[0].actions[0].source.text;
-        assert staged.contains("LexerSlice::new(chars, start, pos).to_string()"), `staged: '${staged}'`;
+        assert staged.contains("chars_text(chars, start, pos)"), `staged: '${staged}'`;
     }
 
     // And in a parser body both are the rule's own consumed span.

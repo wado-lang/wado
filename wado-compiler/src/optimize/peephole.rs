@@ -28,6 +28,7 @@ use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
+use crate::optimize::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::optimize::match_to_switch::intern_cold_markers;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::select_lowering::intern_select;
@@ -43,6 +44,7 @@ pub(super) fn run_peephole(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
     pre_inline: bool,
+    heap: &mut HeapEffectsCache,
 ) -> bool {
     // Intern the builtins the bundled rules synthesize, before any shared
     // immutable borrow of `project`, so their calls are born resolved.
@@ -62,7 +64,6 @@ pub(super) fn run_peephole(
     let callees = build_callee_map(project);
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
     let branch_prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
     let aggregate_forward_rule = AggregateForwardRule;
     let bitset_rule = MatchToBitsetRule::new(&type_table, select_id);
@@ -73,6 +74,7 @@ pub(super) fn run_peephole(
     // Post-inline only: the closure-bearing field read it resolves through is
     // what `inline` exposes when an iterator adaptor's `next` is copied in.
     let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
+    let heap_effects = (!pre_inline).then(|| heap.effects(project, &type_table, gate));
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -97,12 +99,18 @@ pub(super) fn run_peephole(
         // rebuilt for each body.
         let stores_aliased = func.stores_aliased_locals.clone();
         let elide_rule = ElideRule::new(&stores_aliased, &effects);
+        // Per function, as its CTFE budget and remembered misses are: what one
+        // body spends must not decide whether the next one folds.
+        let const_fold_rule = ConstFoldRule::new(&type_table, &callees, &ctfe_builtins);
         // Reference elimination runs post-inline only (it cleans up the ref
         // bindings inlining exposes). Its maps are built from the pristine
         // post-inline body.
-        let ref_elim_rule = (!pre_inline)
-            .then(|| func.body.as_ref().map(build_ref_elim))
-            .flatten();
+        let ref_elim_rule = heap_effects.as_ref().and_then(|effects| {
+            let params = func.params.iter().map(|p| p.local_index).collect();
+            func.body
+                .as_ref()
+                .map(|b| build_ref_elim(b, LazyHeapFrame::new(effects, params)))
+        });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
         // the pristine post-inline body; the escape sets (`address_taken` here,

@@ -1,0 +1,55 @@
+// Fusion clones the consumer's arm into each exit of the labeled block. An
+// exit nested in an inner block reusing the name `outer` had the cloned
+// `break outer` captured by that inner block, so the code after the `if let`
+// ran on the `Some` path too.
+
+use { println, Stdout } from "core:cli";
+
+fn labels(n: i32, m: i32) with Stdout {
+    outer: {
+        let r: Option<i32> = check: {
+            outer: {
+                if n > m { break outer; }
+                if n > 0 { break check: Some(n); }
+            }
+            break check: null;
+        };
+        if let Some(v) = r {
+            println(`some ${v}`);
+            break outer;
+        }
+        println("none");
+    }
+    println("done");
+}
+
+fn loops(n: i32, m: i32) with Stdout {
+    let mut i = 0;
+    loop {
+        i += 1;
+        if i > 2 { break; }
+        let r: Option<i32> = check: {
+            loop {
+                if n > m { break; }
+                if n > 0 { break check: Some(n + i); }
+                break;
+            }
+            break check: null;
+        };
+        if let Some(v) = r {
+            println(`some ${v}`);
+            continue;
+        }
+        println("none");
+    }
+    println("done");
+}
+
+export fn run() with Stdout {
+    labels(builtin::black_box(7), builtin::black_box(100));
+    labels(builtin::black_box(-7), builtin::black_box(100));
+    loops(builtin::black_box(7), builtin::black_box(100));
+}
+
+__DATA__
+{"stdout": "some 7\ndone\nnone\ndone\nsome 8\nsome 9\ndone\n"}

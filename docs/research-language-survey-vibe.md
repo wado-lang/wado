@@ -374,7 +374,7 @@ Refuse:
   the annotated code, so the annotation can break for reasons its own body did
   not cause. [Optimizer Remarks](./wep-2026-06-03-optimizer-remarks.md) reports
   the same facts to a reader who can actually act on them.
-- The `proposed` advancement rule. `docs/CLAUDE.md` already requires an
+- The `proposed` advancement rule. `docs/AGENTS.md` already requires an
   unfinished mechanism to be a "Known gap" stating what is missing and what it
   would take to close. That is the same obligation.
 - An authority header on `spec.md`. Taken and landed while this survey was open,

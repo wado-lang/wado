@@ -6,11 +6,12 @@
 
 use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
+use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
 
 use crate::ast;
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
@@ -18,6 +19,13 @@ use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
+<<<<<<< HEAD
+||||||| 03599b796
+use crate::ast::AstId;
+=======
+use super::util;
+use crate::ast::AstId;
+>>>>>>> origin/main
 use crate::defs::DefId;
 use crate::name::FqTypeName;
 use crate::token::Span;
@@ -260,10 +268,7 @@ pub(super) struct TraitCheckFrame {
 }
 
 /// Per-function annotate-time scope, bundled so queries take one `&Scope`.
-/// None of it may move onto the shared `TypeSystem`: `trait_ctx` is
-/// per-function, `trait_check_stack` is a per-call frame stack whose
-/// sharing would leak frames across module walks, and `resolving_home`
-/// holds only for the expression being resolved under it.
+/// Every field is walk-local, so none of it belongs on the shared `TypeSystem`.
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
@@ -279,13 +284,15 @@ pub(super) struct Scope {
     /// it resolve in their author's module, so this replaces the walk's own
     /// frame rather than being tried alongside it (WEP 2026-04-11).
     pub(super) resolving_home: Option<ModuleSource>,
-    /// The types of the parameters a default expression may name, for the
-    /// default being resolved — `fn f(a, b = a)` asks this for `a`. The caller
-    /// supplied `a` and the call site already typed it, so the answer is that
-    /// type rather than a second walk of the caller's argument. Consulted only
-    /// where the default's own binders do not answer, so a `|a| …` it opens
-    /// still wins. Empty outside such a walk.
-    pub(super) default_arg_types: IndexMap<String, TypeId>,
+    /// While set, use→def edges are dropped: a speculative walk choosing
+    /// among overloads leaves no trace, and the real walk records them.
+    pub(super) suppress_reference_recording: bool,
+    /// The `(base, assoc)` pairs whose binding is being resolved right now.
+    /// Two assoc types bounded through each other have no fixpoint.
+    pub(super) assoc_binding_stack: IndexSet<(TypeId, String)>,
+    /// The binders whose bound closure is being built right now, since
+    /// `T: Uses<T::Item>` asks for it again while it is built.
+    pub(super) bound_closure_stack: IndexSet<TypeId>,
 }
 
 impl Scope {
@@ -433,30 +440,46 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(&mut scope)
     }
 
-    /// Run `body` with the scope field selected by `field` set to `value`,
-    /// restoring the previous value on return (panic-safe).
-    fn with_scope_field<T, R>(
+    /// Run `body` with use→def reference recording suppressed. See
+    /// [`Scope::suppress_reference_recording`].
+    pub(super) fn with_reference_recording_suppressed<R>(
         &mut self,
-        field: fn(&mut Scope) -> &mut T,
-        value: T,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost, T> {
+        util::replaced(
+            self,
+            |e| &mut e.annotate_ctx.suppress_reference_recording,
+            true,
+            body,
+        )
+        .0
+    }
+
+    /// Run `body` with `key` on the walk `stack` selects, or answer `None`
+    /// where it already is: a question asked again inside itself has no answer.
+    pub(super) fn unless_on_walk<K: Eq + Hash + Clone, R>(
+        &mut self,
+        stack: fn(&mut Scope) -> &mut IndexSet<K>,
+        key: K,
+        body: impl FnOnce(&mut Self) -> Option<R>,
+    ) -> Option<R> {
+        struct Pop<'r, 'a, H: CompilerHost, K: Eq + Hash> {
             elaborator: &'r mut Elaborator<'a, H>,
-            field: fn(&mut Scope) -> &mut T,
-            saved: Option<T>,
+            stack: fn(&mut Scope) -> &mut IndexSet<K>,
+            key: K,
         }
-        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
+        impl<H: CompilerHost, K: Eq + Hash> Drop for Pop<'_, '_, H, K> {
             fn drop(&mut self) {
-                *(self.field)(&mut self.elaborator.annotate_ctx) =
-                    self.saved.take().expect("saved scope value present");
+                (self.stack)(&mut self.elaborator.annotate_ctx).shift_remove(&self.key);
             }
         }
-        let saved = std::mem::replace(field(&mut self.annotate_ctx), value);
-        let guard = Restore {
+        if !stack(&mut self.annotate_ctx).insert(key.clone()) {
+            return None;
+        }
+        let guard = Pop {
             elaborator: self,
-            field,
-            saved: Some(saved),
+            stack,
+            key,
         };
         body(guard.elaborator)
     }
@@ -516,17 +539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module: Option<ModuleSource>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(|scope| &mut scope.resolving_home, module, body)
-    }
-
-    /// Run `body` with [`Scope::default_arg_types`] replaced by `types`, so a
-    /// default expression can name the parameters ahead of it.
-    pub(super) fn with_default_arg_types<R>(
-        &mut self,
-        types: IndexMap<String, TypeId>,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_scope_field(|scope| &mut scope.default_arg_types, types, body)
+        util::replaced(self, |e| &mut e.annotate_ctx.resolving_home, module, body).0
     }
 
     /// The supertraits `bounds` carry, each with the trait it was reached from

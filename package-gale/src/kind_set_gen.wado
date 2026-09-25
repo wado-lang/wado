@@ -7,7 +7,9 @@ use { LoweredGrammar } from "./gir.wado";
 use { GenContext, sets_overlap } from "./gen_context.wado";
 use { join_kinds, FOLLOW_SLOT_BITS, FOLLOW_CONT_SLOTS, FOLLOW_MAX_POSITION_ID } from "./gen_util.wado";
 use { MAX_LOOKAHEAD_DEPTH } from "./prediction.wado";
+use { DISPATCH_KIND_LOCAL } from "./ident.wado";
 use { CodeWriter, FnSpec } from "lib:wadopoet";
+use { TreeSet } from "core:collections";
 
 /// Scan-side twin of `gen_lookahead_condition`. Uses
 /// `tokens[pos + d]` (guarded by `pos + d < tokens.len()`) instead
@@ -21,19 +23,24 @@ pub fn gen_scan_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String
 
 pub global EMPTY_SYNC: List<String> = [];
 
-/// Resolve a leaf's FIRST-of-rest to the by-reference `expect` sync argument:
-/// `&SYNC_<id>` for a distinct non-empty set (interned into a `global` once,
-/// never rebuilt per call), or `&EMPTY_SYNC` for the empty set. Mirrors the
-/// `FOLLOW_MASK_<id>` interning so the hot path copies nothing.
+/// A token set as the by-reference argument a membership test reads.
 pub fn sync_set_ref(ctx: &mut GenContext, sync: &List<String>) -> String {
-    if let Some(id) = ctx.intern_sync_set(sync) {
-        return `&SYNC_${id}`;
-    }
-    return String::from("&EMPTY_SYNC");
+    return `&${ctx.sync_bits_ref(sync)}`;
+}
+
+/// A token set as the by-reference kind list a diagnostic names.
+pub fn expected_set_ref(ctx: &mut GenContext, expected: &List<String>) -> String {
+    return `&${ctx.sync_list_ref(expected)}`;
+}
+
+/// `p.expect_set(...)` consuming one token of `kinds`.
+pub fn expect_set_call(ctx: &mut GenContext, kinds: &List<String>) -> String {
+    return `p.expect_set(${sync_set_ref(ctx, kinds)}, ${expected_set_ref(ctx, kinds)})`;
 }
 
 enum LookaheadAccess {
     Scan,
+    ScanKind,
     Parse,
     ParseKind,
 }
@@ -50,7 +57,8 @@ fn join_lookahead_condition(
             result.push_str(" && ");
         }
         let part = match access {
-            Scan => {
+            ScanKind && d == 0 => ctx.kind_check_str(&sig[d], DISPATCH_KIND_LOCAL),
+            Scan | ScanKind => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
                 let check = ctx.kind_check_str(&sig[d], `tokens[${idx_expr}]`);
                 `${idx_expr} < tokens.len() && ${check}`;
@@ -60,7 +68,7 @@ fn join_lookahead_condition(
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
             ParseKind => {
-                let check_expr = if d == 0 { `kind` } else { `p.peek_at(${d})` };
+                let check_expr = if d == 0 { DISPATCH_KIND_LOCAL } else { `p.peek_at(${d})` };
                 ctx.kind_check_str(&sig[d], &check_expr);
             },
         };
@@ -73,31 +81,12 @@ pub fn gen_lookahead_condition(ctx: &mut GenContext, sig: &List<List<String>>) -
     return join_lookahead_condition(ctx, sig, sig.len(), LookaheadAccess::Parse);
 }
 
-/// Emit a `_kind_set_<id>(k: i32) -> bool` function for every
-/// multi-element token-kind set interned during parser codegen. The
-/// `ctx.kind_check_str` and `ctx.kind_negate_check_str` methods rewrite
-/// every multi-element `matches { ... }` check into a call into one of
-/// these helpers, so duplicate sets share a single function body in
-/// the generated wasm.
-/// Emit `_kind_set_<id>(k) -> bool` helpers. The id range
-/// `0..lowered.kind_sets.len()` reads tokens directly from
-/// `lowered.kind_sets` — that's lower's Phase 2.7 pre-interning
-/// surfacing as actual generated code. Higher ids (sets emit-time
-/// `kind_check_str` interned during walk) read from
-/// `ctx.kind_sets()` as a salvage tail, same pattern as the
-/// variant-emission split.
-///
-/// For the lower-registered prefix, the generated helper body is
-/// the canonical proof that `lowered.kind_sets[i].tokens` matches
-/// what emit subsequently calls — a mismatch would compile but
-/// parse wrong (the helper body would not include the token emit
-/// queries). Today the two registries converge by construction
-/// because both intern through the same `ctx.intern_kind_set`
-/// keyed by canonical token order.
-pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext) {
+/// Emit the `_kind_set_<id>(k) -> bool` helper of each interned kind set the
+/// emitted code names. Lower's pre-interned sets take the ids first.
+pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenContext, named: &TreeSet<String>) {
     let entries = ctx.kind_sets();
     for let mut idx = 0; idx < entries.len(); idx += 1 {
-        if !ctx.kind_set_is_used(idx) {
+        if !named.contains(`_kind_set_${entries[idx].id}`) {
             continue;
         }
         if idx < lowered.kind_sets.len() {
@@ -110,22 +99,24 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
     }
 }
 
-/// Emit the runtime FOLLOW tables: `FOLLOW_KINDS` holds every distinct
-/// position set once, `FOLLOW_SETS` is the same tables as bitsets for the
-/// gate's membership test, and each `FOLLOW_MASK_<id>` packs its positions
-/// into one `i64`. A continuation is therefore a scalar a call site composes
-/// with a shift, and a rule takes one parameter rather than a row of slots.
-pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
+/// Emit the runtime FOLLOW tables: `FOLLOW_SETS` holds every distinct position
+/// set once, as the bitset `kind_set_has` reads, and each `FOLLOW_MASK_<id>`
+/// packs its positions into one `i64`. A continuation is therefore a scalar a
+/// call site composes with a shift, and a rule takes one parameter rather than
+/// a row of slots.
+pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext, named: &TreeSet<String>) {
     // No caller-FOLLOW gate anywhere ⇒ no call site names either table.
     // A grammar that gates on a forwarded `follow` alone interns no mask
     // and still reads `FOLLOW_SETS`, so only the masks are conditional.
     if !ctx.emit_follow() {
         return;
     }
-    let entries = ctx.follow_masks();
     let mut sets: List<List<i32>> = [];
     let mut masks: List<String> = [];
-    for let entry of &entries {
+    for let entry of ctx.follow_masks() {
+        if !named.contains(ctx.follow_mask_ref(entry.id)) {
+            continue;
+        }
         let mut packed: i64 = 0;
         let mut slot = 0;
         for let depth_set of &entry.mask {
@@ -139,14 +130,32 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     }
     let mut rendered: List<String> = [];
     for let set of &sets {
-        rendered.push(`[${join_kinds(&ctx.token_names_of(set))}]`);
+        rendered.push(`[${join_kinds(&kind_bitset_words(set))}]`);
     }
-    w.line(`global FOLLOW_KINDS: List<List<i32>> = [${join_kinds(&rendered)}];`);
-    w.line("global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);");
+    w.line(`global FOLLOW_SETS: List<List<i32>> = [${join_kinds(&rendered)}];`);
     for let mask of &masks {
         w.line(mask);
     }
     w.blank();
+}
+
+/// A set of token kinds as the words `kind_set_has` tests: kind `k` is bit
+/// `k & 31` of word `k >> 5`.
+pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
+    let mut words: List<i32> = [];
+    for let kind of set {
+        assert *kind >= 0, `kind set: negative token kind ${*kind}`;
+        let w = *kind >> 5;
+        while words.len() <= w {
+            words.push(0);
+        }
+        words[w] = words[w] | 1 << (*kind & 31);
+    }
+    let mut out: List<String> = [];
+    for let word of &words {
+        out.push(if *word == i32::MIN { String::from("i32::MIN") } else { `${*word}` });
+    }
+    return out;
 }
 
 /// The index of `set` in `sets`, appending it when it is new. A grammar
@@ -161,16 +170,19 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
     return sets.len() - 1;
 }
 
-/// Emit the recovery sync-set globals: `EMPTY_SYNC` (the empty default) plus
-/// one `SYNC_<id>: List<i32>` per interned non-empty set. `expect` takes its
-/// `sync` by reference to one of these, so a terminal on the valid hot path
-/// neither rebuilds nor copies the set.
-pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
+/// Emit the token-set globals: `EMPTY_SYNC`, then per interned set its
+/// `SYNC_<id>` bits and its `EXPECTED_<id>` kind list, each only where named.
+pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext, named: &TreeSet<String>) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
     w.line("global EMPTY_SYNC: List<i32> = [];");
-    for let entry of &ctx.sync_sets() {
-        w.line(`global SYNC_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
+    for let entry of ctx.sync_sets() {
+        if named.contains(`SYNC_${entry.id}`) {
+            w.line(`global SYNC_${entry.id}: List<i32> = [${join_kinds(&kind_bitset_words(&entry.tokens))}];`);
+        }
+        if named.contains(`EXPECTED_${entry.id}`) {
+            w.line(`global EXPECTED_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
+        }
     }
     w.blank();
 }
@@ -196,6 +208,11 @@ fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
 
 pub fn build_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
     return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ParseKind);
+}
+
+/// `build_lookahead_condition` inside a scan, which reads `kind` as the parse does.
+pub fn build_scan_lookahead_condition(ctx: &mut GenContext, pos_sets: &List<List<String>>, depth: i32) -> String {
+    return join_lookahead_condition(ctx, pos_sets, depth, LookaheadAccess::ScanKind);
 }
 
 pub fn find_needed_depth(all_position_sets: &List<List<List<String>>>) -> i32 {

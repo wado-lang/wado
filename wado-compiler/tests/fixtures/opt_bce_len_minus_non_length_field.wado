@@ -1,0 +1,27 @@
+// `n - 1 < n` holds only when the subtraction does not wrap. A list's length is
+// never negative, but an ordinary `i32` field can be `i32::MIN`, where `n - 1`
+// wraps to `i32::MAX`, so the guard must still run and panic.
+
+use { println, Stdout } from "core:cli";
+
+struct S { n: i32, m: i32 }
+
+#[inline(never)]
+fn f(s: &S) -> i32 with Stdout {
+    let idx = s.n - 1;
+    if idx >= s.n {
+        panic("wrapped");
+    }
+    println(`ok ${idx}`);
+    return idx;
+}
+
+export fn run() with Stdout {
+    let t = S { n: builtin::black_box(5), m: builtin::black_box(3) };
+    f(&t);
+    let s = S { n: builtin::black_box(-2147483648), m: builtin::black_box(3) };
+    f(&s);
+}
+
+__DATA__
+{"stdout": "ok 4\n", "stderr_contains": ["wrapped"], "trapped": true}
