@@ -231,12 +231,6 @@ pub enum Code {
     /// A `#[linear_memory(...)]` attribute is malformed, repeated, or sits on a
     /// declaration with a body.
     LinearMemoryAttr,
-    /// A `#[wire(number = N)]` is out of range, reserved, repeated within one
-    /// struct, or written on some of a struct's fields and not the rest.
-    WireNumber,
-    /// A `#[wire(encoding = "…")]` names no encoding, or one the field's
-    /// integer type cannot take.
-    WireEncoding,
     ResourceExtends,
     /// A resource's `#[cm(..., classes = ...)]` does not number its `extends`
     /// tree, or a type pattern narrows to a resource that declares none.
@@ -327,8 +321,6 @@ impl std::fmt::Display for Code {
             Code::ImmediateAttr => "IMMEDIATE_ATTR",
             Code::TrapAttr => "TRAP_ATTR",
             Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
-            Code::WireNumber => "WIRE_NUMBER",
-            Code::WireEncoding => "WIRE_ENCODING",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ResourceClasses => "RESOURCE_CLASSES",
             Code::ParamAttr => "PARAM_ATTR",

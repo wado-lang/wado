@@ -26,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, NamePolicy, Visibility, WireEncoding};
+use crate::ast::{HandleClasses, NamePolicy, Visibility};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -495,10 +495,6 @@ struct ReflectFieldInfo {
     type_id: TypeId,
     index: u32,
     wire_name_override: Option<String>,
-    /// `#[wire(number = N)]`, or `0` where the field carries none. Zero is the
-    /// wire format's own non-number: a field number starts at 1.
-    wire_number: i32,
-    wire_encoding: WireEncoding,
     is_secret: bool,
     has_default: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
@@ -549,8 +545,6 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     type_id: f.type_id,
                     index: f.index,
                     wire_name_override: f.wire_name_override.clone(),
-                    wire_number: f.serde_number.unwrap_or(0) as i32,
-                    wire_encoding: f.serde_encoding,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
@@ -780,7 +774,6 @@ pub(crate) const REFLECT_HOLES_ASSOC: &str = "Holes";
 struct ReflectSynthEnv {
     string_type: TypeId,
     case_style_type: TypeId,
-    wire_encoding_type: TypeId,
     member_struct_name: String,
     /// The declaration `member_struct_name` spells; the name is only rendered
     /// into the synthesised bodies.
@@ -812,14 +805,12 @@ impl ReflectSynthEnv {
     fn resolve(tt: &mut TypeTable) -> Self {
         let string_type = tt.make_compiler_struct(CompilerItem::String);
         let case_style_type = tt.make_compiler_enum(CompilerItem::CaseStyle);
-        let wire_encoding_type = tt.make_compiler_enum(CompilerItem::WireEncoding);
         let (member_struct_name, member_struct_def) =
             resolve_member_struct(tt, CompilerItem::ReflectStructField);
         let items = tt.compiler_items();
         Self {
             string_type,
             case_style_type,
-            wire_encoding_type,
             member_struct_name,
             member_struct_def,
             root_trait_name: items.trait_fq(CompilerItem::Reflect),
@@ -936,14 +927,6 @@ fn compiler_enum_case(
     )
 }
 
-fn wire_encoding_item(encoding: WireEncoding) -> CompilerItem {
-    match encoding {
-        WireEncoding::Plain => CompilerItem::WireEncodingPlain,
-        WireEncoding::ZigZag => CompilerItem::WireEncodingZigZag,
-        WireEncoding::Fixed => CompilerItem::WireEncodingFixed,
-    }
-}
-
 fn case_style_item(name_policy: Option<NamePolicy>) -> CompilerItem {
     match name_policy {
         None => CompilerItem::CaseStyleIdentity,
@@ -1050,23 +1033,6 @@ fn generate_struct_members_fn(
                         span,
                     ),
                     field_index: 4,
-                },
-                reflect_meta_int_field(
-                    "wire_number",
-                    i64::from(f.wire_number),
-                    TypeTable::I32,
-                    5,
-                    span,
-                ),
-                TirStructField {
-                    name: "wire_encoding".to_string(),
-                    value: compiler_enum_case(
-                        wire_encoding_item(f.wire_encoding),
-                        env.wire_encoding_type,
-                        type_table.borrow().compiler_items(),
-                        span,
-                    ),
-                    field_index: 6,
                 },
             ];
             TirExpr::new(
@@ -2543,7 +2509,6 @@ fn generate_enum_reflect_impls(
                     name: c.name.clone(),
                     index: c.index,
                     wire_name_override: c.wire_name_override.clone(),
-                    wire_discriminant: c.wire_number.unwrap_or(c.index as i32),
                 })
                 .collect(),
             span: e.span,
@@ -2584,8 +2549,6 @@ struct ReflectEnumCaseRow {
     name: String,
     index: u32,
     wire_name_override: Option<String>,
-    /// The case's `#[wire(number = N)]`, or its index where it carries none.
-    wire_discriminant: i32,
 }
 
 /// Which payload-free kind an env was resolved for: one env type serves both,
@@ -2783,7 +2746,6 @@ fn generate_enum_members_fn(
                 name: case_name,
                 index,
                 wire_name_override,
-                wire_discriminant,
             } = case;
             let wire_override = {
                 let tt = type_table.borrow();
@@ -2831,13 +2793,6 @@ fn generate_enum_members_fn(
                     value: wire_override,
                     field_index: 3,
                 },
-                reflect_meta_int_field(
-                    "wire_discriminant",
-                    i64::from(*wire_discriminant),
-                    TypeTable::I32,
-                    4,
-                    span,
-                ),
             ]
         })
         .collect();

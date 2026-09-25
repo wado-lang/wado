@@ -625,7 +625,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(variant) => (variant, suffix),
             None => {
                 let def = self.tysys.qualified_owner_decl(ident)?;
-                (self.tysys.data.variant_cases.get(&def)?, suffix.rsplit_once("::")?.1)
+                (
+                    self.tysys.data.variant_cases.get(&def)?,
+                    suffix.rsplit_once("::")?.1,
+                )
             }
         };
         let (_, case_data) = variant.case_named(case)?;
