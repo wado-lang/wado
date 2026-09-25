@@ -1338,7 +1338,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     }
                                 }
                             }
-                            UseItem::Namespace { name: ns } => {
+                            UseItem::Namespace { name: ns, .. } => {
                                 let source = resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
@@ -1710,7 +1710,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             to_import.push((alias.as_ref().unwrap_or(name).clone(), entry));
                         }
                     }
-                    ast::UseItem::Namespace { name: ns } => {
+                    ast::UseItem::Namespace { name: ns, .. } => {
                         let declared = state
                             .tysys
                             .signatures

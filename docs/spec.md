@@ -169,6 +169,11 @@ for let of of arr {
 }
 ```
 
+A variable, parameter, item, case or import may not be named `resume`. Only a
+field or a method, reached through `.`, may take the name. The reason is that
+`resume` begins an expression (`resume value`), so such a name could never be
+read.
+
 ### Statements and Expressions
 
 - `expr;` makes a statement.
@@ -951,6 +956,16 @@ match opt {
     Some(1) => "one",
     None => "none",
 }   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
+```
+
+An arm no value can reach is an error too: the guardless arms before it already
+take every value it matches.
+
+```wado
+match opt {
+    _ => 0,
+    Some(x) => x,   // Error: unreachable arm
+}
 ```
 
 #### Guard Expressions
@@ -5666,7 +5681,7 @@ match node {
 }
 ```
 
-A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An unguarded arm whose type is a supertype of a later arm's makes that later arm unreachable, which is an error, as [any unreachable arm](#exhaustiveness) is.
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 

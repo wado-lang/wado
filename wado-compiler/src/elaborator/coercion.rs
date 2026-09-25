@@ -309,11 +309,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(match util::parse_u128_literal(repr) {
                 Ok(value) => {
                     let tt = self.tysys.type_table.borrow();
-                    let err_msg = if neg.is_some() {
-                        util::check_int_range_negative(value, target_type, &tt, repr)
-                    } else {
-                        util::check_int_range_positive(value, target_type, &tt, repr)
-                    };
+                    let err_msg =
+                        util::int_literal_range_error(value, neg.is_some(), repr, target_type, &tt);
                     drop(tt);
                     if let Some(err_msg) = err_msg {
                         let _ = self.emit(TypeError::InvalidLiteral {
@@ -457,22 +454,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) || matches!(expr, Expr::TemplateString(_));
 
         if is_string_or_template {
-            let base_id = self
-                .tysys
-                .type_table
-                .borrow()
-                .representation_head(target_type);
-            let string_struct_name = self
-                .tysys
-                .type_table
-                .borrow()
-                .compiler_struct_name(CompilerItem::String)
-                .to_string();
-            let is_string_newtype = matches!(
-                self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Struct { def, .. }
-                    if self.tysys.type_table.borrow().struct_head_name(*def) == string_struct_name
-            ) && target_type != base_id;
+            let is_string_newtype = {
+                let tt = self.tysys.type_table.borrow();
+                tt.newtype_representation(target_type)
+                    .is_some_and(|base| tt.is_string(base))
+            };
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);
@@ -491,13 +477,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
         );
         if is_bytes_literal {
-            let list_u8 = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
-            let base_id = self
-                .tysys
-                .type_table
-                .borrow()
-                .representation_head(target_type);
-            if base_id == list_u8 {
+            let (is_byte_list, settles_param) = {
+                let tt = self.tysys.type_table.borrow();
+                (
+                    tt.is_byte_list_representation(target_type),
+                    tt.is_list_of_open_element(target_type),
+                )
+            };
+            let bytes_type = if is_byte_list {
+                Some(target_type)
+            } else if settles_param {
+                Some(self.tysys.type_table.borrow_mut().make_list(TypeTable::U8))
+            } else {
+                None
+            };
+            if let Some(target_type) = bytes_type {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
                     && let Err(message) = unescape_bytes(raw)
@@ -517,16 +511,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // unwrapped base fn type (so unannotated params are inferred from
         // the expected signature) and retag the recorded expression type.
         if matches!(expr, Expr::Closure(_)) {
-            let base_id = self
+            let fn_base = self
                 .tysys
                 .type_table
                 .borrow()
-                .representation_head(target_type);
-            let is_fn_newtype = matches!(
-                self.tysys.type_table.borrow().get(base_id),
-                ResolvedType::Function { .. }
-            ) && target_type != base_id;
-            if is_fn_newtype {
+                .newtype_representation(target_type)
+                .filter(|&base| {
+                    matches!(
+                        self.tysys.type_table.borrow().get(base),
+                        ResolvedType::Function { .. }
+                    )
+                });
+            if let Some(base_id) = fn_base {
                 // Walk the closure for fact recording (param types,
                 // captures, body) under the unwrapped fn type.
                 self.resolve_expr(expr, ctx, Some(base_id));
@@ -545,20 +541,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
+        if let Some(coerced) = self.try_coerce_struct_newtype(expr, ctx, target_type) {
+            return Some(coerced);
+        }
+
         // Key-value literal → a type with a `From<Array<[K, V]>>` impl. The
         // sub-helper records `StructToMap` and `expression_types`.
         if let Some(coerced) = self.try_coerce_struct_to_map(expr, ctx, target_type) {
             return Some(coerced);
         }
 
-        // A key-value literal whose generic target builds from no pair array
-        // at all: say what is missing where it is written.
+        // A key-value literal whose generic target takes no fields and builds
+        // from no pair array here: say what is missing where it is written.
         if let Expr::StructLiteral(struct_lit) = expr
             && struct_lit.name.is_none()
             && matches!(
                 self.tysys.type_table.borrow().get(target_type),
                 ResolvedType::GenericInstance { .. }
             )
+            && self.implicit_struct_target(Some(target_type)).is_none()
         {
             self.report_if_not_a_map_target(target_type, expr.span());
         }
@@ -584,13 +585,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
+    /// An unnamed struct literal against a newtype over a struct, built as that
+    /// struct: literal coercion reaches a newtype as it reaches its base.
+    pub(super) fn try_coerce_struct_newtype(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        target_type: TypeId,
+    ) -> Option<TypeId> {
+        let Expr::StructLiteral(struct_lit) = expr else {
+            return None;
+        };
+        let base = self
+            .tysys
+            .type_table
+            .borrow()
+            .newtype_representation(target_type)?;
+        if struct_lit.name.is_some() || self.implicit_struct_target(Some(base)).is_none() {
+            return None;
+        }
+        self.resolve_expr(expr, ctx, Some(base));
+        self.record_coercion(expr.id(), CoercionKind::StructNewtype, target_type);
+        self.record_expression_type(expr.id(), target_type);
+        Some(target_type)
+    }
+
     /// Coerce an anonymous struct literal into a type implementing
-    /// `From<Array<[K, V]>>` (WEP 2026-08-24).
-    ///
-    /// Records the coercion choice and resolved expression type at the
-    /// decision point so every caller (`try_coerce`, `resolve_cast`,
-    /// `resolve_let`'s struct-to-map branch) leaves an annotation —
-    /// no caller can bypass recording.
+    /// `From<Array<[K, V]>>`, recording the choice wherever it is decided.
     pub(super) fn try_coerce_struct_to_map(
         &mut self,
         expr: &Expr,

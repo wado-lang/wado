@@ -4,7 +4,7 @@
 //! info-level `remark:` diagnostic with a source span; a copy the optimizer
 //! removes (scalarizes / elides) is not.
 
-use crate::common::{InMemoryHost, runtime};
+use crate::common::{InMemoryHost, MapHost, runtime};
 use wado_compiler::{CompilerOptions, OptLevel, Severity};
 
 /// Compile `source` under `options` and return the `remark:` diagnostics as
@@ -316,38 +316,10 @@ export fn run() with Stdout {
     );
 }
 
-/// A `CompilerHost` serving a fixed set of in-memory modules, so a multi-file
-/// program can be compiled without touching the filesystem.
-struct MultiFileHost {
-    files: wado_compiler::hashmap::IndexMap<String, String>,
-    diagnostics: std::sync::Mutex<Vec<wado_compiler::Diagnostic>>,
-}
-
-impl wado_compiler::CompilerHost for MultiFileHost {
-    fn load_source(
-        &self,
-        path: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send {
-        let found = self.files.get(path).map(|s| s.as_bytes().to_vec());
-        let path = path.to_string();
-        async move { found.ok_or(wado_compiler::SourceError::NotFound { path }) }
-    }
-
-    fn emit_diagnostic(&self, diagnostic: wado_compiler::Diagnostic) {
-        self.diagnostics.lock().unwrap().push(diagnostic);
-    }
-}
-
 /// Compile `entry` at `-O2` alongside `files`, and return the `remark:`
 /// diagnostics as `"file:line:col message"` strings.
 fn remarks_across_modules(entry: &str, files: &[(&str, &str)]) -> Vec<String> {
-    let host = MultiFileHost {
-        files: files
-            .iter()
-            .map(|(p, s)| ((*p).to_string(), (*s).to_string()))
-            .collect(),
-        diagnostics: std::sync::Mutex::new(Vec::new()),
-    };
+    let host = MapHost::new(files);
     let options = CompilerOptions {
         opt_level: OptLevel::O2,
         ..CompilerOptions::default()
@@ -358,8 +330,7 @@ fn remarks_across_modules(entry: &str, files: &[(&str, &str)]) -> Vec<String> {
         Some("test.wado"),
         options,
     ));
-    let diagnostics = host.diagnostics.lock().unwrap().clone();
-    diagnostics
+    host.diagnostics()
         .into_iter()
         .filter(|d| d.message.starts_with("remark:"))
         .map(|d| {

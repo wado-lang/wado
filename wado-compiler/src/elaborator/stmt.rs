@@ -11,10 +11,10 @@ use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
-use super::Elaborator;
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
+use super::{Elaborator, ForwardDefaults};
 use crate::ast::{BinaryOp, RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -28,7 +28,7 @@ use crate::name::{
 };
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
-use crate::{hashmap, tir};
+use crate::{escape, hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -223,6 +223,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// tables. The other kinds are parsed but not resolved, having no
     /// per-`AstId` fact for reify.
     fn resolve_local_item(&mut self, item: &ast::Item) {
+        ForwardDefaults(self).visit_item(item);
         match item {
             ast::Item::Struct(struct_decl) => self.resolve_local_struct(struct_decl),
             // `hoist_local_items` resolved these ahead of the struct fields.
@@ -542,18 +543,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if let ast::Expr::StructLiteral(struct_lit) = ast_value {
                 // Handle implicit struct literal: let p: Point = { x: 1, y: 2 }
                 if struct_lit.name.is_none() {
-                    // Check if target type is a struct
-                    let target_resolved = self.tysys.type_table.borrow().get(target_type).clone();
                     // `resolve_expr` decides what an unnamed literal against a
                     // declared struct means. Deciding it a second time here is
                     // how the two spellings came to check different things.
-                    if let ResolvedType::Struct { .. } = target_resolved {
+                    let is_struct = matches!(
+                        self.tysys.type_table.borrow().get(target_type),
+                        ResolvedType::Struct { .. }
+                    );
+                    if is_struct || self.implicit_struct_target(Some(target_type)).is_some() {
                         (
                             self.resolve_expr(ast_value, ctx, Some(target_type)),
                             target_type,
                         )
-                    } else if let Some(coerced) =
-                        self.try_coerce_struct_to_map(ast_value, ctx, target_type)
+                    } else if let Some(coerced) = self
+                        .try_coerce_struct_newtype(ast_value, ctx, target_type)
+                        .or_else(|| self.try_coerce_struct_to_map(ast_value, ctx, target_type))
                     {
                         (coerced, target_type)
                     } else {
@@ -1083,6 +1087,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
     }
 
+    /// The struct a pattern destructures (a newtype's base), and whether its
+    /// written name names it. A scrutinee that is no struct is reported instead.
+    fn struct_pattern_head(
+        &self,
+        type_name: Option<&str>,
+        type_name_id: Option<AstId>,
+        scrutinee: TypeId,
+        span: Span,
+    ) -> Option<(StructDef, bool)> {
+        let head = {
+            let tt = self.tysys.type_table.borrow();
+            match tt.get(tt.reflect_structure_head(scrutinee)) {
+                ResolvedType::Struct { def, .. } => Some(*def),
+                _ => None,
+            }
+        };
+        let Some(head) = head else {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: "struct type".to_string(),
+                found: self.tysys.type_table.borrow().type_name(scrutinee),
+                span,
+            });
+            return None;
+        };
+        let name_matches = type_name.is_none_or(|written| {
+            let matches = self.tysys.pattern_qualifier_matches(type_name_id, head);
+            if !matches {
+                let (expected, found) =
+                    self.pattern_mismatch_names(type_name_id, written, scrutinee);
+                let _ = self.emit(TypeError::PatternTypeMismatch {
+                    expected,
+                    found,
+                    span,
+                });
+            }
+            matches
+        });
+        Some((head, name_matches))
+    }
+
     /// The two spellings a pattern mismatch prints.
     ///
     /// The written qualifier and the scrutinee's rendering can be the same
@@ -1212,49 +1256,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: pat_span,
             } => {
                 let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                // Every lookup below asks the scrutinee's head, which an
-                // anonymous shape and a function-local `struct` both have and
-                // neither of them can be reached by spelling. A newtype's head
-                // is its base's: it inherits the fields it wraps.
-                let struct_head = {
-                    let tt = self.tysys.type_table.borrow();
-                    match tt.get(tt.reflect_structure_head(type_id)) {
-                        ResolvedType::Struct { def, .. } => Some(*def),
-                        _ => None,
-                    }
-                };
+                let head = self.struct_pattern_head(
+                    type_name.as_deref(),
+                    *type_name_id,
+                    type_id,
+                    *pat_span,
+                );
 
-                let type_name_matches = match (type_name, struct_head) {
-                    (Some(written), Some(head)) => {
-                        let matches = self.tysys.pattern_qualifier_matches(*type_name_id, head);
-                        if !matches {
-                            let (expected, found) =
-                                self.pattern_mismatch_names(*type_name_id, written, type_id);
-                            let _ = self.emit(TypeError::PatternTypeMismatch {
-                                expected,
-                                found,
-                                span: *pat_span,
-                            });
-                        }
-                        matches
-                    }
-                    _ => true,
-                };
-
-                if struct_head.is_none() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: "struct type".to_string(),
-                        found: self.tysys.type_table.borrow().type_name(type_id),
-                        span: *pat_span,
-                    });
-                    return;
-                }
-
-                // Resolve each field pattern
                 for field in fields {
-                    let (_field_index, field_type) =
-                        self.lookup_field_type(type_id, &field.field_name, field.span);
-                    if type_name_matches {
+                    let field_type = match head {
+                        Some(_) => {
+                            self.lookup_field_type(type_id, &field.field_name, field.span)
+                                .1
+                        }
+                        None => TypeTable::ERROR,
+                    };
+                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
                         self.check_field_visibility(
                             type_id,
                             &field.field_name,
@@ -1273,7 +1290,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
-                if !has_rest && let Some(head) = struct_head {
+                if let Some((head, _)) = head
+                    && !has_rest
+                {
                     self.check_struct_pattern_complete(head, fields, *pat_span);
                 }
             }
@@ -1469,9 +1488,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The alias and type of the immutable global `ns::NAME` names in a pattern,
+    /// which is a constant-value pattern as the bare `NAME` is.
+    pub(super) fn namespaced_constant(
+        &self,
+        qualifier: Option<&Type>,
+        name: &str,
+    ) -> Option<(String, TypeId)> {
+        let alias = self.sem.imports.pattern_ns_member(qualifier, name)?;
+        let ty = self.immutable_global_type(&alias)?;
+        Some((alias, ty))
+    }
+
     /// Whether `name` refers to an immutable global (defined here or imported),
-    /// which in pattern position is a constant-value (refutable) match rather
-    /// than a fresh binding.
+    /// which in pattern position is a constant-value match, not a binding.
     pub(super) fn is_immutable_global(&self, name: &str) -> bool {
         self.immutable_global_type(name).is_some()
     }
@@ -1599,6 +1629,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // use→def edge so it is not flagged dead (mirrors the expr path).
                 if !is_mut && let Some(constant) = self.immutable_global_type(name) {
                     self.record_item_reference_by_name(*id, name);
+                    let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
+                    self.typecheck(constant, peeled, *name_span);
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
                 }
@@ -1611,29 +1643,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Pattern::Literal(lit) => {
                 match lit {
-                    Literal::Number(repr) => {
-                        // Float literals cannot be used in match patterns
-                        if util::is_float_only_literal(repr) {
-                            let _ = self.emit(TypeError::InvalidPattern {
-                                message: "float literals cannot be used in match patterns"
-                                    .to_string(),
-                                span,
-                            });
-                        }
+                    Literal::Number(repr) if util::is_float_only_literal(repr) => {
+                        let _ = self.emit(TypeError::InvalidPattern {
+                            message: "float literals cannot be used in match patterns".to_string(),
+                            span,
+                        });
                     }
                     Literal::Null => {
                         // If the scrutinee is a variant type with a `None` case,
                         // `null` lowers to a `None` variant pattern (no binding).
                         let _ = self.try_null_as_none_pattern(scrutinee_type);
                     }
-                    _ => {}
-                }
-                if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected,
-                        found: self.tysys.type_table.borrow().type_name(scrutinee_type),
-                        span,
-                    });
+                    _ => self.check_pattern_value(pattern, scrutinee_type, span),
                 }
                 Vec::new()
             }
@@ -1719,27 +1740,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
+                        self.typecheck(assoc.ty, scrutinee_type, *span);
                         if let Some(id) = *name_id {
                             self.resolve_constant_pattern(id, scrutinee_type, assoc.ty, ctx, *span);
                         }
                         return Vec::new();
                     }
 
-                    // `ns::NAME` naming an immutable global the namespace exports
-                    // is a constant-value pattern, as the bare `NAME` is.
-                    if let Some((alias, constant)) = self
-                        .sem
-                        .imports
-                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
-                        .and_then(|alias| {
-                            let constant = self.immutable_global_type(&alias)?;
-                            Some((alias, constant))
-                        })
+                    if let Some((alias, constant)) =
+                        self.namespaced_constant(variant_qualifier.as_ref(), variant_name)
                     {
                         if let Some(id) = *name_id {
                             self.record_item_reference_by_name(id, &alias);
                             self.resolve_constant_pattern(id, scrutinee_type, constant, ctx, *span);
                         }
+                        self.typecheck(constant, scrutinee_type, *span);
                         return Vec::new();
                     }
 
@@ -1925,31 +1940,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } => {
                 let (scrutinee_type, ref_binding) =
                     self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
-                let mut type_name_matches = true;
-                if let Some(expected_name) = type_name {
-                    let resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-                    if let ResolvedType::Struct { def, .. } = resolved
-                        && !self.tysys.pattern_qualifier_matches(*type_name_id, def)
-                    {
-                        let (expected, found) = self.pattern_mismatch_names(
-                            *type_name_id,
-                            expected_name,
-                            scrutinee_type,
-                        );
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected,
-                            found,
-                            span: *pat_span,
-                        });
-                        type_name_matches = false;
-                    }
-                }
+                let head = self.struct_pattern_head(
+                    type_name.as_deref(),
+                    *type_name_id,
+                    scrutinee_type,
+                    *pat_span,
+                );
 
                 let mut field_bindings: PatBindings = Vec::new();
                 for field in fields {
-                    let (_field_index, field_type) =
-                        self.lookup_field_type(scrutinee_type, &field.field_name, field.span);
-                    if type_name_matches {
+                    let field_type = match head {
+                        Some(_) => {
+                            self.lookup_field_type(scrutinee_type, &field.field_name, field.span)
+                                .1
+                        }
+                        None => TypeTable::ERROR,
+                    };
+                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
                         self.check_field_visibility(
                             scrutinee_type,
                             &field.field_name,
@@ -1966,11 +1973,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ));
                 }
 
-                let struct_head = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::Struct { def, .. } => Some(*def),
-                    _ => None,
-                };
-                if !has_rest && let Some(head) = struct_head {
+                if let Some((head, _)) = head
+                    && !has_rest
+                {
                     self.check_struct_pattern_complete(head, fields, *pat_span);
                 }
                 field_bindings
@@ -2209,8 +2214,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
-    /// not it. An integer literal's range is the coercion's answer, not a pattern's.
-    fn literal_pattern_mismatch(
+    /// not it. Whether its value is in range is [`Self::check_pattern_value`]'s.
+    pub(super) fn literal_pattern_mismatch(
         &mut self,
         lit: &Literal,
         scrutinee_type: TypeId,
@@ -2218,6 +2223,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
         let expected = match lit {
+            Literal::Number(_) | Literal::Byte(_)
+                if !type_table.is_integer(head) && !type_table.is_wide_int(head) =>
+            {
+                "an integer type"
+            }
             Literal::String(_) if !type_table.is_string(head) => "String",
             Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
             Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
@@ -2271,6 +2281,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .is_some()
     }
 
+    /// Report a literal pattern or range bound that is no value of
+    /// `scrutinee_type`: of another kind, or out of its range.
+    fn check_pattern_value(&mut self, pattern: &Pattern, scrutinee_type: TypeId, span: Span) {
+        if let Pattern::Literal(lit) = pattern
+            && let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type)
+        {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected,
+                found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                span,
+            });
+            return;
+        }
+        let message = {
+            let tt = self.tysys.type_table.borrow();
+            match pattern {
+                Pattern::Literal(Literal::Number(repr)) => {
+                    let (negated, digits) = repr
+                        .strip_prefix('-')
+                        .map_or((false, repr.as_str()), |digits| (true, digits));
+                    util::parse_u128_literal(digits).ok().and_then(|magnitude| {
+                        util::int_literal_range_error(
+                            magnitude,
+                            negated,
+                            digits,
+                            scrutinee_type,
+                            &tt,
+                        )
+                    })
+                }
+                Pattern::Literal(Literal::Byte(raw)) => {
+                    escape::unescape_byte(raw).ok().and_then(|v| {
+                        util::int_value_range_error(
+                            v.into(),
+                            &format!("b'{raw}'"),
+                            scrutinee_type,
+                            &tt,
+                        )
+                    })
+                }
+                Pattern::Variant {
+                    variant_name,
+                    variant_qualifier: Some(qualifier),
+                    bindings,
+                    ..
+                } if bindings.is_empty() => const_qualifier_name(qualifier).and_then(|ty| {
+                    let value = primitive_int_bound(ty, variant_name)?;
+                    let shown = format!("{ty}::{variant_name}");
+                    util::int_value_range_error(value, &shown, scrutinee_type, &tt)
+                }),
+                _ => None,
+            }
+        };
+        if let Some(message) = message {
+            let _ = self.emit(TypeError::InvalidPattern { message, span });
+        }
+    }
+
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
     /// emitting the bad-bounds / reversed / empty diagnostics. Range
     /// patterns bind nothing and reify rebuilds the real `TirPattern::Range`,
@@ -2299,6 +2367,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return;
         };
+        for bound in [start, end] {
+            self.check_pattern_value(bound, scrutinee_type, span);
+        }
 
         // Check for reversed or empty range
         let inclusive = matches!(kind, RangeKind::Inclusive);
@@ -3483,19 +3554,23 @@ pub(super) fn primitive_assoc_const_to_i128(
     qualifier: Option<&Type>,
     const_name: &str,
 ) -> Option<i128> {
-    let ty_name = match qualifier? {
-        Type::Named(named) => named.name.as_str(),
-        Type::Generic(generic) => generic.name.as_str(),
-        Type::NamespacedGeneric(namespaced) => namespaced.name.as_str(),
+    primitive_int_bound(const_qualifier_name(qualifier?)?, const_name)
+}
+
+/// The type name qualifying a constant path such as `u8::MAX`.
+fn const_qualifier_name(qualifier: &Type) -> Option<&str> {
+    match qualifier {
+        Type::Named(named) => Some(named.name.as_str()),
+        Type::Generic(generic) => Some(generic.name.as_str()),
+        Type::NamespacedGeneric(namespaced) => Some(namespaced.name.as_str()),
         Type::Function(_)
         | Type::Tuple(_)
         | Type::Reference(_)
         | Type::MutReference(_)
         | Type::TypePackSpread(_, _)
         | Type::Infer(_)
-        | Type::Error(_) => return None,
-    };
-    primitive_int_bound(ty_name, const_name)
+        | Type::Error(_) => None,
+    }
 }
 
 /// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both

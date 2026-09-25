@@ -1,10 +1,12 @@
-// An import naming a module nothing resolves to.
+// An import naming a module nothing resolves to. `web:` is no bundled
+// namespace: the web bindings are the `wado-lang:web` package.
 
 use { foo } from "unknown:module";
+use { Element } from "web:dom";
 
 export fn run() {
     foo();
 }
 
 __DATA__
-{"compile_error": "unknown module namespace 'unknown'; expected 'core', 'wasi' or 'web'", "compile_error_codes": ["MODULE_NOT_FOUND"]}
+{"compile_error": "unknown module namespace 'unknown'; expected 'core' or 'wasi'", "compile_error_codes": ["MODULE_NOT_FOUND"]}

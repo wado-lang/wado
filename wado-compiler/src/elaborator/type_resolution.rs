@@ -9,7 +9,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::trait_query::SelfBinding;
-use super::types::TypeError;
+use super::types::{TypeError, forward_type_param_defaults};
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
@@ -564,12 +564,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
+    /// Report each default naming its own or a later parameter, which no
+    /// argument has settled when the default is read.
+    pub(super) fn report_forward_type_param_defaults(&mut self, params: &[ast::GenericParam]) {
+        for (slot, referenced) in forward_type_param_defaults(params) {
+            let _ = self.emit(TypeError::ForwardTypeParamDefault {
+                param: params[slot].name.clone(),
+                referenced,
+                span: params[slot]
+                    .default
+                    .as_ref()
+                    .expect("only a default names a parameter")
+                    .span(),
+            });
+        }
+    }
+
     /// Whether `def`'s declared defaults can be expanded at all: each names
     /// only parameters to its left, and the walk they set off terminates.
-    ///
-    /// One naming a parameter no argument has settled yet would leak the
-    /// parameter itself into the instantiation. Checked once per declaration:
-    /// the declaration is ill-formed, not the application that reached it.
     pub(super) fn type_param_defaults_are_ordered(&mut self, def: DefId) -> bool {
         if let Some(&ordered) = self.checked_type_param_defaults.get(&def) {
             return ordered;
@@ -593,27 +605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.checked_type_param_defaults.insert(def, false);
             return false;
         }
-        let mut ordered = true;
-        for slot in 0..params.len() {
-            let Some(default) = params[slot].default.clone() else {
-                continue;
-            };
-            let mut referenced = None;
-            self.walk_type_heads(&default, &mut |_, _, name, _, _| {
-                if referenced.is_none() && params[slot..].iter().any(|p| p.name == name) {
-                    referenced = Some(name.to_string());
-                }
-                false
-            });
-            if let Some(referenced) = referenced {
-                ordered = false;
-                let _ = self.emit(TypeError::ForwardTypeParamDefault {
-                    param: params[slot].name.clone(),
-                    referenced,
-                    span: default.span(),
-                });
-            }
-        }
+        let ordered = forward_type_param_defaults(&params).is_empty();
         self.checked_type_param_defaults.insert(def, ordered);
         ordered
     }

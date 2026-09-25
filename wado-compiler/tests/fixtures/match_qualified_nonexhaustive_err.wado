@@ -1,0 +1,34 @@
+// A case qualified by a newtype's name and a constant reached through a
+// namespace each cover one value, not the rest: both matches miss values.
+
+use ns from "./sub/pattern_ns_constant.wado";
+
+enum Color {
+    Red,
+    Green,
+}
+
+type C = Color;
+
+fn by_newtype(c: C) -> i32 {
+    return match c {
+        C::Green => 1,
+    };
+}
+
+fn by_namespace(t: i32) -> i32 {
+    return match t {
+        ns::TK_FOO => 1,
+    };
+}
+
+export fn run() {
+    let _ = by_newtype(Color::Red as C);
+    let _ = by_namespace(1);
+}
+
+__DATA__
+{
+  "compile_error": "non-exhaustive match",
+  "compile_error_count": 2
+}

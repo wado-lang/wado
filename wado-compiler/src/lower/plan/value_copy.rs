@@ -341,27 +341,23 @@ fn needs_copy_in_env(
     if depth > NEEDS_COPY_DEPTH_LIMIT {
         return true;
     }
-    let items = type_table.compiler_items();
-    let box_name = items.struct_name(CompilerItem::Box);
-    let list_name = items.struct_name(CompilerItem::List);
     match type_table.get(type_id) {
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
         ResolvedType::Struct { def, type_args } => {
-            type_table.struct_head_name(*def) != box_name || type_args.is_empty()
+            !type_table.is_compiler_struct(*def, CompilerItem::Box) || type_args.is_empty()
         }
         ResolvedType::GenericInstance { def, type_args } => {
-            let name = type_table.def_name(*def);
-            if name == box_name {
+            if type_table.is_compiler_item(*def, CompilerItem::Box) {
                 return false;
             }
-            if TypeTable::is_tuple_type(name) {
+            if TypeTable::is_tuple_type(type_table.def_name(*def)) {
                 // Empty tuples are unit-shaped; non-empty tuples need
                 // element-wise deep copy.
                 return !type_args.is_empty();
             }
-            if name == list_name {
+            if type_table.is_compiler_item(*def, CompilerItem::List) {
                 return true;
             }
             if let Some(cases) = type_table.variant_template_cases(*def) {

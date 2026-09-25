@@ -3,71 +3,43 @@
 use crate::ast::Pattern;
 use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::escape::{unescape_byte, unescape_char};
-use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
-/// Check if a positive integer literal value fits in the target integer type.
-/// Returns `Some(error_message)` if out of range, `None` if OK.
-/// Only checks primitive integer types (i128/u128 struct types are handled separately).
-///
-/// All literal formats (decimal, hex, octal, binary) use strict numeric range.
-/// To reinterpret a bit pattern, use an explicit cast: `0xFF as i8`.
-pub(super) fn check_int_range_positive(
-    value: u128,
+/// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
+/// value of `target_type`. Every format checks the numeric range: `0xFF as i8` reinterprets.
+pub(super) fn int_literal_range_error(
+    magnitude: u128,
+    negated: bool,
+    repr: &str,
     target_type: TypeId,
     type_table: &TypeTable,
-    repr: &str,
 ) -> Option<String> {
-    let base_id = type_table.representation_head(target_type);
-    let in_range = match type_table.get(base_id) {
-        // i128/u128/f32/f64/bool/char are handled elsewhere.
-        ResolvedType::Primitive(prim) => value <= prim.int_max()?,
-        _ => return None,
+    // Past `i128` is out of range for every type `int_range` answers for.
+    let value = match i128::try_from(magnitude) {
+        Ok(v) if negated => -v,
+        Ok(v) => v,
+        Err(_) if negated => i128::MIN,
+        Err(_) => i128::MAX,
     };
-    if in_range {
-        None
+    let shown = if negated {
+        format!("-{repr}")
     } else {
-        let type_name = match type_table.get(base_id) {
-            ResolvedType::Primitive(prim) => prim.as_str(),
-            _ => "unknown",
-        };
-        Some(format!("literal out of range for `{type_name}`: {repr}"))
-    }
+        repr.to_string()
+    };
+    int_value_range_error(value, &shown, target_type, type_table)
 }
 
-/// Check if a negated integer literal `-pos_value` fits in the target integer type.
-/// Returns `Some(error_message)` if out of range, `None` if OK.
-/// Only checks primitive integer types (i128/u128 struct types are handled separately).
-pub(super) fn check_int_range_negative(
-    pos_value: u128,
+/// Why `value`, written `shown`, is no value of the integer `target_type`.
+pub(super) fn int_value_range_error(
+    value: i128,
+    shown: &str,
     target_type: TypeId,
     type_table: &TypeTable,
-    repr: &str,
 ) -> Option<String> {
-    let base_id = type_table.representation_head(target_type);
-    let in_range = match type_table.get(base_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8 => pos_value <= u128::from(i8::MIN.unsigned_abs()),
-            PrimitiveType::I16 => pos_value <= u128::from(i16::MIN.unsigned_abs()),
-            PrimitiveType::I32 => pos_value <= u128::from(i32::MIN.unsigned_abs()),
-            PrimitiveType::I64 => pos_value <= u128::from(i64::MIN.unsigned_abs()),
-            // Unsigned types cannot hold negative values
-            PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64 => {
-                false
-            }
-            _ => return None, // i128/u128/f32/f64/bool/char handled elsewhere
-        },
-        _ => return None,
-    };
-    if in_range {
-        None
-    } else {
-        let type_name = match type_table.get(base_id) {
-            ResolvedType::Primitive(prim) => prim.as_str(),
-            _ => "unknown",
-        };
-        Some(format!("literal out of range for `{type_name}`: -{repr}"))
-    }
+    let prim = type_table.primitive_head(target_type)?;
+    let (min, max) = prim.int_range()?;
+    (value < min || value > max)
+        .then(|| format!("literal out of range for `{}`: {shown}", prim.as_str()))
 }
 
 /// Normalize a numeric literal representation: remove underscores and lowercase.

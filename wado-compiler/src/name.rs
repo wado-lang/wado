@@ -8,10 +8,12 @@ use crate::ast::{AstId, TestMetadata};
 use crate::defs::{DefId, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
-use crate::path::{normalize, relative_path};
+use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
+use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
+use heck::ToSnakeCase;
 use std::fmt;
 use std::hash::Hash;
 
@@ -1443,6 +1445,22 @@ pub fn validate_module_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// An IDL identifier as the `snake_case` name Wado declares it under: a keyword
+/// the parser does not take as a name (`match`, `resume`) gets a trailing `_`.
+#[must_use]
+pub fn wado_identifier(idl_name: &str) -> String {
+    let snake = idl_name.to_snake_case();
+    let keyword = KEYWORDS
+        .iter()
+        .chain(CONTEXTUAL_KEYWORDS)
+        .any(|(keyword, _)| *keyword == snake);
+    if keyword && !NAME_KEYWORDS.contains(&snake.as_str()) {
+        format!("{snake}_")
+    } else {
+        snake
+    }
+}
+
 /// `true` for an opaque module identifier that is not a filesystem path and
 /// must never be normalized: a reserved namespace (`core:`, `wasi:`, `web:`) or
 /// a remote URI (`http://` / `https://`).
@@ -1474,34 +1492,42 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
     Ok(normalize_module_path(path))
 }
 
-/// Resolve an import path against the importing module's path, producing a path
-/// canonical from the project root — base `./sub/main.wado` with relative
-/// `../lib.wado` gives `./lib.wado`.
+/// Resolve an import against the importing module's path: base `./sub/main.wado`
+/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and authority.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
-    // Handle special module prefixes - they don't need resolution
     if has_special_prefix(relative) {
         return relative.to_string();
     }
-
-    // Get the directory of the base path
-    let base_dir = get_parent_path(base);
-
-    // Join the base directory with the relative path
-    let joined = if base_dir.is_empty() {
-        relative.to_string()
-    } else if let Some(stripped) = relative.strip_prefix("./") {
-        // ./foo from ./sub/ becomes ./sub/foo
-        format!("{base_dir}/{stripped}")
-    } else if relative.starts_with("../") {
-        // ../foo from ./sub/ needs parent resolution
-        format!("{base_dir}/{relative}")
-    } else {
-        // bare name like "foo.wado" - treat as relative to base dir
-        format!("{base_dir}/{relative}")
+    let (origin, base_path) = split_uri_origin(base);
+    let joined = match base_path.rfind('/') {
+        Some(pos) => format!("{}/{relative}", &base_path[..pos]),
+        None if origin.contains("//") => format!("/{relative}"),
+        None => relative.to_string(),
     };
+    format!("{origin}{}", normalize(&joined))
+}
 
-    // Normalize the result to resolve . and ..
-    normalize_module_path(&joined)
+/// Split a URI's `scheme:` and `//authority` off its path. A one-letter scheme is
+/// a Windows drive, which stays with the path.
+fn split_uri_origin(path: &str) -> (&str, &str) {
+    let Some(colon) = path.find(':') else {
+        return ("", path);
+    };
+    let scheme = &path[..colon];
+    let is_scheme = scheme.len() > 1
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    if !is_scheme {
+        return ("", path);
+    }
+    let after_scheme = &path[colon + 1..];
+    let origin_len = match after_scheme.strip_prefix("//") {
+        Some(authority) => colon + 3 + authority.find('/').unwrap_or(authority.len()),
+        None => colon + 1,
+    };
+    path.split_at(origin_len)
 }
 
 /// Canonicalize a resolved local module identity to the unique minimal form for
@@ -1531,12 +1557,11 @@ pub fn entry_dir_of(entry_module: Option<&ModuleSource>) -> String {
     }
 }
 
-/// The parent directory of a module path (everything before the last `/`, or
-/// empty if none). Shared by every site that derives a [`canonical_local_path`]
-/// anchor, so they agree on it.
+/// The parent directory of a module path: everything before the last `/`, or
+/// empty if none. Every [`canonical_local_path`] anchor comes from here.
 #[must_use]
 pub fn module_parent_dir(path: &str) -> &str {
-    get_parent_path(path)
+    path.rfind('/').map_or("", |pos| &path[..pos])
 }
 
 /// The symbol name of a module-level global var: `global:{module_source}::{name}`.
@@ -1548,31 +1573,21 @@ pub fn global_name(module_source: &ModuleSource, name: impl fmt::Display) -> Str
     format!("global:{module_source}::{name}")
 }
 
-/// The canonical loader identity for a relative `import_source` imported from a
-/// local module `from_path`, anchored at `entry_dir`: compose
-/// ([`resolve_module_path`]) then canonicalize ([`canonical_local_path`]). The
-/// one resolver shared by the loader, the analyze/elaborator re-resolution, and
-/// the CLI Kiln harvest, so all three agree on identities.
+/// The loader identity of `import_source` imported from the local module
+/// `from_path`, or from the entry module where `None`, anchored at `entry_dir`.
 #[must_use]
-pub fn resolve_local_identity(entry_dir: &str, from_path: &str, import_source: &str) -> String {
-    canonical_local_path(entry_dir, &resolve_module_path(from_path, import_source))
-}
-
-/// Resolve an import source (`"./geometry.wado"`, `"core:cli"`) against the
-/// importing module.
-pub fn resolve_import(
-    interner: &mut ModuleSourceInterner,
-    from_module: &ModuleSource,
+pub fn resolve_local_identity(
+    entry_dir: &str,
+    from_path: Option<&str>,
     import_source: &str,
-) -> ModuleSource {
-    resolve_import_with_entry(interner, from_module, import_source, None)
+) -> String {
+    let resolved = match from_path {
+        Some(from_path) => resolve_module_path(from_path, import_source),
+        None => normalize_module_path(import_source),
+    };
+    canonical_local_path(entry_dir, &resolved)
 }
 
-/// Resolve an import source, consulting a Kiln [`crate::kiln::InvocationIndex`]
-/// first: a recorded `(from_module, import_source)` pair resolves to the
-/// invocation's generated entry module under `build/kiln/…`, everything else
-/// falls through to [`resolve_import_with_entry`]. Use this in place of
-/// [`resolve_import`] wherever an index is available.
 /// The file a declaration in `source` is written in, as a [`InvocationIndex`]
 /// keys it and a diagnostic names it. Empty for a source that holds no path.
 #[must_use]
@@ -1580,11 +1595,13 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
     match source {
         ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
         ModuleSource::EntryPoint { filename } => filename.as_str(),
-        ModuleSource::Redirected { uri } => uri.as_str(),
+        ModuleSource::Redirected { uri, .. } => uri.as_str(),
         _ => "",
     }
 }
 
+/// Resolve an import source, a Kiln invocation's redirect first. The one
+/// resolver the loader, analysis and the elaborator share.
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1595,7 +1612,7 @@ pub fn resolve_import_with_invocations(
     if !invocations.is_empty() {
         let decl_file = decl_file_of(from_module);
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
-            return interner.redirected(entry_uri);
+            return interner.redirected(entry_uri, from_module);
         }
     }
     resolve_import_with_entry(interner, from_module, import_source, entry_module)
@@ -1618,13 +1635,26 @@ pub fn resolve_import_with_entry(
         return interner.remote(import_source);
     }
 
+    let relative = is_cwd_relative(import_source);
     // A relative import inherits the importer's package root.
-    if let ModuleSource::Dependency { pkg, path } = from_module
-        && (import_source.starts_with("./") || import_source.starts_with("../"))
-    {
-        let resolved = resolve_module_path(path, import_source);
-        let pkg = pkg.to_string();
-        return interner.dependency_module(&pkg, &resolved);
+    if relative {
+        match from_module {
+            ModuleSource::Dependency { pkg, path } => {
+                let resolved = resolve_module_path(path, import_source);
+                let pkg = pkg.to_string();
+                return interner.dependency_module(&pkg, &resolved);
+            }
+            ModuleSource::Remote { pkg, url } => {
+                let resolved = resolve_module_path(url, import_source);
+                let pkg = pkg.to_string();
+                return interner.remote_module(&pkg, &resolved);
+            }
+            ModuleSource::Redirected { uri, .. } => {
+                let resolved = resolve_module_path(uri, import_source);
+                return interner.redirected(&resolved, from_module);
+            }
+            _ => {}
+        }
     }
 
     // Dependency name (`use { … } from "router"` / `from "ns:pkg"`): resolve
@@ -1633,10 +1663,7 @@ pub fn resolve_import_with_entry(
     // import from within a dependency must not bind to the consumer's deps. A
     // path dependency is Wado source; a registry dependency is a prebuilt
     // component imported across the CM boundary.
-    if !import_source.starts_with("./")
-        && !import_source.starts_with("../")
-        && !matches!(from_module, ModuleSource::Dependency { .. })
-    {
+    if !relative && !matches!(from_module, ModuleSource::Dependency { .. }) {
         if let Some(dep) = interner.resolve_dependency(import_source) {
             return dep;
         }
@@ -1645,13 +1672,9 @@ pub fn resolve_import_with_entry(
         }
     }
 
-    // Handle relative imports from local modules
-    // For entry points, we don't resolve against the filename - just use the import directly
-    if let ModuleSource::Local { path: from_path } = from_module
-        && (from_path.starts_with("./") || from_path.starts_with("../"))
-    {
+    if relative && let ModuleSource::Local { path: from_path } = from_module {
         let resolved =
-            resolve_local_identity(&entry_dir_of(entry_module), from_path, import_source);
+            resolve_local_identity(&entry_dir_of(entry_module), Some(from_path), import_source);
         // If this resolves to the entry module's canonical name, return the
         // entry ModuleSource to maintain a single type identity.
         if let Some(entry) = entry_module {
@@ -1666,12 +1689,8 @@ pub fn resolve_import_with_entry(
         return interner.local(&resolved);
     }
 
-    // Entry imports canonicalize against the entry dir, mirroring the loader.
     if matches!(from_module, ModuleSource::EntryPoint { .. }) {
-        let resolved = canonical_local_path(
-            &entry_dir_of(entry_module),
-            &normalize_module_path(import_source),
-        );
+        let resolved = resolve_local_identity(&entry_dir_of(entry_module), None, import_source);
         return interner.local(&resolved);
     }
 
@@ -1718,18 +1737,6 @@ pub fn filesystem_to_module_path(project_root: &str, file_path: &str) -> Option<
         Some(relative.to_string())
     } else {
         Some(format!("./{relative}"))
-    }
-}
-
-/// Get the parent directory of a path.
-///
-/// Given `./sub/file.wado`, returns `./sub`.
-/// Given `./file.wado`, returns `.`.
-/// Given `file.wado`, returns empty string.
-fn get_parent_path(path: &str) -> &str {
-    match path.rfind('/') {
-        Some(pos) => &path[..pos],
-        None => "",
     }
 }
 
@@ -2111,6 +2118,12 @@ pub fn mangle_local_method(struct_name: &str, method_name: &str) -> String {
     format!("{struct_name}::{method_name}")
 }
 
+/// The owner and member of a [`mangle_local_method`] name; `None` for a bare one.
+#[must_use]
+pub fn split_local_method(name: &str) -> Option<(&str, &str)> {
+    name.rsplit_once("::")
+}
+
 /// Build a local method name with trait from struct name, trait name, and method name.
 ///
 /// Examples:
@@ -2479,6 +2492,35 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_against_a_uri_or_root() {
+        assert_eq!(
+            resolve_module_path("file:///abs/gen/x.wado", "./h.wado"),
+            "file:///abs/gen/h.wado"
+        );
+        assert_eq!(
+            resolve_module_path("https://host/a/b.wado", "../c.wado"),
+            "https://host/c.wado"
+        );
+        assert_eq!(
+            resolve_module_path("kiln:/abs/gen/x.wado", "../h.wado"),
+            "kiln:/abs/h.wado"
+        );
+        assert_eq!(
+            resolve_module_path("core:json/value.wado", "./parse.wado"),
+            "core:json/parse.wado"
+        );
+        assert_eq!(
+            resolve_module_path("https://host:8080", "./c.wado"),
+            "https://host:8080/c.wado"
+        );
+        assert_eq!(resolve_module_path("/x.wado", "./c.wado"), "/c.wado");
+        assert_eq!(
+            resolve_module_path("C:/a/x.wado", "./c.wado"),
+            "C:/a/c.wado"
+        );
+    }
+
+    #[test]
     fn test_resolve_special_prefixes() {
         // Special prefixes should pass through unchanged
         assert_eq!(
@@ -2528,10 +2570,10 @@ mod tests {
     }
 
     #[test]
-    fn test_get_parent_path() {
-        assert_eq!(get_parent_path("./sub/file.wado"), "./sub");
-        assert_eq!(get_parent_path("./file.wado"), ".");
-        assert_eq!(get_parent_path("file.wado"), "");
+    fn test_module_parent_dir() {
+        assert_eq!(module_parent_dir("./sub/file.wado"), "./sub");
+        assert_eq!(module_parent_dir("./file.wado"), ".");
+        assert_eq!(module_parent_dir("file.wado"), "");
     }
 
     #[test]

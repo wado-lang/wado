@@ -416,12 +416,10 @@ fn build_copy_return_expr(
     // `StructLiteral` arm rejects with a hard panic. Falling through to identity
     // keeps a stray non-monomorphized template wrapper safe; the shapes that do
     // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    let list_name = type_table
-        .borrow()
-        .compiler_struct_name(CompilerItem::List)
-        .to_string();
     if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table.borrow().def_name(*def) == list_name
+        && type_table
+            .borrow()
+            .is_compiler_item(*def, CompilerItem::List)
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -503,16 +501,10 @@ fn is_synth_safe_element(
             if TypeTable::is_tuple_type(name) {
                 return true;
             }
-            let (list_name, string_name, box_name) = {
-                let tt = type_table.borrow();
-                let items = tt.compiler_items();
-                (
-                    items.struct_name(CompilerItem::List).to_string(),
-                    items.struct_name(CompilerItem::String).to_string(),
-                    items.struct_name(CompilerItem::Box).to_string(),
-                )
-            };
-            if *name == list_name || *name == string_name || *name == box_name {
+            if [CompilerItem::List, CompilerItem::String, CompilerItem::Box]
+                .into_iter()
+                .any(|item| type_table.borrow().is_compiler_item(def, item))
+            {
                 return true;
             }
             // A concrete monomorphised struct entry is the strongest

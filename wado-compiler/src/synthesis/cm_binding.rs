@@ -440,7 +440,7 @@ fn unresolvable_record_in_payload(
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
     if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
-        && tt.def_name(*def) == "Result"
+        && tt.is_compiler_item(*def, CompilerItem::Result)
     {
         return type_args
             .clone()

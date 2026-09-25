@@ -1,7 +1,7 @@
 //! The names a WIT or `WebIDL` identifier takes in Wado and at the CM boundary.
 
 use heck::{ToKebabCase, ToSnakeCase, ToUpperCamelCase};
-use wado_compiler::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
+pub use wado_compiler::name::wado_identifier as to_wado_identifier;
 
 /// Convert WIT kebab-case to Wado `snake_case` for function/field names
 #[must_use]
@@ -19,22 +19,6 @@ pub fn to_upper_camel_case(name: &str) -> String {
 #[must_use]
 pub fn to_kebab_case(name: &str) -> String {
     name.to_kebab_case()
-}
-
-/// Convert a `WebIDL` identifier to a Wado `snake_case` name the parser takes
-/// as a name: a keyword it does not (`match`, `self`) gets a trailing `_`.
-#[must_use]
-pub fn to_wado_identifier(name: &str) -> String {
-    let snake = name.to_snake_case();
-    let keyword = KEYWORDS
-        .iter()
-        .chain(CONTEXTUAL_KEYWORDS)
-        .any(|(keyword, _)| *keyword == snake);
-    if keyword && !NAME_KEYWORDS.contains(&snake.as_str()) {
-        format!("{snake}_")
-    } else {
-        snake
-    }
 }
 
 #[cfg(test)]

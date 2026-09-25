@@ -18,6 +18,7 @@
 //! published version is immutable, so a present cache file is reused without a
 //! re-pull, and every project shares one copy.
 
+use wado_compiler::path::is_cwd_relative;
 use wado_manifest::Manifest;
 
 use crate::cache::{component_path, write_atomic};
@@ -359,11 +360,7 @@ fn parse_inline_dep(
 /// registry. `lib:` is included: it is reserved but registry-resolvable via an
 /// alias.
 fn classify_specifier(spec: &str) -> Option<(&str, &str, Option<&str>)> {
-    if spec.starts_with("./")
-        || spec.starts_with("../")
-        || spec.starts_with("http://")
-        || spec.starts_with("https://")
-    {
+    if is_cwd_relative(spec) || spec.starts_with("http://") || spec.starts_with("https://") {
         return None;
     }
     let (head, version) = match spec.split_once('@') {

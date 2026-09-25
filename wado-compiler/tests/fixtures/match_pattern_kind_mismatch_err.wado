@@ -1,0 +1,50 @@
+// A literal pattern or range bound of another kind than the scrutinee is a
+// type error, and coverage reads nothing from it.
+enum Color { Red, Green }
+
+fn case_column(c: Color) -> i32 {
+    return match c { Red => 1, 0 => 2, _ => 3 };
+}
+
+fn bool_column(b: bool) -> i32 {
+    return match b { true => 1, 'x' => 2, _ => 3 };
+}
+
+fn tuple_column(t: [i32, i32]) -> i32 {
+    return match t { [1, 2] => 1, 5 => 2, _ => 3 };
+}
+
+fn float_column(x: f64) -> i32 {
+    return match x { 1 => 1, _ => 2 };
+}
+
+fn char_column(c: char) -> i32 {
+    return match c { b'a' => 1, 97 => 2, 1..=5 => 3, _ => 4 };
+}
+
+fn string_column(s: String) -> i32 {
+    return match s { 1 => 1, _ => 2 };
+}
+
+fn int_column(x: i32) -> i32 {
+    return match x { 'a'..='z' => 1, _ => 2 };
+}
+
+export fn run() {
+    let _ = case_column(Color::Red) + bool_column(true) + tuple_column([1, 2]);
+    let _ = float_column(1.0) + char_column('a') + string_column("s") + int_column(1);
+}
+
+__DATA__
+{
+  "compile_error": ":6:32: analysis error: pattern mismatch: expected 'an integer type', found 'Color'",
+  "compile_errors_contains": [
+    "expected 'char', found 'bool'",
+    "expected 'an integer type', found '[i32, i32]'",
+    "expected 'an integer type', found 'f64'",
+    "expected 'an integer type', found 'char'",
+    "expected 'an integer type', found 'String'",
+    "expected 'char', found 'i32'"
+  ],
+  "compile_errors_not_contains": ["unreachable arm", "non-exhaustive", "overlapping"]
+}

@@ -1,0 +1,43 @@
+// A handler method may leave out `self`: the dispatch closure calls it
+// statically instead of passing the handler as its first argument.
+
+interface Greeting {
+    fn hello(name: String) -> String;
+}
+
+struct Polite {}
+
+impl Greeting for Polite {
+    fn hello(name: String) -> String {
+        resume `good day, ${name}`
+    }
+}
+
+struct Holder<T> {
+    payload: T,
+}
+
+impl<T> Greeting for Holder<T> {
+    fn hello(name: String) -> String {
+        resume `hi ${name}`
+    }
+}
+
+test "a concrete handler method without a receiver" {
+    let mut p = Polite {};
+    let s = with Greeting => &mut p do {
+        Greeting::hello("x");
+    };
+    assert s == "good day, x";
+}
+
+test "a generic handler method without a receiver" {
+    let h = Holder { payload: 1 };
+    let s = with Greeting => &h do {
+        Greeting::hello("y");
+    };
+    assert s == "hi y";
+}
+
+__DATA__
+{"test": {}}

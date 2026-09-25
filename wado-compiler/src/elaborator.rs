@@ -50,7 +50,9 @@ use tysys::TypeSystem;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
+use crate::ast::{
+    self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
+};
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
@@ -89,6 +91,19 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
         }
     }
     index
+}
+
+/// Reports a default naming a later parameter, in every generic-parameter
+/// list an item declares. A body's local items are checked where it is walked.
+struct ForwardDefaults<'e, 'a, H: CompilerHost>(&'e mut Elaborator<'a, H>);
+
+impl<H: CompilerHost> AstVisitor for ForwardDefaults<'_, '_, H> {
+    fn visit_generic_params(&mut self, params: &[ast::GenericParam]) {
+        self.0.report_forward_type_param_defaults(params);
+        ast::walk_generic_params(self, params);
+    }
+
+    fn visit_block(&mut self, _: &ast::Block) {}
 }
 
 /// The sentence every `#[unavailable]` declaration in the program reports,
@@ -1471,12 +1486,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 | ast::UseItem::Wildcard
                 | ast::UseItem::Namespace { .. } => None,
             });
-            if let Some(first) = interfaces.next() {
-                // `entry` must be threaded so identities match the loader
-                // (see `name::resolve_local_identity`). Wasm-asset imports
-                // resolve to `ModuleSource::Wasm`, matching the loader.
-                let source =
-                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations);
+            if let Some(first) = interfaces.next()
+                && let Some(source) =
+                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations)
+            {
                 for interface_name in std::iter::once(first).chain(interfaces) {
                     sources.insert(interface_name.clone(), source.clone());
                 }
@@ -1681,9 +1694,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
+    fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
+        if let Some(sym) = self.symbols.lookup_in_module(source, name) {
+            self.record_reference_to_def(site, sym.defined_at);
+        }
+    }
+
     /// Record use→def edges for each imported name in `use { a, b as c } from "..."`
-    /// declarations. The cursor landing on an imported name inside a `use`
-    /// specifier list should jump to the defining symbol in the source module.
+    /// declarations, so the cursor on one jumps to its definition.
     fn record_use_specifier_references(&mut self, module: &Module) {
         for item in &module.items {
             let Item::Use(use_decl) = item else { continue };
@@ -1697,13 +1715,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for use_item in &use_decl.items {
                 match use_item {
                     ast::UseItem::Simple { id, name, .. } => {
-                        if let Some(sym) = self.symbols.lookup_in_module(&source, name) {
-                            self.record_reference_to_def(*id, sym.defined_at);
+                        self.record_use_reference(&source, *id, name);
+                    }
+                    ast::UseItem::InterfaceFunctions {
+                        id,
+                        interface_name,
+                        functions,
+                        ..
+                    } => {
+                        self.record_use_reference(&source, *id, interface_name);
+                        for function in functions {
+                            let member = name::mangle_local_method(interface_name, &function.name);
+                            self.record_use_reference(&source, function.id, &member);
                         }
                     }
-                    ast::UseItem::InterfaceFunctions { .. }
-                    | ast::UseItem::Wildcard
-                    | ast::UseItem::Namespace { .. } => {}
+                    ast::UseItem::Wildcard | ast::UseItem::Namespace { .. } => {}
                 }
             }
         }
@@ -1909,6 +1935,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut test_count = 0usize;
         for item in &module.items {
+            ForwardDefaults(self).visit_item(item);
+            if let Item::Struct(ast::StructDecl { id, .. })
+            | Item::Variant(ast::VariantDecl { id, .. })
+            | Item::Newtype(ast::Newtype { id, .. }) = item
+                && let Some(def) = self.tysys.resolutions.defs().of_ast_id(*id)
+            {
+                self.type_param_defaults_are_ordered(def);
+            }
             match item {
                 Item::Function(func) => {
                     self.resolve_function(func);

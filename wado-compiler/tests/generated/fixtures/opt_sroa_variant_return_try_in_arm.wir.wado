@@ -1286,32 +1286,32 @@ fn "core:prelude/fpfmt.wado/big_mul_add"(n, factor, addend) {
     let carry: u64;
     let k: i32;
     let v: u64;
-    let value_25: u32;
+    let value_26: u32;
     let used: i32;
-    let $licm_used_31: i32;
-    let $licm_repr_32: ref Array<u32>;
+    let $licm_used_32: i32;
+    let $licm_repr_33: ref Array<u32>;
     carry = builtin::i64_extend_i32_u(addend);
     k = 0;
-    $licm_used_31 = local.tee $load_0(n.used);
-    $licm_repr_32 = local.tee $load_1(n.repr);
+    $licm_used_32 = local.tee $load_0(n.used);
+    $licm_repr_33 = local.tee $load_1(n.repr);
     b111: block {
         l112: loop {
-            break_if b111 k >= $licm_used_31;
-            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_32, k)) * builtin::i64_extend_i32_u(factor)) + carry;
-            builtin::array_set<u32>($licm_repr_32, k, builtin::i32_wrap_i64(v));
+            break_if b111 k >= $licm_used_32;
+            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * builtin::i64_extend_i32_u(factor)) + carry;
+            builtin::array_set<u32>($licm_repr_33, k, builtin::i32_wrap_i64(v));
             carry = v >>u 32_i64;
             k = k + 1;
             continue l112;
         };
     };
     if carry != 0_i64 {
-        value_25 = builtin::i32_wrap_i64(carry);
+        value_26 = builtin::i32_wrap_i64(carry);
         used = $load_0;
         if @unlikely(used >= builtin::array_len($load_1)) {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(n);
         }
-        builtin::array_set<u32>(n.repr, used, value_25);
+        builtin::array_set<u32>(n.repr, used, value_26);
         n.used = used + 1;
     }
 }

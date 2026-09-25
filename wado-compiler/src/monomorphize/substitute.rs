@@ -4,6 +4,7 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
@@ -107,17 +108,17 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = type_table.def_name(def).to_string();
+                let is_tuple = TypeTable::is_tuple_type(type_table.def_name(def));
                 // Skip List and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
-                if name == "List" || TypeTable::is_tuple_type(&name) {
+                if is_tuple || type_table.is_compiler_item(def, CompilerItem::List) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
                         .collect();
                     return if new_args == type_args {
                         type_id
-                    } else if TypeTable::is_tuple_type(&name) {
+                    } else if is_tuple {
                         type_table.make_tuple(new_args)
                     } else {
                         type_table.make_generic_instance(def, new_args)
@@ -150,7 +151,7 @@ impl Monomorphizer {
 
                 // Skip List - it has special codegen handling and should not be
                 // monomorphized as a regular struct
-                if name == "List" {
+                if type_table.is_compiler_item(*def, CompilerItem::List) {
                     continue;
                 }
 
