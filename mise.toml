@@ -795,7 +795,7 @@ run = """
 #!/usr/bin/env bash
 set -e -o pipefail
 example/web-browser/build.sh
-cd example/web-browser && python3 -m http.server 8089 --bind 127.0.0.1
+cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8089 --dir example/web-browser example/static_server.wado
 """
 
 
@@ -872,7 +872,7 @@ tar tzf "$OUT"
 
 [tasks.playground-web-serve]
 description = "Serve the browser playground on http://127.0.0.1:8088 (run playground-web-build first)"
-run = "cd wado-playground/web && python3 -m http.server 8088"
+run = "cargo run -q -p wado-cli -- serve --addr 127.0.0.1:8088 --dir wado-playground/web example/static_server.wado"
 
 [tasks.playground-web-test]
 description = "Browser smoke test for the playground (installs playwright-core; needs Chromium 137+)"

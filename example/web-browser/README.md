@@ -13,3 +13,11 @@ wado test                   # run its tests against SurfaceDom
 `build.sh` compiles the program, transpiles it with jco, and bundles it with
 jco's browser shims into `build/app.js`, which `index.html` loads. The browser
 needs JSPI and Wasm GC, as Chromium 137 and later have.
+
+The demo serves this directory with `wado serve` and
+`example/static_server.wado`, a static file server written in Wado. From the
+repository root:
+
+```sh
+wado serve --addr 127.0.0.1:8089 --dir example/web-browser example/static_server.wado
+```
