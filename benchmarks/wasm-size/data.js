@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790332233068,
+  "lastUpdate": 1790336119371,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59736,6 +59736,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19231,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "014361be8a2d7ac51bf76fb508ac26be50dd6d40",
+          "message": "Merge pull request #2159 from wado-lang/claude/protobuf-codegen-grog-nabnby\n\nfeat(grog): generate Wado declarations from .proto schemas; core:protobuf encodes sint/fixed, enums and implicit presence",
+          "timestamp": "2026-09-25T20:10:18+09:00",
+          "tree_id": "842299ce04e151dbfa14e3d223acaeb78f6314d4",
+          "url": "https://github.com/wado-lang/wado/commit/014361be8a2d7ac51bf76fb508ac26be50dd6d40"
+        },
+        "date": 1790336118638,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
             "unit": "bytes"
           },
           {
