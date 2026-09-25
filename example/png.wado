@@ -1,0 +1,284 @@
+//! PNG encoding and inline terminal display, shared by the image examples
+//! (`fractal.wado`, `raytracer.wado`).
+//!
+//! The encoder writes 8-bit truecolor PNG (ISO/IEC 15948). Each scanline gets
+//! the filter that minimizes the sum of absolute differences, as libpng does;
+//! `core:zlib` compresses the filtered stream and supplies the chunk CRC-32.
+//!
+//! `show` puts the image on the terminal through one of three protocols:
+//! the Kitty graphics protocol, the iTerm2 inline image protocol (iTerm2,
+//! WezTerm, VS Code), or 24-bit ANSI colour on `▀` half blocks, which any
+//! truecolor terminal renders.
+
+use { print, env, Stdout, Environment } from "core:cli";
+use { TerminalStdout } from "wasi:cli";
+use { crc32, crc32_init, zlib_compress, inflate_zlib, Z_BEST_COMPRESSION } from "core:zlib";
+use base64 from "core:base64";
+
+/// An 8-bit RGB raster, rows top to bottom.
+pub struct Image {
+    pub width: i32,
+    pub height: i32,
+    pub rgb: ByteList,
+}
+
+impl Image {
+    pub fn new(width: i32, height: i32) -> Image {
+        return Image { width, height, rgb: ByteList::filled(width * height * 3, 0) };
+    }
+
+    pub fn set(&mut self, x: i32, y: i32, rgb: [f64, f64, f64]) {
+        let i = (y * self.width + x) * 3;
+        self.rgb[i] = to_channel(rgb.0);
+        self.rgb[i + 1] = to_channel(rgb.1);
+        self.rgb[i + 2] = to_channel(rgb.2);
+    }
+
+    fn channel(&self, x: i32, y: i32, c: i32) -> i32 {
+        return self.rgb[(y * self.width + x) * 3 + c] as i32;
+    }
+}
+
+/// Maps a linear 0..1 intensity to a byte, clamping out-of-range values.
+fn to_channel(v: f64) -> u8 {
+    return f64::clamp(v * 255.0 + 0.5, 0.0, 255.0) as u8;
+}
+
+global PNG_SIGNATURE: ByteList = b"\x89PNG\r\n\x1a\n";
+
+fn push_u32_be(out: &mut ByteList, v: u32) {
+    out.push((v >> 24) as u8);
+    out.push((v >> 16) as u8);
+    out.push((v >> 8) as u8);
+    out.push(v as u8);
+}
+
+fn push_chunk(out: &mut ByteList, kind: ByteList, data: &ByteList) {
+    push_u32_be(out, data.len() as u32);
+    let start = out.len();
+    out.extend(&kind);
+    out.extend(data);
+    push_u32_be(out, crc32(crc32_init(), out, start, out.len() - start));
+}
+
+fn paeth(a: i32, b: i32, c: i32) -> i32 {
+    let pa = if b > c { b - c } else { c - b };
+    let pb = if a > c { a - c } else { c - a };
+    let pc = if a + b > c + c { a + b - c - c } else { c + c - a - b };
+    if pa <= pb && pa <= pc {
+        return a;
+    }
+    if pb <= pc {
+        return b;
+    }
+    return c;
+}
+
+/// The predictor filter `kind` (0 None, 1 Sub, 2 Up, 3 Average, 4 Paeth)
+/// applied to byte `i` of scanline `y`.
+fn filtered(img: &Image, y: i32, i: i32, kind: i32) -> u8 {
+    let stride = img.width * 3;
+    let row = y * stride;
+    let x = img.rgb[row + i] as i32;
+    let a = if i >= 3 { img.rgb[row + i - 3] as i32 } else { 0 };
+    let b = if y > 0 { img.rgb[row - stride + i] as i32 } else { 0 };
+    let c = if y > 0 && i >= 3 { img.rgb[row - stride + i - 3] as i32 } else { 0 };
+    let predicted = match kind {
+        0 => 0,
+        1 => a,
+        2 => b,
+        3 => (a + b) / 2,
+        _ => paeth(a, b, c),
+    };
+    return (x - predicted) as u8;
+}
+
+/// The filter a scanline compresses best under, by libpng's heuristic: the
+/// smallest sum of residuals read as signed bytes.
+fn best_filter(img: &Image, y: i32) -> i32 {
+    let mut best = 0;
+    let mut best_cost = i32::MAX;
+    for let kind of 0..<5 {
+        let mut cost = 0;
+        for let i of 0..<img.width * 3 {
+            let r = filtered(img, y, i, kind) as i32;
+            cost += if r < 128 { r } else { 256 - r };
+        }
+        if cost < best_cost {
+            best = kind;
+            best_cost = cost;
+        }
+    }
+    return best;
+}
+
+/// Encodes `img` as a PNG file.
+pub fn encode(img: &Image) -> ByteList {
+    let mut ihdr: ByteList = [];
+    push_u32_be(&mut ihdr, img.width as u32);
+    push_u32_be(&mut ihdr, img.height as u32);
+    ihdr.extend(&[8, 2, 0, 0, 0]);  // bit depth 8, truecolor, deflate, adaptive, no interlace
+
+    let stride = img.width * 3;
+    let mut scanlines = ByteList::with_capacity((stride + 1) * img.height);
+    for let y of 0..<img.height {
+        let kind = best_filter(img, y);
+        scanlines.push(kind as u8);
+        for let i of 0..<stride {
+            scanlines.push(filtered(img, y, i, kind));
+        }
+    }
+
+    let mut out = PNG_SIGNATURE;
+    push_chunk(&mut out, b"IHDR", &ihdr);
+    push_chunk(&mut out, b"IDAT", &zlib_compress(&scanlines, Z_BEST_COMPRESSION));
+    push_chunk(&mut out, b"IEND", &[]);
+    return out;
+}
+
+/// How `show` puts an image on the terminal.
+#[wire(name_policy = "kebab-case")]
+pub enum View {
+    Auto,
+    Kitty,
+    Iterm,
+    Ansi,
+    Off,
+}
+
+/// The protocol the terminal running us speaks, read from the variables each
+/// terminal sets; `Off` when stdout is not a terminal.
+fn detect() -> View with (Environment, TerminalStdout) {
+    if TerminalStdout::get_terminal_stdout() matches { None } {
+        return Off;
+    }
+    let term = env("TERM").unwrap_or("");
+    let program = env("TERM_PROGRAM").unwrap_or("");
+    if env("KITTY_WINDOW_ID") matches { Some(_) } || term.contains("kitty") || program == "ghostty" {
+        return Kitty;
+    }
+    if program == "iTerm.app" || program == "WezTerm" || program == "vscode" {
+        return Iterm;
+    }
+    return Ansi;
+}
+
+/// Displays `img`, whose encoding is `png`, inline on the terminal. The ANSI
+/// fallback scales the image to fit `columns` character cells.
+pub fn show(img: &Image, png: &ByteList, view: View, columns: i32) with (Stdout, Environment, TerminalStdout) {
+    let resolved = if view matches { Auto } { detect() } else { view };
+    match resolved {
+        Kitty => print(kitty_escape(png)),
+        Iterm => print(iterm_escape(png)),
+        Ansi => print(ansi_blocks(img, columns)),
+        _ => {
+        },
+    }
+}
+
+/// The Kitty graphics protocol: transmit-and-display (`a=T`) a PNG
+/// (`f=100`), base64 in chunks of at most 4096 bytes, `m=1` on all but the last.
+fn kitty_escape(png: &ByteList) -> String {
+    let payload = base64::encode(png);
+    let mut out = String::with_capacity(payload.len() + payload.len() / 4096 * 16 + 32);
+    let mut pos = 0;
+    while pos < payload.len() {
+        let end = i32::min(pos + 4096, payload.len());
+        let more = if end < payload.len() { 1 } else { 0 };
+        let control = if pos == 0 { `a=T,f=100,m=${more}` } else { `m=${more}` };
+        out.push_str(`\u{1b}_G${control};${payload.substr_bytes(pos, end)}\u{1b}\\`);
+        pos = end;
+    }
+    out.push_str("\n");
+    return out;
+}
+
+/// The iTerm2 inline image protocol (OSC 1337), which WezTerm and VS Code
+/// also read.
+fn iterm_escape(png: &ByteList) -> String {
+    return `\u{1b}]1337;File=inline=1;size=${png.len()};preserveAspectRatio=1:${base64::encode(png)}\u{7}\n`;
+}
+
+/// The mean of channel `c` over the box `[x0, x1) × [y0, y1)`.
+fn box_mean(img: &Image, x0: i32, x1: i32, y0: i32, y1: i32, c: i32) -> i32 {
+    let mut sum = 0;
+    for let y of y0..<y1 {
+        for let x of x0..<x1 {
+            sum += img.channel(x, y, c);
+        }
+    }
+    return sum / ((x1 - x0) * (y1 - y0));
+}
+
+/// The image as rows of `▀`, each cell painting its upper pixel in the
+/// foreground colour and its lower pixel in the background colour.
+fn ansi_blocks(img: &Image, columns: i32) -> String {
+    let cols = i32::min(columns, img.width);
+    // A character cell is about twice as tall as it is wide, and holds two rows.
+    let rows = i32::max(1, img.height * cols / img.width / 2);
+    let mut out = String::with_capacity(rows * cols * 40);
+    for let row of 0..<rows {
+        for let col of 0..<cols {
+            let x0 = col * img.width / cols;
+            let x1 = i32::max(x0 + 1, (col + 1) * img.width / cols);
+            let top = row * 2 * img.height / (rows * 2);
+            let mid = i32::max(top + 1, (row * 2 + 1) * img.height / (rows * 2));
+            let bottom = i32::max(mid + 1, (row + 1) * 2 * img.height / (rows * 2));
+            let bottom = i32::min(bottom, img.height);
+            let fg = `${box_mean(img, x0, x1, top, mid, 0)};${box_mean(img, x0, x1, top, mid, 1)};${box_mean(
+                img,
+                x0,
+                x1,
+                top,
+                mid,
+                2,
+            )}`;
+            let bg = if mid < bottom {
+                `${box_mean(img, x0, x1, mid, bottom, 0)};${box_mean(img, x0, x1, mid, bottom, 1)};${box_mean(
+                    img,
+                    x0,
+                    x1,
+                    mid,
+                    bottom,
+                    2,
+                )}`;
+            } else {
+                "0;0;0";
+            };
+            out.push_str(`\u{1b}[38;2;${fg}m\u{1b}[48;2;${bg}m▀`);
+        }
+        out.push_str("\u{1b}[0m\n");
+    }
+    return out;
+}
+
+test "encode writes a well-formed PNG" {
+    let mut img = Image::new(2, 2);
+    img.set(0, 0, [1.0, 0.0, 0.0]);
+    img.set(1, 1, [0.0, 0.0, 1.0]);
+    let png = encode(&img);
+    assert png.len() > 8 + 25 + 12 + 12;
+
+    // IHDR carries the size; IDAT inflates back to 2 filtered scanlines.
+    assert png[8 + 4 + 4 + 3] == 2;
+    assert png[8 + 4 + 4 + 7] == 2;
+    let idat_len = png[33] as i32 << 24 | png[34] as i32 << 16 | png[35] as i32 << 8 | png[36] as i32;
+    let mut idat: ByteList = [];
+    for let i of 41..<41 + idat_len {
+        idat.push(png[i]);
+    }
+    assert inflate_zlib(&idat) matches { Ok(raw) && raw.len() == 2 * (1 + 2 * 3) };
+}
+
+test "the paeth predictor picks the nearest neighbour" {
+    assert paeth(10, 20, 10) == 20;
+    assert paeth(20, 10, 10) == 20;
+    assert paeth(10, 10, 30) == 10;
+}
+
+test "ansi blocks paint two pixel rows per text row" {
+    let mut img = Image::new(1, 2);
+    img.set(0, 0, [1.0, 0.0, 0.0]);
+    img.set(0, 1, [0.0, 0.0, 1.0]);
+    assert ansi_blocks(&img, 80) == "\u{1b}[38;2;255;0;0m\u{1b}[48;2;0;0;255m▀\u{1b}[0m\n";
+}
