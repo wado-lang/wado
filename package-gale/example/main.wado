@@ -14,12 +14,12 @@ use { eval as eval_logic } from "./logic.wado";
 
 export fn run() with (Stdout, Stderr, Environment, Exit) {
     let arguments = args();
-    if arguments.len() != 3 {
+    if arguments.len() != 2 {
         usage();
         exit(1);
     }
-    let command = &arguments[1];
-    let expr = &arguments[2];
+    let command = &arguments[0];
+    let expr = &arguments[1];
     let result = match *command {
         "arith" => eval_arith(expr),
         "logic" => eval_logic(expr),

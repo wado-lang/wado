@@ -1,10 +1,10 @@
-// args() starts with the program name, which the test harness sets.
+// The test harness names the program and passes no arguments.
 
-use { println, args, Stdout, Environment } from "core:cli";
+use { println, args, program_name, Stdout, Environment } from "core:cli";
 
 export fn run() with (Stdout, Environment) {
-    println(`${args():?}`);
+    println(`${program_name():?} ${args():?}`);
 }
 
 __DATA__
-{"stdout": "[\"fixture.wasm\"]\n"}
+{"stdout": "Option::Some(\"fixture.wasm\") []\n"}

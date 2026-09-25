@@ -83,8 +83,8 @@ pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment; // w
 ```
 
 `parse` takes the arguments directly, so tests and subcommand dispatch inject a
-`List<String>` (bpaf's `run_inner` vs `run`). It takes them without the program
-name. `core:cli::args()` starts with that name, and `from_env` drops it.
+`List<String>` (bpaf's `run_inner` vs `run`). Neither sees the program name:
+`core:cli::args()` leaves it to `core:cli::program_name()`.
 
 ### Object Mapping
 

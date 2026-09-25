@@ -663,7 +663,7 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
     return Result::Ok(r?);
 }
 
-/// Parse the process arguments after the program name (`core:cli::args()`) into `T`.
+/// Parse the process arguments (`core:cli::args()`) into `T`.
 pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment {
-    return parse::<T>(args().into_iter().skip(1).collect());
+    return parse::<T>(args());
 }

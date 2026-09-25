@@ -22,11 +22,11 @@ struct Vocabulary {
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let arguments = args();
-    if arguments.len() != 2 {
+    if arguments.len() != 1 {
         eprintln("usage: gen_vocabulary <wado-syntax.json>");
         exit(1);
     }
-    let json = match fs::read_to_string(&arguments[1]) {
+    let json = match fs::read_to_string(&arguments[0]) {
         Ok(text) => text,
         Err(e) => {
             eprintln(`gen_vocabulary: ${e}`);

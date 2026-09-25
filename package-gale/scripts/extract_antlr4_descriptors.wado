@@ -1396,7 +1396,7 @@ fn parse_cli_args(arguments: List<String>) -> Result<CliArgs, String> {
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let cli = match parse_cli_args(args().into_iter().skip(1).collect()) {
+    let cli = match parse_cli_args(args()) {
         Ok(c) => c,
         Err(msg) => {
             eprintln(msg);

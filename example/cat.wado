@@ -17,7 +17,7 @@ use { Stdin } from "wasi:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Stdin) {
-    let paths = args().into_iter().skip(1).collect();
+    let paths = args();
 
     if paths.is_empty() {
         // No arguments: read from stdin and write to stdout

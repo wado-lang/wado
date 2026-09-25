@@ -10,7 +10,7 @@ WASI CLI interfaces, use `wasi:cli` directly.
 
 ```wado
 println("Hello, Wado!");
-for let arg of args().into_iter().skip(1) {
+for let arg of args() {
     println(`arg: ${arg}`);
 }
 if let Some(home) = env("HOME") {
@@ -50,8 +50,12 @@ Returns the value of an environment variable by name.
 
 ### `pub fn args() -> List<String> with Environment`
 
-The command line: the program name, then its arguments. A runner that
-starts the program (`wado run`) is not part of it.
+The command-line arguments, after the program name.
+
+### `pub fn program_name() -> Option<String> with Environment`
+
+The name the program was started as, such as the path `wado run` was given,
+never the runner. None when the host gives no command line.
 
 ### `pub fn cwd() -> Option<String> with Environment`
 

@@ -642,9 +642,10 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
-/// `args()` starts with the program `wado run` was given, never `wado` itself.
+/// The program name is what `wado run` was given, never `wado` itself, and
+/// `args()` holds what follows it.
 #[test]
-fn test_run_args_start_with_the_program() {
+fn test_run_program_name_and_args() {
     wado()
         .args([
             "run",
@@ -655,7 +656,10 @@ fn test_run_args_start_with_the_program() {
         ])
         .assert()
         .success()
-        .stdout(r#"["wado-cli/tests/fixtures/run_args.wado", "-x", "y"]"#.to_owned() + "\n");
+        .stdout(
+            r#"Option::Some("wado-cli/tests/fixtures/run_args.wado") ["-x", "y"]"#.to_owned()
+                + "\n",
+        );
 }
 
 /// `example/cat.wado` prints every file it is given, in order, and not itself.

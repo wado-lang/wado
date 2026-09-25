@@ -546,15 +546,15 @@ fn load_docs() -> List<String> with (Stderr, Preopens) {
 
 fn requested_steps() -> i32 with (Stderr, Environment) {
     let arguments = args();
-    if arguments.len() < 2 {
+    if arguments.is_empty() {
         return NUM_STEPS;
     }
-    match i32::from_str(&arguments[1]) {
+    match i32::from_str(&arguments[0]) {
         Ok(n) && n > 0 => {
             return n;
         },
         _ => {
-            eprintln(`microgpt: ignoring invalid step count: ${arguments[1]}`);
+            eprintln(`microgpt: ignoring invalid step count: ${arguments[0]}`);
             return NUM_STEPS;
         },
     }

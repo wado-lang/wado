@@ -1641,17 +1641,17 @@ eq_constant_time(&mac, &expected);   // any AsByteSlice: ByteList, String, …
 
 ### core:cli
 
-`println` / `eprintln` / `print` / `eprint`, `args`, `env`, `cwd`,
+`println` / `eprintln` / `print` / `eprint`, `args`, `program_name`, `env`, `cwd`,
 `exit`; `log_stdout` / `log_stderr` print with no effect. See
 [`core:cli`](./stdlib-core-cli.md).
 
 ```wado
 use { println, eprintln, print, eprint, Stdout, Stderr } from "core:cli";
-use { args, env } from "core:cli";
+use { args, program_name, env } from "core:cli";
 
 println("hello");
-// The program name, then its arguments; never the runner (`wado run`)
-for let arg of args().into_iter().skip(1) { println(`arg: ${arg}`); }
+for let arg of args() { println(`arg: ${arg}`); }   // what follows the program name
+program_name();   // Some("app.wado") under `wado run app.wado`, never the runner
 if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ```
 
