@@ -6,6 +6,8 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::ast::{AttrEntry, AttrObject, AttrValue};
+
 use super::invocation::{GeneratorModule, Invocation, InvocationPath};
 use super::options::CanonicalValue;
 use super::options_check::CanonicalOptions;
@@ -104,6 +106,62 @@ pub fn empty_options_canonical() -> Vec<u8> {
     let mut out = Vec::new();
     encode_options_table(&mut out, &[]);
     out
+}
+
+/// The options as a `use` site writes them, before a descriptor types them.
+/// Writing none encodes as [`empty_options_canonical`] does.
+#[must_use]
+pub fn encode_written_options(options: Option<&AttrValue>) -> Vec<u8> {
+    let mut out = Vec::new();
+    match options {
+        Some(AttrValue::Object(entries)) => encode_written_table(&mut out, entries),
+        Some(other) => encode_written_value(&mut out, other),
+        None => encode_options_table(&mut out, &[]),
+    }
+    out
+}
+
+fn encode_written_table(out: &mut Vec<u8>, entries: &AttrObject) {
+    let mut sorted: Vec<(&String, &AttrEntry)> = entries.iter().collect();
+    sorted.sort_by(|a, b| a.0.cmp(b.0));
+    write_len(out, sorted.len());
+    for (key, entry) in sorted {
+        write_str(out, key);
+        encode_written_value(out, &entry.value);
+    }
+}
+
+// Unvalidated, so a float may be non-finite: its bits are the encoding.
+fn encode_written_value(out: &mut Vec<u8>, v: &AttrValue) {
+    match v {
+        AttrValue::Bool(b) => {
+            out.push(0);
+            out.push(u8::from(*b));
+        }
+        AttrValue::Int(n) => {
+            out.push(1);
+            out.extend_from_slice(&n.to_le_bytes());
+        }
+        AttrValue::Float(f) => {
+            out.push(3);
+            out.extend_from_slice(&f.to_bits().to_le_bytes());
+        }
+        AttrValue::String(s) => {
+            out.push(4);
+            write_str(out, s);
+        }
+        AttrValue::Array(items) => {
+            out.push(7);
+            write_len(out, items.len());
+            for item in items {
+                encode_written_value(out, &item.value);
+            }
+        }
+        AttrValue::Object(entries) => {
+            out.push(8);
+            encode_written_table(out, entries);
+        }
+    }
 }
 
 fn write_len(out: &mut Vec<u8>, len: usize) {
