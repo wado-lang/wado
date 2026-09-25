@@ -1,5 +1,5 @@
 //! The `wado-lang:web` unrestricted-resource slice `package-web` generates from its
-//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-tide.md`.
+//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-web.md`.
 
 use crate::common::{WEB_PACKAGE, compile_against_web};
 

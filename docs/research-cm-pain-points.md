@@ -18,8 +18,8 @@ Checked against:
 
 ## A host object has no handle a GC guest can let go of
 
-Tide binds the DOM. A page hands the program the same objects again and again,
-and a program keeps them in lists, struct fields and closures. Tide therefore
+`wado-lang:web` binds the DOM. A page hands the program the same objects again and again,
+and a program keeps them in lists, struct fields and closures. The bindings therefore
 does not use CM resources for them. Each object crosses as an `f64` index into a
 table the glue owns, and nothing ever releases an entry: every object the
 program has seen stays alive for the life of the page
@@ -64,7 +64,7 @@ representation, but only to the instance that implements the resource
 (CanonicalABI.md, "`canon resource.rep`"). An importer needs a host function per
 resource type to compare two handles.
 
-Tide avoids this only because its handles are not CM resources: the glue
+The web bindings avoid this only because its handles are not CM resources: the glue
 interns each object, so one object always crosses as one number.
 
 What to report to the CM: an importer cannot tell whether two handles name the
@@ -105,7 +105,7 @@ function. The CM has no function values. Concurrency.md lists them as future
 work: "allow function closures to be passed as first-class values, supporting
 the 'callback' pattern in many pre-existing APIs, including Web APIs".
 
-[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks) encodes a closure as a
+[Web § Callbacks](./wep-2026-04-01-web.md#callbacks) encodes a closure as a
 `u32` key and exports one trampoline per argument shape for the host to call
 back through. What that costs:
 
@@ -115,14 +115,14 @@ back through. What that costs:
   serving several instances has to route each key back to its own. A function
   value would carry its instance with it.
 
-What to report to the CM: nothing new. The need is already on the list; Tide
-adds a concrete consumer and the cost of the workaround.
+What to report to the CM: nothing new. The need is already on the list; the web bindings
+add a concrete consumer and the cost of the workaround.
 
 ## Checked and not a CM gap
 
 ### Recursive reentrance
 
-[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks) records that
+[Web § Callbacks](./wep-2026-04-01-web.md#callbacks) records that
 `dispatch_event` in a browser traps, because the listener runs during the
 import call and reenters the component.
 
@@ -139,13 +139,13 @@ documented API.
   path panics instead, see "wasmtime" below.
 - jco does not yet, see "jco" below.
 
-The Tide known gap is therefore jco's, and
+The web bindings' known gap is therefore jco's, and
 [Research: Callbacks across the CM Boundary](./research-cm-boundary-callbacks.md)
 describes the rule the spec has since dropped.
 
 ### Exceptions from the host
 
-A DOM operation that throws traps in Tide ([Tide § Exceptions](./wep-2026-04-01-tide.md#exceptions)).
+A DOM operation that throws traps in the web bindings ([Web § Exceptions](./wep-2026-04-01-web.md#exceptions)).
 
 The CM has a channel for it. The JS API turns an exception thrown by a function
 whose WIT result is a `result` into that result's `error` case

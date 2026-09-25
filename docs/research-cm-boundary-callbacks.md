@@ -9,7 +9,7 @@ implementation from outside the library's OCI artifact.
 
 This note is the **guest↔guest** direction: neither end is a host, so neither
 can call the other's exports. The host↔guest direction is
-[Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+[Web § Callbacks](./wep-2026-04-01-web.md#callbacks).
 
 The engine rules below and the endpoint (first-class function values) carry
 across; the host-pump rejection does not — it is about a published artifact's
