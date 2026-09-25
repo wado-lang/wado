@@ -1185,7 +1185,7 @@ test "PlainDateTime until round-trips through add, in both directions" {
 }
 
 fn sample_date_time(s: i64) -> PlainDateTime {
-    let t = if s < 0 { -s } else { s };
+    let t = i64::abs(s);
     return PlainDateTime::new(
         PlainDate::from_epoch_days(s % 20_000 - 10_000),
         PlainTime::new((t / 7 % 24) as i32, (t / 11 % 60) as i32, (t / 13 % 60) as i32),

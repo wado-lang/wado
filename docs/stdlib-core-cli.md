@@ -50,7 +50,12 @@ Returns the value of an environment variable by name.
 
 ### `pub fn args() -> List<String> with Environment`
 
-Returns all command-line arguments.
+The command-line arguments, after the program name.
+
+### `pub fn program_name() -> Option<String> with Environment`
+
+The name the program was started as, such as the path `wado run` was given,
+never the runner. None when the host gives no command line.
 
 ### `pub fn cwd() -> Option<String> with Environment`
 

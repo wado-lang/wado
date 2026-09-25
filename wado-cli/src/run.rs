@@ -24,7 +24,7 @@ pub struct RunOptions {
     pub profile: ProfileMode,
     /// `(host_path, guest_path)` pairs from `--dir host[::guest]`.
     pub preopened_dirs: Vec<(String, String)>,
-    /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
+    /// The guest's arguments, which `get-arguments` answers after the program name.
     pub program_args: Vec<String>,
     pub runtime: RuntimeKnobs,
 }
@@ -195,13 +195,13 @@ async fn run_cli_component(
     cranelift_opt: wasmtime::OptLevel,
     profile: &ProfileMode,
     preopened_dirs: &[(String, String)],
-    program_args: &[String],
+    argv: &[String],
     runtime_knobs: RuntimeKnobs,
 ) -> Result<()> {
     let engine = runtime::create_engine(cranelift_opt, profile, runtime_knobs)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&component)?;
-    let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
+    let mut store = runtime::create_store(&engine, preopened_dirs, argv)?;
 
     let profiler = if let ProfileMode::Guest { interval_ms, .. } = profile {
         let interval = Duration::from_millis(*interval_ms);
@@ -295,13 +295,16 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
     let wasm = Box::pin(build_for_driver(&opts.input, "wasi:cli/command", &flags)).await?;
+    let argv: Vec<String> = std::iter::once(opts.input)
+        .chain(opts.program_args)
+        .collect();
 
     run_cli_component(
         &wasm,
         cranelift_opt,
         &opts.profile,
         &opts.preopened_dirs,
-        &opts.program_args,
+        &argv,
         opts.runtime,
     )
     .await

@@ -711,6 +711,7 @@ async fn worker_loop(
     engine: Engine,
     service_pre: Arc<ServicePre<WasiState>>,
     preopens: Arc<Preopens>,
+    argv: Arc<[String]>,
     mut job_rx: mpsc::Receiver<RequestJob>,
     max_inflight: usize,
     mut tick_rx: watch::Receiver<()>,
@@ -734,7 +735,7 @@ async fn worker_loop(
         // Fresh instance for this generation. Guest module-init (Wado
         // `global` initializers, e.g. a router built at startup) runs
         // here — once per generation, not once per request.
-        let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &[]);
+        let state = WasiState::new_no_inherit_env_with_preopens(&preopens, &argv);
         let mut store = Store::new(&engine, state);
         // Arm the epoch deadline. The dispatch loop refreshes it every
         // turn (see below), so a healthy worker never trips it; a guest
@@ -853,6 +854,7 @@ async fn worker_loop(
 
 async fn run_http_server(
     wasm: Vec<u8>,
+    program: &str,
     addr: &str,
     cranelift_opt: wasmtime::OptLevel,
     preopened_dirs: Vec<(String, String)>,
@@ -886,6 +888,7 @@ async fn run_http_server(
     // Open preopens once at startup; they are attached to every worker
     // generation's `WasiState`.
     let preopens = Arc::new(Preopens::open(&preopened_dirs)?);
+    let argv: Arc<[String]> = Arc::new([program.to_owned()]);
     let instance_pre = linker.instantiate_pre(&component)?;
     let service_pre = Arc::new(ServicePre::<WasiState>::new(instance_pre)?);
     drop(linker);
@@ -949,6 +952,7 @@ async fn run_http_server(
             engine.clone(),
             Arc::clone(&service_pre),
             Arc::clone(&preopens),
+            Arc::clone(&argv),
             rx,
             per_worker_inflight,
             tick_rx.clone(),
@@ -1189,6 +1193,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     });
     run_http_server(
         wasm,
+        &opts.input,
         &opts.addr,
         cranelift_opt,
         opts.preopened_dirs,
