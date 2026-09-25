@@ -1,0 +1,15 @@
+use { println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { from_env } from "core:args";
+
+struct Options {
+    #[wire(positional)]
+    input: String,
+    jobs: i32 = 1,
+}
+
+export fn run() with (Stdout, Stderr, Environment) {
+    match from_env::<Options>() {
+        Ok(o) => println(`input=${o.input} jobs=${o.jobs}`),
+        Err(e) => eprintln(`error: ${e}`),
+    }
+}

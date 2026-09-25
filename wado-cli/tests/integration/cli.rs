@@ -642,6 +642,23 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
+/// `wado run` hands the guest its arguments with no program name before them,
+/// and `core:args::from_env` parses every one.
+#[test]
+fn test_run_args_reach_from_env() {
+    wado()
+        .args([
+            "run",
+            "wado-cli/tests/fixtures/run_args_from_env.wado",
+            "--jobs",
+            "4",
+            "in.txt",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("input=in.txt jobs=4"));
+}
+
 /// A run writes the program's output and nothing else.
 #[test]
 fn test_run_announces_nothing() {

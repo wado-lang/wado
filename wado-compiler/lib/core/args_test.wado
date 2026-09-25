@@ -401,3 +401,32 @@ test "a repeated scalar option takes the last occurrence" {
     let r = parse::<ScalarOpt>(["--jobs", "1", "--jobs", "2"]);
     assert r matches { Ok(o) && o.jobs == 2 };
 }
+
+#[wire(name_policy = "kebab-case")]
+enum Shade {
+    Light,
+    DarkBlue,
+}
+
+struct EnumOpts {
+    shade: Shade = Shade::Light,
+    tint: Option<Shade> = null,
+    layer: List<Shade> = [],
+}
+impl Deserialize for EnumOpts;
+
+test "an enum option takes its value from the next token or after `=`" {
+    assert parse::<EnumOpts>(["--shade", "dark-blue"]) matches { Ok(o) && o.shade == Shade::DarkBlue };
+    assert parse::<EnumOpts>(["--shade=dark-blue"]) matches { Ok(o) && o.shade == Shade::DarkBlue };
+    assert parse::<EnumOpts>(["--tint=light"]) matches { Ok(o) && o.tint == Option::Some(Shade::Light) };
+}
+
+test "a repeatable enum option converts each occurrence" {
+    let r = parse::<EnumOpts>(["--layer", "light", "--layer=dark-blue"]);
+    assert r matches { Ok(o) && o.layer == [Shade::Light, Shade::DarkBlue] };
+}
+
+test "an enum option without a value reports MissingValue" {
+    let r = parse::<EnumOpts>(["--shade", "--tint", "light"]);
+    assert r matches { Err(e) && e.kind == ArgsErrorKind::MissingValue };
+}

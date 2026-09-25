@@ -9,7 +9,8 @@
 //!
 //! Supported: `--name value`, `--name=value`, `bool` flags (`--name`),
 //! `Option<T> = null`, required/optional/variadic positionals, repeatable
-//! `List<T>` options (`--inc a --inc b`, interspersing allowed), and the `--`
+//! `List<T>` options (`--inc a --inc b`, interspersing allowed), `enum`-valued
+//! options (`--color dark-red`, matched by wire name), and the `--`
 //! end-of-options marker. `-`/`_` fold, so `--dry-run` binds `dry_run`.
 //!
 //! Long options only: an option value never starts with `--`, so a missing
@@ -588,6 +589,11 @@ impl Deserializer for ArgvDeserializer {
         type_name: S,
         num_cases: i32,
     ) -> Result<ArgvVariantAccess, DeserializeError> {
+        // An enum-valued `--option` names its case the way any option names its value.
+        if self.cur_is_option {
+            let tag = self.take_value()?;
+            return Result::Ok(ArgvVariantAccess { de: self, tag });
+        }
         // Externally tagged: the next bare token is the case tag. A subcommand
         // field is reached as a positional slot (`#[wire(positional)]`), so the
         // token the outer `next_field` saw is the tag.
@@ -657,15 +663,7 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
     return Result::Ok(r?);
 }
 
-/// Parse the process arguments (from `core:cli::args()`, with the program name
-/// dropped) into `T`.
+/// Parse the process arguments (`core:cli::args()`) into `T`.
 pub fn from_env<T: Deserialize>() -> Result<T, ArgsError> with Environment {
-    let all = args();
-    let mut argv: List<String> = [];
-    let mut i = 1;
-    while i < all.len() {
-        argv.push(all[i]);
-        i += 1;
-    }
-    return parse::<T>(argv);
+    return parse::<T>(args());
 }
