@@ -4,16 +4,12 @@
 //! — and the `synthesize_free_cm_*` pair releases them at either export
 //! boundary. [`cm_shape`] panics on an unrecognised shape rather than leaking.
 
-use std::cell::RefCell;
-
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{
     CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_layout_with_registry,
 };
-use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
-use crate::tir::{TirBinaryOp, TirExpr, TirLocal, TirModule, TirStmt, TypeTable};
+use crate::tir::{TirBinaryOp, TirExpr, TirLocal, TirStmt, TypeTable};
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, expr_stmt, i32_const, if_stmt,
@@ -23,7 +19,7 @@ use crate::synthesis::common::{
 use super::export_adapter::FlatLocal;
 use super::types::{
     CmStdlibNames, binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift,
-    disc_load_op, flat_types_from_ast_type,
+    disc_load_op,
 };
 
 /// Lighter than `LowerContext`: freeing reads the value out of memory or out of
@@ -31,8 +27,6 @@ use super::types::{
 pub(super) struct CmShapeContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub names: &'a CmStdlibNames,
-    pub tir_modules: &'a IndexMap<ModuleSource, TirModule>,
-    pub type_table: &'a RefCell<TypeTable>,
 }
 
 /// A part of a CM value: a record field, a variant payload, or a list element.
@@ -198,8 +192,7 @@ fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
 /// How many flat CM slots `ty` flattens to, from the same function that lays
 /// out an export's flat signature — the slot list this walk indexes into.
 fn flat_slot_count(ty: &Type, ctx: &CmShapeContext<'_>) -> usize {
-    let tt = ctx.type_table.borrow();
-    flat_types_from_ast_type(ty, ctx.tir_modules, &tt).len()
+    ctx.cm_interface_registry.cm_flatten(ty).len()
 }
 
 /// A case's payload, or `None` when it is unit and so carries nothing to free.
