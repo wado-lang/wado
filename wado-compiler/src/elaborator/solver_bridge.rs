@@ -546,7 +546,6 @@ fn representative(
     tuple: Option<DefId>,
     key: &DeclKey,
 ) -> Option<ResolvedType> {
-    use crate::defs::DefKind;
     match key {
         // The tuple declaration registers no type of its own; an instance of
         // it is what a tuple type is.
@@ -1238,7 +1237,7 @@ impl SolverBridge {
                 &mut info
                     .cases
                     .iter()
-                    .filter(|c| c.payload != TypeTable::UNIT)
+                    .filter(|c| c.has_payload(table))
                     .map(|c| c.payload),
                 &info.module_source,
             ));

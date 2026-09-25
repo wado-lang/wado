@@ -32,10 +32,12 @@ use super::coercion::{
     NumericLiteralKind, classify_numeric_literal, is_numeric_literal_expr,
     numeric_literal_pair_order, range_endpoint_order,
 };
+use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
+use crate::ast::RangeKind;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
@@ -59,8 +61,8 @@ use crate::elaborator::sem::types::{
     OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
-    remap_pattern_local,
+    RefBinding, collect_pattern_bindings_with_index, primitive_assoc_const_to_i128,
+    primitive_int_bound, remap_pattern_local,
 };
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
@@ -77,12 +79,19 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, test_function_name,
 };
+use crate::primitive::PrimitiveType;
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
+use crate::synthesis::common::builtin_call;
 use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
     EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
+};
+use crate::tir::{
+    FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateShape,
+    TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
+    TirTemplatePart,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -220,8 +229,6 @@ pub(super) struct ReifyAssertSlot {
 /// The callee a literal coercion names, as annotate resolved and mangled it
 /// (WEP 2026-08-24).
 fn literal_callee_ref(callee: &LiteralCallee) -> tir::FunctionRef {
-    use crate::tir::{FunctionRef, MonomorphInfo};
-
     FunctionRef {
         module_source: callee.impl_module_source.clone(),
         name: callee.mangled_name.clone(),
@@ -262,7 +269,7 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
 }
 
 /// What `==` compares when it compares by identity.
-enum Identity {
+pub(super) enum Identity {
     Reference,
     /// An unrestricted resource handle, which the host interns.
     Handle,
@@ -323,6 +330,17 @@ fn build_literal_spread_call(
     )
 }
 
+/// `break;`, leaving the innermost loop.
+fn bare_break(span: Span) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::Break {
+            label: None,
+            value: None,
+        },
+        span,
+    )
+}
+
 /// `if !cond { break; }`, a loop's exit test.
 fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
     let neg_cond = TirExpr::new(
@@ -333,17 +351,10 @@ fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
         TypeTable::BOOL,
         cond_span,
     );
-    let break_stmt = TirStmt::new(
-        TirStmtKind::Break {
-            label: None,
-            value: None,
-        },
-        span,
-    );
     TirStmt::new(
         TirStmtKind::If {
             condition: neg_cond,
-            then_block: TirBlock::new(vec![break_stmt], span),
+            then_block: TirBlock::new(vec![bare_break(span)], span),
             else_block: None,
         },
         span,
@@ -592,14 +603,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Build a [`TypeLookup`] view over the current module's import
-    /// context and the shared `all_*` tables. Used by `reify_*` helpers
-    /// that need to resolve AST `Type` nodes (e.g. type-param defaults,
-    /// resource method param/return types) the same way the elaborator
-    /// did during annotate — but without the elaborator's
-    /// `record_type_name_reference` side-effect (use→def edges were
-    /// already recorded by annotate and live on
-    /// [`ModuleSemantics::bindings`]).
+    /// A [`TypeLookup`] from the current module, without annotate's use→def recording.
     fn type_lookup(&self) -> TypeLookup<'_> {
         // A function-local item is reached through the walk's local data
         // tables, keyed by declaration — not `fn_local_items`, which annotate
@@ -672,7 +676,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `EffectRef`s stay canonically consistent across the module). Handles a
     /// bare `Function` and one behind `&` / `&mut`.
     fn apply_function_type_effects(&self, ty: &ast::Type, resolved: TypeId) -> TypeId {
-        use crate::tir::ResolvedType;
         match ty {
             ast::Type::Reference(inner) => {
                 let pointee = match self.tysys.type_table.borrow().get(resolved) {
@@ -866,7 +869,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // Decl-only items: read from `tysys.all_*` and produce TIR without
+    // Decl-only items: read from `tysys.data` and produce TIR without
     // consulting `TypeAnnotations`.
     // ─────────────────────────────────────────────────────────────────
 
@@ -901,9 +904,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Reify a `flags F { … }` declaration. The `TypeId` is the one
-    /// `annotate_decls` interned via `make_flags`; reify reads it from
-    /// `tysys.data.flags_cases`.
+    /// Reify a `flags F { … }` declaration, typed as
+    /// [`DataDecls::declare_flags`](super::types::DataDecls::declare_flags) interned it.
     fn reify_flags(&self, flags_decl: &ast::FlagsDecl) -> Option<TirFlags> {
         let def = self.tysys.resolutions.defs().of_ast_id(flags_decl.id)?;
         let info = self.tysys.data.flags_cases.get(&def)?;
@@ -916,10 +918,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             members: flags_decl
                 .flags
                 .iter()
-                .enumerate()
-                .map(|(i, m)| TirFlagsMember {
-                    name: m.name.clone(),
-                    bitmask: 1u32 << i,
+                .zip(&info.members)
+                .map(|(m, member)| TirFlagsMember {
+                    name: member.name.clone(),
+                    bitmask: member.bitmask,
                     span: m.span,
                 })
                 .collect(),
@@ -1246,7 +1248,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // recorded them; reify reads them back rather than re-resolving.
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("resolve_effect_decl records op signatures for every effect reify emits");
+            .expect("`record_effect_ops` records op signatures for every effect reify emits");
         tir::TirEffect {
             name: decl.name.clone(),
             visibility: decl.visibility,
@@ -1263,7 +1265,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
-            .expect("resolve_resource_decl records op signatures for every resource reify emits");
+            .expect("`record_effect_ops` records op signatures for every resource reify emits");
         tir::TirResource {
             def: self
                 .tysys
@@ -1316,10 +1318,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let mut ctx = FunctionContext::new(return_type, display_name.clone());
         ctx.in_handler_method = in_handler_method;
-        if func.is_async {
-            ctx.is_async = true;
-            ctx.task_return_type = self.declared_task_return(func, return_type);
-        }
+        let task_return_type = self.declared_task_return(func, return_type);
+        ctx.is_async = func.is_async;
+        ctx.task_return_type = task_return_type;
 
         // Effect params (`<effect E>`) drive `Param` effect resolution in
         // function-type params; publish them for the body walk.
@@ -1361,7 +1362,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let body = self.with_replaced(
+        let body = util::replaced(
+            self,
             |reify| &mut reify.current_effect_param_names,
             effect_param_names,
             |this| {
@@ -1369,7 +1371,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .as_ref()
                     .map(|b| this.reify_block(b, &mut ctx, None))
             },
-        );
+        )
+        .0;
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.
@@ -1394,7 +1397,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirFunction {
             module_source: ModuleSource::default(),
             name: display_name,
-            def_id: self.tysys.def_of(func.id),
+            def_id: self.tysys.resolutions.defs().of_ast_id(func.id),
             visibility: func.visibility,
             is_export: func.is_export,
             is_async: func.is_async,
@@ -1404,14 +1407,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             method_info: None,
             params,
             return_type,
-            task_return_type: self.declared_task_return(func, return_type),
+            task_return_type,
             effects: self
                 .sem
                 .types
                 .function_effects
                 .get(&func.id)
                 .cloned()
-                .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
+                .expect(
+                    "the declaring walk records function_effects for every function reify emits",
+                ),
             retains,
             immediates,
             trap,
@@ -1448,8 +1453,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// still produces a record, which is the point: the effect-dispatch
     /// synthesis has no method to learn about it from.
     fn reify_impl_decl(&mut self, impl_block: &ast::ImplBlock) -> Option<TirImpl> {
-        use crate::name::LocalMethodName;
-
         if impl_block.is_synthesize_request {
             return None;
         }
@@ -1518,8 +1521,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// module perspective is swapped to the trait module for the walk, since the
     /// facts are keyed by `AstId`s that name it.
     fn reify_impl_default_methods(&mut self, impl_block: &ast::ImplBlock) -> Vec<TirFunction> {
-        use crate::name::MethodName;
-
         if impl_block.is_synthesize_request {
             return Vec::new();
         }
@@ -1587,11 +1588,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     this.reify_method(default_method, &facts, concrete_owner.as_ref())
                 });
 
-            // `resolve_method` records this exact string under
-            // `method_names`, which `reify_method` already read back.
-            // Recomputing it covers the synthesis path, where the fact
-            // has no declaring walk to come from, and goes through the
-            // same `format_local` so the two spellings agree.
+            // No declaring walk recorded `method_names` for a synthesized default.
             tir_func.name = MethodName::format_local(
                 concrete_owner.as_ref().unwrap_or(&struct_name),
                 Some(&trait_name_mangled),
@@ -1619,24 +1616,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // sites resolve it directly (mirroring a monomorphized instance).
         concrete_owner: Option<&FqTypeName>,
     ) -> TirFunction {
-        use crate::name::LocalMethodName;
-
-        // Single source of truth: the impl-type-param scheme is computed once
-        // by `Elaborator::resolve_method` and recorded; reify reads it. reify
-        // runs only for the current module's explicitly-written methods in the
-        // same `build_tir_from_state` pass that recorded them (stdlib is
-        // rehydrated from the snapshot's already-reified TIR), so the fact is
-        // always present — a missing entry is a contract violation, not a
-        // fallback case.
         let mut impl_type_params: Vec<TirTypeParam> =
             self.ann_method_impl_type_params(func.id).expect(
                 "resolve_method records the impl-type-param scheme for every \
                  impl method reify emits",
             );
 
-        // Mangled / display names — read straight off the per-method facts
-        // `resolve_method` already publishes; reify no longer runs
-        // `format_local` itself.
         let method_names = self.ann_method_names(func.id).expect(
             "resolve_method records the mangled + display names for every impl method reify emits",
         );
@@ -1691,8 +1676,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         test_index: usize,
         module_is_todo: bool,
     ) -> Option<(TirFunction, TirTest)> {
-        use crate::tir::{FunctionKind, InlineHint, ReturnAbi, TypeTable};
-
         let meta = test_decl.metadata(module_is_todo);
         let ast::TestMetadata {
             expect_trap,
@@ -2476,8 +2459,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) -> TirStmt {
-        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
-
         let span = l.span;
         let else_ast = l
             .else_block
@@ -2550,7 +2531,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         stmt: &ast::Stmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::TirStmtKind;
         match stmt {
             ast::Stmt::Expr(expr_stmt) => {
                 let expr = self.reify_expr(&expr_stmt.expr, ctx, None);
@@ -2669,7 +2649,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
-        use crate::tir::TirStmtKind;
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present. The WIR builder zero-initialises the slot;
         // reify emits a Unit placeholder as the `value` and the
@@ -2677,7 +2656,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // patterns in this position are rejected at annotate; the
         // recovery path emits an Expr-Unit placeholder to mirror.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
             // 7-A: same as the initialised case — read the binding's recorded
             // type (this path always binds a simple `Ident` / `MutIdent`).
             let binding_id = match &let_stmt.pattern {
@@ -2855,8 +2833,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TypeTable};
-
         // Power-assert capture hook. See `reify_assert` /
         // `reify_with_assert_capture`.
         if let Some(actx) = ctx.reify_assert_capture_ctx.as_ref() {
@@ -3129,21 +3105,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
-            ast::Expr::Range(range) => self.reify_range(range, ctx, recorded_type),
-            ast::Expr::TemplateString(template) => {
-                self.reify_template_string(template, ctx, recorded_type)
-            }
+            ast::Expr::Range(range) => self.reify_range(range, ctx),
+            ast::Expr::TemplateString(template) => self.reify_template_string(template, ctx),
             ast::Expr::TaggedTemplate(tagged) => {
                 self.reify_tagged_template(tagged, ctx, recorded_type)
             }
             ast::Expr::Matches(m) => self.reify_matches(m, ctx),
-            ast::Expr::CompoundAssign(compound) => {
-                self.reify_compound_assign(compound, ctx, recorded_type)
-            }
-            ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx, recorded_type),
-            ast::Expr::Closure(closure) => {
-                self.reify_closure(closure, ctx, recorded_type, expected_type)
-            }
+            ast::Expr::CompoundAssign(compound) => self.reify_compound_assign(compound, ctx),
+            ast::Expr::TryOp(qm) => self.reify_question_mark(qm, ctx),
+            ast::Expr::Closure(closure) => self.reify_closure(closure, ctx, expected_type),
             ast::Expr::Index(index) => self.reify_index(index, ctx, recorded_type),
             ast::Expr::ComparisonChain(chain) => self.reify_comparison_chain(chain, ctx),
             ast::Expr::StaticMethodCall(static_call) => {
@@ -3301,8 +3271,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `resolve_condition_expr` made: a `Bool` expectation would reach the
     /// operands and propagate into `If`/`Match` branches, where it is wrong.
     fn reify_condition_expr(&mut self, expr: &ast::Expr, ctx: &mut FunctionContext) -> TirExpr {
-        use crate::tir::TypeTable;
-
         let cond = self.reify_expr(expr, ctx, None);
         match cond.type_id {
             TypeTable::BOOL | TypeTable::UNKNOWN | TypeTable::ERROR => cond,
@@ -3339,14 +3307,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             } => {
                 // Mirror `Elaborator::resolve_while`'s LetChain arm:
                 // the else-branch unconditionally `break`s out of the loop.
-                let break_stmt = TirStmt::new(
-                    TirStmtKind::Break {
-                        label: None,
-                        value: None,
-                    },
-                    span,
-                );
-                let else_block = TirBlock::new(vec![break_stmt], *cond_span);
+                let else_block = TirBlock::new(vec![bare_break(span)], *cond_span);
                 ctx.enter_scope();
                 let body_stmts = self.reify_let_chain_stmts(
                     elements,
@@ -3380,8 +3341,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<tir::TypeId>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmtKind};
-
         let ast_id = expr.id();
         ctx.reify_assert_capture_ctx
             .as_mut()
@@ -3543,8 +3502,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
     /// then hints the enclosing branch unlikely and the inliner skips the branch.
     fn make_cold_path_stmt(&self, span: Span) -> TirStmt {
-        use crate::synthesis::common::builtin_call;
-        use crate::tir::{TirStmtKind, TypeTable};
         let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
         TirStmt::new(TirStmtKind::Expr(call), span)
     }
@@ -3563,8 +3520,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         inspect_spec: Option<TemplateFormatSpec>,
         span: Span,
     ) -> TirStmt {
-        use crate::tir::TirTemplatePart;
-
         let rendered = TirExpr::new(
             TirExprKind::TemplateString {
                 parts: vec![TirTemplatePart::Interpolation {
@@ -3621,11 +3576,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         assert_stmt: &ast::AssertStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::{
-            CallArg, FunctionRef, TirBlock, TirExprKind, TirStmtKind, TirTemplatePart, TirUnaryOp,
-            TypeTable,
-        };
-
         let span = assert_stmt.span;
 
         // Always install the context: an empty `ast_id_to_slot` map
@@ -3907,8 +3857,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// compile-time-unrolls into per-element labelled blocks, and
     /// `ForOfVariadic` defers to the monomorphizer via a `VariadicForOf` node.
     fn reify_for_of(&mut self, for_of: &ast::ForOfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
-        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
-
         match self.ann_desugars(for_of.id) {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
@@ -3938,8 +3886,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         info: ForOfIteratorInfo,
     ) -> Vec<TirStmt> {
-        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
-
         let span = for_of.span;
         let mut frame = ctx.enter_loop();
         let ctx = &mut *frame;
@@ -4035,16 +3981,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map_or(TypeTable::UNIT, |e| e.type_id);
         let some_body = TirExpr::new(TirExprKind::Block(body_block), body_type, span);
 
-        let break_block = TirBlock::new(
-            vec![TirStmt::new(
-                TirStmtKind::Break {
-                    label: None,
-                    value: None,
-                },
-                span,
-            )],
-            span,
-        );
+        let break_block = TirBlock::new(vec![bare_break(span)], span);
         let break_body = TirExpr::new(TirExprKind::Block(break_block), TypeTable::UNIT, span);
 
         let match_type =
@@ -4098,8 +4035,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for_of: &ast::ForOfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TypeTable};
-
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
@@ -4316,8 +4251,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for_of: &ast::ForOfStmt,
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
-        use crate::tir::{ResolvedType, TirExprKind, TirStmtKind, TypeTable};
-
         let span = for_of.span;
         let (actual_iterable, is_enumerate) = match &for_of.iterable {
             ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
@@ -4506,16 +4439,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
-
         let span = comp.span;
         let (source, is_enumerate) = Elaborator::<H>::split_enumerate(&comp.iterable);
         let iterable = self.reify_expr(source, ctx, None);
         let unique_id = ctx.fresh_serial();
 
-        let elem_type =
-            Elaborator::<H>::comprehension_pack_elem(&self.tysys.type_table, iterable.type_id)
-                .unwrap_or(TypeTable::UNKNOWN);
+        let elem_type = self
+            .tysys
+            .comprehension_pack_elem(iterable.type_id)
+            .unwrap_or(TypeTable::UNKNOWN);
         let binding_type = if is_enumerate {
             self.tysys
                 .type_table
@@ -4665,7 +4597,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // expansion shape is a single Match: the pattern
                 // arm's body is the labeled-body + update; the
                 // wildcard arm breaks.
-                use crate::tir::{TirExprKind, TirMatchArm, TirPattern};
                 let single_let = if elements.len() == 1 {
                     match &elements[0] {
                         ast::ConditionElement::Let {
@@ -4702,16 +4633,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     *cond_span,
                 );
                 let else_body = TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(
-                        vec![TirStmt::new(
-                            TirStmtKind::Break {
-                                label: None,
-                                value: None,
-                            },
-                            span,
-                        )],
-                        *cond_span,
-                    )),
+                    TirExprKind::Block(TirBlock::new(vec![bare_break(span)], *cond_span)),
                     TypeTable::NEVER,
                     *cond_span,
                 );
@@ -4764,7 +4686,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         body: &ast::Block,
         ctx: &mut FunctionContext,
     ) -> TirStmt {
-        use crate::tir::TirStmtKind;
         ctx.for_continue_labels.push(body_label.to_string());
         ctx.active_labels.push(body_label.to_string());
         let body_block = self.reify_block(body, ctx, None);
@@ -4810,8 +4731,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tail_value: bool,
         span: Span,
     ) -> Vec<TirStmt> {
-        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
-
         if elements.is_empty() {
             return self
                 .reify_block_with_position(then_block_ast, ctx, expected_type, tail_value)
@@ -4927,7 +4846,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         tail_value: bool,
     ) -> Vec<TirStmt> {
-        use crate::tir::{TirExprKind, TirStmtKind, TypeTable};
         match &if_stmt.condition {
             ast::Condition::LetChain { elements, .. } => {
                 let else_block = if_stmt
@@ -4988,7 +4906,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// branches). `Condition::LetChain` mirrors the expression-level
     /// `IfLetChain` desugar.
     fn reify_if_stmt(&mut self, if_stmt: &ast::IfStmt, ctx: &mut FunctionContext) -> Vec<TirStmt> {
-        use crate::tir::TirStmtKind;
         match &if_stmt.condition {
             ast::Condition::Expr(cond_expr) => {
                 let condition = self.reify_condition_expr(cond_expr, ctx);
@@ -5158,8 +5075,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirUnaryOp, TypeTable};
-
         // Mirror `resolve_binary_operands_with_coercion`:
         // a numeric-literal operand is typed from the *other* operand (or,
         // when both are literals, from the expression's recorded type). This
@@ -5286,10 +5201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
-        _recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirTemplatePart};
-
         let string_type = self
             .tysys
             .type_table
@@ -5359,10 +5271,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{
-            CallArg, TemplateShape, TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField,
-        };
-
         let span = tagged.span;
         let (Some(template_ty), Some(dispatch)) = (
             self.ann_tagged_template(tagged.id),
@@ -5524,15 +5432,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// produces the same shape by reading the element type from
     /// the reified `start` expression and interning the
     /// `GenericInstance` via `make_generic_instance`.
-    fn reify_range(
-        &mut self,
-        range: &ast::RangeExpr,
-        ctx: &mut FunctionContext,
-        recorded_type: TypeId,
-    ) -> TirExpr {
-        use crate::ast::RangeKind;
-        use crate::tir::{TirExprKind, TirStructField, TypeTable};
-
+    fn reify_range(&mut self, range: &ast::RangeExpr, ctx: &mut FunctionContext) -> TirExpr {
         // Annotate has unified the endpoints, so either type is the element
         // type — but only in the order the elaborator resolved them in.
         let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
@@ -5576,12 +5476,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .and_then(|gi| gi.mangled_name)
             .unwrap_or_else(|| struct_name.clone());
 
-        // Honour the recorded result type if present (annotate may
-        // have unified with a more specific `RangeInclusive<i32>` etc.
-        // already on `recorded_type`); reify trusts it as the final
-        // expression type.
-        let _ = recorded_type;
-
         TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type,
@@ -5605,8 +5499,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStructField};
-
         // A recorded `key_value_coercions[struct_lit.id]` means the literal
         // builds an `Array<[K, V]>` for the target's `From`.
         if let Some(facts) = self.ann_key_value_coercions(struct_lit.id) {
@@ -5937,10 +5829,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
-        recorded_type: TypeId,
     ) -> TirExpr {
-        let _ = recorded_type;
-
         let op = match compound.op {
             CompoundAssignOp::Add => TirBinaryOp::Add,
             CompoundAssignOp::Sub => TirBinaryOp::Sub,
@@ -5959,7 +5848,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `$caN` names out of the enclosing map.
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
-        self.with_replaced(
+        util::replaced(
+            self,
             |reify| &mut reify.compound_overrides,
             IndexMap::default(),
             |this| {
@@ -5971,6 +5861,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 result
             },
         )
+        .0
     }
 
     /// Build the read + write of a compound assign with the impure-operand
@@ -6053,12 +5944,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `match expr { Ok(v) => v, Err(e) => return Err(From::from(e)) }` for
     /// `Result<T, E>`. Annotate has already validated both the operand and the
     /// function's return type.
-    fn reify_question_mark(
-        &mut self,
-        qm: &ast::TryOpExpr,
-        ctx: &mut FunctionContext,
-        _recorded_type: TypeId,
-    ) -> TirExpr {
+    fn reify_question_mark(&mut self, qm: &ast::TryOpExpr, ctx: &mut FunctionContext) -> TirExpr {
         let inner = self.reify_expr(&qm.expr, ctx, None);
         let inner_type = inner.type_id;
 
@@ -6093,8 +5979,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
-
         let inner_type = inner.type_id;
         let (some_type, some_name, some_index, none_name, none_index) = {
             let tt = self.tysys.type_table.borrow();
@@ -6190,10 +6074,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         qm_id: AstId,
     ) -> TirExpr {
-        use crate::tir::{
-            ResolvedType, TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind,
-        };
-
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
 
@@ -6262,7 +6142,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let converted_err = if need_from_conversion {
-            self.reify_from_call(outer_err_type, inner_err_type, e_expr, span, qm_id)
+            self.reify_from_call(outer_err_type, e_expr, span, qm_id)
         } else {
             e_expr
         };
@@ -6330,8 +6210,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TypeTable};
-
         if let Some(identity) = self.tysys.identity_of(op, left.type_id, right.type_id) {
             return self.identity_comparison(identity, op, left, right, span);
         }
@@ -6388,8 +6266,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         chain: &ast::ComparisonChainExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{TirBinaryOp, TirBlock, TirExprKind, TirStmtKind, TypeTable};
-
         assert!(
             chain.comparisons.len() >= 2,
             "the parser makes a single comparison a `Binary`"
@@ -6495,8 +6371,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
-
         let receiver = self.reify_expr(&index.expr, ctx, None);
 
         // Tuple constant-index path: detect via the receiver's
@@ -6516,8 +6390,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let ast::Expr::Literal(lit) = &index.index
             && let ast::Literal::Number(repr) = &lit.value
             && let Ok(idx) = repr.parse::<usize>()
-            && let Ok(elem) =
-                Elaborator::<H>::tuple_literal_index_type(&self.tysys.type_table, elems, idx)
+            && let Ok(elem) = self.tysys.tuple_literal_index_type(elems, idx)
         {
             return TirExpr::new(
                 TirExprKind::FieldAccess {
@@ -6534,12 +6407,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `.enumerate()` index: kept as `Index` here and rewritten to the
         // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
         if let Some(elems) = &tuple_elems
-            && let Some(elem_type) = Elaborator::<H>::variadic_enumerate_subscript_type(
-                &self.tysys.type_table,
-                elems,
-                &index.index,
-                ctx,
-            )
+            && let Some(elem_type) =
+                self.tysys
+                    .variadic_enumerate_subscript_type(elems, &index.index, ctx)
         {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return TirExpr::new(
@@ -6567,7 +6437,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // shape (annotate would have diagnosed missing trait impl).
         // Match the recovery output with a Unit placeholder typed
         // as ERROR.
-        let _ = recorded_type;
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, index.span)
     }
 
@@ -6580,11 +6449,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         closure: &ast::ClosureExpr,
         ctx: &mut FunctionContext,
-        recorded_type: TypeId,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        use crate::tir::{ResolvedType, TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
-
         let span = closure.span;
 
         let cap_info = self
@@ -6775,7 +6641,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Step 7: wrap in a Block when ref_stmts materialised any
         // outer-scope `$ref_v` bindings.
         if ref_stmts.is_empty() {
-            let _ = recorded_type;
             return closure_tir;
         }
 
@@ -6792,8 +6657,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// pack to, read off the parameter's own concrete type. The caller it is
     /// spliced into may be one nothing instantiates, so this is the last chance.
     fn settle_packs_in_default(&mut self, expr: &mut TirExpr, expected: TypeId) {
-        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
-
         let TirExprKind::TupleLiteral { elements } = &mut expr.kind else {
             return;
         };
@@ -6823,7 +6686,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         }
         let settled: Vec<TypeId> = type_args[at..type_args.len() - after].to_vec();
-        if settled.iter().any(|&t| self.tysys.type_contains_pack(t)) {
+        if settled
+            .iter()
+            .any(|&t| self.tysys.type_table.borrow().contains_type_pack(t))
+        {
             return;
         }
         let settled = self.tysys.type_table.borrow_mut().make_tuple(settled);
@@ -6836,7 +6702,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a tuple literal, handling spread elements. The tuple `TypeId` is
     /// built bottom-up via `make_tuple` so a nested tuple's element type is the
     /// same interned id as the inner literal's, which `nir/sroa` relies on. A
-    /// spread expands per `type_contains_pack`: a pack to `TypePackExpansion`, a
+    /// spread expands per `contains_type_pack`: a pack to `TypePackExpansion`, a
     /// tuple containing one to `TupleSpread`, a concrete one to `FieldAccess`es.
     fn reify_tuple_literal(
         &mut self,
@@ -6844,10 +6710,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{
-            ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind, TypeTable,
-        };
-
         let mut elements: Vec<TirExpr> = Vec::new();
         let mut elem_types: Vec<TypeId> = Vec::new();
         // (local_idx, name, expr, span) for non-trivial spread operands.
@@ -6856,7 +6718,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for elem in &tuple_lit.elements {
             if let ast::Expr::Spread(inner, _span) = elem {
                 let spread_expr = self.reify_expr(inner, ctx, None);
-                let contains_pack = self.tysys.type_contains_pack(spread_expr.type_id);
+                let contains_pack = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_pack(spread_expr.type_id);
                 let spread_type = self
                     .tysys
                     .type_table
@@ -7037,8 +6903,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         span: Span,
     ) -> TirExpr {
-        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind};
-
         let string_type = self
             .tysys
             .type_table
@@ -7189,15 +7053,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn reify_from_call(
         &mut self,
         target_type: TypeId,
-        from_type: TypeId,
         value: TirExpr,
         span: Span,
         caller_id: AstId,
     ) -> TirExpr {
-        use crate::name::LocalMethodName;
-        use crate::tir::{CallArg, FunctionRef, TirExprKind};
-
-        let _ = from_type;
         let facts = self.ann_from_call_facts(caller_id).expect(
             "resolve_from_call records FromCallFacts at every site reify hits — \
                  ?-op, Type::from(x), and Type::<…>::from(x)",
@@ -7244,8 +7103,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         result_type: tir::TypeId,
     ) -> TirExpr {
-        use crate::tir::{EffectRef, TirExprKind, TirHandlerBinding};
-
         let mut bindings: Vec<TirHandlerBinding> = Vec::with_capacity(with_expr.handlers.len());
         for binding in &with_expr.handlers {
             // Annotate recorded the binding's effect
@@ -7300,8 +7157,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// annotate time) into a two-arm match: pattern → true, wildcard
     /// → false. Mirror `Elaborator::desugar_matches_expr`.
     fn reify_matches(&mut self, m: &ast::MatchesExpr, ctx: &mut FunctionContext) -> TirExpr {
-        use crate::tir::{TirExprKind, TirMatchArm, TirPattern, TypeTable};
-
         let scrutinee = self.reify_expr(&m.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
@@ -7385,9 +7240,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use super::expr::UnionSource;
-        use crate::tir::TirStructField;
-
         // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
         let struct_type = recorded_type;
@@ -7570,8 +7422,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirMatchArm, TypeTable};
-
         let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
@@ -7624,8 +7474,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, TirExprKind};
-
         // Reuse the static-method `FunctionRef` annotate resolved
         // (mangled name + `cm_name` for CM binding synthesis). reify's
         // own target-type resolution can lose these for imported / CM
@@ -8058,8 +7906,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, TirExprKind};
-
         let span = call.span;
 
         // Variant-ctor (`Variant::Case(payload)`) must beat the
@@ -8072,39 +7918,31 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         {
             // `ns::Type::Case(payload)` reaches its owner through the namespace;
             // the nullary form is `reify_ident`'s.
-            let (variant_info, case_name) = match suffix.split_once("::") {
-                None => (
-                    owner
-                        .and_then(|owner| self.type_lookup().variant_cases_of(owner))
-                        .cloned(),
-                    suffix,
-                ),
+            let (owner, case_name) = match suffix.split_once("::") {
+                None => (owner, suffix),
                 Some((_, case_name)) if self.sem.imports.namespace_imports.contains_key(prefix) => {
-                    (
-                        self.tysys
-                            .qualified_owner_decl(ident)
-                            .and_then(|def| self.tysys.data.variant_cases.get(&def))
-                            .cloned(),
-                        case_name,
-                    )
+                    (self.tysys.qualified_owner_decl(ident), case_name)
                 }
                 Some(_) => (None, suffix),
             };
-            if let Some(variant_info) = variant_info
-                && let Some((case_index, case_data)) = variant_info.case_named(case_name)
-            {
+            let case = owner
+                .and_then(|owner| self.type_lookup().variant_cases_of(owner))
+                .and_then(|info| info.case_named(case_name))
+                .map(|(index, case)| (index as u32, case.name.clone(), case.payload));
+            if let Some((case_index, case_name, payload_type)) = case {
                 let variant_type = self
                     .ann_generic_instantiations(call.id)
                     .map(|gi| gi.instance_type)
                     .unwrap_or(recorded_type);
-                let payload = call.args.first().map(|arg_expr| {
-                    Box::new(self.reify_expr(arg_expr, ctx, Some(case_data.payload)))
-                });
+                let payload = call
+                    .args
+                    .first()
+                    .map(|arg_expr| Box::new(self.reify_expr(arg_expr, ctx, Some(payload_type))));
                 return TirExpr::new(
                     TirExprKind::VariantConstruct {
                         variant_type,
-                        case_index: case_index as u32,
-                        case_name: case_data.name.clone(),
+                        case_index,
+                        case_name,
                         payload,
                     },
                     variant_type,
@@ -8197,7 +8035,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && call.args.len() == 1
         {
             let arg = self.reify_expr(&call.args[0], ctx, None);
-            let arg_type = arg.type_id;
 
             // Bodyless `impl From<X> for Type;` marker impl — production
             // synthesizes a `From::from` call inline via
@@ -8205,7 +8042,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // under `call.id`. Reify reuses `reify_from_call` so both the
             // ?-op path and this static-call path emit identical TIR.
             if self.ann_from_call_facts(call.id).is_some() {
-                return self.reify_from_call(recorded_type, arg_type, arg, span, call.id);
+                return self.reify_from_call(recorded_type, arg, span, call.id);
             }
 
             // Reflexive: `T::from(T_val)` — identity, return the argument.
@@ -8479,8 +8316,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::CallArg;
-
         // The AST receiver of the IndexMutMethodCall is always an
         // `Expr::Index` — guaranteed by the elaborator's
         // dispatcher; reify trusts the desugar tag's contract.
@@ -8540,8 +8375,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TypeTable};
-
         // IndexMut rewrite gets first crack — when the elaborator
         // tagged this call as `IndexMutMethodCall`, the receiver is an
         // index expression that needs `$index_mut_val` synthesis.
@@ -8579,7 +8412,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // unknown until monomorphization; defer folding to a
                         // literal via `TupleLen` so it is not frozen at the
                         // unsubstituted pack count (mirrors the `zip` deferral).
-                        if self.tysys.type_contains_pack(base_type_id) {
+                        if self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .contains_type_pack(base_type_id)
+                        {
                             return TirExpr::new(
                                 TirExprKind::TupleLen {
                                     expr: Box::new(receiver),
@@ -8616,7 +8454,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        let transposed = if self.tysys.type_contains_pack(base_type_id) {
+                        let transposed = if self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .contains_type_pack(base_type_id)
+                        {
                             TirExpr::new(
                                 TirExprKind::TupleZip {
                                     expr: Box::new(receiver),
@@ -8749,7 +8592,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         receiver_type: TypeId,
         field_name: &str,
     ) -> (u32, String, Option<TypeId>) {
-        use crate::tir::ResolvedType;
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         // The receiver's own head answers: same-named structs in different
         // modules reach their own fields, and an anonymous shape — which no
@@ -8770,11 +8612,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .unwrap_or_default();
                 if TypeTable::is_tuple_type(&name)
                     && let Ok(index) = field_name.parse::<usize>()
-                    && let Ok(elem) = Elaborator::<H>::tuple_literal_index_type(
-                        &self.tysys.type_table,
-                        &type_args,
-                        index,
-                    )
+                    && let Ok(elem) = self.tysys.tuple_literal_index_type(&type_args, index)
                 {
                     return (index as u32, field_name.to_string(), Some(elem));
                 }
@@ -8852,33 +8690,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Run `body` with the field `field` selects set to `value`, restoring the
-    /// enclosing value on return (panic-safe).
-    fn with_replaced<T, R>(
-        &mut self,
-        field: fn(&mut Self) -> &mut T,
-        value: T,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost, T> {
-            reify: &'r mut Reify<'a, H>,
-            field: for<'s> fn(&'s mut Reify<'a, H>) -> &'s mut T,
-            saved: Option<T>,
-        }
-        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
-            fn drop(&mut self) {
-                *(self.field)(self.reify) = self.saved.take().expect("saved field present");
-            }
-        }
-        let saved = std::mem::replace(field(self), value);
-        let guard = Restore {
-            reify: self,
-            field,
-            saved: Some(saved),
-        };
-        body(guard.reify)
-    }
-
     /// Run `body` standing in another module: its source, its items and its
     /// facts, all three restored on return.
     fn with_perspective<R>(
@@ -8888,29 +8699,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         sem: &'a ModuleSemantics,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        type Perspective<'a> = (ModuleSource, &'a [Item], &'a ModuleSemantics);
-        struct Restore<'r, 'a, H: CompilerHost> {
-            reify: &'r mut Reify<'a, H>,
-            saved: Option<Perspective<'a>>,
-        }
-        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
-            fn drop(&mut self) {
-                let (module, items, sem) = self.saved.take().expect("saved perspective present");
-                self.reify.current_module_source = module;
-                self.reify.current_module_items = items;
-                self.reify.sem = sem;
-            }
-        }
-        let saved = (
-            std::mem::replace(&mut self.current_module_source, module),
-            std::mem::replace(&mut self.current_module_items, items),
-            std::mem::replace(&mut self.sem, sem),
-        );
-        let guard = Restore {
-            reify: self,
-            saved: Some(saved),
-        };
-        body(guard.reify)
+        util::replaced(
+            self,
+            |r| &mut r.current_module_source,
+            module,
+            |r| {
+                util::replaced(
+                    r,
+                    |r| &mut r.current_module_items,
+                    items,
+                    |r| util::replaced(r, |r| &mut r.sem, sem, body).0,
+                )
+                .0
+            },
+        )
+        .0
     }
 
     /// Reify a bare identifier reference. Local lookup goes through
@@ -8924,8 +8727,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        use crate::tir::TirExprKind;
-
         // Canonicalize `ns::member` to its `ns$member` alias, matching
         // `resolve_ident` at annotate time (expr.rs) so reify consults the
         // same alias-keyed registries. The original `id` / `span` are kept.
@@ -9250,7 +9051,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // have diagnosed an unknown identifier at annotate time.
         // Match the elaborator's recovery shape so reify doesn't
         // panic on a known-bad input.
-        let _ = recorded_type;
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
@@ -9412,9 +9212,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        use crate::primitive::PrimitiveType;
-        use crate::tir::{ResolvedType, TypeTable};
-
         let source_type = self.ann_expression_types(cast.expr.id())?;
         // Newtypes share their base's representation, so dispatch on the
         // ultimate base of both sides; explicit repr-compatible `Cast`
@@ -9589,7 +9386,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
         ctx: &FunctionContext,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TypeTable};
         let kind = match &lit.value {
             ast::Literal::Number(repr) => {
                 return self.reify_numeric_literal(repr, recorded_type, lit.span);
@@ -9811,8 +9607,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> Option<TirPattern> {
-        use crate::tir::{TirExpr, TirExprKind, TirLiteralPattern};
-
         let AssocConstSig {
             module: const_module,
             ty: type_id,
@@ -9863,7 +9657,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         is_unsigned: bool,
         ctx: &mut FunctionContext,
     ) -> i128 {
-        use crate::tir::TirExprKind;
         if let ast::Pattern::Variant {
             variant_name,
             variant_qualifier,
@@ -9909,10 +9702,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
     /// declares it. Drives lowering an enum-case pattern to `TirPattern::Enum`.
     fn scrutinee_enum_case_index(&self, scrutinee_type: TypeId, case_name: &str) -> Option<u32> {
-        use crate::tir::ResolvedType;
         // Peel references for match ergonomics: `match &c { Red => … }`
         // presents the scrutinee as `&Color`.
-        let peeled = self.tysys.scrutinee_structure_head(scrutinee_type);
+        let peeled = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Enum { .. }
@@ -9929,8 +9725,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// True when `scrutinee_type` is a variant (directly or as a generic
     /// instance) whose cases include `case_name`.
     fn scrutinee_has_variant_case(&self, scrutinee_type: TypeId, case_name: &str) -> bool {
-        use crate::tir::ResolvedType;
-        let peeled = self.tysys.scrutinee_structure_head(scrutinee_type);
+        let peeled = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
         if !matches!(
             self.tysys.type_table.borrow().get(peeled),
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. }
@@ -9940,7 +9739,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.tysys
             .type_def(peeled)
             .and_then(|def| self.type_lookup().variant_cases_of(def))
-            .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name))
+            .is_some_and(|info| info.case_named(case_name).is_some())
     }
 
     /// Lower a nullary variant-case pattern (e.g. `None`) to
@@ -9954,7 +9753,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirPattern {
         // The head the cases come from, peeled the way `scrutinee_has_variant_case`
         // already asks: references for match ergonomics, then newtypes.
-        let head = self.tysys.scrutinee_structure_head(scrutinee_type);
+        let head = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
         let (case_index, payload_type) = self.variant_case_index_and_payload(head, case_name);
         TirPattern::Variant {
             enum_type: head,
@@ -9970,7 +9773,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// binding (mirrors `Elaborator::resolve_if_pattern_inner`). Mutable
     /// globals are not constants and fall through to a binding.
     fn reify_immutable_global_pattern(&self, name: &str, span: Span) -> Option<TirPattern> {
-        use crate::tir::{TirExpr, TirExprKind};
         if let Some(&(ty, mutable)) = self.sem.decls.current_module_globals.get(name)
             && !mutable
         {
@@ -10054,7 +9856,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // known case first, then immutable global, then binding.
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.scrutinee_structure_head(scrutinee_type),
+                        enum_type: self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .scrutinee_structure_head(scrutinee_type),
                         case_name: name.clone(),
                         case_index,
                     };
@@ -10093,7 +9899,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Pattern::Literal(lit) => {
-                use crate::tir::TirLiteralPattern;
                 // Mirrors `Elaborator::resolve_if_pattern_inner`'s literal arm:
                 // char / string literals decode their escapes, and `null` on a
                 // variant scrutinee with a `None` case lowers to that case.
@@ -10234,7 +10039,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, &case_name)
                 {
                     return TirPattern::Enum {
-                        enum_type: self.tysys.scrutinee_structure_head(scrutinee_type),
+                        enum_type: self
+                            .tysys
+                            .type_table
+                            .borrow()
+                            .scrutinee_structure_head(scrutinee_type),
                         case_name,
                         case_index,
                     };
@@ -10246,7 +10055,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // variant decl + payload type resolve through the
                 // underlying `Option<T>` rather than falling to the
                 // unknown-payload `_` arm.
-                let peeled_scrutinee = self.tysys.scrutinee_structure_head(scrutinee_type);
+                let peeled_scrutinee = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .scrutinee_structure_head(scrutinee_type);
                 let (case_index, payload_type) =
                     self.variant_case_index_and_payload(peeled_scrutinee, &case_name);
 
@@ -10315,7 +10128,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Range {
                 start, end, kind, ..
             } => {
-                use crate::ast::RangeKind;
                 let inclusive = matches!(kind, RangeKind::Inclusive);
                 let is_unsigned = self
                     .tysys
@@ -10447,14 +10259,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         scrutinee_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
-        use crate::tir::{ResolvedType, TirStructPatternField};
-
         // Determine the struct name: explicit `Type::Pattern` wins;
         // otherwise read from the scrutinee.
         // Destructuring through a reference (`let { x, y } = &p`)
         // presents the scrutinee as `&Point`; peel references so the
         // struct decl resolves (fields inherit the reference kind below).
-        let peeled_scrutinee = self.tysys.scrutinee_structure_head(scrutinee_type);
+        let peeled_scrutinee = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
 
         // A field index is a fact about the value being destructured, so the
         // scrutinee's head answers and the pattern's qualifier — which annotate
@@ -10570,14 +10384,6 @@ impl TypeSystem {
         drop(tt);
         self.apply_scrutinee_ref_kind(scrutinee_type, target)
     }
-}
-
-impl TypeSystem {
-    /// The identity of the declaration at `id`, which the emitted `TirFunction`
-    /// carries so a later pass can ask what it was reified from.
-    fn def_of(&self, id: AstId) -> Option<DefId> {
-        self.resolutions.defs().of_ast_id(id)
-    }
 
     /// The type of the `*…` result a dispatched index read produces. Each site
     /// supplies the type it recorded; one that is missing or unresolved is
@@ -10596,11 +10402,8 @@ impl TypeSystem {
             )
     }
 
-    /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
-    /// `recv.index_value(idx)`) from an already-reified receiver and subscript
-    /// plus the recorded dispatch. Shared by [`Self::reify_index`] and the
-    /// compound-assign read so the two lowerings cannot drift. `deref_type` is
-    /// the type of the `*…` result used when `dispatch.needs_deref`.
+    /// The trait read `*recv.index(idx)` (or `recv.index_value(idx)`) `dispatch`
+    /// records; `deref_type` types the `*…` when `dispatch.needs_deref`.
     fn build_index_read_from_dispatch(
         &self,
         receiver: TirExpr,
@@ -10641,9 +10444,12 @@ impl TypeSystem {
     }
 
     /// How `==` / `!=` compares these operands by identity, if it does.
-    fn identity_of(&self, op: ast::BinaryOp, left: TypeId, right: TypeId) -> Option<Identity> {
-        use crate::tir::ResolvedType;
-
+    pub(super) fn identity_of(
+        &self,
+        op: ast::BinaryOp,
+        left: TypeId,
+        right: TypeId,
+    ) -> Option<Identity> {
         if !matches!(op, ast::BinaryOp::Eq | ast::BinaryOp::NotEq) {
             return None;
         }
@@ -10697,40 +10503,13 @@ impl TypeSystem {
         Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
     }
 
-    /// Whose cases a pattern names — see [`TypeTable::scrutinee_structure_head`].
-    pub(super) fn scrutinee_structure_head(&self, scrutinee_type: TypeId) -> TypeId {
-        self.type_table
-            .borrow()
-            .scrutinee_structure_head(scrutinee_type)
-    }
-
     /// `inner` wrapped in the reference kind of `scrutinee_type` for match
-    /// ergonomics, as `Elaborator::peel_scrutinee_refs` reckons it.
+    /// ergonomics, as [`Self::peel_scrutinee_refs`] reckons it.
     fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
-        use crate::tir::ResolvedType;
-        let mut cur = scrutinee_type;
-        let mut saw_ref = false;
-        let mut saw_mut_ref = false;
-        loop {
-            let resolved = self.type_table.borrow().get(cur).clone();
-            match resolved {
-                ResolvedType::Ref(i) => {
-                    saw_ref = true;
-                    cur = i;
-                }
-                ResolvedType::MutRef(i) => {
-                    saw_mut_ref = true;
-                    cur = i;
-                }
-                _ => break,
-            }
-        }
-        if saw_ref {
-            self.type_table.borrow_mut().make_ref(inner)
-        } else if saw_mut_ref {
-            self.type_table.borrow_mut().make_mut_ref(inner)
-        } else {
-            inner
+        match self.peel_scrutinee_refs(scrutinee_type, RefBinding::None).1 {
+            RefBinding::None => inner,
+            RefBinding::Ref => self.type_table.borrow_mut().make_ref(inner),
+            RefBinding::MutRef => self.type_table.borrow_mut().make_mut_ref(inner),
         }
     }
 }
@@ -10802,7 +10581,6 @@ fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
 /// under a stdlib-snapshot callee module whose `associated_constants` map
 /// was not rehydrated.
 fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
-    use crate::tir::TypeTable;
     Some((
         primitive_int_bound(prefix, suffix)?,
         TypeTable::primitive_by_name(prefix)?,
@@ -11178,7 +10956,6 @@ pub(crate) fn ord_bool_from_cmp(
             greater_index,
         )
     };
-    use crate::tir::TirBinaryOp;
     let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
         ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
         ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
@@ -11366,7 +11143,6 @@ fn bind_to_local(
 }
 
 fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
-    use crate::tir::TirUnaryOp;
     match op {
         ast::UnaryOp::Neg => TirUnaryOp::Neg,
         ast::UnaryOp::Not => TirUnaryOp::Not,
@@ -11382,7 +11158,6 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
 /// internal variants that the elaborator only synthesises after
 /// coercion analysis, so reify never produces them from this helper.
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
-    use crate::tir::TirBinaryOp;
     match op {
         ast::BinaryOp::Add => TirBinaryOp::Add,
         ast::BinaryOp::Sub => TirBinaryOp::Sub,
@@ -11465,8 +11240,6 @@ fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
 /// in step with it: a construct missing here is a `return` the closure's return
 /// type cannot see, which mistypes `$call` and fails core-Wasm validation.
 fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
-    use crate::tir::{TirExprKind, TirStmtKind};
-
     fn in_block(block: &TirBlock) -> Option<tir::TypeId> {
         block.stmts.iter().find_map(|stmt| match &stmt.kind {
             TirStmtKind::Return { value } => value.as_ref().map(|v| v.type_id),

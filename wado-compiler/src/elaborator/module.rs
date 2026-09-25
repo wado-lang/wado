@@ -1,14 +1,13 @@
 //! Single module type/signature collection and name resolution helpers.
 
-use crate::ast::{self, Item, Module, Type, wire_numbers_of};
+use crate::ast::{Item, Module, Type};
 use crate::compiler_host::CompilerHost;
 use crate::tir::TypeTable;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::types::{
-    EnumInfo, GenericNewtypeInfo, ParamSlot, RealTypeParams, StructFieldInfo, VariantCaseData,
-    VariantInfo,
+    EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
@@ -18,89 +17,55 @@ use crate::name::{FqTypeName, MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
-        // Then collect struct fields from the main module
         for item in &module.items {
             match item {
                 Item::Struct(struct_decl) => {
-                    // Set up type parameters in scope for resolving field types.
-                    // Use an inherited scope so caller-provided context stays
-                    // visible — only `type_params` and `type_param_bounds` are
-                    // replaced, matching the original `mem::take` semantics.
                     let mut scope = self.enter_inherited_type_param_scope();
                     scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                     scope.register_generic_params(&struct_decl.type_params, 0);
 
                     let mut fields = Vec::new();
-                    let mut field_ast_ids = Vec::new();
-                    let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = scope.resolve_type(&field.ty);
                         scope.reject_written_annotation(&field.ty);
                         fields.push((field.name.clone(), type_id, field.visibility));
-                        field_ast_ids.push(field.id);
-                        field_defaults.push(field.default.clone());
                     }
                     let type_param_type_ids = Elaborator::<H>::slot_type_ids(
                         &ParamSlot::list(&struct_decl.type_params),
                         &scope.tysys.type_table,
                     );
 
-                    let module_source = scope.current_module_source.clone();
-                    let def = scope.tysys.def_of_item(struct_decl.id);
-                    scope.sem.decls.local.struct_fields.insert(
-                        def,
-                        StructFieldInfo {
-                            name: struct_decl.name.clone(),
-                            module_source,
-                            defined_at: struct_decl.id,
-                            fields,
-                            field_ast_ids,
-                            field_defaults,
-                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
-                            type_params: RealTypeParams::of(&struct_decl.type_params),
-                            type_param_type_ids,
-                        },
+                    let info = StructFieldInfo::of_decl(
+                        scope.current_module_source.clone(),
+                        struct_decl,
+                        fields,
+                        type_param_type_ids,
                     );
+                    let def = scope.tysys.def_at(struct_decl.id);
+                    scope.sem.decls.local.struct_fields.insert(def, info);
 
                     drop(scope);
                 }
                 Item::Newtype(newtype_decl) => {
+                    let def = self.tysys.def_at(newtype_decl.id);
                     if newtype_decl.type_params.is_empty() {
-                        // Concrete newtype: resolve immediately
                         let base_type_id = self.resolve_type(&newtype_decl.ty);
-                        let def = self
-                            .tysys
-                            .resolutions
-                            .defs()
-                            .of_ast_id(newtype_decl.id)
-                            .expect("a newtype declaration has an identity");
-                        let newtype_id = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_newtype(def, base_type_id);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .register_decl_type(newtype_decl.id, newtype_id);
-                        self.sem.decls.local.newtypes.insert(def, newtype_id);
-                    } else {
-                        // Generic newtype: store definition for lazy instantiation
-                        self.sem.decls.local.generic_newtypes.insert(
-                            self.tysys.def_of_item(newtype_decl.id),
-                            GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
+                        self.sem.decls.local.declare_newtype(
+                            &self.tysys.type_table,
+                            def,
+                            newtype_decl.id,
+                            base_type_id,
                         );
+                    } else {
+                        self.sem
+                            .decls
+                            .local
+                            .generic_newtypes
+                            .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
                     }
                 }
                 Item::Variant(variant_decl) => {
-                    // Set up type parameters in scope for resolving field types.
-                    // Use an inherited scope so caller-provided context stays
-                    // visible — only `type_params` is replaced, matching the
-                    // original `mem::take(&mut self.annotate_ctx.trait_ctx.type_params)`.
                     let mut scope = self.enter_inherited_type_param_scope();
                     scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.register_generic_params(&variant_decl.type_params, 0);
@@ -109,26 +74,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &scope.tysys.type_table,
                     );
 
-                    // Collect variant cases with resolved payload types
-                    let mut cases = Vec::new();
-                    for case in &variant_decl.cases {
-                        // Each variant case has exactly one payload type.
-                        // Unit variants have `()` (unit type) payload.
-                        let payload = if let Some(payload_ty) = &case.payload {
-                            scope.reject_written_annotation(payload_ty);
-                            scope.resolve_type(payload_ty)
-                        } else {
-                            TypeTable::UNIT
-                        };
-                        cases.push(VariantCaseData {
-                            name: case.name.clone(),
-                            payload,
-                            ast_id: case.id,
-                        });
-                    }
+                    let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
+                        scope.reject_written_annotation(payload_ty);
+                        scope.resolve_type(payload_ty)
+                    });
 
                     let module_source = scope.current_module_source.clone();
-                    let def = scope.tysys.def_of_item(variant_decl.id);
+                    let def = scope.tysys.def_at(variant_decl.id);
                     scope.sem.decls.local.variant_cases.insert(
                         def,
                         VariantInfo::of_decl(
@@ -148,7 +100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Item::Enum(enum_decl) => {
                     self.sem.decls.local.enum_cases.insert(
-                        self.tysys.def_of_item(enum_decl.id),
+                        self.tysys.def_at(enum_decl.id),
                         EnumInfo::of_decl(self.current_module_source.clone(), enum_decl),
                     );
                     register_enum_compiler_items(
@@ -163,7 +115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if flags_decl.flags.len() > 32 {
                         continue;
                     }
-                    let def = self.tysys.def_of_item(flags_decl.id);
+                    let def = self.tysys.def_at(flags_decl.id);
                     self.sem.decls.local.declare_flags(
                         &self.tysys.type_table,
                         def,
@@ -197,22 +149,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // method declarations against the trait as their owner type
                     // — the trait body is the only place a serde protocol
                     // method and its owning trait are both in scope.
-                    let owner_head = self
-                        .tysys
-                        .resolutions
-                        .defs()
-                        .of_ast_id(trait_decl.id)
-                        .map(|def| FqTypeName::declared(self.tysys.resolutions.defs(), def));
+                    let owner_head = FqTypeName::declared(
+                        self.tysys.resolutions.defs(),
+                        self.tysys.def_at(trait_decl.id),
+                    );
                     for method in &trait_decl.methods {
-                        let Some(owner_head) = owner_head.as_ref() else {
-                            continue;
-                        };
                         register_method_compiler_item(
                             &self.tysys.type_table,
                             &method.attrs,
                             &method.name,
                             &trait_decl.name,
-                            owner_head,
+                            &owner_head,
                             &self.current_module_source,
                             method.span,
                             self.logger,

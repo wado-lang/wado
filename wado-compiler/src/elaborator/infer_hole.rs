@@ -572,13 +572,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// Whether `answer` can stand as a variable's solution.
-    ///
-    /// Another variable cannot: a variable resolves to a type, not to a
-    /// deferral. Neither can `never`, `unknown` or `error` — each is a type a
-    /// check accepts *anywhere*, so taking one as the answer would fix the
-    /// variable to it and measure every later candidate against it. The
-    /// element type of `[panic(), 1]` is not `!`.
+    /// Whether `answer` can stand as a variable's solution: not another variable,
+    /// nor `never` / `unknown` / `error`, which every check accepts anywhere.
     fn is_usable_answer(&self, answer: TypeId) -> bool {
         answer != TypeTable::NEVER
             && answer != TypeTable::UNKNOWN

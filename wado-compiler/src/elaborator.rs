@@ -242,9 +242,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
-    /// Construct a [`TypeLookup`] view over the elaborator's current import
-    /// context and shared `all_*` tables. Use this for any type-name
-    /// resolution; never reach into `all_*` directly.
+    /// A [`TypeLookup`] standing in the frame the AST under resolution was written in.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
         // The frame is where the AST under resolution was written, so a
         // travelled expression reads names as its author did — and its aliases
@@ -407,13 +405,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
-    /// Run `body` in `module`'s perspective, swapping the current module and
-    /// its namespace imports. For callee-scope work only, such as a parameter
-    /// default; already being there skips the swap.
-    ///
-    /// The walk's own type tables are not swapped with it: they are keyed by
-    /// declaration, so an entry answers for the declaration that made it and
-    /// for nothing else, whichever module the walk is standing in.
+    /// Run `body` in `module`'s perspective, swapping the current module and its
+    /// namespace imports; for callee-scope work only, such as a parameter default.
     pub(super) fn with_module_perspective_for<R>(
         &mut self,
         module: &ModuleSource,
@@ -428,25 +421,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .namespace_imports(module)
             .cloned()
             .unwrap_or_default();
-        struct Restore<'r, 'a, H: CompilerHost> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            saved: Option<(ModuleSource, trait_env::NamespaceImports)>,
-        }
-        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
-            fn drop(&mut self) {
-                let (source, namespaces) = self.saved.take().expect("saved perspective present");
-                self.elaborator.current_module_source = source;
-                self.elaborator.sem.imports.namespace_imports = namespaces;
-            }
-        }
-        let saved_source = std::mem::replace(&mut self.current_module_source, module.clone());
-        let saved_namespaces =
-            std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
-        let guard = Restore {
-            elaborator: self,
-            saved: Some((saved_source, saved_namespaces)),
-        };
-        body(guard.elaborator)
+        util::replaced(
+            self,
+            |e| &mut e.current_module_source,
+            module.clone(),
+            |e| {
+                util::replaced(
+                    e,
+                    |e| &mut e.sem.imports.namespace_imports,
+                    namespaces,
+                    body,
+                )
+                .0
+            },
+        )
+        .0
     }
 
     /// Run `body` recording into `fresh` in place of the facts `field` selects,
@@ -457,28 +446,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         fresh: T,
         body: impl FnOnce(&mut Self) -> R,
     ) -> (R, T) {
-        struct Restore<'r, 'a, H: CompilerHost, T> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            field: for<'s> fn(&'s mut Elaborator<'a, H>) -> &'s mut T,
-            saved: Option<T>,
-        }
-        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
-            fn drop(&mut self) {
-                if let Some(saved) = self.saved.take() {
-                    *(self.field)(self.elaborator) = saved;
-                }
-            }
-        }
-        let saved = std::mem::replace(field(self), fresh);
-        let mut guard = Restore {
-            elaborator: self,
-            field,
-            saved: Some(saved),
-        };
-        let result = body(guard.elaborator);
-        let saved = guard.saved.take().expect("enclosing facts present");
-        let recorded = std::mem::replace(field(guard.elaborator), saved);
-        (result, recorded)
+        util::replaced(self, field, fresh, body)
     }
 
     /// The single sink for every use→def edge, so the
@@ -1188,7 +1156,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The answer comes from [`crate::resolve::Resolutions`] — resolved once,
     /// in the module that wrote the reference — so an alias and a second
     /// module's same-named trait cannot reach the mangle. A site that names no
-    /// declaration carries no identity — see [`Self::fq_trait_name_at`].
+    /// declaration carries no identity — see [`TypeSystem::fq_trait_name_at`].
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let written = self.get_type_name(ty);
         let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
@@ -1476,7 +1444,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().struct_fields_of_head(head)
     }
 
-    /// The struct `type_id` is an instance of; see [`Self::variant_of_type`].
+    /// The struct `type_id` is an instance of; see [`TypeSystem::variant_of_type`].
     pub(super) fn struct_fields_of_type(&self, type_id: TypeId) -> Option<&StructFieldInfo> {
         let def = self.tysys.type_def(type_id)?;
         self.lookup_struct_fields_of_decl(def)
@@ -1672,10 +1640,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         self.record_reference(use_id, decl_id);
                     }
                     tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(def) = self.decl_key_or_local(name).filter(|def| {
-                    self.tysys.trait_env.effect_decl_index.contains(def)
-                        || self.tysys.trait_env.resource_decl_index.contains(def)
-                }) {
+                } else if let Some(def) = self
+                    .decl_key_or_local(name)
+                    .filter(|&def| self.tysys.is_effect_or_resource_decl(def))
+                {
                     if let Some(use_id) = use_id {
                         let decl_ast = self.tysys.resolutions.defs().ast_id(def);
                         self.record_reference_to_def(use_id, decl_ast);
@@ -1813,7 +1781,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // identity — the impl target's prefix canonicalized here, in the
         // declaring scope — so the driver-merged view cannot collide across
         // same-named types. Lookups canonicalize the queried prefix the
-        // same way ([`Self::associated_constant_of`] and its path / qualified
+        // same way ([`TypeSystem::associated_constant_of`] and its path / qualified
         // forms).
         self.sem.decls.associated_constants.clear();
         type AssocConstInput = (
@@ -2146,10 +2114,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-                .is_some_and(|key| {
-                    scope.tysys.trait_env.effect_decl_index.contains(&key)
-                        || scope.tysys.trait_env.resource_decl_index.contains(&key)
-                });
+                .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
@@ -2280,12 +2245,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // synthesis would overwrite its own per-node facts. `decls` and
             // `imports` are cloned from the impl module for name resolution.
             for default_method in &default_methods {
-                // Build a synthetic `ModuleSemantics` for this
-                // one (impl, default_method) synthesis. Fresh
-                // `types` / `bindings` so the body walk's writes
-                // stay isolated; clone the impl module's `decls`
-                // / `imports` so the walk's reads see the
-                // resolved decls + import context.
                 let synthetic = ModuleSemantics {
                     bindings: ModuleBindings::default(),
                     imports: scope.sem.imports.clone(),
@@ -2311,20 +2270,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     },
                 );
 
-                // Drain decl-level writes that must flow back
-                // into the impl module's `TirModule`. The body
-                // walk's only such write is anon-struct push;
-                // synthesis-request pushes only happen at the
-                // decl pass, not inside a method body.
+                // A body walk's only decl-level write is an anonymous struct.
                 scope
                     .sem
                     .decls
                     .pending_anonymous_structs
                     .append(&mut populated.decls.pending_anonymous_structs);
-
-                // Stash the populated synthetic under the
-                // (impl, default_method) key so reify can swap
-                // `scope.sem` to it during its synthesis pass.
                 scope
                     .sem
                     .default_method_semantics
@@ -2335,12 +2286,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 impl TypeSystem {
-    /// The impl-associated constant `owner` declares as `name`.
-    ///
-    /// `owner` is the declaration the use site's qualifier resolved to — an
-    /// alias and a `ns$Type` prefix answer with it like any other spelling —
-    /// so a same-named type in an unrelated module can never satisfy the
-    /// lookup.
+    /// The impl-associated constant `owner` declares as `name`. `owner` is the
+    /// declaration the use site's qualifier resolved to, never a spelling.
     pub(super) fn associated_constant_of(
         &self,
         owner: DefId,
@@ -2348,6 +2295,7 @@ impl TypeSystem {
     ) -> Option<sig::AssocConstSig> {
         self.signatures.associated_constant(owner, name).cloned()
     }
+
     /// [`Self::associated_constant_of`] for a qualified path in expression
     /// position, whose leading segment carries the site that names the owner.
     pub(super) fn associated_constant_of_path(
@@ -2358,6 +2306,7 @@ impl TypeSystem {
         let name = ident.segments.last()?;
         self.associated_constant_of(owner, &name.name)
     }
+
     /// [`Self::associated_constant_of`] for a pattern's `Type::CONST`
     /// spelling, whose qualifier is a written `ast::Type` with its own site.
     pub(super) fn associated_constant_qualified(
@@ -2368,6 +2317,7 @@ impl TypeSystem {
         let owner = trait_query::assoc_const_owner(qualifier, &self.resolutions)?;
         self.associated_constant_of(owner, name)
     }
+
     /// The declaration a qualified path's *owner* segment names — `Color` in
     /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
     /// resolve walk answered for. `None` for a bare name, which qualifies
@@ -2375,22 +2325,10 @@ impl TypeSystem {
     pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
         self.resolutions.declared(ident.owner_segment()?.id)
     }
+
     /// The canonical signature of the free function the site names.
     pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
         self.signatures.function_sig(self.free_function_at(site)?)
-    }
-}
-
-impl TypeSystem {
-    /// The declaration an item node declares.
-    ///
-    /// Every item the collect pass walks was declared into the table, so a miss
-    /// is a hole in that pass rather than a name that reached nothing.
-    pub(super) fn def_of_item(&self, id: AstId) -> DefId {
-        self.resolutions
-            .defs()
-            .of_ast_id(id)
-            .expect("an item declaration has an identity")
     }
 
     /// The free function the reference site `site` names, answered by the
@@ -2460,12 +2398,8 @@ impl TypeSystem {
         trait_env::render_decl_name(self.resolutions.defs(), def)
     }
 
-    /// The trait a bound's reference site names; `written` supplies the type
-    /// arguments and the diagnostic spelling.
-    ///
-    /// A site naming no declaration gets no invented identity — `use` and the
-    /// prelude are the only ways to name a trait, so a name reaching nothing here
-    /// reaches nothing at all, and the mangle falls back to the spelling.
+    /// The trait a bound's reference site names, `written` its spelling. A site
+    /// naming no declaration gets no invented identity: the mangle uses `written`.
     pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
         let resolutions = &self.resolutions;
         let answer = resolutions.get(site);
@@ -2481,12 +2415,8 @@ impl TypeSystem {
         )
     }
 
-    /// The variant `type_id` is an instance of, or `None` when it is not one.
-    ///
-    /// Asks the type for its declaration instead of reading a `(name, module)`
-    /// pair off it: an instantiated `Option<i32>` answers with the `Option` it
-    /// was spelled from, so there is no separate generic arm and no spelling
-    /// check deciding whether the pair means a variant at all.
+    /// The variant `type_id` is an instance of, or `None` when it is not one. An
+    /// instantiated `Option<i32>` answers with the `Option` it was spelled from.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
         let def = self.type_def(type_id)?;
         self.data.variant_cases.get(&def)

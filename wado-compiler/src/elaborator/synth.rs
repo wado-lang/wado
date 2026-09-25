@@ -17,7 +17,7 @@ use super::callee::CalleeRef;
 use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
-use super::tysys::TypeSystem;
+use super::tysys::{TypeSystem, range_item};
 use super::util::is_float_only_literal;
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::name::{DeclName, RefKind};
@@ -257,35 +257,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         class
     }
 
-    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
-    /// nominal: a base name renders a function type's own parameters, so
-    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
-    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
-    /// `Holder<i32, String>`, which no `T` makes it.
-    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
-        let mut bindings = IndexMap::default();
-        unify(&self.tysys.type_table, param, arg, &mut bindings);
-        // A binding dropped here leaves that slot spelled as it was written, so
-        // the parameter can never equal the argument.
-        let substitution: IndexMap<u32, TypeId> = {
-            let tt = self.tysys.type_table.borrow();
-            bindings
-                .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
-                .collect()
-        };
-        let filled = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .substitute_type_params(param, &substitution);
-        param_takes(&self.tysys.type_table.borrow(), filled, arg)
-    }
-
     /// Whether a candidate's parameter type is in `class`'s denoted set.
     pub(super) fn class_admits(&self, param: TypeId, class: &ArgClass) -> bool {
         let tt = self.tysys.type_table.borrow();
@@ -313,7 +284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return false;
                 }
                 drop(tt);
-                self.slots_fill_param_to(param, *t)
+                self.tysys.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.
@@ -514,7 +485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_variant_cases_at(owner, prefix) {
             let declared_at = info.defined_at;
             let generic = !info.type_params.is_empty();
-            if info.cases.iter().any(|c| c.name == suffix) {
+            if info.case_named(suffix).is_some() {
                 if generic {
                     return ArgClass::Opaque(OpaqueReason::Inference);
                 }
@@ -834,11 +805,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head alone otherwise — which is still enough to tell the two range
     /// types apart from a plain index.
     fn synth_range(&mut self, range: &ast::RangeExpr, scope: &mut SynthScope<'_>) -> ArgClass {
-        let item = match range.kind {
-            ast::RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            ast::RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
-        let range_decl = self.tysys.type_table.borrow().compiler_item_def(item);
+        let range_decl = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_item_def(range_item(range.kind));
         let start = self.synth(&range.start, scope);
         let element = start.meet(self.synth(&range.end, scope));
         let Some(def) = range_decl else {
@@ -1079,9 +1050,35 @@ impl TypeSystem {
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))
     }
-}
 
-impl TypeSystem {
+    /// Whether `param`'s slots can be filled to make it `arg`. Structural, not
+    /// nominal: a base name renders a function type's own parameters, so
+    /// `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is
+    /// chosen, and it drops a generic's arguments, so `Holder<T, T>` spells like
+    /// `Holder<i32, String>`, which no `T` makes it.
+    fn slots_fill_param_to(&self, param: TypeId, arg: TypeId) -> bool {
+        let mut bindings = IndexMap::default();
+        unify(&self.type_table, param, arg, &mut bindings);
+        // A binding dropped here leaves that slot spelled as it was written, so
+        // the parameter can never equal the argument.
+        let substitution: IndexMap<u32, TypeId> = {
+            let tt = self.type_table.borrow();
+            bindings
+                .iter()
+                .filter_map(|(&slot, &filled)| match tt.get(slot) {
+                    ResolvedType::TypeParam { index, .. }
+                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let filled = self
+            .type_table
+            .borrow_mut()
+            .substitute_type_params(param, &substitution);
+        param_takes(&self.type_table.borrow(), filled, arg)
+    }
+
     /// How an argument's class reads in a diagnostic — the reason-chain step
     /// that says what this argument contributed to selection.
     pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {

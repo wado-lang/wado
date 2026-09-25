@@ -3,7 +3,6 @@
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -25,7 +24,7 @@ use super::call::{
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
-use super::sig::{InstantiatedImplSig, MethodSig, Param};
+use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
 use super::trait_env::{ImplHeader, TraitEnv};
@@ -36,6 +35,7 @@ use super::types::{
 use super::tysys::TypeSystem;
 use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::sig::ImplSig;
@@ -43,7 +43,6 @@ use crate::elaborator::solver_bridge::Ordered;
 use crate::elaborator::trait_env::written_type_arg;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
-use crate::elaborator::{scope, sig};
 use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, TypeHead};
 use crate::resolve::{Resolution, head_site};
 use crate::unparse::binary_op_str;
@@ -72,14 +71,40 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
         .expect("every indexed impl block has an ImplHeader")
 }
 
-impl<H: CompilerHost> Elaborator<'_, H> {}
-
 impl TypeSystem {
     /// The declaration facts the decl pass recorded for an indexed impl block.
     fn impl_sig(&self, r: &ImplBlockRef) -> &ImplSig {
         self.signatures
             .impl_sig(r.0)
             .expect("the decl pass records every impl block's declaration facts")
+    }
+}
+
+impl MethodInfo {
+    /// The receiver's own method `sig`, its types as `instantiated` settled
+    /// them; the fields no signature carries start empty.
+    pub(super) fn of_sig(sig: &MethodSig, instantiated: InstantiatedSig) -> Self {
+        let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        Self {
+            method_def: Some(sig.def),
+            return_type: instantiated.return_type,
+            self_kind: sig.self_kind,
+            param_types: instantiated.param_types[first_value..].to_vec(),
+            param_is_mut: Param::is_mut_flags(&sig.params),
+            param_defaults: Param::defaults(&sig.params),
+            param_names: Param::names(&sig.params),
+            owner: MethodOwner::Receiver,
+            cm_name: None,
+            is_ref_impl: false,
+            method_type_param_ids: sig.own_type_param_ids(),
+            method_own_params: sig.own_params.clone(),
+            impl_module: None,
+            from_concrete_impl: false,
+            consumes_self: sig.self_kind == ast::SelfKind::Value,
+            inherent_visibility: None,
+            defaults_module: sig.defaults_module.clone(),
+            impl_type_bindings: Vec::new(),
+        }
     }
 }
 
@@ -277,7 +302,6 @@ impl TypeSystem {
     /// (WEP 2026-08-12 §4); a binder is free only where it stands, so
     /// `impl<T> Slot<[i32, T]>` still wants a pair.
     fn arg_matches(&self, written: &Type, recv: TypeId) -> bool {
-        use crate::tir::ResolvedType;
         let tt = self.type_table.borrow();
         let resolved = tt.get(recv).clone();
         drop(tt);
@@ -422,47 +446,6 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Collect trait impl block references for a given type name.
-    /// Returns lightweight `ImplBlockRef` values instead of cloning impl block data.
-    fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
-        let mut refs = Vec::new();
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_key) {
-            for entry in entries {
-                if self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(entry)
-                    .is_some_and(ImplHeader::is_trait_impl)
-                {
-                    refs.push(ImplBlockRef(*entry));
-                }
-            }
-        }
-        refs
-    }
-
-    /// Collect trait impl block references for multiple type names.
-    fn collect_trait_impl_refs_multi(&self, type_keys: &[ImplTargetKey]) -> Vec<ImplBlockRef> {
-        let mut refs = Vec::new();
-        for key in type_keys {
-            if let Some(entries) = self.tysys.trait_env.impl_index.get(key) {
-                for entry in entries {
-                    if self
-                        .tysys
-                        .trait_env
-                        .impl_headers
-                        .get(entry)
-                        .is_some_and(ImplHeader::is_trait_impl)
-                    {
-                        refs.push(ImplBlockRef(*entry));
-                    }
-                }
-            }
-        }
-        refs
-    }
-
     /// Shared scan-and-map prologue behind `find_indexing_trait_impl`,
     /// `find_assoc_type_in_trait_impl`, and `find_arithmetic_trait_impl`: walk
     /// the trait impls on `target` whose name satisfies `trait_matches`
@@ -484,17 +467,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) -> Option<R>,
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
-        let signatures = Rc::clone(&self.tysys.signatures);
-        let impl_refs = self.collect_trait_impl_refs(target);
+        let impl_refs = self.tysys.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
             let trait_name = self.get_type_name(header.trait_ty().unwrap());
             if !trait_matches(&trait_name, header.trait_def()) {
                 continue;
             }
-            let impl_sig = signatures
-                .impl_sig(impl_ref.0)
-                .expect("the decl pass records every impl block's declaration facts")
+            let impl_sig = self
+                .tysys
+                .impl_sig(impl_ref)
                 .instantiate(&self.tysys.type_table, concrete_type_args);
             let declared: IndexSet<String> =
                 header.type_params.iter().map(|p| p.name.clone()).collect();
@@ -573,35 +555,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 _ => t,
             }
         })
-    }
-
-    /// The trait declaration's own type parameters, under the names it wrote
-    /// them, standing at the arguments this impl supplied.
-    fn trait_declared_bindings(
-        &self,
-        trait_decl: DefId,
-        trait_args: &[TypeId],
-        receiver: Option<TypeId>,
-    ) -> Vec<DefaultTypeBinding> {
-        let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
-            return Vec::new();
-        };
-        // The trait declared the bounds, so their `Self` is the trait's — which
-        // at this impl is the receiver, under the trait that wrote them.
-        let implementing = receiver.map(|type_id| SelfBinding {
-            type_id,
-            declaring_trait: Some(trait_decl),
-        });
-        trait_params_from_impl(&header.type_params, trait_args, implementing)
-            .into_iter()
-            .filter_map(|supplied| {
-                Some(DefaultTypeBinding {
-                    name: supplied.param.name.clone(),
-                    settled: SettledAs::Type(*supplied.arg?),
-                    bounds: supplied.bounds,
-                })
-            })
-            .collect()
     }
 
     /// The right-hand type `trait_`'s declaration gives `method_name`, read off
@@ -708,6 +661,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
+    /// The trait impl blocks indexed under `type_key`.
+    fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
+        self.trait_env
+            .impl_index
+            .get(type_key)
+            .into_iter()
+            .flatten()
+            .filter(|entry| {
+                self.trait_env
+                    .impl_headers
+                    .get(*entry)
+                    .is_some_and(ImplHeader::is_trait_impl)
+            })
+            .map(|entry| ImplBlockRef(*entry))
+            .collect()
+    }
+
+    /// The trait declaration's own type parameters, under the names it wrote
+    /// them, standing at the arguments this impl supplied.
+    fn trait_declared_bindings(
+        &self,
+        trait_decl: DefId,
+        trait_args: &[TypeId],
+        receiver: Option<TypeId>,
+    ) -> Vec<DefaultTypeBinding> {
+        let Some(header) = self.trait_env.decl_header_of(&trait_decl) else {
+            return Vec::new();
+        };
+        // The trait declared the bounds, so their `Self` is the trait's — which
+        // at this impl is the receiver, under the trait that wrote them.
+        let implementing = receiver.map(|type_id| SelfBinding {
+            type_id,
+            declaring_trait: Some(trait_decl),
+        });
+        trait_params_from_impl(&header.type_params, trait_args, implementing)
+            .into_iter()
+            .filter_map(|supplied| {
+                Some(DefaultTypeBinding {
+                    name: supplied.param.name.clone(),
+                    settled: SettledAs::Type(*supplied.arg?),
+                    bounds: supplied.bounds,
+                })
+            })
+            .collect()
+    }
+
     /// Get the module source for an `ImplBlockRef`.
     fn impl_block_module_source(&self, r: &ImplBlockRef) -> ModuleSource {
         self.resolutions.defs().module(r.0).clone()
@@ -718,9 +717,7 @@ impl TypeSystem {
     pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<DefId> {
         self.compiler_trait_def(operator_compiler_item(op)?)
     }
-}
 
-impl TypeSystem {
     /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
     /// fields all declare a default, making it eligible for auto-derived
     /// `Default::default()` — a fieldless one vacuously. `None` for an unknown
@@ -987,9 +984,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     continue;
                 }
-                if let Some(info) =
-                    self.inherent_method_info(&impl_ref, method_name, receiver_type_args.as_deref())
-                {
+                if let Some(info) = self.tysys.inherent_method_info(
+                    &impl_ref,
+                    method_name,
+                    receiver_type_args.as_deref(),
+                ) {
                     return Some(info);
                 }
             }
@@ -1012,9 +1011,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     continue;
                 }
-                if let Some(info) =
-                    self.inherent_method_info(&impl_ref, method_name, receiver_type_args.as_deref())
-                {
+                if let Some(info) = self.tysys.inherent_method_info(
+                    &impl_ref,
+                    method_name,
+                    receiver_type_args.as_deref(),
+                ) {
                     return Some(info);
                 }
             }
@@ -1029,8 +1030,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // to a scan (issue #1416).
         let receiver_decl = self.tysys.type_table.borrow().nominal_def(base_type_id);
         if let Some(def) = receiver_decl
-            && let Some(info) =
-                self.find_resource_method_info(def, method_name, receiver_type_args.as_deref())
+            && let Some(info) = self.tysys.find_resource_method_info(
+                def,
+                method_name,
+                receiver_type_args.as_deref(),
+            )
         {
             return Some(info);
         }
@@ -1074,174 +1078,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(receiver),
                 receiver_type_args,
             )
-    }
-
-    /// `MethodInfo` for `method_name` on the inherent `impl` block at
-    /// `impl_ref`, or `None` when the block declares no such method.
-    fn inherent_method_info(
-        &mut self,
-        impl_ref: &ImplBlockRef,
-        method_name: &str,
-        receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<MethodInfo> {
-        let trait_env = Arc::clone(&self.tysys.trait_env);
-        let signatures = Rc::clone(&self.tysys.signatures);
-        let header = impl_header(&trait_env, impl_ref);
-        let method_header = header.methods.iter().find(|m| m.name == method_name)?;
-        let sig = signatures.method_sig(method_header.def)?;
-        let impl_sig = signatures
-            .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts");
-
-        let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
-        let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
-        let first_value = sig.first_value_param().min(instantiated.param_types.len());
-        let impl_type_bindings = slot_type_bindings(
-            &self.tysys.type_table,
-            &impl_sig.target_type_args,
-            receiver_type_args.unwrap_or(&[]),
-        );
-
-        Some(MethodInfo {
-            impl_type_bindings,
-            method_def: Some(sig.def),
-            return_type: instantiated.return_type,
-            self_kind: sig.self_kind,
-            param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: Param::is_mut_flags(&sig.params),
-            owner: MethodOwner::Receiver,
-            cm_name: None,
-            is_ref_impl: false,
-            method_type_param_ids: sig.own_type_param_ids(),
-            method_own_params: sig.own_params.clone(),
-            impl_module: Some(self.tysys.impl_block_module_source(impl_ref)),
-            from_concrete_impl: self.tysys.impl_is_concrete_instantiation(&header.ty),
-            param_defaults: Param::defaults(&sig.params),
-            param_names: Param::names(&sig.params),
-            consumes_self: sig.self_kind == ast::SelfKind::Value,
-            inherent_visibility: Some(method_header.visibility),
-            defaults_module: sig.defaults_module.clone(),
-        })
-    }
-
-    /// The signature of `method_name` as an instance method on the resource
-    /// `def` declares.
-    ///
-    /// The receiver's `ResolvedType` carries the declaration, so the method is
-    /// found on it directly — no name, no module, and so no scan (issue #1416).
-    fn find_resource_method_info(
-        &mut self,
-        def: DefId,
-        method_name: &str,
-        receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<MethodInfo> {
-        // The nearest declaration answers, keeping its own signature. Only the
-        // receiver's takes type arguments — a generic resource is rejected.
-        self.tysys
-            .resource_chain_of(def)
-            .into_iter()
-            .enumerate()
-            .find_map(|(step, current)| {
-                let args = if step == 0 { receiver_type_args } else { None };
-                let mut info = self.resource_method_info_on(current, method_name, args)?;
-                // An ancestor's method keeps its own name and module: one
-                // declaration, reached through the chain, so the call names the
-                // resource that declares it and the receiver passes through.
-                if step > 0
-                    && let Some(declaring) =
-                        self.tysys.type_table.borrow().find_resource_type(current)
-                {
-                    info.owner = MethodOwner::Ancestor(declaring);
-                }
-                Some(info)
-            })
-    }
-
-    /// The resource that declares `method_name` as an instance method for a
-    /// receiver declared by `def` — itself or the nearest ancestor — and what
-    /// it declares. A static belongs to its declaring resource alone, so the
-    /// walk passes it by.
-    pub(super) fn resource_instance_method(
-        &self,
-        def: DefId,
-        method_name: &str,
-    ) -> Option<(DefId, sig::MethodSig)> {
-        self.tysys
-            .resource_chain_of(def)
-            .into_iter()
-            .find_map(|current| {
-                let sig = self
-                    .tysys
-                    .signatures
-                    .resource_method_sig(current, method_name)?;
-                (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
-            })
-    }
-
-    /// The trait whose impl for `type_key` declares `method_name`, if one does.
-    /// Direct impls only: a blanket impl answers for every type, so counting it
-    /// here would make every prelude-provided name collide.
-    pub(super) fn trait_impl_declaring(
-        &self,
-        type_key: &ImplTargetKey,
-        method_name: &str,
-    ) -> Option<String> {
-        for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
-            let Some(header) = self.tysys.trait_env.impl_headers.get(&impl_ref.0) else {
-                continue;
-            };
-            if header.methods.iter().any(|m| m.name == method_name)
-                && let Some(trait_name) = header.trait_head_name()
-            {
-                return Some(trait_name.to_string());
-            }
-        }
-        None
-    }
-
-    /// [`Self::find_resource_method_info`] without the `extends` walk.
-    fn resource_method_info_on(
-        &mut self,
-        def: DefId,
-        method_name: &str,
-        receiver_type_args: Option<&[TypeId]>,
-    ) -> Option<MethodInfo> {
-        let sig = self
-            .tysys
-            .signatures
-            .resource_method_sig(def, method_name)?
-            .clone();
-        if sig.self_kind == ast::SelfKind::None {
-            return None;
-        }
-
-        let instantiated = sig
-            .decl
-            .instantiate(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
-        let first_value = sig.first_value_param().min(instantiated.param_types.len());
-        let method_type_param_ids = sig.own_type_param_ids();
-
-        Some(MethodInfo {
-            // A generic resource is rejected, so its methods take no slots.
-            impl_type_bindings: Vec::new(),
-            method_def: Some(sig.def),
-            return_type: instantiated.return_type,
-            self_kind: sig.self_kind,
-            param_types: instantiated.param_types[first_value..].to_vec(),
-            param_is_mut: Param::is_mut_flags(&sig.params),
-            owner: MethodOwner::Receiver,
-            cm_name: sig.cm_name,
-            is_ref_impl: false,
-            method_type_param_ids,
-            method_own_params: sig.own_params.clone(),
-            impl_module: None,
-            from_concrete_impl: false,
-            param_defaults: Param::defaults(&sig.params),
-            param_names: Param::names(&sig.params),
-            consumes_self: sig.self_kind == ast::SelfKind::Value,
-            inherent_visibility: None,
-            defaults_module: sig.defaults_module.clone(),
-        })
     }
 
     /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
@@ -1492,7 +1328,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .zip(type_args)
             .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
             .filter(|&(_, &arg)| {
-                self.tysys.is_unbound_type_param(arg) || self.tysys.type_contains_pack(arg)
+                self.tysys.is_unbound_type_param(arg)
+                    || self.tysys.type_table.borrow().contains_type_pack(arg)
             })
             .map(|(p, _)| p.name.clone())
             .collect();
@@ -1812,9 +1649,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<TraitMethodMatch> {
-        use super::solver_bridge::Ordered;
-        use super::types::TraitMethodMatch;
-
         let receiver_display = type_key
             .display_name(self.tysys.resolutions.defs())
             .to_string();
@@ -1936,7 +1770,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
     ) -> Vec<TraitMethodMatch> {
-        use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
         // Extract type param mappings from the impl header before mutating self.
@@ -2134,10 +1967,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
         // perspective can see (issue #1416) — which is why the decl pass, not
         // this query, resolved it.
-        let signatures = Rc::clone(&scope.tysys.signatures);
-        let impl_sig = signatures
-            .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts")
+        let impl_sig = scope
+            .tysys
+            .impl_sig(impl_ref)
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
             impl_sig
@@ -2208,17 +2040,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A header whose trait reaches no declaration implements none, so it
         // contributes no trait method. The index still holds it under the
         // spelling it wrote, which is how an erroneous block reaches a lookup.
-        let Some(trait_decl) = signatures
-            .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts")
-            .trait_decl
-        else {
+        let Some(trait_decl) = scope.tysys.impl_sig(impl_ref).trait_decl else {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
         // A trait-declared default spells the trait's own parameters: under
         // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`.
-        let declared = scope.trait_declared_bindings(trait_decl, &trait_args, receiver_type_id);
+        let declared =
+            scope
+                .tysys
+                .trait_declared_bindings(trait_decl, &trait_args, receiver_type_id);
         bind_nearer(&mut impl_type_bindings, declared);
         let trait_name_of_impl = scope
             .tysys
@@ -2228,8 +2059,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
-            let self_kind = method_sig.self_kind;
-
             // Bring the reported slots into scope, so the body resolves `T`
             // to the slot the call site binds. Effect and `fn`-bound params
             // occupy none, so they are not registered.
@@ -2267,13 +2096,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let instantiated = method_sig
                 .decl
                 .instantiate_slots(&scope.tysys.type_table, &impl_slots);
-            let return_type = instantiated.return_type;
-            // `MethodInfo::param_types` excludes the receiver; the digest
-            // includes it.
-            let param_types = instantiated.param_types[method_sig
-                .first_value_param()
-                .min(instantiated.param_types.len())..]
-                .to_vec();
 
             // Remove method-level type params from scope
             for type_param in &method_type_params {
@@ -2288,32 +2110,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_param_bounds
                     .shift_remove(&type_param.name);
             }
-            let param_is_mut = Param::is_mut_flags(&method_sig.params);
-            let param_names = Param::names(&method_sig.params);
-            let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: trait_name_of_impl.clone(),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     impl_type_bindings: impl_type_bindings.clone(),
-                    method_def: Some(method_sig.def),
-                    return_type,
-                    self_kind,
-                    param_types,
-                    param_is_mut,
-                    owner: MethodOwner::Receiver,
-                    cm_name: None,
-                    is_ref_impl: false,
-                    method_type_param_ids,
-                    method_own_params: method_sig.own_params,
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
-                    param_defaults,
-                    param_names,
-                    consumes_self: self_kind == ast::SelfKind::Value,
-                    inherent_visibility: None,
-                    defaults_module: method_sig.defaults_module,
+                    ..MethodInfo::of_sig(&method_sig, instantiated)
                 },
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
@@ -2346,33 +2151,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &[],
                 );
 
-                let self_kind = default_method.sig.self_kind;
-                let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
                     trait_name: trait_name_of_impl,
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         impl_type_bindings,
-                        method_def: Some(default_method.sig.def),
-                        return_type: instantiated.return_type,
-                        self_kind,
-                        param_types: instantiated.param_types[first_value_param..].to_vec(),
-                        param_is_mut: Param::is_mut_flags(&default_method.sig.params),
-                        owner: MethodOwner::Receiver,
-                        cm_name: None,
-                        is_ref_impl: false,
-                        method_type_param_ids: default_method.sig.own_type_param_ids(),
-                        method_own_params: default_method.sig.own_params.clone(),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
-                        param_defaults: Param::defaults(&default_method.sig.params),
-                        param_names: Param::names(&default_method.sig.params),
-                        consumes_self: self_kind == ast::SelfKind::Value,
-                        inherent_visibility: None,
                         // The body and its defaults are the trait's, so both
                         // resolve where the trait wrote them.
                         defaults_module: trait_module,
+                        ..MethodInfo::of_sig(&default_method.sig, instantiated)
                     },
                     impl_module_source,
                     blanket_type_param,
@@ -3483,9 +3273,111 @@ impl TypeSystem {
             found.retain(|info| self.writes_rhs_type(info));
         }
     }
-}
 
-impl TypeSystem {
+    /// `MethodInfo` for `method_name` on the inherent `impl` block at
+    /// `impl_ref`, or `None` when the block declares no such method.
+    fn inherent_method_info(
+        &self,
+        impl_ref: &ImplBlockRef,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
+        let header = impl_header(&self.trait_env, impl_ref);
+        let method_header = header.methods.iter().find(|m| m.name == method_name)?;
+        let sig = self.signatures.method_sig(method_header.def)?;
+        let impl_sig = self.impl_sig(impl_ref);
+        let receiver_type_args = receiver_type_args.unwrap_or(&[]);
+        let slots = impl_sig.slots(&self.type_table, receiver_type_args);
+        let instantiated = sig.decl.instantiate_slots(&self.type_table, &slots);
+        Some(MethodInfo {
+            impl_type_bindings: slot_type_bindings(
+                &self.type_table,
+                &impl_sig.target_type_args,
+                receiver_type_args,
+            ),
+            impl_module: Some(self.impl_block_module_source(impl_ref)),
+            from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
+            inherent_visibility: Some(method_header.visibility),
+            ..MethodInfo::of_sig(sig, instantiated)
+        })
+    }
+
+    /// The signature of `method_name` as an instance method on the resource
+    /// `def` declares, found on the declaration directly (issue #1416).
+    fn find_resource_method_info(
+        &self,
+        def: DefId,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
+        // The nearest declaration answers, keeping its own signature. Only the
+        // receiver's takes type arguments — a generic resource is rejected.
+        self.resource_chain_of(def)
+            .into_iter()
+            .enumerate()
+            .find_map(|(step, current)| {
+                let args = if step == 0 { receiver_type_args } else { None };
+                let mut info = self.resource_method_info_on(current, method_name, args)?;
+                // An ancestor's method keeps its own name and module: one
+                // declaration, reached through the chain, so the call names the
+                // resource that declares it and the receiver passes through.
+                if step > 0
+                    && let Some(declaring) = self.type_table.borrow().find_resource_type(current)
+                {
+                    info.owner = MethodOwner::Ancestor(declaring);
+                }
+                Some(info)
+            })
+    }
+
+    /// [`Self::find_resource_method_info`] without the `extends` walk.
+    fn resource_method_info_on(
+        &self,
+        def: DefId,
+        method_name: &str,
+        receiver_type_args: Option<&[TypeId]>,
+    ) -> Option<MethodInfo> {
+        let sig = self.signatures.resource_method_sig(def, method_name)?;
+        if sig.self_kind == ast::SelfKind::None {
+            return None;
+        }
+        let instantiated = sig
+            .decl
+            .instantiate(&self.type_table, receiver_type_args.unwrap_or(&[]));
+        Some(MethodInfo {
+            cm_name: sig.cm_name.clone(),
+            ..MethodInfo::of_sig(sig, instantiated)
+        })
+    }
+
+    /// The nearest of `def` and its ancestors declaring `method_name` as an
+    /// instance method, and that signature; statics are not inherited.
+    pub(super) fn resource_instance_method(
+        &self,
+        def: DefId,
+        method_name: &str,
+    ) -> Option<(DefId, MethodSig)> {
+        self.resource_chain_of(def).into_iter().find_map(|current| {
+            let sig = self.signatures.resource_method_sig(current, method_name)?;
+            (sig.self_kind != ast::SelfKind::None).then(|| (current, sig.clone()))
+        })
+    }
+
+    /// The trait whose direct impl for `type_key` declares `method_name`. A
+    /// blanket answers for every type, so counting one would collide every name.
+    pub(super) fn trait_impl_declaring(
+        &self,
+        type_key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<String> {
+        self.collect_trait_impl_refs(type_key)
+            .iter()
+            .filter_map(|impl_ref| self.trait_env.impl_headers.get(&impl_ref.0))
+            .filter(|header| header.methods.iter().any(|m| m.name == method_name))
+            .find_map(ImplHeader::trait_head_name)
+            .map(str::to_string)
+    }
+
     /// `def` and every resource it extends. Collected, so the walk's own
     /// lookups can borrow the type table again.
     fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {

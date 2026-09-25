@@ -1770,9 +1770,7 @@ impl TypeSystem {
     }
 
     /// The declaration `Reflect::<T>` names, and this instantiation's type args.
-    /// `None` where no `Reflect` impl is synthesized, which
-    /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)
-    /// decides — the same answer monomorphization gets for a bounded blanket.
+    /// `None` where no `Reflect` impl is synthesized, which [`has_reflect_kind`] decides.
     fn reflect_root_subject(&self, self_ty: TypeId) -> Option<(String, ModuleSource, Vec<TypeId>)> {
         let tt = self.type_table.borrow();
         if !has_reflect_kind(self_ty, &tt) {

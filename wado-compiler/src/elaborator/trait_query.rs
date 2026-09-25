@@ -1,6 +1,8 @@
 //! Trait query functions: checking trait implementations, bounds validation,
 //! and associated type resolution.
 
+use std::cell::{Cell, RefCell};
+
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Type};
@@ -20,7 +22,6 @@ use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
     trait_params_from_impl,
 };
-use super::sig::Param;
 use super::trait_env::{ImplMethodHeader, InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
@@ -33,8 +34,8 @@ use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
-    BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    get_type_name_static, header_answers_bound_args, written_arg_nodes, written_type_arg,
+    BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitEnv, get_type_name_static,
+    header_answers_bound_args, written_arg_nodes, written_type_arg,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -240,6 +241,38 @@ fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
     let (expected_referent, expected_mut) = referent(tt, expected);
     let (actual_referent, actual_mut) = referent(tt, actual);
     expected_referent == actual_referent && expected_mut == actual_mut
+}
+
+/// A bound question on the open stack, closed when dropped.
+struct OpenQuestion<'s>(&'s RefCell<Vec<TraitCheckFrame>>);
+
+impl<'s> OpenQuestion<'s> {
+    fn open(stack: &'s RefCell<Vec<TraitCheckFrame>>, frame: TraitCheckFrame) -> Self {
+        stack.borrow_mut().push(frame);
+        Self(stack)
+    }
+}
+
+impl Drop for OpenQuestion<'_> {
+    fn drop(&mut self) {
+        self.0.borrow_mut().pop();
+    }
+}
+
+/// A member edge crossed on the way to a bound question, uncrossed when dropped.
+struct MemberEdge<'s>(&'s Cell<u32>);
+
+impl<'s> MemberEdge<'s> {
+    fn cross(edges: &'s Cell<u32>) -> Self {
+        edges.set(edges.get() + 1);
+        Self(edges)
+    }
+}
+
+impl Drop for MemberEdge<'_> {
+    fn drop(&mut self) {
+        self.0.set(self.0.get() - 1);
+    }
 }
 
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
@@ -455,7 +488,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for binding in &impl_block.associated_types {
             let bounds: Vec<(String, Option<FqTraitName>)> = self
                 .tysys
-                .trait_assoc_type_decl(&trait_decl, &binding.name)
+                .trait_env
+                .assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.names_a_trait())
@@ -700,26 +734,9 @@ impl TypeSystem {
     /// The declared type parameters of an already-identified trait: the
     /// `<T, U>` of `trait Foo<T, U>`.
     pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        self.trait_decl_header_of(key)
+        self.trait_env
+            .decl_header_of(key)
             .map(|header| header.type_params.clone())
-    }
-}
-
-impl TypeSystem {
-    /// The declaration header of a trait already identified, so a caller
-    /// answers about the declaration its site resolved to, not a spelling.
-    pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
-        self.trait_env.decl_header_of(key)
-    }
-
-    /// The trait's declaration of the associated type `assoc_name`, or `None`
-    /// when it declares no such type.
-    pub(super) fn trait_assoc_type_decl(
-        &self,
-        key: &DefId,
-        assoc_name: &str,
-    ) -> Option<&ast::AssociatedTypeDecl> {
-        self.trait_env.assoc_type_decl(key, assoc_name)
     }
 
     fn reads_a_projection(&self, ty: &ast::Type, binders: &[AstId]) -> bool {
@@ -729,9 +746,7 @@ impl TypeSystem {
                     Resolution::Projection(base) if binders.contains(&base)))
         })
     }
-}
 
-impl TypeSystem {
     /// The trait a compiler item names, as an identity.
     ///
     /// A compiler item is a declaration the compiler knows by construction, so
@@ -886,15 +901,16 @@ impl TypeSystem {
         if let Some(repeated) = repeated {
             return repeated;
         }
-        ctx.trait_check_stack.borrow_mut().push(TraitCheckFrame {
-            type_id,
-            trait_,
-            wanted: wanted.to_vec(),
-            member_edges,
-        });
-        let result = answer();
-        ctx.trait_check_stack.borrow_mut().pop();
-        result
+        let _open = OpenQuestion::open(
+            &ctx.trait_check_stack,
+            TraitCheckFrame {
+                type_id,
+                trait_,
+                wanted: wanted.to_vec(),
+                member_edges,
+            },
+        );
+        answer()
     }
 
     /// The differential of WEP 2026-09-01: in debug builds, the solver must
@@ -988,9 +1004,10 @@ impl TypeSystem {
         let mut failing: Option<(String, TypeId)> = None;
         let walked =
             self.walk_structural_derive_members(scope, resolved, tr, &mut |member, member_tid| {
-                ctx.member_edges.set(ctx.member_edges.get() + 1);
-                let holds = self.type_implements_trait(ctx, scope, member_tid, trait_);
-                ctx.member_edges.set(ctx.member_edges.get() - 1);
+                let holds = {
+                    let _edge = MemberEdge::cross(&ctx.member_edges);
+                    self.type_implements_trait(ctx, scope, member_tid, trait_)
+                };
                 if holds {
                     true
                 } else {
@@ -1309,7 +1326,7 @@ impl TypeSystem {
          -> bool {
             info.cases
                 .iter()
-                .filter(|c| c.payload != TypeTable::UNIT)
+                .filter(|c| c.has_payload(&self.type_table.borrow()))
                 .all(|c| {
                     visit(
                         StructuralMember::Case(&c.name),
@@ -2221,7 +2238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &DefId,
         method_name: &str,
     ) -> Option<(sig::MethodSig, Vec<DeclaredAssocType>)> {
-        let header = self.tysys.trait_decl_header_of(key)?;
+        let header = self.tysys.trait_env.decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
         }
@@ -2234,7 +2251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .supertrait_decls(key)
-            .filter_map(|decl| Some((decl, self.tysys.trait_decl_header_of(&decl)?)))
+            .filter_map(|decl| Some((decl, self.tysys.trait_env.decl_header_of(&decl)?)))
             .flat_map(|(decl, super_header)| {
                 super_header
                     .assoc_types
@@ -2626,49 +2643,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &slots,
             &SlotProjections::from_iter([(0, answers)]),
         );
-        let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
-
-        Some((
-            fq_trait_name,
-            MethodInfo {
-                // A bare bound dispatches on the parameter itself, off no
-                // `impl` block.
-                impl_type_bindings: Vec::new(),
-                method_def: Some(sig.def),
-                return_type: instantiated.return_type,
-                self_kind: sig.self_kind,
-                param_types: instantiated.param_types[first_value_param..].to_vec(),
-                param_is_mut: Param::is_mut_flags(&sig.params),
-                owner: MethodOwner::Receiver,
-                cm_name: None,
-                is_ref_impl: false,
-                method_type_param_ids: sig.own_type_param_ids(),
-                method_own_params: sig.own_params.clone(),
-                impl_module: None,
-                from_concrete_impl: false,
-                param_defaults: Param::defaults(&sig.params),
-                param_names: Param::names(&sig.params),
-                consumes_self: sig.self_kind == ast::SelfKind::Value,
-                inherent_visibility: None,
-                defaults_module: sig.defaults_module.clone(),
-            },
-        ))
+        // A bare bound dispatches on the parameter itself, off no `impl` block.
+        Some((fq_trait_name, MethodInfo::of_sig(&sig, instantiated)))
     }
 }
 
 impl TypeSystem {
     /// The header of `method_name` on the trait `key` names. The cheap form of
-    /// [`Self::trait_method_of`], for counting candidates without cloning each
+    /// [`Elaborator::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
     fn trait_method_header_of(&self, key: &DefId, method_name: &str) -> Option<&ImplMethodHeader> {
-        self.trait_decl_header_of(key)?
+        self.trait_env
+            .decl_header_of(key)?
             .methods
             .iter()
             .find(|m| m.name == method_name)
     }
-}
 
-impl TypeSystem {
     /// The recorded signature of an already-identified trait.
     ///
     /// Every by-name form funnels through this one. Flattening a key back to
@@ -2681,9 +2672,7 @@ impl TypeSystem {
         }
         self.signatures.trait_sig(*key)
     }
-}
 
-impl TypeSystem {
     /// The types a pack parameter's bound actually falls on.
     ///
     /// A pack is instantiated with the tuple that carries its elements, so the
@@ -3421,7 +3410,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
         trait_name: &str,
         method_name: &str,
-        is_type_param: bool,
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         // `Eq` and `Ord` fix their return types whatever a user impl writes, and
@@ -3450,55 +3438,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None,
                 )
             });
-        let (info_trait_name, self_kind, param_types, return_type, impl_def) =
-            if let Some(info) = written {
-                let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
-                let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-                (
-                    info.trait_name,
-                    info.self_kind,
-                    param_types,
-                    return_type,
-                    Some(info.impl_def),
-                )
-            } else if let Some((item, return_type)) = auto_derive
-                && let Some(trait_) = self.tysys.compiler_trait(item)
-                && self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    lookup_type_id,
-                    &trait_,
-                )
-            {
-                let ref_self_ty = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::Ref(lookup_type_id));
-                // Auto-derived: no `impl` block is written, so none is named.
-                (
-                    self.tysys.type_table.borrow().compiler_trait_fq(item),
-                    ast::SelfKind::Ref,
-                    vec![ref_self_ty],
-                    return_type,
-                    None,
-                )
-            } else {
-                return None;
-            };
+        if let Some(info) = written {
+            let mut resolved = ResolvedTraitMethod::of_operator_impl(
+                &self.tysys,
+                info,
+                method_name,
+                struct_name.to_string(),
+                lookup_type_id,
+            );
+            if let Some((_, return_type)) = auto_derive {
+                resolved.return_type = return_type;
+            }
+            return Some(resolved);
+        }
+        let (item, return_type) = auto_derive?;
+        let derived = self.tysys.compiler_trait(item)?;
+        if !self.tysys.type_implements_trait(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            lookup_type_id,
+            &derived,
+        ) {
+            return None;
+        }
+        let ref_self_ty = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .intern(ResolvedType::Ref(lookup_type_id));
+        // Auto-derived: no `impl` block is written, so none is named.
         Some(ResolvedTraitMethod {
-            // The block's own method where one is written; an auto-derived
-            // match names no block and so no declaration.
-            method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method_name)),
-            trait_name: info_trait_name,
+            method_def: None,
+            trait_name: self.tysys.type_table.borrow().compiler_trait_fq(item),
             method_name: method_name.to_string(),
-            impl_def,
+            impl_def: None,
             impl_name: struct_name.to_string(),
-            impl_type_id: (!is_type_param).then_some(lookup_type_id),
-            self_kind,
+            impl_type_id: Some(lookup_type_id),
+            self_kind: ast::SelfKind::Ref,
             return_type,
-            param_types,
-            is_type_param_receiver: is_type_param,
+            param_types: vec![ref_self_ty],
+            is_type_param_receiver: false,
         })
     }
 
@@ -3541,26 +3520,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(derive_id));
+        // Derived from the receiver's structure, off no `impl` block.
         let method_info = MethodInfo {
-            // Derived from the receiver's structure, off no `impl` block.
-            impl_type_bindings: Vec::new(),
-            method_def: None,
-            return_type,
-            self_kind: ast::SelfKind::Ref,
             param_types: vec![ref_self_ty],
             param_is_mut: vec![false],
             param_defaults: vec![None],
             param_names: vec!["other".to_string()],
             owner: inherited.map_or(MethodOwner::Receiver, MethodOwner::InheritedFrom),
-            cm_name: None,
-            is_ref_impl: false,
-            method_type_param_ids: vec![],
-            method_own_params: vec![],
-            impl_module: None,
-            from_concrete_impl: false,
-            consumes_self: false,
-            inherent_visibility: None,
-            defaults_module: None,
+            ..MethodInfo::undeclared(return_type)
         };
         // The receiver's declaration names the module the derived impl belongs
         // to; `auto_derive_eligible_kind` above already established it is one.
@@ -3602,8 +3569,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// [`written_for`] over a call's type arguments. A parameter the call leaves
-    /// parametric contributes nothing, so a bound mentioning it keeps its binder.
+    /// Each parameter with the type a call writes for it, as [`asked_at`] reads them.
+    /// A parameter the call leaves parametric contributes nothing, so a bound keeps its binder.
     fn call_site_types(
         &self,
         params: &[ast::GenericParam],

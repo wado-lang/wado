@@ -224,7 +224,7 @@ pub(super) fn slot_type_bindings(
 }
 
 /// View of a `ResolvedType::Function` after peeling references and
-/// fn-type newtypes. Returned by [`Elaborator::as_fn_signature`].
+/// fn-type newtypes. Returned by [`TypeSystem::as_fn_signature`].
 pub(super) struct FnSignature {
     is_mut: bool,
     params: Vec<TypeId>,
@@ -511,9 +511,7 @@ impl TypeSystem {
             _ => None,
         }
     }
-}
 
-impl TypeSystem {
     /// Classify a call callee's prefix so `resolve_call` can rewrite
     /// `Self::` / `T::` (T bound to concrete) before any name lookup
     /// happens. `T::` (T abstract) is routed through its own static
@@ -965,39 +963,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .cloned()
                 && let Some((_, case_data)) = variant_info.case_named(suffix)
+                && case_data.has_payload(&self.tysys.type_table.borrow())
             {
-                let payload_is_unit = matches!(
-                    self.tysys.type_table.borrow().get(case_data.payload),
-                    ResolvedType::Unit
-                );
-                if !payload_is_unit {
-                    let mut payload_type = case_data.payload;
-                    if !type_args.is_empty() {
-                        payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
-                    } else if let Some(expected) = expected_type {
-                        // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                        let expected_resolved =
-                            self.tysys.type_table.borrow().get(expected).clone();
-                        if let ResolvedType::GenericInstance {
-                            def: expected_def,
-                            type_args: expected_args,
-                        } = expected_resolved
-                            && Some(expected_def)
-                                == self
-                                    .tysys
-                                    .resolutions
-                                    .defs()
-                                    .of_ast_id(variant_info.defined_at)
-                            && expected_args.len() == variant_info.type_param_type_ids.len()
-                        {
-                            payload_type = self
+                let mut payload_type = case_data.payload;
+                if !type_args.is_empty() {
+                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
+                } else if let Some(expected) = expected_type {
+                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
+                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
+                    if let ResolvedType::GenericInstance {
+                        def: expected_def,
+                        type_args: expected_args,
+                    } = expected_resolved
+                        && Some(expected_def)
+                            == self
                                 .tysys
-                                .substitute_type_params(payload_type, &expected_args);
-                        }
+                                .resolutions
+                                .defs()
+                                .of_ast_id(variant_info.defined_at)
+                        && expected_args.len() == variant_info.type_param_type_ids.len()
+                    {
+                        payload_type = self
+                            .tysys
+                            .substitute_type_params(payload_type, &expected_args);
                     }
-                    param_types.push(payload_type);
-                    is_variant_payload = true;
                 }
+                param_types.push(payload_type);
+                is_variant_payload = true;
             }
         }
 
@@ -1366,48 +1358,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &variant_info,
                         case_data,
                         &args,
+                        &[],
                         prefix,
                         expected_type,
-                        call,
+                        call.id,
+                        call.span,
                     );
-                }
-                // If no matching case, check for From<T> synthesis requests
-                else if suffix == "from" && args.len() == 1 {
+                } else if suffix == "from"
+                    && args.len() == 1
+                    && self.requests_from_synthesis(&self.impl_target(prefix), args[0])
+                {
                     let target_type_id = self
                         .tysys
                         .type_table
                         .borrow()
                         .type_id_of_decl(variant_info.defined_at);
-                    let from_type = args[0];
-                    let from_type_name = self.tysys.type_table.borrow().type_name(from_type);
-                    let from_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::From)
-                        .to_string();
-                    // `impl From<X> for Prefix;` — a body-less derivation
-                    // request. Both the flag and the trait reference are
-                    // header facts, so the impls are reached by the target's
-                    // canonical key rather than by scanning one module's AST
-                    // for a matching written name.
-                    let matching_impl = self
-                        .tysys
-                        .trait_env
-                        .all_impl_keys(&self.impl_target(prefix))
-                        .iter()
-                        .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
-                        .any(|header| {
-                            header.is_synthesize_request
-                                && header.trait_head_name() == Some(from_trait_name.as_str())
-                                && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
-                                    if generic.args.len() == 1
-                                        && self.get_type_name_full(&generic.args[0])
-                                            == from_type_name)
-                        });
-                    if matching_impl {
-                        return self.resolve_from_call(target_type_id, from_type, call.id);
-                    }
+                    return self.resolve_from_call(target_type_id, args[0], call.id);
                 }
                 return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
@@ -1449,9 +1415,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &variant_info,
                             case_data,
                             &args,
+                            &[],
                             type_name,
                             expected_type,
-                            call,
+                            call.id,
+                            call.span,
                         );
                     }
 
@@ -1589,17 +1557,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A concrete block hosts its function under the head it
                     // wrote, arguments included, as the two-segment spelling
                     // names it.
-                    let receiver = if let Some(head) = self.concrete_impl_head_of(Some(&method_ref))
-                    {
-                        head
-                    } else if method_ref.type_name == type_name {
-                        self.namespace_member(prefix, type_name).map_or_else(
-                            || FqTypeName::shape(&struct_module, type_name),
-                            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-                        )
-                    } else {
-                        FqTypeName::shape(&struct_module, &method_ref.type_name)
-                    };
+                    let receiver =
+                        if let Some(head) = self.tysys.concrete_impl_head_of(Some(&method_ref)) {
+                            head
+                        } else if method_ref.type_name == type_name {
+                            self.namespace_member(prefix, type_name).map_or_else(
+                                || FqTypeName::shape(&struct_module, type_name),
+                                |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+                            )
+                        } else {
+                            FqTypeName::shape(&struct_module, &method_ref.type_name)
+                        };
                     let final_mangled = MethodName::format_local(
                         &receiver,
                         method_ref.trait_name.as_ref(),
@@ -2040,7 +2008,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
         if callee_module.is_effect_like()
             && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
+            && let Some((_, Some(return_type))) =
+                self.tysys.resolve_effect_op_signature(decl, func_name)
         {
             return return_type;
         }
@@ -2054,24 +2023,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Default to UNIT for unknown functions (they might be external/builtin)
         TypeTable::UNIT
-    }
-
-    /// Resolve an effect operation's `(param types, return type)` — the single
-    /// source of truth shared by `lookup_function_signature` and
-    /// `lookup_function_return_type` (issue #1371). An operation is a method on
-    /// an `interface` (WASI/user effect) or a `resource` (WASI handle); both
-    /// store methods as `InterfaceMethod`s, and the decl pass recorded both
-    /// kinds as a [`MethodSig`] in the declaration's own frame.
-    fn resolve_effect_op_signature(
-        &self,
-        effect: DefId,
-        operation: &str,
-    ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
-        let sig = self
-            .tysys
-            .signatures
-            .resource_method_sig(effect, operation)?;
-        Some((sig.decl.param_types.clone(), sig.decl.return_type))
     }
 
     /// Get the String struct type (from core:prelude/string.wado)
@@ -2136,7 +2087,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // the interface stays on `suffix`, which `interface_site` skips.
             if let Some((_, operation)) = name.rsplit_once("::")
                 && let Some(decl) = self.tysys.effect_or_resource_decl_at(interface_site)
-                && let Some((params, _)) = self.resolve_effect_op_signature(decl, operation)
+                && let Some((params, _)) = self.tysys.resolve_effect_op_signature(decl, operation)
             {
                 return Some((params, Vec::new()));
             }
@@ -3173,7 +3124,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
             .filter(|&i| {
                 self.tysys.is_unbound_type_param(type_args[i])
-                    || self.tysys.type_contains_pack(type_args[i])
+                    || self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .contains_type_pack(type_args[i])
             })
             .collect();
         if unanswered.is_empty() {
@@ -3182,7 +3137,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
         let scope = self.scope_type_param_ids();
-        if scope.iter().any(|&s| self.tysys.type_contains_pack(s)) {
+        if scope
+            .iter()
+            .any(|&s| self.tysys.type_table.borrow().contains_type_pack(s))
+        {
             return;
         }
         for pack_pos in unanswered {
@@ -3481,18 +3439,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Some(sig.clone());
         }
-        self.resource_instance_method(def, method_name)
+        self.tysys
+            .resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
     }
 
-    /// Whether `found` arguments fit a case carrying `payload`: one, or none
-    /// for a unit payload. Reports the mismatch where they do not.
-    pub(super) fn check_case_arity(&self, payload: TypeId, found: usize, span: Span) -> bool {
-        let payload_is_unit = matches!(
-            self.tysys.type_table.borrow().get(payload),
-            ResolvedType::Unit
-        );
-        let expected = usize::from(!payload_is_unit);
+    /// Whether `found` arguments fit `case`: one for a payload, else none.
+    /// Reports the mismatch where they do not.
+    pub(super) fn check_case_arity(
+        &self,
+        case: &VariantCaseData,
+        found: usize,
+        span: Span,
+    ) -> bool {
+        let expected = usize::from(case.has_payload(&self.tysys.type_table.borrow()));
         if found != expected {
             let _ = self.emit(TypeError::ArgumentCountMismatch {
                 expected,
@@ -3503,26 +3463,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found == expected
     }
 
-    /// `Owner::Case(payload)` under a qualified path: the arity check, the
-    /// payload against a concrete case, and the variant instance it builds.
-    fn construct_variant_case(
+    /// `Owner::Case` or `Owner::Case(payload)` under a qualified path: the arity
+    /// check, the payload against a concrete case, and the variant instance it builds.
+    pub(super) fn construct_variant_case(
         &mut self,
         variant_info: &VariantInfo,
         case_data: &VariantCaseData,
         args: &[TypeId],
+        explicit: &[TypeId],
         written_owner: &str,
         expected_type: Option<TypeId>,
-        call: &ast::CallExpr,
+        site: AstId,
+        span: Span,
     ) -> TypeId {
-        if !self.check_case_arity(case_data.payload, args.len(), call.span) {
+        if !self.check_case_arity(case_data, args.len(), span) {
             return TypeTable::ERROR;
         }
         let payload = args.first().copied();
         let variant_type = if variant_info.type_params.is_empty() {
-            // A generic case's payload type is a parameter
-            // `infer_variant_type_args` binds from this very argument.
+            // Only a concrete case has a payload type to check; a generic one
+            // binds it from this argument.
             if let Some(payload) = payload {
-                self.typecheck(payload, case_data.payload, call.span);
+                self.typecheck(payload, case_data.payload, span);
             }
             self.tysys
                 .type_table
@@ -3535,15 +3497,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 case_data,
                 payload,
                 expected_type,
-                &[],
+                explicit,
             );
-            self.defer_uninferable_variant(inferred, written_owner, variant_info, call.span)
+            self.defer_uninferable_variant(inferred, written_owner, variant_info, span)
         };
-        let type_args = match self.tysys.type_table.borrow().get(variant_type) {
-            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-            _ => Vec::new(),
-        };
-        self.record_generic_instantiation(call.id, type_args, variant_type);
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(variant_type)
+            .unwrap_or_default();
+        self.record_generic_instantiation(site, type_args, variant_type);
         variant_type
     }
 
@@ -3667,22 +3631,25 @@ impl TypeSystem {
         sig.method_slot_base = 0;
         Some(sig)
     }
-}
 
-impl TypeSystem {
-    /// Whether `name` is a declared effect (`interface`) or resource —
-    /// the set of identifiers `resolve_call`'s qualified-call fallback may
-    /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
+    /// An operation's `(param types, return type)` on an `interface` or a
+    /// `resource`, in the declaration's own frame.
+    fn resolve_effect_op_signature(
+        &self,
+        effect: DefId,
+        operation: &str,
+    ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
+        let sig = self.signatures.resource_method_sig(effect, operation)?;
+        Some((sig.decl.param_types.clone(), sig.decl.return_type))
+    }
+
+    /// Whether `def` declares an effect (`interface`) or a resource.
+    pub(super) fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
         self.trait_env.effect_decl_index.contains(&def)
             || self.trait_env.resource_decl_index.contains(&def)
     }
 
-    /// Get the return type of a builtin function
-    ///
-    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
-    /// For generic builtins like `array_new<T>`, returns a type containing
-    /// `TypeParam` placeholders that get substituted during monomorphization.
+    /// A builtin's return type, `TypeParam`-based for a generic one.
     pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
         self.builtin_registry
             .get_return_type(name)
@@ -3712,10 +3679,8 @@ impl TypeSystem {
             .collect()
     }
 
-    /// Look up a generic function (current or imported) and produce a temporary
-    /// `(type_param_list, resolved_param_types, decl_return_type)` triple suitable
-    /// for type-arg inference. Sets up the function's type params in scope while
-    /// resolving param and return types.
+    /// A generic function's `(type params, param types, return type)`; empty
+    /// for a non-generic one.
     fn lookup_generic_func_for_inference(
         &self,
         callee: &CalleeRef,
@@ -3730,9 +3695,7 @@ impl TypeSystem {
             sig.decl.return_type,
         ))
     }
-}
 
-impl TypeSystem {
     /// Infer type arguments for a variant constructor `Variant::Case(payload)`.
     ///
     /// Uses [`InferCtx`] with:

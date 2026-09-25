@@ -1064,10 +1064,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// The name a literal's target type carries its impls under. Broader than
-    /// [`super::tysys::TypeSystem::struct_name_for_type`], which omits the
-    /// nominal shapes that are not structs: a variant is a literal target too
-    /// (`core:value::Value` is the case that matters).
+    /// The name a literal's target type carries its impls under: a variant is a
+    /// target too, which [`Self::struct_name_for_type`] omits (`core:value::Value`).
     fn literal_target_name(&self, target_type: TypeId) -> Option<String> {
         self.struct_name_for_type(target_type).or_else(|| {
             self.type_table

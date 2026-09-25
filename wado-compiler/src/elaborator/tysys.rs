@@ -254,6 +254,14 @@ pub(crate) fn operator_compiler_item(op: &BinaryOp) -> Option<CompilerItem> {
     operator_trait_method(op).map(|(item, _)| item)
 }
 
+/// The prelude struct a `kind` range literal builds.
+pub(super) fn range_item(kind: RangeKind) -> CompilerItem {
+    match kind {
+        RangeKind::Exclusive => CompilerItem::RangeExclusive,
+        RangeKind::Inclusive => CompilerItem::RangeInclusive,
+    }
+}
+
 /// Pure type-shape helpers answerable from the type table alone (peel
 /// references, extract a declared type's name, newtype-base resolution, type
 /// stringification). They touch only `self.type_table`; the body walk and
@@ -332,10 +340,7 @@ impl TypeSystem {
     /// The prelude struct a `kind` range literal builds: its name, and its
     /// instance over `element`.
     pub(crate) fn range_type(&self, kind: RangeKind, element: TypeId) -> (String, TypeId) {
-        let item = match kind {
-            RangeKind::Exclusive => CompilerItem::RangeExclusive,
-            RangeKind::Inclusive => CompilerItem::RangeInclusive,
-        };
+        let item = range_item(kind);
         let mut type_table = self.type_table.borrow_mut();
         let name = type_table.compiler_items().struct_name(item).to_string();
         let def = type_table.require_compiler_item_def(item);

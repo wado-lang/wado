@@ -302,11 +302,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
         span,
         logger,
         || {
-            let method_name = if methods.len() == 1 {
-                Some(methods[0].name.clone())
-            } else {
-                None
-            };
+            let method_name = (methods.len() == 1).then(|| methods[0].name.clone());
             // The synthesiser identifies an assoc type by its bound, so both
             // spellings come from the declaration and stay rename-stable.
             let assoc_types = assoc_types
@@ -422,9 +418,6 @@ pub(super) struct MethodFrame {
 }
 
 impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
-    /// Register the impl's and the method's type parameters into this
-    /// scope and bind `Self`, yielding the frame the method's parameter
-    /// and return types resolve in.
     /// Intern one of the impl target's parameters, put it in this frame's
     /// scope, and describe it for the TIR.
     fn bind_target_param(
@@ -1426,27 +1419,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .decl_type_params
             .insert(struct_decl.id, type_params);
-
-        // Record per-field resolved types for reify to read instead of
-        // re-resolving them off the static decl pass + UNKNOWN-fallback.
-        // The static pass cannot follow `pub use` re-export chains; the
-        // resolution we just did, with import scopes in place, can.
         self.sem
             .types
             .struct_field_types
             .insert(struct_decl.id, struct_field_types);
-    }
-
-    /// Operation signatures the decl pass recorded for the declaration at
-    /// `decl_id`.
-    fn declared_effect_ops(&self, decl_id: ast::AstId) -> Vec<TirEffectOp> {
-        let decl = self.tysys.def_at(decl_id);
-        self.sem
-            .decls
-            .effect_ops
-            .get(&decl)
-            .cloned()
-            .expect("the decl pass records every interface / resource declaration's operations")
     }
 
     /// The scope a `trait`'s methods resolve in: `Self` as slot 0, bounded by
@@ -1979,7 +1955,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record the operation signatures of the `interface` or `resource`
     /// declared at `decl_id`.
     pub(super) fn record_effect_ops(&mut self, decl_id: ast::AstId) {
-        let operations = self.declared_effect_ops(decl_id);
+        let operations = self
+            .sem
+            .decls
+            .effect_ops
+            .get(&self.tysys.def_at(decl_id))
+            .cloned()
+            .expect("the decl pass records every interface / resource declaration's operations");
         self.sem.types.effect_ops.insert(decl_id, operations);
     }
 
@@ -2017,17 +1999,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .types
             .decl_type_params
             .insert(variant_decl.id, type_params);
-
-        register_type_compiler_item(
-            &self.tysys.type_table,
-            CompilerItemKind::Variant,
-            &variant_decl.attrs,
-            variant_decl.id,
-            &variant_decl.name,
-            &self.current_module_source,
-            variant_decl.span,
-            self.logger,
-        );
     }
 
     /// Populate `func`'s generic-inference caches without resolving its body, so
@@ -2273,26 +2244,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the function's `AstId`.
-        let func_key = func.id;
-        scope.sem.types.function_effects.insert(func_key, effects);
+        scope.sem.types.function_effects.insert(func.id, effects);
 
         // Record what `task return` delivers, so reify can set
         // `task_return_type` for resource-store inference.
         if func.is_async {
-            let task_key = func.id;
             scope
                 .sem
                 .types
                 .function_task_returns
-                .insert(task_key, declared_return_type);
+                .insert(func.id, declared_return_type);
         }
 
         drop(scope);
 
-        let sig_key = func.id;
-        self.sem.types.fn_param_types.insert(sig_key, param_types);
-        self.sem.types.fn_return_types.insert(sig_key, return_type);
-        self.sem.types.decl_type_params.insert(sig_key, type_params);
+        self.sem.types.fn_param_types.insert(func.id, param_types);
+        self.sem.types.fn_return_types.insert(func.id, return_type);
+        self.sem.types.decl_type_params.insert(func.id, type_params);
     }
 
     /// Resolve a test declaration's body for its facts, under the name reify
@@ -2414,7 +2382,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // share the handler-method semantics with effects: an
         // `impl Fields for CountingFields` method is a one-shot handler
         // body just like `impl Counter for BaseCounter`.
-        //
         if let Some(name) = base_trait_name.as_deref() {
             let canonical_key = scope.decl_key_or_local(name);
             let declares =
@@ -2517,16 +2484,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // cannot reconstruct effect-param canonicalisation without
         // `trait_ctx.effect_params`, so the annotate phase records
         // the already-resolved list here keyed by the method's `AstId`.
-        let method_key = func.id;
-        scope.sem.types.function_effects.insert(method_key, effects);
+        scope.sem.types.function_effects.insert(func.id, effects);
 
         drop(scope);
 
         // In `func.params` order, receiver included.
-        let sig_key = func.id;
-        self.sem.types.fn_param_types.insert(sig_key, param_types);
-        self.sem.types.fn_return_types.insert(sig_key, return_type);
-        self.sem.types.decl_type_params.insert(sig_key, type_params);
+        self.sem.types.fn_param_types.insert(func.id, param_types);
+        self.sem.types.fn_return_types.insert(func.id, return_type);
+        self.sem.types.decl_type_params.insert(func.id, type_params);
 
         // Store type parameters for generic methods (for call site substitution)
         if !func.type_params.is_empty() {
@@ -2543,15 +2508,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 }
 
 impl TypeSystem {
-    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
-    /// every argument is concrete. Its methods are per-instantiation functions
-    /// named `List<u8>::method` and called directly. The tuple arm carries
-    /// coherence Rule 1: the variadic template is skipped for that arity.
-    ///
-    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
-    /// nothing else: this names the method, matching decides which receivers
-    /// reach that name, and a second answer mints one name from two functions.
+    /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
+    /// [i32, i32]`): every argument answers [`Self::impl_arg_pins_a_position`].
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;

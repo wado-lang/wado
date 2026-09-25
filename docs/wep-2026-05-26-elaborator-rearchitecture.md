@@ -103,19 +103,21 @@ TIR. The batch path runs through `reify` into the downstream pipeline.
 
 Holds the `TypeTable` arena, the `TraitEnv`, the builtin / WASI / world
 registries, the included-files map, `Signatures`, the program's data
-declarations (`DataDecls`, one table set that a walk's own local declarations
-extend in the same shape), and the read-only caches built once during
-`annotate_decls`. It exposes the operations the rest of the
-compiler asks of "the type system": interning, coercion, inference, type
-checking, trait queries, method lookup. It does not know about `Module`,
-`AstId`, or `ModuleSource`-keyed per-module state.
+declarations (`DataDecls`), and the read-only caches built once during
+`annotate_decls`. A walk's local declarations extend `DataDecls` in a second
+table set of the same shape. It exposes the operations the rest of the compiler
+asks of "the type system": interning, coercion, inference, type checking, trait
+queries, method lookup. It does not know about `Module` or
+`ModuleSource`-keyed per-module state.
 
 The name is the membership rule: "would a new field belong in the type system
 itself?" gates admission and prevents drift back into God-Object behaviour.
 
 Query shape is `fn query(&self, ctx: &Scope, scope: &TypeLookup, …) -> …`, and
-three rules define the boundary: `TypeSystem` never sees AST, never mutates
-`ModuleSemantics`, never logs. Queries return data — including reason chains
+three rules define the boundary: `TypeSystem` never walks a body, never mutates
+`ModuleSemantics`, and never logs. It reads the declaration ASTs that
+`Signatures` and `TraitEnv` hold, and answers a site's `AstId` through
+`Resolutions`. Queries return data — including reason chains
 ([`wep-2026-06-02-diagnostic-reason-chains.md`](./wep-2026-06-02-diagnostic-reason-chains.md))
 — and the walker turns them into diagnostics.
 
@@ -358,30 +360,44 @@ Every convergence below was forced by a defect where two of them disagreed:
 
 ### Scope — transient walk state with RAII-only mutation
 
-One `Scope` struct (`elaborator/scope.rs`) holds the trait-resolution context,
-the module a travelled expression resolves in, the recursion stacks of the
-questions that can ask themselves again (an associated-type binding, a binder's
-bound closure, `type_implements_trait`), and the flag that keeps a speculative
-walk from recording use→def edges. Effect parameters live in `TraitContext`
-itself: they are declared in a signature's `type_params` list, so they are
-generic-scope state and the `TypeParamScope` guard restores them with the rest
-of the context. All mutation goes through guards — `TypeParamScope`,
-`with_self_binding`, `with_resolving_home`, `unless_on_walk` for a recursion
-stack, and one shared field-restore guard behind the other `with_*` helpers.
-Enforceable by inspection: no `mem::replace` or manual clone-restore of
-`Scope`'s own fields outside `scope.rs`.
+One `Scope` struct (`elaborator/scope.rs`) holds the walk's transient state.
+That is the trait-resolution context, the module a travelled expression
+resolves in, and the stacks that stop a question from asking itself again: an
+associated-type binding, a binder's bound closure, `type_implements_trait` and
+the member edges it has taken. It also holds the flag that stops a speculative
+walk from recording use→def edges.
 
-The rule is about transient walk state, not about this struct: any value saved
-for the length of a sub-walk and restored after it needs a guard, so an early
-return or a panic cannot leave it swapped. The walker's module perspective is
-swapped under one, and so is Reify's. A walk whose facts are kept apart — a
-trait's default method walked for one impl, a call's omitted defaults walked for
-one site — records into a fresh set under a guard that hands the set back and
-restores the enclosing one. On `FunctionContext`, a field replaced
-for a sub-walk — a loop's labels, an assignment's hoisted types — is replaced
-through a guard that derefs to the context and puts the enclosing value back on
-drop, and a callee's default arguments reify with the caller's bindings hidden
-under another.
+Effect parameters live in `TraitContext` itself. They are declared in a
+signature's `type_params` list, so they are generic-scope state, and the
+`TypeParamScope` guard restores them with the rest of the context.
+
+Guards make every change: `TypeParamScope` (with `with_type_param_args` and
+`with_type_params_bound`), `with_self_binding`, `unless_on_walk` for the two
+recursion sets, the `type_implements_trait` frame guard, and `util::replaced`
+behind `with_resolving_home` and `with_reference_recording_suppressed`.
+Enforceable by inspection: no `mem::replace` or manual clone-restore of
+`Scope`'s own fields outside a guard.
+
+The rule is about transient walk state, not about this struct. Any value saved
+for a sub-walk and restored after it needs a guard. Without one, an early
+return or a panic leaves it swapped. The guards are:
+
+- `with_module_perspective_for` for the walker's module perspective, and
+  `Reify::with_perspective` for Reify's.
+- `recording_into`, for a walk whose facts are kept apart: a trait's default
+  method walked for one impl, or a call's omitted defaults walked for one site.
+  It records into a fresh set, hands that set back, and restores the enclosing
+  one.
+- `FunctionContext::replacing`, for a context field replaced for a sub-walk,
+  such as a loop's labels. Its guard derefs to the context and restores the
+  field on drop.
+- `with_caller_bindings_hidden`, while a travelled expression is walked or
+  reified.
+
+The perspective guards and `recording_into` rest on one replace-and-restore
+helper, `util::replaced`. `with_caller_bindings_hidden` nests
+`FunctionContext::replacing` frames, which hand back a guard rather than taking
+a closure.
 
 ### Elaborator — the walker
 
@@ -685,7 +701,7 @@ Each is a grep:
 | AST-map reads outside reify / decl pass          | 0      | 0   |
 | Whole-module AST scans outside the decl pass     | 0      | 0   |
 | Reify `resolve_type` call sites                  | 1      | 1   |
-| Reify `loaded_modules` / `symbols` reads         | 0      | 6   |
+| Reify `loaded_modules` / `symbols` reads         | 0      | 9   |
 | Reify `type_lookup()` call sites                 | 0      | 14  |
 | `TypeLookup { … }` literals                      | 1      | 3   |
 | `TirTypeParam { … }` literals                    | 1      | 3   |
@@ -818,22 +834,22 @@ instead is the wrong altitude: the corpus writes those declarations on purpose.
 
 ### An argument check is a lookup away from being skipped
 
-Every call path now checks its arguments, but each reaches its own lookup to
-learn what the callee declares, and the count and the parameter list have to
-come from the same one or a call is checked against a signature that is not
-its callee's. Two shapes made that concrete: a lookup that returned an empty
-list both for "declares no parameters" and for "not answered here", so a
-nullary callee's arguments were dropped along with their side effects; and a
-count taken from a first-match lookup beside a parameter list taken from a
-unique-match one, so an overloaded `from` was checked against whichever impl
-the index held first.
+Every call path checks its arguments, but each reaches its own lookup to learn
+what the callee declares. The count and the parameter list have to come from
+the same lookup, or a call is checked against a signature that is not its
+callee's. Two shapes made that concrete. One lookup returned an empty list both
+for "declares no parameters" and for "not answered here", so a nullary callee's
+arguments were dropped along with their side effects. Another site took the
+count from a first-match lookup and the parameter list from a unique-match one,
+so an overloaded `from` was checked against whichever impl the index held
+first.
 
-Both are closed where they were found. The three static spellings —
-`Type::method`, `Type::<T>::method`, `ns::Type::method` — now share one
+Both are closed where they were found. The three static spellings
+(`Type::method`, `Type::<T>::method`, `ns::Type::method`) share one
 `check_static_call_args`, and one lookup answers what a static declares. The
-shape survives elsewhere: 19 sites across 6 files emit
-`ArgumentCountMismatch`, and only 3 of them go through that shared check. The
-rest assemble the callee's parameter list themselves, and nothing in a
+shape survives elsewhere: 15 sites across 4 files emit
+`ArgumentCountMismatch`, and only one of them is that shared check. The rest
+assemble the callee's parameter list themselves, and nothing in a
 signature says which of the two questions — "what does this name declare" and
 "which declaration does this call select" — a given lookup answers.
 
@@ -845,13 +861,13 @@ arguments.
 ### Reify still resolves names
 
 The completeness rule holds for the facts that exist; what is left is the
-facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads,
+facts that do not. Reify carries `symbols` and `loaded_modules` for 9 reads,
 runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
 effect name that is a parameter resolves — in a phase whose contract is that it
 resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
 global's declared type in that global's own module scope.
 
-The reads that remain are also fail-safe where the contract is fail-loud: 84
+The reads that remain are also fail-safe where the contract is fail-loud: 66
 `unwrap_or*` defaults against 48 `.expect`s. Most are legitimately optional
 ("this node has no coercion"), but the ones that are not silently change
 emitted TIR — an unknown field name writes field 0, a malformed literal emits
@@ -875,17 +891,14 @@ disagree in the ways copies do.
 | A `let` pattern bound into the function context         | 2      | `stmt.rs`                |
 | A struct pattern's missing-field check                  | 2      | `stmt.rs`                |
 | An operator call's arguments wrapped by `arg_ref_wraps` | 2      | `reify.rs`               |
-| An operator dispatched through a trait method           | 2      | `operators.rs`           |
-| An operator impl admitted and resolved                  | 2      | `operators.rs`           |
 | An impl's associated types resolved and registered      | 2      | `trait_query.rs`         |
 | A `Reflect*` static call's receiver checks              | 2      | `reflect.rs`             |
 | An indexed base's nominal head, for `[]` dispatch       | 2      | `expr.rs`                |
 | A trait impl sought on a newtype, then on its base      | 2      | `trait_query.rs`         |
 | A canonical identifier rebuilt for a qualified case     | 2      | `expr.rs` and `reify.rs` |
 
-`is_real_type_param` is re-spelled inline in `call.rs`, twice, with a
-no-default filter beside it, so the "single source for the projection rule"
-invariant holds everywhere else.
+`call.rs` re-spells `is_real_type_param` inline twice, each with a no-default
+filter beside it. Everywhere else the projection rule has one source.
 
 Finishing it: each row is a mechanical merge, and none changes what the language
 accepts — the e2e corpus is the verification.
@@ -902,12 +915,12 @@ in an existing walk.
 Finishing it: one walk the collectors hang off, and one `TypeLookup`
 constructor that the decl pass and `TypeSystem::type_lookup` both call.
 
-### The query layer stops at the walker's own state
+### The walker still carries the compilation unit
 
-Every walker method that reads nothing but `TypeSystem` answers there now:
-`TypeSystem` carries 190 methods against the walker's 774. The walker's 204
-`&self` methods each read the module's facts or the scope, so none moves
-without a carrier for those.
+A walker method that reads nothing but `TypeSystem` answers on `TypeSystem`,
+which has 203 methods to the walker's 745. The walker's 185 `&self` methods
+read the module's facts or the scope, or emit a diagnostic, so none of them
+moves without a carrier for that state.
 
 `AnnotateState` still exists, reaching `effect_check.rs` and `semantics.rs` as
 a carrier, and the borrowed compilation-unit inputs (symbols, logger,
@@ -921,15 +934,16 @@ driver locals or `ElabEnv` fields.
 
 ### Block scopes popped by hand
 
-Every swap of walk state restores on drop. What is left is the lexical
-block stack: 40 `enter_scope` / `exit_scope` pairs on `FunctionContext` across
-the walk and reify, and the function-local item table a block with local items
-replaces and puts back. An early return between the two leaves the frame
-pushed. Two of the pairs are not nested: they pop and push again mid-block to
-drop the bindings a guard introduced.
+Every swap of walk state restores on drop, but the lexical block stack does
+not. `FunctionContext` has 40 `enter_scope` / `exit_scope` pairs across the
+walk and reify. A block with local items also replaces the function-local item
+table and puts it back by hand. That makes 41, the count in the invariant
+table. An early return between a push and its pop leaves the frame pushed. Two
+of the pairs are not nested: they pop and push again mid-block to drop the
+bindings a guard introduced.
 
-Finishing it: one guard per block frame, the `FieldFrame` pattern, so the
-count in the invariant table reaches 0.
+Finishing it: one guard per block frame, on the `FieldFrame` pattern, so the
+count reaches 0.
 
 ### The hole sweep is still a hand list
 
@@ -979,7 +993,7 @@ mechanical one.
 - Liveness has a place to live: it slots between `annotate` and `reify`, gives
   the LSP its unused diagnostics, and decides what reify emits.
 - `Rc<RefCell<…>>` retreats to where it is genuinely needed. Borrow-check
-  pressure now reflects the conceptual model rather than working around it.
+  pressure reflects the conceptual model rather than working around it.
 
 ### Trade-offs
 

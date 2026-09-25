@@ -1,9 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr,
-    ExprStmt, ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt,
-    Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
+    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, Expr, ExprStmt,
+    ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, Pattern, ReturnStmt, Stmt, TaskReturnStmt,
+    Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::primitive::PrimitiveType;
@@ -15,15 +15,13 @@ use super::Elaborator;
 use super::types::{BindingSite, FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
-use crate::ast::{BinaryOp, RangeKind, StructPatternField, wire_numbers_of};
+use crate::ast::{BinaryOp, RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::types::{
-    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
-};
+use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias,
@@ -35,7 +33,7 @@ use crate::{IndexMap, hashmap, tir};
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RefBinding {
+pub(super) enum RefBinding {
     None,
     Ref,
     MutRef,
@@ -195,7 +193,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Stmt::While(while_stmt) => self.resolve_while(while_stmt, ctx),
             Stmt::For(for_stmt) => self.resolve_for(for_stmt, ctx),
             Stmt::ForOf(for_of) => self.resolve_for_of(for_of, ctx),
-            Stmt::Loop(loop_stmt) => self.resolve_loop(loop_stmt, ctx),
+            Stmt::Loop(loop_stmt) => self.resolve_block(&loop_stmt.body, ctx, None),
             Stmt::Match(match_expr) => {
                 // A `match` in statement position discards its result, so pin
                 // the expected type to `Unit` (the WIR builder drops each arm
@@ -206,7 +204,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_expression_type(match_expr.id, ty);
             }
             Stmt::Break(break_stmt) => self.resolve_break(break_stmt, ctx),
-            Stmt::Continue(continue_stmt) => self.resolve_continue(continue_stmt, ctx),
+            Stmt::Continue(_) => {}
             Stmt::Assert(a) => self.desugar_assert(a, ctx),
             Stmt::LabeledBlock(labeled_block) => self.resolve_labeled_block(labeled_block, ctx),
             // Already resolved ahead of the block's statements.
@@ -256,9 +254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Give a local struct its identity before any of its block's
     /// declarations are resolved, so a type may name one written later.
     fn declare_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
+        let def = self.tysys.def_at(struct_decl.id);
         // Mirrors `intern_all_decl_types`'s "base entry" for a module-level
         // generic struct: its usage sites mint separate `GenericInstance`
         // TypeIds, and this one exists so `type_id_of_decl` has something to
@@ -288,14 +284,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             StructFieldInfo {
                 name: mangled_name,
-                module_source: self.current_module_source.clone(),
-                defined_at: struct_decl.id,
-                fields: Vec::new(),
-                field_ast_ids: Vec::new(),
-                field_defaults: Vec::new(),
-                field_wire_numbers: Vec::new(),
-                type_params: RealTypeParams::of(&struct_decl.type_params),
-                type_param_type_ids,
+                ..StructFieldInfo::of_decl(
+                    self.current_module_source.clone(),
+                    struct_decl,
+                    Vec::new(),
+                    type_param_type_ids,
+                )
             },
         );
     }
@@ -316,17 +310,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // split for a top-level struct.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let mut fields = Vec::new();
-        let mut field_ast_ids = Vec::new();
-        let mut field_defaults = Vec::new();
-        for field in &struct_decl.fields {
-            let type_id = scope.resolve_struct_field(field, &mut field_ctx);
-            fields.push((field.name.clone(), type_id, field.visibility));
-            field_ast_ids.push(field.id);
-            field_defaults.push(field.default.clone());
-        }
+        let fields: Vec<_> = struct_decl
+            .fields
+            .iter()
+            .map(|field| {
+                let type_id = scope.resolve_struct_field(field, &mut field_ctx);
+                (field.name.clone(), type_id, field.visibility)
+            })
+            .collect();
 
-        // Reify has only the enclosing function's params in scope.
         let type_params = scope.data_type_params(&struct_decl.type_params);
         drop(scope);
 
@@ -335,22 +327,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .decl_type_params
             .insert(struct_decl.id, type_params);
 
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(struct_decl.id) else {
-            return;
-        };
-        let Some(info) = self.sem.decls.local.struct_fields.get_mut(&def) else {
-            return;
-        };
-        info.fields = fields;
-        info.field_ast_ids = field_ast_ids;
-        info.field_defaults = field_defaults;
-        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
-        // Local structs have no `Item::Struct` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // statement handling (`reify_local_struct`) is what discovers and
-        // builds this declaration's `TirStruct`, from the `local_struct_fields`
-        // entry just recorded above (annotate records facts; reify is the
-        // sole TIR producer, matching every other declaration kind).
+        let def = self.tysys.def_at(struct_decl.id);
+        self.sem
+            .decls
+            .local
+            .struct_fields
+            .get_mut(&def)
+            .expect("`declare_local_struct` ran over this block first")
+            .fields = fields;
     }
 
     /// Report what a signature's written types cannot mean.
@@ -443,16 +427,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // base AST with its arguments substituted, so what is recorded is the
         // declaration — the same entry a module-level generic newtype makes.
         if !newtype_decl.type_params.is_empty() {
-            let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-                return true;
-            };
-            self.sem.decls.local.generic_newtypes.insert(
-                def,
-                GenericNewtypeInfo {
-                    type_params: RealTypeParams::of(&newtype_decl.type_params),
-                    base_type_ast: newtype_decl.ty.clone(),
-                },
-            );
+            let def = self.tysys.def_at(newtype_decl.id);
+            self.sem
+                .decls
+                .local
+                .generic_newtypes
+                .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
             self.sem
                 .decls
                 .fn_local_items
@@ -463,37 +443,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == TypeTable::UNKNOWN {
             return false;
         }
-        // Same as the local struct: the head is this declaration's identity.
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        let type_id = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_newtype(def, base_type_id);
-        self.tysys
-            .type_table
-            .borrow_mut()
-            .register_decl_type(newtype_decl.id, type_id);
-        // Durable entry: some trait-bound synthesis (e.g. the auto-derived
-        // `Display` a template string needs) re-resolves a newtype's base type
-        // rather than reading `ResolvedType` directly, so it must be
-        // discoverable post-declaration the same way struct field info is
-        // (see `resolve_local_struct`).
-        let Some(def) = self.tysys.resolutions.defs().of_ast_id(newtype_decl.id) else {
-            return true;
-        };
-        self.sem.decls.local.newtypes.insert(def, type_id);
+        let def = self.tysys.def_at(newtype_decl.id);
+        self.sem.decls.local.declare_newtype(
+            &self.tysys.type_table,
+            def,
+            newtype_decl.id,
+            base_type_id,
+        );
         self.sem
             .decls
             .fn_local_items
             .insert(newtype_decl.name.clone(), def);
-        // Local newtypes have no `Item::Newtype` entry in `module.items` for
-        // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
-        // handling (`reify_local_newtype`) discovers and builds this
-        // declaration's `TirNewtype`, from the `local_newtypes` entry just
-        // recorded above.
         true
     }
 
@@ -919,7 +879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => self
                 .tysys
                 .variant_of_type(type_id)
-                .is_some_and(|info| info.cases.iter().any(|c| c.name == case_name)),
+                .is_some_and(|info| info.case_named(case_name).is_some()),
             _ => false,
         }
     }
@@ -1896,14 +1856,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (e.g., `Some` in `Some(x)`). Points at the case declaration's
                 // span so LSP jump-to-def from the pattern lands on the case decl.
                 if let Some(id) = name_id
-                    && let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type).cloned()
-                    && let Some(case_data) = variant_info
-                        .cases
-                        .iter()
-                        .find(|c| c.name == normalized_variant_name)
-                        .cloned()
+                    && let Some(case_ast_id) = self
+                        .tysys
+                        .variant_of_type(scrutinee_type)
+                        .and_then(|info| info.case_named(normalized_variant_name))
+                        .map(|(_, case)| case.ast_id)
                 {
-                    self.record_reference_to_def(*id, case_data.ast_id);
+                    self.record_reference_to_def(*id, case_ast_id);
                 }
 
                 // The cases belong to the structure the scrutinee wraps, so the
@@ -2295,13 +2254,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(variant_info) = self.tysys.variant_of_type(scrutinee_type) else {
             return false;
         };
-        let none_case_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_variant_case_name(CompilerItem::OptionNone)
-            .to_string();
-        variant_info.cases.iter().any(|c| c.name == none_case_name)
+        let tt = self.tysys.type_table.borrow();
+        variant_info
+            .case_named(tt.compiler_variant_case_name(CompilerItem::OptionNone))
+            .is_some()
     }
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
@@ -2422,16 +2378,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) -> TypeId {
-        // Clone payload first to avoid borrow conflict with substitute_type_params.
         let payload_opt = self
             .type_lookup()
             .variant_cases_of(variant)
-            .and_then(|info| {
-                info.cases
-                    .iter()
-                    .find(|case| case.name == case_name)
-                    .map(|case| case.payload)
-            });
+            .and_then(|info| info.case_named(case_name))
+            .map(|(_, case)| case.payload);
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
@@ -2449,10 +2400,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
         });
         TypeTable::UNKNOWN
-    }
-    /// Resolve a loop statement (infinite loop). Reify rebuilds the `Loop`.
-    pub(super) fn resolve_loop(&mut self, loop_stmt: &LoopStmt, ctx: &mut FunctionContext) {
-        self.resolve_block(&loop_stmt.body, ctx, None);
     }
 
     /// Resolve a for-of loop.
@@ -2497,7 +2444,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_zip_variadic = matches!(
             actual_iterable,
             Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-        ) && self.tysys.type_contains_pack(iterable_type_id);
+        ) && self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_pack(iterable_type_id);
 
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
@@ -3135,15 +3086,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the `Break` stmt.
     }
 
-    /// Resolve a continue statement. `continue` carries no facts; reify
-    /// rebuilds it, retargeted inside a C-style `for` body.
-    pub(super) fn resolve_continue(
-        &mut self,
-        _continue_stmt: &ContinueStmt,
-        _ctx: &FunctionContext,
-    ) {
-    }
-
     /// Resolve a `while` or `while let` into a `loop`: the former guarded by
     /// `if !cond { break; }`, the latter by `match expr { pat => B, _ => break }`.
     /// A naked `break` / `continue` in the body already targets that synthesised
@@ -3177,8 +3119,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a C-style `for init; cond; update { B }` into
     /// `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
     /// with the `let pat = e` form guarding on a `match` instead. The outer block
-    /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
-    /// reroutes a naked `continue` to, so control still falls through `update`.
+    /// is a fresh scope, and `B`'s label is what reify reroutes a naked
+    /// `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, DesugarKind::CStyleFor);
         let body_label = for_body_label(ctx.fresh_serial());
@@ -3280,7 +3222,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// `type_id` with its reference layers peeled, and the reference kind a
     /// binding beneath takes under match ergonomics: any `&` downgrades `&mut`.
-    fn peel_scrutinee_refs(
+    pub(super) fn peel_scrutinee_refs(
         &self,
         type_id: TypeId,
         ref_binding: RefBinding,

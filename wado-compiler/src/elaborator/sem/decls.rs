@@ -4,17 +4,91 @@
 //! [`crate::ast::AstId`] belongs in [`super::types::TypeAnnotations`], and an
 //! import fact in [`super::imports::ModuleImports`].
 
+use std::cell::RefCell;
+
+use crate::ast::{self, AstId, Visibility, wire_numbers_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::tir::{TypeId, TypeTable};
 
 use super::super::sig::{DeclSig, MethodSig};
-use super::super::types::{DataDecls, StructFieldInfo};
+use super::super::types::{
+    DataDecls, GenericNewtypeInfo, RealTypeParams, StructFieldInfo, VariantCaseData,
+};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
 use crate::tir;
 use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
+
+impl DataDecls {
+    /// Declare the concrete newtype `decl_id` over `base`, which is also a type name.
+    pub(crate) fn declare_newtype(
+        &mut self,
+        type_table: &RefCell<TypeTable>,
+        def: DefId,
+        decl_id: AstId,
+        base: TypeId,
+    ) {
+        let newtype_id = type_table.borrow_mut().make_newtype(def, base);
+        type_table
+            .borrow_mut()
+            .register_decl_type(decl_id, newtype_id);
+        self.newtypes.insert(def, newtype_id);
+    }
+}
+
+impl GenericNewtypeInfo {
+    pub(crate) fn of_decl(decl: &ast::Newtype) -> Self {
+        Self {
+            type_params: RealTypeParams::of(&decl.type_params),
+            base_type_ast: decl.ty.clone(),
+        }
+    }
+}
+
+impl StructFieldInfo {
+    /// `decl` with its fields resolved to `fields`, in declaration order.
+    pub(crate) fn of_decl(
+        module_source: ModuleSource,
+        decl: &ast::StructDecl,
+        fields: Vec<(String, TypeId, Visibility)>,
+        type_param_type_ids: Vec<TypeId>,
+    ) -> Self {
+        Self {
+            name: decl.name.clone(),
+            module_source,
+            defined_at: decl.id,
+            fields,
+            field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
+            field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
+            field_wire_numbers: wire_numbers_of(&decl.fields),
+            type_params: RealTypeParams::of(&decl.type_params),
+            type_param_type_ids,
+        }
+    }
+}
+
+impl VariantCaseData {
+    /// `decl`'s cases, each payload resolved by `payload_of`; a case without
+    /// one carries `()`.
+    pub(crate) fn collect(
+        decl: &ast::VariantDecl,
+        mut payload_of: impl FnMut(&ast::Type) -> TypeId,
+    ) -> Vec<Self> {
+        decl.cases
+            .iter()
+            .map(|case| Self {
+                name: case.name.clone(),
+                payload: case
+                    .payload
+                    .as_ref()
+                    .map_or(TypeTable::UNIT, &mut payload_of),
+                ast_id: case.id,
+            })
+            .collect()
+    }
+}
 
 /// A function's canonical signature, resolved once by its module's decl
 /// pass in the declaring perspective, with the function's own type params
@@ -142,13 +216,7 @@ pub(crate) struct ModuleDecls {
     pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
     /// Additions to the data tables made during this module's walk, read by
-    /// `TypeLookup` ahead of the program's. Populated by `collect_types` and by
-    /// call sites that instantiate a generic newtype on demand.
-    ///
-    /// Keyed by declaration, so a module-level `struct` and the same spelling
-    /// declared inside a function body are two entries rather than one that
-    /// wins — and so a walk standing in another module reads these without
-    /// having to hide them first.
+    /// `TypeLookup` ahead of the program's. Keyed by declaration, never spelling.
     pub(crate) local: DataDecls,
 
     /// Fields of the anonymous struct shapes this walk interned. A shape names

@@ -386,15 +386,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             else {
                 continue;
             };
-            // Accept either an effect or a resource declaration. The
-            // dispatch synthesis pass treats both uniformly.
-            if !(self.tysys.trait_env.effect_decl_index.contains(&trait_ref)
-                || self
-                    .tysys
-                    .trait_env
-                    .resource_decl_index
-                    .contains(&trait_ref))
-            {
+            // The dispatch synthesis pass treats an effect and a resource alike.
+            if !self.tysys.is_effect_or_resource_decl(trait_ref) {
                 continue;
             }
             let type_args = self

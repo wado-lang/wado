@@ -376,6 +376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         let inherited = match key {
             ImplTargetKey::Decl(def) => self
+                .tysys
                 .resource_instance_method(*def, method_name)
                 .map(|(_, sig)| sig.def),
             _ => None,
@@ -669,7 +670,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     origin,
                     selector,
                 };
-                let offer = self.impl_static_offer(
+                let offer = self.tysys.impl_static_offer(
                     header,
                     impl_def,
                     trait_decl,
@@ -724,82 +725,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// What an `impl` block offers for `method_name`: the body it wrote, else
-    /// the trait default it leaves to answer. One walk, so the argument survey
-    /// and the rules cannot see different candidate sets.
-    ///
-    /// `None` where the block offers nothing — it declares another name, or the
-    /// trait left the method required, which is reported where the two are
-    /// compared.
-    pub(super) fn impl_static_offer(
-        &self,
-        header: &ImplHeader,
-        impl_def: DefId,
-        trait_decl: DefId,
-        method_name: &str,
-        receiver_type: Option<TypeId>,
-    ) -> Option<StaticOffer> {
-        if let Some(method) = header.methods.iter().find(|m| m.name == method_name) {
-            let sig = self
-                .tysys
-                .signatures
-                .method_sig(method.def)
-                .expect("the decl pass records every impl-declared method's signature");
-            return Some(StaticOffer {
-                method_id: method.def,
-                kind: CandidateKind::of(sig.self_kind),
-                origin: CandidateOrigin::Written,
-                selector: self.tysys.written_selector(header, sig),
-            });
-        }
-        self.inherited_offer(trait_decl, impl_def, method_name, receiver_type)
-    }
-
-    /// The candidate for the trait's default body, where the block wrote none.
-    /// The trait's frame numbers `Self` as slot 0 and the trait's own parameters
-    /// after it, so the block's trait arguments follow the receiver: reading the
-    /// default at the receiver alone leaves them open, and every argument then
-    /// reaches every block.
-    ///
-    /// `None` where the trait left the method required, which is the block's own
-    /// error and reported where the two are compared.
-    fn inherited_offer(
-        &self,
-        trait_decl: DefId,
-        impl_def: DefId,
-        method_name: &str,
-        receiver_type: Option<TypeId>,
-    ) -> Option<StaticOffer> {
-        let declared = self
-            .tysys
-            .signatures
-            .trait_sig(trait_decl)?
-            .method(method_name)?;
-        if !declared.is_inherited() {
-            return None;
-        }
-        let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
-            .chain(self.tysys.trait_args_of_impl(impl_def))
-            .collect();
-        let instantiated = declared
-            .sig
-            .instantiate_call(&self.tysys.type_table, &frame, &[]);
-        Some(StaticOffer {
-            method_id: declared.sig.def,
-            kind: CandidateKind::of(declared.sig.self_kind),
-            origin: CandidateOrigin::Inherited,
-            selector: match instantiated.param_types.get(
-                declared
-                    .sig
-                    .first_value_param()
-                    .min(instantiated.param_types.len())..,
-            ) {
-                Some([]) | None => Selector::Absent,
-                Some(params) => Selector::Params(params.to_vec()),
-            },
-        })
-    }
-
     /// Whether the receiver declares a `variant` case, an `enum` case or a
     /// `flags` member of this name — a constructor the spelling names, not a
     /// call.
@@ -810,15 +735,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let lookup = self.type_lookup();
         lookup
             .variant_cases_of(*def)
-            .is_some_and(|info| info.cases.iter().any(|case| case.name == name))
+            .is_some_and(|info| info.case_named(name).is_some())
             || lookup
                 .enum_cases_of(*def)
-                .is_some_and(|info| info.cases.iter().any(|case| case.name == name))
+                .is_some_and(|info| info.find_case(name).is_some())
             || lookup
                 .flags_members_of(*def)
                 .is_some_and(|info| info.members.iter().any(|member| member.name == name))
     }
 
+    /// The resolution for a declaration already picked: its signature, read at
+    /// the receiver.
     fn callee_of_declaration(
         &mut self,
         def: DefId,
@@ -882,17 +809,78 @@ impl TypeSystem {
         }
         Selector::Params(params.to_vec())
     }
-}
 
-impl TypeSystem {
-    /// One own declaration as a candidate. `None` where no signature answers
-    /// for it, which is a rung that cannot resolve rather than a spelling that
-    /// names nothing — the others still answer.
+    /// What an `impl` block offers for `method_name`: the body it wrote, else
+    /// the trait default it leaves to answer. One walk, so the argument survey
+    /// and the rules cannot see different candidate sets.
     ///
-    /// Its selector is `Absent`: the arguments choose *among impls*, and the
-    /// receiver's own declaration has none to be chosen against. Reading them
-    /// here would drop it on a mismatch, where the call site has an argument
-    /// type error to report against the one declaration the spelling names.
+    /// `None` where the block offers nothing — it declares another name, or the
+    /// trait left the method required, which is reported where the two are
+    /// compared.
+    pub(super) fn impl_static_offer(
+        &self,
+        header: &ImplHeader,
+        impl_def: DefId,
+        trait_decl: DefId,
+        method_name: &str,
+        receiver_type: Option<TypeId>,
+    ) -> Option<StaticOffer> {
+        if let Some(method) = header.methods.iter().find(|m| m.name == method_name) {
+            let sig = self
+                .signatures
+                .method_sig(method.def)
+                .expect("the decl pass records every impl-declared method's signature");
+            return Some(StaticOffer {
+                method_id: method.def,
+                kind: CandidateKind::of(sig.self_kind),
+                origin: CandidateOrigin::Written,
+                selector: self.written_selector(header, sig),
+            });
+        }
+        self.inherited_offer(trait_decl, impl_def, method_name, receiver_type)
+    }
+
+    /// The candidate for the trait's default body, where the block wrote none.
+    /// The trait's frame numbers `Self` as slot 0 and the trait's own parameters
+    /// after it, so the block's trait arguments follow the receiver: reading the
+    /// default at the receiver alone leaves them open, and every argument then
+    /// reaches every block.
+    ///
+    /// `None` where the trait left the method required, which is the block's own
+    /// error and reported where the two are compared.
+    fn inherited_offer(
+        &self,
+        trait_decl: DefId,
+        impl_def: DefId,
+        method_name: &str,
+        receiver_type: Option<TypeId>,
+    ) -> Option<StaticOffer> {
+        let declared = self.signatures.trait_sig(trait_decl)?.method(method_name)?;
+        if !declared.is_inherited() {
+            return None;
+        }
+        let frame: Vec<TypeId> = std::iter::once(receiver_type.unwrap_or(TypeTable::UNKNOWN))
+            .chain(self.trait_args_of_impl(impl_def))
+            .collect();
+        let instantiated = declared.sig.instantiate_call(&self.type_table, &frame, &[]);
+        Some(StaticOffer {
+            method_id: declared.sig.def,
+            kind: CandidateKind::of(declared.sig.self_kind),
+            origin: CandidateOrigin::Inherited,
+            selector: match instantiated.param_types.get(
+                declared
+                    .sig
+                    .first_value_param()
+                    .min(instantiated.param_types.len())..,
+            ) {
+                Some([]) | None => Selector::Absent,
+                Some(params) => Selector::Params(params.to_vec()),
+            },
+        })
+    }
+
+    /// One own declaration as a candidate; `None` where no signature answers.
+    /// `Absent` selector: the arguments choose among impls, and this one has none.
     fn own_candidate(&self, method_id: DefId) -> Option<Candidate> {
         let sig = self.signatures.method_sig(method_id)?;
         Some(Candidate {
@@ -929,10 +917,7 @@ impl TypeSystem {
             .unwrap_or_default()
     }
 
-    /// The resolution for a declaration already picked: its signature, read at
-    /// the receiver.
-    /// The receiver's type arguments: the ones a call carries, else the ones
-    /// its type holds. `None` where it brings neither.
+    /// The receiver's type arguments: the ones a call carries, else the ones its type holds.
     pub(super) fn receiver_declaring_args(
         &self,
         receiver_type: Option<TypeId>,

@@ -19,6 +19,7 @@ use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
+use super::util;
 use crate::ast::AstId;
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
@@ -281,10 +282,7 @@ pub(super) struct TraitCheckFrame {
 }
 
 /// Per-function annotate-time scope, bundled so queries take one `&Scope`.
-/// None of it may move onto the shared `TypeSystem`: `trait_ctx` is
-/// per-function, `trait_check_stack` is a per-call frame stack whose
-/// sharing would leak frames across module walks, and `resolving_home`
-/// holds only for the expression being resolved under it.
+/// Every field is walk-local, so none of it belongs on the shared `TypeSystem`.
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
@@ -447,41 +445,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(&mut scope)
     }
 
-    /// Run `body` with the scope field selected by `field` set to `value`,
-    /// restoring the previous value on return (panic-safe).
-    fn with_scope_field<T, R>(
-        &mut self,
-        field: fn(&mut Scope) -> &mut T,
-        value: T,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        struct Restore<'r, 'a, H: CompilerHost, T> {
-            elaborator: &'r mut Elaborator<'a, H>,
-            field: fn(&mut Scope) -> &mut T,
-            saved: Option<T>,
-        }
-        impl<H: CompilerHost, T> Drop for Restore<'_, '_, H, T> {
-            fn drop(&mut self) {
-                *(self.field)(&mut self.elaborator.annotate_ctx) =
-                    self.saved.take().expect("saved scope value present");
-            }
-        }
-        let saved = std::mem::replace(field(&mut self.annotate_ctx), value);
-        let guard = Restore {
-            elaborator: self,
-            field,
-            saved: Some(saved),
-        };
-        body(guard.elaborator)
-    }
-
     /// Run `body` with use→def reference recording suppressed. See
     /// [`Scope::suppress_reference_recording`].
     pub(super) fn with_reference_recording_suppressed<R>(
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(|scope| &mut scope.suppress_reference_recording, true, body)
+        util::replaced(
+            self,
+            |e| &mut e.annotate_ctx.suppress_reference_recording,
+            true,
+            body,
+        )
+        .0
     }
 
     /// Run `body` with `key` on the walk `stack` selects, or answer `None`
@@ -568,7 +544,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module: Option<ModuleSource>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(|scope| &mut scope.resolving_home, module, body)
+        util::replaced(self, |e| &mut e.annotate_ctx.resolving_home, module, body).0
     }
 
     /// The supertraits `bounds` carry, each with the trait it was reached from

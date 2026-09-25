@@ -21,7 +21,7 @@ use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
-use crate::tir::{StructDef, TirLocal, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Struct field info: module source and field definitions
@@ -138,6 +138,13 @@ pub(crate) struct VariantCaseData {
     pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
     pub(crate) ast_id: AstId,
+}
+
+impl VariantCaseData {
+    /// Whether the case carries a payload, rather than being a unit case.
+    pub(super) fn has_payload(&self, table: &TypeTable) -> bool {
+        !matches!(table.get(self.payload), ResolvedType::Unit)
+    }
 }
 
 /// Variant info: module source, type parameters, and cases
@@ -259,7 +266,7 @@ impl FlagsInfo {
         decl: &ast::FlagsDecl,
     ) -> Self {
         assert!(
-            decl.flags.len() <= 32,
+            decl.flags.len() <= u32::BITS as usize,
             "a flags declaration wider than a word is rejected before this"
         );
         let members = decl
@@ -2777,11 +2784,8 @@ pub(super) struct FunctionContext {
     /// `assert` label, a `for` body, an iterator local, a template's holes. Read
     /// through [`FunctionContext::fresh_serial`].
     next_internal: u32,
-    /// Stack of labels for re-targeting naked `continue` inside C-style
-    /// `for` bodies. When non-empty, `resolve_continue` emits
-    /// `break <last>` instead of a bare `continue`, so the for-loop's
-    /// `update` expression runs before the next iteration. Empty outside
-    /// a C-style for body.
+    /// The body labels of the enclosing C-style `for`s, innermost last; reify
+    /// lowers a naked `continue` to `break <last>` so `update` runs.
     pub(super) for_continue_labels: Vec<String>,
     /// The binding site whose pattern is being resolved, when it must match
     /// every value. `None` inside `match`, `if let` and `while let`.
@@ -3123,36 +3127,11 @@ impl FunctionContext {
         &mut self,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        struct CallerBindings {
-            scopes: Vec<IndexMap<String, LocalVar>>,
-            outer_locals: IndexMap<String, OuterBinding>,
-            deref_overrides: IndexMap<String, (String, TypeId)>,
-            outer_box_types: IndexMap<String, TypeId>,
-        }
-        struct Restore<'c> {
-            ctx: &'c mut FunctionContext,
-            saved: Option<CallerBindings>,
-        }
-        impl Drop for Restore<'_> {
-            fn drop(&mut self) {
-                let saved = self.saved.take().expect("saved caller bindings present");
-                self.ctx.scopes = saved.scopes;
-                self.ctx.outer_locals = saved.outer_locals;
-                self.ctx.deref_overrides = saved.deref_overrides;
-                self.ctx.outer_box_types = saved.outer_box_types;
-            }
-        }
-        let saved = CallerBindings {
-            scopes: std::mem::replace(&mut self.scopes, vec![IndexMap::default()]),
-            outer_locals: std::mem::take(&mut self.outer_locals),
-            deref_overrides: std::mem::take(&mut self.deref_overrides),
-            outer_box_types: std::mem::take(&mut self.outer_box_types),
-        };
-        let guard = Restore {
-            ctx: self,
-            saved: Some(saved),
-        };
-        body(guard.ctx)
+        let mut scopes = self.replacing(|ctx| &mut ctx.scopes, vec![IndexMap::default()]);
+        let mut outer = scopes.replacing(|ctx| &mut ctx.outer_locals, IndexMap::default());
+        let mut derefs = outer.replacing(|ctx| &mut ctx.deref_overrides, IndexMap::default());
+        let mut boxes = derefs.replacing(|ctx| &mut ctx.outer_box_types, IndexMap::default());
+        body(&mut boxes)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.
@@ -3704,13 +3683,8 @@ impl<'a> TypeLookup<'a> {
         cycles
     }
 
-    /// The fields of the struct `def` declares.
-    ///
-    /// The declaration is the key: nothing here re-resolves a spelling, so a
-    /// caller that reached `def` off a type cannot land on another module's
-    /// same-named struct.
     /// `def`'s entry in the table `pick` names, this walk's own ahead of the
-    /// program's.
+    /// program's. Keyed by declaration, so no spelling is re-resolved.
     fn data_of<T>(
         &self,
         def: DefId,
@@ -3852,13 +3826,8 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) impl_module_source: ModuleSource,
 }
 
-/// Complete, Self-substituted description of a trait method lookup, produced by
-/// [`Elaborator::resolve_trait_method_for_op`][rtq] and consumed by
-/// [`Elaborator::build_trait_op_method_call_on_resolved`][bop]. Always populated,
-/// so operator dispatch cannot build a method call without argument types.
-///
-/// [rtq]: crate::elaborator::Elaborator::resolve_trait_method_for_op
-/// [bop]: crate::elaborator::Elaborator::build_trait_op_method_call_on_resolved
+/// A trait method an operator dispatches to, Self-substituted;
+/// [`Elaborator::dispatch_trait_op_method`] builds the call.
 pub(super) struct ResolvedTraitMethod {
     /// The declaration dispatch selected — an `impl` block's method, or the
     /// *trait's* where the receiver is a type parameter and only
@@ -3904,7 +3873,6 @@ impl ResolvedTraitMethod {
         trait_name: FqTraitName,
         method_name: &str,
         info: MethodInfo,
-        return_type: TypeId,
     ) -> Self {
         Self {
             method_def: info.method_def,
@@ -3914,7 +3882,7 @@ impl ResolvedTraitMethod {
             impl_name: param.to_string(),
             impl_type_id: None,
             self_kind: info.self_kind,
-            return_type,
+            return_type: info.return_type,
             param_types: info.param_types,
             is_type_param_receiver: true,
         }
@@ -3922,14 +3890,14 @@ impl ResolvedTraitMethod {
 
     /// The method of the operator impl `info` matched on `impl_type_id`.
     pub(super) fn of_operator_impl(
+        tysys: &TypeSystem,
         info: ArithmeticTraitInfo,
-        method_def: Option<DefId>,
         method_name: &str,
         impl_name: String,
         impl_type_id: TypeId,
     ) -> Self {
         Self {
-            method_def,
+            method_def: tysys.declared_method(info.impl_def, method_name),
             trait_name: info.trait_name,
             method_name: method_name.to_string(),
             impl_def: Some(info.impl_def),

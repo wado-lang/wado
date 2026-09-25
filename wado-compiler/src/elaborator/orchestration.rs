@@ -12,7 +12,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{
     self, HandleClasses, Item, Module, Type, declared_handle_classes, declares_unrestricted,
-    wire_numbers_of,
 };
 use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
@@ -29,8 +28,8 @@ use super::Elaborator;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
-    DataDecls, EnumInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams, ResourceInfo,
-    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    DataDecls, EnumInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo, StructFieldInfo,
+    TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
@@ -495,23 +494,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for item in &module.items {
                 match item {
                     Item::Struct(struct_decl) => {
-                        // Insert with empty fields first - will be populated in second sub-pass
-                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
-                            data.struct_fields.insert(
-                                def,
-                                StructFieldInfo {
-                                    name: struct_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: struct_decl.id,
-                                    fields: Vec::new(),
-                                    field_ast_ids: Vec::new(),
-                                    field_defaults: Vec::new(),
-                                    field_wire_numbers: Vec::new(),
-                                    type_params: RealTypeParams::of(&struct_decl.type_params),
-                                    type_param_type_ids: Vec::new(), // filled in second pass
-                                },
-                            );
-                        }
+                        // Unresolved until the second sub-pass; the name is what is needed now.
+                        data.struct_fields.insert(
+                            resolutions.defs().def_at(struct_decl.id),
+                            StructFieldInfo::of_decl(
+                                module_source.clone(),
+                                struct_decl,
+                                Vec::new(),
+                                Vec::new(),
+                            ),
+                        );
                         register_type_compiler_item(
                             &type_table,
                             CompilerItemKind::Struct,
@@ -684,10 +676,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // was made. Reading it per branch let the generic arm claim
                     // progress it had not recorded, which is a loop that never
                     // converges rather than a missing entry.
-                    let def = resolutions
-                        .defs()
-                        .of_ast_id(newtype_decl.id)
-                        .expect("a newtype declaration has an identity");
+                    let def = resolutions.defs().def_at(newtype_decl.id);
                     if newtype_decl.type_params.is_empty() {
                         // Skip if already resolved (fixpoint convergence).
                         if data.newtypes.contains_key(&def) {
@@ -706,20 +695,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             &mut type_table.borrow_mut(),
                             &lookup,
                         );
-                        let newtype_id = type_table.borrow_mut().make_newtype(def, base_type_id);
-                        type_table
-                            .borrow_mut()
-                            .register_decl_type(newtype_decl.id, newtype_id);
-                        data.newtypes.insert(def, newtype_id);
+                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                         newly_resolved = true;
                     } else if !data.generic_newtypes.contains_key(&def) {
-                        data.generic_newtypes.insert(
-                            def,
-                            GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            },
-                        );
+                        data.generic_newtypes
+                            .insert(def, GenericNewtypeInfo::of_decl(newtype_decl));
                         newly_resolved = true;
                     }
                 }
@@ -757,90 +737,52 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
                 match item {
                     Item::Struct(struct_decl) => {
-                        let mut fields = Vec::new();
-                        let mut field_ast_ids = Vec::new();
-                        let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                         let struct_slots = ParamSlot::list(&struct_decl.type_params);
-                        for field in &struct_decl.fields {
-                            let type_id = Self::resolve_type_static_with_params(
-                                &field.ty,
-                                &mut type_table.borrow_mut(),
-                                &lookup,
-                                &struct_slots,
-                            );
-                            fields.push((field.name.clone(), type_id, field.visibility));
-                            field_ast_ids.push(field.id);
-                            field_defaults.push(field.default.clone());
-                        }
+                        let fields = struct_decl
+                            .fields
+                            .iter()
+                            .map(|field| {
+                                let type_id = Self::resolve_type_static_with_params(
+                                    &field.ty,
+                                    &mut type_table.borrow_mut(),
+                                    &lookup,
+                                    &struct_slots,
+                                );
+                                (field.name.clone(), type_id, field.visibility)
+                            })
+                            .collect();
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
                         let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
-
-                        let info = StructFieldInfo {
-                            name: struct_decl.name.clone(),
-                            module_source: module_source.clone(),
-                            defined_at: struct_decl.id,
+                        let info = StructFieldInfo::of_decl(
+                            module_source.clone(),
+                            struct_decl,
                             fields,
-                            field_ast_ids,
-                            field_defaults,
-                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
-                            type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
-                        };
-                        if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
-                            data.struct_fields.insert(def, info);
-                        }
+                        );
+                        data.struct_fields
+                            .insert(resolutions.defs().def_at(struct_decl.id), info);
                     }
-                    Item::Newtype(newtype_decl) => {
-                        if newtype_decl.type_params.is_empty() {
-                            // Concrete newtype: resolve immediately
-                            let base_type_id = Self::resolve_type_static(
-                                &newtype_decl.ty,
-                                &mut type_table.borrow_mut(),
-                                &lookup,
-                            );
-                            let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) else {
-                                continue;
-                            };
-                            let newtype_id =
-                                type_table.borrow_mut().make_newtype(def, base_type_id);
-                            type_table
-                                .borrow_mut()
-                                .register_decl_type(newtype_decl.id, newtype_id);
-                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                                data.newtypes.insert(def, newtype_id);
-                            }
-                        } else {
-                            // Generic newtype: store definition for lazy instantiation
-                            let info = GenericNewtypeInfo {
-                                type_params: RealTypeParams::of(&newtype_decl.type_params),
-                                base_type_ast: newtype_decl.ty.clone(),
-                            };
-                            if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
-                                data.generic_newtypes.insert(def, info);
-                            }
-                        }
+                    // The pre-pass already recorded every generic newtype whole.
+                    Item::Newtype(newtype_decl) if newtype_decl.type_params.is_empty() => {
+                        let base_type_id = Self::resolve_type_static(
+                            &newtype_decl.ty,
+                            &mut type_table.borrow_mut(),
+                            &lookup,
+                        );
+                        let def = resolutions.defs().def_at(newtype_decl.id);
+                        data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                     }
                     Item::Variant(variant_decl) => {
                         let variant_slots = ParamSlot::list(&variant_decl.type_params);
-                        let mut cases = Vec::new();
-                        for case in &variant_decl.cases {
-                            let payload = if let Some(payload_ty) = &case.payload {
-                                Self::resolve_type_static_with_params(
-                                    payload_ty,
-                                    &mut type_table.borrow_mut(),
-                                    &lookup,
-                                    &variant_slots,
-                                )
-                            } else {
-                                TypeTable::UNIT
-                            };
-                            cases.push(VariantCaseData {
-                                name: case.name.clone(),
-                                payload,
-                                ast_id: case.id,
-                            });
-                        }
+                        let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
+                            Self::resolve_type_static_with_params(
+                                payload_ty,
+                                &mut type_table.borrow_mut(),
+                                &lookup,
+                                &variant_slots,
+                            )
+                        });
                         let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
                         if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
                             data.variant_cases.insert(
@@ -2044,7 +1986,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Ok(())
     }
 
-    /// Validate type names in a block (let-stmt type annotations and cast expressions).
+    /// Validate type names in a function's signature and body.
     fn validate_function_type_names(
         func: &ast::Function,
         known_type_names: &IndexSet<String>,
@@ -2073,6 +2015,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Ok(())
     }
 
+    /// Validate type names in a block (let-stmt type annotations and cast expressions).
     fn validate_block_type_names(
         block: &ast::Block,
         known_type_names: &IndexSet<String>,
