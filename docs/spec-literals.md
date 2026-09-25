@@ -142,6 +142,15 @@ let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (
 let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
 ```
 
+A float has no bit pattern for `as` to reinterpret. An integer literal cast to
+`f32` or `f64` converts by value, as the annotated form does, and the same
+range check applies.
+
+```wado
+let m = 340282350000000000000000000000000000000 as f32;  // OK: f32::MAX
+let n = 400000000000000000000000000000000000000 as f32;  // compile error: literal out of range for `f32`
+```
+
 A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
 
 ```wado

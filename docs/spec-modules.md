@@ -392,6 +392,10 @@ impl Show for geo::Tag { ... }
 A qualified head names the namespace's declaration even where the importing
 module declares one of its own by that name.
 
+The namespace belongs to the importing file alone. It names a module, not an
+item, so `pub use utils from "..."` is a compile error; re-export the members by
+name (see [Re-exports](#re-exports-pub-use)).
+
 ### Note
 
 Wado does not support `use * as name` or default imports.
@@ -473,7 +477,8 @@ Re-export rules:
 - A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
-- Wildcards prohibited: `pub use * from "..."` is not allowed
+- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
+- A re-export stays at module level, so `export use` is a compile error
 
 ## Exception: The Prelude
 
