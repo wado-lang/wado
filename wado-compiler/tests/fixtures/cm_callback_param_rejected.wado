@@ -1,0 +1,18 @@
+// The host calls a callback back with scalars and unrestricted handles only, so
+// one taking a `String` cannot cross the Component Model boundary.
+
+#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+resource Target {
+    #[cm("web:demo/target#listen")]
+    #[cm_params("self", "listener")]
+    fn listen(&self, listener: fn(String));
+}
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": "callback parameter 'listener' of `listen` cannot cross the Component Model boundary",
+    "compile_error_codes": ["CM_BOUNDARY_TYPE"]
+}

@@ -3,8 +3,9 @@
 // Usage: node snapshot.mjs <output.json>
 //
 // The slice is the interfaces listed below, their partials and included mixins
-// from every spec, and the typedefs their members name. `wado-from-idl --webidl`
-// reads the output, so generation never needs the network.
+// from every spec, and the typedefs and callbacks their members name.
+// `wado-from-idl --webidl` reads the output, so generation never needs the
+// network.
 
 import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";
@@ -45,11 +46,20 @@ const mixins = defs.filter(
   (def) => def.type === "interface mixin" && mixinNames.has(def.name),
 );
 
-// A typedef is kept when a member of the slice names it, transitively.
-const typedefs = new Map(
-  defs.filter((def) => def.type === "typedef").map((def) => [def.name, def]),
-);
+// A typedef or a callback is kept when a member of the slice names it,
+// transitively.
+const named = (types) =>
+  new Map(defs.filter((def) => types.includes(def.type)).map((def) => [def.name, def]));
+const typedefs = named(["typedef"]);
+const callbacks = named(["callback", "callback interface"]);
 const kept = new Map();
+const keptCallbacks = new Map();
+const visitMembers = (members) => {
+  for (const m of members) {
+    if (m.idlType) visit(m.idlType);
+    for (const a of m.arguments ?? []) visit(a.idlType);
+  }
+};
 const visit = (t) => {
   if (Array.isArray(t.idlType)) {
     t.idlType.forEach(visit);
@@ -60,12 +70,14 @@ const visit = (t) => {
     kept.set(td.name, td);
     visit(td.idlType);
   }
+  const cb = callbacks.get(t.idlType);
+  if (cb && !keptCallbacks.has(cb.name)) {
+    keptCallbacks.set(cb.name, cb);
+    visitMembers(cb.type === "callback" ? [cb] : cb.members);
+  }
 };
 for (const iface of [...interfaces, ...mixins]) {
-  for (const m of iface.members) {
-    if (m.idlType) visit(m.idlType);
-    for (const a of m.arguments ?? []) visit(a.idlType);
-  }
+  visitMembers(iface.members);
 }
 
 const require = createRequire(import.meta.url);
@@ -81,8 +93,9 @@ const snapshot = {
   mixins,
   includes,
   typedefs: [...kept.values()].sort((a, b) => a.name.localeCompare(b.name)),
+  callbacks: [...keptCallbacks.values()].sort((a, b) => a.name.localeCompare(b.name)),
 };
 await writeFile(out, JSON.stringify(snapshot, null, 2) + "\n");
 console.error(
-  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions, ${kept.size} typedefs (@webref/idl ${webref.version}) → ${out}`,
+  `snapshot: ${interfaces.length} interface and ${mixins.length} mixin definitions, ${kept.size} typedefs, ${keptCallbacks.size} callbacks (@webref/idl ${webref.version}) → ${out}`,
 );

@@ -14,7 +14,7 @@ use crate::unparse::binary_op_str;
 use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
-use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
+use super::method_lookup::replace_on_assign_place;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
 use super::tysys::{Identity, TypeSystem};
 use super::util::bound_param_name;
@@ -966,23 +966,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         };
 
-        if unary.op == UnaryOp::MutRef
-            && let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx)
-        {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: format!("cannot take &mut of immutable variable '{binding}'"),
-                span: unary.span,
-            });
-        }
-
-        if unary.op == UnaryOp::MutRef
-            && matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
-            && self.tysys.is_replace_on_assign_place_type(expr_type)
-        {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: format!("cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"),
-                span: unary.span,
-            });
+        if unary.op == UnaryOp::MutRef {
+            self.record_mut_borrow(&unary.expr, ctx);
+            if let Some(binding) = self.place_roots_at_immutable_binding(&unary.expr, ctx) {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!("cannot take &mut of immutable variable '{binding}'"),
+                    span: unary.span,
+                });
+            }
+            if matches!(&unary.expr, ast::Expr::FieldAccess(_) | ast::Expr::Index(_))
+                && self.tysys.is_replace_on_assign_place_type(expr_type)
+            {
+                let _ = self.emit(TypeError::CannotAssign {
+                    message: format!(
+                        "cannot take a mutable reference to {}",
+                        replace_on_assign_place()
+                    ),
+                    span: unary.span,
+                });
+            }
         }
 
         if let Some((method_name, item, op_symbol)) = match unary.op {

@@ -2936,7 +2936,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(facts) = self.ann_sequence_coercions(tuple_lit.id) {
                     return self.reify_sequence_coercion(tuple_lit, facts, ctx, span);
                 }
-                self.reify_tuple_literal(tuple_lit, ctx, span)
+                self.reify_tuple_literal(tuple_lit, ctx, recorded_type, span)
             }
             ast::Expr::Cast(cast) => {
                 // The cast expression's type is the resolved target type;
@@ -3134,6 +3134,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
                     ctx.address_taken_locals.insert(*index);
+                }
+                // A reborrow names the storage its operand already references;
+                // borrowing the deref would box a copy of a scalar.
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: referent,
+                    } = &inner.kind
+                    && self.tysys.type_table.borrow().type_key(referent.type_id)
+                        == self.tysys.type_table.borrow().type_key(recorded_type)
+                {
+                    return *referent.clone();
                 }
                 TirExpr::new(
                     TirExprKind::Unary {
@@ -6650,6 +6662,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         tuple_lit: &ast::TupleLiteralExpr,
         ctx: &mut FunctionContext,
+        recorded_type: TypeId,
         span: Span,
     ) -> TirExpr {
         let mut elements: Vec<TirExpr> = Vec::new();
@@ -6775,7 +6788,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             } else {
                 let resolved = self.reify_expr(elem, ctx, None);
-                elem_types.push(resolved.type_id);
+                // A diverging element takes the type the tuple is expected to hold
+                // there, and stays `!` where nothing expects one.
+                let table = self.tysys.type_table.borrow();
+                let elem_type = match table.as_tuple(recorded_type) {
+                    Some(expected) if table.is_never(resolved.type_id) => {
+                        expected[elem_types.len()]
+                    }
+                    _ => resolved.type_id,
+                };
+                drop(table);
+                elem_types.push(elem_type);
                 elements.push(resolved);
             }
         }

@@ -12,7 +12,10 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{
+    LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_read_func_name,
+    cm_stream_read_value_func_name, cm_stream_write_func_name,
+};
 use crate::package::Package;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBinaryOp,
@@ -302,7 +305,7 @@ fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<Ti
         sites,
         |tt, expr| {
             let elem = record_stream_read_element(tt, expr)?;
-            Some((record_stream_read_func_name(&tt.base_type_name(elem)), elem))
+            Some((cm_stream_read_func_name(&tt.base_type_name(elem)), elem))
         },
         synthesize_record_stream_read_func,
     )
@@ -345,7 +348,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         .map_or_else(|| pascal_to_kebab(&elem_name), str::to_string);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
-        record_stream_read_func_name(&elem_name),
+        cm_stream_read_func_name(&elem_name),
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
         elem_size,
@@ -411,10 +414,7 @@ fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The `$cm_future_write_*` helper name for a payload type.
 fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
-    format!(
-        "$cm_future_write_{}",
-        tt.mangle_type_arg_for_generic(payload_type_id)
-    )
+    cm_future_write_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
 /// Generate per-element `StreamWritable<T>::write()` binding functions for
@@ -478,10 +478,7 @@ fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 }
 
 fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
-    format!(
-        "$cm_stream_write_{}",
-        tt.mangle_type_arg_for_generic(elem_type_id)
-    )
+    cm_stream_write_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
 /// Generate per-element `StreamReadable<T>::read()` binding functions for
@@ -557,10 +554,7 @@ fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The `$cm_stream_read_val_*` helper name for an element type.
 fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
-    format!(
-        "$cm_stream_read_val_{}",
-        tt.mangle_type_arg_for_generic(elem_type_id)
-    )
+    cm_stream_read_value_func_name(&tt.mangle_type_arg_for_generic(elem_type_id))
 }
 
 fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
@@ -988,10 +982,7 @@ fn future_read_payload(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId
 
 /// The `$cm_future_read_*` helper name for a payload type.
 fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
-    format!(
-        "$cm_future_read_{}",
-        tt.mangle_type_arg_for_generic(payload_type_id)
-    )
+    cm_future_read_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
 /// The CM package a future payload's named types resolve in, or `""` where the
@@ -1230,11 +1221,6 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     }
     let elem = stream_receiver_element(tt, expr)?;
     (!is_u8_stream_element(tt, elem)).then_some(elem)
-}
-
-/// The `$cm_stream_read_<record>` helper name for a WASI record element.
-fn record_stream_read_func_name(elem_name: &str) -> String {
-    format!("$cm_stream_read_{elem_name}")
 }
 
 /// Shared stream-read loop generator. `func_name` / `stream_read_name` /
@@ -1795,7 +1781,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             && let Some(elem_type_id) = record_stream_read_element(self.tt, expr)
         {
             let elem_name = self.tt.base_type_name(elem_type_id);
-            let func_name = record_stream_read_func_name(&elem_name);
+            let func_name = cm_stream_read_func_name(&elem_name);
             self.rewrite_call(expr, BindingTarget::Entry(func_name));
             return;
         }

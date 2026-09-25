@@ -30,6 +30,7 @@ pub struct Snapshot {
     /// The `X includes M` statements whose target is in the slice.
     pub includes: Vec<Includes>,
     pub typedefs: Vec<Typedef>,
+    pub callbacks: Vec<Callback>,
 }
 
 #[derive(Deserialize)]
@@ -58,6 +59,22 @@ pub struct Typedef {
     pub name: String,
     #[serde(rename = "idlType")]
     pub idl_type: IdlType,
+}
+
+/// A function the page calls back: a `callback`, or a `callback interface`,
+/// whose one operation a function stands in for.
+#[derive(Deserialize)]
+#[serde(tag = "type")]
+pub enum Callback {
+    #[serde(rename = "callback")]
+    Function {
+        name: String,
+        #[serde(rename = "idlType")]
+        idl_type: IdlType,
+        arguments: Vec<Argument>,
+    },
+    #[serde(rename = "callback interface")]
+    Interface { name: String, members: Vec<Member> },
 }
 
 #[derive(Deserialize)]
@@ -172,6 +189,42 @@ struct Merged<'a> {
 /// would have had and why there is none.
 type Lowered = std::result::Result<(WadoFunction, JsMember), (String, String)>;
 
+/// A callback's return type and arguments, or why no function stands in for it.
+type Signature<'a> = std::result::Result<(&'a IdlType, &'a [Argument]), String>;
+
+impl Callback {
+    fn signature(&self) -> (&str, Signature<'_>) {
+        match self {
+            Self::Function {
+                name,
+                idl_type,
+                arguments,
+            } => (name, Ok((idl_type, arguments))),
+            Self::Interface { name, members } => {
+                let operations: Vec<_> = members
+                    .iter()
+                    .filter_map(|member| match member {
+                        Member::Operation {
+                            idl_type,
+                            arguments,
+                            ..
+                        } => Some((idl_type, arguments.as_slice())),
+                        _ => None,
+                    })
+                    .collect();
+                let signature = match operations[..] {
+                    [operation] => Ok(operation),
+                    _ => Err(format!(
+                        "callback interface of {} operations",
+                        operations.len()
+                    )),
+                };
+                (name, signature)
+            }
+        }
+    }
+}
+
 /// The module binding the `web:<package>` interfaces and its glue, each naming
 /// `source` in its header.
 ///
@@ -213,6 +266,11 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
             .iter()
             .map(|t| (t.name.as_str(), &t.idl_type))
             .collect(),
+        callbacks: snapshot.callbacks.iter().map(Callback::signature).collect(),
+        global_interface: merged
+            .values()
+            .any(|iface| iface.global)
+            .then(|| to_upper_camel_case(&snapshot.package)),
     };
 
     let classes = number_classes(&merged)?;
@@ -244,7 +302,10 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
         let functions = split_js(bindings, &mut js);
         module.interfaces.push(WadoInterface {
-            name: to_upper_camel_case(&snapshot.package),
+            name: lowering
+                .global_interface
+                .clone()
+                .expect("a package with global bindings has a `[Global]` interface"),
             doc_comment: Some(format!(
                 "The `web:{}` entry points, which hand out the first handle.",
                 snapshot.package
@@ -424,6 +485,10 @@ struct Lowering<'a> {
     package: &'a str,
     slice: IndexSet<&'a str>,
     typedefs: IndexMap<&'a str, &'a IdlType>,
+    callbacks: IndexMap<&'a str, Signature<'a>>,
+    /// The interface handing out the first handle, which a callback's body may
+    /// perform. `None` without a `[Global]` interface.
+    global_interface: Option<String>,
 }
 
 impl Lowering<'_> {
@@ -666,10 +731,53 @@ impl Lowering<'_> {
             "DOMString" | "USVString" | "ByteString" => WadoType::String,
             "undefined" => return Err("`undefined` outside a return type".to_string()),
             _ if self.slice.contains(name) => WadoType::Named(to_upper_camel_case(name)),
-            _ => match self.typedefs.get(name) {
-                Some(target) => return self.lower_type(target, flow),
-                None => return Err(format!("`{name}` is outside the slice")),
-            },
+            _ => {
+                if let Some(target) = self.typedefs.get(name) {
+                    return self.lower_type(target, flow);
+                }
+                return match self.callbacks.get(name) {
+                    Some(signature) => self.lower_callback(signature.clone()?, flow),
+                    None => Err(format!("`{name}` is outside the slice")),
+                };
+            }
+        })
+    }
+
+    /// A callback crosses only into the host, returns nothing, and takes only
+    /// what the host always calls a closure back with: scalars and handles.
+    fn lower_callback(
+        &self,
+        (return_type, arguments): (&IdlType, &[Argument]),
+        flow: Flow,
+    ) -> std::result::Result<WadoType, String> {
+        if flow == Flow::Out {
+            return Err("a callback in a result".to_string());
+        }
+        if !is_undefined(return_type) {
+            return Err("a callback returning a value".to_string());
+        }
+        let params = arguments
+            .iter()
+            .map(|arg| {
+                if arg.variadic {
+                    return Err(format!("callback argument `{}`: variadic", arg.name));
+                }
+                if arg.optional {
+                    return Err(format!("callback argument `{}`: optional", arg.name));
+                }
+                let ty = self.lower_type(&arg.idl_type, Flow::Out)?;
+                if ty.callback_argument_word().is_some() {
+                    return Ok(ty);
+                }
+                Err(format!(
+                    "callback argument `{}`: neither a scalar nor a handle",
+                    arg.name
+                ))
+            })
+            .collect::<std::result::Result<_, _>>()?;
+        Ok(WadoType::Callback {
+            params,
+            effect: self.global_interface.clone(),
         })
     }
 
@@ -754,10 +862,11 @@ fn self_param(iface: &str) -> WadoParam {
     }
 }
 
-/// `ty` as an `Option` when `wrap`, without doubling one it already is.
+/// `ty` as an `Option` when `wrap`, unless it is one or a callback: the DOM
+/// ignores a null listener, so leaving the call out says the same.
 fn optional(ty: WadoType, wrap: bool) -> WadoType {
     match ty {
-        WadoType::Option(_) => ty,
+        WadoType::Option(_) | WadoType::Callback { .. } => ty,
         ty if wrap => WadoType::Option(Box::new(ty)),
         ty => ty,
     }

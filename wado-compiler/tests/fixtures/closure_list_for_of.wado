@@ -1,0 +1,42 @@
+// A list of closures takes the `List<T>` impls like any other element type,
+// though no impl in the program names a function type. A reference to a
+// closure, from an iterator or a pattern, is a box as a scalar's is.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    fs: List<fn(i32) -> i32>,
+}
+
+export fn run() with Stdout {
+    let mut seen: List<i32> = [];
+    let fs: List<fn(i32) -> i32> = [|v: i32| v * 10];
+    for let f of fs {
+        seen.push(f(1));
+    }
+    let h = Holder { fs };
+    for let f of &h.fs {
+        seen.push((*f)(2));
+    }
+    let mut counters: List<fn mut() -> i32> = [];
+    let mut n = 0;
+    counters.push(|| {
+        n += 5;
+        return n;
+    });
+    for let mut c of counters {
+        seen.push(c());
+    }
+    let o: Option<fn(i32) -> i32> = Option::Some(|v: i32| v * 10);
+    if let Some(f) = &o {
+        seen.push((*f)(3));
+    }
+    match &o {
+        Some(f) => seen.push((*f)(4)),
+        None => (),
+    };
+    println(`${seen:?}`);
+}
+
+__DATA__
+{"stdout": "[10, 20, 5, 30, 40]\n"}

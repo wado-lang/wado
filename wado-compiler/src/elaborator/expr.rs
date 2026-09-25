@@ -3034,14 +3034,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The outer bindings `closure` assigns to, its nested closures included. A
-    /// write names its target's root ident (`point.x`, `arr[i]` name the root).
-    pub(super) fn collect_mutated_vars(closure: &ast::ClosureExpr, result: &mut IndexSet<String>) {
-        MutatedVarsCollector {
-            result,
+    /// The outer bindings `closure` may write, its nested closures included. A
+    /// place names its root ident (`point.x`, `arr[i]` name the root).
+    pub(super) fn collect_capture_writes(closure: &ast::ClosureExpr) -> CaptureWrites {
+        let mut collector = CaptureWritesCollector {
+            writes: CaptureWrites::default(),
             shadowed: Vec::new(),
-        }
-        .closure_body(closure);
+        };
+        collector.closure_body(closure);
+        collector.writes
     }
 
     /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
@@ -4708,7 +4709,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 let elem_expected = expected_elem_types.as_ref().map(|v| v[elem_idx]);
                 let resolved = self.resolve_expr(elem, ctx, elem_expected);
-                elem_types.push(resolved);
+                // A diverging element takes the type the tuple is expected to hold.
+                let diverges = self.tysys.type_table.borrow().is_never(resolved);
+                elem_types.push(elem_expected.filter(|_| diverges).unwrap_or(resolved));
             }
         }
 
@@ -5339,32 +5342,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Records the outer bindings a closure body assigns to, walking it under its
+/// The outer bindings a closure body may write, found before its walk so the
+/// frame owning each can box it for every closure between.
+#[derive(Default)]
+pub(super) struct CaptureWrites {
+    pub(super) assigned: IndexSet<String>,
+    /// Borrowed `&mut` or a method's receiver: a write only where the walk
+    /// finds a `&mut` borrow of this storage.
+    pub(super) borrowed: IndexSet<String>,
+}
+
+/// Records the outer bindings a closure body may write, walking it under its
 /// own binders. Unhandled syntax falls through to `AstVisitor`'s `walk_*`.
-struct MutatedVarsCollector<'a> {
-    result: &'a mut IndexSet<String>,
+struct CaptureWritesCollector {
+    writes: CaptureWrites,
     /// Names bound inside the closure and in scope at this point of the walk. A
     /// write to one names that binding, not the outer one it shadows.
     shadowed: Vec<String>,
 }
 
-impl MutatedVarsCollector<'_> {
-    /// Walk an l-value down to its root identifier so `point.x = ...`
-    /// and `arr[i] = ...` count as mutations of `point` / `arr`.
-    fn root_ident_of_lvalue(expr: &ast::Expr) -> Option<&str> {
-        match expr {
-            ast::Expr::Ident(id) => Some(&id.name),
-            ast::Expr::FieldAccess(fa) => Self::root_ident_of_lvalue(&fa.expr),
-            ast::Expr::Index(idx) => Self::root_ident_of_lvalue(&idx.expr),
-            _ => None,
-        }
+impl CaptureWritesCollector {
+    /// The outer binding `place` roots at, unless the closure binds that name.
+    fn outer_root<'e>(&self, place: &'e ast::Expr) -> Option<&'e str> {
+        place
+            .place_root_ident()
+            .map(|id| id.name.as_str())
+            .filter(|name| !self.shadowed.iter().any(|s| s == name))
     }
 
     fn record_target(&mut self, target: &ast::Expr) {
-        if let Some(name) = Self::root_ident_of_lvalue(target)
-            && !self.shadowed.iter().any(|s| s == name)
-        {
-            self.result.insert(name.to_string());
+        if let Some(name) = self.outer_root(target) {
+            self.writes.assigned.insert(name.to_string());
+        }
+    }
+
+    fn record_borrow(&mut self, place: &ast::Expr) {
+        if let Some(name) = self.outer_root(place) {
+            self.writes.borrowed.insert(name.to_string());
         }
     }
 
@@ -5397,7 +5411,7 @@ impl MutatedVarsCollector<'_> {
     }
 }
 
-impl AstVisitor for MutatedVarsCollector<'_> {
+impl AstVisitor for CaptureWritesCollector {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {
@@ -5408,6 +5422,14 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             }
             ast::Expr::CompoundAssign(ca) => {
                 self.record_target(&ca.target);
+                ast::walk_expr(self, expr);
+            }
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::MutRef => {
+                self.record_borrow(&u.expr);
+                ast::walk_expr(self, expr);
+            }
+            ast::Expr::MethodCall(call) => {
+                self.record_borrow(&call.receiver);
                 ast::walk_expr(self, expr);
             }
             ast::Expr::Closure(c) => self.closure_body(c),

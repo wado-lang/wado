@@ -1,4 +1,4 @@
-use { Document, Dom, Element, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
+use { Document, Dom, Element, Event, EventTarget, HtmlElement, HtmlInputElement, Node } from "./dom.wado";
 use { SurfaceDom } from "./surface_dom.wado";
 
 test "a fresh document has a body" {
@@ -393,5 +393,40 @@ test "an input holds its value" {
         assert input.value() == "";
         input.set_value("typed");
         assert input.value() == "typed";
+    };
+}
+
+test "an event reaches capturing ancestors first, then the target" {
+    let mut dom = SurfaceDom::new();
+    let mut order: List<String> = [];
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        let button = doc.create_element("button", null);
+        body.append_child(button);
+        button.add_event_listener("click", |_: Event| order.push("target"), null);
+        body.add_event_listener("click", |_: Event| order.push("body, bubbling"), null);
+        body.add_event_listener("click", |_: Event| order.push("body"), Option::Some(true));
+        Dom::window().add_event_listener("click", |_: Event| order.push("window"), Option::Some(true));
+        button.add_event_listener("focus", |_: Event| order.push("other type"), null);
+        assert button.dispatch_event(Event::new("click"));
+    };
+    assert order == ["window", "body", "target"];
+}
+
+test "a listener sees the event and may call the DOM" {
+    let mut dom = SurfaceDom::new();
+    with &mut dom do {
+        let doc = Dom::document();
+        let body = doc.body().unwrap();
+        body.add_event_listener("ping", |e: Event| {
+            assert e.type() == "ping";
+            assert e.target() == Option::Some(Dom::document().body().unwrap() as EventTarget);
+            Dom::document().body().unwrap().set_id("pinged");
+        }, null);
+        let event = Event::new("ping");
+        assert event.target() == null;
+        body.dispatch_event(event);
+        assert body.id() == "pinged";
     };
 }

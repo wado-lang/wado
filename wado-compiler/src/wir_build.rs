@@ -11,6 +11,7 @@ use crate::nir_package::NirPackage;
 use crate::primitive::PrimitiveType;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_optimize::array::{ConstOperand, data_promotion_pays};
+use crate::world_registry::WorldSurface;
 
 /// Whether a `PackedArray` is built by `array.new_fixed` rather than from a data
 /// segment, which `const_object_globalization` must predict alike.
@@ -86,7 +87,9 @@ pub fn build_wir_package(package: &NirPackage) -> WirPackage {
     // this is the single place with the full picture. Codegen reads the plan to
     // decide membership per phase; the WIT producer reads the flat list.
     wir.import_plan = component_imports::resolve_import_plan(package, &wir.needed_canonicals);
-    wir.imported_cm_interfaces =
-        component_imports::imported_cm_interface_fqs(package, &wir.import_plan);
+    wir.world_surface = WorldSurface {
+        imports: component_imports::imported_cm_interface_fqs(package, &wir.import_plan),
+        callbacks: package.component_plan.callback_exports.clone(),
+    };
     wir
 }

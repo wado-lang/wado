@@ -13,7 +13,7 @@ use crate::cm_abi;
 use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, cm_export_func_name, cm_post_return_func_name};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
@@ -46,11 +46,6 @@ use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
-
-/// Build the export binding function name for a world export.
-pub fn export_binding_func_name(export_name: &str) -> String {
-    format!("$cm_export__{export_name}")
-}
 
 /// Lower a Wado-typed value to flat CM ABI args (i32 / i64 / f32 / f64).
 ///
@@ -1580,7 +1575,7 @@ pub(super) fn synthesize_export_binding(
     env: &ExportBindingEnv<'_>,
     strategy: ExportReturnStrategy,
 ) -> Rc<RefCell<TirFunction>> {
-    let binding_name = export_binding_func_name(export_name);
+    let binding_name = cm_export_func_name(export_name);
     let mut body_stmts: Vec<TirStmt> = Vec::new();
     let mut locals: Vec<TirLocal> = Vec::new();
     let lift_ctx = env.lift_ctx();
@@ -1808,12 +1803,6 @@ fn push_sync_return_epilogue(
     }
 }
 
-/// The core function named by a sync lift's `post-return` canonical option.
-/// Distinct from [`export_binding_func_name`] so the core module exports both.
-pub(super) fn post_return_func_name(export_name: &str) -> String {
-    format!("$cm_post_return__{export_name}")
-}
-
 /// Synthesize a sync-lifted export's `post-return`, or `None` when nothing was
 /// allocated to reclaim. The gate is the indirect return rather than memory
 /// ownership: a result wider than one core value comes back through a
@@ -1853,7 +1842,7 @@ pub(super) fn synthesize_post_return(
     )));
 
     Some(finalize_export_binding(
-        post_return_func_name(export_name),
+        cm_post_return_func_name(export_name),
         vec![TirParam {
             name: "$ret_ptr".to_string(),
             type_id: TypeTable::I32,

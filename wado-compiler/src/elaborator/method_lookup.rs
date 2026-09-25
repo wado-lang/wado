@@ -47,10 +47,18 @@ use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, TypeHead};
 use crate::resolve::{Resolution, head_site};
 use crate::unparse::binary_op_str;
 
+/// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
+/// every refused `&mut` into a larger value names.
+pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
+    "a replace-on-assign type (primitive, enum, flags, fn)";
+
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
 /// the same thing about the same refusal.
-pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replace-on-assign type (primitive, enum, flags, fn); \
-     use the containing value's reference directly";
+pub(super) fn replace_on_assign_place() -> String {
+    format!(
+        "a field or element of {REPLACE_ON_ASSIGN_TYPE}; use the containing value's reference directly"
+    )
+}
 
 /// Lightweight reference to an impl block: its identity, resolving to the
 /// block's digested [`ImplHeader`] via [`impl_header`]. Dispatch cannot reach
@@ -1490,8 +1498,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_ast: Option<&ast::Expr>,
         method_name: &str,
         span: Span,
-        ctx: &FunctionContext,
+        ctx: &mut FunctionContext,
     ) {
+        if let Some(place) = receiver_ast {
+            self.record_mut_borrow(place, ctx);
+        }
         let immutable = match self.tysys.type_table.borrow().get(receiver) {
             ResolvedType::Ref(_) => true,
             ResolvedType::MutRef(_) => false,
@@ -1525,21 +1536,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: format!(
-                    "cannot call `&mut self` method `{method_name}` on {REPLACE_ON_ASSIGN_PLACE}"
+                    "cannot call `&mut self` method `{method_name}` on {}",
+                    replace_on_assign_place()
                 ),
                 span,
             });
         }
     }
 
-    /// The immutable binding a place roots at: `x`, `x.f`, `x[i]`, `*x`, and
-    /// any nesting of those. A reference step ends the walk; `&T` is
-    /// [`Self::place_roots_at_immutable_ref`]'s to report.
-    pub(super) fn place_roots_at_immutable_binding(
-        &self,
-        expr: &ast::Expr,
-        ctx: &FunctionContext,
-    ) -> Option<String> {
+    /// The name whose storage the place `expr` writes: `x`, `x.f`, `x[i]`,
+    /// `*x`, and any nesting of those. `None` past a reference step.
+    fn place_root<'e>(&self, expr: &'e ast::Expr) -> Option<&'e str> {
         if let Some(ty) = self.sem.types.expression_types.get(&expr.id()).copied()
             && matches!(
                 self.tysys.type_table.borrow().get(ty),
@@ -1549,19 +1556,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         match expr {
-            ast::Expr::Ident(id) => match ctx.binding(&id.name) {
-                Some(binding) => (!binding.is_mut).then(|| id.name.clone()),
-                // Only a name no binding claims can be the global; one
-                // shadowing it answers for itself.
-                None => self.is_immutable_global(&id.name).then(|| id.name.clone()),
-            },
-            ast::Expr::FieldAccess(fa) => self.place_roots_at_immutable_binding(&fa.expr, ctx),
-            ast::Expr::Index(ix) => self.place_roots_at_immutable_binding(&ix.expr, ctx),
-            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-                self.place_roots_at_immutable_binding(&u.expr, ctx)
-            }
+            ast::Expr::Ident(id) => Some(&id.name),
+            ast::Expr::FieldAccess(fa) => self.place_root(&fa.expr),
+            ast::Expr::Index(ix) => self.place_root(&ix.expr),
+            ast::Expr::Unary(u) if u.op == ast::UnaryOp::Deref => self.place_root(&u.expr),
             _ => None,
         }
+    }
+
+    /// Record that `place` is borrowed `&mut` here. One rooted at a binding of an
+    /// enclosing frame is written through, so the closure must capture it `&mut`.
+    pub(super) fn record_mut_borrow(&self, place: &ast::Expr, ctx: &mut FunctionContext) {
+        if let Some(root) = self.place_root(place)
+            && ctx.lookup(root).is_none()
+        {
+            ctx.borrowed_captures.insert(root.to_string());
+        }
+    }
+
+    /// The immutable binding a place roots at. A reference step ends the walk;
+    /// `&T` is [`Self::place_roots_at_immutable_ref`]'s to report.
+    pub(super) fn place_roots_at_immutable_binding(
+        &self,
+        expr: &ast::Expr,
+        ctx: &FunctionContext,
+    ) -> Option<String> {
+        let root = self.place_root(expr)?;
+        let immutable = match ctx.binding(root) {
+            Some(binding) => !binding.is_mut,
+            // Only a name no binding claims can be the global; one shadowing it
+            // answers for itself.
+            None => self.is_immutable_global(root),
+        };
+        immutable.then(|| root.to_string())
     }
 
     /// Whether the place `expr` reaches its storage through an immutable
@@ -3061,6 +3088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self_kind != ast::SelfKind::MutRef {
             return None; // Method doesn't need &mut, fall back to Index
         }
+        self.record_mut_borrow(&method_call.receiver, ctx);
 
         // Past the bail, this path owns the call, so it owns the use->def edge
         // for the method name too — `resolve_method_call_with` never sees it.

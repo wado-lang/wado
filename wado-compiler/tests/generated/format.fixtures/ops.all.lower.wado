@@ -48,6 +48,8 @@ global CM_EVENT_SUBTASK: i32 = 1;
 
 global CM_SUBTASK_STARTED: u32 = 1;
 
+global mut CM_CALLBACKS: List<fn() -> ()> = deferred null;
+
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
 
 global mut $modules_initialized: bool = false;
@@ -2145,6 +2147,10 @@ pub struct "Box<core:prelude/types.wado/CopyResult>" {
 
 pub struct "Box<wasi:cli/types.wado/ErrorCode>" {
     value: ErrorCode,
+}
+
+pub struct "Box<fn()->()>" {
+    value: fn() -> (),
 }
 
 pub struct "Box<fn mut(char)->bool>" {
@@ -5082,6 +5088,27 @@ fn cm_lower_array_u8(arr: List<u8>) -> i64 {
     return core::rt::cm_lower_list_u8(arr."core:prelude/list.wado/List<u8>::internal_raw_data_ref"(), 0, len);
 }
 
+fn cm_callback_key(callback: fn() -> ()) -> u32 {
+    let mut i: i32 = 0;
+    loop {
+        if !(i < core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>::len"()) {
+            break;
+        }
+        $for_0_body: {
+            if core::builtin::ref_eq(core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i), callback) {
+                return i as u32;
+            }
+        }
+        i = (i + 1);
+    }
+    core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>::push"(callback);
+    return (core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>::len"() - 1) as u32;
+}
+
+fn cm_callback(key: u32) -> fn() -> () {
+    return core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(key as i32);
+}
+
 fn handle_class(handle: f64, stride: f64) -> i32 {
     let sign_clear: bool = (core::builtin::i64_reinterpret_f64(handle) >= 0);
     if !((sign_clear && (handle < core::rt::HANDLE_LIMIT)) && (core::builtin::f64_floor(handle) == handle)) {
@@ -5237,6 +5264,57 @@ fn "core:prelude/slice.wado/Slice<u8>::internal_repr"(self: &Slice<u8>) -> &Arra
 
 fn "core:prelude/list.wado/List<u8>::internal_from_raw"(repr: Array<u8>, used: i32) -> List<u8> {
     return List<u8> { repr: repr, used: used };
+}
+
+pub fn "core:prelude/list.wado/List<fn()->()>::push"(self: &mut List<fn() -> ()>, value: fn() -> ()) {
+    let used: i32 = self.used;
+    if (used >= self.repr."Array<fn()->()>::len"()) {
+        core::builtin::cold_path();
+        self."core:prelude/list.wado/List<fn()->()>::grow"();
+    }
+    self.repr."Array<fn()->()>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
+    self.used = (used + 1);
+}
+
+fn "core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<fn() -> ()>, index: i32) -> fn() -> () {
+    $assert_0: {
+        let $v1: i32 = self.used;
+        let $cond: bool = (index < $v1);
+        if !$cond {
+            core::builtin::cold_path();
+            core::rt::panic($tmpl: {
+                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(173);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"List::index_value", used: 17 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
+                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: 336 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index: ", used: 7 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: index }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.used: ", used: 11 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: $v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                break $tmpl: $r;
+            });
+        }
+    }
+    return self.repr."Array<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
+}
+
+pub fn "core:prelude/list.wado/List<fn()->()>::len"(self: &List<fn() -> ()>) -> i32 {
+    return self.used;
+}
+
+fn "core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<fn() -> ()>) -> List<fn() -> ()> {
+    return List<fn()->()> { repr: elements, used: core::builtin::array_len::<fn() -> ()>(&elements) };
 }
 
 #[retain(self)]
@@ -5567,6 +5645,26 @@ fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str
 
 pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"(self: &Slice<u8>) -> bool {
     return (self."core:prelude/slice.wado/Slice<u8>::len"() == 0);
+}
+
+fn "Array<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<fn() -> ()>, index: i32) -> fn() -> () {
+    return core::builtin::array_get_value::<fn() -> ()>(self, index);
+}
+
+fn "Array<fn()->()>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<fn() -> ()>, index: i32, value: fn() -> ()) {
+    core::builtin::array_set::<fn() -> ()>(self, index, value);
+}
+
+pub fn "core:prelude/list.wado/List<fn()->()>::grow"(self: &mut List<fn() -> ()>) {
+    let capacity: i32 = self.repr."Array<fn()->()>::len"();
+    let new_capacity: i32 = "core::prelude/primitive.wado::i32::max"((capacity * 2), 4);
+    let mut new_repr: Array<fn() -> ()> = core::builtin::array_new::<fn() -> ()>(new_capacity);
+    core::builtin::array_copy::<fn() -> ()>(&mut new_repr, 0, &self.repr, 0, self.used);
+    self.repr = new_repr;
+}
+
+pub fn "Array<fn()->()>::len"(self: &Array<fn() -> ()>) -> i32 {
+    return core::builtin::array_len::<fn() -> ()>(self);
 }
 
 pub fn "core:prelude/list.wado/List<u8>::push"(self: &mut List<u8>, value: u8) {
@@ -10565,12 +10663,17 @@ pub fn "$initialize_module"() {
     core::prelude/fpfmt.wado::BFLOAT16 = BinaryFormat { precision: 8, exponent_bits: 8 };
 }
 
+pub fn "$initialize_module"() {
+    core::rt::CM_CALLBACKS = "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"([]);
+}
+
 pub fn "$initialize_modules"() {
     if ops.all_dirty.wado::$modules_initialized {
         return;
     }
     core::builtin::cold_path();
     "core::prelude/fpfmt.wado::$initialize_module"();
+    "core::rt::$initialize_module"();
     ops.all_dirty.wado::$modules_initialized = true;
 }
 
@@ -11354,6 +11457,10 @@ fn "$value_copy$core:prelude/list.wado/List<u32>"(v: List<u32>) -> List<u32> {
     return List<u32> { repr: core::builtin::array_clone_prefix::<u32>(&v.repr, v.used), used: v.used };
 }
 
+fn "$value_copy$Array<fn()->()>"(v: Array<fn() -> ()>) -> Array<fn() -> ()> {
+    return core::builtin::array_clone::<fn() -> ()>(&v);
+}
+
 #[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>"(v: Option<WaitEvent>) -> Option<WaitEvent> {
     return match v {
@@ -11505,6 +11612,10 @@ fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {
     return [i64,i64] { 0: v.0, 1: v.1 };
 }
 
+fn "$value_copy$core:prelude/list.wado/List<fn()->()>"(v: List<fn() -> ()>) -> List<fn() -> ()> {
+    return v;
+}
+
 fn "$value_copy$core:prelude/fpfmt.wado/BinaryFormat"(v: BinaryFormat) -> BinaryFormat {
     return BinaryFormat { precision: v.precision, exponent_bits: v.exponent_bits };
 }
@@ -11513,9 +11624,11 @@ fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
     return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
 }
 
-fn array_get_value();
+fn ref_eq();
 
 fn array_len();
+
+fn array_get_value();
 
 fn array_set();
 

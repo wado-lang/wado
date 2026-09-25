@@ -2861,6 +2861,17 @@ pub struct RangeExpr {
 }
 
 impl Expr {
+    /// The binding a field and index chain roots at: `x` of `x.f[i]`. `None`
+    /// where it roots in a temporary.
+    pub fn place_root_ident(&self) -> Option<&IdentExpr> {
+        match self {
+            Expr::Ident(id) => Some(id),
+            Expr::FieldAccess(fa) => fa.expr.place_root_ident(),
+            Expr::Index(idx) => idx.expr.place_root_ident(),
+            _ => None,
+        }
+    }
+
     /// Returns the [`AstId`] for this expression.
     ///
     /// For `Expr::Spread(inner, _)` the id of the inner expression is returned,
