@@ -2339,14 +2339,7 @@ impl Monomorphizer {
                     && !substitution.is_empty()
                     && let Some(info) = call_func.method_info.clone()
                 {
-                    // Only a receiver the substitution answers carries its
-                    // trait's arguments with it; every other instance keeps the
-                    // template's spelling, which is what defines it.
-                    let info = if info.is_type_param_receiver {
-                        self.trait_named_at_instance(info, substitution, type_table)
-                    } else {
-                        info
-                    };
+                    let info = self.trait_named_at_instance(info, substitution, type_table);
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
@@ -3321,12 +3314,19 @@ impl Monomorphizer {
     /// The name with the template's type parameters replaced in the trait's
     /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, and
     /// `T^Make<T::Base>::make` under `T = UserName` names `Make<String>`.
+    ///
+    /// Only a receiver the substitution answers carries its trait's arguments
+    /// with it. An impl's own spelling is what defines it, whatever the caller's
+    /// parameters are named.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
         substitution: &IndexMap<u32, TypeId>,
         type_table: &TypeTable,
     ) -> LocalMethodName {
+        if !info.is_type_param_receiver {
+            return info;
+        }
         let Some(trait_name) = info.trait_name.as_ref() else {
             return info;
         };
