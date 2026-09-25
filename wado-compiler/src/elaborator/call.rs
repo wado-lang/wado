@@ -3682,8 +3682,12 @@ impl TypeSystem {
             Some(_) => self.is_effect_or_resource_decl(decl),
             None => self.trait_env.effect_decl_index.contains(&decl),
         };
-        (dispatches && self.signatures.resource_method_sig(decl, operation).is_some())
-            .then(|| (decl, operation.to_string()))
+        (dispatches
+            && self
+                .signatures
+                .resource_method_sig(decl, operation)
+                .is_some())
+        .then(|| (decl, operation.to_string()))
     }
 
     /// [`Self::packs_args_reach`] for a free function, whose parameter types
