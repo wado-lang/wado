@@ -2094,7 +2094,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
         let members: Vec<NumberedMember<'_>> = fields
             .iter()
-            .map(|f| NumberedMember { name: &f.name, span: &f.span, attrs: &f.attrs })
+            .map(|f| NumberedMember {
+                name: &f.name,
+                span: &f.span,
+                attrs: &f.attrs,
+            })
             .collect();
         self.checked_numbers(
             &members,
@@ -2119,7 +2123,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ),
             "fixed" => (
                 WireEncoding::Fixed,
-                &[PrimitiveType::I32, PrimitiveType::I64, PrimitiveType::U32, PrimitiveType::U64],
+                &[
+                    PrimitiveType::I32,
+                    PrimitiveType::I64,
+                    PrimitiveType::U32,
+                    PrimitiveType::U64,
+                ],
                 "a 32- or 64-bit integer,",
             ),
             _ => {
@@ -2167,7 +2176,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn checked_case_numbers(&self, cases: &[ast::EnumCase]) -> Vec<Option<i32>> {
         let members: Vec<NumberedMember<'_>> = cases
             .iter()
-            .map(|c| NumberedMember { name: &c.name, span: &c.span, attrs: &c.attrs })
+            .map(|c| NumberedMember {
+                name: &c.name,
+                span: &c.span,
+                attrs: &c.attrs,
+            })
             .collect();
         self.checked_numbers(
             &members,
@@ -11808,7 +11821,6 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     })
 }
 
-/// Why a written field number is not one, said to whoever wrote it.
 /// A struct field or an enum case, as `#[wire(number = N)]` checking reads it.
 struct NumberedMember<'a> {
     name: &'a str,
@@ -11816,6 +11828,7 @@ struct NumberedMember<'a> {
     attrs: &'a [ast::Attribute],
 }
 
+/// Why a written field number is not one, said to whoever wrote it.
 fn wire_number_fault(written: &str) -> String {
     if written
         .parse::<u32>()

@@ -500,9 +500,12 @@ impl<T, F> StructField<T, F> {
     /// The field's `#[wire(encoding = …)]`.
     pub fn wire_encoding(&self) -> WireEncoding {
         return match self.wire_encoding {
+            0 => WireEncoding::Plain,
             1 => WireEncoding::ZigZag,
-            2 => WireEncoding::Fixed,
-            _ => WireEncoding::Plain,
+            _ => {
+                assert self.wire_encoding == 2;
+                WireEncoding::Fixed;
+            },
         };
     }
 

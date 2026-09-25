@@ -75,6 +75,10 @@ test "an enum value is its number" {
     assert back.status == Status::Retired;
 }
 
+test "an enum number the schema does not declare is refused" {
+    assert from_bytes::<Account>(&[0x50, 0x07] as ByteList) matches { Err(_) };
+}
+
 test "onnx.proto round-trips a model" {
     let model = onnx::ModelProto {
         ir_version: Option::Some(10),

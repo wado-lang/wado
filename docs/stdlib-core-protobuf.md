@@ -149,6 +149,8 @@ _Fields are private._
 
 ##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
+##### `fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError>`
+
 ##### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`

@@ -105,11 +105,11 @@ impl Reader {
             }
             let kind = self.s.kind(item);
             if kind == protobuf::RK_FIELD {
-                fields.push(self.read_field(item, null));
+                fields.push(self.read_field(item, null)?);
             } else if kind == protobuf::RK_GROUP {
-                fields.push(self.read_group(item, null));
+                fields.push(self.read_group(item, null)?);
             } else if kind == protobuf::RK_MAP_FIELD {
-                fields.push(self.read_map_field(item));
+                fields.push(self.read_map_field(item)?);
             } else if kind == protobuf::RK_ONEOF {
                 let name = self.text(self.child(item, protobuf::RK_IDENT));
                 for let member of self.nodes(item) {
@@ -122,9 +122,9 @@ impl Reader {
                     }
                     let inner_kind = self.s.kind(inner);
                     if inner_kind == protobuf::RK_ONEOF_FIELD {
-                        fields.push(self.read_field(inner, Option::Some(name)));
+                        fields.push(self.read_field(inner, Option::Some(name))?);
                     } else if inner_kind == protobuf::RK_GROUP {
-                        fields.push(self.read_group(inner, Option::Some(name)));
+                        fields.push(self.read_group(inner, Option::Some(name))?);
                     }
                 }
             } else if kind == protobuf::RK_MESSAGE_DEF || kind == protobuf::RK_ENUM_DEF {
@@ -145,36 +145,36 @@ impl Reader {
     }
 
     /// A `field` or a `oneofField`: the latter has no label.
-    fn read_field(&self, node: i32, oneof: Option<String>) -> Field {
-        return Field {
+    fn read_field(&self, node: i32, oneof: Option<String>) -> Result<Field, String> {
+        return Result::Ok(Field {
             name: self.text(self.child(node, protobuf::RK_IDENT)),
-            number: self.int_after_eq(node),
+            number: self.field_number(node)?,
             label: self.label_of(node),
             type_: type_of(self.text(self.child(node, protobuf::RK_TYPE_REF))),
             oneof,
             features: self.field_features(node),
             line: self.line(node),
-        };
+        });
     }
 
-    fn read_group(&self, node: i32, oneof: Option<String>) -> Field {
+    fn read_group(&self, node: i32, oneof: Option<String>) -> Result<Field, String> {
         let name = self.text(self.child(node, protobuf::RK_IDENT));
-        return Field {
+        return Result::Ok(Field {
             name: name.to_ascii_lowercase(),
-            number: self.int_after_eq(node),
+            number: self.field_number(node)?,
             label: self.label_of(node),
             type_: FieldType::Group(name),
             oneof,
             features: self.field_features(node),
             line: self.line(node),
-        };
+        });
     }
 
-    fn read_map_field(&self, node: i32) -> Field {
+    fn read_map_field(&self, node: i32) -> Result<Field, String> {
         let types = self.nodes_of(node, protobuf::RK_TYPE_REF);
-        return Field {
+        return Result::Ok(Field {
             name: self.text(self.child(node, protobuf::RK_IDENT)),
-            number: self.int_after_eq(node),
+            number: self.field_number(node)?,
             label: Label::Repeated,
             type_: FieldType::Map([
                 self.text(types[0]),
@@ -182,7 +182,7 @@ impl Reader {
             ]),
             features: self.field_features(node),
             line: self.line(node),
-        };
+        });
     }
 
     fn read_enum(&mut self, def: i32, outer: &List<String>) -> Result<(), String> {
@@ -219,13 +219,17 @@ impl Reader {
     }
 
     /// The field number: the one `INT` token directly under the field.
-    fn int_after_eq(&self, node: i32) -> i32 {
+    fn field_number(&self, node: i32) -> Result<i32, String> {
         for let mut c = self.s.first_child(node); c >= 0; c = self.s.next_sibling(c) {
             if self.s.is_token(c) && self.toks.kind_at(self.s.token_index(c)) == protobuf::TK_INT {
-                return int_value(&self.toks.token_text(self.s.token_index(c))).unwrap_or(0);
+                let text = self.toks.token_text(self.s.token_index(c));
+                let Some(number) = int_value(&text) else {
+                    return Result::Err(`${self.line(node)}: ${text} is not a field number`);
+                };
+                return Result::Ok(number);
             }
         }
-        return 0;
+        unreachable();
     }
 
     fn field_features(&self, node: i32) -> Features {

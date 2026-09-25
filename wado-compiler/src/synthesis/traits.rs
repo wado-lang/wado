@@ -2863,7 +2863,12 @@ fn generate_enum_from_discriminant_fn(
     let qualified_name = method_info.to_mangled_name();
 
     let mut stmts = Vec::new();
-    for ReflectEnumCaseRow { name: case_name, index, .. } in &target.cases {
+    for ReflectEnumCaseRow {
+        name: case_name,
+        index,
+        ..
+    } in &target.cases
+    {
         let comparison = TirExpr::new(
             TirExprKind::Binary {
                 op: TirBinaryOp::Eq,

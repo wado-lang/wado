@@ -3130,6 +3130,11 @@ _Fields are private._
 
 The case's discriminant.
 
+#### `pub fn wire_discriminant(&self) -> i32`
+
+The discriminant a format writes: the case's `#[wire(number = N)]`, or
+its discriminant where it carries none.
+
 #### `pub fn holds(&self, v: &T) -> bool`
 
 Whether `v` is this case.
@@ -3241,6 +3246,10 @@ Whether the field is marked `#[secret]`.
 
 The field's `#[wire(number = N)]`, or `0` where it carries none: a
 field number starts at 1, so zero is the format's own non-number.
+
+#### `pub fn wire_encoding(&self) -> WireEncoding`
+
+The field's `#[wire(encoding = …)]`.
 
 #### `pub fn get(&self, v: &T) -> F`
 

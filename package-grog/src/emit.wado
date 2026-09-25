@@ -213,7 +213,7 @@ impl Emitter {
     fn map_field(&self, decl: &MessageDecl, field: &Field, out: &mut FieldSpec) -> Result<(), EmitError> {
         let [ty, zero] = self.type_of(decl, field, &field.type_, &mut out.attrs)?;
         // A map entry is always length-prefixed, so only a field of its own is checked.
-        if zero matches { None } && self.encoding(decl, field) == "DELIMITED" {
+        if zero matches { None } && self.delimited(decl, field) {
             return Result::Err(
                 EmitError::Unsupported(
                     `${field.line}: ${field.name}: a DELIMITED message is a group on the wire, which core:protobuf does not read`,
@@ -348,43 +348,35 @@ impl Emitter {
                 return if field.label matches { Optional } { Presence::Explicit } else { Presence::Implicit };
             },
             Edition(_) => {
-                let setting = self.feature(decl, &field.features.field_presence, |f| f.field_presence);
-                if setting == "IMPLICIT" {
-                    return Presence::Implicit;
-                }
-                if setting == "LEGACY_REQUIRED" {
-                    return Presence::Required;
-                }
-                return Presence::Explicit;
+                return match self.feature(decl, field, |f| f.field_presence) {
+                    Some(p) && p == "IMPLICIT" => Presence::Implicit,
+                    Some(p) && p == "LEGACY_REQUIRED" => Presence::Required,
+                    _ => Presence::Explicit,
+                };
             },
         }
     }
 
-    fn encoding(&self, decl: &MessageDecl, field: &Field) -> String {
-        if !self.file.syntax matches { Edition(_) } {
-            return "LENGTH_PREFIXED";
-        }
-        return self.feature(decl, &field.features.message_encoding, |f| f.message_encoding);
+    fn delimited(&self, decl: &MessageDecl, field: &Field) -> bool {
+        return self.file.syntax matches { Edition(_) }
+            && self.feature(decl, field, |f| f.message_encoding) matches { Some(e) && e == "DELIMITED" };
     }
 
     /// A feature as editions resolve it: the field's setting, else the
-    /// innermost enclosing message's, else the file's, else the default.
-    fn feature(&self, decl: &MessageDecl, own: &Option<String>, pick: fn(&Features) -> Option<String>) -> String {
-        if let Some(v) = own {
-            return *v;
+    /// innermost enclosing message's, else the file's. `None` is the edition's default.
+    fn feature(&self, decl: &MessageDecl, field: &Field, pick: fn(&Features) -> Option<String>) -> Option<String> {
+        if let Some(v) = pick(&field.features) {
+            return Option::Some(v);
         }
         for let mut depth = decl.path.len(); depth > 0; depth -= 1 {
             let key = decl.path.as_slice().slice(0, depth).to_list().join(".");
             if let Some(f) = self.features.get_str(&key) {
                 if let Some(v) = pick(&f) {
-                    return v;
+                    return Option::Some(v);
                 }
             }
         }
-        if let Some(v) = pick(&self.file.features) {
-            return v;
-        }
-        return "";
+        return pick(&self.file.features);
     }
 }
 

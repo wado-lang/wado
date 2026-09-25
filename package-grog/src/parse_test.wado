@@ -68,3 +68,7 @@ test "descriptor.proto" {
     assert file.package == "google.protobuf";
     assert file.messages.len() > 30;
 }
+
+test "a field number past i32 is refused" {
+    assert read("message M { int32 a = 99999999999; }") matches { Err(e) && e == "1: 99999999999 is not a field number" };
+}

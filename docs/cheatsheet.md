@@ -1799,10 +1799,39 @@ let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
 let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 ```
 
+### core:protobuf
+
+The Protocol Buffers wire format, keyed by `#[wire(number = N)]`. A field with a
+default is implicit presence: it is left off the wire while it holds its
+default, so that default should be the zero. Grog generates these declarations
+from a `.proto`. See [`core:protobuf`](./stdlib-core-protobuf.md) and
+[WEP: Grog](./wep-2026-09-22-grog.md).
+
+```wado
+use { to_bytes, from_bytes } from "core:protobuf";
+
+enum Status {
+    #[wire(number = 0)] Unknown,
+    #[wire(number = 5)] Active,         // an enum numbers every case or none
+}
+
+struct Account {
+    #[wire(number = 1)] id: i32 = 0,               // omitted while 0
+    #[wire(number = 2)] #[wire(encoding = "zigzag")] delta: i64 = 0,   // sint64
+    #[wire(number = 3)] #[wire(encoding = "fixed")] hash: u32 = 0,     // fixed32
+    #[wire(number = 4)] balance: Option<i64> = null,  // explicit: Some(0) is written
+    #[wire(number = 5)] status: Status = Status::Unknown,
+}
+
+let bytes = to_bytes(&Account { id: 150 })?;       // [0x08, 0x96, 0x01]
+let back = from_bytes::<Account>(&bytes)?;
+
+// Grog, as a Kiln generator
+use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
+```
+
 ### Other core modules
 
-- [`core:protobuf`](./stdlib-core-protobuf.md) — the Protocol Buffers wire
-  format, keyed by `#[wire(number = N)]`
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value

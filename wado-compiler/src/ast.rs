@@ -1571,9 +1571,13 @@ impl WireEncoding {
 /// The `#[wire(encoding = "…")]` text these attributes carry, as written.
 #[must_use]
 pub fn wire_encoding_written(attrs: &[Attribute]) -> Option<&str> {
-    attrs
-        .iter()
-        .find_map(|a| if a.name == WIRE { a.kv_value("encoding") } else { None })
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_value("encoding")
+        } else {
+            None
+        }
+    })
 }
 
 /// One entry per field, in declaration order, as `StructInfo` holds them.
