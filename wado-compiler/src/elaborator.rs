@@ -1080,16 +1080,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// [`Self::impl_receiver_name`] from the block's parts. A concrete `&X`
-    /// block names `&X`: its kind alone is shared with every other such block.
+    /// [`Self::impl_receiver_name`] from the block's parts. A `&X` block names
+    /// `&X`, as an `X` block names `X`: its kind alone is shared with every
+    /// other such block.
     pub(super) fn receiver_name_of_impl(
         &self,
         impl_ty: &ast::Type,
         type_params: &[ast::GenericParam],
         owner: Option<DefId>,
     ) -> FqTypeName {
-        if RefKind::from_ast(impl_ty).is_some() && type_params.is_empty() {
-            return trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
+        if let Some(kind) = RefKind::from_ast(impl_ty) {
+            let target = trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
+            if matches!(Receiver::of_ref_impl(kind, &target), Receiver::RefTo(..)) {
+                return if type_params.is_empty() {
+                    target
+                } else {
+                    target.head_only()
+                };
+            }
         }
         self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), owner)
     }
@@ -2149,7 +2157,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // receivers built elsewhere, so it stays plain.
             let qualified_struct_name = scope.impl_receiver_name(impl_block);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
-                Some(kind) => Receiver::Ref(kind),
+                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
                 None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
             let is_ref_impl = receiver.ref_kind().is_some();
@@ -2169,7 +2177,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Concrete-impl owner (`impl List<u8>`, `impl Eq for &Item`): the
             // receiver's qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<FqTypeName> =
-                if !qualified_struct_name.references().is_empty() {
+                if !qualified_struct_name.references().is_empty()
+                    && impl_block.type_params.is_empty()
+                {
                     Some(qualified_struct_name.clone())
                 } else if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();

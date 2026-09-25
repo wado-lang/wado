@@ -1846,11 +1846,24 @@ impl TypeSystem {
         wanted: &[FqTypeName],
     ) -> bool {
         let trait_env = self.trait_env.clone();
+        // A `&X` block answers only for the reference to `X`.
+        let subject_ref = subject.and_then(|id| {
+            let fq = self.type_table.borrow().fq_type_name(id);
+            let (kind, _) = fq.split_reference()?;
+            Some(Receiver::of_ref_impl(kind, &fq))
+        });
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
                 let Some(header) = trait_env.impl_headers.get(&entry) else {
                     continue;
                 };
+                if let Some(referent) = header.ref_receiver()
+                    && subject_ref
+                        .as_ref()
+                        .is_some_and(|subject| *subject != referent)
+                {
+                    continue;
+                }
                 // Both sides are declarations: the query's comes from the
                 // reference site that asked (a bound, a `T::method()` prefix),
                 // the header's from the site it writes, and each was resolved by
@@ -1980,9 +1993,7 @@ impl TypeSystem {
             // A value blanket mints no instance for a reference, so it does not
             // answer one. This is what left `&i32: Sum` holding with nothing to
             // dispatch to.
-            .filter(|b| {
-                b.receiver == BlanketReceiver::Value && !matches!(type_key, Receiver::Ref(_))
-            })
+            .filter(|b| b.receiver == BlanketReceiver::Value && type_key.ref_kind().is_none())
             .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {

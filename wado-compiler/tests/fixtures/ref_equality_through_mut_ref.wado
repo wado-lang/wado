@@ -1,0 +1,29 @@
+// A `&mut` left operand reaches an impl written for `&`, as a `&mut T`
+// argument reaches a `&T` parameter.
+struct Tag {
+    id: i32,
+}
+
+struct Item {
+    id: i32,
+}
+
+impl Eq<Tag> for &Item {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.id == other.id;
+    }
+}
+
+test "a mutable reference to a string equals the string it names" {
+    let mut s: String = "x";
+    let r = &mut s;
+    assert r == "x";
+    assert r != "y";
+}
+
+test "a mutable reference reaches a user impl for the shared one" {
+    let mut item = Item { id: 3 };
+    let r = &mut item;
+    assert r == Tag { id: 3 };
+    assert r != Tag { id: 4 };
+}

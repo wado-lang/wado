@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::dispatch_receiver_name;
 use crate::name::{
-    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, RefKind,
+    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, Receiver, RefKind,
     mangle_generic_name,
 };
 use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TirTypeParam, TypeId, TypeTable};
@@ -322,23 +322,22 @@ impl Monomorphizer {
         // shape impl would dedup wrongly.
         let is_ref_universal_blanket = key.impl_type_args.len() == 1
             && key.method_info.as_ref().is_some_and(|i| {
-                i.ref_receiver().is_some_and(|ref_kind| {
-                    i.trait_decl().is_some_and(|trait_| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(trait_, ref_kind == RefKind::Mut)
-                    })
+                let Receiver::Ref(ref_kind) = i.receiver() else {
+                    return false;
+                };
+                i.trait_decl().is_some_and(|trait_| {
+                    self.functions
+                        .trait_env
+                        .has_universal_ref_blanket(trait_, *ref_kind == RefKind::Mut)
                 })
             });
         let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
         if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
             return false;
         }
-        // Any other instance is one body per module, the module being part of
-        // its identity: `&List<T>`'s and `&Array<T>`'s impls of one trait
-        // mangle alike under the collapsed `&` head and live in two modules.
-        // A second key under the body's own module — a `GenericInstance` and
-        // the `Struct` it became — is an alias of that body.
+        // Any other instance is one body per module. A second key under the
+        // body's own module — a `GenericInstance` and the `Struct` it became —
+        // is an alias of that body.
         let home = (key.module_source.clone(), mangled_name.clone());
         if self.functions.instantiated_homes.contains(&home) {
             self.functions.instantiated.insert(key, mangled_name);
@@ -463,23 +462,17 @@ impl Monomorphizer {
             .receiver()
             .is_declared_binder_of(impl_type_params.iter().map(|p| p.name.as_str()));
 
-        let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
+        let receiver = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"
-            MethodName::format_struct_with_args(
-                &impl_arg_names[0],
-                None,
-                &[],
-                method_info.trait_name.as_ref(),
-            )
+            impl_arg_names[0].clone()
+        } else if impl_arg_names.is_empty() {
+            method_info.struct_name()
         } else {
             // Normal: append type args: "List" → "List<i32>"
-            MethodName::format_struct_with_args(
-                &method_info.struct_name(),
-                method_info.receiver().ref_kind(),
-                &impl_arg_names,
-                method_info.trait_name.as_ref(),
-            )
+            method_info.receiver().mangle(&impl_arg_names)
         };
+        let mangled_struct =
+            MethodName::format_struct_with_trait(&receiver, method_info.trait_name.as_ref());
 
         // Build method name: transform<i64> (using method type args)
         let method_arg_names: Vec<String> = key

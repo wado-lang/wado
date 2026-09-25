@@ -364,9 +364,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut blanket_binder: Option<FqTypeName> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
         let mut matched_impl_struct_name: Option<String> = None;
-        // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
-        // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
-        // `Receiver::Ref` without re-inspecting the string.
+        // `Some` when the ref-priority path below adopts a `&X` / `&mut X` impl,
+        // so the receiver keys back to its typed reference without re-inspecting
+        // a string.
         let mut matched_ref_kind: Option<RefKind> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
@@ -1082,15 +1082,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
-            Some(kind) => Receiver::Ref(kind),
+            Some(kind) => Receiver::of_ref_impl(kind, &receiver_struct_name),
             None => Receiver::Type(base_struct_name),
         };
         let mut method_info =
             LocalMethodName::of(base_receiver, trait_name, method_name.to_string())
                 .with_type_args(&impl_type_arg_names, &method_type_arg_names);
-        if matched_ref_kind.is_some() && !receiver_struct_name.references().is_empty() {
-            method_info = method_info.at_owner(&receiver_struct_name);
-        }
         method_info.is_type_param_receiver = is_type_param_receiver;
         method_info.is_ref_impl = is_ref_impl;
         method_info.cm_name = cm_name;

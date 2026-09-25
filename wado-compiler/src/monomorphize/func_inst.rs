@@ -1301,7 +1301,7 @@ impl Monomorphizer {
                                         ),
                                         Some(tn.clone()),
                                     ));
-                                    // For ref-type impls, also try "&^Trait::method"
+                                    // For ref-type impls, also try "&List^Trait::method"
                                     if let Some(ref info) = method_func.method_info
                                         && info.base_struct_name() != base_struct
                                     {
@@ -1546,7 +1546,7 @@ impl Monomorphizer {
                             &method_name,
                         ));
                         // For ref-type impls (e.g., impl Trait for &List<T>),
-                        // the template function is registered under "&^Trait::method"
+                        // the template function is registered under "&List^Trait::method"
                         if info.base_struct_name() != *base_struct {
                             names_to_try.push(MethodName::format_local(
                                 &info.fq_base_struct_name(),
@@ -3380,28 +3380,28 @@ impl Monomorphizer {
         bound(node.binder_name()?)
     }
 
-    /// The name with the trait's arguments cut back to what the answering impl
-    /// writes. An instance minted under a longer name defines nothing.
+    /// The name with the trait's arguments as the answering impl writes them:
+    /// cut back to what it spells, its own parameters left standing. An
+    /// instance minted under another spelling defines nothing.
     fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
-        let shorter = || {
-            let trait_fq = info.trait_name.as_ref()?;
-            if trait_fq.args().is_empty() {
-                return None;
-            }
-            let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
-            let kept = self.functions.trait_env.impl_written_arg_count(
-                info.receiver(),
-                trait_,
-                trait_fq.args(),
-            )?;
-            (kept < trait_fq.args().len())
-                .then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
-        };
-        shorter().unwrap_or(info)
+        self.impl_named_by(&info).unwrap_or(info)
     }
 
-    /// The concrete impl written on the reference a type-param receiver binds
-    /// (`impl Show for &Wrap<bool>` under `T = &Wrap<bool>`), if there is one.
+    /// [`Self::named_by_impl`] where an impl on the receiver answers.
+    fn impl_named_by(&self, info: &LocalMethodName) -> Option<LocalMethodName> {
+        let trait_fq = info.trait_name.as_ref()?;
+        let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
+        let written = self.functions.trait_env.impl_written_trait_args(
+            info.receiver(),
+            &info.struct_type_args,
+            trait_,
+            trait_fq.args(),
+        )?;
+        Some(info.with_trait_type_args(&written))
+    }
+
+    /// The impl written on the reference a type-param receiver binds
+    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one.
     fn ref_impl_at_instance(
         &self,
         info: &LocalMethodName,
@@ -3414,13 +3414,7 @@ impl Monomorphizer {
             .get(binder.binder_name()?)?;
         let bound = *substitution.get(key)?;
         RefKind::from_resolved(type_table.get(bound))?;
-        let candidate = self.named_by_impl(info.at_owner(&type_table.fq_type_name(bound)));
-        self.functions.trait_env.concrete_impl_module_for(
-            ImplReceiver::Instantiated(&candidate.mangled_struct_name()),
-            candidate.base_trait_name()?,
-            None,
-        )?;
-        Some(candidate)
+        self.impl_named_by(&info.at_owner(&type_table.fq_type_name(bound)))
     }
 
     /// Resolve a method call in a generic body to its concrete target after
@@ -3443,7 +3437,14 @@ impl Monomorphizer {
         };
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
-        if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
+        // An impl written for the reference itself outranks the `&T` blanket.
+        let ref_impl = info
+            .is_type_param_receiver
+            .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
+            .flatten();
+        if ref_impl.is_none()
+            && self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table)
+        {
             return;
         }
 
@@ -3506,10 +3507,6 @@ impl Monomorphizer {
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
         // name directly instead of adding type args.
-        let ref_impl = info
-            .is_type_param_receiver
-            .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
-            .flatten();
         let mut new_info = if let Some(ref_impl) = ref_impl {
             ref_impl
         } else if info.is_type_param_receiver && !type_names.is_empty() {
@@ -3549,7 +3546,7 @@ impl Monomorphizer {
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
-            // correct generic function template ("&^IntoIterator::into_iter" instead
+            // correct generic function template ("&List^IntoIterator::into_iter" instead
             // of "List^IntoIterator::into_iter").
             if info.is_ref_impl {
                 new_info.receiver = info.receiver.clone();

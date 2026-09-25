@@ -1,0 +1,29 @@
+// A generic impl whose trait arguments name its own parameters answers a bound
+// written with concrete ones, and the instance the bound reaches is its own.
+struct Holder<T> {
+    v: T,
+}
+
+impl<T: Eq> Eq<T> for Holder<T> {
+    fn eq(&self, other: &T) -> bool {
+        return self.v == *other;
+    }
+}
+
+fn matches_op<S: Eq<i32>>(s: S, t: i32) -> bool {
+    return s == t;
+}
+
+fn matches_call<S: Eq<String>>(s: S, t: String) -> bool {
+    return s.eq(&t);
+}
+
+test "a bound with concrete arguments reaches the generic impl" {
+    let h = Holder { v: 7 };
+    assert h == 7;
+    assert matches_op(h, 7);
+    assert !matches_op(h, 8);
+    let text = Holder::<String> { v: "x" };
+    assert matches_call(text, "x");
+    assert !matches_call(text, "y");
+}

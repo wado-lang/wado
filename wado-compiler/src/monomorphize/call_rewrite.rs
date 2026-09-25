@@ -2,7 +2,7 @@
 
 use crate::elaborator::trait_env::ReceiverCandidate;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -407,13 +407,13 @@ impl Monomorphizer {
             .as_ref()
             .is_some_and(|m| m.is_blanket)
             && method_func.method_info.as_ref().is_some_and(|i| {
-                i.ref_receiver().is_some_and(|ref_kind| {
-                    let is_mut = ref_kind == RefKind::Mut;
-                    i.trait_decl().is_some_and(|trait_| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(trait_, is_mut)
-                    })
+                let Receiver::Ref(ref_kind) = i.receiver() else {
+                    return false;
+                };
+                i.trait_decl().is_some_and(|trait_| {
+                    self.functions
+                        .trait_env
+                        .has_universal_ref_blanket(trait_, *ref_kind == RefKind::Mut)
                 })
             });
         if !type_args.is_empty()
@@ -598,7 +598,7 @@ impl Monomorphizer {
             if let Some(info) = method_func.method_info.as_ref()
                 && let Some(ref trait_name) = info.trait_name
             {
-                // For ref-type impls, try the ref struct name first (e.g., "&^IntoIterator::into_iter")
+                // For ref-type impls, try the ref struct name first (e.g., "&List^IntoIterator::into_iter")
                 if info.base_struct_name() != base_struct {
                     possible_keys.push(InstantiationKey {
                         def: None,

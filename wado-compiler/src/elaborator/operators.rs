@@ -5,7 +5,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::primitive::PrimitiveType;
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -1737,13 +1737,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_ = self.tysys.compiler_trait_def(item)?;
         let method = self.tysys.operator_method_name(item);
-        let info = self.find_operator_impl_on(
-            &ImplTargetKey::Ref(kind),
-            left,
-            trait_,
-            &method,
-            Some(&ArgClass::Exact(right)),
-        )?;
+        // `&mut X` coerces to `&X`, so a block for `&X` answers where none
+        // for `&mut X` does.
+        let shared = (kind == RefKind::Mut).then_some(RefKind::Shared);
+        let (kind, info) = std::iter::once(kind).chain(shared).find_map(|kind| {
+            let info = self.find_operator_impl_on(
+                &ImplTargetKey::Ref(kind),
+                left,
+                trait_,
+                &method,
+                Some(&ArgClass::Exact(right)),
+            )?;
+            Some((kind, info))
+        })?;
         let found = OperatorImpl {
             info,
             impl_name: kind.prefix().to_string(),
@@ -1991,8 +1997,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved: &ResolvedTraitMethod,
         receiver: TypeId,
     ) -> FunctionRef {
-        let template = LocalMethodName::new_ref(
-            kind,
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(kind, &header.target_id),
             Some(resolved.trait_name.clone()),
             resolved.method_name.clone(),
         );
@@ -2010,10 +2016,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .pointee_of(receiver)
             .expect("a reference block answers a reference receiver");
         // `&T` binds `T` to the pointee; `&Holder<T>` to the pointee's arguments.
-        let is_blanket = matches!(
-            header.referent_key(&self.tysys.resolutions),
-            Some(ImplTargetKey::TypeParam(..))
-        );
+        let is_blanket = matches!(template.receiver(), Receiver::Ref(_));
         let impl_type_args = if is_blanket {
             vec![pointee]
         } else {

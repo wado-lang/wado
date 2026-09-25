@@ -203,12 +203,23 @@ pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<DefId>>;
 
 type ReceiverImplIndex = IndexMap<name::Receiver, Vec<DefId>>;
 
-fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplIndex {
+/// Each entry under its target's receiver. A `&X` block is also under `&X`
+/// itself, beside the bucket of its kind every reference block shares.
+fn index_by_receiver(
+    index: &TraitImplIndex,
+    headers: &IndexMap<DefId, ImplHeader>,
+    defs: &DefTable,
+) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
     for (key, entries) in index {
         out.entry(key.receiver(defs))
             .or_default()
             .extend(entries.iter().copied());
+        for &entry in entries {
+            if let Some(referent) = headers.get(&entry).and_then(ImplHeader::ref_receiver) {
+                out.entry(referent).or_default().push(entry);
+            }
+        }
     }
     out
 }
@@ -323,6 +334,39 @@ impl ImplHeader {
 
     pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
         self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
+    }
+
+    /// What the block's own parameters stand for where its target is
+    /// instantiated at `args`; `None` where a position it pins differs.
+    fn binders_at(&self, args: &[name::FqTypeName]) -> Option<IndexMap<String, name::FqTypeName>> {
+        let target = match self.target_id.split_reference() {
+            Some((_, referent)) => referent,
+            None => self.target_id.clone(),
+        };
+        let mut bound = IndexMap::default();
+        if target.args().len() != args.len() {
+            return Some(bound);
+        }
+        for (written, actual) in target.args().iter().zip(args) {
+            match written.binder_name() {
+                Some(binder) if written.args().is_empty() => {
+                    bound.insert(binder.to_string(), actual.clone());
+                }
+                _ if written.mentions_binder() || written.head_only() == actual.head_only() => {}
+                _ => return None,
+            }
+        }
+        Some(bound)
+    }
+
+    /// The receiver a `&X` / `&mut X` block registers under, naming `X`'s head;
+    /// `None` for a `&T` blanket and any other target.
+    pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
+        let ImplTargetKey::Ref(kind) = self.target else {
+            return None;
+        };
+        let receiver = name::Receiver::of_ref_impl(kind, &self.target_id);
+        matches!(receiver, name::Receiver::RefTo(..)).then_some(receiver)
     }
 
     /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
@@ -816,6 +860,9 @@ fn index_impl_modules(
             fq_trait.base_name(),
             &header.module,
         );
+        if let Some(referent) = header.ref_receiver() {
+            out.record(&referent, fq_trait.base_name(), &header.module);
+        }
     }
     out
 }
@@ -1388,8 +1435,8 @@ impl TraitEnv {
 
         (
             Arc::new(Self {
-                by_receiver: index_by_receiver(&impl_index, defs),
-                all_by_receiver: index_by_receiver(&all_impl_index, defs),
+                by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
+                all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
                 impl_index,
                 all_impl_index,
                 defs: resolutions.defs().clone(),
@@ -1609,32 +1656,51 @@ impl TraitEnv {
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
-    /// How many arguments the impl on `receiver` writes for `trait_`, among
-    /// those a bound writing `wanted` reaches.
-    pub(crate) fn impl_written_arg_count(
+    /// The trait arguments the impl on `receiver` (instantiated at
+    /// `receiver_args`) answering a bound writing `wanted` names itself by: as
+    /// the impl spells them, its own parameters included.
+    pub(crate) fn impl_written_trait_args(
         &self,
         receiver: &name::Receiver,
+        receiver_args: &[name::FqTypeName],
         trait_: DefId,
         wanted: &[name::FqTypeName],
-    ) -> Option<usize> {
+    ) -> Option<Vec<name::FqTypeName>> {
         let defaults = &self.decl_header_of(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
             if header.trait_def() != Some(trait_) {
                 return None;
             }
+            let bound = header.binders_at(receiver_args)?;
             let default_at =
                 |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
             let args = header.trait_arg_ids();
-            let answers = wanted.iter().enumerate().all(|(i, want)| {
+            let at_instance = |arg: name::FqTypeName| {
+                arg.rewrite(&|node| {
+                    node.args()
+                        .is_empty()
+                        .then(|| bound.get(node.binder_name()?).cloned())
+                        .flatten()
+                })
+            };
+            let answers = (0..args.len().max(wanted.len())).all(|i| {
+                let Some(asks) = wanted
+                    .get(i)
+                    .cloned()
+                    .or_else(|| default_at(i).map(at_instance))
+                else {
+                    return true;
+                };
                 let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
                     return false;
                 };
-                effective.head_only() == want.head_only()
+                let effective = at_instance(effective);
+                effective.mentions_binder() || effective.head_only() == asks.head_only()
             });
             // The count the impl's own name spells, not every argument
             // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-            answers.then(|| non_default_named_arg_count(args, &default_at))
+            answers.then(|| args[..non_default_named_arg_count(args, &default_at)].to_vec())
         })
     }
 
