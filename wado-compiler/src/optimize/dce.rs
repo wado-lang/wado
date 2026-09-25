@@ -412,7 +412,7 @@ fn collect_array_clone_element_types(
             // builtin like `array_clone` has no per-`T` record, so the
             // descriptor's `monomorph_info` is generic — only the node knows `T`).
             let func = callee_descriptor(descriptors, *func_id);
-            if (func.is_builtin_named("array_clone") || func.is_builtin_named("array_clone_prefix"))
+            if matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix"))
                 && let Some(elem) = type_args.first().copied()
             {
                 out.insert(elem);
