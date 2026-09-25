@@ -105,10 +105,29 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
     return Result::Ok(());
 }
 
-/// A tensor an attribute carries, which `Constant` is the operator of. It has
-/// no shape: the one element a reader folds has no axis to put in one.
-pub struct ConstTensor {
-    pub data: List<f32>,
+/// A tensor whose elements the build reads: a `Constant`, an initializer no
+/// kernel computes in, or what stage 0 folds from them.
+pub struct Known {
+    pub extents: List<i32>,
+    pub elements: Elements,
+}
+
+/// A known tensor's elements, in the type stage 0 computes them in. ONNX's
+/// integer types all fit `i64`, as its shape arithmetic does.
+pub variant Elements {
+    Ints(List<i64>),
+    Floats(List<f32>),
+    Bools(List<bool>),
+}
+
+impl Known {
+    pub fn len(&self) -> i32 {
+        return match &self.elements {
+            Ints(v) => v.len(),
+            Floats(v) => v.len(),
+            Bools(v) => v.len(),
+        };
+    }
 }
 
 /// An attribute's values as written. ONNX types an attribute by the operator's
@@ -118,7 +137,7 @@ pub struct Attr {
     pub name: String,
     pub values: List<String>,
     pub is_list: bool,
-    pub tensor: Option<ConstTensor> = null,
+    pub tensor: Option<Known> = null,
 }
 
 pub struct Node {
@@ -139,9 +158,11 @@ impl Node {
     }
 }
 
-/// The element type of an initializer stage 0 reads at build time, as `Reshape`
-/// reads its target shape. No kernel computes in it, so it is never a weight.
-pub global BUILD_TIME_ELEMENT: String = "int64";
+/// Whether an initializer of `dtype` is read at build time, as `Reshape` reads
+/// its target shape. No kernel computes in these, so none is ever a weight.
+pub fn is_build_time(dtype: &String) -> bool {
+    return *dtype == "int64" || *dtype == "int32" || *dtype == "bool";
+}
 
 /// `inputs` holds the parameters `forward` takes, so it never names an
 /// initializer: both readers pass theirs through `parameters` first.
@@ -150,13 +171,13 @@ pub struct Graph {
     pub inputs: List<ValueInfo>,
     pub outputs: List<ValueInfo>,
     pub initializers: List<ValueInfo>,
-    pub integers: TreeMap<String, List<i64>> = TreeMap::new(),
+    pub constants: TreeMap<String, Known> = TreeMap::new(),
     pub nodes: List<Node>,
 }
 
-/// The message both readers give an integer initializer written without values.
-pub fn integer_without_values(tensor: &String) -> String {
-    return `${tensor}: an integer tensor is read at build time, so the graph must carry its values`;
+/// The message both readers give a build-time tensor written without values.
+pub fn constant_without_values(tensor: &String) -> String {
+    return `${tensor}: the build reads this tensor, so the graph must carry its values`;
 }
 
 /// The declared inputs that are parameters. An input an initializer also names
@@ -164,7 +185,7 @@ pub fn integer_without_values(tensor: &String) -> String {
 pub fn parameters(
     inputs: List<ValueInfo>,
     initializers: &List<ValueInfo>,
-    integers: &TreeMap<String, List<i64>>,
+    constants: &TreeMap<String, Known>,
 ) -> List<ValueInfo> {
     let mut named: List<String> = [];
     for let vi of *initializers {
@@ -172,7 +193,7 @@ pub fn parameters(
     }
     let mut kept: List<ValueInfo> = [];
     for let vi of inputs {
-        if !named.contains_str(vi.name.as_str_slice()) && !integers.contains_key(vi.name) {
+        if !named.contains_str(vi.name.as_str_slice()) && !constants.contains_key(vi.name) {
             kept.push(vi);
         }
     }

@@ -8,16 +8,18 @@ use onnx from "../grammar/Onnx.g4"
 use { TreeMap } from "core:collections";
 use {
     Attr,
-    BUILD_TIME_ELEMENT,
     Dim,
+    Elements,
     Graph,
+    Known,
     Node,
     Rank,
     ValueInfo,
     bit_pattern,
     check_element_count,
+    constant_without_values,
     element_of,
-    integer_without_values,
+    is_build_time,
     parameters,
     push_element,
     static_extents,
@@ -46,7 +48,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     let mut inputs: List<ValueInfo> = [];
     let mut outputs: List<ValueInfo> = [];
     let mut initializers: List<ValueInfo> = [];
-    let mut integers = TreeMap::<String, List<i64>>::new();
+    let mut constants = TreeMap::<String, Known>::new();
     let mut nodes: List<Node> = [];
     for let c of children(s, graph) {
         if !s.is_node(c) {
@@ -60,8 +62,8 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
         } else if kind == onnx::RK_INITIALIZERS {
             for let vi of children_of_kind(s, c, onnx::RK_VALUE_INFO) {
                 let info = read_value_info(s, toks, vi)?;
-                if info.dtype == BUILD_TIME_ELEMENT {
-                    integers[info.name] = read_integers(s, toks, vi, &info)?;
+                if is_build_time(&info.dtype) {
+                    constants[info.name] = read_known(s, toks, vi, &info)?;
                 } else {
                     initializers.push(info);
                 }
@@ -72,10 +74,10 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     }
     return Result::Ok(Graph {
         name: quotable_text(s, toks, name_node),
-        inputs: parameters(inputs, &initializers, &integers),
+        inputs: parameters(inputs, &initializers, &constants),
         outputs,
         initializers,
-        integers,
+        constants,
         nodes,
     });
 }
@@ -158,10 +160,11 @@ fn inline_texts(
     return Result::Ok(Option::Some(texts));
 }
 
-/// An initializer the build reads, as the integers its inline values spell.
-fn read_integers(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<List<i64>, String> {
+/// An initializer the build reads, as its inline values spell it. ONNX writes
+/// a bool element as the integer `int32_data` holds.
+fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<Known, String> {
     let Some(texts) = inline_texts(s, toks, vi, &info.name, &info.rank)? else {
-        return Result::Err(integer_without_values(&info.name));
+        return Result::Err(constant_without_values(&info.name));
     };
     let mut values: List<i64> = [];
     for let text of texts {
@@ -170,7 +173,12 @@ fn read_integers(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &V
         };
         values.push(v);
     }
-    return Result::Ok(values);
+    let elements = if info.dtype == "bool" {
+        Elements::Bools(values.into_iter().map(|v| v != 0).collect());
+    } else {
+        Elements::Ints(values);
+    };
+    return Result::Ok(Known { extents: static_extents(&info.rank).unwrap(), elements });
 }
 
 /// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the

@@ -1,6 +1,6 @@
 //! What the reader takes out of a graph, on the forms a real model carries.
 
-use { Dim, Graph, Rank } from "./graph.wado";
+use { Dim, Elements, Graph, Known, Rank } from "./graph.wado";
 use { read } from "./onnx_text.wado";
 
 global MLP: String = `<ir_version: 7, opset_import: [ "" : 10 ]>
@@ -169,10 +169,27 @@ test "an int64 initializer is an integer the build reads, not a weight" {
             Y = Reshape(X, S)
         }`,
     ).unwrap();
-    let want: List<i64> = [6];
-    assert g.integers.get("S") == Option::Some(want);
+    assert g.constants.get("S") == Option::Some(Known {
+        extents: [1],
+        elements: Elements::Ints([6]),
+    });
     assert g.initializers.len() == 1;
     assert g.initializers[0].name == "W";
+}
+
+test "a bool initializer is a constant the build reads" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <bool[2] M = {1, 0}>
+        {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    assert g.constants.get("M") == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Bools([true, false]),
+    });
+    assert g.initializers.is_empty();
 }
 
 test "an int64 initializer without inline values names itself" {
@@ -183,7 +200,7 @@ test "an int64 initializer without inline values names itself" {
             Y = Reshape(X, S)
         }`,
     ).unwrap_err();
-    assert e == "S: an integer tensor is read at build time, so the graph must carry its values";
+    assert e == "S: the build reads this tensor, so the graph must carry its values";
 }
 
 test "an initializer without inline values carries no data" {

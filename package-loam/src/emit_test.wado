@@ -1,5 +1,5 @@
 use { EmitError, GRAPH_BANNER, emit } from "./emit.wado";
-use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -485,8 +485,9 @@ fn constant_graph(consumer: Node, produced: Rank, value: f32) -> Graph {
                         name: "value",
                         values: [],
                         is_list: false,
-                        tensor: Option::Some(ConstTensor {
-                            data: [value],
+                        tensor: Option::Some(Known {
+                            extents: [],
+                            elements: Elements::Floats([value]),
                         }),
                     },
                 ],

@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Dim, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { Schema } from "./schema.wado";
 use { Window, WindowError, ints, window_over } from "./window.wado";
 
@@ -412,8 +412,8 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>, graph: &Graph, schem
 /// carries.
 fn reshape(node: &Node, operand: &Shape, graph: &Graph, schema: &Schema) -> Result<Shape, InferError> {
     let target = node.inputs[1];
-    let Some(written) = graph.integers.get(target) else {
-        return Result::Err(refusal(node, `the target shape ${target} is not an int64 initializer the graph carries`));
+    let Some(Known { elements: Ints(written), .. }) = graph.constants.get(target) else {
+        return Result::Err(refusal(node, `the target shape ${target} is not an integer initializer the graph carries`));
     };
     let total = static_count(node, operand)?;
     return regrouped(node, operand, &reshape_targets(node, operand, &written, total)?, schema);
@@ -606,19 +606,19 @@ pub fn constant_value(node: &Node) -> Result<f32, InferError> {
         builtin::cold_path();
         return Result::Err(attribute_error(node, "value", "is absent and the operator reads it"));
     };
-    let Some(tensor) = &attr.tensor else {
+    let Some(Known { elements: Floats(data), .. }) = &attr.tensor else {
         builtin::cold_path();
-        return Result::Err(attribute_error(node, "value", "is not a tensor this reader carries"));
+        return Result::Err(attribute_error(node, "value", "is not a float tensor this reader carries"));
     };
-    if tensor.data.len() != 1 {
+    if data.len() != 1 {
         builtin::cold_path();
         return Result::Err(attribute_error(
             node,
             "value",
-            `holds ${tensor.data.len()} elements and only a single one broadcasts`,
+            `holds ${data.len()} elements and only a single one broadcasts`,
         ));
     }
-    return Result::Ok(tensor.data[0]);
+    return Result::Ok(data[0]);
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX

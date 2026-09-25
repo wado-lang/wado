@@ -10,17 +10,18 @@ use { TreeMap } from "core:collections";
 use { from_bytes } from "core:protobuf";
 use {
     Attr,
-    BUILD_TIME_ELEMENT,
-    ConstTensor,
     Dim,
+    Elements,
     Graph,
+    Known,
     Node,
     Rank,
     ValueInfo,
     bit_pattern,
     check_element_count,
+    constant_without_values,
     element_of,
-    integer_without_values,
+    is_build_time,
     parameters,
     push_element,
 } from "./graph.wado";
@@ -200,18 +201,51 @@ pub struct ModelProto {
     pub opset_import: List<OperatorSetIdProto> = [],
 }
 
-/// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
-/// in the typed `float_data` or, as every exporter does, as little-endian
-/// bytes in `raw_data`. `None` where the tensor is some other element type.
-pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
-    if t.data_type != 1 {
-        return Result::Ok(null);
-    }
-    let extents = extents_of(t)?;
-    let Some(bytes) = payload(t, &"float", &extents)? else {
-        return Result::Err(`${t.name}: no data`);
+/// A tensor's elements as the build holds them. ONNX writes them either in the
+/// typed field for the element type or, as every exporter does, as
+/// little-endian bytes in `raw_data`. `None` for an element type not read.
+pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
+    let raw = &t.raw_data;
+    let width = match t.data_type {
+        1 | 6 => 4,
+        7 => 8,
+        9 => 1,
+        _ => {
+            return Result::Ok(null);
+        },
     };
-    return Result::Ok(Option::Some([List::<f32>::from_le_bytes(bytes), extents]));
+    if raw.len() % width != 0 {
+        return Result::Err(`${t.name}: ${raw.len()} raw bytes is not whole elements of ${width} bytes`);
+    }
+    let typed = raw.is_empty();
+    let elements = match t.data_type {
+        1 => Elements::Floats(if typed { t.float_data } else { List::<f32>::from_le_bytes(raw) }),
+        6 => Elements::Ints(widened(&if typed { t.int32_data } else { List::<i32>::from_le_bytes(raw) })),
+        7 => Elements::Ints(if typed { t.int64_data } else { List::<i64>::from_le_bytes(raw) }),
+        _ => Elements::Bools(if typed { nonzero(&t.int32_data) } else { nonzero(&List::<u8>::from_le_bytes(raw)) }),
+    };
+    let known = Known { extents: extents_of(t)?, elements };
+    if known.len() == 0 && check_element_count(&t.name, 0, &known.extents).is_err() {
+        return Result::Err(constant_without_values(&t.name));
+    }
+    check_element_count(&t.name, known.len(), &known.extents)?;
+    return Result::Ok(Option::Some(known));
+}
+
+fn widened(values: &List<i32>) -> List<i64> {
+    let mut out: List<i64> = [];
+    for let v of *values {
+        out.push(v as i64);
+    }
+    return out;
+}
+
+fn nonzero<T: Eq + Default>(values: &List<T>) -> List<bool> {
+    let mut out: List<bool> = [];
+    for let v of *values {
+        out.push(v != T::default());
+    }
+    return out;
 }
 
 fn extents_of(t: &TensorProto) -> Result<List<i32>, String> {
@@ -317,20 +351,6 @@ fn read_initializer(t: &TensorProto, dtype: String) -> Result<ValueInfo, String>
     });
 }
 
-/// An `int64` tensor's elements, from `raw_data` or the typed `int64_data`.
-fn integer_values(t: &TensorProto) -> Result<List<i64>, String> {
-    if t.raw_data.len() % 8 != 0 {
-        return Result::Err(`${t.name}: ${t.raw_data.len()} raw bytes is not whole int64 elements`);
-    }
-    let values = if t.raw_data.is_empty() { t.int64_data } else { List::<i64>::from_le_bytes(&t.raw_data) };
-    let extents = extents_of(t)?;
-    if values.is_empty() && check_element_count(&t.name, 0, &extents).is_err() {
-        return Result::Err(integer_without_values(&t.name));
-    }
-    check_element_count(&t.name, values.len(), &extents)?;
-    return Result::Ok(values);
-}
-
 /// A tensor's elements as little-endian bytes: `raw_data` as it stands, or the
 /// typed field re-encoded. A 16-bit element sits in the low half of an `int32`.
 fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Option<ByteList>, String> {
@@ -395,19 +415,16 @@ fn read_attr(a: &AttributeProto) -> Result<Attr, String> {
                 values.push(utf8(&v));
             }
         },
-        // A tensor has no text form, so it travels whole. Only a float one
-        // does, since the kernels compute in f32.
+        // A tensor has no text form, so it travels whole.
         ATTRIBUTE_TENSOR => {
             is_list = false;
-            if let Some(t) = &a.t {
-                if let Some([data, _]) = float_tensor(t)? {
-                    return Result::Ok(Attr {
-                        name: a.name,
-                        values: [],
-                        is_list: false,
-                        tensor: Option::Some(ConstTensor { data }),
-                    });
-                }
+            if let Some(t) = &a.t && let Some(known) = known_tensor(t)? {
+                return Result::Ok(Attr {
+                    name: a.name,
+                    values: [],
+                    is_list: false,
+                    tensor: Option::Some(known),
+                });
             }
         },
         // A graph or a type has no text form, so the attribute is carried with
@@ -452,14 +469,14 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     };
 
     let mut initializers: List<ValueInfo> = [];
-    let mut integers = TreeMap::<String, List<i64>>::new();
+    let mut constants = TreeMap::<String, Known>::new();
     for let t of graph.initializer {
         check_inline(&t)?;
         let Some(dtype) = dtype_name(t.data_type) else {
             return Result::Err(`${t.name}: element type ${t.data_type}`);
         };
-        if dtype == BUILD_TIME_ELEMENT {
-            integers[t.name] = integer_values(&t)?;
+        if is_build_time(&dtype) {
+            constants[t.name] = known_tensor(&t)?.unwrap();
         } else {
             initializers.push(read_initializer(&t, dtype)?);
         }
@@ -468,7 +485,7 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let vi of graph.input {
         declared.push(read_value_info(&vi)?);
     }
-    let inputs = parameters(declared, &initializers, &integers);
+    let inputs = parameters(declared, &initializers, &constants);
     let mut outputs: List<ValueInfo> = [];
     for let vi of graph.output {
         outputs.push(read_value_info(&vi)?);
@@ -482,7 +499,7 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
         inputs,
         outputs,
         initializers,
-        integers,
+        constants,
         nodes,
     });
 }

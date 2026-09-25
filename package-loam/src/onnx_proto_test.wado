@@ -1,5 +1,5 @@
 use { from_bytes, to_bytes } from "core:protobuf";
-use { Dim, Graph, Rank } from "./graph.wado";
+use { Dim, Elements, Graph, Known, Rank } from "./graph.wado";
 use {
     GraphProto,
     ModelProto,
@@ -51,7 +51,7 @@ test "a whole convolutional graph reads" {
     assert g.nodes.len() == 40;
     // Every weight is a `ConstantOfShape` of an int64 shape the build reads.
     assert g.initializers.is_empty();
-    assert g.integers.len() == 17;
+    assert g.constants.len() == 17;
     assert g.outputs.len() == 1;
     assert g.nodes[g.nodes.len() - 1].op == "Softmax";
     assert g.inputs[0].name == "data_0";
@@ -61,10 +61,16 @@ test "a whole convolutional graph reads" {
 test "an int64 initializer is an integer the build reads, not a weight" {
     let g = graph_of(#include_bytes("../tests/models/mnist-12/model.onnx"));
 
-    let flat: List<i64> = [1, 256];
-    let weight: List<i64> = [256, 10];
-    assert g.integers.get("Pooling160_Output_0_reshape0_shape") == Option::Some(flat);
-    assert g.integers.get("Parameter193_reshape1_shape") == Option::Some(weight);
+    let flat = Known {
+        extents: [2],
+        elements: Elements::Ints([1, 256]),
+    };
+    let weight = Known {
+        extents: [2],
+        elements: Elements::Ints([256, 10]),
+    };
+    assert g.constants.get("Pooling160_Output_0_reshape0_shape") == Option::Some(flat);
+    assert g.constants.get("Parameter193_reshape1_shape") == Option::Some(weight);
     assert g.initializers.len() == 6;
     assert g.inputs.len() == 1;
 }

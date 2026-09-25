@@ -2,17 +2,18 @@
 //! One `.pb` file is one bare `TensorProto`.
 
 use { from_bytes } from "core:protobuf";
-use { TensorProto, float_tensor } from "../src/onnx_proto.wado";
+use { Known } from "../src/graph.wado";
+use { TensorProto, known_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
     let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
         panic("the tensor did not decode");
     };
-    let Ok(Some(pair)) = float_tensor(&t) else {
+    let Ok(Some(Known { extents, elements: Floats(data) })) = known_tensor(&t) else {
         panic("the tensor is not float");
     };
-    return pair;
+    return [data, extents];
 }
 
 /// How far a generated kernel may sit from the output ONNX ships: a fraction of
