@@ -1199,8 +1199,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `ty` with each projection over this frame's parameters answered by its
     /// bounds: a use site handing `C` to `T` in `&T::Value` reads `C::Value`.
     pub(super) fn answer_frame_projections(&mut self, ty: TypeId) -> TypeId {
+        if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
+            return ty;
+        }
         let asked: Vec<(u32, String, DefId, String)> = {
             let table = self.tysys.type_table.borrow();
+            let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
                 .assoc_type_projections(ty)
                 .into_iter()
@@ -1217,14 +1221,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let ResolvedType::TypeParam { index, name } = table.get(*param_id) else {
                         return None;
                     };
-                    Some((*index, name.clone(), *owning_trait, assoc_name.clone()))
+                    // A callee's parameter the substitution left behind may
+                    // share a name with one of this frame's binders.
+                    (binders.get(name)?.type_id == *param_id).then(|| {
+                        (*index, name.clone(), *owning_trait, assoc_name.clone())
+                    })
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
         for (slot, base_name, trait_, assoc) in asked {
             if let Some(answer) = self.frame_projection_of_trait(&base_name, trait_, &assoc) {
-                answers.entry(slot).or_default().push((assoc, answer));
+                answers.entry(slot).or_default().push((trait_, assoc, answer));
             }
         }
         if answers.is_empty() {

@@ -3627,8 +3627,8 @@ impl TypeTable {
                     && let Some(answer) = projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
-                            .find(|(name, _)| *name == assoc_name)
-                            .map(|(_, type_id)| *type_id)
+                            .find(|(trait_, name, _)| *trait_ == owning_trait && *name == assoc_name)
+                            .map(|(_, _, type_id)| *type_id)
                     })
                 {
                     return answer;
@@ -6133,14 +6133,14 @@ pub struct TirTypeParam {
 }
 
 /// What a use site knows about the associated types projected from a slot,
-/// beyond the type filling it: slot index → `[(associated-type name, what it
-/// means here)]`.
+/// beyond the type filling it: slot index → `[(declaring trait,
+/// associated-type name, what it means here)]`.
 ///
 /// The companion of the slot substitution in
 /// [`TypeTable::substitute_type_params_with`]. A declaration resolves
 /// `Self::Item` in its own frame, where it can only be a projection; what it
 /// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
-pub type SlotProjections = IndexMap<u32, Vec<(String, TypeId)>>;
+pub type SlotProjections = IndexMap<u32, Vec<(DefId, String, TypeId)>>;
 
 /// Substitution-key base for method-level type params: past the highest
 /// impl-param *index*, not the count. A concrete type in a receiver slot
@@ -7778,15 +7778,39 @@ mod tests {
         let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
-        let projections =
-            SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]);
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
-            &projections,
+            &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
         assert_eq!(substituted, TypeTable::U8);
+    }
+
+    fn answer_item(trait_: DefId, answer: TypeId) -> SlotProjections {
+        SlotProjections::from_iter([(0, vec![(trait_, "Item".to_string(), answer)])])
+    }
+
+    /// An answer is for one trait's associated type: another trait declaring
+    /// the same name on the same slot is a different projection.
+    #[test]
+    fn an_answer_for_another_trait_leaves_the_projection() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &answer_item(DefId::for_test(1), TypeTable::U8),
+        );
+
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection, got {:?}", table.get(substituted));
+        };
+        assert_eq!(param_id, receiver);
     }
 
     /// An unanswered name leaves the projection abstract over the substituted
@@ -7802,7 +7826,7 @@ mod tests {
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
-            &SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]),
+            &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
         let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()

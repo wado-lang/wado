@@ -2254,7 +2254,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
-    ) -> Vec<(String, TypeId)> {
+    ) -> Vec<(DefId, String, TypeId)> {
         let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
             ResolvedType::TypeParam { name, .. } => name.clone(),
             _ => String::new(),
@@ -2270,7 +2270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &decl.name,
                 )
             });
-            answers.push((decl.name.clone(), answer));
+            answers.push((*declaring, decl.name.clone(), answer));
         }
         answers
     }
