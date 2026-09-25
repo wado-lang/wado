@@ -779,69 +779,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )
                         });
                         let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
-<<<<<<< HEAD
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            all_variant_cases.insert(
-                                def,
-                                VariantInfo {
-                                    name: variant_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: variant_decl.id,
-                                    type_params: RealTypeParams::of(&variant_decl.type_params),
-                                    cases,
-                                    type_param_type_ids,
-                                },
-                            );
-                        }
-                    }
-                    Item::Enum(enum_decl) => {
-                        // Populate enum cases (no field types, just names and indices)
-                        let cases: Vec<EnumCaseData> = enum_decl
-                            .cases
-                            .iter()
-                            .enumerate()
-                            .map(|(index, case)| EnumCaseData::of(index, case))
-                            .collect();
-                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
-                            all_enum_cases.insert(
-                                def,
-                                EnumInfo::new(module_source.clone(), enum_decl.id, cases),
-                            );
-                        }
-||||||| be2e0cf4e
-                        if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
-                            all_variant_cases.insert(
-                                def,
-                                VariantInfo {
-                                    name: variant_decl.name.clone(),
-                                    module_source: module_source.clone(),
-                                    defined_at: variant_decl.id,
-                                    type_params: RealTypeParams::of(&variant_decl.type_params),
-                                    cases,
-                                    type_param_type_ids,
-                                },
-                            );
-                        }
-                    }
-                    Item::Enum(enum_decl) => {
-                        // Populate enum cases (no field types, just names and indices)
-                        let cases: Vec<EnumCaseData> = enum_decl
-                            .cases
-                            .iter()
-                            .enumerate()
-                            .map(|(index, case)| EnumCaseData {
-                                name: case.name.clone(),
-                                index: index as u32,
-                                ast_id: case.id,
-                            })
-                            .collect();
-                        if let Some(def) = resolutions.defs().of_ast_id(enum_decl.id) {
-                            all_enum_cases.insert(
-                                def,
-                                EnumInfo::new(module_source.clone(), enum_decl.id, cases),
-                            );
-                        }
-=======
                         data.variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
                             VariantInfo::of_decl(
@@ -851,7 +788,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 type_param_type_ids,
                             ),
                         );
->>>>>>> origin/main
                     }
                     Item::Flags(flags_decl) => {
                         if flags_decl.flags.len() > FlagsInfo::MAX_MEMBERS {

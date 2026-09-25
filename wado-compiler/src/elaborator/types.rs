@@ -219,16 +219,6 @@ pub(super) struct EnumCaseData {
     pub(super) ast_id: AstId,
 }
 
-impl EnumCaseData {
-    pub(super) fn of(index: usize, case: &ast::EnumCase) -> Self {
-        Self {
-            name: case.name.clone(),
-            index: index as u32,
-            ast_id: case.id,
-        }
-    }
-}
-
 /// Enum info: module source and cases (enums have no type parameters or payloads)
 #[derive(Clone)]
 pub(crate) struct EnumInfo {

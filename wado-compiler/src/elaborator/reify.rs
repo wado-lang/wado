@@ -82,7 +82,6 @@ use crate::name::{
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, test_function_name,
 };
-use crate::primitive::PrimitiveType;
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
@@ -993,75 +992,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let field_types = self
             .ann_struct_field_types(struct_decl.id)
             .expect("resolve_struct records the field types for every struct reify emits");
-<<<<<<< HEAD
-
-        // Field-default expressions resolve in a per-struct
-        // `FunctionContext` keyed `struct:<name>` (no self, no other
-        // fields in scope), matching `Elaborator::resolve_struct`
-        // byte-for-byte so the synthesized purity check and reify see
-        // identical TIR.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let mut fields = Vec::with_capacity(struct_decl.fields.len());
-        for (index, field) in struct_decl.fields.iter().enumerate() {
-            fields.push(self.reify_struct_field(
-                field,
-                index,
-                field_types[index],
-                field.visibility,
-                wire_numbers[index],
-                &mut field_ctx,
-            ));
-        }
-||||||| be2e0cf4e
-
-        // Field-default expressions resolve in a per-struct
-        // `FunctionContext` keyed `struct:<name>` (no self, no other
-        // fields in scope), matching `Elaborator::resolve_struct`
-        // byte-for-byte so the synthesized purity check and reify see
-        // identical TIR.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let mut fields = Vec::with_capacity(struct_decl.fields.len());
-        for (index, field) in struct_decl.fields.iter().enumerate() {
-            let type_id = field_types[index];
-
-            let wire_name_override = wire_name_override_of(&field.attrs);
-
-            let default_expr: Option<Box<TirExpr>> = field.default.as_ref().map(|default_ast| {
-                Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
-            });
-
-            // A field is optional on deserialize iff it has a default value.
-            // `#[wire(default)]` is removed (rejected in `resolve_struct`).
-            let serde_default = field.default.is_some();
-
-            let serde_positional = field
-                .attrs
-                .iter()
-                .any(|a| a.name == WIRE && a.has_arg("positional"));
-
-            fields.push(TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-                wire_name_override,
-                serde_default,
-                serde_positional,
-                serde_number: wire_numbers[index],
-                default_expr,
-            });
-        }
-=======
         let fields = self.reify_fields(struct_decl, &field_types);
->>>>>>> origin/main
 
         // Single source of truth: the body walk projected these type
         // params with each default resolved while the decl's type-param scope
@@ -1104,23 +1035,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .zip(field_types)
             .zip(wire_numbers)
             .enumerate()
-            .map(|(index, ((field, &type_id), serde_number))| TirField {
-                name: field.name.clone(),
-                visibility: field.visibility,
-                type_id,
-                index: index as u32,
-                span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-                wire_name_override: wire_name_override_of(&field.attrs),
-                serde_default: field.default.is_some(),
-                serde_positional: field
-                    .attrs
-                    .iter()
-                    .any(|a| a.name == WIRE && a.has_arg("positional")),
-                serde_number,
-                default_expr: field.default.as_ref().map(|default_ast| {
-                    Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(type_id)))
-                }),
+            .map(|(index, ((field, &type_id), wire_number))| {
+                self.reify_struct_field(field, index, type_id, wire_number, &mut field_ctx)
             })
             .collect()
     }
@@ -1141,109 +1057,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-<<<<<<< HEAD
-    /// A function-local struct as TIR: its field types from what
-    /// `resolve_local_struct` recorded, its attributes from the AST.
-||||||| be2e0cf4e
-    /// Field types and type-param bounds come from
-    /// `sem.decls.local_struct_fields` — the durable fact
-    /// `resolve_local_struct` recorded under this declaration's own identity.
-    /// Field attributes (`#[wire(...)]`, `#[secret]`) and default-value
-    /// expressions are read straight from the AST here, exactly matching
-    /// `reify_struct`'s handling for a top-level struct — `StructFieldInfo`
-    /// doesn't carry attributes, only `(name, type, visibility)`.
-=======
     /// Reify a `struct` declared in a function body. Field attributes and defaults
     /// come from the AST, as for a top-level struct: `StructFieldInfo` carries neither.
->>>>>>> origin/main
     fn reify_local_struct(&mut self, struct_decl: &ast::StructDecl) {
-<<<<<<< HEAD
-        let info = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
-            .cloned()
-            .expect("resolve_local_struct records every local struct annotate resolved");
-        // Field-default expressions resolve in a per-struct `FunctionContext`
-        // (no self, no other fields in scope), matching `reify_struct`.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let fields: Vec<TirField> = info
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(index, (name, type_id, visibility))| {
-                let field = &struct_decl.fields[index];
-                assert_eq!(
-                    &field.name, name,
-                    "resolve_local_struct keeps declaration order"
-                );
-                self.reify_struct_field(
-                    field,
-                    index,
-                    *type_id,
-                    *visibility,
-                    wire_numbers[index],
-                    &mut field_ctx,
-                )
-            })
-            .collect();
-||||||| be2e0cf4e
-        let Some(info) = self
-            .tysys
-            .resolutions
-            .defs()
-            .of_ast_id(struct_decl.id)
-            .and_then(|def| self.sem.decls.local_struct_fields.get(&def))
-            .cloned()
-        else {
-            // `resolve_local_struct` inserts this unconditionally for every
-            // local struct declaration annotate resolved.
-            return;
-        };
-        // Field-default expressions resolve in a per-struct `FunctionContext`
-        // (no self, no other fields in scope), matching `reify_struct`.
-        let mut field_ctx =
-            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
-        let fields: Vec<TirField> = info
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(index, (name, type_id, visibility))| {
-                let field = struct_decl.fields.get(index);
-                let attrs: &[ast::Attribute] = field.map_or(&[], |f| &f.attrs);
-                let default_expr: Option<Box<TirExpr>> =
-                    field.and_then(|f| f.default.as_ref()).map(|default_ast| {
-                        Box::new(self.reify_expr(default_ast, &mut field_ctx, Some(*type_id)))
-                    });
-                TirField {
-                    name: name.clone(),
-                    visibility: *visibility,
-                    type_id: *type_id,
-                    index: index as u32,
-                    span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == SECRET),
-                    wire_name_override: wire_name_override_of(attrs),
-                    serde_default: field.is_some_and(|f| f.default.is_some()),
-                    serde_positional: attrs
-                        .iter()
-                        .any(|a| a.name == WIRE && a.has_arg("positional")),
-                    serde_number: wire_numbers.get(index).copied().flatten(),
-                    default_expr,
-                }
-            })
-            .collect();
-=======
         let def = self.tysys.def_at(struct_decl.id);
         let info = &self.sem.decls.local.struct_fields[&def];
         let name = info.name.clone();
         let field_types: Vec<TypeId> = info.fields.iter().map(|&(_, ty, _)| ty).collect();
         let fields = self.reify_fields(struct_decl, &field_types);
->>>>>>> origin/main
         // Single source of truth, as for a top-level struct: the body walk
         // projected these with the struct's own type-param scope alive.
         let type_params = self.ann_decl_type_params(struct_decl.id).expect(
@@ -1975,7 +1796,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         field: &ast::StructField,
         index: usize,
         type_id: TypeId,
-        visibility: Visibility,
         wire_number: Option<u32>,
         field_ctx: &mut FunctionContext,
     ) -> TirField {
@@ -1985,7 +1805,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|default_ast| Box::new(self.reify_expr(default_ast, field_ctx, Some(type_id))));
         TirField {
             name: field.name.clone(),
-            visibility,
+            visibility: field.visibility,
             type_id,
             index: index as u32,
             span: field.span,

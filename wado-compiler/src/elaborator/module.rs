@@ -100,37 +100,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     drop(scope);
                 }
                 Item::Enum(enum_decl) => {
-<<<<<<< HEAD
-                    // Collect enum cases (no field types, just names and indices)
-                    let cases: Vec<EnumCaseData> = enum_decl
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .map(|(index, case)| EnumCaseData::of(index, case))
-                        .collect();
-                    self.sem.decls.local_enum_cases.insert(
-                        self.def_of_item(enum_decl.id),
-                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
-||||||| be2e0cf4e
-                    // Collect enum cases (no field types, just names and indices)
-                    let cases: Vec<EnumCaseData> = enum_decl
-                        .cases
-                        .iter()
-                        .enumerate()
-                        .map(|(index, case)| EnumCaseData {
-                            name: case.name.clone(),
-                            index: index as u32,
-                            ast_id: case.id,
-                        })
-                        .collect();
-                    self.sem.decls.local_enum_cases.insert(
-                        self.def_of_item(enum_decl.id),
-                        EnumInfo::new(self.current_module_source.clone(), enum_decl.id, cases),
-=======
                     self.sem.decls.local.enum_cases.insert(
                         self.tysys.def_at(enum_decl.id),
                         EnumInfo::of_decl(self.current_module_source.clone(), enum_decl),
->>>>>>> origin/main
                     );
                     register_enum_compiler_items(
                         &self.tysys.type_table,
