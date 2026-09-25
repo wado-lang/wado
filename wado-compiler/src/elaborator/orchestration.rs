@@ -2787,15 +2787,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         logger,
                     )?;
                 }
-                for stmt in &with_handler.body.stmts {
-                    Self::validate_stmt_type_names(
-                        stmt,
-                        known_type_names,
-                        resource_type_names,
-                        type_params,
-                        logger,
-                    )?;
-                }
+                Self::validate_block_type_names(
+                    &with_handler.body,
+                    known_type_names,
+                    resource_type_names,
+                    type_params,
+                    logger,
+                )?;
             }
             ast::Expr::Resume(resume) => {
                 Self::validate_expr_type_names(

@@ -566,6 +566,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .find_map(|facts| map(facts).get(&id))
     }
 
+    /// Run `body` with `overlay`'s facts answering ahead of the enclosing ones.
+    fn with_overlay<R>(
+        &mut self,
+        overlay: Option<&'a BodyFacts>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let mut stack = self.tuple_overlay_stack.clone();
+        stack.extend(overlay);
+        util::replaced(self, |reify| &mut reify.tuple_overlay_stack, stack, body).0
+    }
+
     with_body_facts!(reify_annotation_accessors);
 
     /// Recorded type of an expression, reporting an indefinite one as absent
@@ -3993,129 +4004,125 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         for (i, &elem_type) in elems.iter().enumerate() {
             let ctx = &mut ctx.enter_scope();
-            if let Some(overlay) = instantiation.get(i) {
-                self.tuple_overlay_stack.push(overlay);
-            }
-
-            let temp_ref = TirExpr::new(
-                TirExprKind::Local {
-                    index: temp_local,
-                    name: temp_name.clone(),
-                },
-                tuple_type_id,
-                span,
-            );
-            let field_access = TirExpr::new(
-                TirExprKind::FieldAccess {
-                    expr: Box::new(temp_ref),
-                    field_index: i as u32,
-                    field_name: i.to_string(),
-                },
-                elem_type,
-                span,
-            );
-
-            // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
-            // the field, matching `for v of &list` refiter semantics.
-            let (bind_elem_type, bind_value) = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .tuple_element_binding(field_access, elem_type, by_ref, span);
-
-            let mut block_stmts = Vec::new();
-
-            if is_enumerate {
-                let i32_type = TypeTable::I32;
-                let index_literal = TirExpr::new(
-                    TirExprKind::IntLiteral {
-                        value: i as u64,
-                        repr: i.to_string(),
+            let block_stmts = self.with_overlay(instantiation.get(i), |this| {
+                let temp_ref = TirExpr::new(
+                    TirExprKind::Local {
+                        index: temp_local,
+                        name: temp_name.clone(),
                     },
-                    i32_type,
+                    tuple_type_id,
                     span,
                 );
-                let enum_tuple_type = self
+                let field_access = TirExpr::new(
+                    TirExprKind::FieldAccess {
+                        expr: Box::new(temp_ref),
+                        field_index: i as u32,
+                        field_name: i.to_string(),
+                    },
+                    elem_type,
+                    span,
+                );
+
+                // By reference (`for v of &tuple`), bind `&T_k` to a fresh copy of
+                // the field, matching `for v of &list` refiter semantics.
+                let (bind_elem_type, bind_value) = this
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .make_tuple(vec![i32_type, bind_elem_type]);
-                let enum_tuple = TirExpr::new(
-                    TirExprKind::TupleLiteral {
-                        elements: vec![index_literal, bind_value],
-                    },
-                    enum_tuple_type,
-                    span,
-                );
-                let tir_pattern = self.reify_pattern(&for_of.binding, enum_tuple_type, ctx);
-                block_stmts.push(TirStmt::new(
-                    TirStmtKind::LetDestructure {
-                        pattern: tir_pattern,
-                        is_mut: for_of.is_mut,
-                        value: enum_tuple,
-                    },
-                    span,
-                ));
-            } else {
-                match &for_of.binding {
-                    ast::Pattern::Ident {
-                        id,
-                        name,
-                        span: binding_span,
-                    }
-                    | ast::Pattern::MutIdent {
-                        id,
-                        name,
-                        span: binding_span,
-                    } => {
-                        let is_mut = for_of.is_mut
-                            || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
-                        let local_index = ctx.add_local_at(
-                            name.clone(),
-                            bind_elem_type,
-                            is_mut,
-                            Some(*id),
-                            *binding_span,
-                        );
-                        block_stmts.push(TirStmt::new(
-                            TirStmtKind::Let {
-                                name: name.clone(),
-                                local_index,
+                    .tuple_element_binding(field_access, elem_type, by_ref, span);
+
+                let mut block_stmts = Vec::new();
+
+                if is_enumerate {
+                    let i32_type = TypeTable::I32;
+                    let index_literal = TirExpr::new(
+                        TirExprKind::IntLiteral {
+                            value: i as u64,
+                            repr: i.to_string(),
+                        },
+                        i32_type,
+                        span,
+                    );
+                    let enum_tuple_type = this
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_tuple(vec![i32_type, bind_elem_type]);
+                    let enum_tuple = TirExpr::new(
+                        TirExprKind::TupleLiteral {
+                            elements: vec![index_literal, bind_value],
+                        },
+                        enum_tuple_type,
+                        span,
+                    );
+                    let tir_pattern = this.reify_pattern(&for_of.binding, enum_tuple_type, ctx);
+                    block_stmts.push(TirStmt::new(
+                        TirStmtKind::LetDestructure {
+                            pattern: tir_pattern,
+                            is_mut: for_of.is_mut,
+                            value: enum_tuple,
+                        },
+                        span,
+                    ));
+                } else {
+                    match &for_of.binding {
+                        ast::Pattern::Ident {
+                            id,
+                            name,
+                            span: binding_span,
+                        }
+                        | ast::Pattern::MutIdent {
+                            id,
+                            name,
+                            span: binding_span,
+                        } => {
+                            let is_mut = for_of.is_mut
+                                || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
+                            let local_index = ctx.add_local_at(
+                                name.clone(),
+                                bind_elem_type,
                                 is_mut,
-                                is_reactive: false,
-                                type_id: bind_elem_type,
-                                value: bind_value,
-                                skip_value_copy: false,
-                            },
-                            span,
-                        ));
-                    }
-                    ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                        let tir_pattern = self.reify_pattern(&for_of.binding, bind_elem_type, ctx);
-                        block_stmts.push(TirStmt::new(
-                            TirStmtKind::LetDestructure {
-                                pattern: tir_pattern,
-                                is_mut: for_of.is_mut,
-                                value: bind_value,
-                            },
-                            span,
-                        ));
-                    }
-                    ast::Pattern::Wildcard => {
-                        block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
-                    }
-                    _ => {
-                        // Annotate diagnosed; emit nothing.
+                                Some(*id),
+                                *binding_span,
+                            );
+                            block_stmts.push(TirStmt::new(
+                                TirStmtKind::Let {
+                                    name: name.clone(),
+                                    local_index,
+                                    is_mut,
+                                    is_reactive: false,
+                                    type_id: bind_elem_type,
+                                    value: bind_value,
+                                    skip_value_copy: false,
+                                },
+                                span,
+                            ));
+                        }
+                        ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
+                            let tir_pattern =
+                                this.reify_pattern(&for_of.binding, bind_elem_type, ctx);
+                            block_stmts.push(TirStmt::new(
+                                TirStmtKind::LetDestructure {
+                                    pattern: tir_pattern,
+                                    is_mut: for_of.is_mut,
+                                    value: bind_value,
+                                },
+                                span,
+                            ));
+                        }
+                        ast::Pattern::Wildcard => {
+                            block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
+                        }
+                        _ => {
+                            // Annotate diagnosed; emit nothing.
+                        }
                     }
                 }
-            }
 
-            let body = self.reify_block(&for_of.body, ctx, None);
-            block_stmts.extend(body.stmts);
-
-            if instantiation.get(i).is_some() {
-                self.tuple_overlay_stack.pop();
-            }
+                let body = this.reify_block(&for_of.body, ctx, None);
+                block_stmts.extend(body.stmts);
+                block_stmts
+            });
 
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::LabeledBlock {
@@ -5506,33 +5513,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // This literal's own default walk, so a second literal of the same
             // struct at other type arguments does not answer for it.
             let overlay = self.ann_ref(|facts| &facts.default_overlays, struct_lit.id);
-            if let Some(overlay) = overlay {
-                self.tuple_overlay_stack.push(overlay);
-            }
-            for (name, field_index, raw_ty, default) in &decl_fields {
-                if provided.contains(name) {
-                    continue;
+            self.with_overlay(overlay, |this| {
+                for (name, field_index, raw_ty, default) in &decl_fields {
+                    if provided.contains(name) {
+                        continue;
+                    }
+                    if let Some(default_expr) = default {
+                        let expected_field_ty = substitute(this, *raw_ty);
+                        // Reify a foreign default under its owning module's
+                        // perspective: the default's free identifiers and decl
+                        // lookups resolve in the struct module's scope.
+                        let value = ctx.with_caller_bindings_hidden(|ctx| {
+                            this.with_module_perspective(&struct_module, |this| {
+                                this.reify_expr(default_expr, ctx, Some(expected_field_ty))
+                            })
+                        });
+                        fields.push(TirStructField {
+                            name: name.clone(),
+                            value,
+                            field_index: *field_index,
+                        });
+                    }
                 }
-                if let Some(default_expr) = default {
-                    let expected_field_ty = substitute(self, *raw_ty);
-                    // Reify a foreign default under its owning module's
-                    // perspective: the default's free identifiers and decl
-                    // lookups resolve in the struct module's scope.
-                    let value = ctx.with_caller_bindings_hidden(|ctx| {
-                        self.with_module_perspective(&struct_module, |this| {
-                            this.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                        })
-                    });
-                    fields.push(TirStructField {
-                        name: name.clone(),
-                        value,
-                        field_index: *field_index,
-                    });
-                }
-            }
-            if overlay.is_some() {
-                self.tuple_overlay_stack.pop();
-            }
+            });
         }
         fields.sort_by_key(|f| f.field_index);
 
@@ -7534,22 +7537,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
              `apply_param_defaults` nor `record_default_walk`. \
              Site {site:?} in {callee_module:?} at {call_span:?}"
         );
-        if let Some(overlay) = overlay {
-            self.tuple_overlay_stack.push(overlay);
-        }
-
-        // Capture the call site for location literals before the perspective
-        // swap below moves to the callee. Only the outermost default walk
-        // captures; a nested defaulted call (`fn outer(x = loc())`) inherits
-        // it, so every literal reports the same ultimate call site.
-        let captured_call_site = self.call_site_location.is_none();
-        if captured_call_site {
-            self.call_site_location = Some(CallSiteLocation {
+        // Captured before the perspective swap below moves to the callee. A nested
+        // defaulted call (`fn outer(x = loc())`) keeps the outermost call site.
+        let call_site = self
+            .call_site_location
+            .clone()
+            .unwrap_or_else(|| CallSiteLocation {
                 module: self.current_module_source.clone(),
                 span: call_span,
                 function_name: ctx.function_name.clone(),
             });
-        }
 
         // A default expression otherwise resolves in the *callee's* lexical
         // scope and may name items the caller cannot see, so swap the module
@@ -7559,64 +7556,79 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let captured = names_captured_by_defaults(args.len(), func_params);
         let mut prelude = Vec::new();
         let mut borrows = BorrowedPlaces::default();
-        self.with_module_perspective(callee_module, |this| {
-            ctx.with_caller_bindings_hidden(|ctx| {
-                // Once any slot is bound, every argument is, so each still runs
-                // ahead of what a default reads, in the order the call spells them.
-                // A `&mut` place stays in the call for the callee's writes to reach
-                // it, and a default borrows it again unless a closure would hold it.
-                if named.contains(&true) {
-                    for ((arg, (name, _)), named) in args.iter_mut().zip(func_params).zip(&named) {
-                        let unbound =
-                            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, arg.expr.span);
-                        let value = std::mem::replace(&mut arg.expr, unbound);
-                        arg.expr = if name == RECEIVER {
-                            this.bind_receiver_ahead(ctx, value, &mut prelude)
-                        } else if is_mut_borrow(&value)
-                            && this.tysys.is_source_place(&value)
-                            && !captured.contains(name)
-                        {
-                            let borrow =
-                                this.bind_subscripts_ahead(ctx, value, "arg_index", &mut prelude);
-                            if *named {
-                                let what = minted_name(name, ctx.fresh_serial());
-                                let stand_in = ctx.add_local(what, borrow.type_id, false, None);
-                                ctx.name_local(name.clone(), stand_in);
-                                borrows.0.push((stand_in, borrow.clone()));
+        let walk = |this: &mut Self| {
+            util::replaced(
+                this,
+                |r| &mut r.call_site_location,
+                Some(call_site),
+                |this| {
+                    this.with_module_perspective(callee_module, |this| {
+                        ctx.with_caller_bindings_hidden(|ctx| {
+                            // Once any slot is bound, every argument is, so each still runs
+                            // ahead of what a default reads, in the order the call spells them.
+                            // A `&mut` place stays in the call for the callee's writes to reach
+                            // it, and a default borrows it again unless a closure would hold it.
+                            if named.contains(&true) {
+                                for ((arg, (name, _)), named) in
+                                    args.iter_mut().zip(func_params).zip(&named)
+                                {
+                                    let unbound = TirExpr::new(
+                                        TirExprKind::Unit,
+                                        TypeTable::UNIT,
+                                        arg.expr.span,
+                                    );
+                                    let value = std::mem::replace(&mut arg.expr, unbound);
+                                    arg.expr = if name == RECEIVER {
+                                        this.bind_receiver_ahead(ctx, value, &mut prelude)
+                                    } else if is_mut_borrow(&value)
+                                        && this.tysys.is_source_place(&value)
+                                        && !captured.contains(name)
+                                    {
+                                        let borrow = this.bind_subscripts_ahead(
+                                            ctx,
+                                            value,
+                                            "arg_index",
+                                            &mut prelude,
+                                        );
+                                        if *named {
+                                            let what = minted_name(name, ctx.fresh_serial());
+                                            let stand_in =
+                                                ctx.add_local(what, borrow.type_id, false, None);
+                                            ctx.name_local(name.clone(), stand_in);
+                                            borrows.0.push((stand_in, borrow.clone()));
+                                        }
+                                        borrow
+                                    } else {
+                                        bind_param_to_local(ctx, name, value, &mut prelude)
+                                    };
+                                }
                             }
-                            borrow
-                        } else {
-                            bind_param_to_local(ctx, name, value, &mut prelude)
-                        };
-                    }
-                }
-                for (i, named) in named.iter().enumerate().skip(args.len()) {
-                    let Some((name, Some(default_ast))) = func_params.get(i) else {
-                        break;
-                    };
-                    // A trait method's default has no body for annotate to walk, so
-                    // without the parameter's type here it reifies untyped.
-                    let expected = param_types.get(i).copied();
-                    let mut resolved = this.reify_expr(default_ast, ctx, expected);
-                    if let Some(expected) = expected {
-                        this.settle_packs_in_default(&mut resolved, expected);
-                    }
-                    borrows.visit_expr(&mut resolved);
-                    if *named {
-                        resolved = bind_param_to_local(ctx, name, resolved, &mut prelude);
-                    }
-                    // A default is a value synthesized here, with no caller storage
-                    // behind it for the callee to write.
-                    args.push(CallArg::new(resolved, false));
-                }
-            });
-        });
-        if captured_call_site {
-            self.call_site_location = None;
-        }
-        if overlay.is_some() {
-            self.tuple_overlay_stack.pop();
-        }
+                            for (i, named) in named.iter().enumerate().skip(args.len()) {
+                                let Some((name, Some(default_ast))) = func_params.get(i) else {
+                                    break;
+                                };
+                                // A trait method's default has no body for annotate to walk, so
+                                // without the parameter's type here it reifies untyped.
+                                let expected = param_types.get(i).copied();
+                                let mut resolved = this.reify_expr(default_ast, ctx, expected);
+                                if let Some(expected) = expected {
+                                    this.settle_packs_in_default(&mut resolved, expected);
+                                }
+                                borrows.visit_expr(&mut resolved);
+                                if *named {
+                                    resolved =
+                                        bind_param_to_local(ctx, name, resolved, &mut prelude);
+                                }
+                                // A default is a value synthesized here, with no caller storage
+                                // behind it for the callee to write.
+                                args.push(CallArg::new(resolved, false));
+                            }
+                        });
+                    });
+                },
+            );
+        };
+        self.with_overlay(overlay, walk);
         prelude
     }
 

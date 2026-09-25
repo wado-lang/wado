@@ -2638,9 +2638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
-        for stmt in &for_of.body.stmts {
-            self.resolve_stmt(stmt, ctx);
-        }
+        self.resolve_block(&for_of.body, ctx, None);
     }
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the

@@ -384,10 +384,12 @@ return or a panic leaves it swapped. The guards are:
 
 - `with_module_perspective_for` for the walker's module perspective, and
   `Reify::with_perspective` for Reify's.
-- `recording_into`, for a walk whose facts are kept apart: a trait's default
-  method walked for one impl, or a call's omitted defaults walked for one site.
-  It records into a fresh set, hands that set back, and restores the enclosing
-  one.
+- `util::replaced` over the recorded facts, for a walk whose facts are kept
+  apart: a trait's default method walked for one impl, or a call's omitted
+  defaults walked for one site. The walk records into a fresh set, the set comes
+  back, and the enclosing one is restored.
+- `Reify::with_overlay`, for the facts one such walk recorded, read ahead of the
+  enclosing ones while that walk is reified.
 - `FunctionContext::replacing`, for a context field replaced for a sub-walk,
   such as a loop's labels. Its guard derefs to the context and restores the
   field on drop.
@@ -397,7 +399,7 @@ return or a panic leaves it swapped. The guards are:
 - `with_caller_bindings_hidden`, while a travelled expression is walked or
   reified.
 
-The perspective guards and `recording_into` rest on one replace-and-restore
+The perspective guards and `with_overlay` rest on one replace-and-restore
 helper, `util::replaced`. `with_caller_bindings_hidden` nests
 `FunctionContext::replacing` frames, which hand back a guard rather than taking
 a closure.
@@ -712,7 +714,7 @@ Each is a grep:
 | Name-keyed AST predicates                        | 0      | 1   |
 | AST-level type-param substitution helpers        | 0      | 0   |
 | Walk state swapped and restored outside a guard  | 0      | 0   |
-| Block-scope pushes popped by hand                | 0      | 0   |
+| Scope, label or overlay frames popped by hand    | 0      | 0   |
 | `with_module_perspective_for` call sites         | 1      | 1   |
 | `with_reference_recording_suppressed` call sites | 1      | 1   |
 | Walker signatures taking or returning a TIR node | 0      | 0   |
