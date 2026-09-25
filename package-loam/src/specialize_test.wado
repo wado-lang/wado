@@ -3,7 +3,14 @@
 use { TreeMap } from "core:collections";
 use { Graph, ValueInfo } from "./graph.wado";
 use { read } from "./onnx_text.wado";
-use { bind_dims, keep_outputs } from "./specialize.wado";
+use { OptionConflict, bind_dims, keep_outputs } from "./specialize.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "an option the graph cannot take is an Error" {
+    is_error::<OptionConflict>();
+}
 
 fn dims_of(graph: &Graph, tensor: String) -> String {
     for let declared of [&graph.inputs, &graph.outputs] {
@@ -29,12 +36,14 @@ test "a bound dimension becomes static on every tensor declaring it" {
 
 test "a dimension the graph never declares stops the build" {
     let mut graph = relu();
-    assert bind_dims(&mut graph, &({ M: 2 } as TreeMap<String, i32>)).unwrap_err() == "dims: the graph declares no dimension M";
+    let e = bind_dims(&mut graph, &({ M: 2 } as TreeMap<String, i32>)).unwrap_err();
+    assert e.option == "dims";
+    assert `${e}` == "dims: the graph declares no dimension M";
 }
 
 test "a negative extent stops the build" {
     let mut graph = relu();
-    assert bind_dims(&mut graph, &({ N: -1 } as TreeMap<String, i32>)).unwrap_err() == "dims: N is -1, and an extent is not negative";
+    assert `${bind_dims(&mut graph, &({ N: -1 } as TreeMap<String, i32>)).unwrap_err()}` == "dims: N is -1, and an extent is not negative";
 }
 
 fn two_heads() -> Graph {
@@ -78,5 +87,7 @@ test "no outputs listed keeps the graph whole" {
 
 test "an output the graph does not declare stops the build" {
     let mut graph = two_heads();
-    assert keep_outputs(&mut graph, &["S"]).unwrap_err() == "outputs: the graph declares no output S";
+    let e = keep_outputs(&mut graph, &["S"]).unwrap_err();
+    assert e.option == "outputs";
+    assert `${e}` == "outputs: the graph declares no output S";
 }

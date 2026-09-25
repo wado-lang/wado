@@ -14,6 +14,7 @@ use {
     Known,
     Node,
     Rank,
+    ReadError,
     ValueInfo,
     bit_pattern,
     check_element_count,
@@ -29,7 +30,11 @@ use {
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.
-pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, String> {
+pub fn read<S: AsStrSlice>(source: S) -> Result<Graph, ReadError> {
+    return read_model(source).map_err(|reason| ReadError { reason });
+}
+
+fn read_model<S: AsStrSlice>(source: S) -> Result<Graph, String> {
     let result = onnx::parse(source);
     if !result.ok() {
         let d = &result.diagnostics[0];

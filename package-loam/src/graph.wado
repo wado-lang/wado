@@ -289,6 +289,20 @@ pub fn is_binary_elementwise(op: &String) -> bool {
     return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
 }
 
+/// A model neither reader can take, and why.
+pub struct ReadError {
+    pub reason: String,
+}
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for ReadError {
+}
+
 /// The message both readers give a build-time tensor written without values.
 pub fn constant_without_values(tensor: &String) -> String {
     return `${tensor}: the build reads this tensor, so the graph must carry its values`;

@@ -1,7 +1,14 @@
 //! What the reader takes out of a graph, on the forms a real model carries.
 
-use { Dim, Elements, Graph, Known, Rank } from "./graph.wado";
+use { Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
 use { read } from "./onnx_text.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "a reader's failure is an Error" {
+    is_error::<ReadError>();
+}
 
 global MLP: String = `<ir_version: 7, opset_import: [ "" : 10 ]>
 mlp (float[N, 128] X) => (float[N, 10] Y)
@@ -46,7 +53,7 @@ test "arithmetic before opset 7 aligned at an axis stops the build" {
         `<ir_version: 3, opset_import: ["" : 6]> g (float[2, 3] X, float[2] B) => (float[2, 3] Y) {
             Y = Add <broadcast = 1, axis = 0> (X, B)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "Y = Add: opset 6 aligns the operands at attribute axis, which no later opset does";
 }
 
@@ -219,7 +226,7 @@ test "an int64 initializer without inline values names itself" {
         {
             Y = Reshape(X, S)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "S: the build reads this tensor, so the graph must carry its values";
 }
 
@@ -234,7 +241,7 @@ test "inline values that disagree with the shape name the tensor" {
         {
             Y = Add(X, W)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "W: 2 elements for a shape of 3 or more";
 }
 
@@ -269,7 +276,7 @@ test "a half bit pattern past sixteen bits names itself" {
             {
                 Y = Add(X, W)
             }`,
-        ).unwrap_err();
+        ).unwrap_err().reason;
         assert e == `W: ${text} is not a float16 bit pattern`;
     }
 }
@@ -281,7 +288,7 @@ test "a decimal in a half tensor names itself" {
         {
             Y = Add(X, W)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "W: 1.0 is not a float16 bit pattern";
 }
 
@@ -303,12 +310,12 @@ test "a float may not start at the point" {
         {
             Y = Add(X, W)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e.starts_with("2:");
 }
 
 test "a syntax error comes back with its position" {
-    let e = read("agraph (float[2] X) => (float[2] Y)").unwrap_err();
+    let e = read("agraph (float[2] X) => (float[2] Y)").unwrap_err().reason;
     assert e.starts_with("1:");
 }
 
@@ -319,7 +326,7 @@ test "an initializer pointing at another file names itself rather than being dro
         {
             Y = Add(X, W)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "W: an initializer whose data lives in another file is not read";
 }
 
@@ -328,6 +335,6 @@ test "a sequence type names itself rather than being read as a tensor" {
         `agraph (seq(float[2]) X) => (float[2] Y) {
             Y = Relu(X)
         }`,
-    ).unwrap_err();
+    ).unwrap_err().reason;
     assert e == "X: only a tensor type is read, not a sequence or a map";
 }

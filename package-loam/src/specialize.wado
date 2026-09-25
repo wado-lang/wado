@@ -4,12 +4,31 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 
+/// An invocation option the graph cannot take, and why.
+pub struct OptionConflict {
+    pub option: String,
+    pub reason: String,
+}
+
+impl Display for OptionConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.option}: ${self.reason}`);
+    }
+}
+
+impl Error for OptionConflict {
+}
+
+fn conflict(option: String, reason: String) -> Result<(), OptionConflict> {
+    return Result::Err(OptionConflict { option, reason });
+}
+
 /// Every `dim_param` that `dims` names, made the static extent it gives. A name
 /// the graph never declares fixes nothing, so it is a mistake in the option.
-pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), String> {
+pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), OptionConflict> {
     for let [name, extent] of dims.entries() {
         if *extent < 0 {
-            return Result::Err(`dims: ${name} is ${extent}, and an extent is not negative`);
+            return conflict("dims", `${name} is ${extent}, and an extent is not negative`);
         }
     }
     let mut bound = TreeSet::<String>::new();
@@ -21,7 +40,7 @@ pub fn bind_dims(graph: &mut Graph, dims: &TreeMap<String, i32>) -> Result<(), S
     }
     for let [name, _] of dims.entries() {
         if !bound.contains(*name) {
-            return Result::Err(`dims: the graph declares no dimension ${name}`);
+            return conflict("dims", `the graph declares no dimension ${name}`);
         }
     }
     return Result::Ok(());
@@ -45,7 +64,7 @@ fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut TreeSet<Str
 
 /// The graph cut down to what the outputs `names` lists read, which it returns
 /// in that order. An empty list keeps the graph whole.
-pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), String> {
+pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), OptionConflict> {
     if names.is_empty() {
         return Result::Ok(());
     }
@@ -53,7 +72,7 @@ pub fn keep_outputs(graph: &mut Graph, names: &List<String>) -> Result<(), Strin
     let mut needed = TreeSet::<String>::new();
     for let name of *names {
         let Some(at) = graph.outputs.position(|vi| vi.name == name) else {
-            return Result::Err(`outputs: the graph declares no output ${name}`);
+            return conflict("outputs", `the graph declares no output ${name}`);
         };
         outputs.push(graph.outputs[at]);
         needed.insert(name);

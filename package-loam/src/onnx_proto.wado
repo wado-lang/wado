@@ -11,6 +11,7 @@ use {
     Known,
     Node,
     Rank,
+    ReadError,
     ValueInfo,
     bit_pattern,
     check_element_count,
@@ -441,7 +442,11 @@ fn read_node(n: &NodeProto) -> Result<Node, String> {
 
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
 /// cover names itself, as the textual reader's errors do.
-pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
+pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, ReadError> {
+    return read_model(bytes).map_err(|reason| ReadError { reason });
+}
+
+fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     let model = match from_bytes::<ModelProto, S>(bytes) {
         Ok(m) => m,
         Err(e) => {

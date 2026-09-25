@@ -1,5 +1,5 @@
 use { from_bytes, to_bytes } from "core:protobuf";
-use { Dim, Elements, Graph, Known, Rank } from "./graph.wado";
+use { Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
 use {
     GraphProto,
     ModelProto,
@@ -17,7 +17,7 @@ fn graph_of(bytes: ByteList) -> Graph {
     return match read(bytes) {
         Ok(g) => g,
         Err(e) => {
-            panic(e);
+            panic(e.reason);
         },
     };
 }
@@ -157,7 +157,7 @@ test "a model round-trips through the declarations" {
     assert g.nodes[0].inputs[1] == "W";
 }
 
-fn read_initializer_of(weight: TensorProto) -> Result<Graph, String> {
+fn read_initializer_of(weight: TensorProto) -> Result<Graph, ReadError> {
     let model = ModelProto {
         graph: Option::Some(GraphProto {
             name: "weights",
@@ -187,7 +187,7 @@ test "a half's int32_data entry past sixteen bits names itself" {
         data_type: 16,
         name: "H",
         int32_data: [70000],
-    }).unwrap_err();
+    }).unwrap_err().reason;
 
     assert e == "H: 70000 is not a bfloat16 bit pattern";
 }
@@ -208,7 +208,7 @@ test "an initializer whose data disagrees with its shape names itself" {
         data_type: 1,
         name: "W",
         float_data: [1.0, 2.0, 3.0],
-    }).unwrap_err();
+    }).unwrap_err().reason;
 
     assert e == "W: 3 elements for a shape of 2";
 }
@@ -226,7 +226,7 @@ test "a value the subset cannot type names itself" {
         panic("the model did not encode");
     };
 
-    assert read(bytes) matches { Err(e) && e == "X: a value with no type" };
+    assert read(bytes) matches { Err(e) && e.reason == "X: a value with no type" };
 }
 
 test "an element type outside the mapping names itself" {
@@ -247,5 +247,5 @@ test "an element type outside the mapping names itself" {
         panic("the model did not encode");
     };
 
-    assert read(bytes) matches { Err(e) && e == "X: element type 21" };
+    assert read(bytes) matches { Err(e) && e.reason == "X: element type 21" };
 }

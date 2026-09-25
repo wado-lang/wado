@@ -4,7 +4,7 @@
 use {
     Request,
     Response,
-    Error,
+    Error as KilnError,
     OutputFile,
     KilnHost,
     Diagnostic as KilnDiagnostic,
@@ -36,26 +36,26 @@ pub struct Options {
 impl Deserialize for Options;
 
 /// Whatever the graph is wrong about, said against the file it was read from.
-fn at<E: Display>(path: &String, e: &E) -> Error {
-    return Error::InvalidSchema(`loam: '${path}': ${e}`);
+fn at<E: Error>(path: &String, e: &E) -> KilnError {
+    return KilnError::InvalidSchema(`loam: '${path}': ${e}`);
 }
 
 /// The graph from either spelling: `.onnx`, which an exporter writes, or
 /// `.onnxtext`, which a fixture is written in and a diff can show.
-fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, Error> {
+fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, KilnError> {
     if path.ends_with(".onnx") {
         return onnx_proto::read(read_all(content)).map_err(|e| at(path, &e));
     }
     let source = match read_text(content) {
         Ok(text) => text,
         Err(e) => {
-            return Result::Err(Error::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
+            return Result::Err(KilnError::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
         },
     };
     return onnx_text::read(&source).map_err(|e| at(path, &e));
 }
 
-export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
+export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
     let path = req.primary.path;
     let mut graph = read_graph(&path, req.primary.content)?;
     bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
