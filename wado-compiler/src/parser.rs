@@ -1692,33 +1692,33 @@ impl Parser {
     /// its value.
     fn parse_attr_object(&mut self) -> ParseResult<AttrObject> {
         self.expect(&TokenKind::LBrace)?;
-        let mut obj = AttrObject::default();
-        if !self.check(&TokenKind::RBrace) {
-            loop {
-                let (key, key_span) = self.consume_ident_with_span()?;
-                self.expect(&TokenKind::Colon)?;
-                let before = self.pos;
-                let value = self.parse_attr_value()?;
-                let value_span = self.skipped_span(before);
-                obj.insert(
-                    key,
-                    AttrEntry {
-                        key_span,
-                        value_span,
-                        value,
-                    },
-                );
-                if !self.check(&TokenKind::Comma) {
-                    break;
-                }
-                self.advance();
-                if self.check(&TokenKind::RBrace) {
-                    break;
-                }
-            }
-        }
+        let entries = self.parse_comma_separated(&TokenKind::RBrace, |p| {
+            let (key, key_span) = p.consume_ident_with_span()?;
+            p.expect(&TokenKind::Colon)?;
+            let AttrItem {
+                span: value_span,
+                value,
+            } = p.parse_attr_item()?;
+            Ok((
+                key,
+                AttrEntry {
+                    key_span,
+                    value_span,
+                    value,
+                },
+            ))
+        })?;
         self.expect(&TokenKind::RBrace)?;
-        Ok(obj)
+        Ok(entries.into_iter().collect())
+    }
+
+    fn parse_attr_item(&mut self) -> ParseResult<AttrItem> {
+        let before = self.pos;
+        let value = self.parse_attr_value()?;
+        Ok(AttrItem {
+            span: self.skipped_span(before),
+            value,
+        })
     }
 
     /// Parse a single [`AttrValue`]: scalar, array, or nested object.
@@ -1774,24 +1774,8 @@ impl Parser {
                     });
                 }
                 self.advance();
-                let mut items = Vec::new();
-                if !self.check(&TokenKind::RBracket) {
-                    loop {
-                        let before = self.pos;
-                        let value = self.parse_attr_value()?;
-                        items.push(AttrItem {
-                            span: self.skipped_span(before),
-                            value,
-                        });
-                        if !self.check(&TokenKind::Comma) {
-                            break;
-                        }
-                        self.advance();
-                        if self.check(&TokenKind::RBracket) {
-                            break;
-                        }
-                    }
-                }
+                let items =
+                    self.parse_comma_separated(&TokenKind::RBracket, Self::parse_attr_item)?;
                 self.expect(&TokenKind::RBracket)?;
                 Ok(AttrValue::Array(items))
             }
@@ -1813,7 +1797,6 @@ impl Parser {
         }
     }
 
-    /// Consume a string literal and return its raw text (escape sequences not interpreted).
     /// The raw text of the string literal at the cursor, escapes unresolved.
     /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {

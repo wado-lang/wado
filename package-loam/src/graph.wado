@@ -19,23 +19,27 @@ pub variant Rank {
     Dims(List<Dim>),
 }
 
+/// The dimensions a rank states, a scalar's being none. `None` is a tensor
+/// whose rank the graph leaves open.
+pub fn dims_of(rank: &Rank) -> Option<List<Dim>> {
+    return match rank {
+        Dims(d) => Option::Some(*d),
+        Scalar => Option::Some([] as List<Dim>),
+        Unranked => null,
+    };
+}
+
 /// Every extent `rank` states, or `None` where it leaves one open.
 pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
+    let Some(dims) = dims_of(rank) else {
+        return null;
+    };
     let mut extents: List<i32> = [];
-    match rank {
-        Scalar => {
-        },
-        Unranked => {
+    for let d of dims {
+        let Static(e) = d else {
             return null;
-        },
-        Dims(dims) => {
-            for let d of *dims {
-                let Static(e) = d else {
-                    return null;
-                };
-                extents.push(e);
-            }
-        },
+        };
+        extents.push(e);
     }
     return Option::Some(extents);
 }
@@ -132,9 +136,8 @@ impl Known {
     }
 }
 
-/// An attribute's values as written. ONNX types an attribute by the operator's
-/// schema rather than by the syntax, so the text is kept and the operator
-/// reads it. A tensor payload has no text form and travels in `tensor`.
+/// An attribute's values as written, since ONNX types one by the operator
+/// rather than the syntax. A tensor has no text form and travels in `tensor`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
@@ -148,13 +151,17 @@ impl Attr {
     pub fn ints(&self) -> Result<List<i64>, String> {
         let mut values: List<i64> = [];
         for let text of self.values {
-            let Ok(v) = i64::from_str(&text) else {
-                return Result::Err(`holds '${text}', which is not an integer`);
-            };
-            values.push(v);
+            values.push(int_of(&text)?);
         }
         return Result::Ok(values);
     }
+}
+
+fn int_of(text: &String) -> Result<i64, String> {
+    let Ok(v) = i64::from_str(text) else {
+        return Result::Err(`holds '${text}', which is not an integer`);
+    };
+    return Result::Ok(v);
 }
 
 pub struct Node {
@@ -177,13 +184,31 @@ impl Node {
     /// The one integer attribute `name` holds, or `fallback` where it is
     /// absent. `Err` is the reason, as `Attr::ints` gives it.
     pub fn int_attr<S: AsStrSlice>(&self, name: S, fallback: i64) -> Result<i64, String> {
-        let Some(a) = self.attr(name) else {
+        let Some(text) = self.one_value(name)? else {
             return Result::Ok(fallback);
+        };
+        return int_of(&text);
+    }
+
+    /// `int_attr` for a float attribute.
+    pub fn float_attr<S: AsStrSlice>(&self, name: S, fallback: f32) -> Result<f32, String> {
+        let Some(text) = self.one_value(name)? else {
+            return Result::Ok(fallback);
+        };
+        let Ok(v) = f32::from_str(&text) else {
+            return Result::Err(`holds '${text}', which is not a number`);
+        };
+        return Result::Ok(v);
+    }
+
+    fn one_value<S: AsStrSlice>(&self, name: S) -> Result<Option<String>, String> {
+        let Some(a) = self.attr(name) else {
+            return Result::Ok(null);
         };
         if a.values.len() != 1 {
             return Result::Err("is a list and the operator reads one value");
         }
-        return Result::Ok(a.ints()?[0]);
+        return Result::Ok(Option::Some(a.values[0]));
     }
 }
 

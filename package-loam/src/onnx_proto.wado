@@ -1,10 +1,5 @@
-//! The ONNX protobuf format, as much of it as Loam reads. Field numbers are
-//! `vendor/onnx/onnx/onnx.proto`; `onnx-ml.proto` declares them identically.
-//!
-//! Every field carries a default, since protobuf omits a field holding its
-//! type's default and a missing one would otherwise be an error. A field the
-//! subset leaves out is skipped by `core:protobuf`, so a real model reads
-//! whatever else it carries.
+//! The ONNX protobuf format, as much of it as Loam reads, numbered as in
+//! `vendor/onnx/onnx/onnx.proto`. Protobuf omits a default, so each field has one.
 
 use { TreeMap } from "core:collections";
 use { from_bytes } from "core:protobuf";
@@ -26,9 +21,8 @@ use {
     push_element,
 } from "./graph.wado";
 
-/// Nesting flattens: `.proto` nests a message inside a message and Wado has
-/// no nested declaration, so the path is joined into the name. This is the
-/// rule Grog will apply; here it is applied by hand.
+/// `TensorShapeProto.Dimension`. Wado has no nested declaration, so the path
+/// is joined into the name, as Grog will join it.
 pub struct TensorShapeProtoDimension {
     #[wire(number = 1)]
     pub dim_value: i64 = 0,
@@ -50,9 +44,8 @@ pub struct TypeProtoTensor {
     pub shape: Option<TensorShapeProto> = null,
 }
 
-/// The `oneof value` in the schema. A `oneof` is a set of ordinary fields of
-/// which at most one is written, so on the wire it is these numbers and
-/// nothing more.
+/// The schema's `oneof value`, which on the wire is ordinary fields of which
+/// at most one is written.
 pub struct TypeProto {
     #[wire(number = 1)]
     pub tensor_type: Option<TypeProtoTensor> = null,
@@ -103,10 +96,8 @@ pub struct TensorProto {
 /// the model rather than in `raw_data`.
 pub global DATA_LOCATION_EXTERNAL: i32 = 1;
 
-/// An attribute, carried as the payload fields the schema declares. `g` and
-/// `graphs` are left out: a subgraph belongs to the control-flow operators,
-/// which Loam does not cover, and reading it would make the declarations
-/// mutually recursive.
+/// An attribute without `g` and `graphs`: only control flow, which Loam does
+/// not cover, carries a subgraph, and one would make the declarations recursive.
 pub struct AttributeProto {
     #[wire(number = 1)]
     pub name: String = "",
@@ -201,9 +192,8 @@ pub struct ModelProto {
     pub opset_import: List<OperatorSetIdProto> = [],
 }
 
-/// A tensor's elements as the build holds them. ONNX writes them either in the
-/// typed field for the element type or, as every exporter does, as
-/// little-endian bytes in `raw_data`. `None` for an element type not read.
+/// A tensor's elements, from its typed field or the little-endian `raw_data`
+/// every exporter writes. `None` for an element type not read.
 pub fn known_tensor(t: &TensorProto) -> Result<Option<Known>, String> {
     let raw = &t.raw_data;
     let width = match t.data_type {
@@ -251,8 +241,7 @@ fn extents_of(t: &TensorProto) -> Result<List<i32>, String> {
     return Result::Ok(extents);
 }
 
-/// The element type names the textual format spells, indexed by
-/// `TensorProto.DataType`. The two formats must agree, since one `Graph`
+/// A `TensorProto.DataType` as the textual format names it, since one `Graph`
 /// serves both readers.
 fn dtype_name(elem_type: i32) -> Option<String> {
     return match elem_type {
@@ -276,9 +265,8 @@ fn dtype_name(elem_type: i32) -> Option<String> {
     };
 }
 
-/// An extent as the shape algebra holds it. ONNX states a dimension as an
-/// `int64` and no tensor that fits in memory needs one, so narrowing it is
-/// where a file says something no graph can mean.
+/// An ONNX `int64` dimension as the extent the shape algebra holds. No tensor
+/// that fits in memory needs a wider one, so a file stating one is refused.
 fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
     if !(0 <= dim <= i32::MAX as i64) {
         return Result::Err(`${tensor}: dimension ${dim}`);
@@ -431,9 +419,8 @@ fn read_attr(a: &AttributeProto) -> Result<Attr, String> {
     return Result::Ok(Attr { name: a.name, values, is_list });
 }
 
-/// ONNX declares a string attribute as `bytes`, and the specification says it
-/// is UTF-8. Bytes that are not are kept as the replacement character rather
-/// than failing the read, since no shape rule consults an attribute.
+/// A string attribute, which ONNX declares as UTF-8 `bytes`. Bytes that are not
+/// become U+FFFD, since failing would refuse a model over an attribute unread.
 fn utf8(bytes: &ByteList) -> String {
     let mut out = String::with_capacity(bytes.len());
     if let Err(_) = out.push_utf8(bytes) {

@@ -4,8 +4,8 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { axes_of, axis_index, fold, regrouped_extents } from "./fold.wado";
-use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
+use { axes_of, axis_index, fold, regrouped_extents, resolve_index } from "./fold.wado";
+use { Dim, Graph, KERNEL_ELEMENT, Known, Node, Rank, ValueInfo, dims_of, element_of } from "./graph.wado";
 use { element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, WindowError, ints, window_over } from "./window.wado";
@@ -313,8 +313,7 @@ fn is_layout(op: &String) -> bool {
 }
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
-/// `Cast`'s target, and f32 for every other kernel, which reads only f32.
-/// `None` where the operand is an element emit stops the build for.
+/// `Cast`'s target, and f32 for every other; `None` for an element emit refuses.
 fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Result<Option<String>, InferError> {
     let op = node.op;
     if op == "Cast" {
@@ -330,8 +329,9 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
         if let Some(p) = primitives.get(indices) && p != "i64" {
             return Result::Err(refusal(node, `operand ${indices} is ${p}, and Gather indexes with i64`));
         }
+        return Result::Ok(primitives.get(node.inputs[0]));
     }
-    if is_layout(&op) || op == "Gather" {
+    if is_layout(&op) {
         return Result::Ok(primitives.get(node.inputs[0]));
     }
     if op == "Where" {
@@ -394,9 +394,8 @@ fn materialize(
     return Result::Ok(());
 }
 
-/// Merge the graph's own output declaration into what the nodes produced, as
-/// ONNX's `mergeInDimensionInfo` does: only two static extents can conflict,
-/// and a declared static extent settles an axis the nodes left symbolic.
+/// The graph's output declaration merged into what the nodes produced, as ONNX's
+/// `mergeInDimensionInfo` does: a declared static extent settles a symbolic one.
 fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(*produced);
@@ -478,19 +477,8 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     return Result::Ok(Shape { axes });
 }
 
-/// The dimensions a rank states, a scalar's being none. `None` is a tensor
-/// whose rank the graph leaves open, which states nothing to work from.
-fn dims_of(rank: &Rank) -> Option<List<Dim>> {
-    return match rank {
-        Dims(d) => Option::Some(*d),
-        Scalar => Option::Some([] as List<Dim>),
-        Unranked => null,
-    };
-}
-
-/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one.
-/// A `?` carries no symbol of its own, so the axis's name stands for it: two
-/// occurrences of one axis are the same length by the schema's account.
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one. A
+/// `?` has no symbol, so the axis's name stands for it, as one length.
 fn extent_of(dim: &Dim, axis: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
@@ -816,15 +804,13 @@ fn refusal(node: &Node, reason: String) -> InferError {
 }
 
 /// Whether a `Gemm` was given its `C` operand, or a `Conv` its `B`. ONNX
-/// writes an absent optional operand as an empty name where a later one
-/// follows it, and omits it otherwise.
+/// writes an absent optional operand as an empty name, or omits it.
 pub fn has_bias(node: &Node) -> bool {
     return node.inputs.len() >= 3 && node.inputs[2] != "";
 }
 
 /// `Gemm`'s `alpha`, `beta`, `transA` and `transB`, each defaulted as ONNX
-/// defaults it. `emit` reads them again to pick its kernels, so this is where
-/// they are understood rather than in either stage alone.
+/// defaults it. `emit` reads them again to pick its kernels.
 pub fn gemm_options(node: &Node) -> Result<[f32, f32, bool, bool], InferError> {
     return Result::Ok([
         float_attr(node, "alpha", 1.0)?,
@@ -858,26 +844,8 @@ fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transpo
     return Result::Ok(shape);
 }
 
-fn single_attr(node: &Node, name: String) -> Result<Option<String>, InferError> {
-    let Some(attr) = node.attr(name) else {
-        return Result::Ok(null);
-    };
-    if attr.values.len() != 1 {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, "is a list and the operator reads one value"));
-    }
-    return Result::Ok(Option::Some(attr.values[0]));
-}
-
 fn float_attr(node: &Node, name: String, fallback: f32) -> Result<f32, InferError> {
-    let Some(text) = single_attr(node, name)? else {
-        return Result::Ok(fallback);
-    };
-    let Ok(value) = f32::from_str(&text) else {
-        builtin::cold_path();
-        return Result::Err(attribute_error(node, name, `holds '${text}', which is not a number`));
-    };
-    return Result::Ok(value);
+    return node.float_attr(name, fallback).map_err(|reason| attribute_error(node, name, reason));
 }
 
 fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError> {
@@ -921,7 +889,7 @@ pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> R
 /// operator reads at most `last`.
 fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
     let written = int_attr(node, "axis", fallback)?;
-    let resolved = if written < 0 { written + rank as i64 } else { written };
+    let resolved = resolve_index(written, rank as i64);
     if !(0 <= resolved <= last as i64) {
         return Result::Err(attribute_error(node, "axis", `is ${written}, outside rank ${rank}`));
     }
@@ -1011,7 +979,7 @@ fn is_unary_elementwise(op: &String) -> bool {
 }
 
 /// The operators that broadcast two operands against each other.
-fn is_binary_elementwise(op: &String) -> bool {
+pub fn is_binary_elementwise(op: &String) -> bool {
     return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
 }
 

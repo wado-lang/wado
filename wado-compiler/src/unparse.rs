@@ -373,23 +373,23 @@ impl<'a> Unparser<'a> {
         self.pending_comments(lo, hi).cloned().collect()
     }
 
-    /// Emit one entry of a delimited list per line, between the delimiters at
-    /// `open` and `close`. `anchors` gives each entry its source start and the
-    /// id a same-line trailing comment attaches to. Every wrapped list renders
-    /// here, so where an interior comment goes is decided once rather than per
-    /// construct.
+    /// Emit the delimited list at `span` one entry per line. `anchors` gives each
+    /// entry its source start and the id a same-line trailing comment attaches to.
     fn emit_entries_per_line<T, A, E>(
         &mut self,
+        [open_delim, close_delim]: [&str; 2],
+        span: Span,
         entries: &[T],
-        open: usize,
-        close: usize,
         anchors: A,
         mut emit: E,
     ) where
         A: Fn(&T) -> (Option<usize>, Option<AstId>),
         E: FnMut(&mut Self, &T),
     {
-        let mut lo = open;
+        self.output.push_str(open_delim);
+        self.output.push('\n');
+        self.indent_level += 1;
+        let mut lo = span.start;
         for entry in entries {
             let (start, trailing_id) = anchors(entry);
             match start {
@@ -407,9 +407,12 @@ impl<'a> Unparser<'a> {
             self.output.push('\n');
         }
         // Whatever is left between the delimiters, a comment wedged inside an
-        // entry included: there is no finer place for it. Bounded by `open`,
-        // since a comment written before the list is not inside it.
-        self.flush_comments_in(open, close, Spacing::Tight);
+        // entry included: there is no finer place for it. Bounded below, since
+        // a comment written before the list is not inside it.
+        self.flush_comments_in(span.start, span.end, Spacing::Tight);
+        self.indent_level -= 1;
+        self.write_indent();
+        self.output.push_str(close_delim);
     }
 
     /// Leading trivia for `id`, or an empty slice when no trivia map is
@@ -613,13 +616,11 @@ impl<'a> Unparser<'a> {
             self.emit_use_imports_inline(u);
             return;
         }
-        self.output.push_str("use {\n");
-        self.indent_level += 1;
-        let braces = u.items_span.unwrap_or(u.span);
+        self.output.push_str("use ");
         self.emit_entries_per_line(
+            ["{", "}"],
+            u.items_span.unwrap_or(u.span),
             &u.items,
-            braces.start,
-            braces.end,
             |item| {
                 let id = match item {
                     UseItem::Simple { id, .. } => Some(*id),
@@ -629,9 +630,6 @@ impl<'a> Unparser<'a> {
             },
             Unparser::unparse_use_item,
         );
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push('}');
     }
 
     /// Emit the ` from "..."` source clause.
@@ -748,10 +746,8 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Emit an attribute value. A container nested inside another container
-    /// (depth ≥ 2) is always expanded multi-line; a leaf container (depth 1,
-    /// only scalar members) is inline-first and falls back to multi-line only
-    /// when it overflows. Scalars are always inline. `span` is the value's.
+    /// Emit the attribute value at `span`, a container wrapped as
+    /// [`Self::emit_container_value`] decides.
     fn unparse_attr_value_wrapped(&mut self, v: &AttrValue, span: Span) {
         match v {
             AttrValue::Object(obj) if !obj.is_empty() => {
@@ -778,9 +774,8 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Shared container-rendering policy: force multi-line at depth ≥ 2 or
-    /// around a comment, otherwise try `inline` and roll back to `multiline`
-    /// only on overflow.
+    /// Emit `multiline` at depth ≥ 2 or around a comment, else `inline`, rolled
+    /// back to `multiline` on overflow.
     fn emit_container_value(
         &mut self,
         depth: usize,
@@ -800,40 +795,32 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Emit `{` then one `key: value,` per line (recursively wrapping each
-    /// value as needed), then a closing `}` on its own indented line. A comment
-    /// keeps its place among the entries.
+    /// Emit `{ key: value, ... }` one entry per line, wrapping each value as
+    /// needed.
     fn unparse_attr_object_multiline(&mut self, obj: &AttrObject, span: Span) {
-        self.output.push_str("{\n");
-        self.indent_level += 1;
-        for (k, entry) in obj {
-            self.open_entry_line(span.start, entry.key_span.start);
-            self.output.push_str(k);
-            self.output.push_str(": ");
-            self.unparse_attr_value_wrapped(&entry.value, entry.value_span);
-            self.output.push_str(",\n");
-        }
-        self.flush_comments_in(span.start, span.end, Spacing::Tight);
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push('}');
+        let entries: Vec<_> = obj.iter().collect();
+        self.emit_entries_per_line(
+            ["{", "}"],
+            span,
+            &entries,
+            |(_, entry)| (Some(entry.key_span.start), None),
+            |s, (key, entry)| {
+                s.output.push_str(key);
+                s.output.push_str(": ");
+                s.unparse_attr_value_wrapped(&entry.value, entry.value_span);
+            },
+        );
     }
 
-    /// Emit `[` then one element per line (recursively wrapping each as needed),
-    /// then a closing `]` on its own indented line. A comment keeps its place
-    /// among the elements.
+    /// Emit `[ ... ]` one element per line, wrapping each as needed.
     fn unparse_attr_array_multiline(&mut self, items: &[AttrItem], span: Span) {
-        self.output.push_str("[\n");
-        self.indent_level += 1;
-        for item in items {
-            self.open_entry_line(span.start, item.span.start);
-            self.unparse_attr_value_wrapped(&item.value, item.span);
-            self.output.push_str(",\n");
-        }
-        self.flush_comments_in(span.start, span.end, Spacing::Tight);
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push(']');
+        self.emit_entries_per_line(
+            ["[", "]"],
+            span,
+            items,
+            |item| (Some(item.span.start), None),
+            |s, item| s.unparse_attr_value_wrapped(&item.value, item.span),
+        );
     }
 
     /// Emit `(params)` followed by `emit_after` (the rest of the signature line
@@ -860,18 +847,13 @@ impl<'a> Unparser<'a> {
             }
             self.rollback(snap);
         }
-        self.output.push_str("(\n");
-        self.indent_level += 1;
         self.emit_entries_per_line(
+            ["(", ")"],
+            params_span,
             params,
-            params_span.start,
-            params_span.end,
             |p| (Some(p.span.start), Some(p.id)),
             Unparser::unparse_param,
         );
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push(')');
         emit_after(self);
     }
 
@@ -1860,18 +1842,13 @@ impl<'a> Unparser<'a> {
         // span) because a comment before a container element attaches to that
         // element's *head* node, not to the element expression's own id.
         if self.has_comment_in_range(tuple_lit.span.start, tuple_lit.span.end) {
-            self.output.push_str("[\n");
-            self.indent_level += 1;
             self.emit_entries_per_line(
+                ["[", "]"],
+                tuple_lit.span,
                 elements,
-                tuple_lit.span.start,
-                tuple_lit.span.end,
                 |e| (Some(e.span().start), Some(e.id())),
                 Unparser::unparse_expr,
             );
-            self.indent_level -= 1;
-            self.write_indent();
-            self.output.push(']');
             return;
         }
 
@@ -2200,18 +2177,13 @@ impl<'a> Unparser<'a> {
             }
             self.rollback(snap);
         }
-        self.output.push_str("(\n");
-        self.indent_level += 1;
         self.emit_entries_per_line(
+            ["(", ")"],
+            span,
             args,
-            span.start,
-            span.end,
             |a| (Some(a.span().start), Some(a.id())),
             Unparser::unparse_expr,
         );
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push(')');
     }
 
     /// Single-line `(arg1, arg2, ...)` form. A block comment before an
@@ -2632,18 +2604,13 @@ impl<'a> Unparser<'a> {
             self.rollback(snap);
         }
 
-        self.output.push_str("{\n");
-        self.indent_level += 1;
         self.emit_entries_per_line(
+            ["{", "}"],
+            s.span,
             &s.members(),
-            s.span.start,
-            s.span.end,
             |m| (Some(m.span().start), Some(m.value_id())),
             |s, m| s.emit_literal_member(m),
         );
-        self.indent_level -= 1;
-        self.write_indent();
-        self.output.push('}');
     }
 
     fn emit_literal_member(&mut self, member: &LiteralMember<'_>) {

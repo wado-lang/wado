@@ -124,7 +124,7 @@ global CONTEXT: i32 = 32;
 global STEPS: i32 = 8;
 
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
-pub fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
+fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
     assert !prompt.is_empty() && prompt.len() + steps <= CONTEXT;
     let mut ids = *prompt;
     for let _ of 0..<steps {

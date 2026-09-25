@@ -75,14 +75,13 @@ test "an int64 initializer is an integer the build reads, not a weight" {
     assert g.inputs.len() == 1;
 }
 
-test "a tensor attribute is present and its value is not" {
-    // `ConstantOfShape` carries `value` as a `TensorProto`, which has no text
-    // form. Nothing reads an attribute, so the model still reads.
+test "a tensor attribute travels whole rather than as text" {
     let g = graph_of(#include_bytes("../tests/onnx/light/light_bvlc_alexnet.onnx"));
 
     assert g.nodes[0].op == "ConstantOfShape";
     assert g.nodes[0].attrs[0].name == "value";
     assert g.nodes[0].attrs[0].values.is_empty();
+    assert g.nodes[0].attrs[0].tensor matches { Some(_) };
 }
 
 test "a bare TensorProto is the shape the backend test data stores" {

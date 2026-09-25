@@ -1,6 +1,5 @@
 //! Stage 0's evaluation of what a graph computes from what the build knows:
 //! the shape arithmetic an exporter writes, and the constants it reaches.
-//! Each operator means what its ONNX definition says.
 
 use { TreeMap } from "core:collections";
 use { Elements, Known, Node } from "./graph.wado";
@@ -114,10 +113,8 @@ fn constant(node: &Node) -> Result<Known, String> {
             elements: Elements::Ints(values),
         });
     }
-    if let Some(a) = node.attr("value_float") {
-        let Ok(v) = f32::from_str(&a.values[0]) else {
-            return Result::Err(`value_float holds '${a.values[0]}'`);
-        };
+    if node.attr("value_float") matches { Some(_) } {
+        let v = node.float_attr("value_float", 0.0).map_err(|reason| `attribute value_float ${reason}`)?;
         return Result::Ok(Known { extents: [], elements: Elements::Floats([v]) });
     }
     return Result::Err("the value is none this reader carries");
@@ -142,10 +139,14 @@ fn shape_of(node: &Node, known: &TreeMap<String, Known>, shapes: &TreeMap<String
     });
 }
 
-/// `i` counted from the end where negative, then held within `[lo, hi]`.
+/// `i` resolved against `extent`, then held within `[lo, hi]`.
 fn clamped(i: i64, extent: i64, lo: i64, hi: i64) -> i64 {
-    let from_start = if i < 0 { i + extent } else { i };
-    return i64::clamp(from_start, lo, hi);
+    return i64::clamp(resolve_index(i, extent), lo, hi);
+}
+
+/// An ONNX index into `extent` positions, which counts from the end where negative.
+pub fn resolve_index(i: i64, extent: i64) -> i64 {
+    return if i < 0 { i + extent } else { i };
 }
 
 fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
@@ -159,7 +160,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
     let mut picks: List<i32> = [];
     for let o of 0..<element_count(&leading) {
         for let index of wanted {
-            let i = if index < 0 { index + along as i64 } else { index };
+            let i = resolve_index(index, along as i64);
             if !(0 <= i < along as i64) {
                 return Result::Err(`index ${index} is outside an axis of ${along}`);
             }
@@ -544,7 +545,7 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
 }
 
 pub fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
-    let i = if axis < 0 { axis + rank as i64 } else { axis };
+    let i = resolve_index(axis, rank as i64);
     if !(0 <= i < rank as i64) {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);
     }

@@ -1924,9 +1924,7 @@ impl FunctionTranslator<'_, '_> {
                 has_receiver: false,
             };
         }
-        if func.module_source.is_core_builtin()
-            && let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args)
-        {
+        if let Some(rewritten) = self.convert_case_bridge_call(func, type_args, args) {
             return rewritten;
         }
         let ordered = self.call_args_in_param_order(func, args);

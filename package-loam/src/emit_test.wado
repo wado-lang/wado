@@ -13,9 +13,8 @@ fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitErro
     return emit(&graph, &infer(&graph, &Schema { layout }).unwrap());
 }
 
-/// The part of the module generated from the graph, with the inlined runtime
-/// cut away. Asserting that a kernel is *absent* has to say where, since the
-/// runtime names every kernel.
+/// The module below the inlined runtime, which names every kernel, so a test
+/// asserting a kernel is absent reads only the graph's own code.
 fn emitted(out: &String) -> String {
     let start = out.find(&GRAPH_BANNER).unwrap() + GRAPH_BANNER.len();
     return out.as_str_slice().slice(start, out.len()).to_string();
@@ -52,8 +51,6 @@ fn mlp_layout() -> List<LayoutRule> {
 test "a banner separates the inlined runtime from the graph's own code" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
-    // The runtime is above the banner and this graph's code below it, which is
-    // what lets a test say where a kernel call would have to appear.
     let body = emitted(&out);
     assert !body.contains("pub fn matmul");
     assert !body.contains("pub fn map");
@@ -595,8 +592,6 @@ test "a half precision boundary states its own element type" {
     assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
 }
 
-// The kernels compute in f32 and half precision has no arithmetic, so every
-// half operand is widened on the way in and the result narrowed on the way out.
 test "a half precision boundary is widened into the f32 the kernels compute in" {
     let out = generate(mlp("float16"), mlp_layout()).unwrap();
 

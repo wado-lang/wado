@@ -14,8 +14,6 @@ pub struct Tokenizer {
     byte_chars: List<char>,
     /// The byte each of `byte_chars` stands for, indexed by code point.
     char_bytes: List<u8>,
-    letters: List<[u32, u32]>,
-    numbers: List<[u32, u32]>,
 }
 
 enum Class {
@@ -29,10 +27,7 @@ impl Tokenizer {
     /// `specials` are tokens matched in the text as they stand, before it is split.
     pub fn new(vocab: &String, merges: &String, specials: List<String>) -> Tokenizer {
         let ids = from_string::<TreeMap<String, i32>>(vocab).expect("vocab.json maps each token to its id");
-        let mut tokens: List<String> = [];
-        for let _ of 0..<ids.len() {
-            tokens.push("");
-        }
+        let mut tokens = List::<String>::filled(ids.len(), "");
         for let [token, id] of ids.entries() {
             assert 0 <= *id < tokens.len();
             tokens[*id] = *token;
@@ -62,8 +57,6 @@ impl Tokenizer {
             specials,
             byte_chars,
             char_bytes,
-            letters: icu::value_ranges("gc", "L").unwrap(),
-            numbers: icu::value_ranges("gc", "N").unwrap(),
         };
     }
 
@@ -145,10 +138,10 @@ impl Tokenizer {
         if c.is_whitespace() {
             return Class::Space;
         }
-        if within(&self.letters, c) {
+        if icu::value_contains("gc", "L", c).unwrap() {
             return Class::Letter;
         }
-        if within(&self.numbers, c) {
+        if icu::value_contains("gc", "N", c).unwrap() {
             return Class::Number;
         }
         return Class::Other;
@@ -224,24 +217,6 @@ fn spells(chars: &List<char>, at: i32, text: &String) -> bool {
         i += 1;
     }
     return true;
-}
-
-fn within(ranges: &List<[u32, u32]>, c: char) -> bool {
-    let code = c as u32;
-    let mut lo = 0;
-    let mut hi = ranges.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        let [first, last] = ranges[mid];
-        if code < first {
-            hi = mid;
-        } else if code > last {
-            lo = mid + 1;
-        } else {
-            return true;
-        }
-    }
-    return false;
 }
 
 struct Tokenized {

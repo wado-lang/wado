@@ -172,7 +172,7 @@ fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &Valu
     let mut values: List<i64> = [];
     for let text of texts {
         let Ok(v) = i64::from_str(&text) else {
-            return Result::Err(`${info.name}: ${text} is not an ${info.dtype}`);
+            return Result::Err(`${info.name}: ${text} is not an integer`);
         };
         values.push(v);
     }
@@ -369,9 +369,8 @@ fn quotable_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Str
     return unquote(first_token_text(s, toks, node));
 }
 
-/// The first terminal under a node. Every caller names a rule whose first
-/// element is one, so a node with none is a grammar that moved under the
-/// reader.
+/// The first terminal under a node. Each caller names a rule that starts with
+/// one, so a node with none is a grammar that moved under the reader.
 fn first_token_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
     return toks.token_text(first_token(s, node));
 }

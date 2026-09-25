@@ -7,9 +7,11 @@ use { Axis, Shape } from "./shape.wado";
 use { Graph, Known, Node, element_of, static_extents } from "./graph.wado";
 use {
     Checked,
+    InferError,
     gather_axis,
     gemm_options,
     has_bias,
+    is_binary_elementwise,
     is_reduction,
     reduced_axes,
     softmax_axis,
@@ -49,9 +51,8 @@ pub struct NameCollision {
 }
 
 pub variant EmitError {
-    /// An axis named as something the generated module already declares. A
-    /// tensor name comes from the model and is renamed; an axis is the
-    /// schema's word, so it is the author's to change.
+    /// An axis named as something the generated module declares. Unlike a
+    /// tensor, it is not renamed: the schema's author chose the word.
     ReservedAxis(String),
     Dtype(UnmappedDtype),
     Operator(UnimplementedOperator),
@@ -234,9 +235,8 @@ fn is_bound(module: &TreeSet<String>, name: &String) -> bool {
     return module.contains(*name) || is_reserved(name);
 }
 
-/// The names the generated module binds before it names an axis or a tensor,
-/// beyond the language's own. The runtime's are read out of the runtime itself,
-/// so adding a kernel there cannot leave this behind.
+/// The names the generated module binds beyond the language's own. The
+/// runtime's are read out of the runtime, so a new kernel cannot be missed.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
     for let name of declared_in(&RUNTIME) {
@@ -263,9 +263,7 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
-        // The runtime is one self-contained file, which is what lets the
-        // reserved set be read off it. An import would bind a name from
-        // somewhere this never looks.
+        // An import would bind a name from a file this never reads.
         assert !line.starts_with("use ");
         let mut declaration = line.as_str_slice();
         for let prefix of VISIBILITY_PREFIXES {
@@ -359,8 +357,7 @@ fn emit_embedded(
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a
-/// reference and everything else as a value, which is the one thing a kernel
-/// call has to know to spell its operands.
+/// reference and everything else as a value.
 struct Operands {
     values: TreeMap<String, String>,
     already_reference: TreeSet<String>,
@@ -560,15 +557,24 @@ fn tensor_type(checked: &Checked, held: &TreeMap<String, String>, tensor: &Strin
 }
 
 fn axis_list(shape: &Shape) -> String {
-    return axis_names_of(&shape.axes).join(", ");
+    return axis_run(shape, 0, shape.rank());
 }
 
-fn axis_names_of(axes: &List<Axis>) -> List<String> {
+/// The names of `shape`'s axes `from..<to`, as a turbofish lists them.
+fn axis_run(shape: &Shape, from: i32, to: i32) -> String {
     let mut names: List<String> = [];
-    for let axis of *axes {
-        names.push(axis.name);
+    for let i of from..<to {
+        names.push(shape.axes[i].name);
     }
-    return names;
+    return names.join(", ");
+}
+
+/// What stage 0 read already: a failure stopped the build there.
+fn settled<T>(read: Result<T, InferError>) -> T {
+    let Ok(value) = read else {
+        unreachable();
+    };
+    return value;
 }
 
 /// One node as the kernel call that computes it. The operand expressions are
@@ -591,10 +597,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${cast_body(&from, &to)})`);
     }
     if op == "Gather" {
-        let Ok(axis) = gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()) else {
-            // Stage 0 read the same attribute and stopped the build there.
-            unreachable();
-        };
+        let axis = settled(gather_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
         if axis != 0 {
             builtin::cold_path();
             return Result::Err(EmitError::Operator(UnimplementedOperator {
@@ -621,7 +624,7 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         }
         return Result::Ok(`matmul(${a}, ${b})`);
     }
-    if binary_body(&op, &"x", &"y") matches { Some(_) } {
+    if is_binary_elementwise(&op) {
         return binary_node_call(node, shapes, exprs);
     }
     if op == "Gemm" {
@@ -636,27 +639,20 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         return Result::Ok(`select(${operands.join(", ")})`);
     }
     if op == "Softmax" {
-        let Ok(axis) = softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank()) else {
-            // Stage 0 read the same attribute and stopped the build there.
-            unreachable();
-        };
+        let axis = settled(softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank()));
         return Result::Ok(`softmax(${exprs.reference(&node.inputs[0])}, ${axis})`);
     }
     if is_reduction(&op) {
         return reduction_call(node, checked, exprs);
     }
     if op == "Transpose" {
-        let a = exprs.reference(&node.inputs[0]);
         let shape = shapes.get(node.inputs[0]).unwrap();
-        let Ok(perm) = transpose_perm(node, shape.rank()) else {
-            // Stage 0 read the same attribute and stopped the build there.
-            unreachable();
-        };
-        // A permutation that leaves every axis alone computes the operand.
-        // Every node result is bound as a value, so it is read as one.
+        let perm = settled(transpose_perm(node, shape.rank()));
+        // Every node result is bound as a value, so the operand is read as one.
         if is_identity(&perm) {
             return Result::Ok(exprs.value(&node.inputs[0]));
         }
+        let a = exprs.reference(&node.inputs[0]);
         let element = checked.primitives.get(node.inputs[0]).unwrap();
         let to = shapes.get(node.outputs[0]).unwrap();
         return Result::Ok(`permute::<${element}, [${axis_list(&shape)}], [${axis_list(&to)}]>(${a}, ${perm})`);
@@ -672,16 +668,11 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
 fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String> {
     let shapes = &checked.shapes;
     let x = shapes.get(node.inputs[0]).unwrap();
-    let Ok(parts) = split_parts(node, &checked.known, &x) else {
-        // Stage 0 read the same parts and stopped the build there.
-        unreachable();
-    };
-    let Ok(axis) = split_axis(node, x.rank()) else {
-        unreachable();
-    };
+    let parts = settled(split_parts(node, &checked.known, &x));
+    let axis = settled(split_axis(node, x.rank()));
     let element = checked.primitives.get(node.inputs[0]).unwrap();
-    let pre = axis_names_of(&x.axes[0..<axis].to_list()).join(", ");
-    let post = axis_names_of(&x.axes[axis + 1..<x.rank()].to_list()).join(", ");
+    let pre = axis_run(&x, 0, axis);
+    let post = axis_run(&x, axis + 1, x.rank());
     let operand = exprs.reference(&node.inputs[0]);
     let mut calls: List<String> = [];
     let mut start = 0;
@@ -706,11 +697,10 @@ fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &
     if shape.rank() == out.rank() {
         return Result::Ok(operand);
     }
-    let mut axes = out.axes[0..<out.rank() - shape.rank()].to_list();
-    axes.extend(&shape.axes);
+    // The shared axes agree by name, so the lifted operand's are `out`'s.
     let element = checked.primitives.get(*tensor).unwrap();
     return Result::Ok(
-        `&lift::<${element}, [${axis_list(&shape)}], [${axis_names_of(&axes).join(", ")}]>(${operand}, ${out.rank()})`,
+        `&lift::<${element}, [${axis_list(&shape)}], [${axis_list(out)}]>(${operand}, ${out.rank()})`,
     );
 }
 
@@ -726,10 +716,7 @@ fn reduction_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<St
             reason: "no kernel drops a reduced axis",
         }));
     }
-    let Ok(axes) = reduced_axes(node, &checked.known, x.rank()) else {
-        // Stage 0 read the same axes and stopped the build there.
-        unreachable();
-    };
+    let axes = settled(reduced_axes(node, &checked.known, x.rank()));
     let a = exprs.reference(&node.inputs[0]);
     if node.op == "ReduceMean" {
         return Result::Ok(`reduce_mean(${a}, ${axes})`);
@@ -743,7 +730,7 @@ fn folds_constant(node: &Node, index: i32, scalars: &TreeMap<String, String>) ->
     if node.op == "Gemm" {
         return index == 2;
     }
-    if index > 1 || binary_body(&node.op, &"x", &"y") matches { None } {
+    if index > 1 || !is_binary_elementwise(&node.op) {
         return false;
     }
     return !scalars.contains_key(node.inputs[1 - index]);
@@ -764,15 +751,15 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
     if let Some(literal) = exprs.scalars.get(node.inputs[1]) {
-        let body = binary_body(&op, &"v", &literal).unwrap();
+        let body = binary_body(&op, &"v", &literal);
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
     }
     if let Some(literal) = exprs.scalars.get(node.inputs[0]) {
-        let body = binary_body(&op, &literal, &"v").unwrap();
+        let body = binary_body(&op, &literal, &"v");
         return Result::Ok(`map(${exprs.reference(&node.inputs[1])}, |v| ${body})`);
     }
     let [a, b, left, right] = binary_call(node, shapes, exprs);
-    let body = binary_body(&op, &"x", &"y").unwrap();
+    let body = binary_body(&op, &"x", &"y");
     let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
         builtin::cold_path();
         return Result::Err(broadcast_error(node, &left, &right));
@@ -785,10 +772,7 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
 fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> String {
     let x = shapes.get(node.inputs[0]).unwrap();
     let y = shapes.get(node.outputs[0]).unwrap();
-    let Ok(window) = window_of(node, &x, shapes) else {
-        // Stage 0 read the same window and stopped the build there.
-        unreachable();
-    };
+    let window = settled(window_of(node, &x, shapes));
     let geometry = `&Window { kernel: ${window.kernel}, strides: ${window.strides}, dilations: ${window.dilations}, pads: ${window.pads}, output: ${window.output} }`;
     let input = exprs.reference(&node.inputs[0]);
     if node.op == "MaxPool" {
@@ -807,7 +791,7 @@ fn window_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
 
 /// The axes past a shape's first two, which a window slides over.
 fn spatial_axes(shape: &Shape) -> String {
-    return axis_names_of(&shape.axes[2..<shape.rank()].to_list()).join(", ");
+    return axis_run(shape, 2, shape.rank());
 }
 
 /// A constant as an expression the generated source spells. Wado has no
@@ -827,9 +811,8 @@ fn float_literal(value: f32) -> String {
     return `(${value} as f32)`;
 }
 
-/// The kernel that combines two operands elementwise, or `None` where no
-/// kernel broadcasts one against the other. Once the shared axes are one list,
-/// which operand is the shorter decides the kernel.
+/// The kernel that combines two operands elementwise, chosen by which is the
+/// shorter, or `None` where no kernel broadcasts one against the other.
 fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
     if !shared_axes_agree(left, right) {
         return null;
@@ -838,21 +821,17 @@ fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &
         return Option::Some(`zip(${a}, ${b}, |x, y| ${body})`);
     }
     if right.rank() < left.rank() {
-        let turbofish = `::<[${leading_axes(left, right.rank())}], [${axis_list(right)}]>`;
+        let turbofish = `::<[${axis_run(left, 0, left.rank() - right.rank())}], [${axis_list(right)}]>`;
         return Option::Some(`zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`);
     }
-    let turbofish = `::<[${leading_axes(right, left.rank())}], [${axis_list(left)}]>`;
+    let turbofish = `::<[${axis_run(right, 0, right.rank() - left.rank())}], [${axis_list(left)}]>`;
     return Option::Some(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
 }
 
-/// `Gemm` is `alpha * A' * B' + beta * C`, which the kernels spell as a
-/// `matmul` under two optional `transpose2`s, a `map` for each scalar that is
-/// not one, and an elementwise add for the bias.
+/// `Gemm`'s `alpha * A' * B' + beta * C`, as a `matmul` under optional
+/// `transpose2`s, a `map` per scalar that is not one, and a bias add.
 fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
-    let Ok([alpha, beta, trans_a, trans_b]) = gemm_options(node) else {
-        // Stage 0 read the same attributes and stopped the build there.
-        unreachable();
-    };
+    let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
     let a = transposed(&exprs.reference(&node.inputs[0]), trans_a);
     let b = transposed(&exprs.reference(&node.inputs[1]), trans_b);
     let mut product = `matmul(${a}, ${b})`;
@@ -905,8 +884,7 @@ fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
-/// 0 lets an extent of 1 stretch to meet the other operand and `matmul` does
-/// not, so agreeing on the name is not yet agreeing.
+/// 0 stretches an extent of 1 and `matmul` does not, so the name is not enough.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agrees(&right.extent);
 }
@@ -941,36 +919,25 @@ fn batch_axes_agree(left: &Shape, right: &Shape) -> bool {
     return true;
 }
 
-/// The axes `shape` carries ahead of its last `back`, which is the `..Pre` a
-/// broadcasting kernel's turbofish names.
-fn leading_axes(shape: &Shape, back: i32) -> String {
-    assert back <= shape.rank();
-    let mut pre: List<String> = [];
-    for let mut i = 0; i < shape.rank() - back; i += 1 {
-        pre.push(shape.axes[i].name);
-    }
-    return pre.join(", ");
-}
-
-/// The expression a binary operator's elements combine through, over the
-/// kernel's `x` and `y`.
-fn binary_body(op: &String, lhs: &String, rhs: &String) -> Option<String> {
+/// The expression a binary operator's elements combine through.
+fn binary_body(op: &String, lhs: &String, rhs: &String) -> String {
     if *op == "Add" {
-        return Option::Some(`${lhs} + ${rhs}`);
+        return `${lhs} + ${rhs}`;
     }
     if *op == "Sub" {
-        return Option::Some(`${lhs} - ${rhs}`);
+        return `${lhs} - ${rhs}`;
     }
     if *op == "Mul" {
-        return Option::Some(`${lhs} * ${rhs}`);
+        return `${lhs} * ${rhs}`;
     }
     if *op == "Div" {
-        return Option::Some(`${lhs} / ${rhs}`);
+        return `${lhs} / ${rhs}`;
     }
     if *op == "Pow" {
-        return Option::Some(`f32::pow(${lhs}, ${rhs})`);
+        return `f32::pow(${lhs}, ${rhs})`;
     }
-    return null;
+    // Stage 0 refuses every operator the kernels lack.
+    unreachable();
 }
 
 /// One element `v` of primitive `from` as `to`, as ONNX's `Cast` converts it:

@@ -160,8 +160,8 @@ fn stretched_zip<Axes>(
 ) -> Tensor<f32, Axes> {
     let extents = broadcast_extents(&a_extents, &b_extents).unwrap();
     let rank = extents.len();
-    let a_carries = carries(&stretched_strides(&a_extents, rank), &extents);
-    let b_carries = carries(&stretched_strides(&b_extents, rank), &extents);
+    let a_carries = stretched_carries(&a_extents, &extents);
+    let b_carries = stretched_carries(&b_extents, &extents);
     let count = element_count(&extents);
     let mut out = List::<f32>::with_capacity(count);
     let mut index = List::<i32>::filled(rank, 0);
@@ -183,9 +183,9 @@ fn stretched_zip<Axes>(
 pub fn select<E, Axes>(cond: &Tensor<bool, Axes>, x: &Tensor<E, Axes>, y: &Tensor<E, Axes>) -> Tensor<E, Axes> {
     let extents = broadcast_extents(&broadcast_extents(&cond.extents, &x.extents).unwrap(), &y.extents).unwrap();
     let rank = extents.len();
-    let c_carries = carries(&stretched_strides(&cond.extents, rank), &extents);
-    let x_carries = carries(&stretched_strides(&x.extents, rank), &extents);
-    let y_carries = carries(&stretched_strides(&y.extents, rank), &extents);
+    let c_carries = stretched_carries(&cond.extents, &extents);
+    let x_carries = stretched_carries(&x.extents, &extents);
+    let y_carries = stretched_carries(&y.extents, &extents);
     let count = element_count(&extents);
     let mut out = List::<E>::with_capacity(count);
     let mut index = List::<i32>::filled(rank, 0);
@@ -260,6 +260,11 @@ fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
         unwound += strides[axis] * (extents[axis] - 1);
     }
     return carry;
+}
+
+/// `carries` for a tensor of `extents` stretched over `out`.
+fn stretched_carries(extents: &List<i32>, out: &List<i32>) -> List<i32> {
+    return carries(&stretched_strides(extents, out.len()), out);
 }
 
 /// The extents two operands broadcast to under ONNX's rule, or `None` where an
@@ -494,7 +499,7 @@ pub fn reduce<Axes>(t: &Tensor<f32, Axes>, axes: List<i32>, init: f32, op: fn(f3
     for let axis of axes {
         extents[axis] = 1;
     }
-    let steps = carries(&stretched_strides(&extents, rank), &t.extents);
+    let steps = stretched_carries(&extents, &t.extents);
     let mut out = List::<f32>::filled(element_count(&extents), init);
     let mut index = List::<i32>::filled(rank, 0);
     let mut at = 0;

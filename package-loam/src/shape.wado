@@ -61,9 +61,8 @@ pub struct Shape {
     pub axes: List<Axis>,
 }
 
-/// Two axes that must be one length are not, at an operation that cannot
-/// proceed without them being one. Carries both, since a diagnostic that names
-/// only the expected one leaves the reader to find the other.
+/// Two axes an operation needs to be one length are not. Both extents are
+/// carried, so the diagnostic names each.
 pub struct ExtentConflict {
     pub op: String,
     pub axis: String,
@@ -176,10 +175,8 @@ impl Shape {
         return Result::Ok(Shape { axes });
     }
 
-    /// `MatMul` as ONNX defines it, which is numpy's: the trailing axis of
-    /// `self` contracts with the leading matrix axis of `rhs`, the batch axes
-    /// ahead of them broadcast, and a rank-1 operand is a matrix whose missing
-    /// axis is dropped from the result.
+    /// `MatMul` as ONNX defines it, which is numpy's: the batch axes broadcast,
+    /// and a rank-1 operand is a matrix whose missing axis the result drops.
     pub fn matmul(&self, rhs: &Shape, op: String) -> Result<Shape, ExtentConflict> {
         assert self.rank() >= 1 && rhs.rank() >= 1;
 
@@ -231,8 +228,7 @@ impl Shape {
     }
 
     /// Discharge the one condition an operation places on a pair of axes. What
-    /// stage 0 cannot prove is an error here, since there is no runtime tier
-    /// below it to re-check at.
+    /// stage 0 cannot prove is an error, as no runtime tier re-checks it.
     pub fn agree(left: &Axis, right: &Axis, op: &String) -> Result<(), ExtentConflict> {
         if left.extent.agrees(&right.extent) {
             return Result::Ok(());

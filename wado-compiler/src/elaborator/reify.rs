@@ -3142,15 +3142,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
                     return tir;
                 }
-                // `expr as Ty` — emit `Cast` with the recorded target type,
-                // re-typing an integer literal operand to the target, as
-                // `resolve_cast` typed it. annotate propagates that target to
-                // a direct literal operand but not through a `Neg`, so
-                // `-9e15 as i64` would otherwise emit an `i32.const` that
-                // truncates before the cast widens.
-                let retyped = self.tysys.type_table.borrow().is_numeric(target_type);
+                // annotate types a direct literal operand as the target but not
+                // one under a `Neg`: `-9e15 as i64` would truncate as `i32.const`.
+                let numeric_target = self.tysys.type_table.borrow().is_numeric(target_type);
                 let inner = match int_literal_cast_operand(&cast.expr) {
-                    Some((lit, _, negated)) if retyped => {
+                    Some((lit, _, negated)) if numeric_target => {
                         let lit_tir = self.reify_literal(lit, target_type, ctx);
                         if negated {
                             TirExpr::new(
