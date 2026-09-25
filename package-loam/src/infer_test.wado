@@ -494,6 +494,33 @@ test "arithmetic on an int64 tensor stops the build" {
     assert y_axes(source, [rule("M", ["Key"])]).unwrap_err() == "Y = Add: operand M is i64, and Add computes in f32";
 }
 
+test "Where broadcasts its three operands and takes its branches' element" {
+    let source = `g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y) <float S> {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Head", "Query", "Key"]),
+        rule("X", ["Batch", "Head", "Query", "Key"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=2,Head=3,Query=4,Key=4";
+}
+
+test "a Where condition other than bool stops the build" {
+    let source = `g (float[4] M, float[4] X) => (float[4] Y) {
+        Y = Where(M, X, X)
+    }`;
+    assert y_axes(source, [rule("*", ["Key"])]).unwrap_err() == "Y = Where: operand M is f32, and Where selects with bool";
+}
+
+test "Where between two element types stops the build" {
+    let source = `g (float[4] M, float[4] X, int64[4] I) => (float[4] Y) {
+        C = Cast<to = 9>(M)
+        Y = Where(C, X, I)
+    }`;
+    assert y_axes(source, [rule("*", ["Key"])]).unwrap_err() == "Y = Where: operand X is f32 and I is i64, and Where returns one of them";
+}
+
 test "Gather along axis 0 puts the indices' axes where the row's was" {
     let source = `g (int64[1, 4] I) => (float[1, 4, 8] Y) <float[16, 8] W> {
         Y = Gather(W, I)

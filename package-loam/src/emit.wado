@@ -612,6 +612,14 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
     if op == "Gemm" {
         return gemm_call(node, shapes, exprs);
     }
+    if op == "Where" {
+        let out = shapes.get(node.outputs[0]).unwrap();
+        let mut operands: List<String> = [];
+        for let tensor of node.inputs {
+            operands.push(lifted(node, &tensor, &out, checked, exprs)?);
+        }
+        return Result::Ok(`select(${operands.join(", ")})`);
+    }
     if op == "Softmax" {
         let Ok(axis) = softmax_axis(node, shapes.get(node.inputs[0]).unwrap().rank()) else {
             // Stage 0 read the same attribute and stopped the build there.
@@ -643,6 +651,26 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands) -> Result<String,
         unreachable();
     };
     return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+}
+
+/// An operand as a tensor of `out`'s rank, for a kernel whose operands share
+/// one axis list. A shorter one is lifted under `out`'s leading axes.
+fn lifted(node: &Node, tensor: &String, out: &Shape, checked: &Checked, exprs: &Operands) -> Result<String, EmitError> {
+    let shape = checked.shapes.get(*tensor).unwrap();
+    if !shared_axes_agree(&shape, out) {
+        builtin::cold_path();
+        return Result::Err(broadcast_error(node, &shape, out));
+    }
+    let operand = exprs.reference(tensor);
+    if shape.rank() == out.rank() {
+        return Result::Ok(operand);
+    }
+    let mut axes = out.axes[0..<out.rank() - shape.rank()].to_list();
+    axes.extend(&shape.axes);
+    let element = checked.primitives.get(*tensor).unwrap();
+    return Result::Ok(
+        `&lift::<${element}, [${axis_list(&shape)}], [${axis_names_of(&axes).join(", ")}]>(${operand}, ${out.rank()})`,
+    );
 }
 
 /// A `ReduceMean` or `ReduceSum`, whose kernels keep each reduced axis at

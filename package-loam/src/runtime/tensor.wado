@@ -157,6 +157,41 @@ fn stretched_zip<Axes>(
     return Tensor { data: out, extents };
 }
 
+/// ONNX's `Where`: `x` where `cond` holds and `y` elsewhere, each operand
+/// stretched as `zip` stretches one.
+pub fn select<E, Axes>(cond: &Tensor<bool, Axes>, x: &Tensor<E, Axes>, y: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+    let extents = broadcast_extents(&broadcast_extents(&cond.extents, &x.extents).unwrap(), &y.extents).unwrap();
+    let rank = extents.len();
+    let c_carries = carries(&stretched_strides(&cond.extents, rank), &extents);
+    let x_carries = carries(&stretched_strides(&x.extents, rank), &extents);
+    let y_carries = carries(&stretched_strides(&y.extents, rank), &extents);
+    let count = element_count(&extents);
+    let mut out = List::<E>::with_capacity(count);
+    let mut index = List::<i32>::filled(rank, 0);
+    let mut at_c = 0;
+    let mut at_x = 0;
+    let mut at_y = 0;
+    for let _ of 0..<count {
+        out.push(if cond.data[at_c] { x.data[at_x] } else { y.data[at_y] });
+        let axis = advance(&mut index, &extents);
+        if axis >= 0 {
+            at_c += c_carries[axis];
+            at_x += x_carries[axis];
+            at_y += y_carries[axis];
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
+/// The same elements under `rank` axes, the ones added leading at extent 1, so
+/// a lower-rank operand stretches as one of the output's rank does.
+pub fn lift<E, In, Out>(t: &Tensor<E, In>, rank: i32) -> Tensor<E, Out> {
+    assert rank >= t.extents.len();
+    let mut extents = List::<i32>::filled(rank - t.extents.len(), 1);
+    extents.extend(&t.extents);
+    return Tensor { data: t.data, extents };
+}
+
 /// Moves a row-major `index` over `extents` one position on and returns the
 /// axis that advanced, every later one having wrapped to 0; -1 past the end.
 fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {

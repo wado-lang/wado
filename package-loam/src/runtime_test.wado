@@ -5,6 +5,7 @@ use {
     conv,
     conv_bias,
     gather_rows,
+    lift,
     map,
     matmul,
     max_pool,
@@ -13,6 +14,7 @@ use {
     reduce,
     reduce_mean,
     reshape,
+    select,
     sigmoid_f32,
     softmax,
     transpose2,
@@ -214,6 +216,27 @@ test "transpose2 moves an i64 tensor as it moves a float one" {
 
     let r: Tensor<i64, [Col, Row]> = transpose2(&t);
     assert r.data == [1, 4, 2, 5, 3, 6] as List<i64>;
+}
+
+test "select takes x where the condition holds, each operand stretched" {
+    let cond: Tensor<bool, [Row, Col]> = Tensor {
+        data: [true, false],
+        extents: [1, 2],
+    };
+    let x: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
+    let y: Tensor<f32, [Row, Col]> = tensor([1, 1], [-1.0]);
+
+    let r = select(&cond, &x, &y);
+    assert r.extents == [2, 2] as List<i32>;
+    assert r.data == [1.0, -1.0, 3.0, -1.0] as List<f32>;
+}
+
+test "lift prepends extent-1 axes up to the rank" {
+    let s: Tensor<f32, []> = tensor([], [7.0]);
+
+    let r = lift::<f32, [], [Row, Col]>(&s, 2);
+    assert r.extents == [1, 1] as List<i32>;
+    assert r.data == [7.0] as List<f32>;
 }
 
 test "softmax normalizes each lane along the axis" {

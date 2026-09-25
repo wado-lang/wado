@@ -343,6 +343,41 @@ g (float[2, 3] X) => (float[2, 3] Y)
     assert out.contains("let Y = *X;");
 }
 
+test "Where lifts a lower-rank operand to the output's axes" {
+    let source = `
+g (float[1, 1, 4, 4] M, float[2, 3, 4, 4] X) => (float[2, 3, 4, 4] Y)
+<float S>
+{
+    C = Cast<to = 9>(M)
+    Y = Where(C, X, S)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("M", ["Batch", "Head", "Query", "Key"]),
+        rule("X", ["Batch", "Head", "Query", "Key"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains(
+        "let Y = select(&C, X, &lift::<f32, [], [Batch, Head, Query, Key]>(&weights.S, 4));",
+    );
+}
+
+test "a folded Where operand is lifted as its literal" {
+    let source = `
+g (float[1, 4] M, float[1, 4] X) => (float[1, 4] Y)
+{
+    C = Cast<to = 9>(M)
+    S = Constant<value_float = -1.0>()
+    Y = Where(C, S, X)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Key"])]).unwrap();
+
+    assert out.contains("let S = Tensor::<f32, []> { data: [(-1 as f32)], extents: [] };");
+    assert out.contains("let Y = select(&C, &lift::<f32, [], [Batch, Key]>(&S, 2), X);");
+}
+
 test "Softmax lowers to the kernel along its axis" {
     let source = `
 g (float[2, 4, 8] X) => (float[2, 4, 8] Y)

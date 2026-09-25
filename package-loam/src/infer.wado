@@ -321,6 +321,18 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
     if is_layout(&op) || op == "Gather" {
         return Result::Ok(primitives.get(node.inputs[0]));
     }
+    if op == "Where" {
+        let [cond, x, y] = [node.inputs[0], node.inputs[1], node.inputs[2]];
+        if let Some(p) = primitives.get(cond) && p != "bool" {
+            return Result::Err(refusal(node, `operand ${cond} is ${p}, and Where selects with bool`));
+        }
+        let px = primitives.get(x);
+        let py = primitives.get(y);
+        if let Some(a) = px && let Some(b) = py && a != b {
+            return Result::Err(refusal(node, `operand ${x} is ${a} and ${y} is ${b}, and Where returns one of them`));
+        }
+        return Result::Ok(px);
+    }
     for let [index, input] of node.inputs.into_iter().enumerate() {
         if read_at_build_time(node, index) {
             continue;
@@ -430,6 +442,10 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
         builtin::cold_path();
         return Result::Err(InferError::UnrankedTensor(vi.name));
     };
+    // A scalar has no axis for a pattern to name.
+    if dims.is_empty() {
+        return Result::Ok(Shape { axes: [] });
+    }
     let Some(names) = schema.axes_for(&vi.name) else {
         builtin::cold_path();
         return Result::Err(InferError::Unnamed(UnnamedTensor { tensor: vi.name }));
@@ -564,6 +580,11 @@ fn infer_node(
     if is_unary_elementwise(&op) {
         arity(node, 1)?;
         return operand_at(node, shapes, 0);
+    }
+    if op == "Where" {
+        arity(node, 3)?;
+        let branches = at_node(node, operand_at(node, shapes, 1)?.elementwise(&operand_at(node, shapes, 2)?, op))?;
+        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0)?, op));
     }
     if op == "Softmax" {
         arity(node, 1)?;
