@@ -172,9 +172,9 @@ fn assert_format_preserves_ast(source: &str) {
 #[test]
 fn test_format_keeps_resource_extends() {
     let source = concat!(
-        "#[cm(\"web:dom/node\", linearity=\"unrestricted\")]\n",
+        "#[cm(\"wado-lang:web/node\", linearity=\"unrestricted\")]\n",
         "pub resource Node extends EventTarget {\n",
-        "    #[cm(\"web:dom/node#text-content\")]\n",
+        "    #[cm(\"wado-lang:web/node#text-content\")]\n",
         "    #[cm_params(\"self\")]\n",
         "    fn text_content(&self) -> Option<String>;\n",
         "}\n"

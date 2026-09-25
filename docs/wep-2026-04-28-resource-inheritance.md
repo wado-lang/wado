@@ -72,7 +72,7 @@ Concretely:
 
 - `#[cm(...)]` on a `resource` takes a `linearity=...` field, `"affine"` or `"unrestricted"`. Making it mandatory means migrating every stdlib resource, which no consumer needs, so the affine majority writes nothing.
   ```wado
-  #[cm("web:dom/element", linearity = "unrestricted")]
+  #[cm("wado-lang:web/element", linearity = "unrestricted")]
   pub resource Element { ... }
 
   #[cm("wasi:http/types@0.3.0#request")]
@@ -119,13 +119,13 @@ pub resource Child extends Parent { ... }
 The `extends Parent` clause slots between the resource name (and any generic parameter list) and the body. It is optional; resources without `extends` behave as today.
 
 ```wado
-#[cm("web:dom/event-target", linearity = "unrestricted", classes = "0..=2")]
+#[cm("wado-lang:web/event-target", linearity = "unrestricted", classes = "0..=2")]
 pub resource EventTarget { ... }
 
-#[cm("web:dom/node", linearity = "unrestricted", classes = "1..=2")]
+#[cm("wado-lang:web/node", linearity = "unrestricted", classes = "1..=2")]
 pub resource Node extends EventTarget { ... }
 
-#[cm("web:dom/element", linearity = "unrestricted", classes = "2..=2")]
+#[cm("wado-lang:web/element", linearity = "unrestricted", classes = "2..=2")]
 pub resource Element extends Node { ... }
 ```
 
@@ -147,7 +147,7 @@ Rules:
 
 An unrestricted resource and an affine one are **distinct types from Wado's perspective**, even if they happen to point to the same host concept. There is no implicit conversion, and no `as`-cast, between them in v1.
 
-In practice this is not a constraint: WebIDL bindings live in `web:*` modules and do not appear in WIT signatures, and vice versa. The two linearities answer different questions — one is a CM-owned lifetime, the other a value the host interprets — so we expect the moment "convert an affine handle to an unrestricted one" becomes urgent to never quite arrive.
+In practice this is not a constraint: WebIDL bindings live in `package-web` and do not appear in WIT signatures, and vice versa. The two linearities answer different questions — one is a CM-owned lifetime, the other a value the host interprets — so we expect the moment "convert an affine handle to an unrestricted one" becomes urgent to never quite arrive.
 
 ### Subtyping rules
 
@@ -745,7 +745,7 @@ Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resourc
 - Subtyping and implicit upcast — one rule in `elaborator/typecheck.rs::check_at`, gated by `Position`: value, `return` and a `&T` referent admit a subtype; `&mut T`, containers and function types do not. Branch agreement is `elaborator/expr.rs::agreed_branch_type`, which `if`, `if let` and `match` all route through.
 - Method resolution over the chain, and the corner cases: override forbidden, trait-vs-inherited ambiguity, statics do not inherit, `Self` fixed at the declaring resource.
 
-- Class numbering — `resolve_resource_extends` checks each committed link against the rules in §"Host runtime contract", and `wado-from-idl` numbers `web:dom` in pre-order (`tests/fixtures/error_resource_classes.wado`).
+- Class numbering — `resolve_resource_extends` checks each committed link against the rules in §"Host runtime contract", and `wado-from-idl` numbers `package-web`'s slice in pre-order (`tests/fixtures/error_resource_classes.wado`).
 - Lowering. An unrestricted resource is not a CM `resource`: it registers as an `f64` newtype (`component_model.rs`), so every `own` / `borrow` path passes it by, a `&self` receiver loses its reference, and the WIT renders the same `f64` in every position (`wit_emit.rs::extern_handle`). The guest holds the `f64`'s bits as a `u64` (`TypeTable::handle_scalar`), which the boundary reinterprets, and linear memory stores as the same eight bytes. Upcast and an inherited method's receiver are wasm-level no-ops — the call resolves to the declaring resource through `MethodOwner::Ancestor`.
 
 - The registry reads that newtype two ways. `resolve_type` peels the handle to its `f64`, the view the boundary decides with: the flat ABI, the canonical options, the emitted WIT. `value_type` keeps the resource's own type, the view the guest holds. A binding's signature takes the second, because `Option<Element>` and `Option<f64>` are distinct GC types (`tests/integration/web_dom.rs`). `cm_type_to_type_id` finds the resource's `TypeId` under its package, a `web:` package being one flat file. A module outside the stdlib declares such a resource as the stdlib would: it is not a local newtype, so no instance exports it as a named type.
@@ -760,7 +760,7 @@ Not built:
 - The `Display` host import.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
 - Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
-- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `web:dom` is a package, never snapshotted, so nothing reaches it yet.
+- A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `wado-lang:web` is a package, never snapshotted, so nothing reaches it yet.
 
 ### Known gap: the handle is an index, not a reference
 

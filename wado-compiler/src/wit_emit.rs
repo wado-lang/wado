@@ -1159,7 +1159,7 @@ struct FqParts {
     namespace: String,
     package: String,
     interface: String,
-    /// Empty for a package that carries no version, as a `web:*` one does.
+    /// Empty for a package that carries no version.
     version: String,
 }
 

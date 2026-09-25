@@ -50,7 +50,6 @@ mod test_report;
 pub mod timezone_host;
 pub mod tls_trust;
 pub mod update;
-pub mod web_host;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;

@@ -117,15 +117,15 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(30)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//wasi/example:demo/Demo::target" = fn() -> f64;  // TypeId(32)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(33)
+type "functype//wasi/example:demo/Target::listen" = fn(f64, i32);  // TypeId(33)
 
-type "functype//wasi/web:demo/Demo::target" = fn() -> f64;  // TypeId(34)
+type "functype//wasi/example:demo/Target::fire" = fn(f64, i32);  // TypeId(34)
 
-type "functype//wasi/web:demo/Target::listen" = fn(f64, i32);  // TypeId(35)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(35)
 
-type "functype//wasi/web:demo/Target::fire" = fn(f64, i32);  // TypeId(36)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(36)
 
 type "functype//cm_callback_handler_path.wado/run" = fn();  // TypeId(37)
 
@@ -193,11 +193,11 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/example:demo/Demo::target from "wasi/example:demo/Demo::target";
+import fn wasi/example:demo/Target::listen from "wasi/example:demo/Target::listen";
+import fn wasi/example:demo/Target::fire from "wasi/example:demo/Target::fire";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/web:demo/Demo::target from "wasi/web:demo/Demo::target";
-import fn wasi/web:demo/Target::listen from "wasi/web:demo/Target::listen";
-import fn wasi/web:demo/Target::fire from "wasi/web:demo/Target::fire";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
@@ -338,11 +338,11 @@ fn "cm_callback_handler_path.wado/run"() with Stdout {
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__Demo_target"() with Demo {
-    return builtin::i64_reinterpret_f64("wasi/web:demo/Demo::target"());
+    return builtin::i64_reinterpret_f64("wasi/example:demo/Demo::target"());
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__Target_listen"(self, listener) with Target {
-    "wasi/web:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
+    "wasi/example:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -379,11 +379,11 @@ fn "cm_callback_handler_path.wado/$cm_export__run"() {
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec0"(self, value) with Target {
-    "wasi/web:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 1);
+    "wasi/example:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 1);
 }
 
 fn "cm_callback_handler_path.wado/$cm_binding__Target_fire$spec1"(self, value) with Target {
-    "wasi/web:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 2);
+    "wasi/example:demo/Target::fire"(builtin::f64_reinterpret_i64(self), 2);
 }
 
 fn "core:prelude/primitive.wado/count_digits_u64"(val) {

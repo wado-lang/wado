@@ -11,7 +11,7 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
 - `core:kiln` — the submodules under `wado-compiler/lib/core/kiln/`. Regenerate
   with `mise run update-stdlib-kiln`. The facade `lib/core/kiln.wado` is
   hand-written and must be preserved.
-- `web:dom` — `package-web/src/dom.wado` and its browser glue
+- `wado-lang:web` — `package-web/src/dom.wado` and its browser glue
   `package-web/glue/dom.js`, generated from the WebIDL snapshot
   `package-web/idl/dom.webidl.json`. Regenerate with
   `mise run update-package-web`; `tests/web_dom_is_fresh.rs` fails when

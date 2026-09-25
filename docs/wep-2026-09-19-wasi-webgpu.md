@@ -71,7 +71,7 @@ answers `Future<GpuDeviceLostInfo>` and `on_uncaptured_error()` a
 
 ### The handles are affine CM resources
 
-`web:dom` collapses its handles into one unrestricted universal handle
+`wado-lang:web` collapses its handles into one unrestricted universal handle
 ([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Nothing of
 the sort applies here: every `wasi:webgpu` resource is a CM `resource`, so
 [Ownership Analysis](./wep-2026-05-21-resource-ownership.md) governs it and the
