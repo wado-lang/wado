@@ -1059,29 +1059,13 @@ fn method_call_info_for_type(
                 return info;
             }
             let impl_module = trait_impl_module(&local_name, type_id, ctx);
-            let template = {
-                let tt = tt.borrow();
-                if tt.receiver_head_awaits_substitution(type_id) {
-                    None
-                } else {
-                    trait_name
-                        .canonical()
-                        .and_then(|trait_| {
-                            trait_method_template(ctx.trait_env, trait_, method_name, type_id, &tt)
-                        })
-                        .or_else(|| {
-                            Some(TemplateId::Synthesized {
-                                module: impl_module.clone(),
-                                name: LocalMethodName::new(
-                                    tt.fq_base_type_name(type_id),
-                                    Some(trait_name.clone()),
-                                    method_name.to_string(),
-                                )
-                                .to_mangled_name(),
-                            })
-                        })
-                }
-            };
+            let template = trait_call_template(
+                ctx.trait_env,
+                &local_name,
+                type_id,
+                &impl_module,
+                &tt.borrow(),
+            );
             MethodCallInfo {
                 local_name,
                 monomorph_info: None,
@@ -1092,9 +1076,8 @@ fn method_call_info_for_type(
     }
 }
 
-/// The declaration `receiver.method()` of `trait_` instantiates: the written
-/// block reaching the receiver, else the blanket serving it, else the same
-/// answer one link down a newtype chain. `None` where a derived body answers.
+/// The template `receiver.method()` of `trait_` instantiates: a written block,
+/// a blanket, else a newtype's base's; `None` where a derived body answers.
 pub(crate) fn trait_method_template(
     trait_env: &TraitEnv,
     trait_: DefId,
@@ -1140,9 +1123,27 @@ pub(crate) fn trait_method_template(
     }
 }
 
-/// The declaration a call of `info` on the concrete `receiver` instantiates,
-/// or `None` where a derived body answers. A call through a reference impl
-/// dispatches on the reference; any other on what it points at.
+/// The template a call of `info` on `receiver` instantiates, else the derived
+/// body in `home`; `None` while the receiver's head awaits substitution.
+pub(crate) fn trait_call_template(
+    trait_env: &TraitEnv,
+    info: &LocalMethodName,
+    receiver: TypeId,
+    home: &ModuleSource,
+    tt: &TypeTable,
+) -> Option<TemplateId> {
+    if tt.receiver_head_awaits_substitution(receiver) {
+        return None;
+    }
+    info.trait_decl()
+        .and_then(|trait_| {
+            trait_method_template(trait_env, trait_, &info.method_name, receiver, tt)
+        })
+        .or_else(|| Some(TemplateId::derived(home.clone(), info)))
+}
+
+/// The template a call of `info` on the concrete `receiver` instantiates, or
+/// `None` where a derived body answers. Only a reference impl keeps the `&`.
 pub(crate) fn method_template_at(
     trait_env: &TraitEnv,
     info: &LocalMethodName,
@@ -1180,19 +1181,26 @@ fn inherent_method_template(
         })
 }
 
+/// Whether a written impl of `trait_` with methods reaches `receiver` itself.
+pub(crate) fn written_impl_reaches(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    trait_env
+        .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
+        .any(|block| tt.impl_reaches_instance(block, receiver))
+}
+
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
 /// `Reflect*`-bounded blanket can claim it.
 pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     tt.reflect_kind(type_id).is_some()
 }
 
-/// The value blanket serving `receiver`: the first whose bounds hold at the
-/// receiver, else one a link down its newtype chain (WEP 2026-09-01 rank 1).
-/// The walk stops at a link carrying an impl of its own, which the newtype
-/// inherits and which outranks any blanket (rank 2) — so `type Name = String`
-/// takes `String`'s `Deserialize`, not the `ReflectStruct` derive its shape
-/// would otherwise admit. Monomorphization ranks blankets only here, so its
-/// several lookups cannot disagree about which one a newtype takes.
+/// The value blanket serving `receiver`, else one down its newtype chain until
+/// a link with its own impl, which outranks any blanket (WEP 2026-09-01).
 pub(crate) fn ranked_value_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_: DefId,
@@ -1289,12 +1297,10 @@ pub(crate) fn blanket_dispatch_for(
     method_name: &str,
     tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource, TemplateId)> {
-    let type_key = tt.impl_receiver_key(type_id);
-    if trait_env.trait_def_of_fq(trait_name).is_some_and(|trait_| {
-        trait_env
-            .methodful_impls_by_receiver(&type_key, trait_)
-            .any(|block| tt.impl_reaches_instance(block, type_id))
-    }) {
+    if trait_env
+        .trait_def_of_fq(trait_name)
+        .is_some_and(|trait_| written_impl_reaches(trait_env, trait_, type_id, tt))
+    {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);

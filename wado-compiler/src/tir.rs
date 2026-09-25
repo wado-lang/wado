@@ -6056,6 +6056,20 @@ impl TemplateId {
             Self::Synthesized { module, .. } => module.clone(),
         }
     }
+
+    /// The body derivation mints in `module` for the trait method `info`,
+    /// named by its receiver's head alone.
+    pub fn derived(module: ModuleSource, info: &LocalMethodName) -> Self {
+        Self::Synthesized {
+            module,
+            name: LocalMethodName::new(
+                info.fq_base_struct_name(),
+                info.trait_name.clone(),
+                info.method_name.clone(),
+            )
+            .to_mangled_name(),
+        }
+    }
 }
 
 /// Whether a function identifies as the core builtin `builtin`, matching both
@@ -6230,26 +6244,13 @@ pub struct TirGlobal {
     pub span: Span,
 }
 
-/// An `impl` block, as a method emitted from it reaches its receivers. Blocks on
-/// one head name their methods alike, so the block is what tells two templates
-/// of one name apart.
+/// The `impl` block a method comes from, which tells apart two templates that
+/// blocks on one head name alike.
 #[derive(Debug, Clone)]
 pub struct ImplOrigin {
     pub def: DefId,
     /// The arguments the target writes, a binder as its own `TypeParam`.
     pub target_args: Vec<TypeId>,
-}
-
-impl ImplOrigin {
-    /// Whether a receiver with these type arguments reaches the block. A
-    /// receiver bringing no arguments reaches only a target writing none.
-    pub fn reaches(&self, receiver_args: &[TypeId], type_table: &TypeTable) -> bool {
-        self.target_args.is_empty()
-            || (!receiver_args.is_empty()
-                && type_table
-                    .impl_target_binding(&self.target_args, receiver_args)
-                    .is_some())
-    }
 }
 
 /// What an impl block's target writes.
@@ -6293,9 +6294,8 @@ impl TypeTable {
         })
     }
 
-    /// Whether impl block `def` reaches `instance`, a receiver type. Every
-    /// reference target keys under one `&` head, so a reference instance is
-    /// reached only where the referents' heads agree too.
+    /// Whether impl block `def` reaches the receiver type `instance`. Reference
+    /// targets share one `&` head, so their referents' heads must agree too.
     pub fn impl_reaches_instance(&self, def: DefId, instance: TypeId) -> bool {
         let target = self.impl_target(def);
         if let ResolvedType::Ref(written) | ResolvedType::MutRef(written) =
@@ -6324,9 +6324,8 @@ impl TypeTable {
         self.impl_target_binding(written, &args).is_some()
     }
 
-    /// Whether impl block `def` reaches every instance of its head: the target
-    /// names a head, and its arguments are distinct binders. A reference, a
-    /// tuple, `()` or a function type is a shape, reached one way at a time.
+    /// Whether impl block `def` reaches every instance of its head: its target
+    /// names a head, not a shape, over distinct binders.
     pub fn impl_covers_every_instance(&self, def: DefId) -> bool {
         let target = self.impl_target(def);
         let names_a_head = match self.get_unerased(target.whole) {
@@ -6372,12 +6371,8 @@ impl TypeTable {
             .collect()
     }
 
-    /// What an impl target writing `written` binds at a receiver with
-    /// `receiver_args`, or `None` where it does not reach it. Each position the
-    /// target pins is that argument, and a binder written twice takes one
-    /// argument. A target writing no position, or a receiver whose arguments
-    /// are not known, pins none; the slots past the target's positions, which a
-    /// static call also carries, pin none, and neither does a pack's tail.
+    /// What a target writing `written` binds at a receiver with `receiver_args`,
+    /// or `None` where it misses it. Unknown arguments and a pack's tail pin none.
     pub fn impl_target_binding(
         &self,
         written: &[TypeId],
@@ -6396,9 +6391,8 @@ impl TypeTable {
         self.bind_type_params(&written[..fixed], receiver_args.get(..fixed)?)
     }
 
-    /// The type-parameter slots `concrete` fills where `written` has them, at
-    /// any depth: `T` from `List<String>` against `List<T>`. `None` where the
-    /// two differ outside a slot, or one slot would take two types.
+    /// The type-parameter slots `concrete` fills in `written`, at any depth;
+    /// `None` where they differ outside a slot or a slot would take two types.
     pub fn bind_type_params(
         &self,
         written: &[TypeId],
@@ -6482,9 +6476,8 @@ impl TypeTable {
         }
     }
 
-    /// Whether one type is an instance of both `a` and `b`, the type parameters
-    /// of each standing for any type and apart from the other's, even where
-    /// they share an id: two impl targets that reach a common receiver.
+    /// Whether some type instantiates both targets `a` and `b`, their type
+    /// parameters kept apart even where they share an id.
     pub fn targets_overlap(&self, a: TypeId, b: TypeId) -> bool {
         let mut subst = IndexMap::default();
         self.unify_apart((Side::Left, a), (Side::Right, b), &mut subst)
@@ -7199,9 +7192,8 @@ impl TirFunction {
         self.has_real_type_params() || !self.impl_type_params.is_empty()
     }
 
-    /// The declaration a call of this function reaches: its declaration and
-    /// block, or the name synthesis gave it. `None` for an instance, which no
-    /// call instantiates.
+    /// The identity a call of this function records: its declaration and block,
+    /// or the name synthesis gave it. `None` for an instance.
     pub fn template_id(&self) -> Option<TemplateId> {
         if self.monomorph_info.is_some() {
             return None;
@@ -7718,11 +7710,6 @@ pub struct TirModule {
     pub data_section: Option<String>,
     /// `#![wasm_module("name")]` — items in this module compile to a separate Wasm core module.
     pub wasm_module: Option<String>,
-    /// Generic struct definitions (before monomorphization)
-    /// Key: (struct name, module source)
-    pub generic_structs: IndexMap<(String, ModuleSource), TirStruct>,
-    /// Requested instantiations (populated during resolution, processed in lower)
-    pub instantiation_requests: IndexSet<InstantiationKey>,
 }
 
 impl TirModule {
@@ -7746,8 +7733,6 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             wasm_module: None,
-            generic_structs: IndexMap::default(),
-            instantiation_requests: IndexSet::default(),
         }
     }
 
@@ -7774,8 +7759,6 @@ impl TirModule {
             globals: Vec::new(),
             data_section: None,
             wasm_module: None,
-            generic_structs: IndexMap::default(),
-            instantiation_requests: IndexSet::default(),
         }
     }
 

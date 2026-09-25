@@ -462,6 +462,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
+    /// What a call of the function `site` names instantiates.
+    fn template_at(&self, site: AstId) -> Option<TemplateId> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        Some(self.tysys.signatures.declared_template(def))
+    }
+
     /// The impl-associated constant `owner` declares as `name` — the same
     /// answer `Elaborator::associated_constant_of` gives, from the same table,
     /// so annotate and reify cannot disagree about which constant a use site
@@ -1456,14 +1462,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     fn impl_origin(&self, impl_block: &ast::ImplBlock) -> ImplOrigin {
         let def = self.tysys.resolutions.defs().def_at(impl_block.id);
-        let sig = self
-            .tysys
-            .signatures
-            .impl_sig(def)
-            .expect("the decl pass records every impl block's declaration facts");
         ImplOrigin {
             def,
-            target_args: sig.target_type_args.clone(),
+            target_args: self.tysys.signatures.impl_sig(def).target_type_args.clone(),
         }
     }
 
@@ -6127,12 +6128,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     ResolvedType::Unknown
                 )
             })
-            .unwrap_or_else(
-                || match self.tysys.type_table.borrow().get(dispatch.return_type) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => dispatch.return_type,
-                },
-            )
+            .unwrap_or_else(|| {
+                self.tysys
+                    .pointee_of(dispatch.return_type)
+                    .unwrap_or(dispatch.return_type)
+            })
     }
 
     /// Build the `Index` / `IndexValue` trait read `*recv.index(idx)` (or
@@ -6801,7 +6801,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
+        use crate::tir::{TirExprKind, TypeTable};
 
         let receiver = self.reify_expr(&index.expr, ctx, None);
 
@@ -6810,13 +6810,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // literal. Matches `Elaborator::resolve_index`'s tuple
         // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
-            let tt = self.tysys.type_table.borrow();
             let base = receiver.type_id;
-            let unwrapped = match tt.get(base) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => base,
-            };
-            tt.as_tuple(unwrapped)
+            let unwrapped = self.tysys.pointee_of(base).unwrap_or(base);
+            self.tysys.type_table.borrow().as_tuple(unwrapped)
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
@@ -8676,11 +8672,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     func: Box::new(tir::FunctionRef {
                         module_source: callee_module,
                         name: callee_name,
-                        template: self
-                            .tysys
-                            .resolutions
-                            .declared_if_walked(ident.id)
-                            .map(|def| TemplateId::Declared { def, block: None }),
+                        template: self.template_at(ident.id),
                         monomorph_info: None,
                         method_info: None,
                     }),
@@ -9343,11 +9335,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: self.current_module_source.clone(),
                     name: ident.name.clone(),
                     type_args,
-                    template: self
-                        .tysys
-                        .resolutions
-                        .declared_if_walked(ident.id)
-                        .map(|def| TemplateId::Declared { def, block: None }),
+                    template: self.template_at(ident.id),
                 },
                 recorded_type,
                 ident.span,
@@ -9371,7 +9359,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: import_src,
                     name: original_name,
                     type_args,
-                    template: Some(TemplateId::Declared { def, block: None }),
+                    template: Some(self.tysys.signatures.declared_template(def)),
                 },
                 recorded_type,
                 ident.span,
@@ -9396,11 +9384,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: symbol.module_source().clone(),
                     name: symbol.name.clone(),
                     type_args,
-                    template: self
-                        .tysys
-                        .resolutions
-                        .declared_if_walked(ident.id)
-                        .map(|def| TemplateId::Declared { def, block: None }),
+                    template: self.template_at(ident.id),
                 },
                 recorded_type,
                 ident.span,

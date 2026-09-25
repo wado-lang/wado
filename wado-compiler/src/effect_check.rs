@@ -458,7 +458,7 @@ struct OwnedEffectData {
     /// Every effect an impl's methods declare, for resolving a trait head's
     /// effect hole against the type a call instantiates it with.
     impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
-    resource_names: IndexSet<(ModuleSource, String)>,
+    resources: IndexSet<EffectRef>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Each interface declaration's effect and `#[cm]` FQ.
@@ -502,14 +502,17 @@ impl OwnedEffectData {
             }
         }
 
-        let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
-        for (src, module) in &sem.modules {
-            for item in &module.items {
-                if let Item::Resource(resource) = item {
-                    resource_names.insert((src.clone(), resource.name.clone()));
-                }
-            }
-        }
+        let resolutions = &*state.tysys.resolutions;
+        let defs = resolutions.defs();
+        let resources: IndexSet<EffectRef> = sem
+            .modules
+            .values()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::Resource(resource) => resolutions.effect_decl(defs.def_at(resource.id)),
+                _ => None,
+            })
+            .collect();
 
         let members = MemberTables::collect(sem, state);
 
@@ -522,8 +525,6 @@ impl OwnedEffectData {
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
-        let resolutions = &*state.tysys.resolutions;
-        let defs = resolutions.defs();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
@@ -618,7 +619,7 @@ impl OwnedEffectData {
             open_traits,
             fn_bound_traits,
             impl_effects,
-            resource_names,
+            resources,
             members,
             closure,
             interfaces,
@@ -638,7 +639,7 @@ impl OwnedEffectData {
             open_traits: &self.open_traits,
             fn_bound_traits: &self.fn_bound_traits,
             impl_effects: &self.impl_effects,
-            resource_names: &self.resource_names,
+            resources: &self.resources,
             members: &self.members,
             closure: &self.closure,
             interfaces: &self.interfaces,
@@ -668,8 +669,8 @@ struct EffectIndex<'a> {
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
     /// Every effect one impl's methods declare.
     impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
-    /// Declared resources, for resource injection and effect classification.
-    resource_names: &'a IndexSet<(ModuleSource, String)>,
+    /// Declared resources, for classifying a missing effect.
+    resources: &'a IndexSet<EffectRef>,
     /// Declared members, for nested-resource detection.
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
@@ -1560,18 +1561,10 @@ impl SemEffectWalker<'_> {
             if self.current.contains(effect) {
                 continue;
             }
-            let kind = match effect {
-                EffectRef::Concrete {
-                    name,
-                    module_source,
-                } if self
-                    .index
-                    .resource_names
-                    .contains(&(module_source.clone(), name.clone())) =>
-                {
-                    EffectKind::Resource
-                }
-                _ => EffectKind::Effect,
+            let kind = if self.index.resources.contains(effect) {
+                EffectKind::Resource
+            } else {
+                EffectKind::Effect
             };
             self.out.push(EffectError {
                 callee: callee.to_string(),

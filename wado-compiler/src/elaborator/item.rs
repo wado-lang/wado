@@ -1202,30 +1202,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve and record `impl_block`'s own declaration facts in its frame.
-    /// Ahead of every other impl question the module asks: whether an impl
-    /// reaches a receiver reads its recorded target.
+    /// Record `impl_block`'s own declaration facts, ahead of every other impl
+    /// question: whether an impl reaches a receiver reads its recorded target.
     pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
-        let mut block = self.enter_inherited_type_param_scope();
-        block.annotate_ctx.trait_ctx.type_params.clear();
-        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        block.register_impl_block_params(impl_block);
+        let mut block = self.enter_impl_params_scope(impl_block);
         let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
         block.record_impl_sig(impl_block, impl_is_concrete);
     }
 
-    /// Resolve and record the canonical signature of every method in
-    /// `impl_block`, in the impl's own frame.
-    ///
-    /// The decl pass runs this for every impl block so a dispatch query
-    /// instantiates a recorded signature instead of re-resolving the method
-    /// AST under the *caller's* perspective (WEP 2026-05-26).
+    /// Record the canonical signature of every method in `impl_block`, in its own
+    /// frame, so dispatch never re-resolves one from the caller's (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
         let impl_def = self.def_at(impl_block.id);
-        let mut block = self.enter_inherited_type_param_scope();
-        block.annotate_ctx.trait_ctx.type_params.clear();
-        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        block.register_impl_block_params(impl_block);
+        let mut block = self.enter_impl_params_scope(impl_block);
 
         let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
 
@@ -2533,20 +2522,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ))
     }
 
-    /// Whether `impl_block` is a concrete generic instantiation (`impl List<u8>`,
-    /// `impl Tag for [i32, i32]`) — a generic self type, tuples included, whose
-    /// every argument is concrete. Its methods are per-instantiation functions
-    /// named `List<u8>::method` and called directly. The tuple arm carries
-    /// coherence Rule 1: the variadic template is skipped for that arity.
-    ///
-    /// "Concrete" is [`super::TypeSystem::impl_arg_pins_a_position`] and
-    /// nothing else: this names the method, matching decides which receivers
-    /// reach that name, and a second answer mints one name from two functions.
+    /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag
+    /// for [i32, i32]`): every target argument pins a position (`arg_pins`).
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
+        !args.is_empty() && args.iter().all(|a| self.tysys.arg_pins(a))
     }
 
     /// Resolve a method. Under `impl_is_concrete` the surrounding impl is a fully

@@ -69,23 +69,20 @@ impl<'a> CallSite<'a> {
 }
 
 impl Monomorphizer {
-    /// The instance `expr`, a call or a function reference, reaches and its
-    /// mangled name; `None` where it reaches a function emitted as written, or
-    /// its arguments do not settle the template's parameters.
+    /// The instance the call or function reference `expr` reaches; `None` where
+    /// its callee is emitted as written or its arguments leave the template open.
     pub(super) fn call_instance(
         &self,
         expr: &TirExpr,
         templates: &Templates,
         type_table: &mut TypeTable,
-    ) -> Option<(InstantiationKey, String)> {
+    ) -> Option<InstantiationKey> {
         let site = CallSite::of(expr)?;
         let template = templates.get(site.template)?.borrow();
-        if site.receiver.is_some_and(|r| {
-            matches!(
-                type_table.get(type_table.peel_refs(r)),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            )
-        }) {
+        if site
+            .receiver
+            .is_some_and(|r| type_table.receiver_head_awaits_substitution(type_table.peel_refs(r)))
+        {
             return None;
         }
         let impl_type_args = if template.impl_type_params.is_empty() {
@@ -105,7 +102,7 @@ impl Monomorphizer {
         if template.has_real_type_params() && method_type_args.is_empty() {
             return None;
         }
-        let key = InstantiationKey {
+        Some(InstantiationKey {
             def: None,
             name: generic_function_name(
                 template.is_method(),
@@ -117,19 +114,28 @@ impl Monomorphizer {
             method_type_args,
             method_info: template.method_info.clone(),
             template: Some(site.template.clone()),
-        };
-        let mangled = if template.is_method() {
-            self.method_instantiation_name_inner(&key, type_table, &template.impl_type_params)
-        } else {
-            self.function_instantiation_name(&key, type_table)
-        };
-        Some((key, mangled))
+        })
+    }
+
+    /// The mangled name of the instance `key`, which [`Self::call_instance`]
+    /// answered, names.
+    pub(super) fn instance_name(
+        &self,
+        key: &InstantiationKey,
+        templates: &Templates,
+        type_table: &TypeTable,
+    ) -> String {
+        let template = key
+            .template
+            .as_ref()
+            .and_then(|id| templates.get(id))
+            .expect("an instance names a registered template")
+            .borrow();
+        self.method_instantiation_name_inner(key, type_table, &template.impl_type_params)
     }
 
     /// The impl arguments `template` instantiates under at `site`, in the form
-    /// its kind keys on: a blanket's parameters in declaration order, a
-    /// reference blanket's referent, a variadic tuple impl's elements, and
-    /// otherwise the arguments of the head the block names.
+    /// its kind keys on: a blanket's own, a tuple's elements, else the head's.
     fn impl_args_at(
         &self,
         template: &TirFunction,
@@ -173,10 +179,8 @@ impl Monomorphizer {
         .map(|(_, args)| args)
     }
 
-    /// A blanket's impl arguments: the receiver it serves, then what its
-    /// bounds project off it. The receiver is the call's where it writes one —
-    /// a blanket reached inside its own instance inherits the outer link's
-    /// arguments, which name that instance and not this one.
+    /// A blanket's impl arguments: the receiver it serves, then what its bounds
+    /// project off it. A written receiver beats a recorded outer newtype link.
     fn blanket_args_at(
         &self,
         blanket: &BlanketImpl,
@@ -207,7 +211,7 @@ impl Monomorphizer {
                 });
                 let subject = match (from_record, site.receiver) {
                     (Some(recorded), Some(receiver))
-                        if self.is_newtype_link_above(
+                        if is_newtype_link_above(
                             recorded,
                             type_table.peel_refs(receiver),
                             type_table,
@@ -224,23 +228,22 @@ impl Monomorphizer {
             }
         }
     }
-
-    /// Whether `outer` is a newtype whose chain of bases passes `inner`.
-    fn is_newtype_link_above(&self, outer: TypeId, inner: TypeId, type_table: &TypeTable) -> bool {
-        let mut link = outer;
-        while link != inner {
-            let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
-                return false;
-            };
-            link = *base_type;
-        }
-        outer != inner
-    }
 }
 
-/// The method arguments `template` instantiates under at `site`: none where it
-/// declares no parameter of its own, else what the call spells, what its
-/// dispatch recorded, or what its arguments show.
+/// Whether `outer` is a newtype whose chain of bases passes `inner`.
+fn is_newtype_link_above(outer: TypeId, inner: TypeId, type_table: &TypeTable) -> bool {
+    let mut link = outer;
+    while link != inner {
+        let ResolvedType::Newtype { base_type, .. } = type_table.get(link) else {
+            return false;
+        };
+        link = *base_type;
+    }
+    outer != inner
+}
+
+/// The method arguments `template` instantiates under at `site`: what the call
+/// spells, else what its dispatch recorded, else what its arguments show.
 fn method_args_at(
     template: &TirFunction,
     site: &CallSite<'_>,

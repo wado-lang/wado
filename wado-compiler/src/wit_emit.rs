@@ -933,9 +933,7 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.types.def_name(*def)) =>
-            {
+            ResolvedType::GenericInstance { type_args, .. } if self.types.is_tuple(id) => {
                 CmShape::Tuple(type_args.clone())
             }
             ResolvedType::GenericInstance { def, type_args } => {

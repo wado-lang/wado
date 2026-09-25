@@ -66,9 +66,8 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
 ///
 /// # Errors
-/// Returns a message naming the offending shape if the component exports a WIT
-/// construct not yet supported for import (resources/handles, world-level
-/// function exports, etc.).
+/// A message naming each shape the component exports that has no import
+/// mapping yet: a resource, a world-level type, or `error-context`.
 pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
     let mut b = Builder::new();
     let mut interface_fqs = Vec::new();
@@ -608,7 +607,15 @@ impl Builder {
             WitType::F64 => Some("f64"),
             WitType::Char => Some("char"),
             WitType::String => Some("String"),
-            WitType::ErrorContext | WitType::Id(_) => None,
+            WitType::ErrorContext => {
+                self.errors.push(
+                    "importing a component whose signature carries `error-context` is not yet \
+                     supported"
+                        .to_string(),
+                );
+                return self.unit();
+            }
+            WitType::Id(_) => None,
         };
         if let Some(name) = prim {
             return self.named(name, None);

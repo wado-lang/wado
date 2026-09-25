@@ -788,10 +788,6 @@ fn check_cm_boundary_representable_inner(
                     )),
                 }
             }
-            // These never carry a CM value across a boundary (diverging/never,
-            // closures, reactive cells, raw GC arrays, unmonomorphized type
-            // parameters, or unresolved/error types). Reject explicitly
-            // instead of silently lowering to i32.
             R::Never
             | R::Ref(_)
             | R::MutRef(_)

@@ -791,9 +791,9 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance {
-                def,
                 type_args: elements,
-            } if TypeTable::is_tuple_type(type_table.def_name(*def)) => {
+                ..
+            } if type_table.is_tuple(type_id) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
                 let found =

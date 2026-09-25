@@ -357,18 +357,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A scope answering `impl_block`'s own names and nothing the caller
-    /// brought: an impl block names its parameters in `impl<...>` and inherits
-    /// none, and its associated types and `Self` answer inside it.
-    pub(super) fn enter_impl_scope(
+    /// A scope binding `impl_block`'s parameters and `Self` and nothing the
+    /// caller brought: an impl block names its parameters in `impl<...>`.
+    pub(super) fn enter_impl_params_scope(
         &mut self,
         impl_block: &ast::ImplBlock,
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        let ctx = &mut scope.annotate_ctx.trait_ctx;
+        ctx.type_params.clear();
+        ctx.type_param_bounds.clear();
+        ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
+        scope
+    }
+
+    /// [`Self::enter_impl_params_scope`] with the block's associated types.
+    pub(super) fn enter_impl_scope(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_impl_params_scope(impl_block);
         if impl_block.trait_type.is_some() && !impl_block.is_synthesize_request {
             let trait_name = scope.impl_block_trait_name(impl_block);
             scope.register_impl_assoc_types(impl_block, trait_name.as_ref());

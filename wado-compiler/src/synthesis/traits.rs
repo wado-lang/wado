@@ -34,8 +34,8 @@ use crate::name::{
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
-use crate::synthesis::template::{blanket_dispatch_for, trait_method_template};
-use crate::tir::{StructDef, TemplateId, TemplateShape, TraitRef};
+use crate::synthesis::template::{blanket_dispatch_for, trait_call_template};
+use crate::tir::{StructDef, TemplateShape, TraitRef};
 use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
@@ -273,6 +273,16 @@ fn make_trait_method(
     }
 }
 
+/// The type table every module shares a handle to.
+fn shared_type_table(project: &Package) -> &Rc<RefCell<TypeTable>> {
+    &project
+        .tir_modules
+        .values()
+        .next()
+        .expect("synthesis runs once the entry module is built")
+        .type_table
+}
+
 /// Run trait synthesis on the entire project.
 ///
 /// For each module, generates Eq/Ord, Inspect and Display implementations for
@@ -281,21 +291,10 @@ pub fn synthesize_traits(project: Package) -> Package {
     let mut project = project;
     let trait_env = project.trait_env.clone();
 
-    // Bound-driven requests (WEP 2026-06-25-trait-derivation): snapshot the
-    // shared set (not a drain — `synthesis::serde_synth::synthesize_serde`
-    // reads the same set for its `Serialize` / `Deserialize` entries after
-    // this pass runs) and keep only the `Eq` / `Ord` entries.
-    //
-    // `TypeTable` is shared (one `Rc<RefCell<…>>` per project, cloned onto
-    // every module), so any module's handle reaches the same table, and
-    // `build_tir` always populates at least the entry module first.
-    let first_module = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
+    // A snapshot, not a drain: `synthesize_serde` reads the same requests later.
+    let type_table = shared_type_table(&project);
     let (eq_trait_key, ord_trait_key) = {
-        let tt = first_module.type_table.borrow();
+        let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
             items.trait_fq(CompilerItem::Eq).canonical().expect(KEYED),
@@ -303,23 +302,13 @@ pub fn synthesize_traits(project: Package) -> Package {
         )
     };
     // `Default` is drained later by `synthesize_defaults` (after `serde_synth`).
-    let requested: SynthRequests = first_module
-        .type_table
+    let requested: SynthRequests = type_table
         .borrow()
         .bound_driven_synth_requests(|key| *key == eq_trait_key || *key == ord_trait_key)
         .into_iter()
         .collect();
-
-    // In-pass dedup: each sub-pass records `(type_name, module, trait_name)`
-    // of every impl it generates so later sub-passes within this same
-    // `synthesize_traits` run can skip emitting a duplicate. The module
-    // component is required because two distinct types from different
-    // modules can share a simple name (e.g. `struct Widget` in module A
-    // and module B), and each needs its own auto-derived impl. The
-    // canonical project-wide synthesis layer is rebuilt afterwards by
-    // `collect_synthesised_impls` (see `synthesis.rs`), which scans TIR
-    // and captures concrete-ness from the synthesized function itself.
-    let partial_impls = first_module.type_table.borrow().partial_impls();
+    let partial_impls = type_table.borrow().partial_impls();
+    // In-pass dedup, per module: two modules' same-named types each derive.
     let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
@@ -353,24 +342,18 @@ pub fn synthesize_traits(project: Package) -> Package {
 /// `Deserialize` bodies record `Default` requests only after that snapshot.
 pub fn synthesize_defaults(project: &mut Package) {
     let trait_env = project.trait_env.clone();
-    let first_module = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis");
-    let default_trait_name = first_module
-        .type_table
+    let type_table = shared_type_table(project);
+    let default_trait_key = type_table
         .borrow()
         .compiler_items()
-        .trait_fq(CompilerItem::Default);
-    let default_trait_key = default_trait_name.canonical();
-    let requested: SynthRequests = first_module
-        .type_table
+        .trait_fq(CompilerItem::Default)
+        .canonical();
+    let requested: SynthRequests = type_table
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == default_trait_key.as_ref())
         .into_iter()
         .collect();
-    let partial_impls = first_module.type_table.borrow().partial_impls();
+    let partial_impls = type_table.borrow().partial_impls();
 
     let mut pending: SynthRequests = IndexSet::default();
     for module in project.tir_modules.values_mut() {
@@ -409,12 +392,7 @@ pub fn synthesize_reflect(project: &mut Package) {
 /// A reflect trait's fully-qualified name, read off the compiler-item registry
 /// any module shares.
 fn reflect_trait_fq(project: &Package, trait_item: CompilerItem) -> FqTraitName {
-    project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis")
-        .type_table
+    shared_type_table(project)
         .borrow()
         .compiler_items()
         .trait_fq(trait_item)
@@ -431,14 +409,7 @@ fn run_reflect_synthesis(
     generate_impls: fn(&mut TirModule, &mut SynthesisCtx<'_, '_, '_>, &FqTraitName),
 ) {
     let trait_env = project.trait_env.clone();
-    let partial_impls = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis")
-        .type_table
-        .borrow()
-        .partial_impls();
+    let partial_impls = shared_type_table(project).borrow().partial_impls();
     let mut pending = SynthRequests::default();
     for module in project.tir_modules.values_mut() {
         let module_source = module.module_source.clone();
@@ -858,12 +829,7 @@ fn synthesize_reflect_kind(
 ) {
     let trait_name = reflect_trait_fq(project, trait_item);
     let trait_key = trait_name.canonical();
-    let requested: SynthRequests = project
-        .tir_modules
-        .values()
-        .next()
-        .expect("tir_modules must contain at least the entry module during synthesis")
-        .type_table
+    let requested: SynthRequests = shared_type_table(project)
         .borrow()
         .bound_driven_synth_requests(|key| Some(key) == trait_key.as_ref())
         .into_iter()
@@ -3383,16 +3349,11 @@ pub(crate) struct SynthesisCtx<'env, 'pend, 'req> {
     /// Module currently being synthesised. Auto-derived impls live in this
     /// module by convention.
     pub(crate) module: ModuleSource,
-    /// Snapshot of every `core:prelude/{traits,format}` symbol this pass
-    /// touches, resolved once through the [`CompilerItem`] registry.
-    /// Threaded through `SynthesisCtx` so every sub-pass (Inspect, Display,
-    /// plus the helpers that build trait method names) reads the registered
-    /// trait / struct names
-    /// instead of hard-coding `"Inspect"` / `"Formatter"` / etc.
+    /// Every `core:prelude/{traits,format}` symbol this pass touches, resolved
+    /// once through the [`CompilerItem`] registry.
     pub(crate) names: &'env TraitsStdlibNames,
-    /// The impl blocks reaching only some instances of their head, as
-    /// [`TypeTable::impl_covers_every_instance`] answers once per pass, before
-    /// it borrows the table for writing.
+    /// The impl blocks reaching only some instances of their head, read once
+    /// per pass before the table is borrowed for writing.
     pub(crate) partial_impls: &'env IndexSet<DefId>,
 }
 
@@ -3439,11 +3400,7 @@ impl SynthesisCtx<'_, '_, '_> {
             .contains(&(Self::key(receiver), self.module.clone(), *trait_key))
     }
 
-    /// The receiver `type_name` indexes under in [`TraitEnv`]. A sub-pass names
-    /// the declarations of the module it is synthesising, so that module is the
-    /// declaring one; the key is built exactly as
-    /// [`super::super::elaborator::trait_env::ImplTargetKey::receiver`] builds
-    /// the definition side.
+    /// The receiver `head` indexes under in [`TraitEnv`].
     fn receiver(&self, head: &FqTypeName) -> Receiver {
         Receiver::Type(head.clone())
     }
@@ -3453,11 +3410,8 @@ impl SynthesisCtx<'_, '_, '_> {
         self.pending_has_head(receiver.head(), trait_key)
     }
 
-    /// `true` when a *methodful* impl already covers `<trait_name> for
-    /// <type_name>` (within `scope`) at every instance, or this pass emitted
-    /// one. A body-less `impl Trait for Type;` marker does not count — it must
-    /// not block the body it asks for — and neither does an impl reaching some
-    /// instances only, since the derived body answers for the rest.
+    /// Whether an impl with methods covers every instance of `receiver` within
+    /// `scope`, or this pass emitted one. A marker asks for the body, so it never counts.
     fn has_methodful_impl(
         &self,
         receiver: &FqTypeName,
@@ -4777,26 +4731,7 @@ fn trait_call_on_type(
             } else {
                 None
             };
-            let template = if is_type_param || tt.receiver_head_awaits_substitution(value_type) {
-                None
-            } else {
-                trait_name
-                    .canonical()
-                    .and_then(|trait_| {
-                        trait_method_template(trait_env, trait_, method_name, value_type, tt)
-                    })
-                    .or_else(|| {
-                        Some(TemplateId::Synthesized {
-                            module: impl_module.clone(),
-                            name: trait_method_info(
-                                &info.fq_base_struct_name(),
-                                trait_name,
-                                method_name,
-                            )
-                            .to_mangled_name(),
-                        })
-                    })
-            };
+            let template = trait_call_template(trait_env, &info, value_type, &impl_module, tt);
             (impl_module, monomorph_info, template)
         };
 

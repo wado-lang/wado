@@ -95,9 +95,12 @@ impl Signatures {
         self.method_sig(*method)
     }
 
-    /// Declaration facts of the `impl` block `def`.
-    pub(crate) fn impl_sig(&self, def: DefId) -> Option<&ImplSig> {
-        self.impl_sigs.get(&def)
+    /// Declaration facts of the `impl` block `def`, which the decl pass records
+    /// for every block.
+    pub(crate) fn impl_sig(&self, def: DefId) -> &ImplSig {
+        self.impl_sigs
+            .get(&def)
+            .unwrap_or_else(|| panic!("no declaration facts for the impl block {def:?}"))
     }
 
     /// Declaration facts of the `trait` `def` declares.
@@ -122,7 +125,7 @@ impl Signatures {
 
     /// Which trait this `impl` block implements, `None` for an inherent one.
     pub(crate) fn impl_trait(&self, impl_def: DefId) -> Option<DefId> {
-        self.impl_sig(impl_def)?.trait_decl
+        self.impl_sig(impl_def).trait_decl
     }
 
     /// Which trait declared `sig`'s method, where an `impl` block of one does.
@@ -503,15 +506,8 @@ impl ImplSig {
         }
     }
 
-    /// The slot substitution a receiver's type arguments imply — the one
-    /// alignment, shared by [`Self::instantiate`] and by the instantiation
-    /// of any [`MethodSig`] the block declares.
-    ///
-    /// Each target position binds the slots its argument holds, at any depth:
-    /// `T` in `impl … for Pair<List<T>, i32>` takes `String` from a
-    /// `Pair<List<String>, i32>`. A concrete argument (`u8` in `impl List<u8>`)
-    /// binds nothing, which is what makes a partially-concrete target
-    /// expressible; a position the receiver leaves open binds nothing either.
+    /// The slots each target position's argument holds, at any depth, filled
+    /// from the receiver's: `T` in `Pair<List<T>, i32>` from `Pair<List<String>, i32>`.
     pub(crate) fn slots(
         &self,
         type_table: &RefCell<TypeTable>,
@@ -529,12 +525,8 @@ impl ImplSig {
         slots
     }
 
-    /// [`Self::slots`] where `receiver_args` are a *spelled* argument list, as
-    /// a turbofish writes them, or a static call's slot list: the receiver's
-    /// positions, then the slots past them by index. `None` where this block's
-    /// target cannot align with one — a blanket, `&`-target or variadic-tuple
-    /// block writes no `target_type_args` and binds its slots from the receiver
-    /// differently.
+    /// [`Self::slots`] for a spelled list: the receiver's positions, then the
+    /// slots past them by index. `None` where the list cannot fill the positions.
     pub(crate) fn spelled_slots(
         &self,
         type_table: &RefCell<TypeTable>,

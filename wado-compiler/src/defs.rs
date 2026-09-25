@@ -441,12 +441,9 @@ impl DefTable {
         };
         let owner_visibility = self.visibility(owner);
         for member in members {
-            // A seed already linked this member to this owner; linking again
-            // would list it twice under the owner.
-            if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
-                continue;
-            }
             let id = match self.of_ast_id(member.ast_id) {
+                // A seed already linked it; linking again lists it twice.
+                Some(id) if self.get(id).parent == Some(owner) => continue,
                 Some(id) => {
                     let def = &mut self.defs[id.0 as usize];
                     def.parent = Some(owner);
@@ -539,14 +536,8 @@ impl DefTable {
         &self.get(def).members
     }
 
-    /// The declaration a node declares, for the passes that hold a declaring
-    /// node rather than an identity — the symbol table, the compiler-item
-    /// registry, an LSP navigation edge. `None` for a node that declares
-    /// nothing.
-    ///
-    /// This is not a name lookup: the node is already the declaration.
-    /// [`Self::of_ast_id`] for a node the collect pass identified, so a miss is
-    /// a hole in that pass rather than a case to handle.
+    /// The declaration the declaring node `id` declares. Panics on a node
+    /// declaring nothing: the collect pass identified every one.
     #[must_use]
     pub fn def_at(&self, id: AstId) -> DefId {
         self.of_ast_id(id)

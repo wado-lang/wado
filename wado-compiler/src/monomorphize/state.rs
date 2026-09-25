@@ -10,6 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
+use crate::synthesis::template::written_impl_reaches;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -22,42 +23,25 @@ pub(super) struct StructInstState {
     pub type_substitutions: IndexMap<TypeId, TypeId>,
     /// Map from `GenericInstance` `TypeId` to mangled struct name
     pub type_to_mangled_name: IndexMap<TypeId, String>,
-    /// Reverse lookup: mangled struct name -> `InstantiationKey`
-    pub mangled_to_key: IndexMap<String, InstantiationKey>,
 }
 
 /// Tracks function monomorphization state
 pub(super) struct FuncInstState {
-    /// Map from `InstantiationKey` to the mangled function name. A key is
-    /// stored as it was asked and, once the structs it names are instantiated,
-    /// under its rewritten form too ([`Monomorphizer::alias_canonical_keys`]),
-    /// so pre- and post-substitution `TypeId`s of one type reach one entry.
+    /// Each key to its instance's mangled name, also under its canonical form
+    /// ([`Monomorphizer::alias_canonical_keys`]).
     pub instantiated: IndexMap<InstantiationKey, String>,
-    /// The `(module, mangled name)` of every queued instance, with the
-    /// template it instantiates: two keys can name one body, never two
-    /// templates.
-    pub instantiated_homes: IndexMap<(ModuleSource, String), Option<TemplateId>>,
+    /// Each queued instance's `(module, mangled name)` to its template: two keys
+    /// can name one body, never two templates.
+    pub instantiated_homes: IndexMap<(ModuleSource, String), TemplateId>,
     /// Work queue of pending function instantiations, each a key of
     /// [`Self::instantiated`].
     pub pending: Vec<InstantiationKey>,
-    /// Project-wide trait knowledge inherited from the package. Used by
-    /// receiver-substitution and comparison-lowering paths to find the
-    /// module that owns `impl <trait> for <type>` without rebuilding a
-    /// parallel "mangled name → module" index.
     pub trait_env: Arc<TraitEnv>,
-    /// Every generic function template in the project, keyed as
-    /// `collect_function_instantiation_sites` keys them. Read-only for the
-    /// whole run and shared rather than cloned.
-    ///
-    /// A template is registered only when it declares type params, so absence
-    /// is the answer "this callee is not generic" — which is what the
-    /// post-variadic-expansion type-arg inference needs in order to tell a
-    /// method type param from an ordinary parameter.
+    /// Every function template in the project; absence means the callee is
+    /// emitted as written.
     pub templates: Rc<Templates>,
-    /// Per module, the names written impls already define. An impl for one
-    /// instantiation (`impl Tag for Box_<i32>`) emits exactly the function a
-    /// template instantiation would, which is what lets the specific impl win
-    /// over the general one — coherence Rule 1 (WEP 2026-03-14 §5).
+    /// Per module, the names written impls define; one for a single instance
+    /// wins over the template's (coherence Rule 1, WEP 2026-03-14 §5).
     pub concrete_names: IndexMap<ModuleSource, IndexSet<String>>,
 }
 
@@ -77,27 +61,13 @@ impl FuncInstState {
             .cloned()
     }
 
-    /// `true` when `info` denotes a trait method whose impl is already
-    /// known to the project as a concrete (non-generic) impl block. The
-    /// existence check used by mono's blanket-vs-concrete branch needs to
-    /// match the legacy `trait_method_locations.contains_key` semantics,
-    /// which only catalogued non-generic impl methods.
+    /// Whether a concrete (non-generic) impl block defines `info`.
     pub fn has_impl(&self, info: &LocalMethodName) -> bool {
-        // Existence-only check; any candidate module suffices so no hint is
-        // needed.
         self.impl_module(info, None).is_some()
     }
 
-    /// Module of any non-blanket `impl <trait> for <Type>` block — broader
-    /// than [`Self::impl_module`] in that it also returns generic impls
-    /// (`impl<T> IntoIterator for List<T>`) which live in the receiver
-    /// type's own module by convention. Used by the type-param dispatch
-    /// path to distinguish "the receiver type has a non-blanket impl,
-    /// fall through to the receiver's module" from "no impl at all, use
-    /// the blanket's module".
-    ///
-    /// `None` where the head's written impls reach other instances than
-    /// `instance` only, which a blanket or a derived body answers instead.
+    /// Module of a non-blanket impl, generic ones included, defining `info` on
+    /// `instance`; `None` where the head's written impls all miss `instance`.
     pub fn generic_or_concrete_impl_module(
         &self,
         info: &LocalMethodName,
@@ -107,13 +77,10 @@ impl FuncInstState {
     ) -> Option<ModuleSource> {
         if let Some(trait_) = info.trait_decl() {
             let instance = type_table.peel_refs(instance);
-            let head = type_table.impl_receiver_key(instance);
-            let mut written = self
+            if self
                 .trait_env
-                .methodful_impls_by_receiver(&head, trait_)
-                .peekable();
-            if written.peek().is_some()
-                && !written.any(|block| type_table.impl_reaches_instance(block, instance))
+                .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(instance), trait_)
+                && !written_impl_reaches(&self.trait_env, trait_, instance, type_table)
             {
                 return None;
             }
@@ -124,52 +91,25 @@ impl FuncInstState {
     }
 }
 
-/// Monomorphizer collects generic instantiations and generates concrete types.
-///
-/// Per issue #1110 (4): there is no "current module" notion at this layer.
-/// Every `FunctionRef::module_source` is set by its producer to the body's
-/// home module, and the monomorphizer reads that field directly — never the
-/// monomorphizer's own location — to key into `generic_functions` /
-/// `instantiated`. Keeping a `current_module_source` here would invite the
-/// "fall back to the current module" pattern the issue forbids.
+/// Collects generic instantiations and generates concrete types. It has no
+/// current module: each `FunctionRef::module_source` names its own (issue #1110).
 pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
-    /// Number of impl-level type params in the function currently being instantiated.
-    /// Set by `instantiate_function` before calling `substitute_types_in_block`.
-    /// Used to distinguish impl-level (struct) type params from method-level type params
-    /// in the substitution map when rewriting static method calls.
+    /// How many leading substitution slots of the function being instantiated
+    /// are its impl's type params rather than its own.
     pub current_impl_type_param_count: usize,
-    /// Base struct name of the impl block being instantiated (e.g., `TreeMap` for
-    /// `impl<K,V> TreeMap<K,V>`), or `None` when the current function is not an
-    /// impl method. Used to restrict impl type arg propagation to calls on the
-    /// same struct — calls to other structs within the same impl block must not
-    /// receive these type args.
-    pub current_impl_struct_name: Option<String>,
-    /// Maps each type-parameter *name* of the function currently being
-    /// instantiated to its key in the substitution map (impl-level params use
-    /// their own index; method-level params are offset past the impl params).
-    /// Set by `instantiate_function`. A type-param-receiver static call
-    /// (`T^Trait::method`) resolves its concrete receiver by *name* through
-    /// this map — the receiver is the param named `base_struct_name`, not
-    /// positionally the lowest-index param (which breaks for `fn f<U, T: Tr>`).
+    /// The receiver head of the impl method being instantiated; only a call on
+    /// that same head inherits its impl type args.
+    pub current_impl_receiver: Option<FqTypeName>,
+    /// Each type param of the function being instantiated, by name, to its
+    /// substitution slot: `T^Trait::method` finds its receiver by name.
     pub current_param_substitution_key: IndexMap<String, u32>,
-    /// Pack index → the pack's own tuple, while a variadic for-of body is
-    /// substituted for one unrolled element.
-    ///
-    /// That substitution binds the pack to the element it walks, which is what
-    /// a bare `T` in the body means. A tuple *spelling* the pack (`[..T]` — the
-    /// type of a local declared outside the loop) still means the whole tuple,
-    /// so the splice reads this instead. Empty outside the expansion.
+    /// Pack index to the pack's whole tuple while one unrolled element is
+    /// substituted, for a `[..T]` spelling that still means the whole.
     pub pack_splice_bindings: RefCell<IndexMap<u32, TypeId>>,
-    /// Template local slots already claimed by an unrolled copy in the function
-    /// being instantiated.
-    ///
-    /// Every unroll — a variadic for-of iteration, a comprehension element —
-    /// clones the same template body, so its locals collide with every other
-    /// copy's. The first copy keeps the template slot and the rest reallocate;
-    /// the claims must be shared, because an inner unroll nested in an outer
-    /// one competes for the very same slots. Cleared per instantiation.
+    /// Template local slots an unrolled copy already holds; shared, since a
+    /// nested unroll competes for the same slots. Cleared per instantiation.
     pub unrolled_local_claims: RefCell<IndexSet<u32>>,
 }
 
@@ -181,7 +121,6 @@ impl Monomorphizer {
                 pending: Vec::new(),
                 type_substitutions: IndexMap::default(),
                 type_to_mangled_name: IndexMap::default(),
-                mangled_to_key: IndexMap::default(),
             },
             functions: FuncInstState {
                 instantiated: IndexMap::default(),
@@ -192,7 +131,7 @@ impl Monomorphizer {
                 concrete_names: IndexMap::default(),
             },
             current_impl_type_param_count: 0,
-            current_impl_struct_name: None,
+            current_impl_receiver: None,
             current_param_substitution_key: IndexMap::default(),
             pack_splice_bindings: RefCell::new(IndexMap::default()),
             unrolled_local_claims: RefCell::new(IndexSet::default()),
@@ -229,12 +168,7 @@ impl Monomorphizer {
         if self.structs.instantiated.contains_key(&key) {
             return false;
         }
-        self.structs
-            .instantiated
-            .insert(key.clone(), mangled_name.clone());
-        self.structs
-            .mangled_to_key
-            .insert(mangled_name, key.clone());
+        self.structs.instantiated.insert(key.clone(), mangled_name);
         self.structs.pending.push(key);
         true
     }
@@ -279,10 +213,8 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
-    /// Queue a function instantiation unless its body is already queued. Two
-    /// dispatch sites can derive distinct-but-equivalent `TypeId`s for one
-    /// argument (a `GenericInstance` and the `Struct` it became), so the body
-    /// is identified by its mangled name rather than by the key.
+    /// Queue a function instantiation unless its body is; a body is its mangled
+    /// name, since one type can reach it under two `TypeId`s.
     pub fn try_queue_function(
         &mut self,
         key: InstantiationKey,
@@ -296,24 +228,23 @@ impl Monomorphizer {
             !self.concrete_impl_owns_name(&key, &mangled_name, type_table),
             "`{mangled_name}` instantiates a generic block where a written impl answers"
         );
-        // An instance is one body per module, the module being part of its
-        // identity: `&List<T>`'s and `&Array<T>`'s impls of one trait mangle
-        // alike under the collapsed `&` head and live in two modules. A second
-        // key under the body's own module — a `GenericInstance` and the
-        // `Struct` it became — is an alias of that body.
+        // The module is part of an instance's identity: `&List<T>`'s and
+        // `&Array<T>`'s impls of one trait mangle alike under the `&` head.
+        let template = key
+            .template
+            .clone()
+            .expect("a function instance names its template");
         let home = (key.module_source.clone(), mangled_name.clone());
-        if let Some(template) = self.functions.instantiated_homes.get(&home) {
+        if let Some(prior) = self.functions.instantiated_homes.get(&home) {
             assert_eq!(
-                *template, key.template,
+                *prior, template,
                 "two templates instantiate `{mangled_name}` in `{}`",
                 key.module_source
             );
             self.functions.instantiated.insert(key, mangled_name);
             return false;
         }
-        self.functions
-            .instantiated_homes
-            .insert(home, key.template.clone());
+        self.functions.instantiated_homes.insert(home, template);
         self.functions
             .instantiated
             .insert(key.clone(), mangled_name);
@@ -321,10 +252,8 @@ impl Monomorphizer {
         true
     }
 
-    /// Index every queued instance under its canonical key as well. A struct
-    /// instantiation maps a `GenericInstance` to the `Struct` it became, and a
-    /// call site collected after that rewrite asks with the `Struct` form while
-    /// one collected before asked with the other; both must reach the one body.
+    /// Index every queued instance under its canonical key as well, so a site
+    /// asking with a `GenericInstance` and one with its `Struct` reach one body.
     pub fn alias_canonical_keys(&mut self, type_table: &mut TypeTable) {
         let entries: Vec<(InstantiationKey, String)> = self
             .functions
@@ -489,19 +418,14 @@ impl Monomorphizer {
     }
 
     /// Whether the declaration `tid` names carries its own `impl <trait> for`
-    /// block reaching `tid`. The impl index keys the head as source writes it, so the query
-    /// goes through [`TypeTable::impl_receiver_key`] rather than a mangled
-    /// name — which would carry the declaring module the index never stores.
+    /// block reaching `tid`.
     pub(super) fn has_own_trait_impl(
         &self,
         type_table: &TypeTable,
         tid: TypeId,
         trait_: DefId,
     ) -> bool {
-        self.functions
-            .trait_env
-            .methodful_impls_by_receiver(&type_table.impl_receiver_key(tid), trait_)
-            .any(|block| type_table.impl_reaches_instance(block, tid))
+        written_impl_reaches(&self.functions.trait_env, trait_, tid, type_table)
     }
 
     /// The first newtype link at or below `type_id` writing its own impl of

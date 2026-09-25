@@ -1640,9 +1640,7 @@ impl TypeSystem {
         let trait_env = self.trait_env.clone();
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
-                let Some(header) = trait_env.impl_headers.get(&entry) else {
-                    continue;
-                };
+                let header = &trait_env.impl_headers[&entry];
                 // Both sides are declarations: the query's comes from the
                 // reference site that asked (a bound, a `T::method()` prefix),
                 // the header's from the site it writes, and each was resolved by
@@ -2922,9 +2920,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let entries = trait_env.entries_by_receiver_vec(&Receiver::Type(type_name));
                 for entry in entries {
-                    let Some(header) = trait_env.impl_headers.get(&entry) else {
-                        continue;
-                    };
+                    let header = &trait_env.impl_headers[&entry];
                     if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
                         // The receiver is keyed by head, so every impl on
                         // `List<_>` answers here, including ones implementing
@@ -3021,9 +3017,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
             for blanket in trait_env.blanket_impls.get(&trait_).into_iter().flatten() {
-                let Some(header) = trait_env.impl_headers.get(&blanket.def) else {
-                    continue;
-                };
+                let header = &trait_env.impl_headers[&blanket.def];
                 if header.associated_types.is_empty() {
                     continue;
                 }

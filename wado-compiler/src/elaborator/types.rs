@@ -552,9 +552,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Two of one trait's impls, each generic over the receiver's head, that
-    /// both reach it. Neither is written for the receiver, so rank 2 cannot
-    /// order them and only an impl written for it answers.
+    /// Two of one trait's impls, each generic over the receiver's head, both
+    /// reaching it: rank 2 cannot order them.
     AmbiguousHeadImpls {
         trait_name: String,
         receiver: String,

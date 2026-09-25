@@ -1740,10 +1740,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr_type,
-        };
+        let base_type_id = self.tysys.pointee_of(expr_type).unwrap_or(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1832,11 +1829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
-            let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                _ => None,
-            };
-            if let Some(expected) = derefed_index_type {
+            if let Some(expected) = self.tysys.pointee_of(index_type) {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
@@ -2011,10 +2004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
+        let base_type_id = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
         let struct_name = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -5265,18 +5255,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target: &ImplTargetKey,
         from: &FqTypeName,
     ) -> Vec<DefId> {
-        let from_trait = self.tysys.compiler_trait_def(CompilerItem::From);
+        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
+            return Vec::new();
+        };
         let env = &self.tysys.trait_env;
         env.all_impl_keys(target)
             .into_iter()
             .filter(|key| {
-                env.impl_headers.get(key).is_some_and(|header| {
-                    from_trait.is_some()
-                        && header.trait_def() == from_trait
-                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
-                            if g.args.len() == 1
-                                && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
-                })
+                let header = &env.impl_headers[key];
+                header.trait_def() == Some(from_trait)
+                    && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
+                        if g.args.len() == 1
+                            && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
             })
             .collect()
     }

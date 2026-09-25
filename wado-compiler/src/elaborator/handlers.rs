@@ -12,7 +12,7 @@ use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
-use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
+use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
 use crate::name::{DeclName, FqTraitName};
 
@@ -324,13 +324,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
             // the block was written, which is not where it is installed.
-            let Some(trait_ref) = self
-                .tysys
-                .trait_env
-                .impl_headers
-                .get(&impl_def)
-                .and_then(ImplHeader::trait_def)
-            else {
+            let Some(trait_ref) = self.tysys.trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
             if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
@@ -340,8 +334,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
-                .map(|sig| sig.trait_type_args.clone())
-                .unwrap_or_default();
+                .trait_type_args
+                .clone();
             if seen.insert((trait_ref, type_args.clone())) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
@@ -371,23 +365,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))?;
-        let implements = |key: &DefId| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| header.trait_def() == Some(effect_decl))
-        };
+        let implements =
+            |key: &DefId| self.tysys.trait_env.impl_headers[key].trait_def() == Some(effect_decl);
         // A block's arguments answer for the clause's when they are the same,
         // or where the block left a slot for monomorphization to fill —
         // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
         // block written for other arguments answers for nothing.
         let fills = |key: &DefId| {
-            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
-                sig.trait_type_args.len() == trait_type_args.len()
-                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
-                        .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
-            })
+            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
+            written.len() == trait_type_args.len()
+                && std::iter::zip(written, trait_type_args)
+                    .all(|(slot, arg)| slot == arg || self.is_open_slot(*slot))
         };
         keys.iter()
             .find(|key| implements(key) && fills(key))
@@ -428,10 +416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// handler value points at. The handler's `impl Effect for T` block is
     /// indexed by `T`, not `&T`.
     fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
-        match self.tysys.type_table.borrow().get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => type_id,
-        }
+        self.tysys.pointee_of(type_id).unwrap_or(type_id)
     }
 
     /// Annotate `resume value`, which yields `()` — at source level it is

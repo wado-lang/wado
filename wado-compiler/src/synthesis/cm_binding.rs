@@ -525,9 +525,8 @@ fn generate_import_adapters(project: &mut Package) {
             &func_info.interface_name,
             &func_info.package,
         )
-        // No declaring module: a placeholder owner in the function's own
-        // namespace. A world-level import carries none, and falls back to
-        // `Wasi` as it did when that was the only bundled namespace.
+        // A world-level import declares no owner: a placeholder in its own
+        // namespace, `Wasi` where it names none.
         .unwrap_or_else(|| {
             let namespace =
                 CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
@@ -544,9 +543,8 @@ fn generate_import_adapters(project: &mut Package) {
             &owner_module,
             &entry_source,
         );
-        // A world function (Phase 9) has no interface, so it needs no
-        // capability effect. The shared synthesizer pushed its empty
-        // interface name as one; drop it so the import stays pure.
+        // A world function has no interface, so no capability effect: drop the
+        // empty one the shared synthesizer pushed.
         if project
             .cm_interface_registry
             .is_world_import_function(qualified_name)

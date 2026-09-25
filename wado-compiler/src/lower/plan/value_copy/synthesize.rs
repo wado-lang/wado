@@ -450,9 +450,8 @@ fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
     )
 }
 
-/// Find the `TirStruct` for a mangled name. When several structs share the name
-/// (same-named types from distinct modules), `module` disambiguates; a unique
-/// name resolves without it, preserving behaviour for the common case.
+/// Find the `TirStruct` for a mangled name; `module` tells apart same-named
+/// structs of distinct modules.
 fn lookup_struct<'a>(
     project: &'a FlatPackage,
     mangled_name: &str,
@@ -491,35 +490,15 @@ fn is_synth_safe_element(
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
         ResolvedType::GenericInstance { def, .. } => {
-            let name = &type_table.borrow().def_name(def).to_string();
-            let module_source = &type_table.borrow().def_module(def).clone();
-            // Tuples, `List<T>`, `Box<T>` and known struct templates are
-            // safe; an instance whose template is neither a registered
-            // struct nor a variant is not.
-            if TypeTable::is_tuple_type(name) {
-                return true;
-            }
-            {
-                let tt = type_table.borrow();
-                if tt.is_list(elem_type)
-                    || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
-                {
-                    return true;
-                }
-            }
-            // A concrete monomorphised struct entry is the strongest
-            // signal — without it WIR has no `Ref` to point at. The struct
-            // list keys on the bare instantiation name, the one
-            // `struct_list_name` derives; a module-qualified head matches
-            // nothing, which would call every generic-instance element
-            // unsafe and copy the enclosing `List<T>` by identity.
-            let listed = type_table.borrow().struct_list_name(elem_type);
-            if listed
-                .is_some_and(|name| lookup_struct(project, &name, Some(module_source)).is_some())
-            {
-                return true;
-            }
-            project.find_variant(module_source, name).is_some()
+            let tt = type_table.borrow();
+            // Any other instance needs a monomorphized struct for WIR to point at.
+            tt.is_tuple(elem_type)
+                || tt.is_list(elem_type)
+                || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
+                || project.variants.iter().any(|v| v.def == def)
+                || tt.struct_list_name(elem_type).is_some_and(|name| {
+                    lookup_struct(project, &name, Some(tt.def_module(def))).is_some()
+                })
         }
         _ => true,
     }

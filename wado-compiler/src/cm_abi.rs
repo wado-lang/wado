@@ -355,6 +355,11 @@ pub(crate) fn named_type(name: &str) -> Type {
     })
 }
 
+#[cfg(test)]
+pub(crate) fn unit_type() -> Type {
+    Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1))
+}
+
 /// Helper: create a `Type::Generic` with a dummy span. Useful for tests.
 #[cfg(test)]
 pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
@@ -424,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_unit_size() {
-        assert_eq!(cm_size(&named_type("()")), 0);
+        assert_eq!(cm_size(&unit_type()), 0);
         assert_eq!(cm_size(&Type::Tuple(vec![])), 0);
     }
 
@@ -538,12 +543,11 @@ mod tests {
     #[test]
     fn test_result_unit_unit() {
         // result<(), ()>: disc(u8, 1 byte) + max(0, 0) = 1 byte, align 1
-        let unit = || Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1));
-        let result = generic_type("Result", vec![unit(), unit()]);
+        let result = generic_type("Result", vec![unit_type(), unit_type()]);
         assert_eq!(cm_size(&result), 1);
         assert_eq!(cm_align(&result), 1);
 
-        let layout = layout_result(&unit(), &unit());
+        let layout = layout_result(&unit_type(), &unit_type());
         assert_eq!(layout.size, 1);
         assert_eq!(layout.align, 1);
         assert_eq!(layout.offsets, vec![0, 1]); // disc at 0, payload at 1

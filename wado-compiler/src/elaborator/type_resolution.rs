@@ -768,9 +768,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_generic_type_out_of_scope(site, name, args, span);
         };
         let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
-        // A trait head reaches here too (`impl IndexValue<i32> for T`),
-        // and a trait's parameters live on its own declaration, so only
-        // a type declaration's list is a ceiling to exceed.
+        // A trait head (`impl IndexValue<i32> for T`) keeps its parameters on
+        // its own declaration, so only a type declaration's list is a ceiling.
         let declared = struct_info
             .as_ref()
             .map(|info| info.type_params.clone())

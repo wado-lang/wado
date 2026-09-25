@@ -624,13 +624,8 @@ pub(super) fn synthesize_adapter(
         builder.next_local,
         builder.locals,
     );
-    // Resources and effects are unified at the effect-system level: every
-    // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
-    // requires the caller to hold `with <E>`. The binding for a CM-imported
-    // operation therefore carries its owning name as its single concrete
-    // effect. The propagation closure (built in `effect_check`) walks
-    // operation signatures separately, so additional resources reachable
-    // through `<E>`'s operations are admitted without listing them here.
+    // An operation on `<E>`, effect or resource alike, requires `with <E>`;
+    // what `<E>`'s operations reach, `effect_check` admits separately.
     binding.borrow_mut().effects.push(EffectRef::Concrete {
         name: func_info.interface_name.clone(),
         module_source: owner_module.clone(),

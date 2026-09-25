@@ -385,13 +385,8 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
     }
 }
 
-/// Create a static call to a generic struct method with proper monomorphization info.
-///
-/// For example, `List::<String>::with_capacity(n)` needs:
-/// - `method_info` with `struct_name: "List"`, `method_name: "with_capacity"`
-/// - `monomorph_info` with `generic_name: "List::with_capacity"`, `type_args: [String]`
-///
-/// Without these, the monomorphizer won't instantiate the generic method.
+/// A static call to `template`, a method of a generic type such as
+/// `List::<String>::with_capacity(n)`, instantiated at `type_args`.
 pub fn generic_static_call(
     receiver: &FqTypeName,
     method_name: &str,
@@ -413,7 +408,6 @@ pub fn generic_static_call(
             is_blanket: false,
         })
     };
-    let _n = args.len();
     TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
@@ -432,11 +426,8 @@ pub fn generic_static_call(
     )
 }
 
-/// Create a method call on a generic struct with proper monomorphization info.
-///
-/// For example, `arr.push(elem)` where `arr: List<String>` needs:
-/// - `method_info` with `struct_name: "List"`, `method_name: "push"`
-/// - The receiver's `type_id` must be the concrete `List<String>` `TypeId`
+/// A method call on a generic type such as `arr.push(elem)`; `receiver`
+/// carries the concrete instance type, which the template is keyed at.
 pub fn generic_method_call(
     receiver: TirExpr,
     head: &FqTypeName,
@@ -448,7 +439,6 @@ pub fn generic_method_call(
 ) -> TirExpr {
     let info = LocalMethodName::new(head.clone(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
-    let _n = args.len();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),

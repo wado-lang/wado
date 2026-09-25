@@ -277,13 +277,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         // A qualified spelling names a trait, so the receiver's own declaration
         // is not what it asks for and no case of the name shadows the answer.
+        let declaring_args = self
+            .receiver_declaring_args(receiver_type, receiver_args)
+            .unwrap_or_default();
         let mut candidates = if required_trait.is_some() {
             Vec::new()
         } else {
-            let receiver_args = self
-                .receiver_declaring_args(receiver_type, receiver_args)
-                .unwrap_or_default();
-            self.own_candidates(&key, method_name, &receiver_args)
+            self.own_candidates(&key, method_name, &declaring_args)
         };
 
         // A case or member the receiver declares is written on the type, and
@@ -303,7 +303,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             receiver_key,
             receiver_type,
-            receiver_args,
+            &declaring_args,
         ));
         candidates.extend(self.blanket_candidates(method_name, receiver_type));
         if let Some(required) = required_trait {
@@ -364,10 +364,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declarations the receiver makes itself: its inherent impls reaching
-    /// `receiver_args`, the statics a `resource` declares, and one it inherits
-    /// along its chain — the index holds only a resource's own, so the chain is
-    /// walked.
+    /// The receiver's own declarations: inherent impls reaching `receiver_args`,
+    /// a `resource`'s statics, and one it inherits along its chain.
     fn own_candidates(
         &self,
         key: &ImplTargetKey,
@@ -704,10 +702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         receiver_type: Option<TypeId>,
         receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
-        let receiver_args = self
-            .receiver_declaring_args(receiver_type, receiver_args)
-            .unwrap_or_default();
-        self.trait_impls_for_receiver(receiver_name, target_hint, &receiver_args)
+        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_args)
             .into_iter()
             .filter_map(|impl_def| {
                 let header = &self.tysys.trait_env.impl_headers[&impl_def];
@@ -764,7 +759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.applicable_blanket_statics(receiver_type, method_name)
             .into_iter()
             .filter_map(|blanket| {
-                let header = self.tysys.trait_env.impl_headers.get(&blanket.def)?;
+                let header = &self.tysys.trait_env.impl_headers[&blanket.def];
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
                 let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
                 Some(Candidate {
@@ -882,8 +877,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .signatures
             .impl_sig(impl_def)
-            .map(|impl_sig| impl_sig.trait_type_args.clone())
-            .unwrap_or_default()
+            .trait_type_args
+            .clone()
     }
 
     /// Whether the receiver declares a `variant` case, an `enum` case or a
@@ -954,9 +949,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let declaring = sig
                 .declaring_impl
-                .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def).cloned());
+                .map(|impl_def| self.tysys.signatures.impl_sig(impl_def));
             let instantiated =
-                sig.instantiate_call_with(&self.tysys.type_table, declaring.as_ref(), &args, &[]);
+                sig.instantiate_call_with(&self.tysys.type_table, declaring, &args, &[]);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }

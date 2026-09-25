@@ -978,10 +978,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mangled_method_name =
             MethodName::format_local(&receiver_struct_name, trait_name.as_ref(), method_name);
 
-        // What the call instantiates: the declaration dispatch selected, in the
-        // block that answered, or the body derivation mints in the receiver's
-        // module. A bound on a parameter answers from no block; the instance
-        // decides.
+        // A bound on a parameter answers from no block, so its instance decides
+        // the template.
         let template = match (dispatched_method_def, dispatched_impl_block) {
             (Some(def), Some(block)) => Some(TemplateId::Declared {
                 def,
@@ -1703,7 +1701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // declaring block is what aligns the two.
                 let declaring = sig
                     .declaring_impl
-                    .and_then(|id| self.tysys.signatures.impl_sig(id));
+                    .map(|id| self.tysys.signatures.impl_sig(id));
                 let instantiated = sig.instantiate_call_with(
                     &self.tysys.type_table,
                     declaring,
@@ -1818,11 +1816,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default();
             let declaring = sig
                 .declaring_impl
-                .and_then(|id| self.tysys.signatures.impl_sig(id))
-                .cloned();
+                .map(|id| self.tysys.signatures.impl_sig(id));
             let instantiated = sig.instantiate_call_with(
                 &self.tysys.type_table,
-                declaring.as_ref(),
+                declaring,
                 &declaring_args,
                 &method_type_args,
             );
@@ -1837,11 +1834,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The declaring block's type parameters stand for the receiver's type
         // arguments, so a default naming one (`v: T = T::default()`) resolves
         // against what `Type::<i32>::method()` spelled.
-        let declaring_impl_sig = declaring_impl
-            .and_then(|id| self.tysys.signatures.impl_sig(id))
-            .cloned();
-        let mut static_type_bindings = declaring_impl_sig
-            .map(|impl_sig| {
+        let mut static_type_bindings = declaring_impl
+            .map(|id| {
+                let impl_sig = self.tysys.signatures.impl_sig(id);
                 let args = self
                     .receiver_declaring_args(Some(target_type_id), &[])
                     .unwrap_or_default();
@@ -2441,14 +2436,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // The `#[cm("...")]` import the callee binds, off the signature this
         // call resolved to, at the receiver it resolved at.
-        method_info.cm_name = declaration
-            .and_then(|def| self.tysys.signatures.method_sig(def).cloned())
-            .or_else(|| {
-                static_receiver
+        method_info.cm_name =
+            match declaration.and_then(|def| self.tysys.signatures.method_sig(def)) {
+                Some(sig) => sig.cm_name.clone(),
+                None => static_receiver
                     .as_ref()
                     .and_then(|key| self.qualified_method_sig_keyed(key, &static_call.method))
-            })
-            .and_then(|sig| sig.cm_name);
+                    .and_then(|sig| sig.cm_name),
+            };
 
         if let Some(method_def) = declaration.or_else(|| {
             let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
@@ -2802,9 +2797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declares the method. The header alone would match an instance
             // method of the same name; both indices together will not.
             .filter(|(_, b)| {
-                let Some(header) = self.tysys.trait_env.impl_headers.get(&b.def) else {
-                    return false;
-                };
+                let header = &self.tysys.trait_env.impl_headers[&b.def];
                 self.static_method_entries(
                     &ImplTargetKey::TypeParam(b.module.clone(), b.param.clone()),
                     method_name,
@@ -2814,7 +2807,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The trait comes off the impl's own header, so the blanket
             // index's bare-name key never reaches a mangled name.
             .filter_map(|(_, b)| {
-                let header = self.tysys.trait_env.impl_headers.get(&b.def)?;
+                let header = &self.tysys.trait_env.impl_headers[&b.def];
                 Some((
                     BlanketStatic {
                         trait_name: self
@@ -3003,18 +2996,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| self.impl_target(struct_name))
     }
 
-    /// The *trait* impl blocks a receiver written `struct_name` reaches,
-    /// current-module-first. Every block whose head names the receiver's
-    /// declaration is one, whether or not it declares the method asked about:
-    /// a block that overrides nothing still answers with the trait's default.
-    ///
-    /// A receiver reaches two namespaces: its declaration, and an impl binding
-    /// the name as its own type parameter (`impl<V: Bound> Trait for V`), which
-    /// keys under that binder. Both are searched in the current module, only
-    /// the declaration namespace outside it.
-    ///
-    /// A block written at another instantiation than `receiver_args` settle
-    /// (`impl Tr for Pair<i64, i32>` for a `Pair<i32, i64>`) is not one.
+    /// The trait impl blocks on the receiver `struct_name` at `receiver_args`,
+    /// current-module-first; a block binding it as its own parameter only here.
     pub(super) fn trait_impls_for_receiver(
         &self,
         struct_name: &str,
@@ -3040,9 +3023,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
         keys.retain(|key| {
-            let header = &env.impl_headers[key];
-            header.is_trait_impl()
-                && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
+            self.impl_head_decl_name(&env.impl_headers[key], defs.module(*key)) == declared_name
                 && !self.impl_at_other_instantiation(*key, receiver_args)
         });
         keys
@@ -3377,7 +3358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .signatures
             .method_sig(selected?.method_id?)?
             .declaring_impl?;
-        let sig = self.tysys.signatures.impl_sig(impl_def)?;
+        let sig = self.tysys.signatures.impl_sig(impl_def);
         let table = self.tysys.type_table.borrow();
         let open = sig
             .target_type_args
@@ -3386,9 +3367,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (!open).then_some(impl_def)
     }
 
-    /// What a static call instantiates: the selected declaration in the block
-    /// supplying its body, or the body derivation mints as `derived_name`.
-    /// `None` for a declaration no block supplies, which the instance decides.
+    /// What a static call instantiates: the selected declaration in its block,
+    /// else the derived `derived_name`; `None` where the instance decides.
     pub(super) fn static_template(
         &self,
         selected: &StaticMethodRef,
@@ -3420,10 +3400,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(self.tysys.resolutions.defs().module(impl_def).clone())
     }
 
-    /// The head a concrete block wrote, arguments included: `impl … for
-    /// Cell<i32>` hosts its function under `Cell<i32>`, and a call spelling the
-    /// receiver `Cell` has to name that, not the bare declaration. `None` where
-    /// the block's target is not generic, which leaves the head as written.
+    /// The head a concrete block wrote, arguments included (`impl … for
+    /// Cell<i32>` hosts under `Cell<i32>`); `None` for a non-generic target.
     pub(super) fn concrete_impl_head_of(
         &self,
         selected: Option<&StaticMethodRef>,
@@ -3431,7 +3409,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let sig = self
             .tysys
             .signatures
-            .impl_sig(self.concrete_impl_of(selected)?)?;
+            .impl_sig(self.concrete_impl_of(selected)?);
         if sig.target_type_args.is_empty() {
             return None;
         }

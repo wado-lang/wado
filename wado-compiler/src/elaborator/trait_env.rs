@@ -322,9 +322,7 @@ fn blanket_param_sources(
 ) -> IndexMap<DefId, Vec<BlanketParamSource>> {
     let mut out: IndexMap<DefId, Vec<BlanketParamSource>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
-        let Some(header) = impl_headers.get(&blanket.def) else {
-            continue;
-        };
+        let header = &impl_headers[&blanket.def];
         let sources: Vec<BlanketParamSource> = header
             .type_params
             .iter()
@@ -1214,11 +1212,7 @@ impl TraitEnv {
             .get(type_key)
             .map(|keys| {
                 keys.iter()
-                    .filter(|key| {
-                        self.impl_headers
-                            .get(*key)
-                            .is_some_and(|h| h.trait_.is_none())
-                    })
+                    .filter(|key| self.impl_headers[*key].trait_.is_none())
                     .copied()
                     .collect()
             })
@@ -1325,7 +1319,7 @@ impl TraitEnv {
     ) -> Option<usize> {
         let defaults = &self.decl_header_of(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
-            let header = self.impl_headers.get(&entry)?;
+            let header = &self.impl_headers[&entry];
             if header.trait_def() != Some(trait_) {
                 return None;
             }
@@ -1417,7 +1411,7 @@ impl TraitEnv {
     /// The template a call reaching `block` for `method` instantiates: the
     /// block's own method, or the trait default it inherits.
     pub(crate) fn method_template(&self, block: DefId, method: &str) -> Option<TemplateId> {
-        let header = self.impl_headers.get(&block)?;
+        let header = &self.impl_headers[&block];
         let def = if let Some(written) = header.methods.iter().find(|m| m.name == method) {
             written.def
         } else {
@@ -1434,10 +1428,8 @@ impl TraitEnv {
         })
     }
 
-    /// The written block on `receiver` whose body answers `method` of `trait_`
-    /// (`None` for an inherent method) at the instances `reaches` admits: one
-    /// written for a single instantiation before a generic one (coherence Rule
-    /// 1). A body-less marker writes no body, so it answers nothing.
+    /// The block on `receiver` whose body answers `method` of `trait_` where
+    /// `reaches` admits, a concrete one before a generic one (coherence Rule 1).
     pub(crate) fn answering_template(
         &self,
         receiver: &name::Receiver,
@@ -1445,32 +1437,25 @@ impl TraitEnv {
         method: &str,
         reaches: impl Fn(DefId) -> bool,
     ) -> Option<TemplateId> {
-        let reaching: Vec<(&ImplHeader, TemplateId)> = self
-            .all_by_receiver
-            .get(receiver)
-            .into_iter()
-            .flatten()
-            .filter_map(|&block| {
-                let header = self.impl_headers.get(&block)?;
-                let answers =
-                    !header.is_synthesize_request && header.trait_def() == trait_ && reaches(block);
-                Some((
-                    header,
-                    answers.then(|| self.method_template(block, method))??,
-                ))
-            })
-            .collect();
-        let (_, template) = reaching
-            .iter()
-            .find(|(header, _)| header.is_concrete())
-            .or_else(|| reaching.first())?;
-        Some(template.clone())
+        let mut generic = None;
+        for &block in self.all_by_receiver.get(receiver).into_iter().flatten() {
+            let header = &self.impl_headers[&block];
+            if header.is_synthesize_request || header.trait_def() != trait_ || !reaches(block) {
+                continue;
+            }
+            let Some(template) = self.method_template(block, method) else {
+                continue;
+            };
+            if header.is_concrete() {
+                return Some(template);
+            }
+            generic.get_or_insert(template);
+        }
+        generic
     }
 
-    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to the impls that
-    /// reach every instance of `receiver` as `covers` says, and that
-    /// `module_source` writes where it is given. A derived body answers
-    /// wherever no such impl does.
+    /// [`Self::has_any_methodful_impl_by_receiver`] narrowed to impls `covers`
+    /// admits and, where given, `module_source` writes.
     pub(crate) fn has_covering_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
@@ -1478,11 +1463,11 @@ impl TraitEnv {
         module_source: Option<&ModuleSource>,
         covers: impl Fn(DefId) -> bool,
     ) -> bool {
-        self.entries_by_receiver(receiver).any(|entry| {
-            module_source.is_none_or(|module| self.defs.module(entry) == module)
-                && self.methodful_header_matches(entry, trait_)
-                && covers(entry)
-        })
+        self.methodful_impls_by_receiver(receiver, trait_)
+            .any(|entry| {
+                module_source.is_none_or(|module| self.defs.module(entry) == module)
+                    && covers(entry)
+            })
     }
 
     /// Whether an inherent `impl` on `receiver` declares `method_name`.
@@ -1496,16 +1481,14 @@ impl TraitEnv {
             .into_iter()
             .flat_map(|entries| entries.iter())
             .any(|key| {
-                self.impl_headers.get(key).is_some_and(|h| {
-                    h.trait_.is_none() && h.methods.iter().any(|m| m.name == method_name)
-                })
+                let h = &self.impl_headers[key];
+                h.trait_.is_none() && h.methods.iter().any(|m| m.name == method_name)
             })
     }
 
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
-        self.impl_headers
-            .get(&entry)
-            .is_some_and(|header| !header.methods.is_empty() && header.trait_def() == Some(trait_))
+        let header = &self.impl_headers[&entry];
+        !header.methods.is_empty() && header.trait_def() == Some(trait_)
     }
 
     /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
@@ -2416,14 +2399,13 @@ pub(super) fn inherent_impl_overlaps(
         if header.trait_.is_some() {
             continue;
         }
-        if let Some(sig) = signatures.impl_sig(*def) {
-            // An `impl &T` defines its methods on `T`, so it keys by the pointee.
-            let pointee = type_table.peel_refs(sig.target);
-            by_target
-                .entry(type_table.impl_receiver_key(pointee))
-                .or_default()
-                .push((header, pointee));
-        }
+        let sig = signatures.impl_sig(*def);
+        // An `impl &T` defines its methods on `T`, so it keys by the pointee.
+        let pointee = type_table.peel_refs(sig.target);
+        by_target
+            .entry(type_table.impl_receiver_key(pointee))
+            .or_default()
+            .push((header, pointee));
     }
     let mut violations = Vec::new();
     for blocks in by_target.values() {

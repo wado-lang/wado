@@ -38,7 +38,6 @@ use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
-use crate::elaborator::sig::ImplSig;
 use crate::elaborator::solver_bridge::Ordered;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
@@ -57,29 +56,13 @@ pub(super) const REPLACE_ON_ASSIGN_PLACE: &str = "a field or element of a replac
 /// the impl AST at all.
 struct ImplBlockRef(DefId);
 
-/// The digested header of the impl block `r` points at. Borrowed from the
-/// caller's `TraitEnv` handle rather than from `&self`, so the header stays
-/// readable across the `&mut self` calls a lookup makes.
-///
-/// Every `ImplBlockRef` originates from a `TraitEnv` impl index, and
-/// `TraitEnv::build` writes `impl_headers` from the same walk that fills
-/// those indices, so a miss means the two diverged.
+/// The header of the impl block `r` points at, borrowed from the caller's
+/// `TraitEnv` handle so it outlives the `&mut self` calls a lookup makes.
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
-    trait_env
-        .impl_headers
-        .get(&r.0)
-        .expect("every indexed impl block has an ImplHeader")
+    &trait_env.impl_headers[&r.0]
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The declaration facts the decl pass recorded for an indexed impl block.
-    fn impl_sig(&self, r: &ImplBlockRef) -> &ImplSig {
-        self.tysys
-            .signatures
-            .impl_sig(r.0)
-            .expect("the decl pass records every impl block's declaration facts")
-    }
-
     /// How `header`'s methods spell a `type_id` receiver in their names.
     pub(super) fn impl_receiver(&self, header: &ImplHeader, type_id: TypeId) -> FqTypeName {
         self.tysys
@@ -187,10 +170,8 @@ pub(super) struct ImplParamSlots {
 }
 
 impl ImplParamSlots {
-    /// The target says where it writes a name outright. A parameter it does
-    /// not — one nested inside an argument (`T` in `Pair<List<T>, i32>`), or
-    /// a blanket's projection — takes a slot past every position the target
-    /// has, filled from the receiver by matching rather than by position.
+    /// A parameter the target writes outright sits at its position; one nested
+    /// in an argument or projected takes a slot past them, filled by matching.
     pub(super) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
         let args = impl_target_args(target).unwrap_or_default();
         let written = |param: &ast::GenericParam| {
@@ -263,41 +244,22 @@ impl TypeSystem {
         ) && table.is_boxed_reference_target(table.representation_head(type_id))
     }
 
-    /// The slots under which the impl block `def` reaches a receiver with these
-    /// type arguments, `None` where it does not: each position the target writes
-    /// is the receiver's there, a binder at any depth taking one type throughout.
-    /// The one reach decision every lookup reads (WEP 2026-08-12).
-    pub(crate) fn impl_binding(
-        &self,
-        def: DefId,
-        receiver_args: &[TypeId],
-    ) -> Option<IndexMap<u32, TypeId>> {
-        let written = &self
-            .signatures
-            .impl_sig(def)
-            .expect("the decl pass records every impl block's declaration facts")
-            .target_type_args;
+    /// Whether the impl block `def` reaches a receiver with these type arguments,
+    /// the one reach decision every lookup reads; bringing none constrains none.
+    pub(crate) fn impl_reaches(&self, def: DefId, receiver_args: Option<&[TypeId]>) -> bool {
+        let Some(receiver_args) = receiver_args else {
+            return true;
+        };
+        let written = &self.signatures.impl_sig(def).target_type_args;
         self.type_table
             .borrow()
             .impl_target_binding(written, receiver_args)
+            .is_some()
     }
 
-    /// Whether the impl block `def` reaches a receiver with these type
-    /// arguments. A receiver that brings none is constrained by none.
-    pub(crate) fn impl_reaches(&self, def: DefId, receiver_args: Option<&[TypeId]>) -> bool {
-        receiver_args.is_none_or(|args| self.impl_binding(def, args).is_some())
-    }
-
-    /// [`Self::arg_pins`] under the name the naming side asks it by — one
-    /// predicate, so a position pinned for naming is pinned for matching.
-    pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
-        self.arg_pins(arg)
-    }
-
-    /// Whether every head inside `arg` names a declaration, so the argument
-    /// stands for one type rather than for whatever the receiver supplies.
-    /// The site decides: a mangle spells an unresolved head as `Builtin`.
-    fn arg_pins(&self, arg: &Type) -> bool {
+    /// Whether every head inside the impl target argument `arg` names a
+    /// declaration, so it stands for one type rather than whatever the receiver supplies.
+    pub(crate) fn arg_pins(&self, arg: &Type) -> bool {
         let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
         match arg {
             // A reference pins what it refers to; the kind is structural.
@@ -328,49 +290,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.resolutions.defs().module(r.0).clone()
     }
 
-    /// Collect trait impl block references for a given type name.
-    /// Returns lightweight `ImplBlockRef` values instead of cloning impl block data.
+    /// The trait impl blocks written on `type_key`.
     fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
-        let mut refs = Vec::new();
-        if let Some(entries) = self.tysys.trait_env.impl_index.get(type_key) {
-            for entry in entries {
-                if self
-                    .tysys
-                    .trait_env
-                    .impl_headers
-                    .get(entry)
-                    .is_some_and(ImplHeader::is_trait_impl)
-                {
-                    refs.push(ImplBlockRef(*entry));
-                }
-            }
-        }
-        refs
+        let index = &self.tysys.trait_env.impl_index;
+        index
+            .get(type_key)
+            .into_iter()
+            .flatten()
+            .map(|&def| ImplBlockRef(def))
+            .collect()
     }
 
-    /// Collect trait impl block references for multiple type names.
-    fn collect_trait_impl_refs_multi(&self, type_keys: &[ImplTargetKey]) -> Vec<ImplBlockRef> {
-        let mut refs = Vec::new();
-        for key in type_keys {
-            if let Some(entries) = self.tysys.trait_env.impl_index.get(key) {
-                for entry in entries {
-                    if self
-                        .tysys
-                        .trait_env
-                        .impl_headers
-                        .get(entry)
-                        .is_some_and(ImplHeader::is_trait_impl)
-                    {
-                        refs.push(ImplBlockRef(*entry));
-                    }
-                }
-            }
-        }
-        refs
-    }
-
-    /// Walk the impls of `trait_` on `target`, instantiate each against
-    /// `concrete_type_args`, and return the first `project` that is not `None`.
+    /// Walk the impls of `trait_` on `target` reaching `concrete_type_args`,
+    /// instantiated there, and return the first `project` that is not `None`.
     fn probe_trait_impls<R>(
         &mut self,
         target: &ImplTargetKey,
@@ -382,12 +314,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let signatures = Rc::clone(&self.tysys.signatures);
         let impl_refs = self.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
-            if impl_header(&trait_env, impl_ref).trait_def() != Some(trait_) {
+            if impl_header(&trait_env, impl_ref).trait_def() != Some(trait_)
+                || !self
+                    .tysys
+                    .impl_reaches(impl_ref.0, Some(concrete_type_args))
+            {
                 continue;
             }
             let impl_sig = signatures
                 .impl_sig(impl_ref.0)
-                .expect("the decl pass records every impl block's declaration facts")
                 .instantiate(&self.tysys.type_table, concrete_type_args);
             if let Some(result) = project(self, impl_ref, &impl_sig) {
                 return Some(result);
@@ -996,9 +931,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let header = impl_header(&trait_env, impl_ref);
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
         let sig = signatures.method_sig(method_header.def)?;
-        let impl_sig = signatures
-            .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts");
+        let impl_sig = signatures.impl_sig(impl_ref.0);
 
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
@@ -1096,10 +1029,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_key: &ImplTargetKey,
         method_name: &str,
     ) -> Option<String> {
-        for impl_ref in self.collect_trait_impl_refs_multi(std::slice::from_ref(type_key)) {
-            let Some(header) = self.tysys.trait_env.impl_headers.get(&impl_ref.0) else {
-                continue;
-            };
+        for impl_ref in self.collect_trait_impl_refs(type_key) {
+            let header = impl_header(&self.tysys.trait_env, &impl_ref);
             if header.methods.iter().any(|m| m.name == method_name)
                 && let Some(trait_name) = header.trait_head_name()
             {
@@ -1153,21 +1084,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inherent_visibility: None,
             defaults_module: sig.defaults_module.clone(),
         })
-    }
-
-    /// The index the declaration gave the first of `slots`, or 0 when there
-    /// are none. A slot carries its own index; nothing else knows it.
-    fn slot_base(&self, slots: &[TypeId]) -> u32 {
-        let table = self.tysys.type_table.borrow();
-        slots
-            .first()
-            .and_then(|&slot| match table.get(slot) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    Some(*index)
-                }
-                _ => None,
-            })
-            .unwrap_or(0)
     }
 
     /// [`Self::fill_defaulted_method_type_args`] for a static's own slots,
@@ -1274,7 +1190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve against. Number them from the index the declaration gave the
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = self.slot_base(slots);
+        let base = slots.first().map_or(0, |&slot| self.declared_slot(slot));
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
@@ -1876,7 +1792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
-        let impl_struct_fq = self.impl_sig(impl_ref).target_fq.clone();
+        let impl_struct_fq = self.tysys.signatures.impl_sig(impl_ref.0).target_fq.clone();
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
         let impl_home = self.impl_block_module_source(impl_ref);
@@ -2063,7 +1979,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let signatures = Rc::clone(&scope.tysys.signatures);
         let impl_sig = signatures
             .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts")
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
             impl_sig
@@ -2131,11 +2046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A header whose trait reaches no declaration implements none, so it
         // contributes no trait method. The index still holds it under the
         // spelling it wrote, which is how an erroneous block reaches a lookup.
-        let Some(trait_decl) = signatures
-            .impl_sig(impl_ref.0)
-            .expect("the decl pass records every impl block's declaration facts")
-            .trait_decl
-        else {
+        let Some(trait_decl) = signatures.impl_sig(impl_ref.0).trait_decl else {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
@@ -2172,11 +2083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (type_param, &type_param_id) in
                 method_slot_params.iter().zip(method_type_param_ids.iter())
             {
-                let index = match scope.tysys.type_table.borrow().get(type_param_id) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => *index,
-                    other => panic!("method slot is not a type parameter: {other:?}"),
-                };
+                let index = scope.declared_slot(type_param_id);
                 scope.bind_param(
                     &type_param.name,
                     BinderInScope::declared(index, type_param_id, type_param.id),
@@ -2344,9 +2251,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Report a tie between impls generic over the receiver's head, which the
-    /// value-blanket report leaves unsaid: each binds the head's arguments
-    /// rather than a bound's subject.
+    /// Report a tie between impls generic over the receiver's head, each binding
+    /// the head's arguments rather than a bound's subject.
     fn report_ambiguous_head_impls(
         &mut self,
         tied: &[Option<DefId>],
@@ -2362,12 +2268,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|def| &env.impl_headers[def])
             .filter(|header| !matches!(header.ty, Type::Named(_)))
             .collect();
-        let ([first, ..], Some(receiver)) = (heads.as_slice(), receiver_type_id) else {
+        let ([first, _, ..], Some(receiver)) = (heads.as_slice(), receiver_type_id) else {
             return;
         };
-        if heads.len() < 2 {
-            return;
-        }
         let _ = self.emit(TypeError::AmbiguousHeadImpls {
             trait_name: first.trait_head_name().unwrap_or_default().to_string(),
             receiver: self.tysys.type_id_to_string(receiver),
@@ -2865,14 +2768,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-                // A concrete type argument in the impl target is a constraint,
-                // not a free parameter: `impl … for TreeMap<String, V>` does
-                // not answer for a `TreeMap<i32, String>` receiver. Without
-                // this the method signature instantiates against the wrong
-                // arguments and the mismatch only surfaces at WIR build.
-                if !s.tysys.impl_reaches(impl_ref.0, Some(&concrete_type_args)) {
-                    return None;
-                }
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
@@ -2902,10 +2797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The declared parameter is `&Rhs`; the operand is the
                 // referent, so admissibility compares against that.
                 if let Some(class) = rhs {
-                    let declared = rhs_type.map(|t| match s.tysys.type_table.borrow().get(t) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                        _ => t,
-                    });
+                    let declared = rhs_type.map(|t| s.tysys.pointee_of(t).unwrap_or(t));
                     if let Some(declared) = declared
                         && !s.class_admits(declared, class)
                     {
@@ -3008,10 +2900,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return None;
                 }
-
-                if !s.tysys.impl_reaches(impl_ref.0, Some(&concrete_type_args)) {
-                    return None;
-                }
                 let impl_type_params = header.type_params.clone();
                 let impl_ty = header.ty.clone();
                 let receiver = s.impl_receiver(header, base_type_id);
@@ -3068,10 +2956,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<(String, TypeId)> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_type,
-        };
+        let base_type_id = self
+            .tysys
+            .pointee_of(container_type)
+            .unwrap_or(container_type);
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -3150,10 +3038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
-        let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => output_type,
-        };
+        let output_base_type_id = self.tysys.pointee_of(output_type).unwrap_or(output_type);
 
         let (output_struct_name, output_module_source, output_type_args) = match self
             .tysys

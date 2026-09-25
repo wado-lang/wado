@@ -20,7 +20,6 @@ use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::trait_env::ImplHeader;
 use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
@@ -1082,13 +1081,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| {
-                let table = self.tysys.type_table.borrow();
-                match table.get(expected) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                    _ => None,
-                }
-            })
+            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
         } else {
             None
         };
@@ -1393,13 +1386,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
+        let base = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
         let table = self.tysys.type_table.borrow();
-        // Mirror `resolve_index`'s one-level reference peel before the tuple
-        // check.
-        let base = match table.get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
         matches!(
             table.get(base),
             ResolvedType::GenericInstance { def, .. }
@@ -1481,10 +1469,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Get base type (unwrap reference if needed)
-            let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => indexed_type,
-            };
+            let base_type_id = self.tysys.pointee_of(indexed_type).unwrap_or(indexed_type);
 
             // Check for IndexAssign trait implementation
             // Arrays now use IndexAssign trait like other types
@@ -1512,11 +1497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
-                    let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                        _ => None,
-                    };
-                    if let Some(expected) = derefed_index_type {
+                    if let Some(expected) = self.tysys.pointee_of(index_type) {
                         self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
@@ -2005,10 +1986,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
             // the expected type is the parameter type itself.
             let expected = if wrap {
-                let referent = match self.tysys.type_table.borrow().get(param_ty) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => param_ty,
-                };
+                let referent = self.tysys.pointee_of(param_ty).unwrap_or(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -2047,13 +2025,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the link the lookup was made on — peeling to the base would send an
         // impl written on the newtype to the base's module.
         let defs = self.tysys.resolutions.defs();
-        let concrete_impl = resolved.impl_def.filter(|def| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(def)
-                .is_some_and(ImplHeader::is_concrete)
-        });
+        let concrete_impl = resolved
+            .impl_def
+            .filter(|def| self.tysys.trait_env.impl_headers[def].is_concrete());
         let module_source = match concrete_impl {
             Some(def) => defs.module(def).clone(),
             None => self

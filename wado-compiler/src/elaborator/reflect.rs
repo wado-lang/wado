@@ -446,9 +446,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let return_type = if method == methods.defaults || method == methods.empty_slots {
-            let Some(slots_ty) =
-                self.struct_defaults_bound_ty(type_param_name, reflect_trait_name.base_name())
-            else {
+            let Some(slots_ty) = self.struct_defaults_bound_ty(type_param_name) else {
                 self.emit_missing_pack_bound(
                     reflect_trait_name.base_name(),
                     type_param_name,
@@ -463,7 +461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(members_ty) = self.payload_member_pack_bound_ty(
                 self_ty,
                 type_param_name,
-                reflect_trait_name.base_name(),
+                CompilerItem::ReflectStruct,
                 REFLECT_FIELD_TYPES_ASSOC,
                 CompilerItem::ReflectStructField,
             ) else {
@@ -533,7 +531,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method = static_call.method.clone();
         let Some(fields_ty) = self.reflect_pack_bound_ty(
             type_param_name,
-            reflect_trait_name.base_name(),
+            CompilerItem::ReflectStruct,
             REFLECT_FIELD_TYPES_ASSOC,
         ) else {
             self.emit_missing_pack_bound(
@@ -598,23 +596,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
     }
 
-    /// The `Assoc = [..F]` pack binding on `T`'s bound of the given trait
-    /// (`Fields` on `ReflectStruct`, `Cases` on `ReflectVariant`), resolved in the
-    /// current scope (where `F` is the projected pack). `None` when `T`
-    /// carries no such bound.
+    /// The `Assoc = [..F]` pack binding on `T`'s bound of the reflection trait
+    /// `trait_`, resolved in the current scope. `None` when `T` carries none.
     fn reflect_pack_bound_ty(
         &mut self,
         type_param_name: &str,
-        reflect_trait_name: &str,
+        trait_: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
+        let trait_def = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_def(trait_)?;
         let pack_ast = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(type_param_name)?
             .iter()
-            .filter(|b| b.name == reflect_trait_name)
+            .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)
             .find_map(|assoc| match &assoc.ty {
@@ -1007,7 +1009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(members_ty) = self.payload_member_pack_bound_ty(
                     self_ty,
                     &name,
-                    trait_name.base_name(),
+                    CompilerItem::ReflectTemplate,
                     REFLECT_HOLES_ASSOC,
                     CompilerItem::ReflectTemplateHole,
                 ) else {
@@ -1200,7 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(members_ty) = self.payload_member_pack_bound_ty(
                 self_ty,
                 type_param_name,
-                trait_name.base_name(),
+                CompilerItem::ReflectVariant,
                 REFLECT_CASE_PAYLOADS_ASSOC,
                 CompilerItem::ReflectVariantCase,
             ) else {
@@ -1244,12 +1246,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn map_bound_pack(
         &mut self,
         type_param_name: &str,
-        reflect_trait_name: &str,
+        trait_: CompilerItem,
         assoc_name: &str,
         elem: impl FnOnce(&mut TypeTable, &PackHead) -> TypeId,
     ) -> Option<TypeId> {
-        let pack_tuple =
-            self.reflect_pack_bound_ty(type_param_name, reflect_trait_name, assoc_name)?;
+        let pack_tuple = self.reflect_pack_bound_ty(type_param_name, trait_, assoc_name)?;
         let mut tt = self.tysys.type_table.borrow_mut();
         let elems = tt.as_tuple(pack_tuple)?;
         let head = elems.iter().find_map(|&e| match tt.get(e) {
@@ -1278,34 +1279,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
-        reflect_trait_name: &str,
+        trait_: CompilerItem,
         assoc_name: &str,
         member_struct_item: CompilerItem,
     ) -> Option<TypeId> {
-        self.map_bound_pack(
-            type_param_name,
-            reflect_trait_name,
-            assoc_name,
-            |tt, head| {
-                let def = tt.require_compiler_item_def(member_struct_item);
-                let elem_param = tt.make_type_param(head.name.clone(), head.index);
-                tt.make_generic_instance(def, vec![self_ty, elem_param])
-            },
-        )
+        self.map_bound_pack(type_param_name, trait_, assoc_name, |tt, head| {
+            let def = tt.require_compiler_item_def(member_struct_item);
+            let elem_param = tt.make_type_param(head.name.clone(), head.index);
+            tt.make_generic_instance(def, vec![self_ty, elem_param])
+        })
     }
 
     /// The slot pack `[..Option<F>]` — the type of `defaults()` under a
     /// `T: ReflectStruct<FieldTypes = [..F]>` bound. Maps the field-type pack
     /// through `Option`, as [`Self::payload_member_pack_bound_ty`] maps it
     /// through the member constructor.
-    fn struct_defaults_bound_ty(
-        &mut self,
-        type_param_name: &str,
-        reflect_trait_name: &str,
-    ) -> Option<TypeId> {
+    fn struct_defaults_bound_ty(&mut self, type_param_name: &str) -> Option<TypeId> {
         self.map_bound_pack(
             type_param_name,
-            reflect_trait_name,
+            CompilerItem::ReflectStruct,
             REFLECT_FIELD_TYPES_ASSOC,
             // The slot names the pack itself, not a `TypeParam` placeholder: a
             // derivation infers `Option<F>`'s payload from it, and inference
@@ -1531,15 +1523,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !subject_is_type_param {
             return Some(self.scalar_concrete_members_ty(spec, self_ty));
         }
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(spec.trait_item)
-            .to_string();
-        let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name, &trait_name)
-        else {
+        let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name) else {
+            let trait_name = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_items()
+                .trait_name(spec.trait_item)
+                .to_string();
             let method = &static_call.method;
             let assoc = spec.members_assoc;
             let _ = self.emit(TypeError::UnknownFunction {
@@ -1695,22 +1686,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The mapped member pack `[..M<T>]` — the type of `members()` under a
-    /// `T: Trait<Members = [..C]>` bound. Unlike
-    /// [`Self::payload_member_pack_bound_ty`] the member carries no payload
-    /// param, so the mapped element is a constant `M<T>` and the bound pack
-    /// serves only to source the arity.
+    /// The mapped member pack `[..M<T>]`, the type of `members()` under a
+    /// `T: Trait<Members = [..C]>` bound; the bound pack sources only the arity.
     fn scalar_members_bound_ty(
         &mut self,
         spec: ScalarReflectSpec,
         self_ty: TypeId,
         type_param_name: &str,
-        trait_name: &str,
     ) -> Option<TypeId> {
-        self.map_bound_pack(type_param_name, trait_name, spec.members_assoc, |tt, _| {
-            let def = tt.require_compiler_item_def(spec.member_struct_item);
-            tt.make_generic_instance(def, vec![self_ty])
-        })
+        self.map_bound_pack(
+            type_param_name,
+            spec.trait_item,
+            spec.members_assoc,
+            |tt, _| {
+                let def = tt.require_compiler_item_def(spec.member_struct_item);
+                tt.make_generic_instance(def, vec![self_ty])
+            },
+        )
     }
 
     /// Per-parameter mutability of a scalar-kind member's dispatch record:

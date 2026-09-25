@@ -733,25 +733,30 @@ Fixtures: `error_user_trait_does_not_capture_add.wado`,
 
 ## Impl target arguments
 
-An `impl` header's type arguments are asked the same question twice — which
-positions the header pins decides both how its methods are _named_ and which
-receivers reach that name — so one predicate answers it,
-`TypeSystem::impl_arg_pins_a_position`.
+An `impl` header's type arguments decide two things: how its methods are
+_named_, and which receivers reach that name. Naming asks whether every head
+inside each argument names a declaration (`TypeSystem::arg_pins`). Reach asks
+what the target binds at a receiver (`TypeTable::impl_target_binding`). Both
+read a binder at its reference site, so neither pins a position the other leaves
+free. Every path that asks whether an impl reaches a receiver asks that one
+matcher: method lookup, the operator lookups, a bound, and associated-type
+registration.
 
 Reading the target is the same hazard one step earlier, and "the target's
 arguments" is three questions. Consumers asking different ones shared a reading
 because the questions sound alike; each now has its own.
 
-- **Does this receiver reach this impl, and does this argument pin its
-  position?** `impl_target_args` — a shape comparison, reading through a
-  reference and counting a tuple's elements.
+- **Which positions does the target write?** `impl_target_args` — reading
+  through a reference, and taking a tuple's elements as its positions.
 - **What does the header bind and the block record?** `impl_target_head_args` —
   the head's own argument list, narrower by the tuple target, which binds as a
   variadic pack through its own path.
 - **What name does the definition mint?** The whole target, references peeled,
-  rendered. The only one that must agree outside the elaborator: monomorphization
-  asserts the minted `(module, name)` is unique, so a duplicate-definition check
-  asks exactly that and nothing else.
+  rendered.
+
+Whether two inherent blocks define one method twice is none of the three. It is
+asked of the targets: two blocks whose targets reach a common receiver and
+define one method name are a duplicate definition, whatever names they mint.
 
 Sharing a reading fails quietly, as an answer narrower or wider than the
 question wanted — reading _arguments_ where the minted _name_ was asked makes
@@ -766,17 +771,20 @@ spelling:
   still wants a two-element tuple starting `i32`. Asking the site is what keeps
   an alias spelled like a parameter, or a qualified `ns::Tag`, from reading as
   a binder.
-- A binder the header cannot bind — one nested in a shape — matches nothing,
-  since a receiver matching it would have nothing to instantiate.
+- A binder binds at any depth: `impl<T> Kind for Pair<List<T>, i32>` reaches
+  `Pair<List<String>, i32>` with `T` as `String`.
+- A binder written twice takes one type: `impl<T> Kind for Pair<T, T>` does not
+  reach `Pair<i32, String>`.
 - Naming no declaration is not matching anything: a tuple, a reference and a
   function type are shapes, and a receiver either has the shape or has not.
 
-The comparison is structural. Rendering both sides is §8's hazard from the
-inside — an AST against a `TypeId` needs two renderers agreeing at every depth,
-which cannot be arranged. Declarations compare through `TypeHead` (`DefId` where
-one is named, the rendering where nothing declares the shape, so `i32` and `()`
-compare without being nominal types); every other shape compares as itself, a
-reference by kind, a tuple by arity, a function type by parameters and return.
+The comparison is structural, between the target's resolved arguments and the
+receiver's. Rendering both sides is §8's hazard from the inside: two renderers
+must agree at every depth, which cannot be arranged. Declarations compare
+through `TypeHead`: the `DefId` where one is named, and the rendering where
+nothing declares the shape, so `i32` and `()` compare without being nominal
+types. Every other shape compares as itself: a reference by kind, a tuple by
+arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
 ### A parameter's number is where the target names it
@@ -784,8 +792,10 @@ Nothing is spelled, so nothing can be spelled two ways.
 A parameter of an `impl` block is substituted against the instance's type
 arguments, so its number is the position the target writes it at.
 `impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1. Numbering by
-declaration order would put it at 0, where the instance carries `Option<i32>`. A parameter the target does not name
-takes a slot past the ones it assigned, which no instantiation reaches.
+declaration order would put it at 0, where the instance carries `Option<i32>`.
+A parameter the target does not write as a whole argument, such as `T` in
+`Pair<List<T>, i32>`, takes a slot past the target's positions. The receiver
+fills that slot by matching, not by position.
 
 One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the
 associated types it registers. Where each site computes its own, they read the
@@ -805,7 +815,7 @@ asking for one cannot land on the other.
 
 An impl is filed under its target's head, so every impl on `List<_>` answers a
 lookup for `List<String>`. The written arguments decide which of them applies.
-That decision is `inherent_impl_type_args_match`, wherever the answer is used.
+That decision is `TypeSystem::impl_reaches`, wherever the answer is used.
 Registering a block's associated types without it files
 `impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
 build order then decides both, which is the pick this WEP forbids.
@@ -826,7 +836,12 @@ caller filled.
 Fixtures: `assoc_type_per_receiver_args.wado`,
 `assoc_type_binder_at_target_position.wado`,
 `impl_on_reference_to_generic_head.wado`,
-`bound_arg_behind_fn_bound_param.wado`.
+`bound_arg_behind_fn_bound_param.wado`,
+`impl_target_nested_param_inherent.wado`,
+`impl_target_nested_param_operator.wado`,
+`impl_target_nested_param_trait.wado`,
+`impl_reach_repeated_param_error.wado`,
+`impl_inherent_overlap_duplicate_error.wado`.
 
 ## Keys past the Component Model boundary
 
@@ -926,18 +941,6 @@ names no instantiation, so the scrutinee's argument has nothing to disagree with
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
-
-## Known gap: the operator paths compare an impl target by spelling
-
-`inherent_impl_type_args_match` decides whether a receiver reaches an impl, and
-it compares structurally. The arithmetic and indexing lookups do not ask it.
-They ask `verify_impl_type_compatibility`, which compares a written argument's
-head against the receiver's rendered type name and reads a free parameter off a
-set of parameter names rather than off its reference site.
-
-What it admits is §8's hazard on those two paths: an alias spelled like a
-parameter, a qualified `ns::Tag`, and two declarations rendering alike are each
-decided by the rendering.
 
 ## Known gap: a reference impl target has no name of its own
 

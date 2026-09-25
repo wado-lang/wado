@@ -4851,11 +4851,8 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
     }
 }
 
-/// Check if a parameter type is supported for Component Model generation
-///
-/// Type aliases (like Instant, Duration) should already be resolved to their
-/// underlying types before this check.
-/// The `enums` and `resources` sets contain known enum/resource type names.
+/// Whether a parameter type, its aliases already resolved, has a CM lowering.
+/// A parameter always carries a type, so `()` has none.
 fn is_param_type_supported_with_types(
     ty: &Type,
     enums: &IndexSet<&str>,
@@ -4863,9 +4860,7 @@ fn is_param_type_supported_with_types(
     structs: &IndexSet<&str>,
 ) -> bool {
     match ty {
-        Type::Named(named) => {
-            ty.is_unit() || is_supported_type_name(&named.name, enums, resources, structs)
-        }
+        Type::Named(named) => is_supported_type_name(&named.name, enums, resources, structs),
         Type::Generic(generic) => {
             matches!(
                 generic.name.as_str(),
@@ -4907,11 +4902,7 @@ fn mentions_empty_tuple(ty: &Type) -> bool {
     ty.any(&mut |ty| matches!(ty, Type::Tuple(elems) if elems.is_empty()))
 }
 
-/// Check if a return type is supported for Component Model generation
-///
-/// Type aliases (like Instant, Duration) should already be resolved to their
-/// underlying types before this check.
-/// The `enums` and `resources` sets contain known enum/resource type names.
+/// Whether a result type, its aliases already resolved, has a CM lifting.
 fn is_return_type_supported_with_types(
     ty: &Type,
     enums: &IndexSet<&str>,
@@ -4953,44 +4944,6 @@ fn is_return_type_supported_with_types(
             .all(|el| is_return_type_supported_with_types(el, enums, resources, structs)),
         _ => false,
     }
-}
-
-/// Check if a parameter type is supported (without enum/resource knowledge)
-pub fn is_param_type_supported(ty: &Type) -> bool {
-    is_param_type_supported_with_types(
-        ty,
-        &IndexSet::default(),
-        &IndexSet::default(),
-        &IndexSet::default(),
-    )
-}
-
-/// Check if a return type is supported (without enum/resource/struct knowledge)
-pub fn is_return_type_supported(ty: &Type) -> bool {
-    is_return_type_supported_with_types(
-        ty,
-        &IndexSet::default(),
-        &IndexSet::default(),
-        &IndexSet::default(),
-    )
-}
-
-/// Check if all types in a WASI function are supported for Component Model generation
-/// (without enum/resource knowledge - use `CmInterfaceRegistry::is_function_supported` instead)
-pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
-    // Check all parameter types (Result not allowed in params)
-    for (_, _, ty) in &func.params {
-        if !is_param_type_supported(ty) {
-            return false;
-        }
-    }
-    // Check return type if present (Result allowed)
-    if let Some(ret_ty) = &func.return_type
-        && !is_return_type_supported(ret_ty)
-    {
-        return false;
-    }
-    true
 }
 
 /// Canonical ABI maximum flat results before a return must use an outptr.
@@ -5448,7 +5401,9 @@ mod tests {
 
     #[test]
     fn test_array_and_option_type_support() {
-        use crate::ast::{GenericType, NamedType};
+        let none = IndexSet::default();
+        let is_return_type_supported =
+            |ty: &Type| is_return_type_supported_with_types(ty, &none, &none, &none);
 
         // List<String> should be supported
         let array_string = Type::Generic(GenericType {

@@ -23,9 +23,8 @@ bind per module ahead of it.
 | Annotate               | `Semantics`     | `semantics.rs`, `elaborator/`                    |
 | Liveness               | Reachability    | `elaborator/liveness.rs`                         |
 | Reify                  | `TirModule`     | `elaborator/reify.rs`                            |
-| Default-purity Check   | (validation)    | `effect_check.rs::check_default_purity`          |
+| Effect Check           | (validation)    | `effect_check.rs`                                |
 | Synthesis              | TIR (extended)  | `synthesis/`                                     |
-| Effect Check           | TIR (validated) | `effect_check.rs`                                |
 | Effect Dispatch (post) | TIR             | `synthesis/effect_dispatch.rs`                   |
 | Link                   | `FlatPackage`   | `link.rs`                                        |
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
@@ -140,11 +139,11 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 
 ## Effect Check
 
-`check_effects` (`effect_check.rs`) runs after synthesis and before monomorphize. It validates that every function declares the effects it actually requires. Synthesized CM boundary code is exempted. A separate `check_default_purity` runs earlier, immediately before synthesis, to gate auto-derived `Default::default()` bodies on pure field defaults. What a function retains is not checked here at all: the body states it, and `lower::plan` infers it ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
+`check_semantics` (`effect_check.rs`) runs over `Semantics`, after annotate and before synthesis, so the batch driver and the LSP share it. It checks that every function declares the effects it requires, and that no default expression or global initializer performs an effect its own handlers do not answer. Synthesized code is never checked, since it is not in `Semantics`. What a function retains is not checked here at all: the body states it, and `lower::plan` infers it ([WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)).
 
 ## Effect Dispatch (post-check)
 
-`synthesis::effect_dispatch::synthesize_post_check` runs between the effect check and link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers). This pass is split out of the main synthesis stage so that effect-check sees the original `WithHandler` shape and can validate which effects are satisfied locally.
+`synthesis::effect_dispatch::synthesize_post_check` runs after synthesis and before link. It desugars `WithHandler` / `Resume` constructs into the per-effect dispatch infrastructure (struct, mut global, dispatch wrappers).
 
 ## Link → Monomorphize → Erase
 

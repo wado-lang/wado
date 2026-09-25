@@ -9,10 +9,8 @@ use super::program::{
 };
 use crate::hashmap::IndexSet;
 
-/// Add to `program` the impls of `trait_` that `declarations` derive, in
-/// declaration order. A declaration an impl covers at every instance derives
-/// nothing; one covered at some instances derives for the rest. `covers` says
-/// which impls reach every instance of their head.
+/// Add to `program` the impls of `trait_` that `declarations` derive, in order:
+/// each but those an impl `covers` at every instance of their head.
 pub fn derive(
     program: &mut Program,
     trait_: TraitDeclId,
@@ -281,8 +279,7 @@ mod tests {
     }
 
     /// `impl Eq for Wrapper<i32>` covers one instance: the rest still derive,
-    /// and the derived impl yields where the written one reaches. `derive` is
-    /// handed that answer; `TypeTable::impl_covers_every_instance` computes it.
+    /// and the derived impl yields where the written one reaches.
     #[test]
     fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
         let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);

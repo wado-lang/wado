@@ -1298,15 +1298,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         })
     }
 
-    /// Construct a per-module `Elaborator` over the shared driver state;
-    /// the module-identity fields are set by the `annotate_module_*` entry
-    /// points.
     /// Hand a module's impl facts to the decl passes after it, whose bound and
     /// supertrait checks ask which impls reach a receiver.
     fn publish_impl_sigs(state: &mut AnnotateState, module_source: &ModuleSource) {
-        let Some(sem) = state.module_semantics.get(module_source) else {
-            return;
-        };
+        let sem = &state.module_semantics[module_source];
         let signatures = Rc::make_mut(&mut state.tysys.signatures);
         let mut type_table = state.tysys.type_table.borrow_mut();
         for (def, sig) in &sem.decls.impl_sigs {
@@ -1315,6 +1310,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Construct a per-module `Elaborator` over the shared driver state; the
+    /// `annotate_module_*` entry points set its module identity.
     fn module_elaborator(
         state: &AnnotateState,
         sem: ModuleSemantics,
@@ -1494,6 +1491,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .iter()
                     .filter_map(|(ms, m)| m.data_section().map(|d| (ms.clone(), d.to_owned())))
                     .collect(),
+                impl_sigs: std::mem::take(&mut Rc::make_mut(&mut state.tysys.signatures).impl_sigs),
                 ..Default::default()
             };
             for module_source in &sorted_sources {
@@ -1512,9 +1510,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     signatures
                         .resource_method_ids
                         .insert(key.clone(), *method_id);
-                }
-                for (def, sig) in &sem.decls.impl_sigs {
-                    signatures.impl_sigs.insert(*def, sig.clone());
                 }
                 for (ast_id, sig) in &sem.decls.trait_sigs {
                     signatures.trait_sigs.insert(*ast_id, sig.clone());
@@ -2962,9 +2957,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Self::resolve_type_static_with_params(arg, type_table, lookup, type_params)
                     })
                     .collect();
-                // An argument the site left out takes its declared default,
-                // the same as in `type_resolution`; otherwise a field type
-                // here would carry a half-applied instantiation.
+                // As in `type_resolution`, or a field type carries a
+                // half-applied instantiation.
                 if let Some((slots, defaults)) =
                     head.and_then(|def| lookup.type_args_with_defaults(def, generic.args.len()))
                 {
@@ -2982,9 +2976,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // A `Newtype` over the instantiated base, as in `type_resolution`: `UNKNOWN`
                 // here would hide the inherited base methods from monomorphization.
                 if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                    // Resolved against the newtype's own parameters, then
-                    // the site's arguments substituted into it: a base
-                    // spelling `T::Assoc` names no type until `T` is one.
+                    // Substituted after resolving: a base spelling `T::Assoc`
+                    // names no type until `T` is one.
                     let slots: Vec<ParamSlot> =
                         gn_info.type_params.iter().map(ParamSlot::from).collect();
                     let base = Self::resolve_type_static_with_params(
@@ -2995,9 +2988,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                     let substitution = positional_substitution(&type_args);
                     let base_type_id = type_table.substitute_type_params(base, &substitution);
-                    // The head is the declaration this reference site
-                    // resolved to, not the rendered `MyArray<i32>` a
-                    // display spelling shows; the arguments sit beside it.
                     return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
                 // Not a `GenericInstance`: effect_check's `signature_resources` must see

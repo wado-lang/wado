@@ -5,16 +5,14 @@
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
 use crate::defs::DefId;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    InstantiationKey, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 
 use super::state::Monomorphizer;
-use crate::tir;
-use crate::tir::TirFunction;
 
 impl Monomorphizer {
     /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
@@ -132,16 +130,18 @@ impl Monomorphizer {
         }
     }
 
-    /// Queue every concrete `GenericInstance` of a struct in `valid_structs`,
-    /// which keeps a library module from instantiating the entry module's.
+    /// Queue every concrete `GenericInstance` of a struct in `generic_structs`.
     pub fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
-        valid_structs: &IndexSet<DefId>,
+        generic_structs: &IndexMap<DefId, TirStruct>,
     ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
-                if type_args.is_empty() || type_table.is_list(id) || !valid_structs.contains(def) {
+                if type_args.is_empty()
+                    || type_table.is_list(id)
+                    || !generic_structs.contains_key(def)
+                {
                     continue;
                 }
                 let name = &type_table.def_name(*def).to_string();
@@ -153,7 +153,7 @@ impl Monomorphizer {
                     .all(|&arg| !type_table.contains_type_param(arg));
 
                 if all_concrete {
-                    let key = tir::InstantiationKey {
+                    let key = InstantiationKey {
                         def: Some(*def),
                         name: name.clone(),
                         module_source: module_source.clone(),
@@ -353,7 +353,6 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
-        use crate::tir::TirPattern;
         match pattern {
             TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Range { .. } => {}
             TirPattern::Binding { type_id, .. } | TirPattern::Narrow { type_id, .. } => {

@@ -21,24 +21,19 @@ impl Monomorphizer {
             let mut func = func_rc.borrow_mut();
             if let Some(mut body) = func.body.take() {
                 rewriter.visit_block(&mut body);
-                // Sync `locals` types with Let statement types
                 Self::sync_local_types_from_lets(&body, &mut func.locals);
-                // Update all Local expression types based on `locals`
                 Self::update_local_expr_types(&mut body, &func.locals);
                 func.body = Some(body);
             }
         }
 
-        // Rewrite function calls in global variable initializers
         for global in &mut module.globals {
             rewriter.visit_expr(global.init.slot_expr_mut());
         }
     }
 
-    /// Sync `locals` types with the let statements they were derived from.
-    ///
-    /// Only walks into statement-level blocks (If/Loop/LabeledBlock/IfLet), not
-    /// into expression blocks, since closures have their own local scope.
+    /// Sync `locals` types with the let statements they were derived from, at
+    /// statement level only: a closure has its own local scope.
     fn sync_local_types_from_lets(block: &TirBlock, locals: &mut [TirLocal]) {
         struct SyncVisitor<'a> {
             locals: &'a mut [TirLocal],
@@ -56,9 +51,7 @@ impl Monomorphizer {
                 }
                 self.walk_stmt(stmt);
             }
-            fn visit_expr(&mut self, _expr: &TirExpr) {
-                // Don't recurse into expressions — only statement-level blocks matter
-            }
+            fn visit_expr(&mut self, _expr: &TirExpr) {}
         }
         SyncVisitor { locals }.visit_block(block);
     }
@@ -89,7 +82,7 @@ impl Monomorphizer {
     /// the same answer collection queued it under.
     fn rewrite_to_instance(&self, expr: &mut TirExpr, type_table: &mut TypeTable) {
         let templates = &self.functions.templates;
-        let Some((key, _)) = self.call_instance(expr, templates, type_table) else {
+        let Some(key) = self.call_instance(expr, templates, type_table) else {
             return;
         };
         let Some(mangled) = self.lookup_function_instantiation(&key).cloned() else {
@@ -127,9 +120,8 @@ impl Monomorphizer {
     }
 }
 
-/// Rebuild `func` to point at the instance `key` names, keeping the call's
-/// `method_info`. `monomorph_info` records the template's name and the
-/// arguments the instance was keyed with.
+/// Point `func` at the instance `key` names, recording in `monomorph_info` the
+/// template's name and the arguments the instance was keyed with.
 fn apply_instantiation(func: &mut FunctionRef, key: &InstantiationKey, mangled: String) {
     let generic_name = if key.method_info.is_some() {
         key.name.clone()

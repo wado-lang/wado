@@ -684,12 +684,7 @@ impl SolverBridge {
         Self::intern_declarations(tysys, modules, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
-            if let Some(trait_) = tysys
-                .trait_env
-                .impl_headers
-                .get(&def)
-                .and_then(ImplHeader::trait_def)
-            {
+            if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {
                 let trait_ = lowering.trait_decl(trait_);
                 lowering.derivation_source.insert((trait_, kind), def);
             }

@@ -9,7 +9,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::{CalleeRef, StaticMethodRef};
@@ -1973,9 +1973,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: callee.module().clone(),
             name: callee.name().to_string(),
-            template: callee
-                .def()
-                .map(|def| TemplateId::Declared { def, block: None }),
+            template: callee.def().map(|def| self.declared_template(def)),
             monomorph_info: None,
             method_info: None, // Free function call,
         };
@@ -2854,15 +2852,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // `impl_type_args` is indexed by slot, which a parameter nested in the
         // target or pushed past a concrete argument holds out of declaration order.
-        let slot_of = |id: TypeId| match self.tysys.type_table.borrow().get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                *index as usize
-            }
-            other => panic!("a declaring slot is a type parameter, found {other:?}"),
-        };
         let mut names: Vec<String> = declaring_slots
             .iter()
-            .filter(|&&(_, id)| unresolved(self, impl_type_args.get(slot_of(id))))
+            .filter(|&&(_, id)| {
+                unresolved(self, impl_type_args.get(self.declared_slot(id) as usize))
+            })
             .map(|(name, _)| name.clone())
             .collect();
         let type_level_unresolved = !names.is_empty();
@@ -3480,42 +3474,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// The slot a declared type parameter's `TypeId` holds.
+    pub(super) fn declared_slot(&self, id: TypeId) -> u32 {
+        match self.tysys.type_table.borrow().get(id) {
+            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => *index,
+            other => panic!("a declared slot is a type parameter, found {other:?}"),
+        }
+    }
+
     /// The declaring block's slots filled with `values` (one per declared
-    /// parameter), indexed as the method's frame numbers them: the receiver's
-    /// arguments at the target's positions, then the slots past them. A
-    /// parameter nested in the target, or one a concrete argument pushes past
-    /// its declaration order, is found by its slot, not its place in `values`.
+    /// parameter), in the method frame's order: the target's positions, then past them.
     fn declaring_slot_values(&self, sig: &MethodSig, values: &[TypeId]) -> Vec<TypeId> {
-        let declared = sig.declaring_type_params();
-        let slot_of = |id: TypeId| match self.tysys.type_table.borrow().get(id) {
-            ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                Some(*index)
-            }
-            _ => None,
-        };
-        let slots: IndexMap<u32, TypeId> = declared
+        let declared: IndexMap<u32, TypeId> = sig
+            .declaring_type_params()
             .iter()
-            .zip(values)
-            .filter_map(|(&(_, id), &value)| Some((slot_of(id)?, value)))
+            .map(|&(_, id)| (self.declared_slot(id), id))
             .collect();
-        let target = sig
-            .declaring_impl
-            .and_then(|def| self.tysys.signatures.impl_sig(def))
-            .map(|impl_sig| impl_sig.target_type_args.clone())
-            .unwrap_or_default();
+        let slots: IndexMap<u32, TypeId> = declared
+            .keys()
+            .zip(values)
+            .map(|(&slot, &value)| (slot, value))
+            .collect();
+        let target: &[TypeId] = match sig.declaring_impl {
+            Some(def) => &self.tysys.signatures.impl_sig(def).target_type_args,
+            None => &[],
+        };
         let mut table = self.tysys.type_table.borrow_mut();
         let mut out: Vec<TypeId> = target
             .iter()
             .map(|&arg| table.substitute_type_params(arg, &slots))
             .collect();
         for slot in out.len() as u32..sig.method_slot_base {
-            let own = declared
-                .iter()
-                .find(|&&(_, id)| {
-                    matches!(table.get(id), ResolvedType::TypeParam { index, .. }
-                        | ResolvedType::TypePack { index, .. } if *index == slot)
-                })
-                .map(|&(_, id)| id);
+            let own = declared.get(&slot).copied();
             let Some(value) = slots.get(&slot).copied().or(own) else {
                 break;
             };
@@ -3716,7 +3706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_index
             .get(key)?
             .iter()
-            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
+            .filter_map(|impl_def| trait_env.impl_headers[impl_def].trait_def())
             .find_map(|trait_decl| {
                 let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
                 method.is_inherited().then(|| method.sig.clone())

@@ -24,7 +24,7 @@ use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_value_blanket, trait_method_template,
+    ranked_value_blanket, trait_call_template,
 };
 use crate::tir::TemplateId;
 use crate::token::Span;
@@ -94,7 +94,7 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;
-    mono.current_impl_struct_name = None;
+    mono.current_impl_receiver = None;
 
     let type_table_rc = module.type_table.clone();
 
@@ -216,13 +216,15 @@ pub(super) struct InstantiationCollector<'a> {
 
 impl TirRefVisitor for InstantiationCollector<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        // Handle call instantiation logic
-        self.mono.collect_func_instantiation_sites_in_expr(
-            expr,
-            self.generic_functions,
-            self.type_table,
-        );
-        // Recurse into all sub-expressions via walk_expr
+        if let Some(key) = self
+            .mono
+            .call_instance(expr, self.generic_functions, self.type_table)
+        {
+            let mangled = self
+                .mono
+                .instance_name(&key, self.generic_functions, self.type_table);
+            self.mono.try_queue_function(key, mangled, self.type_table);
+        }
         self.walk_expr(expr);
     }
 }
@@ -715,12 +717,8 @@ impl Monomorphizer {
         };
         for func_rc in &module.functions[scanned..] {
             let func = func_rc.borrow();
-            // Skip generic functions - their bodies contain TypeParam references that
-            // would incorrectly queue instantiations with TypeParam TypeIds instead of
-            // concrete types. We only scan concrete functions; generic function bodies
-            // are scanned after instantiation in Phase 9.
-            // Effect-only params don't count as generic.
-            if func.has_real_type_params() || !func.impl_type_params.is_empty() {
+            // A template's body is scanned once instantiated, in Phase 9.
+            if func.is_template() {
                 continue;
             }
             if let Some(body) = &func.body {
@@ -737,10 +735,8 @@ impl Monomorphizer {
         }
     }
 
-    /// The declaration a call of `info` dispatched on the concrete `receiver`
-    /// instantiates: the written block or blanket answering there, else, for
-    /// a trait method, the body derivation mints beside the receiver's
-    /// declaration (in `home` where the receiver declares nothing).
+    /// The template a call of `info` on the concrete `receiver` instantiates: a
+    /// written block or blanket, else the derived body beside the receiver's head.
     pub(super) fn dispatch_template(
         &self,
         info: &LocalMethodName,
@@ -750,18 +746,31 @@ impl Monomorphizer {
     ) -> Option<TemplateId> {
         method_template_at(&self.functions.trait_env, info, receiver, type_table).or_else(|| {
             info.trait_decl()?;
-            let head = info.fq_base_struct_name();
-            Some(TemplateId::Synthesized {
-                module: head.module().unwrap_or(home).clone(),
-                name: LocalMethodName::new(head, info.trait_name.clone(), info.method_name.clone())
-                    .to_mangled_name(),
-            })
+            let module = info.fq_base_struct_name().module().unwrap_or(home).clone();
+            Some(TemplateId::derived(module, info))
         })
     }
 
-    /// The template a static call written against a generic block's head
-    /// reaches once `head_args` substitute its parameters: a block written for
-    /// that one instantiation wins over the one the body was checked against.
+    /// [`Self::dispatch_template`], or `blanket`'s method where one serves the call.
+    fn served_template(
+        &self,
+        blanket: Option<&BlanketImpl>,
+        info: &LocalMethodName,
+        receiver: TypeId,
+        home: &ModuleSource,
+        type_table: &TypeTable,
+    ) -> Option<TemplateId> {
+        match blanket {
+            Some(b) => self
+                .functions
+                .trait_env
+                .method_template(b.def, &info.method_name),
+            None => self.dispatch_template(info, receiver, home, type_table),
+        }
+    }
+
+    /// The template a static call on a generic block's head reaches at
+    /// `head_args`: a block written for that instantiation wins over `written`.
     fn static_template_at(
         &self,
         written: Option<TemplateId>,
@@ -783,24 +792,8 @@ impl Monomorphizer {
             .or(written)
     }
 
-    pub fn collect_func_instantiation_sites_in_expr(
-        &mut self,
-        expr: &TirExpr,
-        generic_functions: &Templates,
-        type_table: &mut TypeTable,
-    ) {
-        if let Some((key, mangled)) = self.call_instance(expr, generic_functions, type_table) {
-            self.try_queue_function(key, mangled, type_table);
-        }
-    }
-
-    /// The concrete type a `T^Trait::method` receiver dispatches on while
-    /// instantiating the current function: the substitution entry for the
-    /// receiver parameter *named* `info.base_struct_name()`. Resolving by name
-    /// (rather than the lowest substitution index) is what lets
-    /// `fn f<U, T: Trait>` dispatch `T::method` on `T` instead of `U`. Falls
-    /// back to the lowest-index entry only when no declared parameter matches
-    /// the name (e.g. a synthesised receiver), preserving the prior behaviour.
+    /// The concrete type a `T^Trait::method` receiver dispatches on: the
+    /// parameter named `T`, else (a synthesised receiver) the lowest slot.
     fn receiver_substitution_tid(
         &self,
         info: &LocalMethodName,
@@ -1067,10 +1060,10 @@ impl Monomorphizer {
         // Clone and substitute types in body
         let mut local_count = generic.local_count;
         self.current_impl_type_param_count = generic.impl_type_params.len();
-        self.current_impl_struct_name = generic
+        self.current_impl_receiver = generic
             .method_info
             .as_ref()
-            .map(LocalMethodName::base_struct_name);
+            .map(LocalMethodName::fq_base_struct_name);
         let body = generic.body.as_ref().map(|b| {
             let mut new_body = b.clone();
             self.substitute_types_in_block(
@@ -1361,9 +1354,8 @@ impl Monomorphizer {
                                 .collect::<Vec<_>>(),
                         )
                     } else if self.current_impl_type_param_count > 0
-                        && info.struct_name() == info.base_struct_name()
-                        && self.current_impl_struct_name.as_deref()
-                            == Some(info.base_struct_name().as_str())
+                        && info.struct_type_args.is_empty()
+                        && self.current_impl_receiver.as_ref() == Some(&info.fq_base_struct_name())
                     {
                         // The callee has no monomorph_info, but the outer function
                         // has impl-level type params AND the callee's struct matches
@@ -1586,18 +1578,13 @@ impl Monomorphizer {
                                     concrete_type_id,
                                 )
                             });
-                            let template = match &blanket {
-                                Some(b) => self
-                                    .functions
-                                    .trait_env
-                                    .method_template(b.def, &new_info.method_name),
-                                None => self.dispatch_template(
-                                    &new_info,
-                                    concrete_type_id,
-                                    &resolved_module,
-                                    type_table,
-                                ),
-                            };
+                            let template = self.served_template(
+                                blanket.as_ref(),
+                                &new_info,
+                                concrete_type_id,
+                                &resolved_module,
+                                type_table,
+                            );
                             let resolved_module = template
                                 .as_ref()
                                 .map_or(resolved_module, |t| t.home(type_table.defs()));
@@ -2668,27 +2655,18 @@ impl Monomorphizer {
             None
         };
         let blanket_module = blanket.as_ref().map(|b| b.module.clone());
-        let template = match &blanket {
-            Some(b) => self
-                .functions
-                .trait_env
-                .method_template(b.def, &new_info.method_name),
-            None => self.dispatch_template(
-                &new_info,
-                type_table.peel_refs(receiver_type_id),
-                receiver_module.as_ref().unwrap_or(&module_source),
-                type_table,
-            ),
-        };
+        let template = self.served_template(
+            blanket.as_ref(),
+            &new_info,
+            type_table.peel_refs(receiver_type_id),
+            receiver_module.as_ref().unwrap_or(&module_source),
+            type_table,
+        );
         let concrete_module = template
             .as_ref()
             .map(|template| template.home(type_table.defs()))
             .or(receiver_module);
 
-        // Determine if this is a blanket impl method.
-        // - Direct concrete method: found in trait_method_locations → monomorph_info = None
-        // - Generic impl method: receiver has type_args (peeling newtypes) → handled by receiver scan → None
-        // - Blanket impl method: neither → is_blanket = true
         let receiver_has_type_args = {
             let inner = type_table.peel_refs(receiver_type_id);
             // Peel newtypes: `type FieldValue = List<u8>` inherits
@@ -3876,22 +3854,6 @@ fn try_lower_comparison(
                 )
             })
     };
-    let operand = left.type_id;
-    let template_of = |info: &LocalMethodName, home: &ModuleSource, tt: &TypeTable| {
-        info.trait_decl()
-            .and_then(|trait_| {
-                trait_method_template(trait_env, trait_, &info.method_name, operand, tt)
-            })
-            .unwrap_or_else(|| TemplateId::Synthesized {
-                module: home.clone(),
-                name: LocalMethodName::new(
-                    info.fq_base_struct_name(),
-                    info.trait_name.clone(),
-                    info.method_name.clone(),
-                )
-                .to_mangled_name(),
-            })
-    };
 
     if matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq) {
         let receiver = make_ref(left, type_table);
@@ -3900,14 +3862,20 @@ fn try_lower_comparison(
             .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
-        let template = template_of(&method_info, &method_module, type_table);
+        let template = trait_call_template(
+            trait_env,
+            &method_info,
+            left.type_id,
+            &method_module,
+            type_table,
+        );
 
         let method_call = TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: method_module,
                 name: mangled_name,
-                template: Some(template),
+                template,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },
@@ -3939,7 +3907,13 @@ fn try_lower_comparison(
                 .with_struct_type_args(&impl_type_args);
         let mangled_name = method_info.to_mangled_name();
         let method_module = resolve_module(&method_info, type_module_source);
-        let template = template_of(&method_info, &method_module, type_table);
+        let template = trait_call_template(
+            trait_env,
+            &method_info,
+            left.type_id,
+            &method_module,
+            type_table,
+        );
 
         let cmp_call = TirExpr::new(
             TirExprKind::method_call(
@@ -3947,7 +3921,7 @@ fn try_lower_comparison(
                 FunctionRef {
                     module_source: method_module,
                     name: mangled_name,
-                    template: Some(template),
+                    template,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },
