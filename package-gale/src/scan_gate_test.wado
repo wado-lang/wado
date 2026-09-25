@@ -4,12 +4,8 @@ use { parse } from "./g4/parser.wado";
 use { analysis_context, canonicalize_for_analysis, install_action_context } from "./codegen.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 
-/// The simulable field set, through the path `generate` takes: stamp the action
-/// ids, then let `install_action_context` translate the bodies and narrow them
-/// to what the members block declares.
-///
-/// Asking `scan_gate_fields` directly would hand it no translated bodies, and
-/// every rejection case below would then pass for the wrong reason.
+/// The simulable field set, reached as `generate` reaches it. Asked directly, it sees
+/// no translated bodies, and every rejection below would pass for the wrong reason.
 fn gate_fields(g: &Grammar) -> List<String> {
     let mut grammar = *g;
     let token_kinds = canonicalize_for_analysis(&mut grammar);
@@ -19,10 +15,8 @@ fn gate_fields(g: &Grammar) -> List<String> {
     return *ctx.scan_gate_fields();
 }
 
-// `gate_assignment` reads the body the translator produced, never the grammar
-// text, so every input below is written the way both action languages arrive:
-// the member reached through the parser handle, named as the members block
-// declares it.
+// `gate_assignment` reads the translated body, not grammar text, so each input
+// reaches the member through the parser handle under its declared name.
 test "gate_assignment: a constant assignment" {
     let hit = gate_assignment("p.no_struct = 1;");
     assert hit matches { Some(_) }, `${hit:?}`;
@@ -32,9 +26,8 @@ test "gate_assignment: a constant assignment" {
     }
 }
 
-// A Wado grammar's member keeps the name it was written with, and reaches here
-// through the same handle. Snake_casing it was what left every such grammar
-// without a simulable gate.
+// A Wado grammar's member keeps its written name. Snake_casing it left every such
+// grammar without a simulable gate.
 test "gate_assignment: a member the translator did not rename" {
     let hit = gate_assignment("p.noBrace = 1;");
     assert hit matches { Some(_) }, `${hit:?}`;
@@ -90,10 +83,8 @@ test "gate_assignment: a subscript is not a member" {
     assert gate_assignment("p.stack[0] = 1;") matches { None };
 }
 
-// A gate scope: the save/restore a members field alone cannot express, because
-// each invocation of the rule keeps its own copy of the saved value.
-// `$L` reaches the translated body as the rule's own value channel, the way a
-// member reaches it through the parser handle.
+// A gate scope is the save/restore a members field cannot express: each invocation
+// keeps its own saved value. `$L` arrives as the rule's own value channel.
 test "gate_scope: the @init / @after pair" {
     let s = gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = vals.sv;");
     assert s matches { Some(_) }, `${s:?}`;
@@ -129,23 +120,15 @@ test "gate_scope: no @after is no scope" {
     assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "") matches { None };
 }
 
-// A gate field is simulated only when the scan can run *every* write to it, and
-// a rule's `@init` / `@after` write to one as much as an alternative's action.
-//
-// The members block is load-bearing twice over: a bare name resolves to a field
-// only where one is declared, and a field the block does not declare has no type
-// for the generated `ScanGate` to copy.
+// A field is simulated only if the scan runs every write, `@init` / `@after` included.
+// Declared members give a bare name a field and `ScanGate` a type to copy.
 global GATE_MEMBERS: String = "int noStruct = 0; int depth = 0; int other = 0;";
 
 global SCOPE_BODY: String = "A";
 global HEAD_BODY: String = "A { noStruct = 1; } A";
 
-/// A grammar whose `scope` rule carries `init` (and `after`, when given) and
-/// whose `head` rule writes the gate field plainly.
-///
-/// Written as source and parsed, not built as IR: a rule reaches `$sv` through
-/// its `locals`, and the translator that resolves it is what the gate analysis
-/// now reads.
+/// A grammar whose `scope` rule carries `init` and `after`, and whose `head` writes
+/// the gate field plainly. Source, not IR, so the translator resolves `$sv`.
 fn gate_source<S: AsStrSlice, S1: AsStrSlice = String, S2: AsStrSlice = String, S3: AsStrSlice = String>(
     init: S,
     after: S1 = "",
@@ -180,10 +163,8 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
     assert f == ["no_struct"], `${f:?}`;
 }
 
-// A left-recursive rule's scan carries `min_prec`, so the scope wrapper cannot
-// be written for it. The field is then unsimulable *everywhere*, not just in
-// that rule: leaving it in the set would have every other scan restoring a ban
-// this one never lifts.
+// A left-recursive scan carries `min_prec`, so it takes no scope wrapper. The field
+// goes everywhere, or other scans would restore a ban this one never lifts.
 test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
     let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, "scope A | A"));
     assert f.is_empty(), `${f:?}`;
@@ -194,10 +175,8 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
     assert f.is_empty(), `${f:?}`;
 }
 
-// The disqualifying set is every name in a body the scan cannot run, not the
-// write shapes someone listed. A field the scan simulates for one write and
-// misses for another holds a value the parse never does, and any enumeration of
-// shapes has one it does not know.
+// Every name in a body the scan cannot run is disqualified, not a list of write
+// shapes. Any list misses one, and that field holds a value the parse never does.
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
         let f = gate_fields_of(&gate_source(`noStruct ${op} 1;`));
@@ -205,9 +184,8 @@ test "scan_gate_fields: a compound assignment disqualifies the field" {
     }
 }
 
-// The shapes an assignment-target matcher misses. The first has a plain `f = 0`
-// in it that only a statement splitter would find on its own; the second has no
-// `=` at all.
+// Shapes an assignment-target matcher misses: the first hides a plain `f = 0` only
+// a statement splitter finds, and the second has no `=` at all.
 test "scan_gate_fields: a conditional write disqualifies the field" {
     for let body of ["if (c) noStruct = 0;", "while (c) noStruct = 0;", "for (;;) noStruct = 0;"] as List<String> {
         let f = gate_fields_of(&gate_source(&body));
@@ -222,9 +200,8 @@ test "scan_gate_fields: an increment disqualifies the field" {
     }
 }
 
-// A body naming the field disqualifies it even where it plainly only reads:
-// what the body does to the names it mentions is exactly what could not be
-// read, and over-rejecting only leaves the gate unsimulated.
+// Naming the field disqualifies even a plain read. Over-rejecting only leaves the
+// gate unsimulated.
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
     let f = gate_fields_of(&gate_source("noStruct;"));
     assert f.is_empty(), `${f:?}`;
@@ -249,9 +226,8 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
     assert f.is_empty(), `${f:?}`;
 }
 
-// An inline group's alternatives carry actions the parse runs, and lowering
-// puts no gates on a group alternative's scan body — so the scan cannot run
-// them however simply they are written.
+// Lowering puts no gates on a group alternative's scan body, so the scan cannot
+// run its actions however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
         "other = 1;",

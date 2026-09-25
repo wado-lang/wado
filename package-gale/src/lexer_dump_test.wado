@@ -1,9 +1,5 @@
-//! Tests for `render_lexer_dump(Grammar) -> String`.
-//!
-//! Each test is a minimal `.g4` shaped to force one emit strategy, asserted by
-//! substring so spacing stays free to change. The point is that the report
-//! names the branch the lexer emitter took and why the cheaper one was not
-//! available — the question `gale dump --lexer` exists to answer.
+//! Tests for `render_lexer_dump`: each grammar forces one emit strategy, and the
+//! report must say why the cheaper one was not available.
 
 use { render_lexer_dump } from "./lexer_dump.wado";
 use { assemble_grammar } from "./g4/parser.wado";
@@ -95,8 +91,7 @@ CMT : '/*' ~'*'* '*/' ;");
 
 test "lexer dump reports a lookahead-aware greedy repeat" {
     // `.` matches the `'c'` the suffix needs, so a plain greedy loop would eat
-    // it and strand the suffix at end-of-input — the over-shoot the forward
-    // scan with accept-state tracking exists for.
+    // it and strand the suffix at end-of-input.
     let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .+ 'c' ;");
@@ -126,10 +121,8 @@ I : ('a' | 'ab') 'bc' ;");
 }
 
 test "lexer dump reports a scored alternation's suffix once" {
-    // `gen_lexer_alts_lookahead_aware` only PEEKS the suffix — it restores `pos`
-    // and the element loop `continue`s, so the sequence commits it exactly once.
-    // Reporting it from both places would double every construct behind a
-    // scored alternation, and double the summary's tally with it.
+    // A scored alternation only peeks its suffix and the sequence commits it, so
+    // reporting it from both would double the constructs and the summary's tally.
     let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | 'ab') [0-9]* 'z' ;");
@@ -139,10 +132,8 @@ I : ('a' | 'ab') [0-9]* 'z' ;");
 }
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
-    // The non-greedy emit returns rather than falling out of the element loop,
-    // so it carries the alt's later predicates onto the rest alternative. The
-    // `{true}?` therefore lands between the `.*` and the alt's end, which is
-    // what keeps that repeat on the plain loop.
+    // The non-greedy emit carries the alt's later predicates onto its rest, so the
+    // `{true}?` lands after the `.*` and keeps that repeat on the plain loop.
     let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .*? .* {true}? 'x' ;");
@@ -316,9 +307,7 @@ CMT : '/*' (CMT | .)+? '*/' ;");
 
 test "lexer dump scores a predicate-carrying alternation by length" {
     // ANTLR4's lexer takes the longest arm, and a predicate says whether its own
-    // arm matches — never how the arms compare on length. The carve-out in
-    // `lexer_alts_scan` answers the routing question, where `latn_match` cannot
-    // run a predicate; both emit decisions read `lexer_alts_lengths`.
+    // arm matches, never how the arms compare on length.
     let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | {true}? 'ab') 'bc' ;");

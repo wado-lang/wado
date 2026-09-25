@@ -1,9 +1,5 @@
-//! Tests for `highlight_gen.wado`. The `default_ids` table is indexed by token
-//! kind at runtime (`default_ids[kind]`), so its row order must match the
-//! token numbering emitted by `gen_token_constants` — deferred `more` /
-//! `type(...)` rules at the back, and no sentinel `TK_ERROR` row when a user
-//! rule named `ERROR` claims the id. Captures and overrides come from the
-//! highlight query.
+//! Tests for `highlight_gen.wado`. `default_ids` is indexed by token kind, so its
+//! rows must follow the numbering `gen_token_constants` emits.
 
 use { Grammar, alias_parser_literals } from "./ir.wado";
 use { parse } from "./g4/parser.wado";
@@ -69,9 +65,8 @@ WS : ' ' -> skip ;
 }
 
 test "highlight fn: lexer-only grammar is tokenize-only (no walk_ call)" {
-    // A lexer-only grammar has no parser rules, so the generated module has
-    // no `parse` / tree walk. The highlight fn must fall back to tokenizing
-    // instead of emitting an invalid `highlight_walk(...)` call.
+    // A lexer-only grammar generates no `parse`, so a `highlight_walk(...)` call
+    // would not compile.
     let out = highlight_output("lexer grammar L;
 B : 'b' ;
 WS : ' ' -> skip ;
@@ -81,9 +76,8 @@ WS : ' ' -> skip ;
 }
 
 test "highlight defaults: user ERROR rule suppresses the sentinel row" {
-    // gen_token_constants emits no TK_ERROR sentinel when a user rule named
-    // ERROR exists; the defaults table must not insert one either (every
-    // later row would shift by one).
+    // `gen_token_constants` emits no `TK_ERROR` sentinel here, so a defaults row
+    // for one would shift every later row by one.
     let out = highlight_output("grammar T;
 r : B ;
 B : 'b' ;
@@ -110,10 +104,8 @@ B : 'b' ;
 }
 
 test "highlight fn: a grammar with a parser walks the CST, query or not" {
-    // The walk carries the rule stack a rule-context override reads. A query
-    // with no override reaches the same captures without it, since an empty
-    // override table never reads the stack, and is walked all the same, so the
-    // highlight fn has one shape.
+    // Only an override reads the walk's rule stack, but a query without one is
+    // walked too, so the highlight fn keeps one shape.
     let plain = highlight_output_q("grammar T;
 r : B ;
 B : 'b' ;
@@ -128,9 +120,8 @@ B : 'b' ;
 }
 
 test "rule capture is one rule-level entry, not one per token" {
-    // `(name) @variable` covers every token under `name`, so a contextual
-    // keyword the rule accepts as a name is captured without the query naming
-    // it, and no per-token table spells the set out.
+    // A contextual keyword the rule accepts as a name is then captured without
+    // the query naming it.
     let out = highlight_output_q("grammar T;
 r : name ;
 name : IDENTIFIER | 'test' | 'task' ;
@@ -183,9 +174,8 @@ IDENTIFIER : [a-z]+ ;
 }
 
 test "rule capture follows a rule that delegates to a naming rule" {
-    // A grammar wraps a naming rule once per use site so a query can capture
-    // that site alone (`fieldName : memberName` in `Wado.g4`). The wrapper
-    // accepts what it delegates to, so the capture covers the same tokens.
+    // A grammar wraps a naming rule per use site so a query can capture that site
+    // alone, as `fieldName : memberName` does in `Wado.g4`.
     let out = highlight_output_q("grammar T;
 r : field ;
 field : name ;
