@@ -23,4 +23,6 @@ exclude = ["tests/antlr4-compat/**"]
 [test]
 # Kiln intermediates are not standalone source files. Keep this exclusion
 # when the package is used outside the repository's `.gitignore` coverage.
-exclude = ["build/**"]
+# `tests/generated/` holds no test blocks, and each file in it is compiled by the
+# test that imports it; compiling it alone again cost ~7% of the suite.
+exclude = ["build/**", "tests/generated/**"]

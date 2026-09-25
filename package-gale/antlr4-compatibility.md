@@ -846,7 +846,7 @@ relevant sites.
    consume. Correcting either needs the predicate evaluated at prediction time,
    the gap `warn_unsupported_prediction_predicate` names for the rule-level
    case. Not diagnosed: the same shape parses correctly wherever the group is
-   not scanned, which `nested_action_gate_test.wado` pins.
+   not scanned, which `codegen_test.wado` pins.
 10. A viability probe asks the caller only where the walk reaches the rule's
     tail. The probe scans the continuation and, when that runs out, conjoins
     the rule's FOLLOW — an answer that is only about the caller if nothing
