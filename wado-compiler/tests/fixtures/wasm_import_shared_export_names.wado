@@ -1,0 +1,10 @@
+// A wasm-asset export is its own asset's, whatever another import shares the
+// name: the bundled libm's `libm_sin`, or the allocator's `realloc`.
+use { realloc, libm_sin } from "./sub/wasm_import_shared_export_names.wat" with { type: "wat" };
+
+test "each asset keeps its own export" {
+    assert realloc(0, 0, 1, 1) == 7;
+    assert libm_sin(0.0) == 42.0;
+    assert f64::sin(0.0) == 0.0;
+    assert `${f64::sin(0.5)}`.len() > 3;
+}

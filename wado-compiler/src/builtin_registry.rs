@@ -10,6 +10,7 @@ use crate::ast;
 use crate::ast::{Attribute, CmBoundary, Function, Item, Type};
 use crate::compiler_item::CompilerItem;
 use crate::lexer::lex;
+use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -40,8 +41,9 @@ pub struct BuiltinFunctionInfo {
 /// - Parameter validation (future)
 #[derive(Debug, Default, Clone)]
 pub struct BuiltinRegistry {
-    /// `function_name` -> function info
-    functions: IndexMap<String, BuiltinFunctionInfo>,
+    /// Keyed by the declaring module first: a wasm asset may export any name,
+    /// one `core:builtin` declares included.
+    functions: IndexMap<ModuleSource, IndexMap<String, BuiltinFunctionInfo>>,
 }
 
 impl BuiltinRegistry {
@@ -79,30 +81,38 @@ impl BuiltinRegistry {
         let mut registry = Self::new();
         for item in &module.items {
             if let Item::Function(func) = item {
-                registry.register(func, type_table);
+                registry.register(&ModuleSource::builtin(), func, type_table);
             }
         }
         registry
     }
 
-    /// Register every `#[canonical(...)]` no-body function declared in
-    /// `module` with the registry. Used to fold in functions from
-    /// loader-synthesized wasm-asset modules
-    /// (`ModuleSource::Wasm`) so calls into a wasm asset's exports go
-    /// through the same `TirImport` path as `core:builtin` declarations.
-    pub fn register_wasm_module(&mut self, module: &ast::Module, type_table: &RefCell<TypeTable>) {
+    /// Register the `#[canonical(...)]` bodiless functions of the wasm asset
+    /// `source`, so a call to one lowers to an import as a `core:builtin` one does.
+    pub fn register_wasm_module(
+        &mut self,
+        source: &ModuleSource,
+        module: &ast::Module,
+        type_table: &RefCell<TypeTable>,
+    ) {
+        assert!(source.is_wasm_asset(), "{source} is not a wasm asset");
         for item in &module.items {
             if let Item::Function(func) = item
                 && func.body.is_none()
                 && func.attrs.iter().any(is_canonical_builtin)
             {
-                self.register(func, type_table);
+                self.register(source, func, type_table);
             }
         }
     }
 
     /// Register a builtin function from a parsed function declaration
-    fn register(&mut self, func: &Function, type_table: &RefCell<TypeTable>) {
+    fn register(
+        &mut self,
+        source: &ModuleSource,
+        func: &Function,
+        type_table: &RefCell<TypeTable>,
+    ) {
         let type_params: Vec<String> = func.type_params.iter().map(|p| p.name.clone()).collect();
 
         let params: Vec<(String, TypeId)> = func
@@ -152,7 +162,10 @@ impl BuiltinRegistry {
             diverges,
         };
 
-        self.functions.insert(func.name.clone(), info);
+        self.functions
+            .entry(source.clone())
+            .or_default()
+            .insert(func.name.clone(), info);
     }
 
     /// Resolve an AST Type to a `TypeId`
@@ -216,56 +229,14 @@ impl BuiltinRegistry {
         }
     }
 
-    /// Get function info by name
-    pub fn get(&self, name: &str) -> Option<&BuiltinFunctionInfo> {
-        self.functions.get(name)
+    /// The function `source` declares under `name`.
+    pub fn get(&self, source: &ModuleSource, name: &str) -> Option<&BuiltinFunctionInfo> {
+        self.functions.get(source)?.get(name)
     }
 
-    /// Get function info by canonical name (e.g., "stream-new", "realloc")
-    pub fn get_by_canonical(&self, canonical_name: &str) -> Option<&BuiltinFunctionInfo> {
-        self.functions
-            .values()
-            .find(|f| f.canonical_name.as_deref() == Some(canonical_name))
-    }
-
-    /// Get the return type of a builtin function
-    pub fn get_return_type(&self, name: &str) -> Option<TypeId> {
-        self.functions.get(name).map(|f| f.return_type)
-    }
-
-    /// Check if a builtin function diverges (returns !)
-    pub fn diverges(&self, name: &str) -> bool {
-        self.functions
-            .get(name)
-            .map(|f| f.diverges)
-            .unwrap_or(false)
-    }
-
-    /// Check if a function is registered as a builtin
-    pub fn is_builtin(&self, name: &str) -> bool {
-        self.functions.contains_key(name)
-    }
-
-    /// Get the number of registered builtins
-    pub fn len(&self) -> usize {
-        self.functions.len()
-    }
-
-    /// Check if the registry is empty
-    pub fn is_empty(&self) -> bool {
-        self.functions.is_empty()
-    }
-
-    /// Iterate over all registered builtin functions
-    pub fn iter(&self) -> impl Iterator<Item = &BuiltinFunctionInfo> {
-        self.functions.values()
-    }
-
-    /// Iterate over builtins that are imported (have #[canonical("...")] attribute)
-    pub fn imported_builtins(&self) -> impl Iterator<Item = &BuiltinFunctionInfo> {
-        self.functions
-            .values()
-            .filter(|f| f.canonical_name.is_some())
+    /// The `core:builtin` intrinsic `name`.
+    pub fn intrinsic(&self, name: &str) -> Option<&BuiltinFunctionInfo> {
+        self.get(&ModuleSource::builtin(), name)
     }
 }
 

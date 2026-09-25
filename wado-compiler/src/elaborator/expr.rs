@@ -3198,10 +3198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // General expression cast (not a literal)
             let source_type = self.resolve_expr(&cast.expr, ctx, None);
 
-            // Check if source type is a numeric type we can convert from
-            if self.tysys.type_table.borrow().is_integer(source_type)
-                || self.tysys.type_table.borrow().is_float(source_type)
-            {
+            if self.tysys.type_table.borrow().is_numeric(source_type) {
                 // Reify emits the two-step form,
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 return target_type;
@@ -3213,6 +3210,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // reaches a target wider than `i32` (`65 as i128`). It never lands on
         // `i32`, so the defaulted range check must not judge it.
         let source_type = match int_literal_cast_operand(&cast.expr) {
+            // A float has no bit pattern to write, so the literal converts by
+            // value, as `let x: f32 = N;` does.
+            Some(_) if self.tysys.type_table.borrow().is_float(target_type) => {
+                self.try_coerce_numeric_literal(&cast.expr, target_type)
+                    .expect("a float is a numeric literal target");
+                target_type
+            }
             Some((lit, repr, _)) => {
                 self.check_int_literal_parses(repr, lit.span);
                 self.record_expression_type(cast.expr.id(), TypeTable::I32);

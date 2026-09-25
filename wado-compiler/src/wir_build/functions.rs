@@ -116,12 +116,9 @@ fn register_imports(ctx: &mut WirContext<'_>) {
             ctx.needed_canonicals.insert(intrinsic, func_id.clone());
         }
 
-        // Also register under the TIR builtin function name so call sites can resolve.
-        // e.g., "builtin/realloc" → same WirFuncId as "mem/realloc"
-        if !import.func_name.is_empty() {
-            let alias = MangledName::builtin_alias(&import.func_name);
-            ctx.func_map.insert(alias, func_id);
-        }
+        // Also register under the declaring function's name so call sites resolve.
+        let declared = MangledName::in_module(&import.module_source, &import.func_name);
+        ctx.func_map.insert(declared, func_id);
     }
 }
 

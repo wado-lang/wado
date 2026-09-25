@@ -12,7 +12,7 @@ use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{
     BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -546,15 +546,11 @@ fn collect_subscripts<'e>(
 /// Whether this callee is what `a[i]` dispatches to: the `Index*` trait method,
 /// or the `array_get_*` builtin under it. Both take the container as `args[0]`.
 fn is_index_accessor(func: &FunctionRef, items: &CompilerItems) -> bool {
-    if func.module_source.is_core_builtin() {
-        return [
-            "array_get_value",
-            "array_get_value_u8",
-            "array_get_ref",
-            "array_get_ref_mut",
-        ]
-        .iter()
-        .any(|b| matches_builtin(&func.name, func.monomorph_info.as_ref(), b));
+    if let Some(intrinsic) = func.intrinsic() {
+        return matches!(
+            intrinsic,
+            "array_get_value" | "array_get_value_u8" | "array_get_ref" | "array_get_ref_mut"
+        );
     }
     let Some(declared) = func
         .method_info

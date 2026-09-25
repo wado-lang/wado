@@ -1,5 +1,5 @@
 use { from_bytes, to_bytes } from "core:protobuf";
-use { Dim, Graph, Rank } from "./graph.wado";
+use { Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
 use {
     GraphProto,
     ModelProto,
@@ -17,7 +17,7 @@ fn graph_of(bytes: ByteList) -> Graph {
     return match read(bytes) {
         Ok(g) => g,
         Err(e) => {
-            panic(e);
+            panic(e.reason);
         },
     };
 }
@@ -49,21 +49,40 @@ test "a whole convolutional graph reads" {
 
     assert g.name == "bvlc_alexnet";
     assert g.nodes.len() == 40;
-    assert g.initializers.len() == 17;
+    // Every weight is a `ConstantOfShape` of an int64 shape the build reads.
+    assert g.initializers.is_empty();
+    assert g.constants.len() == 17;
     assert g.outputs.len() == 1;
     assert g.nodes[g.nodes.len() - 1].op == "Softmax";
     assert g.inputs[0].name == "data_0";
     assert g.inputs[0].rank matches { Dims(d) && d.len() == 4 };
 }
 
-test "a tensor attribute is present and its value is not" {
-    // `ConstantOfShape` carries `value` as a `TensorProto`, which has no text
-    // form. Nothing reads an attribute, so the model still reads.
+test "an int64 initializer is an integer the build reads, not a weight" {
+    let g = graph_of(#include_bytes("../tests/models/mnist-12/model.onnx"));
+
+    let flat = Known {
+        extents: [2],
+        elements: Elements::Ints([1, 256]),
+    };
+    let weight = Known {
+        extents: [2],
+        elements: Elements::Ints([256, 10]),
+    };
+    assert g.constants.get("Pooling160_Output_0_reshape0_shape") == Option::Some(flat);
+    assert g.constants.get("Parameter193_reshape1_shape") == Option::Some(weight);
+    assert g.initializers.len() == 6;
+    assert g.inputs.len() == 1;
+    assert g.opset == Option::Some(12);
+}
+
+test "a tensor attribute travels whole rather than as text" {
     let g = graph_of(#include_bytes("../tests/onnx/light/light_bvlc_alexnet.onnx"));
 
     assert g.nodes[0].op == "ConstantOfShape";
     assert g.nodes[0].attrs[0].name == "value";
     assert g.nodes[0].attrs[0].values.is_empty();
+    assert g.nodes[0].attrs[0].tensor matches { Some(_) };
 }
 
 test "a bare TensorProto is the shape the backend test data stores" {
@@ -141,7 +160,7 @@ test "a model round-trips through the declarations" {
     assert g.nodes[0].inputs[1] == "W";
 }
 
-fn read_initializer_of(weight: TensorProto) -> Result<Graph, String> {
+fn read_initializer_of(weight: TensorProto) -> Result<Graph, ReadError> {
     let model = ModelProto {
         graph: Option::Some(GraphProto {
             name: "weights",
@@ -171,7 +190,7 @@ test "a half's int32_data entry past sixteen bits names itself" {
         data_type: 16,
         name: "H",
         int32_data: [70000],
-    }).unwrap_err();
+    }).unwrap_err().reason;
 
     assert e == "H: 70000 is not a bfloat16 bit pattern";
 }
@@ -192,7 +211,7 @@ test "an initializer whose data disagrees with its shape names itself" {
         data_type: 1,
         name: "W",
         float_data: [1.0, 2.0, 3.0],
-    }).unwrap_err();
+    }).unwrap_err().reason;
 
     assert e == "W: 3 elements for a shape of 2";
 }
@@ -210,7 +229,7 @@ test "a value the subset cannot type names itself" {
         panic("the model did not encode");
     };
 
-    assert read(bytes) matches { Err(e) && e == "X: a value with no type" };
+    assert read(bytes) matches { Err(e) && e.reason == "X: a value with no type" };
 }
 
 test "an element type outside the mapping names itself" {
@@ -231,5 +250,5 @@ test "an element type outside the mapping names itself" {
         panic("the model did not encode");
     };
 
-    assert read(bytes) matches { Err(e) && e == "X: element type 21" };
+    assert read(bytes) matches { Err(e) && e.reason == "X: element type 21" };
 }

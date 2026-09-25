@@ -1852,6 +1852,15 @@ let h: i32 = 0xFFFF_FFFF as i32;  // OK: explicit bit-pattern reinterpretation (
 let i: u32 = 0x1_0000_0000;       // compile error: literal out of range for `u32`: 0x1_0000_0000
 ```
 
+A float has no bit pattern for `as` to reinterpret. An integer literal cast to
+`f32` or `f64` converts by value, as the annotated form does, and the same
+range check applies.
+
+```wado
+let m = 340282350000000000000000000000000000000 as f32;  // OK: f32::MAX
+let n = 400000000000000000000000000000000000000 as f32;  // compile error: literal out of range for `f32`
+```
+
 A literal that nothing coerces falls back to `i32`, and the same range check applies there. `-NUM` is checked as one literal, so it reaches the signed minimum.
 
 ```wado
@@ -4604,6 +4613,10 @@ impl Show for geo::Tag { ... }
 A qualified head names the namespace's declaration even where the importing
 module declares one of its own by that name.
 
+The namespace belongs to the importing file alone. It names a module, not an
+item, so `pub use utils from "..."` is a compile error; re-export the members by
+name (see [Re-exports](#re-exports-pub-use)).
+
 #### Note
 
 Wado does not support `use * as name` or default imports.
@@ -4685,7 +4698,8 @@ Re-export rules:
 - A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
-- Wildcards prohibited: `pub use * from "..."` is not allowed
+- Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
+- A re-export stays at module level, so `export use` is a compile error
 
 ### Exception: The Prelude
 

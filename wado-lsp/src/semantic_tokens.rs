@@ -433,7 +433,7 @@ impl SpanCollector {
             ast::AttrValue::Object(nested) => self.mark_attr_keys(nested),
             ast::AttrValue::Array(items) => {
                 for item in items {
-                    self.mark_attr_value(item);
+                    self.mark_attr_value(&item.value);
                 }
             }
             ast::AttrValue::String(_)

@@ -82,10 +82,10 @@ macro_rules! replace_lane {
 /// expression position falls back to the tuple struct
 /// [`FunctionTranslator::wrap_multivalue_i64`] builds.
 pub(super) const MULTIVALUE_I64_BUILTINS: [&str; 4] = [
-    "builtin::i64_add128",
-    "builtin::i64_sub128",
-    "builtin::i64_mul_wide_u",
-    "builtin::i64_mul_wide_s",
+    "i64_add128",
+    "i64_sub128",
+    "i64_mul_wide_u",
+    "i64_mul_wide_s",
 ];
 
 /// How many Wasm results each of [`MULTIVALUE_I64_BUILTINS`] pushes.
@@ -101,14 +101,10 @@ impl FunctionTranslator<'_, '_> {
     ) -> WirInstr {
         let mut operand = |i: usize| Box::new(self.translate_operand(args[i].expr));
         match builtin_name {
-            "builtin::i64_add128" => {
-                WirInstr::I64Add128(operand(0), operand(1), operand(2), operand(3))
-            }
-            "builtin::i64_sub128" => {
-                WirInstr::I64Sub128(operand(0), operand(1), operand(2), operand(3))
-            }
-            "builtin::i64_mul_wide_u" => WirInstr::I64MulWideU(operand(0), operand(1)),
-            "builtin::i64_mul_wide_s" => WirInstr::I64MulWideS(operand(0), operand(1)),
+            "i64_add128" => WirInstr::I64Add128(operand(0), operand(1), operand(2), operand(3)),
+            "i64_sub128" => WirInstr::I64Sub128(operand(0), operand(1), operand(2), operand(3)),
+            "i64_mul_wide_u" => WirInstr::I64MulWideU(operand(0), operand(1)),
+            "i64_mul_wide_s" => WirInstr::I64MulWideS(operand(0), operand(1)),
             other => panic!("not a multi-value i64 builtin: {other}"),
         }
     }
@@ -158,11 +154,6 @@ impl FunctionTranslator<'_, '_> {
         // Try direct name lookup
         let fq = MangledName::in_module(module_source, name);
         if let Some(id) = self.ctx.func_map.get(&fq) {
-            return Some(id.clone());
-        }
-        // Try alias registered during import collection (builtin/{func_name})
-        let alias = MangledName::builtin_alias(name);
-        if let Some(id) = self.ctx.func_map.get(&alias) {
             return Some(id.clone());
         }
         // Try with method info
@@ -367,7 +358,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         match builtin_name {
-            "builtin::i32_load" => {
+            "i32_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I32Load {
                     offset: 0,
@@ -375,7 +366,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
-            "builtin::i32_load8_u" => {
+            "i32_load8_u" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I32Load8U {
                     offset: 0,
@@ -383,7 +374,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
-            "builtin::i32_load8_s" => {
+            "i32_load8_s" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I32Load8S {
                     offset: 0,
@@ -391,7 +382,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
-            "builtin::i32_load16_u" => {
+            "i32_load16_u" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I32Load16U {
                     offset: 0,
@@ -399,7 +390,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
-            "builtin::i32_load16_s" => {
+            "i32_load16_s" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I32Load16S {
                     offset: 0,
@@ -408,7 +399,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::i64_load" => {
+            "i64_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::I64Load {
                     offset: 0,
@@ -417,7 +408,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::i32_store" => {
+            "i32_store" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I32Store {
@@ -427,7 +418,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
-            "builtin::i32_store8" => {
+            "i32_store8" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I32Store8 {
@@ -437,7 +428,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
-            "builtin::i32_store16" => {
+            "i32_store16" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I32Store16 {
@@ -447,7 +438,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
-            "builtin::i64_store" => {
+            "i64_store" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I64Store {
@@ -460,7 +451,7 @@ impl FunctionTranslator<'_, '_> {
             // Floats have no dedicated WIR store/load; reinterpret to the
             // same-width integer and reuse the integer memory ops (byte-identical
             // to `fN.store` / `fN.load`).
-            "builtin::f32_store" => {
+            "f32_store" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I32Store {
@@ -470,7 +461,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(WirInstr::I32ReinterpretF32(Box::new(val))),
                 })
             }
-            "builtin::f64_store" => {
+            "f64_store" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::I64Store {
@@ -480,7 +471,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(WirInstr::I64ReinterpretF64(Box::new(val))),
                 })
             }
-            "builtin::f32_load" => {
+            "f32_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::F32ReinterpretI32(Box::new(WirInstr::I32Load {
                     offset: 0,
@@ -488,7 +479,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })))
             }
-            "builtin::f64_load" => {
+            "f64_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::F64ReinterpretI64(Box::new(WirInstr::I64Load {
                     offset: 0,
@@ -496,7 +487,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })))
             }
-            "builtin::v128_load" => {
+            "v128_load" => {
                 let addr = self.translate_operand(args[0].expr);
                 Some(WirInstr::V128Load {
                     offset: 0,
@@ -504,7 +495,7 @@ impl FunctionTranslator<'_, '_> {
                     addr: Box::new(addr),
                 })
             }
-            "builtin::v128_store" => {
+            "v128_store" => {
                 let addr = self.translate_operand(args[0].expr);
                 let val = self.translate_operand(args[1].expr);
                 Some(WirInstr::V128Store {
@@ -515,7 +506,7 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::array_new" => {
+            "array_new" => {
                 // array.new_default: creates a new array of the given element type
                 let len = self.translate_operand(args[0].expr);
                 Some(WirInstr::ArrayNewDefault {
@@ -523,7 +514,7 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
-            "builtin::array_get_value_u8" => {
+            "array_get_value_u8" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 self.ctx
@@ -536,7 +527,7 @@ impl FunctionTranslator<'_, '_> {
                         result_ty: WirType::I32,
                     })
             }
-            "builtin::array_set_u8" => {
+            "array_set_u8" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
@@ -550,7 +541,7 @@ impl FunctionTranslator<'_, '_> {
                         value: Box::new(val),
                     })
             }
-            "builtin::array_get_value" => {
+            "array_get_value" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
@@ -561,7 +552,7 @@ impl FunctionTranslator<'_, '_> {
                     index: Box::new(idx),
                 })
             }
-            "builtin::array_get_ref" | "builtin::array_get_ref_mut" => {
+            "array_get_ref" | "array_get_ref_mut" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let type_id = self.ref_type_id(self.operand_type_id(args[0].expr));
@@ -583,7 +574,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(get)
                 }
             }
-            "builtin::array_set" => {
+            "array_set" => {
                 let arr = self.translate_operand(args[0].expr);
                 let idx = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
@@ -594,7 +585,7 @@ impl FunctionTranslator<'_, '_> {
                     value: Box::new(val),
                 })
             }
-            "builtin::array_copy" => {
+            "array_copy" => {
                 let dst = self.translate_operand(args[0].expr);
                 let dst_offset = self.translate_operand(args[1].expr);
                 let src = self.translate_operand(args[2].expr);
@@ -611,7 +602,7 @@ impl FunctionTranslator<'_, '_> {
                     len: Box::new(len),
                 })
             }
-            "builtin::array_clone" => {
+            "array_clone" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 match self.array_element_copy(src_type_id) {
                     Some(element_copy) => Some(WirInstr::ArrayClone {
@@ -623,7 +614,7 @@ impl FunctionTranslator<'_, '_> {
                     None => Some(self.build_bulk_array_clone(type_id, src, None)),
                 }
             }
-            "builtin::array_clone_prefix" => {
+            "array_clone_prefix" => {
                 let (type_id, src, src_type_id) = self.translate_array_ref_operand(args);
                 let len = self.translate_operand(args[1].expr);
                 match self.array_element_copy(src_type_id) {
@@ -636,7 +627,7 @@ impl FunctionTranslator<'_, '_> {
                     None => Some(self.build_bulk_array_clone(type_id, src, Some(len))),
                 }
             }
-            "builtin::array_clone_shallow" => {
+            "array_clone_shallow" => {
                 // The demote pass retargets `array_clone` / `array_clone_prefix`
                 // calls here by id, keeping the call-site args — so a second
                 // arg, when present, is the prefix length to preserve.
@@ -644,7 +635,7 @@ impl FunctionTranslator<'_, '_> {
                 let len = args.get(1).map(|arg| self.translate_operand(arg.expr));
                 Some(self.build_bulk_array_clone(type_id, src, len))
             }
-            "builtin::array_fill" => {
+            "array_fill" => {
                 let arr = self.translate_operand(args[0].expr);
                 let offset = self.translate_operand(args[1].expr);
                 let val = self.translate_operand(args[2].expr);
@@ -658,12 +649,12 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::v128_const" => Some(WirInstr::V128Const(
+            "v128_const" => Some(WirInstr::V128Const(
                 self.operand_const_wide_int(args[0].expr)
                     .expect("a v128 bit pattern must be an i128 / u128 literal"),
             )),
-            "builtin::memory_size" => Some(WirInstr::MemorySize),
-            "builtin::memory_fill" => {
+            "memory_size" => Some(WirInstr::MemorySize),
+            "memory_fill" => {
                 let dst = self.translate_operand(args[0].expr);
                 let value = self.translate_operand(args[1].expr);
                 let len = self.translate_operand(args[2].expr);
@@ -674,8 +665,8 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
-            "builtin::unreachable" => Some(WirInstr::Unreachable),
-            "builtin::cold_path" => {
+            "unreachable" => Some(WirInstr::Unreachable),
+            "cold_path" => {
                 // Under `-f no-branch-hinting` the marker lowers to a plain
                 // no-op: no `ColdPath` reaches WIR, so `apply_cold_path_hints`
                 // synthesizes nothing. Dropping it here (not at NIR) keeps the
@@ -687,7 +678,7 @@ impl FunctionTranslator<'_, '_> {
                     Some(WirInstr::Nop)
                 }
             }
-            "builtin::select" => {
+            "select" => {
                 let cond = self.translate_operand(args[0].expr);
                 let a = self.translate_operand(args[1].expr);
                 let b = self.translate_operand(args[2].expr);
@@ -707,10 +698,9 @@ impl FunctionTranslator<'_, '_> {
                 Some(self.wrap_multivalue_i64(instr, result_type_id))
             }
 
-            "builtin::i32_as_char" => Some(self.translate_operand(args[0].expr)),
+            "i32_as_char" => Some(self.translate_operand(args[0].expr)),
 
-            "builtin::call_indirect_stdout_write_via_stream"
-            | "builtin::call_indirect_stderr_write_via_stream" => {
+            "call_indirect_stdout_write_via_stream" | "call_indirect_stderr_write_via_stream" => {
                 // The ambient panic / assert-diagnostic path never forces its
                 // own import. DCE registers `Std{out,err}::write_via_stream` in
                 // `func_map` exactly when the world provides the sink (or a real
@@ -753,28 +743,28 @@ impl FunctionTranslator<'_, '_> {
         args: &[ArenaCallArg],
     ) -> Option<WirInstr> {
         Some(match builtin_name {
-            "builtin::array_len" => unary!(self, args, WirInstr::ArrayLen),
-            "builtin::f64_abs" => unary!(self, args, WirInstr::F64Abs),
-            "builtin::f64_ceil" => unary!(self, args, WirInstr::F64Ceil),
-            "builtin::f64_floor" => unary!(self, args, WirInstr::F64Floor),
-            "builtin::f64_trunc" => unary!(self, args, WirInstr::F64Trunc),
-            "builtin::f64_nearest" => unary!(self, args, WirInstr::F64Nearest),
-            "builtin::f64_sqrt" => unary!(self, args, WirInstr::F64Sqrt),
-            "builtin::f64_min" => binary!(self, args, WirInstr::F64Min),
-            "builtin::f64_max" => binary!(self, args, WirInstr::F64Max),
-            "builtin::f64_copysign" => binary!(self, args, WirInstr::F64Copysign),
-            "builtin::f32_abs" => unary!(self, args, WirInstr::F32Abs),
-            "builtin::f32_ceil" => unary!(self, args, WirInstr::F32Ceil),
-            "builtin::f32_floor" => unary!(self, args, WirInstr::F32Floor),
-            "builtin::f32_trunc" => unary!(self, args, WirInstr::F32Trunc),
-            "builtin::f32_nearest" => unary!(self, args, WirInstr::F32Nearest),
-            "builtin::f32_sqrt" => unary!(self, args, WirInstr::F32Sqrt),
-            "builtin::f32_min" => binary!(self, args, WirInstr::F32Min),
-            "builtin::f32_max" => binary!(self, args, WirInstr::F32Max),
-            "builtin::f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
-            "builtin::ref_eq" => binary!(self, args, WirInstr::RefEq),
-            "builtin::black_box" => unary!(self, args, WirInstr::BlackBox),
-            "builtin::is_uninitialized" => {
+            "array_len" => unary!(self, args, WirInstr::ArrayLen),
+            "f64_abs" => unary!(self, args, WirInstr::F64Abs),
+            "f64_ceil" => unary!(self, args, WirInstr::F64Ceil),
+            "f64_floor" => unary!(self, args, WirInstr::F64Floor),
+            "f64_trunc" => unary!(self, args, WirInstr::F64Trunc),
+            "f64_nearest" => unary!(self, args, WirInstr::F64Nearest),
+            "f64_sqrt" => unary!(self, args, WirInstr::F64Sqrt),
+            "f64_min" => binary!(self, args, WirInstr::F64Min),
+            "f64_max" => binary!(self, args, WirInstr::F64Max),
+            "f64_copysign" => binary!(self, args, WirInstr::F64Copysign),
+            "f32_abs" => unary!(self, args, WirInstr::F32Abs),
+            "f32_ceil" => unary!(self, args, WirInstr::F32Ceil),
+            "f32_floor" => unary!(self, args, WirInstr::F32Floor),
+            "f32_trunc" => unary!(self, args, WirInstr::F32Trunc),
+            "f32_nearest" => unary!(self, args, WirInstr::F32Nearest),
+            "f32_sqrt" => unary!(self, args, WirInstr::F32Sqrt),
+            "f32_min" => binary!(self, args, WirInstr::F32Min),
+            "f32_max" => binary!(self, args, WirInstr::F32Max),
+            "f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
+            "ref_eq" => binary!(self, args, WirInstr::RefEq),
+            "black_box" => unary!(self, args, WirInstr::BlackBox),
+            "is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);
                 // The point of the read is to observe the `null` placeholder,
                 // so it is typed nullable — otherwise codegen narrows it with
@@ -784,361 +774,361 @@ impl FunctionTranslator<'_, '_> {
                 }
                 WirInstr::RefIsNull(Box::new(a))
             }
-            "builtin::i32_and" => binary!(self, args, WirInstr::I32And),
-            "builtin::i32_eqz" => unary!(self, args, WirInstr::I32Eqz),
-            "builtin::i32_clz" => unary!(self, args, WirInstr::I32Clz),
-            "builtin::i64_clz" => unary!(self, args, WirInstr::I64Clz),
-            "builtin::i32_ctz" => unary!(self, args, WirInstr::I32Ctz),
-            "builtin::i64_ctz" => unary!(self, args, WirInstr::I64Ctz),
-            "builtin::i32_popcnt" => unary!(self, args, WirInstr::I32Popcnt),
-            "builtin::i64_popcnt" => unary!(self, args, WirInstr::I64Popcnt),
-            "builtin::i64_reinterpret_f64" => unary!(self, args, WirInstr::I64ReinterpretF64),
-            "builtin::f64_reinterpret_i64" => unary!(self, args, WirInstr::F64ReinterpretI64),
-            "builtin::i32_reinterpret_f32" => unary!(self, args, WirInstr::I32ReinterpretF32),
-            "builtin::f32_reinterpret_i32" => unary!(self, args, WirInstr::F32ReinterpretI32),
+            "i32_and" => binary!(self, args, WirInstr::I32And),
+            "i32_eqz" => unary!(self, args, WirInstr::I32Eqz),
+            "i32_clz" => unary!(self, args, WirInstr::I32Clz),
+            "i64_clz" => unary!(self, args, WirInstr::I64Clz),
+            "i32_ctz" => unary!(self, args, WirInstr::I32Ctz),
+            "i64_ctz" => unary!(self, args, WirInstr::I64Ctz),
+            "i32_popcnt" => unary!(self, args, WirInstr::I32Popcnt),
+            "i64_popcnt" => unary!(self, args, WirInstr::I64Popcnt),
+            "i64_reinterpret_f64" => unary!(self, args, WirInstr::I64ReinterpretF64),
+            "f64_reinterpret_i64" => unary!(self, args, WirInstr::F64ReinterpretI64),
+            "i32_reinterpret_f32" => unary!(self, args, WirInstr::I32ReinterpretF32),
+            "f32_reinterpret_i32" => unary!(self, args, WirInstr::F32ReinterpretI32),
             // A half and its `u16` share a representation, so the cast is the
             // operand. Wasm has no half precision value type to convert to.
-            "builtin::u16_reinterpret_f16"
-            | "builtin::f16_reinterpret_u16"
-            | "builtin::u16_reinterpret_bf16"
-            | "builtin::bf16_reinterpret_u16" => self.translate_operand(args[0].expr),
-            "builtin::v128_not" => unary!(self, args, WirInstr::V128Not),
-            "builtin::v128_and" => binary!(self, args, WirInstr::V128And),
-            "builtin::v128_or" => binary!(self, args, WirInstr::V128Or),
-            "builtin::v128_xor" => binary!(self, args, WirInstr::V128Xor),
-            "builtin::v128_bitselect" => ternary!(self, args, WirInstr::V128Bitselect),
-            "builtin::i8x16_splat" => unary!(self, args, WirInstr::I8x16Splat),
-            "builtin::i8x16_shuffle" => {
+            "u16_reinterpret_f16"
+            | "f16_reinterpret_u16"
+            | "u16_reinterpret_bf16"
+            | "bf16_reinterpret_u16" => self.translate_operand(args[0].expr),
+            "v128_not" => unary!(self, args, WirInstr::V128Not),
+            "v128_and" => binary!(self, args, WirInstr::V128And),
+            "v128_or" => binary!(self, args, WirInstr::V128Or),
+            "v128_xor" => binary!(self, args, WirInstr::V128Xor),
+            "v128_bitselect" => ternary!(self, args, WirInstr::V128Bitselect),
+            "i8x16_splat" => unary!(self, args, WirInstr::I8x16Splat),
+            "i8x16_shuffle" => {
                 let lanes = array::from_fn(|i| operand_lane_const(self.body, args[i].expr));
                 let a = self.translate_operand(args[16].expr);
                 let b = self.translate_operand(args[17].expr);
                 WirInstr::I8x16Shuffle(lanes, Box::new(a), Box::new(b))
             }
-            "builtin::i8x16_extract_lane_s" => {
+            "i8x16_extract_lane_s" => {
                 extract_lane!(self, args, WirInstr::I8x16ExtractLaneS)
             }
-            "builtin::i8x16_extract_lane_u" => {
+            "i8x16_extract_lane_u" => {
                 extract_lane!(self, args, WirInstr::I8x16ExtractLaneU)
             }
-            "builtin::i8x16_replace_lane" => replace_lane!(self, args, WirInstr::I8x16ReplaceLane),
-            "builtin::i8x16_add" => binary!(self, args, WirInstr::I8x16Add),
-            "builtin::i8x16_sub" => binary!(self, args, WirInstr::I8x16Sub),
-            "builtin::i8x16_neg" => unary!(self, args, WirInstr::I8x16Neg),
-            "builtin::i8x16_eq" => binary!(self, args, WirInstr::I8x16Eq),
-            "builtin::i8x16_ne" => binary!(self, args, WirInstr::I8x16Ne),
-            "builtin::i8x16_lt_s" => binary!(self, args, WirInstr::I8x16LtS),
-            "builtin::i8x16_gt_s" => binary!(self, args, WirInstr::I8x16GtS),
-            "builtin::i8x16_le_s" => binary!(self, args, WirInstr::I8x16LeS),
-            "builtin::i8x16_ge_s" => binary!(self, args, WirInstr::I8x16GeS),
-            "builtin::i8x16_lt_u" => binary!(self, args, WirInstr::I8x16LtU),
-            "builtin::i8x16_gt_u" => binary!(self, args, WirInstr::I8x16GtU),
-            "builtin::i8x16_le_u" => binary!(self, args, WirInstr::I8x16LeU),
-            "builtin::i8x16_ge_u" => binary!(self, args, WirInstr::I8x16GeU),
-            "builtin::i8x16_shl" => binary!(self, args, WirInstr::I8x16Shl),
-            "builtin::i8x16_shr_s" => binary!(self, args, WirInstr::I8x16ShrS),
-            "builtin::i8x16_shr_u" => binary!(self, args, WirInstr::I8x16ShrU),
-            "builtin::i8x16_swizzle" => binary!(self, args, WirInstr::I8x16Swizzle),
-            "builtin::i16x8_splat" => unary!(self, args, WirInstr::I16x8Splat),
-            "builtin::i16x8_extract_lane_s" => {
+            "i8x16_replace_lane" => replace_lane!(self, args, WirInstr::I8x16ReplaceLane),
+            "i8x16_add" => binary!(self, args, WirInstr::I8x16Add),
+            "i8x16_sub" => binary!(self, args, WirInstr::I8x16Sub),
+            "i8x16_neg" => unary!(self, args, WirInstr::I8x16Neg),
+            "i8x16_eq" => binary!(self, args, WirInstr::I8x16Eq),
+            "i8x16_ne" => binary!(self, args, WirInstr::I8x16Ne),
+            "i8x16_lt_s" => binary!(self, args, WirInstr::I8x16LtS),
+            "i8x16_gt_s" => binary!(self, args, WirInstr::I8x16GtS),
+            "i8x16_le_s" => binary!(self, args, WirInstr::I8x16LeS),
+            "i8x16_ge_s" => binary!(self, args, WirInstr::I8x16GeS),
+            "i8x16_lt_u" => binary!(self, args, WirInstr::I8x16LtU),
+            "i8x16_gt_u" => binary!(self, args, WirInstr::I8x16GtU),
+            "i8x16_le_u" => binary!(self, args, WirInstr::I8x16LeU),
+            "i8x16_ge_u" => binary!(self, args, WirInstr::I8x16GeU),
+            "i8x16_shl" => binary!(self, args, WirInstr::I8x16Shl),
+            "i8x16_shr_s" => binary!(self, args, WirInstr::I8x16ShrS),
+            "i8x16_shr_u" => binary!(self, args, WirInstr::I8x16ShrU),
+            "i8x16_swizzle" => binary!(self, args, WirInstr::I8x16Swizzle),
+            "i16x8_splat" => unary!(self, args, WirInstr::I16x8Splat),
+            "i16x8_extract_lane_s" => {
                 extract_lane!(self, args, WirInstr::I16x8ExtractLaneS)
             }
-            "builtin::i16x8_extract_lane_u" => {
+            "i16x8_extract_lane_u" => {
                 extract_lane!(self, args, WirInstr::I16x8ExtractLaneU)
             }
-            "builtin::i16x8_replace_lane" => replace_lane!(self, args, WirInstr::I16x8ReplaceLane),
-            "builtin::i16x8_add" => binary!(self, args, WirInstr::I16x8Add),
-            "builtin::i16x8_sub" => binary!(self, args, WirInstr::I16x8Sub),
-            "builtin::i16x8_mul" => binary!(self, args, WirInstr::I16x8Mul),
-            "builtin::i16x8_neg" => unary!(self, args, WirInstr::I16x8Neg),
-            "builtin::i16x8_eq" => binary!(self, args, WirInstr::I16x8Eq),
-            "builtin::i16x8_ne" => binary!(self, args, WirInstr::I16x8Ne),
-            "builtin::i16x8_lt_s" => binary!(self, args, WirInstr::I16x8LtS),
-            "builtin::i16x8_gt_s" => binary!(self, args, WirInstr::I16x8GtS),
-            "builtin::i16x8_le_s" => binary!(self, args, WirInstr::I16x8LeS),
-            "builtin::i16x8_ge_s" => binary!(self, args, WirInstr::I16x8GeS),
-            "builtin::i16x8_lt_u" => binary!(self, args, WirInstr::I16x8LtU),
-            "builtin::i16x8_gt_u" => binary!(self, args, WirInstr::I16x8GtU),
-            "builtin::i16x8_le_u" => binary!(self, args, WirInstr::I16x8LeU),
-            "builtin::i16x8_ge_u" => binary!(self, args, WirInstr::I16x8GeU),
-            "builtin::i16x8_shl" => binary!(self, args, WirInstr::I16x8Shl),
-            "builtin::i16x8_shr_s" => binary!(self, args, WirInstr::I16x8ShrS),
-            "builtin::i16x8_shr_u" => binary!(self, args, WirInstr::I16x8ShrU),
-            "builtin::i32x4_splat" => unary!(self, args, WirInstr::I32x4Splat),
-            "builtin::i32x4_extract_lane" => extract_lane!(self, args, WirInstr::I32x4ExtractLane),
-            "builtin::i32x4_replace_lane" => replace_lane!(self, args, WirInstr::I32x4ReplaceLane),
-            "builtin::i32x4_add" => binary!(self, args, WirInstr::I32x4Add),
-            "builtin::i32x4_sub" => binary!(self, args, WirInstr::I32x4Sub),
-            "builtin::i32x4_mul" => binary!(self, args, WirInstr::I32x4Mul),
-            "builtin::i32x4_neg" => unary!(self, args, WirInstr::I32x4Neg),
-            "builtin::i32x4_eq" => binary!(self, args, WirInstr::I32x4Eq),
-            "builtin::i32x4_ne" => binary!(self, args, WirInstr::I32x4Ne),
-            "builtin::i32x4_lt_s" => binary!(self, args, WirInstr::I32x4LtS),
-            "builtin::i32x4_gt_s" => binary!(self, args, WirInstr::I32x4GtS),
-            "builtin::i32x4_le_s" => binary!(self, args, WirInstr::I32x4LeS),
-            "builtin::i32x4_ge_s" => binary!(self, args, WirInstr::I32x4GeS),
-            "builtin::i32x4_lt_u" => binary!(self, args, WirInstr::I32x4LtU),
-            "builtin::i32x4_gt_u" => binary!(self, args, WirInstr::I32x4GtU),
-            "builtin::i32x4_le_u" => binary!(self, args, WirInstr::I32x4LeU),
-            "builtin::i32x4_ge_u" => binary!(self, args, WirInstr::I32x4GeU),
-            "builtin::i32x4_shl" => binary!(self, args, WirInstr::I32x4Shl),
-            "builtin::i32x4_shr_s" => binary!(self, args, WirInstr::I32x4ShrS),
-            "builtin::i32x4_shr_u" => binary!(self, args, WirInstr::I32x4ShrU),
-            "builtin::i64x2_splat" => unary!(self, args, WirInstr::I64x2Splat),
-            "builtin::i64x2_extract_lane" => extract_lane!(self, args, WirInstr::I64x2ExtractLane),
-            "builtin::i64x2_replace_lane" => replace_lane!(self, args, WirInstr::I64x2ReplaceLane),
-            "builtin::i64x2_add" => binary!(self, args, WirInstr::I64x2Add),
-            "builtin::i64x2_sub" => binary!(self, args, WirInstr::I64x2Sub),
-            "builtin::i64x2_mul" => binary!(self, args, WirInstr::I64x2Mul),
-            "builtin::i64x2_neg" => unary!(self, args, WirInstr::I64x2Neg),
-            "builtin::i64x2_eq" => binary!(self, args, WirInstr::I64x2Eq),
-            "builtin::i64x2_ne" => binary!(self, args, WirInstr::I64x2Ne),
-            "builtin::i64x2_lt_s" => binary!(self, args, WirInstr::I64x2LtS),
-            "builtin::i64x2_gt_s" => binary!(self, args, WirInstr::I64x2GtS),
-            "builtin::i64x2_le_s" => binary!(self, args, WirInstr::I64x2LeS),
-            "builtin::i64x2_ge_s" => binary!(self, args, WirInstr::I64x2GeS),
-            "builtin::i64x2_shl" => binary!(self, args, WirInstr::I64x2Shl),
-            "builtin::i64x2_shr_s" => binary!(self, args, WirInstr::I64x2ShrS),
-            "builtin::i64x2_shr_u" => binary!(self, args, WirInstr::I64x2ShrU),
-            "builtin::f32x4_splat" => unary!(self, args, WirInstr::F32x4Splat),
-            "builtin::f32x4_extract_lane" => extract_lane!(self, args, WirInstr::F32x4ExtractLane),
-            "builtin::f32x4_replace_lane" => replace_lane!(self, args, WirInstr::F32x4ReplaceLane),
-            "builtin::f32x4_add" => binary!(self, args, WirInstr::F32x4Add),
-            "builtin::f32x4_sub" => binary!(self, args, WirInstr::F32x4Sub),
-            "builtin::f32x4_mul" => binary!(self, args, WirInstr::F32x4Mul),
-            "builtin::f32x4_div" => binary!(self, args, WirInstr::F32x4Div),
-            "builtin::f32x4_neg" => unary!(self, args, WirInstr::F32x4Neg),
-            "builtin::f32x4_sqrt" => unary!(self, args, WirInstr::F32x4Sqrt),
-            "builtin::f32x4_abs" => unary!(self, args, WirInstr::F32x4Abs),
-            "builtin::f32x4_eq" => binary!(self, args, WirInstr::F32x4Eq),
-            "builtin::f32x4_ne" => binary!(self, args, WirInstr::F32x4Ne),
-            "builtin::f32x4_lt" => binary!(self, args, WirInstr::F32x4Lt),
-            "builtin::f32x4_gt" => binary!(self, args, WirInstr::F32x4Gt),
-            "builtin::f32x4_le" => binary!(self, args, WirInstr::F32x4Le),
-            "builtin::f32x4_ge" => binary!(self, args, WirInstr::F32x4Ge),
-            "builtin::f32x4_min" => binary!(self, args, WirInstr::F32x4Min),
-            "builtin::f32x4_max" => binary!(self, args, WirInstr::F32x4Max),
-            "builtin::f64x2_splat" => unary!(self, args, WirInstr::F64x2Splat),
-            "builtin::f64x2_extract_lane" => extract_lane!(self, args, WirInstr::F64x2ExtractLane),
-            "builtin::f64x2_replace_lane" => replace_lane!(self, args, WirInstr::F64x2ReplaceLane),
-            "builtin::f64x2_add" => binary!(self, args, WirInstr::F64x2Add),
-            "builtin::f64x2_sub" => binary!(self, args, WirInstr::F64x2Sub),
-            "builtin::f64x2_mul" => binary!(self, args, WirInstr::F64x2Mul),
-            "builtin::f64x2_div" => binary!(self, args, WirInstr::F64x2Div),
-            "builtin::f64x2_neg" => unary!(self, args, WirInstr::F64x2Neg),
-            "builtin::f64x2_sqrt" => unary!(self, args, WirInstr::F64x2Sqrt),
-            "builtin::f64x2_abs" => unary!(self, args, WirInstr::F64x2Abs),
-            "builtin::f64x2_eq" => binary!(self, args, WirInstr::F64x2Eq),
-            "builtin::f64x2_ne" => binary!(self, args, WirInstr::F64x2Ne),
-            "builtin::f64x2_lt" => binary!(self, args, WirInstr::F64x2Lt),
-            "builtin::f64x2_gt" => binary!(self, args, WirInstr::F64x2Gt),
-            "builtin::f64x2_le" => binary!(self, args, WirInstr::F64x2Le),
-            "builtin::f64x2_ge" => binary!(self, args, WirInstr::F64x2Ge),
-            "builtin::f64x2_min" => binary!(self, args, WirInstr::F64x2Min),
-            "builtin::f64x2_max" => binary!(self, args, WirInstr::F64x2Max),
-            "builtin::i8x16_abs" => unary!(self, args, WirInstr::I8x16Abs),
-            "builtin::i8x16_add_sat_s" => binary!(self, args, WirInstr::I8x16AddSatS),
-            "builtin::i8x16_add_sat_u" => binary!(self, args, WirInstr::I8x16AddSatU),
-            "builtin::i8x16_sub_sat_s" => binary!(self, args, WirInstr::I8x16SubSatS),
-            "builtin::i8x16_sub_sat_u" => binary!(self, args, WirInstr::I8x16SubSatU),
-            "builtin::i8x16_min_s" => binary!(self, args, WirInstr::I8x16MinS),
-            "builtin::i8x16_min_u" => binary!(self, args, WirInstr::I8x16MinU),
-            "builtin::i8x16_max_s" => binary!(self, args, WirInstr::I8x16MaxS),
-            "builtin::i8x16_max_u" => binary!(self, args, WirInstr::I8x16MaxU),
-            "builtin::i8x16_avgr_u" => binary!(self, args, WirInstr::I8x16AvgrU),
-            "builtin::i8x16_all_true" => unary!(self, args, WirInstr::I8x16AllTrue),
-            "builtin::i8x16_bitmask" => unary!(self, args, WirInstr::I8x16Bitmask),
-            "builtin::i8x16_narrow_i16x8_s" => binary!(self, args, WirInstr::I8x16NarrowI16x8S),
-            "builtin::i8x16_narrow_i16x8_u" => binary!(self, args, WirInstr::I8x16NarrowI16x8U),
-            "builtin::i8x16_popcnt" => unary!(self, args, WirInstr::I8x16Popcnt),
-            "builtin::i16x8_abs" => unary!(self, args, WirInstr::I16x8Abs),
-            "builtin::i16x8_add_sat_s" => binary!(self, args, WirInstr::I16x8AddSatS),
-            "builtin::i16x8_add_sat_u" => binary!(self, args, WirInstr::I16x8AddSatU),
-            "builtin::i16x8_sub_sat_s" => binary!(self, args, WirInstr::I16x8SubSatS),
-            "builtin::i16x8_sub_sat_u" => binary!(self, args, WirInstr::I16x8SubSatU),
-            "builtin::i16x8_min_s" => binary!(self, args, WirInstr::I16x8MinS),
-            "builtin::i16x8_min_u" => binary!(self, args, WirInstr::I16x8MinU),
-            "builtin::i16x8_max_s" => binary!(self, args, WirInstr::I16x8MaxS),
-            "builtin::i16x8_max_u" => binary!(self, args, WirInstr::I16x8MaxU),
-            "builtin::i16x8_avgr_u" => binary!(self, args, WirInstr::I16x8AvgrU),
-            "builtin::i16x8_all_true" => unary!(self, args, WirInstr::I16x8AllTrue),
-            "builtin::i16x8_bitmask" => unary!(self, args, WirInstr::I16x8Bitmask),
-            "builtin::i16x8_narrow_i32x4_s" => binary!(self, args, WirInstr::I16x8NarrowI32x4S),
-            "builtin::i16x8_narrow_i32x4_u" => binary!(self, args, WirInstr::I16x8NarrowI32x4U),
-            "builtin::i16x8_extend_low_i8x16_s" => {
+            "i16x8_replace_lane" => replace_lane!(self, args, WirInstr::I16x8ReplaceLane),
+            "i16x8_add" => binary!(self, args, WirInstr::I16x8Add),
+            "i16x8_sub" => binary!(self, args, WirInstr::I16x8Sub),
+            "i16x8_mul" => binary!(self, args, WirInstr::I16x8Mul),
+            "i16x8_neg" => unary!(self, args, WirInstr::I16x8Neg),
+            "i16x8_eq" => binary!(self, args, WirInstr::I16x8Eq),
+            "i16x8_ne" => binary!(self, args, WirInstr::I16x8Ne),
+            "i16x8_lt_s" => binary!(self, args, WirInstr::I16x8LtS),
+            "i16x8_gt_s" => binary!(self, args, WirInstr::I16x8GtS),
+            "i16x8_le_s" => binary!(self, args, WirInstr::I16x8LeS),
+            "i16x8_ge_s" => binary!(self, args, WirInstr::I16x8GeS),
+            "i16x8_lt_u" => binary!(self, args, WirInstr::I16x8LtU),
+            "i16x8_gt_u" => binary!(self, args, WirInstr::I16x8GtU),
+            "i16x8_le_u" => binary!(self, args, WirInstr::I16x8LeU),
+            "i16x8_ge_u" => binary!(self, args, WirInstr::I16x8GeU),
+            "i16x8_shl" => binary!(self, args, WirInstr::I16x8Shl),
+            "i16x8_shr_s" => binary!(self, args, WirInstr::I16x8ShrS),
+            "i16x8_shr_u" => binary!(self, args, WirInstr::I16x8ShrU),
+            "i32x4_splat" => unary!(self, args, WirInstr::I32x4Splat),
+            "i32x4_extract_lane" => extract_lane!(self, args, WirInstr::I32x4ExtractLane),
+            "i32x4_replace_lane" => replace_lane!(self, args, WirInstr::I32x4ReplaceLane),
+            "i32x4_add" => binary!(self, args, WirInstr::I32x4Add),
+            "i32x4_sub" => binary!(self, args, WirInstr::I32x4Sub),
+            "i32x4_mul" => binary!(self, args, WirInstr::I32x4Mul),
+            "i32x4_neg" => unary!(self, args, WirInstr::I32x4Neg),
+            "i32x4_eq" => binary!(self, args, WirInstr::I32x4Eq),
+            "i32x4_ne" => binary!(self, args, WirInstr::I32x4Ne),
+            "i32x4_lt_s" => binary!(self, args, WirInstr::I32x4LtS),
+            "i32x4_gt_s" => binary!(self, args, WirInstr::I32x4GtS),
+            "i32x4_le_s" => binary!(self, args, WirInstr::I32x4LeS),
+            "i32x4_ge_s" => binary!(self, args, WirInstr::I32x4GeS),
+            "i32x4_lt_u" => binary!(self, args, WirInstr::I32x4LtU),
+            "i32x4_gt_u" => binary!(self, args, WirInstr::I32x4GtU),
+            "i32x4_le_u" => binary!(self, args, WirInstr::I32x4LeU),
+            "i32x4_ge_u" => binary!(self, args, WirInstr::I32x4GeU),
+            "i32x4_shl" => binary!(self, args, WirInstr::I32x4Shl),
+            "i32x4_shr_s" => binary!(self, args, WirInstr::I32x4ShrS),
+            "i32x4_shr_u" => binary!(self, args, WirInstr::I32x4ShrU),
+            "i64x2_splat" => unary!(self, args, WirInstr::I64x2Splat),
+            "i64x2_extract_lane" => extract_lane!(self, args, WirInstr::I64x2ExtractLane),
+            "i64x2_replace_lane" => replace_lane!(self, args, WirInstr::I64x2ReplaceLane),
+            "i64x2_add" => binary!(self, args, WirInstr::I64x2Add),
+            "i64x2_sub" => binary!(self, args, WirInstr::I64x2Sub),
+            "i64x2_mul" => binary!(self, args, WirInstr::I64x2Mul),
+            "i64x2_neg" => unary!(self, args, WirInstr::I64x2Neg),
+            "i64x2_eq" => binary!(self, args, WirInstr::I64x2Eq),
+            "i64x2_ne" => binary!(self, args, WirInstr::I64x2Ne),
+            "i64x2_lt_s" => binary!(self, args, WirInstr::I64x2LtS),
+            "i64x2_gt_s" => binary!(self, args, WirInstr::I64x2GtS),
+            "i64x2_le_s" => binary!(self, args, WirInstr::I64x2LeS),
+            "i64x2_ge_s" => binary!(self, args, WirInstr::I64x2GeS),
+            "i64x2_shl" => binary!(self, args, WirInstr::I64x2Shl),
+            "i64x2_shr_s" => binary!(self, args, WirInstr::I64x2ShrS),
+            "i64x2_shr_u" => binary!(self, args, WirInstr::I64x2ShrU),
+            "f32x4_splat" => unary!(self, args, WirInstr::F32x4Splat),
+            "f32x4_extract_lane" => extract_lane!(self, args, WirInstr::F32x4ExtractLane),
+            "f32x4_replace_lane" => replace_lane!(self, args, WirInstr::F32x4ReplaceLane),
+            "f32x4_add" => binary!(self, args, WirInstr::F32x4Add),
+            "f32x4_sub" => binary!(self, args, WirInstr::F32x4Sub),
+            "f32x4_mul" => binary!(self, args, WirInstr::F32x4Mul),
+            "f32x4_div" => binary!(self, args, WirInstr::F32x4Div),
+            "f32x4_neg" => unary!(self, args, WirInstr::F32x4Neg),
+            "f32x4_sqrt" => unary!(self, args, WirInstr::F32x4Sqrt),
+            "f32x4_abs" => unary!(self, args, WirInstr::F32x4Abs),
+            "f32x4_eq" => binary!(self, args, WirInstr::F32x4Eq),
+            "f32x4_ne" => binary!(self, args, WirInstr::F32x4Ne),
+            "f32x4_lt" => binary!(self, args, WirInstr::F32x4Lt),
+            "f32x4_gt" => binary!(self, args, WirInstr::F32x4Gt),
+            "f32x4_le" => binary!(self, args, WirInstr::F32x4Le),
+            "f32x4_ge" => binary!(self, args, WirInstr::F32x4Ge),
+            "f32x4_min" => binary!(self, args, WirInstr::F32x4Min),
+            "f32x4_max" => binary!(self, args, WirInstr::F32x4Max),
+            "f64x2_splat" => unary!(self, args, WirInstr::F64x2Splat),
+            "f64x2_extract_lane" => extract_lane!(self, args, WirInstr::F64x2ExtractLane),
+            "f64x2_replace_lane" => replace_lane!(self, args, WirInstr::F64x2ReplaceLane),
+            "f64x2_add" => binary!(self, args, WirInstr::F64x2Add),
+            "f64x2_sub" => binary!(self, args, WirInstr::F64x2Sub),
+            "f64x2_mul" => binary!(self, args, WirInstr::F64x2Mul),
+            "f64x2_div" => binary!(self, args, WirInstr::F64x2Div),
+            "f64x2_neg" => unary!(self, args, WirInstr::F64x2Neg),
+            "f64x2_sqrt" => unary!(self, args, WirInstr::F64x2Sqrt),
+            "f64x2_abs" => unary!(self, args, WirInstr::F64x2Abs),
+            "f64x2_eq" => binary!(self, args, WirInstr::F64x2Eq),
+            "f64x2_ne" => binary!(self, args, WirInstr::F64x2Ne),
+            "f64x2_lt" => binary!(self, args, WirInstr::F64x2Lt),
+            "f64x2_gt" => binary!(self, args, WirInstr::F64x2Gt),
+            "f64x2_le" => binary!(self, args, WirInstr::F64x2Le),
+            "f64x2_ge" => binary!(self, args, WirInstr::F64x2Ge),
+            "f64x2_min" => binary!(self, args, WirInstr::F64x2Min),
+            "f64x2_max" => binary!(self, args, WirInstr::F64x2Max),
+            "i8x16_abs" => unary!(self, args, WirInstr::I8x16Abs),
+            "i8x16_add_sat_s" => binary!(self, args, WirInstr::I8x16AddSatS),
+            "i8x16_add_sat_u" => binary!(self, args, WirInstr::I8x16AddSatU),
+            "i8x16_sub_sat_s" => binary!(self, args, WirInstr::I8x16SubSatS),
+            "i8x16_sub_sat_u" => binary!(self, args, WirInstr::I8x16SubSatU),
+            "i8x16_min_s" => binary!(self, args, WirInstr::I8x16MinS),
+            "i8x16_min_u" => binary!(self, args, WirInstr::I8x16MinU),
+            "i8x16_max_s" => binary!(self, args, WirInstr::I8x16MaxS),
+            "i8x16_max_u" => binary!(self, args, WirInstr::I8x16MaxU),
+            "i8x16_avgr_u" => binary!(self, args, WirInstr::I8x16AvgrU),
+            "i8x16_all_true" => unary!(self, args, WirInstr::I8x16AllTrue),
+            "i8x16_bitmask" => unary!(self, args, WirInstr::I8x16Bitmask),
+            "i8x16_narrow_i16x8_s" => binary!(self, args, WirInstr::I8x16NarrowI16x8S),
+            "i8x16_narrow_i16x8_u" => binary!(self, args, WirInstr::I8x16NarrowI16x8U),
+            "i8x16_popcnt" => unary!(self, args, WirInstr::I8x16Popcnt),
+            "i16x8_abs" => unary!(self, args, WirInstr::I16x8Abs),
+            "i16x8_add_sat_s" => binary!(self, args, WirInstr::I16x8AddSatS),
+            "i16x8_add_sat_u" => binary!(self, args, WirInstr::I16x8AddSatU),
+            "i16x8_sub_sat_s" => binary!(self, args, WirInstr::I16x8SubSatS),
+            "i16x8_sub_sat_u" => binary!(self, args, WirInstr::I16x8SubSatU),
+            "i16x8_min_s" => binary!(self, args, WirInstr::I16x8MinS),
+            "i16x8_min_u" => binary!(self, args, WirInstr::I16x8MinU),
+            "i16x8_max_s" => binary!(self, args, WirInstr::I16x8MaxS),
+            "i16x8_max_u" => binary!(self, args, WirInstr::I16x8MaxU),
+            "i16x8_avgr_u" => binary!(self, args, WirInstr::I16x8AvgrU),
+            "i16x8_all_true" => unary!(self, args, WirInstr::I16x8AllTrue),
+            "i16x8_bitmask" => unary!(self, args, WirInstr::I16x8Bitmask),
+            "i16x8_narrow_i32x4_s" => binary!(self, args, WirInstr::I16x8NarrowI32x4S),
+            "i16x8_narrow_i32x4_u" => binary!(self, args, WirInstr::I16x8NarrowI32x4U),
+            "i16x8_extend_low_i8x16_s" => {
                 unary!(self, args, WirInstr::I16x8ExtendLowI8x16S)
             }
-            "builtin::i16x8_extend_high_i8x16_s" => {
+            "i16x8_extend_high_i8x16_s" => {
                 unary!(self, args, WirInstr::I16x8ExtendHighI8x16S)
             }
-            "builtin::i16x8_extend_low_i8x16_u" => {
+            "i16x8_extend_low_i8x16_u" => {
                 unary!(self, args, WirInstr::I16x8ExtendLowI8x16U)
             }
-            "builtin::i16x8_extend_high_i8x16_u" => {
+            "i16x8_extend_high_i8x16_u" => {
                 unary!(self, args, WirInstr::I16x8ExtendHighI8x16U)
             }
-            "builtin::i16x8_extmul_low_i8x16_s" => {
+            "i16x8_extmul_low_i8x16_s" => {
                 binary!(self, args, WirInstr::I16x8ExtMulLowI8x16S)
             }
-            "builtin::i16x8_extmul_high_i8x16_s" => {
+            "i16x8_extmul_high_i8x16_s" => {
                 binary!(self, args, WirInstr::I16x8ExtMulHighI8x16S)
             }
-            "builtin::i16x8_extmul_low_i8x16_u" => {
+            "i16x8_extmul_low_i8x16_u" => {
                 binary!(self, args, WirInstr::I16x8ExtMulLowI8x16U)
             }
-            "builtin::i16x8_extmul_high_i8x16_u" => {
+            "i16x8_extmul_high_i8x16_u" => {
                 binary!(self, args, WirInstr::I16x8ExtMulHighI8x16U)
             }
-            "builtin::i16x8_extadd_pairwise_i8x16_s" => {
+            "i16x8_extadd_pairwise_i8x16_s" => {
                 unary!(self, args, WirInstr::I16x8ExtAddPairwiseI8x16S)
             }
-            "builtin::i16x8_extadd_pairwise_i8x16_u" => {
+            "i16x8_extadd_pairwise_i8x16_u" => {
                 unary!(self, args, WirInstr::I16x8ExtAddPairwiseI8x16U)
             }
-            "builtin::i16x8_q15mulr_sat_s" => binary!(self, args, WirInstr::I16x8Q15MulrSatS),
-            "builtin::i32x4_abs" => unary!(self, args, WirInstr::I32x4Abs),
-            "builtin::i32x4_all_true" => unary!(self, args, WirInstr::I32x4AllTrue),
-            "builtin::i32x4_bitmask" => unary!(self, args, WirInstr::I32x4Bitmask),
-            "builtin::i32x4_min_s" => binary!(self, args, WirInstr::I32x4MinS),
-            "builtin::i32x4_min_u" => binary!(self, args, WirInstr::I32x4MinU),
-            "builtin::i32x4_max_s" => binary!(self, args, WirInstr::I32x4MaxS),
-            "builtin::i32x4_max_u" => binary!(self, args, WirInstr::I32x4MaxU),
-            "builtin::i32x4_dot_i16x8_s" => binary!(self, args, WirInstr::I32x4DotI16x8S),
-            "builtin::i32x4_extend_low_i16x8_s" => {
+            "i16x8_q15mulr_sat_s" => binary!(self, args, WirInstr::I16x8Q15MulrSatS),
+            "i32x4_abs" => unary!(self, args, WirInstr::I32x4Abs),
+            "i32x4_all_true" => unary!(self, args, WirInstr::I32x4AllTrue),
+            "i32x4_bitmask" => unary!(self, args, WirInstr::I32x4Bitmask),
+            "i32x4_min_s" => binary!(self, args, WirInstr::I32x4MinS),
+            "i32x4_min_u" => binary!(self, args, WirInstr::I32x4MinU),
+            "i32x4_max_s" => binary!(self, args, WirInstr::I32x4MaxS),
+            "i32x4_max_u" => binary!(self, args, WirInstr::I32x4MaxU),
+            "i32x4_dot_i16x8_s" => binary!(self, args, WirInstr::I32x4DotI16x8S),
+            "i32x4_extend_low_i16x8_s" => {
                 unary!(self, args, WirInstr::I32x4ExtendLowI16x8S)
             }
-            "builtin::i32x4_extend_high_i16x8_s" => {
+            "i32x4_extend_high_i16x8_s" => {
                 unary!(self, args, WirInstr::I32x4ExtendHighI16x8S)
             }
-            "builtin::i32x4_extend_low_i16x8_u" => {
+            "i32x4_extend_low_i16x8_u" => {
                 unary!(self, args, WirInstr::I32x4ExtendLowI16x8U)
             }
-            "builtin::i32x4_extend_high_i16x8_u" => {
+            "i32x4_extend_high_i16x8_u" => {
                 unary!(self, args, WirInstr::I32x4ExtendHighI16x8U)
             }
-            "builtin::i32x4_extmul_low_i16x8_s" => {
+            "i32x4_extmul_low_i16x8_s" => {
                 binary!(self, args, WirInstr::I32x4ExtMulLowI16x8S)
             }
-            "builtin::i32x4_extmul_high_i16x8_s" => {
+            "i32x4_extmul_high_i16x8_s" => {
                 binary!(self, args, WirInstr::I32x4ExtMulHighI16x8S)
             }
-            "builtin::i32x4_extmul_low_i16x8_u" => {
+            "i32x4_extmul_low_i16x8_u" => {
                 binary!(self, args, WirInstr::I32x4ExtMulLowI16x8U)
             }
-            "builtin::i32x4_extmul_high_i16x8_u" => {
+            "i32x4_extmul_high_i16x8_u" => {
                 binary!(self, args, WirInstr::I32x4ExtMulHighI16x8U)
             }
-            "builtin::i32x4_extadd_pairwise_i16x8_s" => {
+            "i32x4_extadd_pairwise_i16x8_s" => {
                 unary!(self, args, WirInstr::I32x4ExtAddPairwiseI16x8S)
             }
-            "builtin::i32x4_extadd_pairwise_i16x8_u" => {
+            "i32x4_extadd_pairwise_i16x8_u" => {
                 unary!(self, args, WirInstr::I32x4ExtAddPairwiseI16x8U)
             }
-            "builtin::i32x4_trunc_sat_f32x4_s" => unary!(self, args, WirInstr::I32x4TruncSatF32x4S),
-            "builtin::i32x4_trunc_sat_f32x4_u" => unary!(self, args, WirInstr::I32x4TruncSatF32x4U),
-            "builtin::i32x4_trunc_sat_f64x2_s_zero" => {
+            "i32x4_trunc_sat_f32x4_s" => unary!(self, args, WirInstr::I32x4TruncSatF32x4S),
+            "i32x4_trunc_sat_f32x4_u" => unary!(self, args, WirInstr::I32x4TruncSatF32x4U),
+            "i32x4_trunc_sat_f64x2_s_zero" => {
                 unary!(self, args, WirInstr::I32x4TruncSatF64x2SZero)
             }
-            "builtin::i32x4_trunc_sat_f64x2_u_zero" => {
+            "i32x4_trunc_sat_f64x2_u_zero" => {
                 unary!(self, args, WirInstr::I32x4TruncSatF64x2UZero)
             }
-            "builtin::i64x2_abs" => unary!(self, args, WirInstr::I64x2Abs),
-            "builtin::i64x2_all_true" => unary!(self, args, WirInstr::I64x2AllTrue),
-            "builtin::i64x2_bitmask" => unary!(self, args, WirInstr::I64x2Bitmask),
-            "builtin::i64x2_extend_low_i32x4_s" => {
+            "i64x2_abs" => unary!(self, args, WirInstr::I64x2Abs),
+            "i64x2_all_true" => unary!(self, args, WirInstr::I64x2AllTrue),
+            "i64x2_bitmask" => unary!(self, args, WirInstr::I64x2Bitmask),
+            "i64x2_extend_low_i32x4_s" => {
                 unary!(self, args, WirInstr::I64x2ExtendLowI32x4S)
             }
-            "builtin::i64x2_extend_high_i32x4_s" => {
+            "i64x2_extend_high_i32x4_s" => {
                 unary!(self, args, WirInstr::I64x2ExtendHighI32x4S)
             }
-            "builtin::i64x2_extend_low_i32x4_u" => {
+            "i64x2_extend_low_i32x4_u" => {
                 unary!(self, args, WirInstr::I64x2ExtendLowI32x4U)
             }
-            "builtin::i64x2_extend_high_i32x4_u" => {
+            "i64x2_extend_high_i32x4_u" => {
                 unary!(self, args, WirInstr::I64x2ExtendHighI32x4U)
             }
-            "builtin::i64x2_extmul_low_i32x4_s" => {
+            "i64x2_extmul_low_i32x4_s" => {
                 binary!(self, args, WirInstr::I64x2ExtMulLowI32x4S)
             }
-            "builtin::i64x2_extmul_high_i32x4_s" => {
+            "i64x2_extmul_high_i32x4_s" => {
                 binary!(self, args, WirInstr::I64x2ExtMulHighI32x4S)
             }
-            "builtin::i64x2_extmul_low_i32x4_u" => {
+            "i64x2_extmul_low_i32x4_u" => {
                 binary!(self, args, WirInstr::I64x2ExtMulLowI32x4U)
             }
-            "builtin::i64x2_extmul_high_i32x4_u" => {
+            "i64x2_extmul_high_i32x4_u" => {
                 binary!(self, args, WirInstr::I64x2ExtMulHighI32x4U)
             }
-            "builtin::f32x4_ceil" => unary!(self, args, WirInstr::F32x4Ceil),
-            "builtin::f32x4_floor" => unary!(self, args, WirInstr::F32x4Floor),
-            "builtin::f32x4_trunc" => unary!(self, args, WirInstr::F32x4Trunc),
-            "builtin::f32x4_nearest" => unary!(self, args, WirInstr::F32x4Nearest),
-            "builtin::f32x4_pmin" => binary!(self, args, WirInstr::F32x4PMin),
-            "builtin::f32x4_pmax" => binary!(self, args, WirInstr::F32x4PMax),
-            "builtin::f32x4_convert_i32x4_s" => unary!(self, args, WirInstr::F32x4ConvertI32x4S),
-            "builtin::f32x4_convert_i32x4_u" => unary!(self, args, WirInstr::F32x4ConvertI32x4U),
-            "builtin::f32x4_demote_f64x2_zero" => {
+            "f32x4_ceil" => unary!(self, args, WirInstr::F32x4Ceil),
+            "f32x4_floor" => unary!(self, args, WirInstr::F32x4Floor),
+            "f32x4_trunc" => unary!(self, args, WirInstr::F32x4Trunc),
+            "f32x4_nearest" => unary!(self, args, WirInstr::F32x4Nearest),
+            "f32x4_pmin" => binary!(self, args, WirInstr::F32x4PMin),
+            "f32x4_pmax" => binary!(self, args, WirInstr::F32x4PMax),
+            "f32x4_convert_i32x4_s" => unary!(self, args, WirInstr::F32x4ConvertI32x4S),
+            "f32x4_convert_i32x4_u" => unary!(self, args, WirInstr::F32x4ConvertI32x4U),
+            "f32x4_demote_f64x2_zero" => {
                 unary!(self, args, WirInstr::F32x4DemoteF64x2Zero)
             }
-            "builtin::f64x2_ceil" => unary!(self, args, WirInstr::F64x2Ceil),
-            "builtin::f64x2_floor" => unary!(self, args, WirInstr::F64x2Floor),
-            "builtin::f64x2_trunc" => unary!(self, args, WirInstr::F64x2Trunc),
-            "builtin::f64x2_nearest" => unary!(self, args, WirInstr::F64x2Nearest),
-            "builtin::f64x2_pmin" => binary!(self, args, WirInstr::F64x2PMin),
-            "builtin::f64x2_pmax" => binary!(self, args, WirInstr::F64x2PMax),
-            "builtin::f64x2_convert_low_i32x4_s" => {
+            "f64x2_ceil" => unary!(self, args, WirInstr::F64x2Ceil),
+            "f64x2_floor" => unary!(self, args, WirInstr::F64x2Floor),
+            "f64x2_trunc" => unary!(self, args, WirInstr::F64x2Trunc),
+            "f64x2_nearest" => unary!(self, args, WirInstr::F64x2Nearest),
+            "f64x2_pmin" => binary!(self, args, WirInstr::F64x2PMin),
+            "f64x2_pmax" => binary!(self, args, WirInstr::F64x2PMax),
+            "f64x2_convert_low_i32x4_s" => {
                 unary!(self, args, WirInstr::F64x2ConvertLowI32x4S)
             }
-            "builtin::f64x2_convert_low_i32x4_u" => {
+            "f64x2_convert_low_i32x4_u" => {
                 unary!(self, args, WirInstr::F64x2ConvertLowI32x4U)
             }
-            "builtin::f64x2_promote_low_f32x4" => {
+            "f64x2_promote_low_f32x4" => {
                 unary!(self, args, WirInstr::F64x2PromoteLowF32x4)
             }
-            "builtin::v128_andnot" => binary!(self, args, WirInstr::V128AndNot),
-            "builtin::v128_any_true" => unary!(self, args, WirInstr::V128AnyTrue),
-            "builtin::i8x16_relaxed_swizzle" => binary!(self, args, WirInstr::I8x16RelaxedSwizzle),
-            "builtin::i8x16_relaxed_laneselect" => {
+            "v128_andnot" => binary!(self, args, WirInstr::V128AndNot),
+            "v128_any_true" => unary!(self, args, WirInstr::V128AnyTrue),
+            "i8x16_relaxed_swizzle" => binary!(self, args, WirInstr::I8x16RelaxedSwizzle),
+            "i8x16_relaxed_laneselect" => {
                 ternary!(self, args, WirInstr::I8x16RelaxedLaneselect)
             }
-            "builtin::i16x8_relaxed_laneselect" => {
+            "i16x8_relaxed_laneselect" => {
                 ternary!(self, args, WirInstr::I16x8RelaxedLaneselect)
             }
-            "builtin::i32x4_relaxed_laneselect" => {
+            "i32x4_relaxed_laneselect" => {
                 ternary!(self, args, WirInstr::I32x4RelaxedLaneselect)
             }
-            "builtin::i64x2_relaxed_laneselect" => {
+            "i64x2_relaxed_laneselect" => {
                 ternary!(self, args, WirInstr::I64x2RelaxedLaneselect)
             }
-            "builtin::f32x4_relaxed_madd" => ternary!(self, args, WirInstr::F32x4RelaxedMadd),
-            "builtin::f32x4_relaxed_nmadd" => ternary!(self, args, WirInstr::F32x4RelaxedNmadd),
-            "builtin::f64x2_relaxed_madd" => ternary!(self, args, WirInstr::F64x2RelaxedMadd),
-            "builtin::f64x2_relaxed_nmadd" => ternary!(self, args, WirInstr::F64x2RelaxedNmadd),
-            "builtin::f32x4_relaxed_min" => binary!(self, args, WirInstr::F32x4RelaxedMin),
-            "builtin::f32x4_relaxed_max" => binary!(self, args, WirInstr::F32x4RelaxedMax),
-            "builtin::f64x2_relaxed_min" => binary!(self, args, WirInstr::F64x2RelaxedMin),
-            "builtin::f64x2_relaxed_max" => binary!(self, args, WirInstr::F64x2RelaxedMax),
-            "builtin::i32x4_relaxed_trunc_f32x4_s" => {
+            "f32x4_relaxed_madd" => ternary!(self, args, WirInstr::F32x4RelaxedMadd),
+            "f32x4_relaxed_nmadd" => ternary!(self, args, WirInstr::F32x4RelaxedNmadd),
+            "f64x2_relaxed_madd" => ternary!(self, args, WirInstr::F64x2RelaxedMadd),
+            "f64x2_relaxed_nmadd" => ternary!(self, args, WirInstr::F64x2RelaxedNmadd),
+            "f32x4_relaxed_min" => binary!(self, args, WirInstr::F32x4RelaxedMin),
+            "f32x4_relaxed_max" => binary!(self, args, WirInstr::F32x4RelaxedMax),
+            "f64x2_relaxed_min" => binary!(self, args, WirInstr::F64x2RelaxedMin),
+            "f64x2_relaxed_max" => binary!(self, args, WirInstr::F64x2RelaxedMax),
+            "i32x4_relaxed_trunc_f32x4_s" => {
                 unary!(self, args, WirInstr::I32x4RelaxedTruncF32x4S)
             }
-            "builtin::i32x4_relaxed_trunc_f32x4_u" => {
+            "i32x4_relaxed_trunc_f32x4_u" => {
                 unary!(self, args, WirInstr::I32x4RelaxedTruncF32x4U)
             }
-            "builtin::i32x4_relaxed_trunc_f64x2_s_zero" => {
+            "i32x4_relaxed_trunc_f64x2_s_zero" => {
                 unary!(self, args, WirInstr::I32x4RelaxedTruncF64x2SZero)
             }
-            "builtin::i32x4_relaxed_trunc_f64x2_u_zero" => {
+            "i32x4_relaxed_trunc_f64x2_u_zero" => {
                 unary!(self, args, WirInstr::I32x4RelaxedTruncF64x2UZero)
             }
-            "builtin::i16x8_relaxed_q15mulr_s" => {
+            "i16x8_relaxed_q15mulr_s" => {
                 binary!(self, args, WirInstr::I16x8RelaxedQ15mulrS)
             }
-            "builtin::i16x8_relaxed_dot_i8x16_i7x16_s" => {
+            "i16x8_relaxed_dot_i8x16_i7x16_s" => {
                 binary!(self, args, WirInstr::I16x8RelaxedDotI8x16I7x16S)
             }
-            "builtin::i32x4_relaxed_dot_i8x16_i7x16_add_s" => {
+            "i32x4_relaxed_dot_i8x16_i7x16_add_s" => {
                 ternary!(self, args, WirInstr::I32x4RelaxedDotI8x16I7x16AddS)
             }
-            "builtin::memory_grow" => unary!(self, args, WirInstr::MemoryGrow),
+            "memory_grow" => unary!(self, args, WirInstr::MemoryGrow),
             _ => return None,
         })
     }

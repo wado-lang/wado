@@ -1897,7 +1897,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (it pins the per-call monomorphic shape reify needs to seed
         // mangled-name construction).
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
-        if callee.module().is_builtin() && callee.name() == ARRAY_NEW_DATA {
+        if callee.intrinsic() == Some(ARRAY_NEW_DATA) {
             self.check_array_new_data(&call.args, return_type, call.span);
         }
 
@@ -2049,15 +2049,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Look up the return type of a function
     pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
-        let callee_module = callee.module();
-        let func_name = callee.name();
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.tysys.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.tysys.get_builtin_return_type(builtin_name);
+        if let Some(intrinsic) = callee.intrinsic() {
+            return self.tysys.get_builtin_return_type(intrinsic);
         }
 
         if let Some(def) = callee.def()
@@ -2536,7 +2529,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `builtin::array_new(n)` infer their generic type parameters from
         // argument types or LHS annotations the same way ordinary generic
         // functions do.
-        if let Some(info) = self.tysys.builtin_registry.get(func_name) {
+        if let Some(intrinsic) = callee.intrinsic()
+            && let Some(info) = self.tysys.builtin_registry.intrinsic(intrinsic)
+        {
             if info.type_params.is_empty() {
                 return vec![];
             }
@@ -3728,8 +3723,8 @@ impl TypeSystem {
     /// A builtin's return type, `TypeParam`-based for a generic one.
     pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
         self.builtin_registry
-            .get_return_type(name)
-            .unwrap_or(TypeTable::UNIT)
+            .intrinsic(name)
+            .map_or(TypeTable::UNIT, |f| f.return_type)
     }
 
     /// Whether `ty` is a type argument nothing has determined yet: a slot left

@@ -1241,12 +1241,8 @@ fn compile_after_load<H: CompilerHost>(
     }
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
-    // For the `core:kiln/generator` target world, walk the entry module's
-    // `pub struct Options` and produce a structural descriptor that the CLI
-    // provider caches on disk. Diagnostics from the extractor surface
-    // through the host without bailing: a malformed descriptor does not
-    // fail the whole compile, so the driver's provisional fallback still
-    // produces a valid cache key.
+    // An `Options` no descriptor describes fails here: no options table could
+    // be validated against it, so the generator would trap on a missing field.
     let is_kiln_generator = match (options.target_world.as_deref(), sem.world_registry()) {
         (Some(tw), Some(reg)) => reg.is_generator_world(tw),
         _ => false,
@@ -1259,7 +1255,7 @@ fn compile_after_load<H: CompilerHost>(
                 for d in diags {
                     logger.host().emit_diagnostic(d);
                 }
-                None
+                return Err(Bail);
             }
         }
     } else {
