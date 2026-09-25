@@ -347,20 +347,9 @@ fn lower_inline(
     }
     let module = module.expect("module was validated above");
 
-    let synthetic_id = {
-        let mut h = Sha256::new();
-        h.update(module_key(&module).as_bytes());
-        h.update(from.as_str().as_bytes());
-        for p in &inputs {
-            h.update(p.as_str().as_bytes());
-            h.update([0u8]);
-        }
-        h.update(encode_written_options(
-            options_entry.map(|entry| &entry.value),
-        ));
-        let digest: [u8; 32] = h.finalize().into();
-        format!("kiln-{}", &hex_digest(&digest)[..16])
-    };
+    let written_options = encode_written_options(options_entry.map(|entry| &entry.value));
+    let digest = clause_digest(&module, from.as_str(), &inputs, None, &written_options);
+    let synthetic_id = format!("kiln-{}", &digest[..16]);
 
     let output_dir = output_dir_override.unwrap_or_else(|| {
         InvocationPath::normalize(&format!(
@@ -564,6 +553,18 @@ fn module_key(module: &GeneratorModule) -> String {
 
 fn identity_key(inv: &Invocation) -> String {
     let (module, from, inputs, output_dir, options) = inv.identity_tuple();
+    clause_digest(module, from, inputs, Some(output_dir), &options)
+}
+
+/// The hex SHA-256 of what a clause names. The synthetic id leaves out the
+/// output directory, since by default the directory is named for it.
+fn clause_digest(
+    module: &GeneratorModule,
+    from: &str,
+    inputs: &[InvocationPath],
+    output_dir: Option<&str>,
+    options: &[u8],
+) -> String {
     let mut h = Sha256::new();
     h.update(module_key(module).as_bytes());
     h.update(from.as_bytes());
@@ -571,7 +572,9 @@ fn identity_key(inv: &Invocation) -> String {
         h.update(p.as_str().as_bytes());
         h.update([0u8]);
     }
-    h.update(output_dir.as_bytes());
+    if let Some(dir) = output_dir {
+        h.update(dir.as_bytes());
+    }
     h.update(options);
     let digest: [u8; 32] = h.finalize().into();
     hex_digest(&digest)
