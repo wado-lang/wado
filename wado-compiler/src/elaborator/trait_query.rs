@@ -1425,14 +1425,12 @@ impl TypeSystem {
     }
 
     fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let name = {
-            let tt = self.type_table.borrow();
-            if !matches!(tt.get(type_id), ResolvedType::Struct { .. }) {
-                return false;
-            }
-            tt.type_name(type_id)
+        let def = match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { def, .. } => def.decl(),
+            _ => None,
         };
-        self.auto_derive_default_struct_type(scope, &name).is_some()
+        def.and_then(|def| self.auto_derive_default_struct_type(scope, def))
+            .is_some()
     }
 
     /// The `WireNumbered` bound's eligibility: a struct whose every field
@@ -1680,10 +1678,7 @@ impl TypeSystem {
 
         if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && let Some(name) = def
-                .decl()
-                .map(|d| self.type_table.borrow().def_name(d).to_string())
-            && self.auto_derive_default_struct_type(scope, &name).is_some()
+            && self.is_defaultable_struct(scope, type_id)
         {
             if let Some(key) = on_bound.and_then(|t| self.synth_trait_key(t)) {
                 let module_source = self

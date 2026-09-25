@@ -3028,23 +3028,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The `Default::default` no declaration backs, which bound-driven
     /// synthesis emits on demand. It is not a candidate: nothing declares it,
     /// so no rule has anything to read, and it answers only where the rules
-    /// found nothing.
+    /// found nothing. Answers the reference and the struct type it returns.
     pub(super) fn auto_derived_default_ref(
         &self,
-        struct_name: &str,
+        key: &ImplTargetKey,
         method_name: &str,
-    ) -> Option<StaticMethodRef> {
+    ) -> Option<(StaticMethodRef, TypeId)> {
         if method_name == "default"
+            && let ImplTargetKey::Decl(def) = key
             && let Some(struct_type) = self
                 .tysys
-                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
+                .auto_derive_default_struct_type(&self.type_lookup(), *def)
         {
             let default_trait_name = self
                 .tysys
                 .type_table
                 .borrow()
                 .compiler_trait_fq(CompilerItem::Default);
-            let module_source = self.declaring_module_of(struct_name);
+            let (module_source, struct_name) = {
+                let tt = self.tysys.type_table.borrow();
+                (tt.def_module(*def).clone(), tt.def_name(*def).to_string())
+            };
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -3055,13 +3059,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .canonical()
                         .expect("a compiler trait item names a declaration"),
                 );
-            return Some(StaticMethodRef::new(
+            let method_ref = StaticMethodRef::new(
                 module_source,
-                struct_name,
+                &struct_name,
                 method_name,
                 Some(default_trait_name),
                 None,
-            ));
+            );
+            return Some((method_ref, struct_type));
         }
 
         None

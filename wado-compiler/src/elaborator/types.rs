@@ -3803,10 +3803,6 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.struct_fields_of(self.declaration(name)?)
-    }
-
     /// Field info for a struct type's own head — the form with nothing left to
     /// resolve, since the head is already an identity or a shape.
     pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {

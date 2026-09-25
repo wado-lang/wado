@@ -718,18 +718,14 @@ impl TypeSystem {
         self.compiler_trait_def(operator_compiler_item(op)?)
     }
 
-    /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
-    /// fields all declare a default, making it eligible for auto-derived
-    /// `Default::default()` — a fieldless one vacuously. `None` for an unknown
-    /// name, a required field, or a generic struct. Does not check for a user-written
-    /// `impl Default`, so consult it only as a fallback after the regular
-    /// impl-lookup paths.
+    /// `Some(struct_type)` when `def` is a struct that derives `Default` from its
+    /// field defaults. Blind to a written `impl Default`, so it is a fallback.
     pub(super) fn auto_derive_default_struct_type(
         &self,
         scope: &TypeLookup,
-        struct_name: &str,
+        def: DefId,
     ) -> Option<TypeId> {
-        let info = scope.struct_fields(struct_name)?;
+        let info = scope.struct_fields_of(def)?;
         if !info.auto_derives_default() {
             return None;
         }
