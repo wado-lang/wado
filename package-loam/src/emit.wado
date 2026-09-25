@@ -700,10 +700,16 @@ fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
 }
 
 /// Whether one axis of a kernel's signature can stand for both of these. Stage
-/// 0 lets an extent of 1 stretch to meet the other operand and no kernel does,
-/// so agreeing on the name is not yet agreeing.
+/// 0 lets an extent of 1 stretch to meet the other operand and `matmul` does
+/// not, so agreeing on the name is not yet agreeing.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agrees(&right.extent);
+}
+
+/// `same_axis` for an elementwise kernel, which stretches an extent of 1.
+fn stretchable_axis(left: &Axis, right: &Axis) -> bool {
+    return left.name == right.name
+        && (left.extent.agrees(&right.extent) || left.extent.is_one() || right.extent.is_one());
 }
 
 /// Whether the axes the two operands share, aligned from the end as every
@@ -711,7 +717,7 @@ fn same_axis(left: &Axis, right: &Axis) -> bool {
 fn shared_axes_agree(left: &Shape, right: &Shape) -> bool {
     let common = i32::min(left.rank(), right.rank());
     for let mut back = 0; back < common; back += 1 {
-        if !same_axis(left.from_end(back), right.from_end(back)) {
+        if !stretchable_axis(left.from_end(back), right.from_end(back)) {
             return false;
         }
     }

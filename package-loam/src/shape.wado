@@ -104,9 +104,9 @@ impl Shape {
                 axes.push(right[ri]);
             } else if ri < 0 {
                 axes.push(left[li]);
-            } else if left[li].extent matches { Static(1) } {
+            } else if left[li].extent.is_one() {
                 axes.push(right[ri]);
-            } else if right[ri].extent matches { Static(1) } {
+            } else if right[ri].extent.is_one() {
                 axes.push(left[li]);
             } else {
                 Shape::agree(&left[li], &right[ri], op)?;

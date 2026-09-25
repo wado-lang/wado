@@ -194,6 +194,23 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
 }
 
+test "an extent-1 axis stretches under the name the other operand gives it" {
+    let source = `
+g (float[N, 8, 28, 28] X) => (float[N, 8, 28, 28] Y)
+<float[8, 1, 1] B>
+{
+    Y = Add(X, B)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Chan", "Row", "Col"]),
+        rule("B", ["Chan", "Row", "Col"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("zip_suffix::<[Batch], [Chan, Row, Col]>(X, &weights.B, |x, y| x + y)");
+}
+
 test "Gemm lowers to a matmul under its transpose flags" {
     let source = `
 g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
@@ -325,7 +342,7 @@ g (float[N, 2] X) => (float[N, 2] Y)
     assert `${t}` == "Held: an axis cannot be named as the generated module names something";
 }
 
-test "a broadcast that stretches an extent of one names both operands" {
+test "a stretch between operands of one rank lowers to zip" {
     let source = `
 g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
 <>
@@ -333,11 +350,9 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     Y = Add(X, Z)
 }
 `;
-    // One layout rule names both operands' axes, so stage 0 discharges the
-    // stretch and only the extents differ.
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
 
-    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, Unit] against [Batch, Unit]";
+    assert out.contains("zip(X, Z, |x, y| x + y)");
 }
 
 test "a MatMul batch axis that stretches names both operands" {

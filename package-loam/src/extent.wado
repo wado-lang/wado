@@ -17,6 +17,11 @@ impl Extent {
             Symbol(a) => other matches { Symbol(b) && *b == *a },
         };
     }
+
+    /// Whether this is the extent ONNX's broadcasting stretches to any other.
+    pub fn is_one(&self) -> bool {
+        return self matches { Static(1) };
+    }
 }
 
 impl Display for Extent {

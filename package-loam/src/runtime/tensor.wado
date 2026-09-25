@@ -48,7 +48,9 @@ pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..B
 }
 
 pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
-    assert a.extents == b.extents;
+    if a.extents != b.extents {
+        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
+    }
     let mut out = List::<f32>::with_capacity(a.data.len());
     for let [i, v] of a.data.into_iter().enumerate() {
         out.push(op(v, b.data[i]));
@@ -61,7 +63,10 @@ pub fn zip_suffix<..Pre, ..Suf>(
     b: &Tensor<f32, [..Suf]>,
     op: fn(f32, f32) -> f32,
 ) -> Tensor<f32, [..Pre, ..Suf]> {
-    let period = suffix_period(&a.extents, &b.extents);
+    if !ends_with(&a.extents, &b.extents) {
+        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
+    }
+    let period = element_count(&b.extents);
     let mut out = List::<f32>::with_capacity(a.data.len());
     for let [i, v] of a.data.into_iter().enumerate() {
         out.push(op(v, b.data[i % period]));
@@ -76,7 +81,10 @@ pub fn zip_suffix_lhs<..Pre, ..Suf>(
     b: &Tensor<f32, [..Pre, ..Suf]>,
     op: fn(f32, f32) -> f32,
 ) -> Tensor<f32, [..Pre, ..Suf]> {
-    let period = suffix_period(&b.extents, &a.extents);
+    if !ends_with(&b.extents, &a.extents) {
+        return stretched_zip(a.data, a.extents, b.data, b.extents, op);
+    }
+    let period = element_count(&a.extents);
     let mut out = List::<f32>::with_capacity(b.data.len());
     for let [i, v] of b.data.into_iter().enumerate() {
         out.push(op(a.data[i % period], v));
@@ -84,13 +92,77 @@ pub fn zip_suffix_lhs<..Pre, ..Suf>(
     return Tensor { data: out, extents: b.extents };
 }
 
-fn suffix_period(whole: &List<i32>, suffix: &List<i32>) -> i32 {
+fn ends_with(whole: &List<i32>, suffix: &List<i32>) -> bool {
     assert suffix.len() <= whole.len();
     let offset = whole.len() - suffix.len();
     for let mut i = 0; i < suffix.len(); i += 1 {
-        assert whole[offset + i] == suffix[i];
+        if whole[offset + i] != suffix[i] {
+            return false;
+        }
     }
-    return element_count(suffix);
+    return true;
+}
+
+/// Two operands combined under ONNX's broadcasting: aligned from the end, an
+/// axis one operand lacks or holds at extent 1 stretches to meet the other.
+fn stretched_zip<Axes>(
+    a: List<f32>,
+    a_extents: List<i32>,
+    b: List<f32>,
+    b_extents: List<i32>,
+    op: fn(f32, f32) -> f32,
+) -> Tensor<f32, Axes> {
+    let rank = i32::max(a_extents.len(), b_extents.len());
+    let a_strides = stretched_strides(&a_extents, rank);
+    let b_strides = stretched_strides(&b_extents, rank);
+    let mut extents: List<i32> = [];
+    for let mut i = 0; i < rank; i += 1 {
+        let ea = aligned_extent(&a_extents, rank, i);
+        let eb = aligned_extent(&b_extents, rank, i);
+        assert ea == eb || ea == 1 || eb == 1;
+        extents.push(if ea == 1 { eb } else { ea });
+    }
+    let count = element_count(&extents);
+    let mut out = List::<f32>::with_capacity(count);
+    let mut index = List::<i32>::filled(rank, 0);
+    let mut at_a = 0;
+    let mut at_b = 0;
+    for let mut n = 0; n < count; n += 1 {
+        out.push(op(a[at_a], b[at_b]));
+        for let mut axis = rank - 1; axis >= 0; axis -= 1 {
+            index[axis] += 1;
+            at_a += a_strides[axis];
+            at_b += b_strides[axis];
+            if index[axis] < extents[axis] {
+                break;
+            }
+            at_a -= a_strides[axis] * extents[axis];
+            at_b -= b_strides[axis] * extents[axis];
+            index[axis] = 0;
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
+/// `extents` aligned to `rank` axes from the end, a missing axis being 1.
+fn aligned_extent(extents: &List<i32>, rank: i32, axis: i32) -> i32 {
+    let own = axis - (rank - extents.len());
+    return if own < 0 { 1 } else { extents[own] };
+}
+
+/// Each of `rank` axes' step through a tensor of `extents`, aligned from the
+/// end. A stretched axis steps by zero, so every position reads one element.
+fn stretched_strides(extents: &List<i32>, rank: i32) -> List<i32> {
+    let mut strides = List::<i32>::filled(rank, 0);
+    let mut step = 1;
+    for let mut back = 0; back < extents.len(); back += 1 {
+        let e = extents[extents.len() - 1 - back];
+        if e != 1 {
+            strides[rank - 1 - back] = step;
+        }
+        step *= e;
+    }
+    return strides;
 }
 
 pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {

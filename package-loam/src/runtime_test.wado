@@ -68,6 +68,34 @@ test "zip_suffix broadcasts a trailing axis across a rank-3 operand" {
     assert c.data == [10.0, 40.0, 30.0, 80.0] as List<f32>;
 }
 
+test "zip stretches an extent-1 axis on either side" {
+    let a: Tensor<f32, [Row, Col]> = tensor([2, 1], [1.0, 2.0]);
+    let b: Tensor<f32, [Row, Col]> = tensor([1, 3], [10.0, 20.0, 30.0]);
+
+    let c = zip(&a, &b, |x, y| x + y);
+    assert c.extents == [2, 3] as List<i32>;
+    assert c.data == [11.0, 21.0, 31.0, 12.0, 22.0, 32.0] as List<f32>;
+}
+
+test "zip_suffix stretches a middle extent-1 axis of the shorter operand" {
+    // A per-channel bias `[C, 1, 1]` over `[N, C, H, W]`, as a convolution's is.
+    let a: Tensor<f32, [Batch, Inner, Row, Col]> = tensor([1, 2, 2, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+    let b: Tensor<f32, [Inner, Row, Col]> = tensor([2, 1, 1], [10.0, 100.0]);
+
+    let c = zip_suffix::<[Batch], [Inner, Row, Col]>(&a, &b, |x, y| x + y);
+    assert c.extents == [1, 2, 2, 2] as List<i32>;
+    assert c.data == [11.0, 12.0, 13.0, 14.0, 105.0, 106.0, 107.0, 108.0] as List<f32>;
+}
+
+test "zip_suffix stretches the longer operand's extent-1 axis to the shorter's" {
+    let a: Tensor<f32, [Batch, Col]> = tensor([2, 1], [1.0, 2.0]);
+    let b: Tensor<f32, [Col]> = tensor([3], [10.0, 20.0, 30.0]);
+
+    let c = zip_suffix::<[Batch], [Col]>(&a, &b, |x, y| x * y);
+    assert c.extents == [2, 3] as List<i32>;
+    assert c.data == [10.0, 20.0, 30.0, 20.0, 40.0, 60.0] as List<f32>;
+}
+
 test "zip_suffix_lhs keeps the operand order the operator wrote" {
     let a: Tensor<f32, [Col]> = tensor([2], [10.0, 20.0]);
     let b: Tensor<f32, [Row, Col]> = tensor([2, 2], [1.0, 2.0, 3.0, 4.0]);
