@@ -11,7 +11,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
-use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
+use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS, intrinsic_key};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
 use crate::name::{
     VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_type_key, wir_variant_case_key,
@@ -228,9 +228,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let (func_id, args) = (*func_id, args.clone());
         let func = self.callee_descriptor(func_id);
-        let builtin_name = func
-            .builtin_name()
-            .or_else(|| func.monomorphized_builtin_name())?;
+        let builtin_name = intrinsic_key(&func)?;
         if !MULTIVALUE_I64_BUILTINS.contains(&builtin_name.as_str()) {
             return None;
         }

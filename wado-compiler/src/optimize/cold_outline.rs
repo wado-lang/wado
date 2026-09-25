@@ -88,7 +88,7 @@ struct Exits {
 fn cold_path_id(descriptors: &[FunctionRef]) -> Option<FuncId> {
     descriptors
         .iter()
-        .position(|d| d.builtin_name().as_deref() == Some("builtin::cold_path"))
+        .position(|d| d.is_builtin_named("cold_path"))
         .map(FuncId::new)
 }
 

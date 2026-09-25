@@ -32,8 +32,8 @@ use crate::name::{
 };
 use crate::nir::{
     FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
-    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
-    NirVariantCase, NirVariantDecl, ParamAbi,
+    NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam, NirVariantCase,
+    NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -46,10 +46,9 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
     StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
-    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal,
-    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
-    TypeTable, receiver_value,
+    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
+    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -93,7 +92,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         variant_index,
         flags,
         globals,
-        imports,
         tests,
         wasm_module_sources,
         builtin_declarations,
@@ -182,7 +180,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             .iter()
             .map(|g| translator.convert_global(g))
             .collect(),
-        imports: imports.iter().map(convert_import).collect(),
+        imports: Vec::new(),
         tests: tests.iter().map(convert_test).collect(),
         string_literals: strings.string_literals,
         bytes_literals: strings.bytes_literals,
@@ -2689,16 +2687,6 @@ fn convert_variant_decl(v: &TirVariantDecl) -> NirVariantDecl {
         type_params: v.type_params.iter().map(convert_type_param).collect(),
         cases: v.cases.iter().map(convert_variant_case).collect(),
         span: v.span,
-    }
-}
-
-fn convert_import(i: &TirImport) -> NirImport {
-    NirImport {
-        namespace: i.namespace.clone(),
-        canonical_name: i.canonical_name.clone(),
-        func_name: i.func_name.clone(),
-        params: i.params.clone(),
-        return_type: i.return_type,
     }
 }
 

@@ -91,6 +91,11 @@ pub(super) const MULTIVALUE_I64_BUILTINS: [&str; 4] = [
 /// How many Wasm results each of [`MULTIVALUE_I64_BUILTINS`] pushes.
 pub(super) const MULTIVALUE_I64_RESULTS: usize = 2;
 
+/// The `builtin::<name>` key this module's intrinsic tables match `func` by.
+pub(super) fn intrinsic_key(func: &nir::FunctionRef) -> Option<String> {
+    func.intrinsic().map(|name| format!("builtin::{name}"))
+}
+
 impl FunctionTranslator<'_, '_> {
     /// Translate one of [`MULTIVALUE_I64_BUILTINS`] to its bare two-result
     /// Wasm instruction, with no tuple struct around it.
@@ -158,11 +163,6 @@ impl FunctionTranslator<'_, '_> {
         // Try direct name lookup
         let fq = MangledName::in_module(module_source, name);
         if let Some(id) = self.ctx.func_map.get(&fq) {
-            return Some(id.clone());
-        }
-        // Try alias registered during import collection (builtin/{func_name})
-        let alias = MangledName::builtin_alias(name);
-        if let Some(id) = self.ctx.func_map.get(&alias) {
             return Some(id.clone());
         }
         // Try with method info

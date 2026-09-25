@@ -1990,7 +1990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (it pins the per-call monomorphic shape reify needs to seed
         // mangled-name construction).
         self.record_generic_instantiation(call.id, type_args.clone(), return_type);
-        if callee.module().is_builtin() && callee.name() == ARRAY_NEW_DATA {
+        if callee.intrinsic() == Some(ARRAY_NEW_DATA) {
             self.check_array_new_data(&call.args, return_type, call.span);
         }
 
@@ -2146,16 +2146,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &CalleeRef,
         interface_site: Option<ast::AstId>,
     ) -> TypeId {
+        if let Some(intrinsic) = callee.intrinsic() {
+            return self.get_builtin_return_type(intrinsic);
+        }
         let callee_module = callee.module();
         let func_name = callee.name();
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.get_builtin_return_type(builtin_name);
-        }
 
         // Effect operations are routed here as `CalleeRef::local_namespace`, so
         // `ModuleSource::Local { path }` matches `is_effect_like()`.
@@ -2211,8 +2206,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
         self.tysys
             .builtin_registry
-            .get_return_type(name)
-            .unwrap_or(TypeTable::UNIT)
+            .intrinsic(name)
+            .map_or(TypeTable::UNIT, |f| f.return_type)
     }
 
     /// A callee's declared parameter types and the slots they mention, by the
@@ -2681,8 +2676,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `builtin::array_new(n)` infer their generic type parameters from
         // argument types or LHS annotations the same way ordinary generic
         // functions do.
-        if callee.module().is_builtin()
-            && let Some(info) = self.tysys.builtin_registry.get(func_name)
+        if let Some(intrinsic) = callee.intrinsic()
+            && let Some(info) = self.tysys.builtin_registry.intrinsic(intrinsic)
         {
             if info.type_params.is_empty() {
                 return vec![];

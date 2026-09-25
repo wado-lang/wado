@@ -738,10 +738,7 @@ fn try_fill_idiom(
     let ExprKind::Call { func_id, args, .. } = &engine.body.exprs[call_e].kind else {
         return false;
     };
-    let d = callee_descriptor(descriptors, *func_id);
-    let is_array_set = d.builtin_name().as_deref() == Some("builtin::array_set")
-        || d.monomorphized_builtin_name().as_deref() == Some("builtin::array_set");
-    if !is_array_set || args.len() != 3 {
+    if !callee_descriptor(descriptors, *func_id).is_builtin_named("array_set") || args.len() != 3 {
         return false;
     }
     let (arr_op, arr_is_mut) = (args[0].expr, args[0].is_mut);

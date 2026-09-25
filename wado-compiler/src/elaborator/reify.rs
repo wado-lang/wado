@@ -2640,7 +2640,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let is_marker = |s: &TirStmt| {
             matches!(&s.kind, TirStmtKind::Expr(e)
                 if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if func.builtin_name().as_deref() == Some("builtin::cold_path")))
+                    if func.is_builtin_named("cold_path")))
         };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
         // A marker makes the rest of its block cold, which is where `block_cut`
@@ -8384,8 +8384,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
     /// `builtin::array_new_data`, or `List::from_le_bytes` over a prelude impl.
     fn reads_le_bytes(&self, func: &tir::FunctionRef, result: TypeId) -> bool {
-        if func.module_source.is_builtin() {
-            return func.name == ARRAY_NEW_DATA;
+        if let Some(intrinsic) = func.intrinsic() {
+            return intrinsic == ARRAY_NEW_DATA;
         }
         if !self.reads_prelude_le_bytes(result) {
             return false;
