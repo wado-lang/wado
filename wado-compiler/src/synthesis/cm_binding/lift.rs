@@ -826,34 +826,6 @@ pub(super) fn synthesize_lift_list(
     local_ref(result_local, "$result", array_type_id)
 }
 
-<<<<<<< HEAD
-||||||| dc6a5079475
-/// `(TreeMap<K, V>, K, V)` when `tid` is a `TreeMap<K, V>`, else `None`.
-pub(super) fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
-    let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
-        return None;
-    };
-    let is_tree_map = tt.compiler_item_def(CompilerItem::TreeMap) == Some(*def);
-    match type_args.as_slice() {
-        [key, value] if is_tree_map => Some((tid, *key, *value)),
-        _ => None,
-    }
-}
-
-=======
-/// `(TreeMap<K, V>, K, V)` when `tid` is a `TreeMap<K, V>`, else `None`.
-pub(super) fn tree_map_instance(tt: &TypeTable, tid: TypeId) -> Option<(TypeId, TypeId, TypeId)> {
-    let ResolvedType::GenericInstance { def, type_args } = tt.get(tid) else {
-        return None;
-    };
-    let is_tree_map = tt.is_compiler_item(*def, CompilerItem::TreeMap);
-    match type_args.as_slice() {
-        [key, value] if is_tree_map => Some((tid, *key, *value)),
-        _ => None,
-    }
-}
-
->>>>>>> origin/main
 /// Lift a `map<K, V>` at `addr` into `override_map_ty`, or a fresh `TreeMap`.
 /// `map[k] = v` keeps the last pair for a repeated key, as the CM requires.
 pub(super) fn synthesize_lift_map(

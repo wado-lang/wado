@@ -2048,61 +2048,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Look up the return type of a function
-<<<<<<< HEAD
-    pub(super) fn lookup_function_return_type(
-        &mut self,
-        callee: &CalleeRef,
-        interface_site: Option<ast::AstId>,
-    ) -> TypeId {
-        if let Some(intrinsic) = callee.intrinsic() {
-            return self.get_builtin_return_type(intrinsic);
-        }
-||||||| dc6a5079475
-    pub(super) fn lookup_function_return_type(
-        &mut self,
-        callee: &CalleeRef,
-        interface_site: Option<ast::AstId>,
-    ) -> TypeId {
-=======
     pub(super) fn lookup_function_return_type(&mut self, callee: &CalleeRef) -> TypeId {
->>>>>>> origin/main
-        let callee_module = callee.module();
-        let func_name = callee.name();
-<<<<<<< HEAD
-
-        // Effect operations are routed here as `CalleeRef::local_namespace`, so
-        // `ModuleSource::Local { path }` matches `is_effect_like()`.
-        if callee_module.is_effect_like()
-            && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
-||||||| dc6a5079475
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.get_builtin_return_type(builtin_name);
-        }
-
-        // Effect operations are routed here as `CalleeRef::local_namespace`, so
-        // `ModuleSource::Local { path }` matches `is_effect_like()`.
-        if callee_module.is_effect_like()
-            && let Some(decl) = self.effect_or_resource_decl_at(interface_site)
-            && let Some((_, Some(return_type))) = self.resolve_effect_op_signature(decl, func_name)
-        {
-            return return_type;
-=======
-        // Handle builtin functions
-        if callee_module.is_core_builtin() {
-            return self.tysys.get_builtin_return_type(func_name);
-        }
-        // Legacy: builtin::name pattern
-        if let Some(builtin_name) = func_name.strip_prefix("builtin::") {
-            return self.tysys.get_builtin_return_type(builtin_name);
->>>>>>> origin/main
+        if let Some(intrinsic) = callee.intrinsic() {
+            return self.tysys.get_builtin_return_type(intrinsic);
         }
 
         if let Some(def) = callee.def()
@@ -2124,34 +2072,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_compiler_struct(CompilerItem::String)
     }
 
-<<<<<<< HEAD
-    /// Get the return type of a builtin function
-    ///
-    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
-    /// For generic builtins like `array_new<T>`, returns a type containing
-    /// `TypeParam` placeholders that get substituted during monomorphization.
-    pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
-        self.tysys
-            .builtin_registry
-            .intrinsic(name)
-            .map_or(TypeTable::UNIT, |f| f.return_type)
-    }
-
-||||||| dc6a5079475
-    /// Get the return type of a builtin function
-    ///
-    /// Returns the pre-resolved `TypeId` from the `BuiltinRegistry`.
-    /// For generic builtins like `array_new<T>`, returns a type containing
-    /// `TypeParam` placeholders that get substituted during monomorphization.
-    pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
-        self.tysys
-            .builtin_registry
-            .get_return_type(name)
-            .unwrap_or(TypeTable::UNIT)
-    }
-
-=======
->>>>>>> origin/main
     /// A callee's declared parameter types and the slots they mention, by the
     /// effective callee name (after [`Self::classify_call_callee`]'s `Self::` /
     /// `T::` rewriting). One lookup answers both: a parameter type is usable as
@@ -3803,8 +3723,8 @@ impl TypeSystem {
     /// A builtin's return type, `TypeParam`-based for a generic one.
     pub(super) fn get_builtin_return_type(&self, name: &str) -> TypeId {
         self.builtin_registry
-            .get_return_type(name)
-            .unwrap_or(TypeTable::UNIT)
+            .intrinsic(name)
+            .map_or(TypeTable::UNIT, |f| f.return_type)
     }
 
     /// Whether `ty` is a type argument nothing has determined yet: a slot left

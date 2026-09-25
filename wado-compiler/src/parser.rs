@@ -1571,29 +1571,18 @@ impl Parser {
         else if matches!(self.peek_kind(), TokenKind::Ident(_))
             && matches!(self.peek_nth(1).kind, TokenKind::From)
         {
-<<<<<<< HEAD
-            let span = self.peek().span;
-||||||| dc6a5079475
-=======
             let name_span = self.peek().span;
->>>>>>> origin/main
             let name = self.consume_ident()?;
-<<<<<<< HEAD
             if visibility.reaches_beyond_file() {
                 self.errors.push(ParseError {
                     message: format!(
                         "a namespace cannot be re-exported: `{name}`; drop `{modifier}`, or \
                          re-export its members by name with `{modifier} use {{ ... }} from`"
                     ),
-                    span,
+                    span: name_span,
                 });
             }
-            vec![UseItem::Namespace { name }]
-||||||| dc6a5079475
-            vec![UseItem::Namespace { name }]
-=======
             vec![UseItem::Namespace { name, name_span }]
->>>>>>> origin/main
         } else {
             // Parse items: `{...}`
             let lbrace_span = self.peek().span;

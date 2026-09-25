@@ -630,7 +630,6 @@ impl<'a> Unparser<'a> {
             ["{", "}"],
             u.items_span.unwrap_or(u.span),
             &u.items,
-<<<<<<< HEAD
             |item| match item {
                 UseItem::Simple { id, name_span, .. } => (*name_span, Trailing::Of(*id)),
                 UseItem::InterfaceFunctions {
@@ -639,27 +638,6 @@ impl<'a> Unparser<'a> {
                 UseItem::Wildcard | UseItem::Namespace { .. } => {
                     unreachable!("`use _` and `use name` have no list to wrap")
                 }
-||||||| dc6a5079475
-            braces.start,
-            braces.end,
-            |item| {
-                let id = match item {
-                    UseItem::Simple { id, .. } => Some(*id),
-                    _ => None,
-                };
-                (item.start(), id)
-=======
-            braces.start,
-            braces.end,
-            |item| {
-                let id = match item {
-                    UseItem::Simple { id, .. } | UseItem::InterfaceFunctions { id, .. } => {
-                        Some(*id)
-                    }
-                    UseItem::Wildcard | UseItem::Namespace { .. } => None,
-                };
-                (item.start(), id)
->>>>>>> origin/main
             },
             Unparser::unparse_use_item,
         );
