@@ -7324,7 +7324,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &static_call.method,
                 static_call.id,
                 &static_call.args,
-                recorded_type,
+                None,
                 static_call.span,
                 ctx,
             );
@@ -7700,7 +7700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ident.case_name(),
                 call.id,
                 &call.args,
-                recorded_type,
+                None,
                 span,
                 ctx,
             );
@@ -8628,32 +8628,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(owner) = self.ann_case_owner(ident.id) {
             let case_name = ident.case_name();
             let lookup = self.type_lookup();
-            if let Some(variant_info) = lookup.variant_cases_of(owner)
-                && let Some((case_index, case_data)) = variant_info.case_named(case_name)
-            {
-                let case_name = case_data.name.clone();
-                // A payload-less case carries no value to infer from, so
-                // annotate can only record the decl's own `V<T>`. In a
-                // struct-literal field the caller knows the substituted
-                // `V<i32>`; prefer it over the unresolved record.
-                let recorded_variant_type = self.constructed_variant_type(ident.id, variant_info);
-                let variant_type = self
-                    .tysys
-                    .resolved_variant_type(recorded_variant_type, expected_type)
-                    .unwrap_or(recorded_variant_type);
-                let is_named = matches!(
-                    self.tysys.type_table.borrow().get_unerased(recorded_type),
-                    ResolvedType::Newtype { .. }
-                );
-                return TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type,
-                        case_index: u32::try_from(case_index).expect("case index fits u32"),
-                        case_name,
-                        payload: None,
-                    },
-                    if is_named { recorded_type } else { variant_type },
+            if lookup.variant_cases_of(owner).is_some() {
+                return self.reify_case_construction(
+                    owner,
+                    case_name,
+                    ident.id,
+                    &[],
+                    expected_type,
                     ident.span,
+                    ctx,
                 );
             }
             if let Some(enum_info) = lookup.enum_cases_of(owner)
@@ -8693,10 +8676,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    Emit `TirExprKind::FuncRef` with the recorded
         //    instantiation's type_args when present.
         if self
-                .sem
-                .decls
-                .function_return_types
-                .contains_key(&ident.name)
+            .sem
+            .decls
+            .function_return_types
+            .contains_key(&ident.name)
         {
             let type_args = self
                 .ann_generic_instantiations(ident.id)
@@ -10044,7 +10027,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         case_name: &str,
         site: AstId,
         args: &[ast::Expr],
-        recorded_type: TypeId,
+        expected_type: Option<TypeId>,
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
@@ -10057,7 +10040,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .case_named(case_name)
                 .expect("annotate resolved the case");
             (
-                self.constructed_variant_type(site, variant),
+                self.constructed_variant_type(site, variant, expected_type),
                 u32::try_from(index).expect("case index fits u32"),
                 case.payload,
             )
@@ -10068,15 +10051,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .borrow()
             .nominal_type_args(variant_type)
             .unwrap_or_default();
-        let payload_type = self.tysys.substitute_type_params(declared_payload, &type_args);
+        let payload_type = self
+            .tysys
+            .substitute_type_params(declared_payload, &type_args);
         let payload = args
             .first()
             .map(|arg| Box::new(self.reify_expr(arg, ctx, Some(payload_type))));
         // A newtype prefix (`W::J(1)`) keeps its type, which annotate recorded.
-        let is_named = matches!(
-            self.tysys.type_table.borrow().get_unerased(recorded_type),
-            ResolvedType::Newtype { .. }
-        );
+        let expr_type = self
+            .ann_expression_types(site)
+            .filter(|&t| self.tysys.type_table.borrow().is_newtype(t))
+            .unwrap_or(variant_type);
         TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type,
@@ -10084,22 +10069,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 case_name: case_name.to_string(),
                 payload,
             },
-            if is_named { recorded_type } else { variant_type },
+            expr_type,
             span,
         )
     }
 
-    /// The variant instance a case construction at `site` builds. Only a
-    /// generic variant records one; any other is its declaration's type.
-    fn constructed_variant_type(&self, site: AstId, variant: &VariantInfo) -> TypeId {
-        match self.ann_generic_instantiations(site) {
+    /// The variant instance a case construction at `site` builds: the one
+    /// annotate recorded, or `expected` where a payload-less case left it open.
+    fn constructed_variant_type(
+        &self,
+        site: AstId,
+        variant: &VariantInfo,
+        expected: Option<TypeId>,
+    ) -> TypeId {
+        let recorded = match self.ann_generic_instantiations(site) {
             Some(instantiation) => instantiation.instance_type,
             None => self
                 .tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(variant.defined_at),
-        }
+        };
+        self.tysys
+            .resolved_variant_type(recorded, expected)
+            .unwrap_or(recorded)
     }
 
     /// A variant case's discriminant and payload type, substituted with

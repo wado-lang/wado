@@ -295,8 +295,8 @@ pub(super) struct CaseOwner {
     pub(super) def: DefId,
     /// The newtype the prefix names, which the value takes.
     pub(super) named: Option<TypeId>,
-    /// The type arguments a prefix naming a type carries (`Self`, a bound
-    /// parameter, a newtype); a declaration's come from the turbofish.
+    /// The type arguments a prefix naming a type carries (`Self`, a closed
+    /// newtype); a declaration's come from the turbofish.
     pub(super) carried: Option<Vec<TypeId>>,
 }
 
@@ -714,7 +714,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let structure = table.reflect_structure_head(ty);
         Some(CaseOwner {
             def: self.tysys.type_def(structure)?,
-            named: matches!(table.get_unerased(ty), ResolvedType::Newtype { .. }).then_some(ty),
+            named: table.is_newtype(ty).then_some(ty),
             carried: Some(table.nominal_type_args(structure).unwrap_or_default()),
         })
     }
@@ -1077,13 +1077,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 site: call.id,
                 span: call.span,
             };
-            let constructed = self.resolve_case_construction(
-                &case,
-                &call.args,
-                given_args,
-                expected_type,
-                ctx,
-            );
+            let constructed =
+                self.resolve_case_construction(&case, &call.args, given_args, expected_type, ctx);
             return owner.named_or(constructed);
         }
 

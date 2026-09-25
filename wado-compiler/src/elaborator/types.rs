@@ -1604,7 +1604,7 @@ impl TypeError {
                 case,
                 span,
             } => (
-                // What the parser reports for the same spelling with no call.
+                // The parser's code for the same spelling with no call.
                 Code::InvalidSyntax,
                 format!(
                     "type arguments are written on both `{}` and `{case}`; write them on one",

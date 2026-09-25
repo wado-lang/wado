@@ -1072,6 +1072,11 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Whether `id` names a newtype, erased or not.
+    pub fn is_newtype(&self, id: TypeId) -> bool {
+        matches!(self.get_unerased(id), ResolvedType::Newtype { .. })
+    }
+
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
         self.types.get(self.resolved_id(id))

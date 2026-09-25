@@ -1086,11 +1086,15 @@ fn self_definition() {
             "}\n",
         );
         for (line, character) in [(3, 15), (3, 22), (6, 29)] {
-            let result = def_at(source, line, character).await.expect("Self in impl Mb");
+            let result = def_at(source, line, character)
+                .await
+                .expect("Self in impl Mb");
             assert_range(&result, 0, 8, 10);
         }
         for (line, character) in [(10, 28), (11, 29)] {
-            let result = def_at(source, line, character).await.expect("Self in impl P");
+            let result = def_at(source, line, character)
+                .await
+                .expect("Self in impl P");
             assert_range(&result, 8, 7, 8);
         }
     });

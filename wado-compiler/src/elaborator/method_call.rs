@@ -1591,13 +1591,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 site: static_call.id,
                 span: static_call.span,
             };
-            let constructed = self.resolve_case_construction(
-                &case,
-                &static_call.args,
-                None,
-                expected_type,
-                ctx,
-            );
+            let constructed =
+                self.resolve_case_construction(&case, &static_call.args, None, expected_type, ctx);
             return owner.named_or(constructed);
         }
 

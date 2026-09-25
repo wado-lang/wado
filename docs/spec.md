@@ -968,6 +968,16 @@ match opt {
 }
 ```
 
+A case whose payload type has no value needs no arm, since nothing constructs
+it. An arm naming one is unreachable, and is the same error:
+
+```wado
+let r: Result<i32, !> = Ok(1);
+match r {
+    Ok(v) => v,     // exhaustive: no `Result<i32, !>` is an `Err`
+}
+```
+
 #### Guard Expressions
 
 Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
