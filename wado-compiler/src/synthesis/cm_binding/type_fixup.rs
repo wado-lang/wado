@@ -20,7 +20,7 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
 
-use super::callback_export::erased_callback_type;
+use super::callback_export::{Callbacks, erased_callback_type};
 use super::import_adapter::is_gc_passthrough_param;
 use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
 use crate::name::FqTypeName;
@@ -552,7 +552,7 @@ pub(super) fn rewrite_calls_in_block(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &Rc<RefCell<TypeTable>>,
     applied_returns: &mut IndexMap<usize, TypeId>,
-    callbacks: &mut IndexSet<TypeId>,
+    callbacks: &mut Callbacks,
 ) {
     // The stdlib-name snapshot is invariant across the whole walk; build it
     // once here instead of once per expression node in `rewrite_expr`.
@@ -584,7 +584,7 @@ struct CallRewriteWalker<'a> {
     type_table: &'a Rc<RefCell<TypeTable>>,
     applied_returns: &'a mut IndexMap<usize, TypeId>,
     /// The type of every closure an import takes, which the host calls back.
-    callbacks: &'a mut IndexSet<TypeId>,
+    callbacks: &'a mut Callbacks,
     names: &'a CmStdlibNames,
 }
 
@@ -787,7 +787,13 @@ impl CallRewriteWalker<'_> {
             if !func_info.callbacks.contains(&(i + param_offset)) {
                 continue;
             }
-            self.callbacks.insert(arg.type_id);
+            // A diverging argument never reaches the call.
+            let table = self.type_table.borrow();
+            if !table.is_never(arg.type_id) {
+                self.callbacks
+                    .insert(table.type_key(arg.type_id), arg.type_id);
+            }
+            drop(table);
             let erased = erased_callback_type(&mut self.type_table.borrow_mut());
             let closure = std::mem::replace(
                 arg,

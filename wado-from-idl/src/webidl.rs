@@ -858,9 +858,8 @@ fn self_param(iface: &str) -> WadoParam {
     }
 }
 
-/// `ty` as an `Option` when `wrap`, without doubling one it already is. A
-/// callback stays required: the DOM ignores a null listener, so leaving the call
-/// out says the same.
+/// `ty` as an `Option` when `wrap`, unless it is one or a callback: the DOM
+/// ignores a null listener, so leaving the call out says the same.
 fn optional(ty: WadoType, wrap: bool) -> WadoType {
     match ty {
         WadoType::Option(_) | WadoType::Callback { .. } => ty,

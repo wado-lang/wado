@@ -13,7 +13,7 @@ use crate::unparse::binary_op_str;
 use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
-use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
+use super::method_lookup::replace_on_assign_place;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
 use super::util::bound_param_name;
@@ -1132,7 +1132,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && self.is_replace_on_assign_place_type(expr_type)
         {
             let _ = self.emit(TypeError::CannotAssign {
-                message: format!("cannot take a mutable reference to {REPLACE_ON_ASSIGN_PLACE}"),
+                message: format!(
+                    "cannot take a mutable reference to {}",
+                    replace_on_assign_place()
+                ),
                 span: unary.span,
             });
         }

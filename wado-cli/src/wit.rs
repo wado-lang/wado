@@ -20,6 +20,7 @@ use crate::compile::{
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::manifest::{self, EntryPointKind};
+use wado_compiler::world_registry::WorldSurface;
 
 const DEFAULT_WORLD: &str = "wasi:cli/command";
 
@@ -145,15 +146,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<WitOptions, CliExit> {
 pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
     let usage = format_usage();
     let scope = opts.scope;
-    let (snapshot, world_imports) = if opts.lib {
-        lib_snapshot_and_imports(opts.input, &usage).await?
+    let (snapshot, surface) = if opts.lib {
+        lib_snapshot_and_surface(opts.input, &usage).await?
     } else {
-        world_snapshot_and_imports(opts.input, opts.world, &usage).await?
+        world_snapshot_and_surface(opts.input, opts.world, &usage).await?
     };
 
-    let text =
-        wit_emit::emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &world_imports)
-            .map_err(|e| CliExit::error(format!("wado wit: {e}")))?;
+    let text = wit_emit::emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &surface)
+        .map_err(|e| CliExit::error(format!("wado wit: {e}")))?;
 
     match opts.output {
         Some(file) => {
@@ -168,11 +168,11 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
 
 /// Compile `input` against a fixed WASI world (or the default), returning its
 /// WIT subset and import plan.
-async fn world_snapshot_and_imports(
+async fn world_snapshot_and_surface(
     input: Option<String>,
     world: Option<String>,
     usage: &str,
-) -> Result<(WitEmitSnapshot, Vec<String>), CliExit> {
+) -> Result<(WitEmitSnapshot, WorldSurface), CliExit> {
     let input = manifest::resolve_input(input, EntryPointKind::Command, usage)?;
     let path = Path::new(&input);
     let source = fs::read_to_string(path)
@@ -229,10 +229,10 @@ async fn run_generators(
 
 /// Compile the `[package].lib` entry for the synthesized library world (the
 /// anonymous `root`), returning its WIT subset and import plan.
-async fn lib_snapshot_and_imports(
+async fn lib_snapshot_and_surface(
     input: Option<String>,
     usage: &str,
-) -> Result<(WitEmitSnapshot, Vec<String>), CliExit> {
+) -> Result<(WitEmitSnapshot, WorldSurface), CliExit> {
     let (project, target) = manifest::resolve_lib_project(input, usage)?;
 
     let entry_str = target.entry.to_string_lossy().into_owned();
@@ -269,7 +269,7 @@ async fn compile_wit_snapshot(
     host: &FilesystemCompilerHost,
     input: &str,
     options: CompilerOptions,
-) -> Result<(WitEmitSnapshot, Vec<String>), CliExit> {
+) -> Result<(WitEmitSnapshot, WorldSurface), CliExit> {
     let result = wado_compiler::compile_with_options(source, host, Some(input), options)
         .await
         // Diagnostics are already on the loud host; exit quietly.
@@ -281,14 +281,12 @@ async fn compile_wit_snapshot(
             "wado wit: compiler did not retain the WIT subset (internal error)".to_string(),
         )
     })?;
-    Ok((snapshot, wir_imports(result.wir_package)))
+    Ok((snapshot, wir_surface(result.wir_package)))
 }
 
 /// The faithful import set from a compiled WIR plan, empty when absent.
-fn wir_imports(wir_package: Option<wado_compiler::wir::WirPackage>) -> Vec<String> {
-    wir_package
-        .map(|pkg| pkg.imported_cm_interfaces)
-        .unwrap_or_default()
+fn wir_surface(wir_package: Option<wado_compiler::wir::WirPackage>) -> WorldSurface {
+    wir_package.map(|pkg| pkg.world_surface).unwrap_or_default()
 }
 
 /// The default interface name: the manifest `[package].name` when the input

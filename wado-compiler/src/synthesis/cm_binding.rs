@@ -40,7 +40,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
-use callback_export::synthesize_callback_exports;
+use callback_export::{Callbacks, synthesize_callback_exports};
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
     ExportBindingEnv, ExportReturnStrategy, post_return_func_name, synthesize_export_binding,
@@ -499,7 +499,7 @@ fn entry_type_table(project: &Package) -> Rc<RefCell<TypeTable>> {
 /// Synthesize a binding function for each used WASI effect call and resource
 /// method call, add them to the entry module, and rewrite effect-like call
 /// sites to target them. Answers the closure types those calls pass.
-fn generate_import_adapters(project: &mut Package) -> IndexSet<TypeId> {
+fn generate_import_adapters(project: &mut Package) -> Callbacks {
     let entry_source = project.entry_module_source.clone();
 
     let mut seen_effects: IndexSet<DeclPath> = IndexSet::default();
@@ -516,7 +516,7 @@ fn generate_import_adapters(project: &mut Package) -> IndexSet<TypeId> {
             }
         }
     }
-    let mut callbacks = IndexSet::default();
+    let mut callbacks = Callbacks::default();
     if seen_effects.is_empty() {
         return callbacks;
     }

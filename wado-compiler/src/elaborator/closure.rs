@@ -4,8 +4,6 @@
 //! the caller's typecheck, and records the
 //! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
 
-use crate::hashmap::IndexSet;
-
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
 use crate::name::capture_ref_name;
@@ -171,27 +169,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_closure_defaults(closure);
         let expected_fn = self.extract_expected_fn(expected_type);
 
-        // Collect outer bindings the body assigns to.
-        let mut assigned_names: IndexSet<String> = IndexSet::default();
-        Self::collect_mutated_vars(closure, &mut assigned_names);
-
-        // For each assigned name that resolves to an outer `mut` local,
-        // record a `MutCapture` (so reify replays the `$ref_<var>`
-        // materialisation in the same order) and mark the outer local
-        // address-taken.
+        // Box each outer `mut` local the body may write, recording a
+        // `MutCapture` so reify replays the `$ref_<var>` materialisation in the
+        // same order, and mark the outer local address-taken.
+        let writes = Self::collect_capture_writes(closure);
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
         let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
-        for var_name in &assigned_names {
+        for var_name in writes.assigned.union(&writes.borrowed) {
+            let written = writes.assigned.contains(var_name);
             let Some(local) = ctx.lookup(var_name) else {
                 // A binding `ctx` only reaches by capture is boxed where it is
                 // owned; writing through that box is still a mutating capture.
-                any_mutating_capture |= ctx.binding(var_name).is_some_and(|b| b.is_mut);
+                any_mutating_capture |= written && ctx.binding(var_name).is_some_and(|b| b.is_mut);
                 continue;
             };
             if local.is_mut {
-                any_mutating_capture = true;
+                any_mutating_capture |= written;
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
@@ -256,37 +251,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // A `&mut` borrow of a capture writes it as an assignment does, but only
-        // the walk knows which method receivers are `&mut self`.
+        // Only the walk knows which borrows reach a capture's own storage.
         for var_name in std::mem::take(&mut closure_ctx.borrowed_captures) {
-            if assigned_names.contains(&var_name) {
-                continue;
-            }
-            let Some(local) = ctx.lookup(&var_name).cloned() else {
+            if closure_ctx.deref_overrides.contains_key(&var_name) {
+                any_mutating_capture = true;
+            } else if let Some(local) = ctx.lookup(&var_name) {
+                assert!(
+                    !local.is_mut,
+                    "a `mut` receiver `{var_name}` is boxed before the walk"
+                );
+            } else {
                 any_mutating_capture |= ctx.binding(&var_name).is_some_and(|b| b.is_mut);
                 ctx.borrowed_captures.insert(var_name);
-                continue;
-            };
-            // An immutable one is already reported as the borrow's error.
-            if !local.is_mut {
-                continue;
             }
-            any_mutating_capture = true;
-            let ref_type = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_mut_ref(local.type_id);
-            let ref_name = capture_ref_name(&var_name);
-            let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
-            ctx.address_taken_locals.insert(local.index);
-            closure_ctx.redirect_capture(&var_name, &ref_name, ref_type, ref_index);
-            mut_captures.push(MutCapture {
-                var_name,
-                ref_name,
-                inner_type: local.type_id,
-                ref_type,
-            });
         }
 
         // The source each capture reads from belongs to this walk alone: reify

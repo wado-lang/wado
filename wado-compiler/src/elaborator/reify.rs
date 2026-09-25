@@ -3311,6 +3311,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     ctx.address_taken_locals.insert(*index);
                 }
+                // A reborrow names the storage its operand already references;
+                // borrowing the deref would box a copy of a scalar.
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: referent,
+                    } = &inner.kind
+                    && self.tysys.type_table.borrow().type_key(referent.type_id)
+                        == self.tysys.type_table.borrow().type_key(recorded_type)
+                {
+                    return *referent.clone();
+                }
                 TirExpr::new(
                     TirExprKind::Unary {
                         op,

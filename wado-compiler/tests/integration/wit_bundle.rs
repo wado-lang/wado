@@ -11,12 +11,13 @@ use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
 use wado_compiler::wit_emit;
+use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 use wit_parser::decoding::{DecodedWasm, decode};
 
 /// Faithful world import set (the WIR-level plan), as the CLI feeds the emitter.
-fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
+fn import_plan(source: &str, world_fq: &str) -> WorldSurface {
     let host = InMemoryHost::new();
     match block_on(dump_with_host_and_world(
         source,
@@ -32,9 +33,9 @@ fn import_plan(source: &str, world_fq: &str) -> Vec<String> {
     )) {
         Ok(dump) => dump
             .wir_package
-            .map(|pkg| pkg.imported_cm_interfaces)
+            .map(|pkg| pkg.world_surface)
             .unwrap_or_default(),
-        Err(_) => Vec::new(),
+        Err(_) => WorldSurface::default(),
     }
 }
 

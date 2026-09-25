@@ -3,27 +3,29 @@
 use std::cell::RefCell;
 use std::iter;
 
-use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::callback_export_name;
+use crate::hashmap::IndexMap;
+use crate::name::{callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
     block, cast, expr_stmt, handle_from_f64, internal_call, local_ref, locals_from_params,
     synth_span,
 };
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirParam, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirParam, TypeId, TypeKey, TypeTable};
 use crate::world_registry::CallbackExport;
 
 use super::entry_type_table;
-use super::export_adapter::export_binding_func_name;
 use super::import_adapter::make_binding_function;
 
-/// Add an export for each boundary signature among `callbacks`, the closure
-/// types the imports take, to the entry module.
-pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &IndexSet<TypeId>) {
+/// The closure types the imports are passed, one slot per type.
+pub(super) type Callbacks = IndexMap<TypeKey, TypeId>;
+
+/// Add an export for each boundary signature among `callbacks` to the entry
+/// module.
+pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Callbacks) {
     let type_table = entry_type_table(project);
     let mut exports: IndexMap<String, CallbackExport> = IndexMap::default();
     let mut functions = Vec::new();
-    for &closure in callbacks {
+    for &closure in callbacks.values() {
         let params = closure_params(&type_table.borrow(), closure);
         let boundary: Vec<Boundary> = params
             .iter()
@@ -33,7 +35,7 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Ind
         if exports.contains_key(&cm_name) {
             continue;
         }
-        let core_func = export_binding_func_name(&cm_name);
+        let core_func = cm_callback_func_name(&cm_name);
         let mut tir_params = vec![param("key", 0, TypeTable::U32)];
         let mut args = Vec::new();
         for (i, (&wado, b)) in params.iter().zip(&boundary).enumerate() {
@@ -160,9 +162,11 @@ fn lift_arg(type_table: &RefCell<TypeTable>, value: TirExpr, param: TypeId) -> T
     if type_table.borrow().is_unrestricted_handle(param) {
         return handle_from_f64(value, param);
     }
-    if value.type_id == param {
+    let table = type_table.borrow();
+    if table.type_key(value.type_id) == table.type_key(param) {
         return value;
     }
+    drop(table);
     cast(value, param)
 }
 

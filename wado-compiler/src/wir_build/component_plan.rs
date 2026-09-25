@@ -27,6 +27,8 @@ pub struct ComponentPlan {
     pub world_exports: Vec<WorldExportPlan>,
     /// Test functions to export.
     pub test_exports: Vec<TestExportPlan>,
+    /// The callbacks among [`Self::world_exports`].
+    pub callback_exports: Vec<CallbackExport>,
 }
 
 /// A world export to create at the component boundary.
@@ -227,6 +229,7 @@ pub fn build_component_plan(
     ComponentPlan {
         world_exports,
         test_exports,
+        callback_exports: callback_exports.to_vec(),
     }
 }
 

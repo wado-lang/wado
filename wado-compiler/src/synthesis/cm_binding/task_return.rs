@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::canonical::CanonicalIntrinsic;
+use crate::name::cm_task_entry_func_name;
 
 use crate::ast::Type;
 use crate::cm_abi;
@@ -140,7 +141,7 @@ const TASK_RESULT_LOCAL: &str = "$task_result";
 /// The copy of an `export async fn` that the export binding calls. Its
 /// `task return` delivers through the CM canonical op, so it returns nothing.
 pub(super) fn task_entry_func_name(export_name: &str) -> String {
-    format!("$cm_task_entry__{export_name}")
+    cm_task_entry_func_name(export_name)
 }
 
 /// Split that copy off, leaving the user's own function to keep a lowering its

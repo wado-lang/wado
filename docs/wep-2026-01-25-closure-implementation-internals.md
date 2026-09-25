@@ -36,7 +36,7 @@ There are no `Fn` / `FnMut` traits. `ResolvedType::Function` carries an `is_mut`
 
 Wasm has no shared-versus-exclusive reference distinction, so both compile to the same `call_ref`. What the split buys is a check at the call site: a `fn mut` callee requires the binding holding it to be `mut`.
 
-A closure is `fn mut` when its body assigns to a captured `mut` binding. Capturing a `mut` binding it only reads leaves it `fn`. The body is the whole body, nested closures included, so a write reaching an outer binding from any depth counts. What the closure binds itself shadows, whether a parameter, a `let` or a pattern, and a write to one leaves the outer binding of that name alone.
+A closure is `fn mut` when its body writes a captured `mut` binding: it assigns the binding or a place in it, takes `&mut` of it, or calls a `&mut self` method on it. The writes are read from the syntax before the body is typed, so every written binding is boxed before the first read of it is lowered. Whether a borrow or a method call writes the binding is a typed question, answered by the walk: through a reference it writes the referent instead. Capturing a `mut` binding it only reads leaves it `fn`. The body is the whole body, nested closures included, so a write reaching an outer binding from any depth counts. What the closure binds itself shadows, whether a parameter, a `let` or a pattern, and a write to one leaves the outer binding of that name alone.
 
 ### Captures are implicit
 

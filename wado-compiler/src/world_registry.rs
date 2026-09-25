@@ -42,6 +42,15 @@ pub struct CallbackExport {
     pub params: Vec<(String, &'static str)>,
 }
 
+/// What a compiled component imports, and the callback exports it adds: the
+/// part of its world only the backend knows.
+#[derive(Debug, Clone, Default)]
+pub struct WorldSurface {
+    /// Every CM interface FQ the component imports.
+    pub imports: Vec<String>,
+    pub callbacks: Vec<CallbackExport>,
+}
+
 /// Information about a world export function.
 ///
 /// World exports take two AST shapes (`export Foo;` interface form and

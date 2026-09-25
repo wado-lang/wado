@@ -29,7 +29,7 @@ use crate::tir::{
     TypeTable,
 };
 use crate::unparse::unparse_type_into;
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{CALLBACK_INTERFACE, CallbackExport, WorldRegistry, WorldSurface};
 
 /// How much of the referenced interface graph to inline into the WIT document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -212,29 +212,29 @@ impl std::fmt::Display for WitEmitError {
 
 impl std::error::Error for WitEmitError {}
 
-/// Render the WIT text for `sem` under `opts`. `world_imports` is the faithful
+/// Render the WIT text for `sem` under `opts`. `surface` is the faithful
 /// import plan (`NirPackage::imported_cm_interfaces`) computed post-DCE by the
 /// caller, since it is unavailable from `Semantics` alone.
 pub fn emit_wit_text(
     sem: &Semantics,
     opts: &WitEmitOptions,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<String, WitEmitError> {
-    emit_wit_text_from(sem.wit_emit_input(), opts, world_imports)
+    emit_wit_text_from(sem.wit_emit_input(), opts, surface)
 }
 
 /// Like [`emit_wit_text`], but from a detached [`WitEmitInput`] view (issue #1654).
 pub fn emit_wit_text_from(
     input: WitEmitInput<'_>,
     opts: &WitEmitOptions,
-    world_imports: &[String],
+    surface: &WorldSurface,
 ) -> Result<String, WitEmitError> {
     if !input.is_complete {
         return Err(WitEmitError::IncompleteSemantics);
     }
 
     let mut emitter = Emitter::new(input);
-    let package = emitter.build_package(world_imports)?;
+    let package = emitter.build_package(surface)?;
     let mut out = package.to_string();
 
     // `full` scope inlines every referenced CM interface as a nested package,
@@ -243,6 +243,10 @@ pub fn emit_wit_text_from(
     // re-parses without an external registry.
     if opts.scope == WitScope::Full {
         for nested in emitter.build_nested_packages()? {
+            out.push('\n');
+            out.push_str(&nested.to_string());
+        }
+        if let Some(nested) = callback_package(&surface.callbacks) {
             out.push('\n');
             out.push_str(&nested.to_string());
         }
@@ -326,7 +330,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    fn build_package(&mut self, world_imports: &[String]) -> Result<Package, WitEmitError> {
+    fn build_package(&mut self, surface: &WorldSurface) -> Result<Package, WitEmitError> {
         let contract = self
             .wit_contract
             .ok_or(WitEmitError::IncompleteSemantics)?
@@ -342,7 +346,7 @@ impl<'a> Emitter<'a> {
         // includes implicit runtime imports (e.g. `wasi:cli/stderr` for assert)
         // and excludes type-alias-only interfaces — neither visible from the
         // effect rows alone.
-        let import_fqs: BTreeSet<String> = world_imports.iter().cloned().collect();
+        let import_fqs: BTreeSet<String> = surface.imports.iter().cloned().collect();
 
         // Partition exports into world-conformance entry points (`run` /
         // `handle`, which map to a standard export interface like
@@ -381,6 +385,9 @@ impl<'a> Emitter<'a> {
         }
         for fq in &export_fqs {
             world.named_interface_export(fq.clone());
+        }
+        if !surface.callbacks.is_empty() {
+            world.named_interface_export(CALLBACK_INTERFACE);
         }
 
         if user_funcs.is_empty() {
@@ -1201,6 +1208,30 @@ fn use_target(current_fq: &str, source_fq: &str) -> String {
         (_, Some(src)) => src.to_fq(),
         _ => source_fq.to_string(),
     }
+}
+
+/// The package declaring `callbacks`, which no registry holds; `None` without any.
+fn callback_package(callbacks: &[CallbackExport]) -> Option<wit_encoder::NestedPackage> {
+    if callbacks.is_empty() {
+        return None;
+    }
+    let parts =
+        FqParts::parse(CALLBACK_INTERFACE).expect("the callback interface is fully qualified");
+    let mut iface = Interface::new(parts.interface);
+    for callback in callbacks {
+        let mut func = StandaloneFunc::new(callback.cm_name.clone(), false);
+        let mut params = Params::empty();
+        for (name, primitive) in &callback.params {
+            let ty = primitive_by_name(primitive).expect("a callback takes primitives");
+            params.push(name.clone(), ty);
+        }
+        func.set_params(params);
+        iface.function(func);
+    }
+    let mut package =
+        wit_encoder::NestedPackage::new(PackageName::new(parts.namespace, parts.package, None));
+    package.interface(iface);
+    Some(package)
 }
 
 /// Map a Wado primitive type name to its WIT type, if it names a primitive.

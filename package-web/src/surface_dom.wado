@@ -225,14 +225,17 @@ impl SurfaceDom {
     // Runs with this DOM reinstalled, since a listener is a program calling back
     // into it. A listener added meanwhile waits for the next dispatch.
     fn invoke(&mut self, target: i32, event: Event, capture: bool) {
-        let type = self.events[self.event_index(event)].type;
-        let listeners = self.listeners;
-        for let mut listener of listeners {
-            if listener.target == target && listener.type == type && listener.capture == capture {
-                with &mut *self do {
-                    (listener.callback)(event);
-                };
+        let type = &self.events[self.event_index(event)].type;
+        let mut callbacks: List<fn mut(Event) with Dom> = [];
+        for let listener of &self.listeners {
+            if listener.target == target && listener.capture == capture && listener.type == *type {
+                callbacks.push(listener.callback);
             }
+        }
+        for let mut callback of callbacks {
+            with &mut *self do {
+                callback(event);
+            };
         }
     }
 

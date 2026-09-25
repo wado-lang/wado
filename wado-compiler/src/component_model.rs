@@ -3452,9 +3452,8 @@ impl CmInterfaceRegistry {
         Ok(())
     }
 
-    /// `params` at their value types: newtypes peeled and extern handles kept, so a
-    /// binding's GC-level types match the caller's. A closure is its `u32` key,
-    /// and the indices of those come second.
+    /// `params` at their GC-level value types, closures as `u32` keys, and the
+    /// indices of the closures.
     fn value_params(
         &self,
         params: Vec<(String, String, Type)>,

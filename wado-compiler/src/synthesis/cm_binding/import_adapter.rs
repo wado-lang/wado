@@ -11,7 +11,7 @@ use crate::ast::Type;
 use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexSet;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{LocalMethodName, cm_binding_func_name, cm_lift_func_name};
 use crate::tir::{
     CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirStmt, TirStructField, TypeId, TypeTable,
@@ -42,12 +42,12 @@ use crate::tir;
 
 /// Build the binding function name for a WASI import.
 pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_binding__{interface_name}_{method_name}")
+    cm_binding_func_name(interface_name, method_name)
 }
 
 /// Per-import lift function name. Pointed to by `AsyncCall<T>::__cm_lift`.
 fn lift_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("$cm_lift__{interface_name}_{method_name}")
+    cm_lift_func_name(interface_name, method_name)
 }
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:

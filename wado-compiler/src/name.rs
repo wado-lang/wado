@@ -267,6 +267,61 @@ pub fn kebab_export_name(name: &str) -> String {
     name.replace('_', "-")
 }
 
+/// The core function of a world export `name`'s binding.
+pub fn cm_export_func_name(name: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_export__{name}")
+}
+
+/// The core function of a sync lift's `post-return` for the export `name`.
+pub fn cm_post_return_func_name(name: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_post_return__{name}")
+}
+
+/// The copy of the `export async fn` `name` its binding calls.
+pub fn cm_task_entry_func_name(name: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_task_entry__{name}")
+}
+
+/// The core function of the `wado:callback/callback` export `name`.
+pub fn cm_callback_func_name(name: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_callback__{name}")
+}
+
+/// The binding of the import `method` of `interface`.
+pub fn cm_binding_func_name(interface: &str, method: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_binding__{interface}_{method}")
+}
+
+/// The lift of the import `method` of `interface`, which `AsyncCall<T>` points to.
+pub fn cm_lift_func_name(interface: &str, method: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_lift__{interface}_{method}")
+}
+
+/// The helper writing a future of the payload type mangled as `payload`.
+pub fn cm_future_write_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_write_{payload}")
+}
+
+/// The helper reading a future of the payload type mangled as `payload`.
+pub fn cm_future_read_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_read_{payload}")
+}
+
+/// The helper writing a stream of the element type mangled as `element`.
+pub fn cm_stream_write_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_write_{element}")
+}
+
+/// The helper reading one value from a stream of the element mangled as `element`.
+pub fn cm_stream_read_value_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_read_val_{element}")
+}
+
+/// The helper reading a stream of the WASI record `element`.
+pub fn cm_stream_read_func_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_stream_read_{element}")
+}
+
 /// The `wado:callback/callback` function the host calls a closure back through,
 /// given a word per argument: its Wado primitive, or `handle` (`call-handle`).
 pub fn callback_export_name<'a>(params: impl IntoIterator<Item = &'a str>) -> String {

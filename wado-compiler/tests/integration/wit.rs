@@ -8,11 +8,12 @@ use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host};
 use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
+use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
-/// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
+/// The WIR-level world surface (`WirPackage::world_surface`) for
 /// `source` under `world_fq`, the faithful world import set the emitter reads.
-fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> Vec<String> {
+fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> WorldSurface {
     // Tolerant like the CLI's `resolve_world_imports`: a program that does not
     // compile to a full component (e.g. no world entry point) has no faithful
     // import set, which is the empty set for the emitter's purposes.
@@ -30,9 +31,9 @@ fn import_plan(host: &impl CompilerHost, source: &str, world_fq: &str) -> Vec<St
     )) {
         Ok(dump) => dump
             .wir_package
-            .map(|pkg| pkg.imported_cm_interfaces)
+            .map(|pkg| pkg.world_surface)
             .unwrap_or_default(),
-        Err(_) => Vec::new(),
+        Err(_) => WorldSurface::default(),
     }
 }
 
@@ -128,7 +129,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         &WitEmitOptions {
             scope: WitScope::Local,
         },
-        &[],
+        &WorldSurface::default(),
     )
     .expect("emit_wit_text must succeed for the generator world (issue #1478)");
     assert!(
@@ -233,6 +234,32 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
     resolve
         .push_str("service.wit", &text)
         .expect("resource WIT failed to re-parse");
+}
+
+/// A closure passed to an import makes the component export the callback
+/// interface the host calls it back through, which a full scope declares.
+#[test]
+fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
+    let source = "#[cm(\"web:demo/target\", linearity = \"unrestricted\", classes = \"0..=0\")]\n\
+         resource Target {\n\
+             #[cm(\"web:demo/target#listen\")]\n\
+             #[cm_params(\"self\", \"listener\")]\n\
+             fn listen(&self, listener: fn mut(Target));\n\
+         }\n\
+         export fn run() with Target {\n\
+             let t = 0.0 as Target;\n\
+             t.listen(|_: Target| {});\n\
+         }";
+    let text = emit_scope(source, WitScope::Full);
+    assert!(text.contains("export wado:callback/callback;"), "\n{text}");
+    assert!(
+        text.contains("call-handle: func(key: u32, a0: f64);"),
+        "\n{text}"
+    );
+    let mut resolve = wit_parser::Resolve::new();
+    resolve
+        .push_str("emitted.wit", &text)
+        .expect("emitted WIT failed to re-parse");
 }
 
 /// An import the program binds itself is reconstructed like a bundled one.
@@ -420,7 +447,7 @@ fn cm_catalog_matches_committed_wit() {
         &WitEmitOptions {
             scope: WitScope::Full,
         },
-        &[],
+        &WorldSurface::default(),
     )
     .expect("emit_wit_text failed");
     assert_eq!(

@@ -38,9 +38,8 @@ const used = glue.filter((file) => entry.includes(`./web-${file}`));
 for (const file of used) {
   await copyFile(join(glueDir, file), join(outDir, `web-${file}`));
 }
-// The glue calls a closure back through the output's callback export, which the
-// output hands over once instantiated. Importing the output from the glue would
-// close a cycle the output's top-level reads of the glue do not survive.
+// The output hands the glue its callback export once instantiated: importing it
+// from the glue would close a cycle the output's top-level reads do not survive.
 const callback = entry.match(/export \{[^}]*?\b(\w+) as 'wado:callback\/callback'/);
 if (callback) {
   const connects = used.map(
