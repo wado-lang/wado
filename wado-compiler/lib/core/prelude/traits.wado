@@ -132,6 +132,14 @@ pub enum CaseStyle {
     ScreamingKebab,
 }
 
+/// How a numbered format writes an integer field: `#[wire(encoding = "zigzag")]`
+/// or `"fixed"`, `Plain` where none is written. See WEP 2026-09-22.
+pub enum WireEncoding {
+    Plain,
+    ZigZag,
+    Fixed,
+}
+
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
@@ -464,6 +472,7 @@ pub struct StructField<T, F> {
     has_default: bool,
     is_secret: bool,
     wire_number: i32,
+    wire_encoding: i32,
 }
 
 impl<T, F> StructField<T, F> {
@@ -486,6 +495,15 @@ impl<T, F> StructField<T, F> {
     /// field number starts at 1, so zero is the format's own non-number.
     pub fn wire_number(&self) -> i32 {
         return self.wire_number;
+    }
+
+    /// The field's `#[wire(encoding = …)]`.
+    pub fn wire_encoding(&self) -> WireEncoding {
+        return match self.wire_encoding {
+            1 => WireEncoding::ZigZag,
+            2 => WireEncoding::Fixed,
+            _ => WireEncoding::Plain,
+        };
     }
 
     /// The value of this field in `v`.
@@ -578,6 +596,12 @@ impl<T, F> Inspect for StructField<T, F> {
         struct_field_end(f);
         struct_field(f, "is_secret", false);
         self.is_secret.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "wire_number", false);
+        self.wire_number.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "wire_encoding", false);
+        self.wire_encoding.inspect(f);
         struct_field_end(f);
         struct_close(f);
     }

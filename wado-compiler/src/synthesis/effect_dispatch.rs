@@ -4,7 +4,7 @@
 //! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
-use crate::ast::{RestClause, Visibility};
+use crate::ast::{RestClause, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -356,6 +356,7 @@ fn synthesize_dispatch_struct(
         serde_default: false,
         serde_positional: false,
         serde_number: None,
+        serde_encoding: WireEncoding::Plain,
         default_expr: None,
     });
 
@@ -379,6 +380,7 @@ fn synthesize_dispatch_struct(
             serde_default: false,
             serde_positional: false,
             serde_number: None,
+            serde_encoding: WireEncoding::Plain,
             default_expr: None,
         });
         wrapper_names.insert(op.name.clone(), dispatch_wrapper_name(&label, &op.name));

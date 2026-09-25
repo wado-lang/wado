@@ -6,7 +6,7 @@ use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::Visibility;
+use crate::ast::{Visibility, WireEncoding};
 use crate::module_source::ModuleSource;
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
@@ -626,6 +626,7 @@ impl ClosureLowerer {
                     serde_default: false,
                     serde_positional: false,
                     serde_number: None,
+                    serde_encoding: WireEncoding::Plain,
                     default_expr: None,
                 })
                 .collect();

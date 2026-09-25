@@ -234,6 +234,9 @@ pub enum Code {
     /// A `#[wire(number = N)]` is out of range, reserved, repeated within one
     /// struct, or written on some of a struct's fields and not the rest.
     WireNumber,
+    /// A `#[wire(encoding = "…")]` names no encoding, or one the field's
+    /// integer type cannot take.
+    WireEncoding,
     ResourceExtends,
     /// A resource's `#[cm(..., classes = ...)]` does not number its `extends`
     /// tree, or a type pattern narrows to a resource that declares none.
@@ -325,6 +328,7 @@ impl std::fmt::Display for Code {
             Code::TrapAttr => "TRAP_ATTR",
             Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
             Code::WireNumber => "WIRE_NUMBER",
+            Code::WireEncoding => "WIRE_ENCODING",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ResourceClasses => "RESOURCE_CLASSES",
             Code::ParamAttr => "PARAM_ATTR",

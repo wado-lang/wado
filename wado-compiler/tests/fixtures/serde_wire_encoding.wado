@@ -1,0 +1,24 @@
+// `#[wire(encoding = …)]` picks how a numbered format writes an integer. A
+// name-based format drops it, and the field handle reports it.
+use { to_string, from_string } from "core:json";
+
+struct Sample {
+    #[wire(encoding = "zigzag")] delta: i64,
+    #[wire(encoding = "fixed")] hash: u32,
+    #[wire(encoding = "fixed")] ids: List<i32>,
+    plain: i32,
+}
+
+test "an encoding changes nothing a name-based format does" {
+    let s = Sample { delta: -1, hash: 2, ids: [3], plain: 4 };
+    assert to_string(&s) matches { Ok(t) && t == `\{"delta":-1,"hash":2,"ids":[3],"plain":4\}` };
+    assert from_string::<Sample>(`\{"delta":-1,"hash":2,"ids":[3],"plain":4\}`) matches { Ok(b) && b.delta == -1 };
+}
+
+test "the encoding reaches the field handle a format reads" {
+    let mut out = "";
+    for let f of ReflectStruct::<Sample>::members() {
+        out = `${out}${f.wire_encoding():?};`;
+    }
+    assert out == "WireEncoding::ZigZag;WireEncoding::Fixed;WireEncoding::Fixed;WireEncoding::Plain;";
+}

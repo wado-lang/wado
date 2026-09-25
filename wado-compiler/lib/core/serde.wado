@@ -85,6 +85,9 @@
 
 // Not `core:log`: it imports `core:serde`, so the dependency runs one way.
 use { log_stderr } from "core:rt";
+// Beside `StructField`, which answers it, but kept out of the prelude: only a
+// format names it.
+pub use { WireEncoding } from "core:prelude/traits.wado";
 
 #[compiler_item("serialize_error_kind")]
 pub enum SerializeErrorKind {
@@ -281,11 +284,14 @@ pub trait SerializeStruct with () {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
     /// The same field, with the numeric wire key `#[wire(number = N)]` gave
-    /// it, or `0` where it has none. A format keyed by name drops the number,
-    /// which is what this default does.
+    /// it, or `0` where it has none, its `#[wire(encoding = …)]`, and whether
+    /// it declares a default. A format keyed by name drops all three, which is
+    /// what this default does.
     fn field_numbered<T: Serialize, S: AsStrSlice>(
         &mut self,
         number: i32,
+        encoding: WireEncoding,
+        has_default: bool,
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
@@ -353,6 +359,12 @@ pub trait Serializer with () {
         return seq.end();
     }
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
+    /// Serialize the value an `Option::Some` holds. A format where presence
+    /// is on the wire (protobuf's explicit presence) tells it apart from the
+    /// same value held directly; every other writes the value.
+    fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return value.serialize(self);
+    }
 
 
     #[compiler_item("serializer_begin_seq")]
@@ -455,6 +467,12 @@ pub trait DeserializeStruct with () {
 
     #[compiler_item("deserialize_struct_value")]
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
+
+    /// The same value, read as the field's `#[wire(encoding = …)]` says. A
+    /// format that spells an integer one way only drops it.
+    fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError> {
+        return self.value();
+    }
 
 
     #[compiler_item("deserialize_struct_skip")]
@@ -728,7 +746,7 @@ impl Serialize for () {
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Some(v) = self {
-            return v.serialize(s);
+            return s.serialize_some(v);
         }
         return s.serialize_null();
     }
@@ -1053,7 +1071,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
         for let f of members {
             let name = wire_name(&f, policy);
             let value = f.get(self);
-            st.field_numbered(f.wire_number(), &name, &value)?;
+            st.field_numbered(f.wire_number(), f.wire_encoding(), f.has_default(), &name, &value)?;
         }
         return st.end();
     }
@@ -1188,7 +1206,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                             &wire_name(&ReflectStruct::<T>::members()[i], policy),
                         )?;
                     }
-                    let value: F = sd.value()?;
+                    let value: F = sd.value_encoded(ReflectStruct::<T>::members()[i].wire_encoding())?;
                     slots[i] = Option::Some(value);
                     taken = true;
                 }

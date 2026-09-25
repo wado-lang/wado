@@ -1547,6 +1547,35 @@ pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
     wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
 }
 
+/// `#[wire(encoding = "…")]`: how a numbered format writes an integer field,
+/// which protobuf's `sint*`, `fixed*` and `sfixed*` each need.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WireEncoding {
+    Plain,
+    ZigZag,
+    Fixed,
+}
+
+impl WireEncoding {
+    /// The discriminant `core:prelude`'s `WireEncoding` gives the same case.
+    #[must_use]
+    pub fn discriminant(self) -> i32 {
+        match self {
+            Self::Plain => 0,
+            Self::ZigZag => 1,
+            Self::Fixed => 2,
+        }
+    }
+}
+
+/// The `#[wire(encoding = "…")]` text these attributes carry, as written.
+#[must_use]
+pub fn wire_encoding_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs
+        .iter()
+        .find_map(|a| if a.name == WIRE { a.kv_value("encoding") } else { None })
+}
+
 /// One entry per field, in declaration order, as `StructInfo` holds them.
 #[must_use]
 pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {

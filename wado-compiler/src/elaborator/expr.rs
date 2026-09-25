@@ -25,7 +25,7 @@ use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
-use crate::ast::{RangeExpr, Visibility};
+use crate::ast::{RangeExpr, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
 use crate::defs::DefId;
@@ -4480,6 +4480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 serde_default: false,
                 serde_positional: false,
                 serde_number: None,
+                serde_encoding: WireEncoding::Plain,
                 default_expr: None,
             })
             .collect();

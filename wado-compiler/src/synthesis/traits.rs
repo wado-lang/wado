@@ -26,7 +26,7 @@ use super::common::{
     deref_expr, make_synthetic_free_function, make_synthetic_method, param_local, ref_expr,
     synth_span, write_str_stmt,
 };
-use crate::ast::{HandleClasses, Visibility};
+use crate::ast::{HandleClasses, Visibility, WireEncoding};
 use crate::defs::DefId;
 use crate::escape::unescape_template_segment;
 use crate::name::{
@@ -498,6 +498,7 @@ struct ReflectFieldInfo {
     /// `#[wire(number = N)]`, or `0` where the field carries none. Zero is the
     /// wire format's own non-number: a field number starts at 1.
     wire_number: i32,
+    wire_encoding: WireEncoding,
     is_secret: bool,
     has_default: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
@@ -549,6 +550,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     index: f.index,
                     wire_name_override: f.wire_name_override.clone(),
                     wire_number: f.serde_number.unwrap_or(0) as i32,
+                    wire_encoding: f.serde_encoding,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
@@ -1013,6 +1015,13 @@ fn generate_struct_members_fn(
                     }),
                     TypeTable::I32,
                     5,
+                    span,
+                ),
+                reflect_meta_int_field(
+                    "wire_encoding",
+                    f.wire_encoding.discriminant() as u64,
+                    TypeTable::I32,
+                    6,
                     span,
                 ),
             ];

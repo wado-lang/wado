@@ -20,7 +20,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 use super::{ValueCopyHelpers, needs_value_copy};
-use crate::ast::Visibility;
+use crate::ast::{Visibility, WireEncoding};
 use crate::compiler_item::CompilerItem;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::array_clone_element_type_arg;
@@ -553,6 +553,7 @@ fn build_list_wrapper_copy(
         serde_default: false,
         serde_positional: false,
         serde_number: None,
+        serde_encoding: WireEncoding::Plain,
         default_expr: None,
     };
     let used_field = TirField {
@@ -566,6 +567,7 @@ fn build_list_wrapper_copy(
         serde_default: false,
         serde_positional: false,
         serde_number: None,
+        serde_encoding: WireEncoding::Plain,
         default_expr: None,
     };
     let fields = vec![
@@ -621,6 +623,7 @@ fn build_tuple_copy(
                 serde_default: false,
                 serde_positional: false,
                 serde_number: None,
+                serde_encoding: WireEncoding::Plain,
                 default_expr: None,
             };
             TirStructField {

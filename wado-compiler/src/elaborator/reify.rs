@@ -21,6 +21,7 @@ use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
+use crate::primitive::PrimitiveType;
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
@@ -39,7 +40,8 @@ use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, wire_case_number_of, wire_number_of, wire_number_written,
+    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_encoding_written, wire_number_of,
+    wire_number_written,
 };
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
@@ -1071,6 +1073,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 serde_default,
                 serde_positional,
                 serde_number: wire_numbers[index],
+                serde_encoding: self.checked_wire_encoding(field, type_id),
                 default_expr,
             });
         }
@@ -1169,6 +1172,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .iter()
                         .any(|a| a.name == WIRE && a.has_arg("positional")),
                     serde_number: wire_numbers.get(index).copied().flatten(),
+                    serde_encoding: field.map_or(WireEncoding::Plain, |f| {
+                        self.checked_wire_encoding(f, *type_id)
+                    }),
                     default_expr,
                 }
             })
@@ -2096,6 +2102,64 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             wire_number_of,
             wire_number_fault,
         )
+    }
+
+    /// A field's `#[wire(encoding = "…")]`, checked against the integer it
+    /// applies to: the field's own type, or the element of an `Option` or
+    /// `List` it holds.
+    fn checked_wire_encoding(&self, field: &ast::StructField, type_id: TypeId) -> WireEncoding {
+        let Some(written) = wire_encoding_written(&field.attrs) else {
+            return WireEncoding::Plain;
+        };
+        let (encoding, admits, needs): (_, &[PrimitiveType], _) = match written {
+            "zigzag" => (
+                WireEncoding::ZigZag,
+                &[PrimitiveType::I32, PrimitiveType::I64],
+                "a signed integer, `i32` or `i64`,",
+            ),
+            "fixed" => (
+                WireEncoding::Fixed,
+                &[PrimitiveType::I32, PrimitiveType::I64, PrimitiveType::U32, PrimitiveType::U64],
+                "a 32- or 64-bit integer,",
+            ),
+            _ => {
+                self.wire_encoding_error(
+                    &field.span,
+                    format!(
+                        "`#[wire(encoding = \"{written}\")]`: an encoding is \"zigzag\" or \"fixed\""
+                    ),
+                );
+                return WireEncoding::Plain;
+            }
+        };
+        let tt = self.tysys.type_table.borrow();
+        let element = tt
+            .as_option(type_id)
+            .or_else(|| tt.as_list(type_id))
+            .unwrap_or(type_id);
+        if !matches!(tt.get(element), ResolvedType::Primitive(p) if admits.contains(p)) {
+            self.wire_encoding_error(
+                &field.span,
+                format!(
+                    "`#[wire(encoding = \"{written}\")]` needs {needs} and `{}` holds `{}`",
+                    field.name,
+                    tt.type_name(element)
+                ),
+            );
+        }
+        encoding
+    }
+
+    fn wire_encoding_error(&self, span: &Span, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::WireEncoding,
+                message,
+                span: Some(DiagnosticSpan::from_span(span, None)),
+            },
+        );
     }
 
     /// Each enum case's `#[wire(number = N)]`, by case position, under the

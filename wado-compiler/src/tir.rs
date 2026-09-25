@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RestClause, Visibility};
+use crate::ast::{AstId, HandleClasses, RestClause, Visibility, WireEncoding};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -7027,6 +7027,8 @@ pub struct TirField {
     /// instead of the name. A struct numbers every field or none, so this is
     /// `Some` for all of a struct's fields or for none of them.
     pub serde_number: Option<u32>,
+    /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
+    pub serde_encoding: WireEncoding,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
