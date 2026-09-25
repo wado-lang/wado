@@ -36,11 +36,6 @@ use cranelift_entity::EntityRef;
 /// on it, and a call site is matched by its stamped `func_id`.
 type FuncKey = FuncId;
 
-fn builtin_gname(func: &FunctionRef) -> Option<String> {
-    func.builtin_name()
-        .or_else(|| func.monomorphized_builtin_name())
-}
-
 /// Returns whether anything changed (a binding was retargeted or a shallow
 /// specialization was added), so the optimizer's dirty-set gate can re-examine
 /// the touched functions and accommodate the new ones.
@@ -324,8 +319,8 @@ fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
 /// `String` wrapper copies use the latter; both demote the same way).
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
-        Some("builtin::array_clone" | "builtin::array_clone_prefix")
+        callee_descriptor(descriptors, func_id).intrinsic(),
+        Some("array_clone" | "array_clone_prefix")
     )
 }
 
@@ -646,7 +641,9 @@ impl Analyzer<'_> {
     /// `select` forward values), so a by-value argument moved into one cannot
     /// reach the demoted spine's shared elements.
     fn callee_is_builtin(&self, callee: FuncKey) -> bool {
-        builtin_gname(callee_descriptor(self.descriptors, callee)).is_some()
+        callee_descriptor(self.descriptors, callee)
+            .intrinsic()
+            .is_some()
     }
 
     /// True when every use of local `idx` in `body` keeps the array's
@@ -1148,7 +1145,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // only forward values), so a self-derived arg to a builtin is
                 // harmless. Opaque (non-builtin) calls still gate.
                 let callee = callee_descriptor(self.analyzer.descriptors, *func_id);
-                let is_builtin = builtin_gname(callee).is_some();
+                let is_builtin = callee.intrinsic().is_some();
                 let fname = callee.name.clone();
                 let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
                 for a in args {

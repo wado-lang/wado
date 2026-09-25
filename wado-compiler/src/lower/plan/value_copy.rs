@@ -44,10 +44,7 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     let TirExprKind::Call { func, .. } = &expr.kind else {
         return None;
     };
-    let is_clone = ["array_clone", "array_clone_prefix"]
-        .into_iter()
-        .any(|name| func.is_builtin_named(name));
-    if !is_clone {
+    if !matches!(func.intrinsic(), Some("array_clone" | "array_clone_prefix")) {
         return None;
     }
     func.monomorph_info

@@ -12,6 +12,7 @@ use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
+use super::calls::intrinsic_key;
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
@@ -2649,9 +2650,7 @@ impl FunctionTranslator<'_, '_> {
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
                 let func = &self.callee_descriptor(*func_id);
                 // Check for instruction-builtins first
-                let builtin = func
-                    .builtin_name()
-                    .or_else(|| func.monomorphized_builtin_name());
+                let builtin = intrinsic_key(func);
                 if let Some(ref builtin_name) = builtin
                     && let Some(instr) =
                         self.translate_builtin_call(builtin_name, args, expr.type_id)

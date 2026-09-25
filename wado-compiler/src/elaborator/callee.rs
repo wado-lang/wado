@@ -67,6 +67,12 @@ impl CalleeRef {
             Self::Declared { name, .. } | Self::Rendered { name, .. } => name,
         }
     }
+
+    /// The `core:builtin` intrinsic this is. A function declared anywhere else
+    /// may share the name, a wasm-asset export included.
+    pub fn intrinsic(&self) -> Option<&str> {
+        self.module().is_core_builtin().then(|| self.name())
+    }
 }
 
 /// Identity of a static method callee: the module of the `impl` block, the

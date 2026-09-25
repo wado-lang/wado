@@ -1894,12 +1894,6 @@ impl MangledName {
         Self(format!("{module}/{local_name}"))
     }
 
-    /// The `builtin/<name>` alias an imported builtin is registered under.
-    #[must_use]
-    pub fn builtin_alias(name: &str) -> Self {
-        Self(format!("builtin/{name}"))
-    }
-
     /// The `wasi/<name>` key a WASI canonical import is registered under.
     #[must_use]
     pub fn wasi_import(name: &str) -> Self {

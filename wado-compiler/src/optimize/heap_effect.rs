@@ -803,17 +803,14 @@ fn classify_callee(f: &NirFunction, project: &NirPackage) -> Callee {
     if f.body.is_some() {
         return Callee::Body;
     }
-    if !f.module_source.is_core_builtin() {
-        return Callee::Opaque;
-    }
     let reference = FunctionRef::from_resolved(f, f.module_source.clone());
+    let Some(intrinsic) = reference.intrinsic() else {
+        return Callee::Opaque;
+    };
     let Some(declaration) = project.builtin_declarations.declaration(&reference) else {
         return Callee::Opaque;
     };
-    let array = reference
-        .monomorphized_builtin_name()
-        .or_else(|| reference.builtin_name())
-        .is_some_and(|name| name.starts_with("builtin::array_"));
+    let array = intrinsic.starts_with("array_");
     Callee::Builtin {
         declaration: Box::new(declaration.clone()),
         array,

@@ -19,7 +19,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
-    BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
+    BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
     TirVariantDecl, TypeTable,
 };
 use crate::token::Span;
@@ -61,8 +61,6 @@ pub struct FlatPackage {
     pub flags: Vec<TirFlags>,
     /// All global variable declarations (each carries its own `module_source`)
     pub globals: Vec<TirGlobal>,
-    /// Imports (from entry module only)
-    pub imports: Vec<TirImport>,
     /// Test declarations (from entry module only)
     pub tests: Vec<TirTest>,
     /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
