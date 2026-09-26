@@ -39,6 +39,21 @@ test "mut ref equality" {
     assert !ref_eq(r1, &q);
 }
 
+test "a `&mut` operand compares with a `&` one either way round" {
+    let mut p = Point { x: 1, y: 2 };
+    let mut q = Point { x: 1, y: 2 };
+    let r = Point { x: 0, y: 2 };
+    assert &p == &mut q;
+    assert &mut p == &q;
+    assert &mut p == &mut q;
+    assert &r != &mut q;
+    assert &mut q != &r;
+    let mut i = 3;
+    let j = 3;
+    assert &j == &mut i;
+    assert &mut i == &j;
+}
+
 test "primitive ref equality" {
     let x = 42;
     let y = 42;

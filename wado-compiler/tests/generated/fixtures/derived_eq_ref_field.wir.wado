@@ -79,39 +79,39 @@ global global:derived_eq_ref_field.wado::$const_obj_1: ref null Array<u8> = arra
 global global:derived_eq_ref_field.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
 
 fn "derived_eq_ref_field.wado/run"() with Stdout {
-    let $local_2: ref "core:prelude/string.wado//String";
-    let $local_3: ref "core:prelude/format.wado//Formatter";
+    let $local_3: ref "core:prelude/string.wado//String";
+    let $local_4_4: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
     let new_used: i32;
-    let start_31: i32;
+    let start_33: i32;
     let packed: i64;
-    let rx_42: i32;
-    let tx_43: i32;
-    $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
+    let rx_44: i32;
+    let tx_45: i32;
+    $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     let $arg_spill_1: ref "core:prelude/string.wado//String";
-    $arg_spill_1 = $local_3.buf;
+    $arg_spill_1 = $local_4_4.buf;
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:derived_eq_ref_field.wado::$const_obj_2;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, $mv_arg_2.repr, $mv_arg_2.used);
-    new_used = $local_2.used + 1;
-    if @unlikely(new_used > builtin::array_len($local_2.repr)) {
+    new_used = $local_3.used + 1;
+    if @unlikely(new_used > builtin::array_len($local_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used);
     }
-    start_31 = $local_2.used;
-    $local_2.used = new_used;
-    builtin::array_copy<u8>($local_2.repr, start_31, global:derived_eq_ref_field.wado::$const_obj_1, 0, 1);
-    $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
+    start_33 = $local_3.used;
+    $local_3.used = new_used;
+    builtin::array_copy<u8>($local_3.repr, start_33, global:derived_eq_ref_field.wado::$const_obj_1, 0, 1);
+    $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     let $arg_spill_3: ref "core:prelude/string.wado//String";
-    $arg_spill_3 = $local_3.buf;
+    $arg_spill_3 = $local_4_4.buf;
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:derived_eq_ref_field.wado::$const_obj_0;
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_3, $mv_arg_4.repr, $mv_arg_4.used);
-    rx_42 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_43 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "derived_eq_ref_field.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
-    "core:rt/write_string_to_stream"(tx_43, $local_2.repr, $local_2.used);
+    rx_44 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_45 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "derived_eq_ref_field.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
+    "core:rt/write_string_to_stream"(tx_45, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
