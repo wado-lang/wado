@@ -1,18 +1,22 @@
 #![stdlib("core:jsonc")]
-//! JSONC (JSON with Comments) deserialization.
+//! JSONC (JSON with Comments): reading it, and editing it in place.
 //!
 //! Accepts `//` line comments, `/* */` block comments, and one trailing comma
-//! before a `]` or `}`. There is no JSONC writer: JSON is JSONC, so write with
-//! `core:json`.
+//! before a `]` or `}`.
 //!
-//! The input is rewritten into JSON of the same length, each comment and
-//! trailing comma turned into spaces, and `core:json` reads that. An error
-//! offset therefore points into the original input, and `core:json` carries
-//! none of JSONC's cost.
+//! `from_string` and `from_bytes` rewrite the input into JSON of the same
+//! length, each comment and trailing comma turned into spaces, and
+//! `core:json` reads that. An error offset therefore points into the original
+//! input, and `core:json` carries none of JSONC's cost.
+//!
+//! `set` and `remove` change the value an RFC 6901 JSON Pointer names and
+//! return the new text, every comment and every other member left as it was.
+//! A document written from nothing needs no comments to keep, so write it with
+//! `core:json`: JSON is JSONC.
 
-use { Deserialize, DeserializeError, DEFAULT_MAX_DEPTH } from "core:serde";
+use { Deserialize, DeserializeError, DEFAULT_MAX_DEPTH, IgnoredAny, Serialize, SerializeError } from "core:serde";
 use json from "core:json";
-use { json_ws_end } from "core:json";
+use { json_ws_end, write_escaped_string, PrettyJsonSerializer } from "core:json";
 
 #[synopsis]
 test {
@@ -26,6 +30,10 @@ test {
         /* default */ "port": 8080,
     }`;
     assert from_string::<Server>(src) matches { Ok(s) && s.port == 8080 };
+
+    let edited = set(src, "/port", &9090).unwrap();
+    assert edited.contains("// where to listen");
+    assert from_string::<Server>(&edited) matches { Ok(s) && s.port == 9090 };
 }
 
 /// Deserializes a value from a JSONC string. Convenience wrapper over
@@ -49,6 +57,610 @@ pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
         return json::from_bytes(&blanker.out, max_depth);
     }
     return json::from_bytes(blanker.input, max_depth);
+}
+
+/// Why an edit was refused.
+pub variant EditError {
+    /// The source is not JSONC.
+    Syntax(DeserializeError),
+    /// The value has no JSON form.
+    Serialize(SerializeError),
+    /// The pointer is not an RFC 6901 JSON Pointer.
+    InvalidPointer(String),
+    /// The pointer names no value, and `set` cannot make one there: a step
+    /// through a scalar, an array index past the end, or the root for
+    /// `remove`.
+    NotFound(String),
+}
+
+impl From<DeserializeError> for EditError;
+impl From<SerializeError> for EditError;
+
+impl Display for EditError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message = match *self {
+            Syntax(e) => `invalid JSONC: ${e}`,
+            Serialize(e) => `${e}`,
+            InvalidPointer(p) => `invalid JSON pointer: "${p}"`,
+            NotFound(p) => `no value at "${p}"`,
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for EditError {
+}
+
+/// Sets the value `pointer` names in `src`, and returns the edited text. Only
+/// that value's text changes: comments, whitespace and every other member
+/// stay as they were.
+///
+/// A key the object lacks is added after its last member, and each object
+/// the rest of the pointer passes through is created. An array index equal to
+/// the length, or `-`, appends. The value is written indented where the
+/// container spans lines, and on one line where it does not.
+pub fn set<S: AsStrSlice, P: AsStrSlice, T: Serialize>(src: S, pointer: P, value: &T) -> Result<String, EditError> {
+    let pointer = pointer.as_str_slice();
+    let tokens = parse_pointer(pointer)?;
+    let editor = Editor::new(src.as_str_slice())?;
+    let mut at = editor.root;
+    let mut on_one_line = false;
+    for let mut k = 0; k < tokens.len(); k += 1 {
+        let Some([c, index]) = editor.step(at, &tokens[k]) else {
+            return Result::Err(NotFound(pointer.to_string()));
+        };
+        if index >= 0 && index < c.members.len() {
+            at = c.members[index].value_start;
+            on_one_line = !editor.spans_lines(c.open, c.close);
+            continue;
+        }
+        let is_object = editor.byte(c.open) == b'{';
+        if !is_object && (index != c.members.len() || k + 1 < tokens.len()) {
+            return Result::Err(NotFound(pointer.to_string()));
+        }
+        let mut created: List<String> = [];
+        for let mut j = k + 1; j < tokens.len(); j += 1 {
+            created.push(tokens[j]);
+        }
+        let key: Option<String> = if is_object { Option::Some(tokens[k]) } else { null };
+        let splices = editor.insert(&c, key, &created, value)?;
+        return Result::Ok(editor.apply(&splices));
+    }
+    let text = editor.render(value, &[], !on_one_line)?;
+    let placed = editor.place(&text, &editor.line_indent(at));
+    return Result::Ok(editor.apply(&[
+        Splice { start: at, end: editor.value_end(at), text: placed },
+    ]));
+}
+
+/// Removes the member or element `pointer` names from `src`, and returns the
+/// edited text. The comma that separated it goes too, as does a comment on
+/// the rest of its line. A comment on a line of its own stays.
+pub fn remove<S: AsStrSlice, P: AsStrSlice>(src: S, pointer: P) -> Result<String, EditError> {
+    let pointer = pointer.as_str_slice();
+    let tokens = parse_pointer(pointer)?;
+    let editor = Editor::new(src.as_str_slice())?;
+    let mut at = editor.root;
+    for let mut k = 0; k < tokens.len(); k += 1 {
+        let Some([c, index]) = editor.step(at, &tokens[k]) else {
+            break;
+        };
+        if index < 0 || index >= c.members.len() {
+            break;
+        }
+        if k + 1 == tokens.len() {
+            return Result::Ok(editor.apply(&editor.removal(&c, index)));
+        }
+        at = c.members[index].value_start;
+    }
+    return Result::Err(NotFound(pointer.to_string()));
+}
+
+/// The reference tokens of an RFC 6901 JSON Pointer, unescaped.
+fn parse_pointer(pointer: StrSlice) -> Result<List<String>, EditError> {
+    let mut tokens: List<String> = [];
+    if pointer.is_empty() {
+        return Result::Ok(tokens);
+    }
+    if pointer.get_byte_unchecked(0) != b'/' {
+        return Result::Err(InvalidPointer(pointer.to_string()));
+    }
+    let mut start = 1;
+    for let mut i = 1; i <= pointer.len(); i += 1 {
+        if i < pointer.len() && pointer.get_byte_unchecked(i) != b'/' {
+            continue;
+        }
+        let Some(token) = unescape_token(pointer.slice(start, i)) else {
+            return Result::Err(InvalidPointer(pointer.to_string()));
+        };
+        tokens.push(token);
+        start = i + 1;
+    }
+    return Result::Ok(tokens);
+}
+
+/// `token` with `~1` and `~0` decoded, or `None` where a `~` starts neither.
+fn unescape_token(token: StrSlice) -> Option<String> {
+    let mut out: String = "";
+    let mut tilde = false;
+    for let c of token.chars() {
+        if tilde {
+            if c == '0' {
+                out.push('~');
+            } else if c == '1' {
+                out.push('/');
+            } else {
+                return null;
+            }
+            tilde = false;
+        } else if c == '~' {
+            tilde = true;
+        } else {
+            out.push(c);
+        }
+    }
+    if tilde {
+        return null;
+    }
+    return Option::Some(out);
+}
+
+/// The array index `token` names: `-` is `len`, and anything but a decimal
+/// without a leading zero is -1.
+fn array_index(token: &String, len: i32) -> i32 {
+    if *token == "-" {
+        return len;
+    }
+    let n = token.len();
+    if n == 0 || n > 9 || n > 1 && token.get_byte_unchecked(0) == b'0' {
+        return -1;
+    }
+    let mut index = 0;
+    for let mut i = 0; i < n; i += 1 {
+        let b = token.get_byte_unchecked(i) as i32;
+        if b < b'0' || b > b'9' {
+            return -1;
+        }
+        index = index * 10 + (b - b'0');
+    }
+    return index;
+}
+
+/// A member of an object or an element of an array, as offsets into the
+/// source. An element has no key, so its `start` is `key_end` is
+/// `value_start`.
+struct Member {
+    start: i32,
+    key_end: i32,
+    value_start: i32,
+    value_end: i32,
+    /// The comma after the value, or -1.
+    comma: i32,
+}
+
+/// An object or array: its brackets and what lies between them.
+struct Container {
+    open: i32,
+    close: i32,
+    members: List<Member>,
+}
+
+/// Replace `[start, end)` with `text`.
+struct Splice {
+    start: i32,
+    end: i32,
+    text: String,
+}
+
+/// Reads the structure of a JSONC source already known to be valid, and
+/// words edits in its own style: its line break and its indentation step.
+struct Editor {
+    src: StrSlice,
+    bytes: ByteSlice,
+    root: i32,
+    newline: String,
+    unit: String,
+}
+
+impl Editor {
+    fn new(src: StrSlice) -> Result<Editor, EditError> {
+        let _: IgnoredAny = from_bytes(src.as_bytes())?;
+        let mut editor = Editor { src, bytes: src.as_bytes(), root: 0, newline: "\n", unit: "  " };
+        editor.root = editor.skip_trivia(0);
+        for let mut i = 0; i + 1 < editor.bytes.len(); i += 1 {
+            if editor.byte(i) == b'\r' && editor.byte(i + 1) == b'\n' {
+                editor.newline = "\r\n";
+                break;
+            }
+        }
+        editor.unit = editor.indent_unit();
+        return Result::Ok(editor);
+    }
+
+    fn byte(&self, i: i32) -> i32 {
+        return self.bytes.get_unchecked(i) as i32;
+    }
+
+    /// The indentation of the first indented line holding JSON rather than
+    /// a comment's continuation, or two spaces where there is none.
+    fn indent_unit(&self) -> String {
+        let len = self.bytes.len();
+        for let mut i = 0; i < len; i += 1 {
+            if self.byte(i) != b'\n' {
+                continue;
+            }
+            let end = self.skip_blanks(i + 1);
+            if end == i + 1 || end == len {
+                continue;
+            }
+            let b = self.byte(end);
+            if b != b'\n' && b != b'\r' && b != b'*' && b != b'/' {
+                return self.src.slice(i + 1, end).to_string();
+            }
+        }
+        return "  ";
+    }
+
+    /// The first offset from `i` past spaces and tabs.
+    fn skip_blanks(&self, i: i32) -> i32 {
+        let mut j = i;
+        while j < self.bytes.len() && (self.byte(j) == b' ' || self.byte(j) == b'\t') {
+            j += 1;
+        }
+        return j;
+    }
+
+    /// The first offset from `i` past whitespace, comments not included.
+    fn skip_ws(&self, i: i32) -> i32 {
+        let mut j = i;
+        while j < self.bytes.len() && !json_ws_end(self.byte(j)) {
+            j += 1;
+        }
+        return j;
+    }
+
+    /// The first offset from `i` past whitespace and comments.
+    fn skip_trivia(&self, i: i32) -> i32 {
+        let len = self.bytes.len();
+        let mut j = self.skip_ws(i);
+        while j + 1 < len && self.byte(j) == b'/' {
+            if self.byte(j + 1) == b'/' {
+                j = self.skip_ws(line_end(&self.bytes, j + 2));
+            } else {
+                j = self.skip_ws(block_comment_end(&self.bytes, j + 2));
+            }
+        }
+        return j;
+    }
+
+    /// The offset just past the value starting at `start`.
+    fn value_end(&self, start: i32) -> i32 {
+        let len = self.bytes.len();
+        let first = self.byte(start);
+        if first == b'"' {
+            return string_end(&self.bytes, start + 1);
+        }
+        if first != b'{' && first != b'[' {
+            let mut i = start;
+            while i < len {
+                let b = self.byte(i);
+                if !json_ws_end(b) || b == b',' || b == b']' || b == b'}' || b == b'/' {
+                    break;
+                }
+                i += 1;
+            }
+            return i;
+        }
+        let mut depth = 0;
+        let mut i = start;
+        while i < len {
+            let b = self.byte(i);
+            if b == b'"' {
+                i = string_end(&self.bytes, i + 1);
+                continue;
+            }
+            if b == b'/' {
+                i = self.skip_trivia(i);
+                continue;
+            }
+            if b == b'{' || b == b'[' {
+                depth += 1;
+            } else if b == b'}' || b == b']' {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            i += 1;
+        }
+        return len;
+    }
+
+    /// Where `token` leads from the value at `at`: its container, and the
+    /// index of the member the token names. The index is -1 for an absent key
+    /// or a token no array index is written as. `None` where `at` holds a
+    /// scalar.
+    fn step(&self, at: i32, token: &String) -> Option<[Container, i32]> {
+        let b = self.byte(at);
+        if b != b'{' && b != b'[' {
+            return null;
+        }
+        let c = self.container(at);
+        if b == b'[' {
+            let index = array_index(token, c.members.len());
+            return Option::Some([c, index]);
+        }
+        let mut found = -1;
+        for let mut i = 0; i < c.members.len(); i += 1 {
+            if self.key_matches(&c.members[i], token) {
+                found = i;
+            }
+        }
+        return Option::Some([c, found]);
+    }
+
+    fn container(&self, open: i32) -> Container {
+        let is_object = self.byte(open) == b'{';
+        let close_byte: i32 = if is_object { b'}' } else { b']' };
+        let mut members: List<Member> = [];
+        let mut i = self.skip_trivia(open + 1);
+        while self.byte(i) != close_byte {
+            let start = i;
+            let mut key_end = i;
+            let mut value_start = i;
+            if is_object {
+                key_end = string_end(&self.bytes, i + 1);
+                value_start = self.skip_trivia(self.skip_trivia(key_end) + 1);
+            }
+            let value_end = self.value_end(value_start);
+            let mut comma = -1;
+            i = self.skip_trivia(value_end);
+            if self.byte(i) == b',' {
+                comma = i;
+                i = self.skip_trivia(i + 1);
+            }
+            members.push(Member { start, key_end, value_start, value_end, comma });
+        }
+        return Container { open, close: i, members };
+    }
+
+    fn key_matches(&self, m: &Member, key: &String) -> bool {
+        if !self.has_byte(m.start + 1, m.key_end - 1, b'\\') {
+            return self.src.slice(m.start + 1, m.key_end - 1) == *key;
+        }
+        let decoded: Result<String, DeserializeError> = json::from_string(self.src.slice(m.start, m.key_end));
+        return decoded matches { Ok(k) && k == *key };
+    }
+
+    fn has_byte(&self, start: i32, end: i32, b: i32) -> bool {
+        for let mut i = start; i < end; i += 1 {
+            if self.byte(i) == b {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn spans_lines(&self, start: i32, end: i32) -> bool {
+        return self.has_byte(start, end, b'\n');
+    }
+
+    fn line_start(&self, i: i32) -> i32 {
+        let mut j = i;
+        while j > 0 && self.byte(j - 1) != b'\n' {
+            j -= 1;
+        }
+        return j;
+    }
+
+    fn line_indent(&self, i: i32) -> String {
+        let start = self.line_start(i);
+        return self.src.slice(start, self.skip_blanks(start)).to_string();
+    }
+
+    /// Whether only spaces and tabs precede `i` on its line.
+    fn starts_line(&self, i: i32) -> bool {
+        let start = self.line_start(i);
+        return self.skip_blanks(start) == i;
+    }
+
+    /// The offset of the line break ending the line through `i`, when only
+    /// blanks and comments follow `i` on it, or -1.
+    fn line_rest(&self, i: i32) -> i32 {
+        let len = self.bytes.len();
+        let mut j = self.skip_blanks(i);
+        while j + 1 < len && self.byte(j) == b'/' && self.byte(j + 1) == b'*' {
+            let end = block_comment_end(&self.bytes, j + 2);
+            if self.spans_lines(j, end) {
+                return -1;
+            }
+            j = self.skip_blanks(end);
+        }
+        if j + 1 < len && self.byte(j) == b'/' && self.byte(j + 1) == b'/' {
+            j = line_end(&self.bytes, j + 2);
+            return if j > i && self.byte(j - 1) == b'\r' { j - 1 } else { j };
+        }
+        if j == len || self.byte(j) == b'\n' || self.byte(j) == b'\r' {
+            return j;
+        }
+        return -1;
+    }
+
+    /// The offset just past the line break at `i`.
+    fn line_break_end(&self, i: i32) -> i32 {
+        if i < self.bytes.len() && self.byte(i) == b'\r' {
+            return i + 2;
+        }
+        return i + 1;
+    }
+
+    /// `value` as JSON, inside one object per key of `created`, outermost
+    /// first. Pretty text breaks lines with `\n` and indents from column 0.
+    fn render<T: Serialize>(&self, value: &T, created: &List<String>, pretty: bool) -> Result<String, EditError> {
+        let mut text: String = "";
+        if pretty {
+            let mut ser = PrettyJsonSerializer { buf: &mut text, indent: &self.unit, depth: 0 };
+            value.serialize(&mut ser)?;
+        } else {
+            text = json::to_string(value)?;
+        }
+        for let mut k = created.len() - 1; k >= 0; k -= 1 {
+            let mut wrapped: String = "{";
+            if pretty {
+                wrapped.push('\n');
+                wrapped.push_str(&self.unit);
+            }
+            write_escaped_string(&mut wrapped, &created[k]);
+            wrapped.push_str(": ");
+            if pretty {
+                wrapped.push_str(&reindent(&text, &self.unit, &"\n"));
+                wrapped.push('\n');
+            } else {
+                wrapped.push_str(&text);
+            }
+            wrapped.push('}');
+            text = wrapped;
+        }
+        return Result::Ok(text);
+    }
+
+    /// Rendered `text` placed on a line indented by `indent`.
+    fn place(&self, text: &String, indent: &String) -> String {
+        return reindent(text, indent, &self.newline);
+    }
+
+    /// The splices adding a member to `c`: `key` and the value, or the value
+    /// alone for an array.
+    fn insert<T: Serialize>(
+        &self,
+        c: &Container,
+        key: Option<String>,
+        created: &List<String>,
+        value: &T,
+    ) -> Result<List<Splice>, EditError> {
+        let multi_line = self.spans_lines(c.open, c.close);
+        let empty = c.members.is_empty();
+        let root_multi_line = self.spans_lines(self.root, self.value_end(self.root));
+        let pretty = multi_line || empty && (c.open == self.root || root_multi_line);
+        let mut member: String = "";
+        if let Some(k) = key {
+            write_escaped_string(&mut member, &k);
+            member.push_str(": ");
+        }
+        member.push_str(&self.render(value, created, pretty)?);
+
+        if empty {
+            let outer = self.line_indent(c.open);
+            let inner = `${outer}${self.unit}`;
+            let placed = self.place(&member, &inner);
+            if multi_line && self.starts_line(c.close) {
+                let at = self.line_start(c.close);
+                return Result::Ok([
+                    Splice { start: at, end: at, text: `${inner}${placed}${self.newline}` },
+                ]);
+            }
+            let mut blank_from = c.close;
+            while blank_from > c.open + 1 && (self.byte(blank_from - 1) == b' ' || self.byte(blank_from - 1) == b'\t') {
+                blank_from -= 1;
+            }
+            if pretty {
+                let text = `${self.newline}${inner}${placed}${self.newline}${outer}`;
+                return Result::Ok([
+                    Splice { start: blank_from, end: c.close, text },
+                ]);
+            }
+            let text = if blank_from > c.open + 1 { ` ${member}` } else { member };
+            return Result::Ok([
+                Splice { start: blank_from, end: c.close, text },
+            ]);
+        }
+
+        let last = c.members[c.members.len() - 1];
+        let trailing = last.comma >= 0;
+        let after = if trailing { last.comma + 1 } else { last.value_end };
+        let tail = if trailing { "," } else { "" };
+        let mut splices: List<Splice> = [];
+        if !trailing {
+            splices.push(Splice { start: last.value_end, end: last.value_end, text: "," });
+        }
+        let eol = if multi_line { self.line_rest(after) } else { -1 };
+        if eol >= 0 {
+            let indent = self.line_indent(last.start);
+            let placed = self.place(&member, &indent);
+            splices.push(Splice { start: eol, end: eol, text: `${self.newline}${indent}${placed}${tail}` });
+        } else {
+            splices.push(Splice { start: after, end: after, text: ` ${member}${tail}` });
+        }
+        return Result::Ok(splices);
+    }
+
+    /// The splices taking member `index` out of `c`.
+    fn removal(&self, c: &Container, index: i32) -> List<Splice> {
+        let member = c.members[index];
+        let own_comma = member.comma >= 0;
+        let after = if own_comma { member.comma + 1 } else { member.value_end };
+        if c.members.len() == 1 && self.skip_ws(c.open + 1) == member.start && self.skip_ws(after) == c.close {
+            return [
+                Splice { start: c.open + 1, end: c.close, text: "" },
+            ];
+        }
+        let mut splices: List<Splice> = [];
+        let eol = self.line_rest(after);
+        if self.starts_line(member.start) && eol >= 0 {
+            if !own_comma && index > 0 {
+                let comma = c.members[index - 1].comma;
+                splices.push(Splice { start: comma, end: comma + 1, text: "" });
+            }
+            splices.push(Splice {
+                start: self.line_start(member.start),
+                end: self.line_break_end(eol),
+                text: "",
+            });
+            return splices;
+        }
+        if own_comma {
+            return [
+                Splice { start: member.start, end: self.skip_blanks(after), text: "" },
+            ];
+        }
+        if index > 0 {
+            return [
+                Splice { start: c.members[index - 1].comma, end: member.value_end, text: "" },
+            ];
+        }
+        return [
+            Splice { start: member.start, end: member.value_end, text: "" },
+        ];
+    }
+
+    /// The source with `splices`, which are in order and apart, applied.
+    fn apply(&self, splices: &List<Splice>) -> String {
+        let mut out = String::with_capacity(self.src.len());
+        let mut pos = 0;
+        for let s of splices {
+            out.push_str(self.src.slice(pos, s.start));
+            out.push_str(&s.text);
+            pos = s.end;
+        }
+        out.push_str(self.src.slice(pos, self.src.len()));
+        return out;
+    }
+}
+
+/// `text` with every `\n` in it replaced by `newline` and `indent`.
+fn reindent(text: &String, indent: &String, newline: &String) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut start = 0;
+    for let mut i = 0; i < text.len(); i += 1 {
+        if text.get_byte_unchecked(i) == b'\n' {
+            out.push_str(text.slice(start, i));
+            out.push_str(newline);
+            out.push_str(indent);
+            start = i + 1;
+        }
+    }
+    out.push_str(text.slice(start, text.len()));
+    return out;
 }
 
 /// Rewrites JSONC into JSON of the same length, copying the input only once
@@ -77,13 +689,13 @@ impl Blanker {
             if b == b'/' && i + 1 < len {
                 let next = self.input.get_unchecked(i + 1) as i32;
                 if next == b'/' {
-                    let end = self.line_end(i + 2);
+                    let end = line_end(&self.input, i + 2);
                     self.blank(i, end);
                     i = end;
                     continue;
                 }
                 if next == b'*' {
-                    let end = self.block_comment_end(i + 2);
+                    let end = block_comment_end(&self.input, i + 2);
                     if end < 0 {
                         return Result::Err(DeserializeError::eof(i as i64));
                     }
@@ -98,48 +710,9 @@ impl Blanker {
             let follows_value = last >= 0 && last != b'[' && last != b'{' && last != b',' && last != b':';
             pending_comma = if b == b',' && follows_value { i } else { -1 };
             last = b;
-            i = if b == b'"' { self.string_end(i + 1) } else { i + 1 };
+            i = if b == b'"' { string_end(&self.input, i + 1) } else { i + 1 };
         }
         return Result::Ok(());
-    }
-
-    /// The offset of the `\n` ending the line comment that reaches `from`, or
-    /// the input's end.
-    fn line_end(&self, from: i32) -> i32 {
-        let len = self.input.len();
-        let mut i = from;
-        while i < len && self.input.get_unchecked(i) as i32 != b'\n' {
-            i += 1;
-        }
-        return i;
-    }
-
-    /// The offset just past the `*/` closing the block comment whose body
-    /// starts at `from`, or -1 when the input ends first.
-    fn block_comment_end(&self, from: i32) -> i32 {
-        let len = self.input.len();
-        for let mut i = from; i + 1 < len; i += 1 {
-            if self.input.get_unchecked(i) as i32 == b'*' && self.input.get_unchecked(i + 1) as i32 == b'/' {
-                return i + 2;
-            }
-        }
-        return -1;
-    }
-
-    /// The offset just past the string whose content starts at `from`. An
-    /// unterminated string runs to the input's end, where `core:json`
-    /// reports it.
-    fn string_end(&self, from: i32) -> i32 {
-        let len = self.input.len();
-        let mut i = from;
-        while i < len {
-            let b = self.input.get_unchecked(i) as i32;
-            if b == b'"' {
-                return i + 1;
-            }
-            i += if b == b'\\' { 2 } else { 1 };
-        }
-        return len;
     }
 
     /// Turns `[start, end)` into spaces. Line breaks stay, so a line number
@@ -156,4 +729,43 @@ impl Blanker {
             }
         }
     }
+}
+
+/// The offset of the `\n` ending the line comment that reaches `from`, or
+/// the input's end.
+fn line_end(input: &ByteSlice, from: i32) -> i32 {
+    let len = input.len();
+    let mut i = from;
+    while i < len && input.get_unchecked(i) as i32 != b'\n' {
+        i += 1;
+    }
+    return i;
+}
+
+/// The offset just past the `*/` closing the block comment whose body
+/// starts at `from`, or -1 when the input ends first.
+fn block_comment_end(input: &ByteSlice, from: i32) -> i32 {
+    let len = input.len();
+    for let mut i = from; i + 1 < len; i += 1 {
+        if input.get_unchecked(i) as i32 == b'*' && input.get_unchecked(i + 1) as i32 == b'/' {
+            return i + 2;
+        }
+    }
+    return -1;
+}
+
+/// The offset just past the string whose content starts at `from`. An
+/// unterminated string runs to the input's end, where `core:json`
+/// reports it.
+fn string_end(input: &ByteSlice, from: i32) -> i32 {
+    let len = input.len();
+    let mut i = from;
+    while i < len {
+        let b = input.get_unchecked(i) as i32;
+        if b == b'"' {
+            return i + 1;
+        }
+        i += if b == b'\\' { 2 } else { 1 };
+    }
+    return len;
 }

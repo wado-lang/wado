@@ -1845,9 +1845,10 @@ use { Account } from "./account.proto" with { generator: { module: "wado-lang:gr
 
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and
-  trailing commas
+  trailing commas, and edits it by JSON Pointer with the comments kept
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
-- [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
+- [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value;
+  `from_value` decodes one into a type, `merge` layers one over another
 - [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
 - [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes and HMAC (SHA-256)
 - [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)

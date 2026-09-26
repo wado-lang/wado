@@ -3,16 +3,20 @@
 
 # core:jsonc
 
-JSONC (JSON with Comments) deserialization.
+JSONC (JSON with Comments): reading it, and editing it in place.
 
 Accepts `//` line comments, `/* */` block comments, and one trailing comma
-before a `]` or `}`. There is no JSONC writer: JSON is JSONC, so write with
-`core:json`.
+before a `]` or `}`.
 
-The input is rewritten into JSON of the same length, each comment and
-trailing comma turned into spaces, and `core:json` reads that. An error
-offset therefore points into the original input, and `core:json` carries
-none of JSONC's cost.
+`from_string` and `from_bytes` rewrite the input into JSON of the same
+length, each comment and trailing comma turned into spaces, and
+`core:json` reads that. An error offset therefore points into the original
+input, and `core:json` carries none of JSONC's cost.
+
+`set` and `remove` change the value an RFC 6901 JSON Pointer names and
+return the new text, every comment and every other member left as it was.
+A document written from nothing needs no comments to keep, so write it with
+`core:json`: JSON is JSONC.
 
 ## Synopsis
 
@@ -27,6 +31,10 @@ let src = `{
     /* default */ "port": 8080,
 }`;
 assert from_string::<Server>(src) matches { Ok(s) && s.port == 8080 };
+
+let edited = set(src, "/port", &9090).unwrap();
+assert edited.contains("// where to listen");
+assert from_string::<Server>(&edited) matches { Ok(s) && s.port == 9090 };
 ```
 
 ## Functions
@@ -40,3 +48,44 @@ Deserializes a value from a JSONC string. Convenience wrapper over
 
 Deserializes a value from UTF-8 JSONC bytes — the primary entry point.
 Input holding no comment and no trailing comma is read in place.
+
+### `pub fn set<S: AsStrSlice, P: AsStrSlice, T: Serialize>(src: S, pointer: P, value: &T) -> Result<String, EditError>`
+
+Sets the value `pointer` names in `src`, and returns the edited text. Only
+that value's text changes: comments, whitespace and every other member
+stay as they were.
+
+A key the object lacks is added after its last member, and each object
+the rest of the pointer passes through is created. An array index equal to
+the length, or `-`, appends. The value is written indented where the
+container spans lines, and on one line where it does not.
+
+### `pub fn remove<S: AsStrSlice, P: AsStrSlice>(src: S, pointer: P) -> Result<String, EditError>`
+
+Removes the member or element `pointer` names from `src`, and returns the
+edited text. The comma that separated it goes too, as does a comment on
+the rest of its line. A comment on a line of its own stays.
+
+## Variants
+
+### `pub variant EditError`
+
+Why an edit was refused.
+
+#### `Syntax(DeserializeError)`
+
+The source is not JSONC.
+
+#### `Serialize(SerializeError)`
+
+The value has no JSON form.
+
+#### `InvalidPointer(String)`
+
+The pointer is not an RFC 6901 JSON Pointer.
+
+#### `NotFound(String)`
+
+The pointer names no value, and `set` cannot make one there: a step
+through a scalar, an array index past the end, or the root for
+`remove`.
