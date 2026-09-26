@@ -26,6 +26,10 @@
 //! required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 //! `Z_DEFAULT_STRATEGY` respectively.
 //!
+//! All decompression entry points take `max_output`, default `i32::MAX`. Output
+//! that would pass it fails with `ZlibError::OutputExceedsMax` before it is
+//! written, so untrusted input cannot expand without bound.
+//!
 
 
 #[synopsis]
@@ -799,7 +803,12 @@ impl InflateState {
 
 /// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
 /// it consumed. The limit is checked before each write, so a bomb never materializes.
-fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32, max_output: i32) -> Result<[ByteList, i32], ZlibError> {
+fn inflate_raw_ex(
+    input: &ByteList,
+    input_offset: i32,
+    input_length: i32,
+    max_output: i32,
+) -> Result<[ByteList, i32], ZlibError> {
     let mut state = InflateState::new(true);
     let mut output: ByteList = [];
     let mut exceeded = false;
@@ -1398,7 +1407,7 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32, max_ou
     }
     // The decode succeeded only if it ran to the end of the final block (RFC
     // 1951 section 3.2.3): a Bad mode or an input cut short both stop before Done.
-    if !(state.mode matches { Done }) {
+    if !state.mode matches { Done } {
         return Result::Err(ZlibError::InvalidDeflateData);
     }
     return Result::Ok([output, inp - input_offset]);
@@ -2998,7 +3007,12 @@ pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<Byte
         let data_start = gzip_parse_header(input, member_start)?;
 
         // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
-        let [member_output, consumed] = inflate_raw_ex(input, data_start, input.len() - data_start, max_output - output.len())?;
+        let [member_output, consumed] = inflate_raw_ex(
+            input,
+            data_start,
+            input.len() - data_start,
+            max_output - output.len(),
+        )?;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
         // 4-byte little-endian value, immediately after the DEFLATE member.
@@ -3702,7 +3716,7 @@ impl InflateStream {
         }
     }
 
-    /// Decompresses the buffered input, at most `max_output` bytes of it, and
+    /// Decompresses the buffered input into at most `max_output` bytes and
     /// clears the buffer. The stream may be reused for further input.
     pub fn finish(&mut self, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
         let result = self.decompress(&self.buffer, max_output)?;
@@ -3712,8 +3726,8 @@ impl InflateStream {
         return Result::Ok(result);
     }
 
-    /// Decompresses `input` in one shot using the stream's `format`, at most
-    /// `max_output` bytes of it. Does not touch the internal buffer.
+    /// Decompresses `input` in one shot into at most `max_output` bytes, using
+    /// the stream's `format`. Does not touch the internal buffer.
     pub fn decompress(&self, input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
         if self.format == RAW_FORMAT {
             return inflate_raw(input, max_output);

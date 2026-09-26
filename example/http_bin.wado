@@ -206,7 +206,11 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
 
 /// `body` with each coding a `Content-Encoding` value lists undone, last applied first,
 /// no layer of it longer than `max_size`.
-fn decode_content(content_encoding: &String, body: ByteList, max_size: i32 = MAX_BODY_SIZE) -> Result<ByteList, BodyError> {
+fn decode_content(
+    content_encoding: &String,
+    body: ByteList,
+    max_size: i32 = MAX_BODY_SIZE,
+) -> Result<ByteList, BodyError> {
     let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(
         |c| !c.is_empty(),
     ).collect();

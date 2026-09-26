@@ -30,6 +30,10 @@ All compression entry points share the same shape: the input buffer is
 required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 `Z_DEFAULT_STRATEGY` respectively.
 
+All decompression entry points take `max_output`, default `i32::MAX`. Output
+that would pass it fails with `ZlibError::OutputExceedsMax` before it is
+written, so untrusted input cannot expand without bound.
+
 ## Synopsis
 
 ```wado
@@ -444,13 +448,13 @@ Appends `chunk` to the buffered compressed input.
 
 #### `pub fn finish(&mut self, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses the buffered input, at most `max_output` bytes of it, and
+Decompresses the buffered input into at most `max_output` bytes and
 clears the buffer. The stream may be reused for further input.
 
 #### `pub fn decompress(&self, input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses `input` in one shot using the stream's `format`, at most
-`max_output` bytes of it. Does not touch the internal buffer.
+Decompresses `input` in one shot into at most `max_output` bytes, using
+the stream's `format`. Does not touch the internal buffer.
 
 ## Enums
 
