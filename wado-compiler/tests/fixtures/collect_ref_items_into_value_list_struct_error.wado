@@ -1,0 +1,17 @@
+// A struct element read through `iter_ref` is the source's own element, so a
+// `List<P>` built from it would alias `xs` and let a write through one show in
+// the other.
+
+struct P {
+    x: i32,
+}
+
+export fn run() {
+    let xs: List<P> = [P { x: 1 }, P { x: 2 }];
+    let mut out: List<P> = xs.iter_ref().collect();
+    out[0].x = 9;
+    assert xs[0].x == 1;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type 'FromIterator::Elem = &P': it is 'P'"}
