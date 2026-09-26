@@ -1852,37 +1852,37 @@ fn cast_f64_to_u32_unsigned_trunc() {
 }
 
 #[test]
-fn cast_f64_nan_to_i32_traps_so_stays_nonconst() {
+fn cast_f64_nan_to_i32_is_zero() {
     let e = cast_expr(float_lit(f64::NAN, TypeTable::F64, "nan"), TypeTable::I32);
-    assert_eq!(lattice_of(&e), Lattice::NonConst);
+    expect_int(&e, 0, PrimitiveType::I32);
 }
 
 #[test]
-fn cast_f64_huge_to_i32_traps_so_stays_nonconst() {
+fn cast_f64_huge_to_i32_saturates_at_max() {
     let e = cast_expr(float_lit(1e30, TypeTable::F64, "1e30"), TypeTable::I32);
-    assert_eq!(lattice_of(&e), Lattice::NonConst);
+    expect_int(&e, i32::MAX as u64, PrimitiveType::I32);
 }
 
 #[test]
-fn cast_f64_neg_huge_to_i32_traps_so_stays_nonconst() {
+fn cast_f64_neg_huge_to_i32_saturates_at_min() {
     let e = cast_expr(float_lit(-1e30, TypeTable::F64, "-1e30"), TypeTable::I32);
-    assert_eq!(lattice_of(&e), Lattice::NonConst);
+    expect_int(&e, i64::from(i32::MIN) as u64, PrimitiveType::I32);
 }
 
 #[test]
-fn cast_f64_to_i8_wraps_through_the_i32_intermediate() {
+fn cast_f64_to_i8_saturates_at_the_target() {
     expect_int(
         &cast_expr(float_lit(300.7, TypeTable::F64, "300.7"), TypeTable::I8),
-        44,
+        127,
         PrimitiveType::I8,
     );
 }
 
 #[test]
-fn cast_f64_to_u8_wraps_through_the_u32_intermediate() {
+fn cast_f64_to_u8_saturates_at_the_target() {
     expect_int(
         &cast_expr(float_lit(300.7, TypeTable::F64, "300.7"), TypeTable::U8),
-        44,
+        255,
         PrimitiveType::U8,
     );
 }
