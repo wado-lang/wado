@@ -30,18 +30,19 @@ assert i < list.len() && list[i] == 1;
 // list[i] == 1: <not evaluated>
 ```
 
-To keep a failure readable, each captured operand is rendered with `Inspect`
-(`:?`), which caps sequence types at a default length (`DEFAULT_SEQ_LIMIT` = 256):
-a `String` operand is truncated to 256 characters with a `...` marker and an
-`List` operand to 256 elements (see [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md)).
-Non-sequence operands such as floats keep their natural rendering. The optional
-user message is formatted with the user's own template specifiers (typically
-`Display`, which is never capped) — opt into a longer dump by formatting the
-value yourself.
+Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
+`List` operand is cut at `Inspect`'s default length and marked where it was cut
+(see [template strings](./spec-literals.md#string-literals)). This keeps a
+failure readable. The optional message is an ordinary expression, formatted by
+whatever template specifiers it uses. `Display` is never cut, so formatting a
+value into the message yourself shows all of it.
 
 ## Testing
 
-Tests are first-class syntax: a `test` block declares one, and `wado test` runs them. The runner's flags, file discovery and output are described by `wado test --help` and [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
+Tests are first-class syntax: a `test` block declares one, and `wado test`
+finds and runs them. Which files it reads and what it reports are stated below
+([Test Discovery](#test-discovery), [Test Outcome Model](#test-outcome-model)).
+The runner's flags are described by `wado test --help`.
 
 ### Test Declaration Syntax
 
@@ -107,7 +108,7 @@ test {
 - Test body is a block containing statements
 - No return type or effect declarations needed
 - Tests can use any effects (side effects are allowed in tests)
-- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, `#[synopsis]`) may appear before the `test` keyword
+- Attributes (e.g., `#[expect_trap]`, `#[TODO]`, `#[timeout_ms(N)]`, [`#[synopsis]`](./spec-attributes.md#synopsis)) may appear before the `test` keyword
 
 ### Test Semantics
 
@@ -118,6 +119,7 @@ test {
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
+- Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
 
 #### `#[expect_trap]` Attribute
 
@@ -186,7 +188,70 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 - If the module compiles successfully, each test block is implicitly treated as `#[TODO]`.
 - If the module compiles and all tests pass (i.e., the feature is implemented), it is reported as resolved, which fails the run.
 
-### Test File Conventions
+#### Run Result
+
+A run reports three axes: compile (passed / failed), test (passed / failed),
+and TODO (pending / resolved). Every discovered file is compiled, including one
+with no test blocks, so a compile error anywhere fails the run on the compile
+axis. A run exits non-zero when any file fails to compile, any test fails, or
+any TODO test is resolved.
+
+### Test Discovery
+
+`wado test` with no path argument walks the current directory for `*.wado`
+files. It skips:
+
+- An entry a `.gitignore` matches. Each directory's `.gitignore` applies, and
+  so do those of its ancestors up to the git repository root, with git's rules:
+  the last matching rule wins, a pattern ending in `/` matches only a
+  directory, `!` negates, and `**` spans directories. No `git` binary is needed.
+- A directory listed in `.gitmodules`.
+- A file or directory whose name starts with `.`.
+- A directory holding its own `wado.toml`. That directory is a separate
+  package, walked on its own under its own `[test]` section. With no path
+  argument, its files are reported as a run of their own.
+- An entry the package's `[test].exclude` matches, unless its
+  `[test].include` matches it too.
+
+Symbolic links are followed, and a directory reached twice is walked once. A
+symbolic link that points nowhere is skipped. A `#![generated]` file is not
+skipped.
+
+A file needs neither a `test` block nor a particular world. Every discovered
+file compiles under the `test` world, where an entry point written for another
+world still type-checks, and a file with no `test` block is compiled and not
+run.
+
+#### `[test]` in `wado.toml`
+
+```toml
+[test]
+exclude = ["tests/fixtures/**"]
+include = ["lib/**/*_test.wado"]
+```
+
+`exclude` and `include` are lists of glob patterns, matched against a path
+relative to the package root. `*` and `?` stop at a `/`, and `**` spans
+directories. `dir/**` also matches `dir` itself, so the walk does not enter it.
+
+`include` carves files back out of what `exclude` removes: a file both match is
+discovered. While `include` has any pattern, the walk still enters an excluded
+directory to look for one, but a `wado.toml` inside an excluded directory does
+not start a run of its own.
+
+#### Path Arguments
+
+A path argument replaces the walk of the current directory. The files the
+arguments name are reported as one run, whichever packages they belong to.
+
+- A directory argument is walked as above. A directory inside a package is
+  walked from that package's root, so its `[test]` globs match as they are
+  written, and the files under the directory are kept. A directory argument
+  that yields no file is an error.
+- A file argument is tested as given. `[test].exclude` and `[test].include` do
+  not apply to it.
+
+#### File Naming
 
 `*_test.wado` is the recommended name for a file that contains only tests. The
 suffix is not required: any file with `test` blocks contributes its tests.
@@ -207,6 +272,8 @@ src/
 tests/
   integration_test.wado
 ```
+
+Rationale: [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
 ### Example Test File
 

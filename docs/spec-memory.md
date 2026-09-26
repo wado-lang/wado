@@ -8,8 +8,6 @@
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
-
 Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource linearity](./spec-components.md#resource-linearity)).
 
 ```wado
@@ -32,6 +30,23 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 
 These semantics are as-if. A program may rely on the value each expression
 denotes; it may not rely on the number of copies performed to produce it.
+There is no `move` operator. Where a source is not read again, the compiler may
+move the value instead of copying it, and the program cannot tell.
+
+A program never chooses where a value lives. There is no stack or heap to pick
+between, and no annotation lets a value outlive a scope, because every value a
+reference can reach is kept alive by the garbage collector.
+
+A closure value is copied like any other value. Its captures are references to
+the outer bindings ([Closures](./spec-functions.md#closures)), so every copy
+observes the same bindings. A closure that outlives the scope that declared it
+needs no rule of its own: the collector keeps what it captured alive.
+
+A call across a component boundary copies its arguments and its result, so the
+two components never share a value's storage. A resource crosses as a handle
+([Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries)).
+
+Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ## Reference Types
 
@@ -48,6 +63,9 @@ let mut y = 0;
 let mr = &mut y;      // Mutable reference
 *mr = 10;             // Assign through reference
 ```
+
+A reference is never null, and there is no arithmetic on it. A reference that
+may be absent is written `Option<&T>`.
 
 ### Reference to Reference
 
@@ -113,6 +131,24 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 *r2 = 30;
 ```
 
+### Reference Retention
+
+A function may keep a reference parameter past its return: it may store it in a
+global, or write it through a `&mut` parameter the caller still holds. It may
+also return a reference into a parameter's storage. Each is safe, because the
+referent is GC-managed and cannot dangle.
+
+Nothing in a signature states what a function keeps. A function with a body
+declares nothing about it; the compiler reads it from the body. A function type
+carries none, and neither does a closure, so a function value is called the same
+way whatever the function keeps. Retention is not an effect either: it grants no
+authority and no handler intercepts it, so it has no place in a `with` clause.
+
+A declaration with no body has nothing to read, so it states what it keeps with
+[`#[retain(...)]` / `#[result(...)]`](./spec-attributes.md#retain--result).
+
+Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+
 ### Reference Identity
 
 `==` and `!=` on two references to a type whose value is a heap object (a
@@ -152,7 +188,7 @@ impl Point {
 }
 ```
 
-A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](./spec-components.md#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error. See [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](./spec-components.md#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error.
 
 ### `mut` Parameters
 
