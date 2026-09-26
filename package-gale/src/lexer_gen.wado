@@ -3080,6 +3080,11 @@ pub fn casing_of(ci: bool) -> Casing {
     return if ci { Casing::Insensitive } else { Casing::Sensitive };
 }
 
+/// Whether `casing` reads a positive set folded.
+fn folds_positive(casing: Casing) -> bool {
+    return !casing matches { Sensitive };
+}
+
 /// The casing `rule` is read in when referenced from `casing`. A non-recursive
 /// fragment is planned in its caller's folding; a rule with its own matcher
 /// folds as it resolves, which the read does not see.
@@ -3094,7 +3099,7 @@ fn lexer_elem_leading_chars(
     follow_refs: bool,
     visiting: &mut List<String>,
 ) -> Option<LeadingChars> {
-    let fold = !(casing matches { Sensitive });
+    let fold = folds_positive(casing);
     return match *elem {
         Literal(text) => match text.chars().next() {
             Some(c) => plain_leading_chars(&folded_ranges(c, c, fold)),
@@ -3252,11 +3257,7 @@ struct SecondChars {
 }
 
 /// `SecondChars` of a rule body, or null when some path is unknown.
-fn lexer_second_chars(
-    alts: &List<LexerAlternative>,
-    all_rules: &List<LexerRule>,
-    casing: Casing,
-) -> Option<SecondChars> {
+fn lexer_second_chars(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, casing: Casing) -> Option<SecondChars> {
     let mut budget = SECOND_CHARS_BUDGET;
     let mut acc = SecondChars { ranges: [], may_end: false };
     for let alt of alts {
@@ -3291,13 +3292,20 @@ fn add_second_chars(
             if chars.len() == 1 {
                 return add_following_chars(&rest, all_rules, casing, acc);
             }
-            acc.ranges.extend(&folded_ranges(chars[1], chars[1], !(casing matches { Sensitive })));
+            acc.ranges.extend(&folded_ranges(chars[1], chars[1], folds_positive(casing)));
             true;
         },
         CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, casing, acc),
         Group(alts) => add_alts_second_chars(&alts, &rest, all_rules, casing, budget, acc),
         RuleRef(name) => match find_lexer_rule(all_rules, &name) {
-            Some(r) => add_alts_second_chars(&r.body, &rest, all_rules, callee_casing(r, all_rules, casing), budget, acc),
+            Some(r) => add_alts_second_chars(
+                &r.body,
+                &rest,
+                all_rules,
+                callee_casing(r, all_rules, casing),
+                budget,
+                acc,
+            ),
             None => false,
         },
         Repeat(rep) => {

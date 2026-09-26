@@ -324,8 +324,10 @@ where it cannot prove move / share / fresh; no elision pass):
   referent is pinned only at a move where one of those holders is still
   readable. A holder is readable where it is live, where a copy read out of it
   is live, or anywhere once its value has gone where no alias chain follows it,
-  such as a literal, a result, or a callee that keeps it. So a double buffer
-  that iterates `&a` and then swaps `a` and `b` moves both lists every step.
+  such as a literal, a result, or a callee that keeps it. A scalar read out of a
+  holder carries none of its storage, so `P { a: r.a }` hands nothing on. So a
+  double buffer that iterates `&a` and then swaps `a` and `b` moves both lists
+  every step.
 
   The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
   `a` to `b`, but `b` is dead right after it, so `b` is rebound before it is

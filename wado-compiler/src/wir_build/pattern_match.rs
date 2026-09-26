@@ -157,10 +157,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Translate scrutinee and adjust for min_value
         let scrut = self.translate_operand(scrutinee);
-        let is_i64 = matches!(
-            self.type_table.get(self.operand_type_id(scrutinee)),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
+        let is_i64 = self.scrut_is_wide(self.operand_type_id(scrutinee));
 
         // A 64-bit offset is range-checked before it narrows: wrapping first
         // would land a value 2^32 away from an entry on that entry.
@@ -824,20 +821,13 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32Const(1) // always matches
             }
             PatKind::Literal(lit) => {
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
+                let scrut_get = self.scrut_get(scrut_local, scrut_type);
                 self.translate_literal_pattern_condition(lit, scrut_get, scrut_type)
             }
             PatKind::Enum { case_index, .. } => {
                 // Enum: compare i32 discriminant
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
                 WirInstr::I32Eq(
-                    Box::new(scrut_get),
+                    Box::new(self.scrut_get(scrut_local, scrut_type)),
                     Box::new(WirInstr::I32Const(*case_index as i32)),
                 )
             }
@@ -846,10 +836,7 @@ impl FunctionTranslator<'_, '_> {
                 case_index,
                 ..
             } => {
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
+                let scrut_get = self.scrut_get(scrut_local, scrut_type);
 
                 let (variant_key, case) = self.variant_case(scrut_type, *case_index, variant_name);
                 if case.payload.is_empty() {
@@ -1005,52 +992,19 @@ impl FunctionTranslator<'_, '_> {
         scrut_get: WirInstr,
         scrut_type: TypeId,
     ) -> WirInstr {
-        let is_i64 = matches!(
-            self.type_table.get(scrut_type),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
+        let cmp = IntCompare {
+            scrut: scrut_get,
+            wide: self.scrut_is_wide(scrut_type),
+            unsigned: false,
+        };
         match lit {
-            NirLiteralPattern::I128(val) => {
-                if is_i64 {
-                    WirInstr::I64Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I64Const(*val as i64)),
-                    )
-                } else {
-                    WirInstr::I32Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I32Const(*val as i32)),
-                    )
-                }
-            }
-            NirLiteralPattern::U128(val) => {
-                if is_i64 {
-                    WirInstr::I64Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I64Const(*val as i64)),
-                    )
-                } else {
-                    WirInstr::I32Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I32Const(*val as i32)),
-                    )
-                }
-            }
-            NirLiteralPattern::Bool(val) => WirInstr::I32Eq(
-                Box::new(scrut_get),
-                Box::new(WirInstr::I32Const(i32::from(*val))),
-            ),
-            NirLiteralPattern::Char(val) => WirInstr::I32Eq(
-                Box::new(scrut_get),
-                Box::new(WirInstr::I32Const(*val as i32)),
-            ),
-            NirLiteralPattern::String(_) | NirLiteralPattern::Null => {
-                // String/null patterns: use ref.eq or ref.is_null
-                if matches!(lit, NirLiteralPattern::Null) {
-                    WirInstr::RefIsNull(Box::new(scrut_get))
-                } else {
-                    panic!("string literal patterns should be lowered before WIR translation")
-                }
+            NirLiteralPattern::I128(val) => cmp.eq(*val),
+            NirLiteralPattern::U128(val) => cmp.eq(*val as i128),
+            NirLiteralPattern::Bool(val) => cmp.eq(i128::from(*val)),
+            NirLiteralPattern::Char(val) => cmp.eq(i128::from(u32::from(*val))),
+            NirLiteralPattern::Null => WirInstr::RefIsNull(Box::new(cmp.scrut)),
+            NirLiteralPattern::String(_) => {
+                panic!("string literal patterns should be lowered before WIR translation")
             }
         }
     }
