@@ -197,12 +197,8 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
             continue;
         }
-        // Absence means the collect pass never walked the declaration, which
-        // it skips for a module the stdlib snapshot covers: no method names,
-        // no arity, so the checks that need them would pass by default.
-        // Nothing in the stdlib snapshot declares a linearity yet; when Tide's
-        // `web:*` modules do, this says so instead of accepting what it cannot
-        // check.
+        // Absent: the collect pass skipped a stdlib-snapshot module, so with no
+        // method names or arity the checks below would pass by default.
         if !method_names.contains_key(&parent) {
             reject(
                 clause,

@@ -1,9 +1,9 @@
 // The host calls a callback back with scalars and unrestricted handles only, so
 // one taking a `String` cannot cross the Component Model boundary.
 
-#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/target", linearity = "unrestricted", classes = "0..=0")]
 resource Target {
-    #[cm("web:demo/target#listen")]
+    #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
     fn listen(&self, listener: fn(String));
 }

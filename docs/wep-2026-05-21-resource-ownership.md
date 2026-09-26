@@ -60,7 +60,7 @@ orthogonal to all four rows.
 The three `dtor`-less rows are one linearity, which
 [Resource Inheritance](./wep-2026-04-28-resource-inheritance.md) lets a
 declaration write out: `#[cm(..., linearity = "unrestricted")]`. The other
-spelling, `"affine"`, is the default and so goes unwritten. Only Tide's
+spelling, `"affine"`, is the default and so goes unwritten. Only the web bindings'
 resources declare it today; the non-owning tokens still take their value
 semantics from the absence of a `dtor` alone.
 
@@ -86,7 +86,7 @@ input — is affine instead: a copyable index would leak it.
 
 ### Unreclaimed handles
 
-Tide's browser handles break the rule above. They are indices into a host table,
+The web bindings' browser handles break the rule above. They are indices into a host table,
 allocated per call from unbounded runtime input, with no affine owner and no
 immortal bound, so the rule makes them affine. They cannot be: an upcast in a
 `resource extends` hierarchy copies the handle

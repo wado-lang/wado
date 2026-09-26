@@ -677,7 +677,7 @@ pub fn one_per_cm_name<'a>(
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
-    /// Binding namespace (e.g., "wasi", "web")
+    /// Binding namespace (e.g., "wasi", "wado-lang")
     pub namespace: String,
     /// Effect name (e.g., "Stdout")
     pub interface_name: String,
@@ -3774,7 +3774,7 @@ impl CmInterfaceRegistry {
     }
 
     /// Whether `source` names an interface whose values follow the CM canonical
-    /// ABI: a bundled CM namespace (`wasi:`, `web:`, `core:kiln/`) or a
+    /// ABI: a bundled CM namespace (`wasi:`, `core:kiln/`) or a
     /// component import (whose package namespace is arbitrary, so tracked
     /// explicitly).
     pub fn is_cm_source(&self, source: &str) -> bool {
@@ -5208,18 +5208,18 @@ mod tests {
     #[test]
     fn an_extern_handle_argument_is_peeled_outside_a_resource_method() {
         let registry = registry_from(
-            "web:dom",
+            "dom.wado",
             r#"
-            #[cm("web:dom/handle", linearity = "unrestricted")]
+            #[cm("wado-lang:web/handle", linearity = "unrestricted")]
             pub resource Handle {
-                #[cm("web:dom/handle#sibling")]
+                #[cm("wado-lang:web/handle#sibling")]
                 #[cm_params("self", "other")]
                 fn sibling(&self, other: &Handle) -> Handle;
             }
 
-            #[cm("web:dom/global")]
+            #[cm("wado-lang:web/global")]
             pub interface Dom {
-                #[cm("web:dom/global#adopt")]
+                #[cm("wado-lang:web/global#adopt")]
                 #[cm_params("node")]
                 fn adopt(node: &Handle) -> Handle;
             }
@@ -5286,10 +5286,10 @@ mod tests {
                 pub x: u32,
             }
 
-            #[cm("web:dom/types")]
+            #[cm("wado-lang:web/types")]
             pub interface WebTypes {}
 
-            #[cm("web:dom/types")]
+            #[cm("wado-lang:web/types")]
             pub struct Point {
                 #[cm("x")]
                 pub x: u32,

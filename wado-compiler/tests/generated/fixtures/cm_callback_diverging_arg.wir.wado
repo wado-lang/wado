@@ -85,13 +85,13 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(22)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(23)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
+type "functype//wasi/example:demo/Demo::target" = fn() -> f64;  // TypeId(24)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(25)
+type "functype//wasi/example:demo/Target::listen" = fn(f64, i32);  // TypeId(25)
 
-type "functype//wasi/web:demo/Demo::target" = fn() -> f64;  // TypeId(26)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(26)
 
-type "functype//wasi/web:demo/Target::listen" = fn(f64, i32);  // TypeId(27)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(27)
 
 type "functype//cm_callback_diverging_arg.wado/run" = fn();  // TypeId(28)
 
@@ -145,10 +145,10 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/example:demo/Demo::target from "wasi/example:demo/Demo::target";
+import fn wasi/example:demo/Target::listen from "wasi/example:demo/Target::listen";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
-import fn wasi/web:demo/Demo::target from "wasi/web:demo/Demo::target";
-import fn wasi/web:demo/Target::listen from "wasi/web:demo/Target::listen";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
@@ -249,11 +249,11 @@ fn "cm_callback_diverging_arg.wado/run"() with Stdout {
 }
 
 fn "cm_callback_diverging_arg.wado/$cm_binding__Demo_target"() with Demo {
-    return builtin::i64_reinterpret_f64("wasi/web:demo/Demo::target"());
+    return builtin::i64_reinterpret_f64("wasi/example:demo/Demo::target"());
 }
 
 fn "cm_callback_diverging_arg.wado/$cm_binding__Target_listen"(self, listener) with Target {
-    "wasi/web:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
+    "wasi/example:demo/Target::listen"(builtin::f64_reinterpret_i64(self), listener);
 }
 
 fn "cm_callback_diverging_arg.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

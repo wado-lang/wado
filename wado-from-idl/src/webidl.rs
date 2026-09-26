@@ -1,5 +1,5 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
-//! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-tide.md`.
+//! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-web.md`.
 
 use anyhow::{Result, anyhow, bail};
 use indexmap::{IndexMap, IndexSet};
@@ -19,8 +19,10 @@ const GLOBAL_INTERFACE: &str = "global";
 pub struct Snapshot {
     /// The `@webref/idl` version the slice was taken from.
     pub webref: String,
-    /// The `web:<package>` the slice generates.
+    /// The CM package every interface is imported from, e.g. `wado-lang:web`.
     pub package: String,
+    /// The module the slice generates, which names its files and `[Global]` effect.
+    pub module: String,
     /// The interfaces to generate, in output order.
     pub slice: Vec<String>,
     /// Every `interface` and `partial interface` of a slice member.
@@ -225,7 +227,7 @@ impl Callback {
     }
 }
 
-/// The module binding the `web:<package>` interfaces and its glue, each naming
+/// The module binding the slice's interfaces and its glue, each naming
 /// `source` in its header.
 ///
 /// # Errors
@@ -243,14 +245,14 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<Generated> {
 
 /// A package's generated files, and the members the slice could not express.
 pub struct Generated {
-    /// The Wado module declaring the `web:<package>` imports.
+    /// The Wado module declaring the slice's imports.
     pub wado: String,
     /// The JavaScript module serving them from the browser's objects.
     pub glue: String,
     pub skipped: Vec<String>,
 }
 
-/// Transform a snapshot into the module binding the `web:<package>` interfaces.
+/// Transform a snapshot into the module binding the slice's interfaces.
 ///
 /// # Errors
 ///
@@ -270,7 +272,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
         global_interface: merged
             .values()
             .any(|iface| iface.global)
-            .then(|| to_upper_camel_case(&snapshot.package)),
+            .then(|| to_upper_camel_case(&snapshot.module)),
     };
 
     let classes = number_classes(&merged)?;
@@ -298,7 +300,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
     }
     reject_overrides(&merged, &resources)?;
 
-    let mut module = WadoModule::new(snapshot.package.clone(), snapshot.webref.clone());
+    let mut module = WadoModule::new(snapshot.module.clone(), snapshot.webref.clone());
     if let Some(bindings) = lowering.global_bindings(&merged, &resources)? {
         let functions = split_js(bindings, &mut js);
         module.interfaces.push(WadoInterface {
@@ -306,10 +308,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 .global_interface
                 .clone()
                 .expect("a package with global bindings has a `[Global]` interface"),
-            doc_comment: Some(format!(
-                "The `web:{}` entry points, which hand out the first handle.",
-                snapshot.package
-            )),
+            doc_comment: Some("The entry points, which hand out the first handle.".to_string()),
             cm_interface: lowering.interface_path(GLOBAL_INTERFACE),
             functions,
         });
@@ -493,7 +492,7 @@ struct Lowering<'a> {
 
 impl Lowering<'_> {
     fn interface_path(&self, name: &str) -> String {
-        format!("web:{}/{}", self.package, to_kebab_case(name))
+        format!("{}/{}", self.package, to_kebab_case(name))
     }
 
     /// Every member of `iface` that lowers, appending to `skipped` the ones

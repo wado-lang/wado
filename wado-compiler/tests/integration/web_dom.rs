@@ -1,5 +1,5 @@
-//! The `web:dom` unrestricted-resource slice `package-web` generates from its
-//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-tide.md`.
+//! The `wado-lang:web` unrestricted-resource slice `package-web` generates from its
+//! vendored `WebIDL` snapshot. See `docs/wep-2026-04-01-web.md`.
 
 use crate::common::{WEB_PACKAGE, compile_against_web};
 
@@ -28,7 +28,7 @@ const UPCAST: &str =
 fn an_unrestricted_resource_crosses_as_a_bare_f64() {
     let wat = compile_to_wat(&on_an_element("el.set_id(\"app\");"));
     assert!(
-        wat.contains("web:dom/element"),
+        wat.contains("wado-lang:web/element"),
         "the element interface should be imported: {wat}"
     );
     assert!(
@@ -47,7 +47,7 @@ fn an_unrestricted_resource_crosses_as_a_bare_f64() {
 fn an_inherited_method_calls_the_declaring_interface() {
     let wat = compile_to_wat(&on_an_element(INHERITED));
     assert!(
-        wat.contains("web:dom/node"),
+        wat.contains("wado-lang:web/node"),
         "the declaring interface should be imported: {wat}"
     );
 }
@@ -71,7 +71,7 @@ fn an_optional_extern_handle_result_lifts_to_the_declared_option() {
          assert el.parent_node() matches { None };",
     ));
     assert!(
-        wat.contains("web:dom/document") && wat.contains("web:dom/node"),
+        wat.contains("wado-lang:web/document") && wat.contains("wado-lang:web/node"),
         "both interfaces should be imported: {wat}"
     );
 }
@@ -88,7 +88,7 @@ fn an_optional_extern_handle_argument_keeps_the_declared_option() {
          let other: Option<Node> = Option::Some(node);\n\
          assert el.is_equal_node(other);",
     ));
-    assert!(wat.contains("web:dom/node"), "{wat}");
+    assert!(wat.contains("wado-lang:web/node"), "{wat}");
 }
 
 /// Compile `source`, holding it to its warnings as well: a program this slice
@@ -103,6 +103,6 @@ fn compile_to_wat(source: &str) -> String {
     assert_eq!(warnings, Vec::<&str>::new());
     let result = compiled
         .result
-        .unwrap_or_else(|e| panic!("expected the web:dom slice to compile, got {e}"));
+        .unwrap_or_else(|e| panic!("expected the wado-lang:web slice to compile, got {e}"));
     wasmprinter::print_bytes(&result.wasm).expect("the component should print")
 }

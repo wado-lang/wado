@@ -6,7 +6,7 @@ Wado currently requires all function arguments and all struct fields to be speci
 
 ### WebIDL Bindings
 
-The [WebIDL Binding Generator](./wep-2026-04-01-tide.md) generates Wado bindings for browser APIs. WebIDL makes heavy use of optional parameters with default values:
+`wado-from-idl` generates Wado bindings for browser APIs ([The Web Interface for Wado](./wep-2026-04-01-web.md)). WebIDL makes heavy use of optional parameters with default values:
 
 ```webidl
 Node cloneNode(optional boolean deep = false);
@@ -351,7 +351,7 @@ The `export fn` rule above does not apply here, because the direction is
 reversed. There the CM ABI fixes the signature Wado itself exports. Here it
 fixes the callee's, and the default lives on the caller's side of it. That is
 what lets a WebIDL `optional` argument carry its declared default (see
-[WebIDL Binding Generator](./wep-2026-04-01-tide.md)).
+[The Web Interface for Wado](./wep-2026-04-01-web.md)).
 
 A default resolves in the module that declares the operation, so it may name
 that module's private items. The call that materializes it is minted at each
@@ -677,5 +677,5 @@ at the call (`|| peek(&s.o)`) is accepted.
 ## See Also
 
 - [Default Trait](./wep-2026-03-04-default-trait.md) — the `Default` trait that interacts with struct field defaults
-- [WebIDL Binding Generator](./wep-2026-04-01-tide.md) — the primary motivation for this feature
+- [The Web Interface for Wado](./wep-2026-04-01-web.md) — the primary motivation for this feature
 - [Effect System Design](./wep-2026-01-27-effect-system-design.md) — enforces purity of default expressions
