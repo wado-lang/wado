@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790389551351,
+  "lastUpdate": 1790391224721,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60044,6 +60044,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1b98ea12f1cdf70e157b14fcc190139a4d5c99ed",
+          "message": "Merge pull request #2170 from wado-lang/claude/http-server-gzip-support-la4z5c\n\nfeat!: gzip in the HTTP server examples, and a max_output on every core:zlib inflate that stops a decompression bomb",
+          "timestamp": "2026-09-26T11:31:32+09:00",
+          "tree_id": "3f038aca3d2e9f213054fbcc03882d3f602e09bf",
+          "url": "https://github.com/wado-lang/wado/commit/1b98ea12f1cdf70e157b14fcc190139a4d5c99ed"
+        },
+        "date": 1790391224072,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19683,
             "unit": "bytes"
           },
           {
