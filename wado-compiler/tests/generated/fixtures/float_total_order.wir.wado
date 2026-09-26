@@ -5277,18 +5277,16 @@ fn "float_total_order.wado/core:prelude/list.wado/List<f32>::sort_by$$Closure_0"
     let j: i32;
     let k: i32;
     let $match_13: "core:prelude/traits.wado//enum:Ordering";
-    let a_13: i32;
+    let b_14: i32;
     let value_32: f32;
     let value_37: f32;
     let $licm_repr_40: ref Array<f32>;
-    let $licm_arith_41: i32;
-    let $licm_arith_42: i32;
-    let other_44: u32;
-    let bits_46: u32;
-    let bits_47: u32;
-    let $sroa_a_value_49: f32;
-    let $sroa_b_value_50: f32;
-    let $sroa_self_value_51: u32;
+    let other_42: u32;
+    let bits_44: u32;
+    let bits_45: u32;
+    let $sroa_a_value_47: f32;
+    let $sroa_b_value_48: f32;
+    let $sroa_self_value_49: u32;
     n = self.used;
     if n <= 1 {
         return;
@@ -5298,77 +5296,71 @@ fn "float_total_order.wado/core:prelude/list.wado/List<f32>::sort_by$$Closure_0"
     $licm_repr_40 = self.repr;
     b460: block {
         l461: loop {
-            break_if b460 width >= n;
             start = 0;
-            $licm_arith_41 = width * 2;
-            $licm_arith_42 = width * 2;
             b462: block {
                 l463: loop {
-                    break_if b462 start >= n;
-                    mid = start + width;
-                    if mid < n {
-                        a_13 = start + $licm_arith_41;
-                        end = select i32(a_13 < n, a_13, n);
-                        i = start;
-                        j = mid;
-                        k = start;
-                        b465: block {
-                            l466: loop {
-                                break_if b465 k >= end;
-                                if i < mid {
-                                    if j < end {
-                                        $sroa_a_value_49 = builtin::array_get_value<f32>($licm_repr_40, i);
-                                        $sroa_b_value_50 = builtin::array_get_value<f32>($licm_repr_40, j);
-                                        $match_13 = $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                                            $sroa_self_value_51 = $inline_total_order_key_32_2: block -> u32 {
-                                                bits_46 = builtin::i32_reinterpret_f32($sroa_a_value_49);
-                                                if (bits_46 & -2147483648) != 0 {
-                                                    break $inline_total_order_key_32_2: bits_46 ^ -1;
-                                                }
-                                                break $inline_total_order_key_32_2: bits_46 | -2147483648;
-                                            };
-                                            other_44 = $inline_total_order_key_32_3: block -> u32 {
-                                                bits_47 = builtin::i32_reinterpret_f32($sroa_b_value_50);
-                                                if (bits_47 & -2147483648) != 0 {
-                                                    break $inline_total_order_key_32_3: bits_47 ^ -1;
-                                                }
-                                                break $inline_total_order_key_32_3: bits_47 | -2147483648;
-                                            };
-                                            if $sroa_self_value_51 <u other_44 {
-                                                break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
+                    break_if b462 width >= (n - start);
+                    end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
+                    i = start;
+                    j = mid;
+                    k = start;
+                    b464: block {
+                        l465: loop {
+                            break_if b464 k >= end;
+                            if i < mid {
+                                if j < end {
+                                    $sroa_a_value_47 = builtin::array_get_value<f32>($licm_repr_40, i);
+                                    $sroa_b_value_48 = builtin::array_get_value<f32>($licm_repr_40, j);
+                                    $match_13 = $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+                                        $sroa_self_value_49 = $inline_total_order_key_32_2: block -> u32 {
+                                            bits_44 = builtin::i32_reinterpret_f32($sroa_a_value_47);
+                                            if (bits_44 & -2147483648) != 0 {
+                                                break $inline_total_order_key_32_2: bits_44 ^ -1;
                                             }
-                                            if $sroa_self_value_51 >u other_44 {
-                                                break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
-                                            }
-                                            break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
+                                            break $inline_total_order_key_32_2: bits_44 | -2147483648;
                                         };
-                                        if $match_13 == 2 {
-                                            builtin::array_set<f32>(buf, k, $sroa_b_value_50);
-                                            j = j + 1;
-                                        } else {
-                                            builtin::array_set<f32>(buf, k, $sroa_a_value_49);
-                                            i = i + 1;
+                                        other_42 = $inline_total_order_key_32_3: block -> u32 {
+                                            bits_45 = builtin::i32_reinterpret_f32($sroa_b_value_48);
+                                            if (bits_45 & -2147483648) != 0 {
+                                                break $inline_total_order_key_32_3: bits_45 ^ -1;
+                                            }
+                                            break $inline_total_order_key_32_3: bits_45 | -2147483648;
+                                        };
+                                        if $sroa_self_value_49 <u other_42 {
+                                            break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 0;
                                         }
+                                        if $sroa_self_value_49 >u other_42 {
+                                            break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 2;
+                                        }
+                                        break $inline_u32_core_prelude_traits_wado_Ord__cmp_scalar_0: 1;
+                                    };
+                                    if $match_13 == 2 {
+                                        builtin::array_set<f32>(buf, k, $sroa_b_value_48);
+                                        j = j + 1;
                                     } else {
-                                        value_32 = builtin::array_get_value<f32>($licm_repr_40, i);
-                                        builtin::array_set<f32>(buf, k, value_32);
+                                        builtin::array_set<f32>(buf, k, $sroa_a_value_47);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_37 = builtin::array_get_value<f32>($licm_repr_40, j);
-                                    builtin::array_set<f32>(buf, k, value_37);
-                                    j = j + 1;
+                                    value_32 = builtin::array_get_value<f32>($licm_repr_40, i);
+                                    builtin::array_set<f32>(buf, k, value_32);
+                                    i = i + 1;
                                 }
-                                k = k + 1;
-                                continue l466;
-                            };
+                            } else {
+                                value_37 = builtin::array_get_value<f32>($licm_repr_40, j);
+                                builtin::array_set<f32>(buf, k, value_37);
+                                j = j + 1;
+                            }
+                            k = k + 1;
+                            continue l465;
                         };
-                        builtin::array_copy<f32>($licm_repr_40, start, buf, start, end - start);
-                    }
-                    start = start + $licm_arith_42;
+                    };
+                    builtin::array_copy<f32>($licm_repr_40, start, buf, start, end - start);
+                    start = end;
                     continue l463;
                 };
             };
+            break_if b460 width >= (n - width);
             width = width * 2;
             continue l461;
         };
@@ -5404,12 +5396,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
         fill_byte = c & 255;
         j_6 = 0;
         $licm_repr_29 = self.repr;
-        b478: block {
-            l479: loop {
-                break_if b478 j_6 >= n;
+        b477: block {
+            l478: loop {
+                break_if b477 j_6 >= n;
                 builtin::array_set_u8($licm_repr_29, at + j_6, fill_byte);
                 j_6 = j_6 + 1;
-                continue l479;
+                continue l478;
             };
         };
         return;
@@ -5419,23 +5411,23 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     j_8 = 0;
     $licm_repr_30 = encoded.repr;
     $licm_repr_31 = self.repr;
-    b480: block {
-        l481: loop {
-            break_if b480 j_8 >= n;
+    b479: block {
+        l480: loop {
+            break_if b479 j_8 >= n;
             k = 0;
             $licm_arith_32 = at + (j_8 * fill_len);
-            b482: block {
-                l483: loop {
-                    break_if b482 k >= fill_len;
+            b481: block {
+                l482: loop {
+                    break_if b481 k >= fill_len;
                     index_20 = $licm_arith_32 + k;
                     value_21 = builtin::array_get_value<u8>($licm_repr_30, k);
                     builtin::array_set_u8($licm_repr_31, index_20, value_21);
                     k = k + 1;
-                    continue l483;
+                    continue l482;
                 };
             };
             j_8 = j_8 + 1;
-            continue l481;
+            continue l480;
         };
     };
 }
@@ -5497,14 +5489,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b489: block {
-        l490: loop {
-            break_if b489 i >= digit_count_4;
+    b488: block {
+        l489: loop {
+            break_if b488 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l490;
+            continue l489;
         };
     };
 }
@@ -5836,14 +5828,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b526: block {
-        l527: loop {
-            break_if b526 i >= digit_count_4;
+    b525: block {
+        l526: loop {
+            break_if b525 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l527;
+            continue l526;
         };
     };
 }
@@ -5884,14 +5876,14 @@ fn "core:prelude/primitive.wado/u32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_4 + digit_count_3;
     t = value;
     i = 0;
-    b531: block {
-        l532: loop {
-            break_if b531 i >= digit_count_3;
+    b530: block {
+        l531: loop {
+            break_if b530 i >= digit_count_3;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l532;
+            continue l531;
         };
     };
 }

@@ -5248,14 +5248,12 @@ fn "half_ieee_compare.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0"
     let j: i32;
     let k: i32;
     let $match_13: "core:prelude/traits.wado//enum:Ordering";
-    let a_13: i32;
+    let b_14: i32;
     let value_32: u16;
     let value_37: u16;
     let $licm_repr_40: ref Array<f16>;
-    let $licm_arith_41: i32;
-    let $licm_arith_42: i32;
-    let $sroa_a_value_43: u16;
-    let $sroa_b_value_44: u16;
+    let $sroa_a_value_41: u16;
+    let $sroa_b_value_42: u16;
     n = self.used;
     if n <= 1 {
         return;
@@ -5265,55 +5263,49 @@ fn "half_ieee_compare.wado/core:prelude/list.wado/List<f16>::sort_by$$Closure_0"
     $licm_repr_40 = self.repr;
     b367: block {
         l368: loop {
-            break_if b367 width >= n;
             start = 0;
-            $licm_arith_41 = width * 2;
-            $licm_arith_42 = width * 2;
             b369: block {
                 l370: loop {
-                    break_if b369 start >= n;
-                    mid = start + width;
-                    if mid < n {
-                        a_13 = start + $licm_arith_41;
-                        end = select i32(a_13 < n, a_13, n);
-                        i = start;
-                        j = mid;
-                        k = start;
-                        b372: block {
-                            l373: loop {
-                                break_if b372 k >= end;
-                                if i < mid {
-                                    if j < end {
-                                        $sroa_a_value_43 = builtin::array_get_value<u16>($licm_repr_40, i);
-                                        $sroa_b_value_44 = builtin::array_get_value<u16>($licm_repr_40, j);
-                                        $match_13 = "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Ord::cmp$scalar"(struct.new "core:prelude/types.wado//Box<f32>" { value: "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_a_value_43) }, "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_b_value_44));
-                                        if $match_13 == 2 {
-                                            builtin::array_set<u16>(buf, k, $sroa_b_value_44);
-                                            j = j + 1;
-                                        } else {
-                                            builtin::array_set<u16>(buf, k, $sroa_a_value_43);
-                                            i = i + 1;
-                                        }
+                    break_if b369 width >= (n - start);
+                    end = local.tee mid(start + width) + b_14 = n - mid; select i32(width < b_14, width, b_14);
+                    i = start;
+                    j = mid;
+                    k = start;
+                    b371: block {
+                        l372: loop {
+                            break_if b371 k >= end;
+                            if i < mid {
+                                if j < end {
+                                    $sroa_a_value_41 = builtin::array_get_value<u16>($licm_repr_40, i);
+                                    $sroa_b_value_42 = builtin::array_get_value<u16>($licm_repr_40, j);
+                                    $match_13 = "core:prelude/primitive.wado/f32^core:prelude/traits.wado/Ord::cmp$scalar"(struct.new "core:prelude/types.wado//Box<f32>" { value: "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_a_value_41) }, "core:prelude/half.wado/f32^core:prelude/traits.wado/From<f16>::from"($sroa_b_value_42));
+                                    if $match_13 == 2 {
+                                        builtin::array_set<u16>(buf, k, $sroa_b_value_42);
+                                        j = j + 1;
                                     } else {
-                                        value_32 = builtin::array_get_value<u16>($licm_repr_40, i);
-                                        builtin::array_set<u16>(buf, k, value_32);
+                                        builtin::array_set<u16>(buf, k, $sroa_a_value_41);
                                         i = i + 1;
                                     }
                                 } else {
-                                    value_37 = builtin::array_get_value<u16>($licm_repr_40, j);
-                                    builtin::array_set<u16>(buf, k, value_37);
-                                    j = j + 1;
+                                    value_32 = builtin::array_get_value<u16>($licm_repr_40, i);
+                                    builtin::array_set<u16>(buf, k, value_32);
+                                    i = i + 1;
                                 }
-                                k = k + 1;
-                                continue l373;
-                            };
+                            } else {
+                                value_37 = builtin::array_get_value<u16>($licm_repr_40, j);
+                                builtin::array_set<u16>(buf, k, value_37);
+                                j = j + 1;
+                            }
+                            k = k + 1;
+                            continue l372;
                         };
-                        builtin::array_copy<u16>($licm_repr_40, start, buf, start, end - start);
-                    }
-                    start = start + $licm_arith_42;
+                    };
+                    builtin::array_copy<u16>($licm_repr_40, start, buf, start, end - start);
+                    start = end;
                     continue l370;
                 };
             };
+            break_if b367 width >= (n - width);
             width = width * 2;
             continue l368;
         };
@@ -5379,12 +5371,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
         fill_byte = c & 255;
         j_6 = 0;
         $licm_repr_29 = self.repr;
-        b385: block {
-            l386: loop {
-                break_if b385 j_6 >= n;
+        b384: block {
+            l385: loop {
+                break_if b384 j_6 >= n;
                 builtin::array_set_u8($licm_repr_29, at + j_6, fill_byte);
                 j_6 = j_6 + 1;
-                continue l386;
+                continue l385;
             };
         };
         return;
@@ -5394,23 +5386,23 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     j_8 = 0;
     $licm_repr_30 = encoded.repr;
     $licm_repr_31 = self.repr;
-    b387: block {
-        l388: loop {
-            break_if b387 j_8 >= n;
+    b386: block {
+        l387: loop {
+            break_if b386 j_8 >= n;
             k = 0;
             $licm_arith_32 = at + (j_8 * fill_len);
-            b389: block {
-                l390: loop {
-                    break_if b389 k >= fill_len;
+            b388: block {
+                l389: loop {
+                    break_if b388 k >= fill_len;
                     index_20 = $licm_arith_32 + k;
                     value_21 = builtin::array_get_value<u8>($licm_repr_30, k);
                     builtin::array_set_u8($licm_repr_31, index_20, value_21);
                     k = k + 1;
-                    continue l390;
+                    continue l389;
                 };
             };
             j_8 = j_8 + 1;
-            continue l388;
+            continue l387;
         };
     };
 }
@@ -5666,14 +5658,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b417: block {
-        l418: loop {
-            break_if b417 i >= digit_count_4;
+    b416: block {
+        l417: loop {
+            break_if b416 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l418;
+            continue l417;
         };
     };
 }
@@ -5996,14 +5988,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b452: block {
-        l453: loop {
-            break_if b452 i >= digit_count_4;
+    b451: block {
+        l452: loop {
+            break_if b451 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l453;
+            continue l452;
         };
     };
 }

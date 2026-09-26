@@ -4842,74 +4842,13 @@ fn cm_copy_result(packed: i32) -> CopyResult {
 }
 
 fn cm_copy_count(count: i32) -> i32 {
-    $assert_0: {
-        let $cond: bool = (count >= 0);
-        if !$cond {
-            core::builtin::cold_path();
-            core::rt::panic($tmpl: {
-                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(138);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"cm_copy_count", used: 13 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:rt", used: 7 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
-                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 319 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"a copy moves a count of elements, never a negative one", used: 54 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: count >= 0\n", used: 23 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"count: ", used: 7 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: count }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                break $tmpl: $r;
-            });
-        }
-    }
     return "core::prelude/primitive.wado::i32::min"(count, core::rt::CM_COPY_MAX);
 }
 
 fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
-    $assert_0: {
-        let $v3: i32 = (2147483647 / elem_size);
-        let $cond: bool = $block_0: {
-            let $m0: i32 = 0;
-            let $m1: i32 = count;
-            (($m0 <= $m1) & ($m1 <= $v3));
-        };
-        if !$cond {
-            core::builtin::cold_path();
-            core::rt::panic($tmpl: {
-                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(256);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"cm_buffer_bytes", used: 15 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:rt", used: 7 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
-                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 327 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"the buffer is past what linear memory can address", used: 49 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: 0 <= count <= i32::MAX / elem_size\n", used: 47 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"count: ", used: 7 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: count }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"i32::MAX: ", used: 10 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 2147483647 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"elem_size: ", used: 11 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: elem_size }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"i32::MAX / elem_size: ", used: 22 });
-                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: $v3 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
-                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
-                break $tmpl: $r;
-            });
-        }
+    if ((count < 0) || (count > (2147483647 / elem_size))) {
+        core::builtin::cold_path();
+        core::rt::panic(String { repr: packed"a buffer's length is negative or past what linear memory can address", used: 68 });
     }
     return (count * elem_size);
 }
@@ -4919,7 +4858,7 @@ fn cm_packed_count(packed: i32) -> i32 {
 }
 
 fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
-    let room: i32 = core::rt::cm_copy_count(max);
+    let room: i32 = core::rt::cm_buffer_bytes(core::rt::cm_copy_count(max), 1);
     let ptr: i32 = core::builtin::realloc(0, 0, 1, room);
     let mut result: i32 = core::builtin::stream_read(handle, ptr, room);
     if (result == -1) {
