@@ -2321,7 +2321,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    let eval_host = Arc::new(EvalHost::new(&flags.knobs));
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, jobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })

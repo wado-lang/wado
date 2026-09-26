@@ -9,7 +9,7 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
-use tokio::sync::OnceCell;
+use tokio::sync::{OnceCell, Semaphore};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Engine, GcHeapOutOfMemory, ResourceLimiter, Store, Trap};
 use wasmtime_wasi::cli::{WasiCli, WasiCliView};
@@ -80,12 +80,15 @@ static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
         .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
     let modified = stat
         .modified()
-        .expect("the platform reports a modification time")
-        .duration_since(UNIX_EPOCH)
-        .expect("the `wado` binary was modified after 1970");
+        .expect("the platform reports a modification time");
+    let nanos_since_epoch = match modified.duration_since(UNIX_EPOCH) {
+        Ok(after) => i128::try_from(after.as_nanos()),
+        Err(before) => i128::try_from(before.duration().as_nanos()).map(|nanos| -nanos),
+    }
+    .expect("a modification time within i128 nanoseconds of 1970");
     let mut hasher = Sha256::new();
     hasher.update(stat.len().to_le_bytes());
-    hasher.update(modified.as_nanos().to_le_bytes());
+    hasher.update(nanos_since_epoch.to_le_bytes());
     hash_dev_stdlib(&mut hasher);
     hasher.finalize().into()
 });
@@ -117,17 +120,27 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
+    /// One permit per compile thread, held until the thread ends. A compile
+    /// abandoned past its limit keeps running, so its permit is what stops
+    /// such threads from outnumbering the runner's CPUs.
+    compilers: Arc<Semaphore>,
 }
 
 impl EvalHost {
-    /// A host compiling at the test's `-O` and with its `-f` flags. `--no-cache`
-    /// skips reading the outcome cache.
+    /// A host compiling at the test's `-O` and with its `-f` flags, at most
+    /// `parallelism` compiles at once. `--no-cache` skips reading the outcome
+    /// cache.
     #[must_use]
-    pub fn new(knobs: &CompileKnobs) -> Self {
+    pub fn new(knobs: &CompileKnobs, parallelism: usize) -> Self {
+        assert!(
+            parallelism > 0,
+            "a host with no compile permits never compiles"
+        );
         Self {
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
+            compilers: Arc::new(Semaphore::new(parallelism)),
         }
     }
 
@@ -207,7 +220,9 @@ impl EvalHost {
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
     /// the limit that thread is abandoned, not stopped: nothing can interrupt a
     /// compile. It is not one of the runtime's blocking threads, which the
-    /// runtime would wait for when `wado test` shuts it down.
+    /// runtime would wait for when `wado test` shuts it down. It holds one of
+    /// [`Self::compilers`] until it ends, and waiting for one counts against
+    /// the limit.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
@@ -217,35 +232,43 @@ impl EvalHost {
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };
-        let (report, compiled) = tokio::sync::oneshot::channel();
-        std::thread::Builder::new()
-            .name("eval-compile".to_string())
-            .stack_size(COMPILER_STACK_SIZE)
-            .spawn(move || {
-                let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                    // A host with no sources: the program is one module, and
-                    // nothing on the host's disk is read.
-                    let host = InMemoryCompilerHost::new();
-                    let compiled =
-                        current_thread_runtime().block_on(wado_compiler::compile_with_options(
-                            &source,
-                            &host,
-                            Some(EVAL_FILE),
-                            options,
-                        ));
-                    match compiled {
-                        Ok(result) => Compiled::Wasm(result.wasm),
-                        Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
-                    }
-                }));
-                // Past the limit nobody is listening, and the outcome is dropped.
-                let _ = report.send(outcome);
-            })
-            .expect("spawning the eval compile thread");
-        match tokio::time::timeout(COMPILE_TIME_LIMIT, compiled).await {
-            Ok(outcome) => outcome
+        let compiled = async {
+            let permit = Arc::clone(&self.compilers)
+                .acquire_owned()
+                .await
+                .expect("the compile semaphore is never closed");
+            let (report, compiled) = tokio::sync::oneshot::channel();
+            std::thread::Builder::new()
+                .name("eval-compile".to_string())
+                .stack_size(COMPILER_STACK_SIZE)
+                .spawn(move || {
+                    let _permit = permit;
+                    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                        // A host with no sources: the program is one module, and
+                        // nothing on the host's disk is read.
+                        let host = InMemoryCompilerHost::new();
+                        let compiled =
+                            current_thread_runtime().block_on(wado_compiler::compile_with_options(
+                                &source,
+                                &host,
+                                Some(EVAL_FILE),
+                                options,
+                            ));
+                        match compiled {
+                            Ok(result) => Compiled::Wasm(result.wasm),
+                            Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
+                        }
+                    }));
+                    // Past the limit nobody is listening, and the outcome is dropped.
+                    let _ = report.send(outcome);
+                })
+                .expect("spawning the eval compile thread");
+            compiled
+                .await
                 .expect("the compile thread reports before it exits")
-                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+        };
+        match tokio::time::timeout(COMPILE_TIME_LIMIT, compiled).await {
+            Ok(outcome) => outcome.unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
             Err(_) => Compiled::TimedOut,
         }
     }
