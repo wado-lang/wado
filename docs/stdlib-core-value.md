@@ -192,6 +192,8 @@ _Fields are private._
 
 ### `pub struct ValueSeqAccess`
 
+Reads the elements of a `List` value.
+
 _Fields are private._
 
 #### `impl DeserializeSeq for ValueSeqAccess`
@@ -225,6 +227,9 @@ _Fields are private._
 ##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
 ### `pub struct ValueVariantAccess`
+
+Reads a variant case: a bare name, or a single-key object holding the
+payload.
 
 _Fields are private._
 

@@ -44,9 +44,9 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
 }
 
 /// Which wide-int constructor a call names, and how its arguments compose into
-/// the 128-bit pattern. [`classify_ctor`] recognises exactly the calls
-/// [`create_literal`] emits, so a consumer reading a wide-int literal back
-/// cannot drift from the producer.
+/// the 128-bit pattern. [`classify_ctor`] recognises every call
+/// [`create_literal`] or an integer `as i128` / `as u128` emits, so a consumer
+/// reading a wide-int constant back cannot drift from the producers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WideIntCtor {
     /// `<i128|u128>::from_i64(v)` — sign-extends.
@@ -58,7 +58,7 @@ pub(crate) enum WideIntCtor {
 }
 
 impl WideIntCtor {
-    /// Every `(owner, shape)` pair a wide-int literal can take.
+    /// Every `(owner, shape)` pair a wide-int constant can take.
     const ALL: [(CompilerItem, Self); 6] = [
         (CompilerItem::I128, Self::FromI64),
         (CompilerItem::I128, Self::FromU64),

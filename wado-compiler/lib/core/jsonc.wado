@@ -227,8 +227,8 @@ fn array_index(token: &String, len: i32) -> i32 {
 }
 
 /// A member of an object or an element of an array, as offsets into the
-/// source. An element has no key, so its `start` is `key_end` is
-/// `value_start`.
+/// source. An element has no key, so its `start`, `key_end` and
+/// `value_start` coincide.
 struct Member {
     start: i32,
     key_end: i32,
@@ -265,14 +265,9 @@ struct Editor {
 impl Editor {
     fn new(src: StrSlice) -> Result<Editor, EditError> {
         let _: IgnoredAny = from_bytes(src.as_bytes())?;
-        let mut editor = Editor { src, bytes: src.as_bytes(), root: 0, newline: "\n", unit: "  " };
+        let newline = if src.contains("\r\n") { "\r\n" } else { "\n" };
+        let mut editor = Editor { src, bytes: src.as_bytes(), root: 0, newline, unit: "" };
         editor.root = editor.skip_trivia(0);
-        for let mut i = 0; i + 1 < editor.bytes.len(); i += 1 {
-            if editor.byte(i) == b'\r' && editor.byte(i + 1) == b'\n' {
-                editor.newline = "\r\n";
-                break;
-            }
-        }
         editor.unit = editor.indent_unit();
         return Result::Ok(editor);
     }
@@ -425,24 +420,16 @@ impl Editor {
     }
 
     fn key_matches(&self, m: &Member, key: &String) -> bool {
-        if !self.has_byte(m.start + 1, m.key_end - 1, b'\\') {
-            return self.src.slice(m.start + 1, m.key_end - 1) == *key;
+        let raw = self.src.slice(m.start + 1, m.key_end - 1);
+        if !raw.contains_char('\\') {
+            return raw == *key;
         }
         let decoded: Result<String, DeserializeError> = json::from_string(self.src.slice(m.start, m.key_end));
         return decoded matches { Ok(k) && k == *key };
     }
 
-    fn has_byte(&self, start: i32, end: i32, b: i32) -> bool {
-        for let mut i = start; i < end; i += 1 {
-            if self.byte(i) == b {
-                return true;
-            }
-        }
-        return false;
-    }
-
     fn spans_lines(&self, start: i32, end: i32) -> bool {
-        return self.has_byte(start, end, b'\n');
+        return self.src.slice(start, end).contains_char('\n');
     }
 
     fn line_start(&self, i: i32) -> i32 {

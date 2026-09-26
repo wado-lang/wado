@@ -708,6 +708,7 @@ pub struct ValueDeserializer {
     value: &Value,
 }
 
+/// Reads the elements of a `List` value.
 pub struct ValueSeqAccess {
     items: &List<Value>,
     index: i32,
@@ -720,6 +721,8 @@ pub struct ValueObjectAccess {
     pending: Option<&Value>,
 }
 
+/// Reads a variant case: a bare name, or a single-key object holding the
+/// payload.
 pub struct ValueVariantAccess {
     name: String,
     /// `null` for a unit case.
@@ -744,11 +747,16 @@ fn integer_of(value: &Value) -> Result<i128, DeserializeError> {
             }
         },
         Float(f) => whole_float(*f),
-        String(s) => match i128::from_str(s) {
-            Ok(n) => Result::Ok(n),
-            Err(e) => Result::Err(DeserializeError::invalid_value(`invalid integer string: ${e}`)),
-        },
+        String(s) => integer_string(s),
         _ => Result::Err(DeserializeError::unexpected_type("expected integer")),
+    };
+}
+
+/// The integer a string spells, as `core:json` writes one past 53 bits.
+fn integer_string<T: FromStr>(s: &String) -> Result<T, DeserializeError> {
+    return match T::from_str(s) {
+        Ok(n) => Result::Ok(n),
+        Err(e) => Result::Err(DeserializeError::invalid_value(`invalid integer string: ${e}`)),
     };
 }
 
@@ -758,7 +766,7 @@ fn whole_float(f: f64) -> Result<i128, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float"));
     }
     if !(-TWO_POW_63 <= f < TWO_POW_64) {
-        return Result::Err(DeserializeError::overflow("value out of range for u64"));
+        return Result::Err(DeserializeError::overflow("value out of range for a 64-bit integer"));
     }
     if f < TWO_POW_63 {
         return Result::Ok(f as i64 as i128);
@@ -933,10 +941,7 @@ impl Deserializer for ValueDeserializer {
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         return match self.value {
             UInt128(n) => Result::Ok(*n),
-            String(s) => match u128::from_str(s) {
-                Ok(n) => Result::Ok(n),
-                Err(e) => Result::Err(DeserializeError::invalid_value(`invalid integer string: ${e}`)),
-            },
+            String(s) => integer_string(s),
             _ => Result::Ok(integer_in(self.value, 0, i128::MAX, "u128")? as u128),
         };
     }
