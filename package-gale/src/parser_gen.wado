@@ -71,7 +71,9 @@ use {
     MAX_LOOKAHEAD_DEPTH,
 } from "./prediction.wado";
 use {
+    AltBranch,
     DecisionBranch,
+    decision_partition,
     alt_class_of,
     alt_classes,
     classes_union,
@@ -7430,11 +7432,11 @@ fn arms_fallback_last(untestable: &List<bool>) -> List<i32> {
 /// branch cannot admit one thing in one of them and something else in another.
 fn decision_branches(
     alts: &List<Alternative>,
-    groups: &List<List<i32>>,
+    partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut GenContext,
 ) -> List<DecisionBranch> {
-    return build_decision_branches(alts, groups, classes, ctx, true);
+    return build_decision_branches(alts, partition, classes, ctx, true);
 }
 
 /// The same branches for a caller rendering them into a disjunction, where an
@@ -7442,27 +7444,27 @@ fn decision_branches(
 /// leaving `group_admits` to decide once the whole condition exists.
 fn guard_branches(
     alts: &List<Alternative>,
-    groups: &List<List<i32>>,
+    partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut GenContext,
 ) -> List<DecisionBranch> {
-    return build_decision_branches(alts, groups, classes, ctx, false);
+    return build_decision_branches(alts, partition, classes, ctx, false);
 }
 
 fn build_decision_branches(
     alts: &List<Alternative>,
-    groups: &List<List<i32>>,
+    partition: &List<AltBranch>,
     classes: &List<AltClass>,
     ctx: &mut GenContext,
     answers_gates: bool,
 ) -> List<DecisionBranch> {
     assert classes.len() == alts.len(), "a group is partitioned over its own alternatives, so slot and alt index coincide";
     let mut branches: List<DecisionBranch> = [];
-    for let group of groups {
+    for let b of partition {
         branches.push(DecisionBranch {
-            test: group_branch_admits(group, classes),
-            gate: group_gate(group, alts, ctx, answers_gates),
-            alts: *group,
+            test: b.admits,
+            gate: group_gate(&b.alts, alts, ctx, answers_gates),
+            alts: b.alts,
         });
     }
     return fallback_last(&branches);
@@ -8088,9 +8090,9 @@ fn group_partition(
     alts: &List<Alternative>,
     empty_alt_admits: &Option<EmptyAltAdmits>,
     ctx: &mut GenContext,
-) -> [List<AltClass>, List<List<i32>>] {
+) -> [List<AltClass>, List<AltBranch>] {
     let classes = group_alt_classes(alts, empty_alt_admits, ctx);
-    return [classes, compute_overlap_groups_of(&classes)];
+    return [classes, decision_partition(&classes)];
 }
 
 /// Parse one alt's elements; the chosen alt's elements append to the
