@@ -821,6 +821,23 @@ be refused, and a copied local aliases nothing, so only a read that is not the
 last one refuses — and there the second copy is a second live object, which is
 needed.
 
+### Known gap: some resource holders are not move-checked or dropped
+
+Every value holding an affine resource is move-only and dropped, but only a
+struct, a tuple and a `Result` are checked. An `Option`, a user variant or a
+`List` holding one can be moved twice with no diagnostic, and is not dropped at
+scope exit.
+
+### Known gap: a resource field moves out of its holder
+
+`let c = h.c;` over a struct `h` holding a resource compiles, and `h` stays
+usable. Moving `h` afterwards leaves two owners of one handle.
+
+### Known gap: an integer casts to an affine resource
+
+`5 as Counter` compiles for an affine `Counter` in any module. The result is a
+handle nothing minted, which the program then owns and drops.
+
 ## Deferred: the `move` and `unique` keywords
 
 Intentionally not implemented. Move-only semantics need no syntax: transfer is

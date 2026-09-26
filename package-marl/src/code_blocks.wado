@@ -1,0 +1,53 @@
+//! The fenced code blocks of a Markdown document, in source order, for a tool
+//! that checks what a document quotes.
+
+use { Node } from "./fmt_ast.wado";
+use { parse_document } from "./fmt_parse_block.wado";
+
+/// A fenced code block of a Markdown document.
+pub struct FencedCode {
+    /// The first word of the info string: the language tag, or `""`.
+    pub tag: String,
+    /// The text between the fences, each line ending in `\n`, with the
+    /// enclosing containers' markers and indentation removed.
+    pub code: String,
+    /// The 1-based source line of the opening fence.
+    pub line: i32,
+    /// The raw HTML block directly preceding the fence in the same container,
+    /// blank lines between allowed.
+    pub html_before: Option<String>,
+}
+
+/// Every fenced code block of `source`, in source order, including those
+/// inside list items and blockquotes.
+pub fn fenced_code_blocks<S: AsStrSlice>(source: S) -> List<FencedCode> {
+    let mut out: List<FencedCode> = [];
+    let Node::Document(children) = parse_document(source) else {
+        unreachable();
+    };
+    collect(&children, &mut out);
+    return out;
+}
+
+fn collect(nodes: &List<Node>, out: &mut List<FencedCode>) {
+    let mut html_before: Option<String> = null;
+    for let node of nodes {
+        match node {
+            Node::CodeBlock(cb) && cb.fenced => {
+                out.push(FencedCode { tag: cb.tag, code: cb.code, line: cb.line, html_before });
+            },
+            Node::BlockQuote(inner) => collect(inner, out),
+            Node::List(list) => {
+                for let item of &list.items {
+                    collect(&item.children, out);
+                }
+            },
+            _ => {
+            },
+        }
+        html_before = match node {
+            Node::Html(html) => Option::Some(*html),
+            _ => null,
+        };
+    }
+}

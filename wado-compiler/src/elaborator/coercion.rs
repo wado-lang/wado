@@ -412,15 +412,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// `null` at an `Option<T>` is that `Option<T>`.
+    /// `null` at an `Option<T>`, or at a newtype over one, is that type.
     fn try_coerce_null(&mut self, expr: &Expr, target_type: TypeId) -> Option<TypeId> {
-        let null_at_option = TypeSystem::is_null_literal(expr)
-            && self
-                .tysys
-                .type_table
-                .borrow()
-                .as_option(target_type)
-                .is_some();
+        let null_at_option = TypeSystem::is_null_literal(expr) && {
+            let tt = self.tysys.type_table.borrow();
+            tt.as_option(tt.representation_head(target_type)).is_some()
+        };
         if !null_at_option {
             return None;
         }
@@ -850,8 +847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if TypeSystem::is_null_literal(element) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
-                    "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
-                     type by implementing `From<Option<!>>`"
+                    "`null` names no value of `{slot}`; an `Option` or a newtype over one \
+                     accepts it, and any other type by implementing `From<Option<!>>`"
                 ),
                 span: element.span(),
             });

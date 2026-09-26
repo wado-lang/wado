@@ -1,0 +1,44 @@
+// A newtype: a distinct type over a base, converted only by `as`.
+
+test "arithmetic stays within the newtype" {
+    type Meters = f64;
+
+    let m: Meters = 1000.0;       // literal coercion
+    let sum = m + m;              // Meters + Meters -> Meters
+    let raw: f64 = sum as f64;    // explicit cast required
+    assert raw == 2000.0;
+}
+
+test "inherited associated functions" {
+    type Octets = List<u8>;
+
+    let mut b = Octets::with_capacity(16);   // b: Octets
+    b.push(0xff);
+    assert b.len() == 1 && b[0] == 0xff;
+}
+
+test "casts through a chain" {
+    type A = i32;
+    type B = A;
+    type C = B;
+
+    let c: C = 1;
+    let a = c as A;    // one cast through the chain
+    let i = c as i32;  // straight to the ultimate base
+    assert i == 1 && a as i32 == 1;
+
+    type Wrapper<T> = List<T>;
+    let w = [1] as Wrapper<i32>;
+    let l = w as List<i32>;
+    assert l.len() == 1;
+}
+
+test "function types" {
+    type Meters = f64;
+    let double = |x: f64| x * 2.0;
+
+    let h = double as fn(Meters) -> Meters;
+    assert h(1.5) as f64 == 3.0;
+    let mut r = double as fn mut(f64) -> f64;   // `fn` widens to `fn mut`
+    assert r(1.0) == 2.0;
+}

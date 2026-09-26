@@ -1,0 +1,13 @@
+// `--` is not a token: it reads as two `-` operators, so a double minus is a
+// subtraction of a negation, or a double negation.
+
+test "a--b is a - (-b)" {
+    let a = builtin::black_box(5);
+    let b = builtin::black_box(3);
+    assert a--b == 8;
+}
+
+test "--x is -(-x)" {
+    let x = builtin::black_box(5);
+    assert --x == 5;
+}

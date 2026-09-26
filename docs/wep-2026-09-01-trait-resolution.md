@@ -682,3 +682,9 @@ reflection. Reopening it takes both of:
       `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
       narrower nor wider, so a specificity rank leaves that pair at rank 3 and
       the ambiguity report has to keep naming it.
+
+### Two traits' associated functions of one name
+
+Two traits declaring one associated function name for one type (a function
+with no `self`) are ambiguous at `Type::f(…)`, and no spelling selects one,
+since a qualified call binds `Self` from its receiver argument.
