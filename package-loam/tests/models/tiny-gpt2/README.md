@@ -19,9 +19,11 @@ tool, the graph with its weights left out and the checkpoint holding them:
     cd package-loam/tests/models/tiny-gpt2
     wado run ../../../tools/onnx_split.wado -- model.onnx model
 
-The repository ships no expected outputs, so `test_data_set_0/` is
-onnxruntime's. `oracle.mjs` writes it with onnxruntime-node 1.30.0: four token
-ids, a mask of ones, and the logits the model computes from them.
+The repository ships no expected outputs, so `test_data_set_0/` and
+`test_data_set_1/` are onnxruntime's. `oracle.mjs` writes them with
+onnxruntime-node 1.30.0. Each holds token ids, a mask of ones, and the logits the
+model computes from them. The first holds four tokens and the second seven, so
+one generated module is checked at two sequence lengths.
 
 `generate.json` is the oracle for text. `generate.mjs` writes it with
 onnxruntime-node 1.30.0 and `@huggingface/tokenizers` 0.2.0, reading the

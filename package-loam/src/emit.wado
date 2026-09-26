@@ -132,7 +132,7 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     let axes = axis_names(graph, shapes);
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
-    let names = Names::of(graph, checked, &literals, &axes, &input_symbols(graph, shapes))?;
+    let names = Names::of(graph, checked, &literals.spelled, &axes, &input_symbols(graph, shapes))?;
     let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
@@ -591,7 +591,7 @@ fn emit_forward(
     names: &Names,
     held: &TreeMap<String, String>,
     scalars: TreeMap<String, String>,
-    literals: &List<String>,
+    literals: &Literals,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let mut exprs = Operands {
@@ -632,10 +632,13 @@ fn emit_forward(
     // A symbol is bound once something spells it, which the body decides.
     let mut symbols = Symbols::of(graph, shapes, names);
     let mut body: List<String> = [];
-    for let tensor of *literals {
+    for let tensor of literals.spelled {
         let ident = names.get(&tensor);
         body.push(`let ${ident} = ${literal_tensor(checked, &tensor, &mut symbols)?};`);
         exprs.values[tensor] = ident;
+    }
+    for let [alias, spelled] of literals.aliases.entries() {
+        exprs.values[*alias] = names.get(spelled);
     }
     for let node of &graph.nodes {
         let produced = node.outputs[0];
@@ -696,17 +699,44 @@ fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
     return scalars;
 }
 
-/// The folded tensors something reads as a tensor, which `forward` binds as
-/// literals: all a kernel reads or the graph returns, save a scalar a closure folds.
-fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> List<String> {
-    let mut tensors: List<String> = [];
-    for let [name, _] of checked.known.entries() {
-        if checked.shapes.contains_key(*name)
-            && (!scalars.contains_key(*name) || read_as_tensor(graph, checked, scalars, name)) {
-            tensors.push(*name);
+/// The folded tensors `forward` binds as literals.
+struct Literals {
+    spelled: List<String>,
+    /// A tensor an `Identity` names again under the same axes, and the spelled
+    /// one it reads: a transformer names its mask once per layer, and the mask
+    /// is as large as the context.
+    aliases: TreeMap<String, String>,
+}
+
+/// The folded tensors something reads as a tensor: all a kernel reads or the
+/// graph returns, save a scalar a closure folds.
+fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> Literals {
+    let mut sources = TreeMap::<String, String>::new();
+    for let node of &graph.nodes {
+        if node.op == "Identity" && checked.known.contains_key(node.outputs[0]) {
+            sources[node.outputs[0]] = node.inputs[0];
         }
     }
-    return tensors;
+    let mut literals = Literals { spelled: [], aliases: TreeMap::<String, String>::new() };
+    let mut spelled_for = TreeMap::<String, String>::new();
+    for let [name, _] of checked.known.entries() {
+        if !checked.shapes.contains_key(*name)
+            || scalars.contains_key(*name) && !read_as_tensor(graph, checked, scalars, name) {
+            continue;
+        }
+        let mut root = *name;
+        while let Some(source) = sources.get(root) {
+            root = source;
+        }
+        let axes = axis_list(&checked.shapes[*name]);
+        if let Some(spelled) = spelled_for.get(root) && axis_list(&checked.shapes[spelled]) == axes {
+            literals.aliases[*name] = spelled;
+            continue;
+        }
+        spelled_for.try_insert(root, *name);
+        literals.spelled.push(*name);
+    }
+    return literals;
 }
 
 /// Whether a folded scalar is returned, or read where no closure folds it.

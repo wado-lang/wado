@@ -4,8 +4,8 @@
 //!
 //!     wado run package-loam/example/gpt2.wado -- "Hello, my name is"
 //!
-//! The graph is compiled for a fixed context. A shorter sequence is padded on
-//! the right: attention is causal, so no real position reads the padding.
+//! The graph leaves the sequence length to the run, so each step reads the
+//! tokens so far and nothing more.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use { from_string } from "core:json";
@@ -15,8 +15,7 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
         generator: {
             module: "../src/generator.wado",
             options: {
-                // `sequence_length` is CONTEXT.
-                dims: { batch_size: 1, sequence_length: 32 },
+                dims: { batch_size: 1 },
                 outputs: ["logits"],
                 layout: [
                     {
@@ -72,7 +71,11 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Embed", "Vocab"],
                     },
                     {
-                        pattern: "/transformer/Reshape_1_output_0",
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
                         axes: ["Batch", "Seq"],
                     },
                     {
@@ -112,6 +115,14 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
                         axes: ["Batch", "Seq", "Head", "Dim"],
                     },
                     {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
+                    {
                         pattern: "*/attn/Slice_4_output_0",
                         axes: ["Batch", "Head", "Seq", "Seq"],
                     },
@@ -120,30 +131,18 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
         },
     };
 
-global CONTEXT: i32 = 32;
 global STEPS: i32 = 8;
 
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
-    assert !prompt.is_empty() && prompt.len() + steps <= CONTEXT;
+    assert !prompt.is_empty();
     let mut ids = *prompt;
     for let _ of 0..<steps {
-        let mut input: List<i64> = [];
-        let mut mask: List<i64> = [];
-        for let i of 0..<CONTEXT {
-            let real = i < ids.len();
-            input.push(if real { ids[i] as i64 } else { 0 });
-            mask.push(if real { 1 } else { 0 });
-        }
+        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
+        let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
         let logits = gpt2::forward(
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-                data: input,
-                extents: [1, CONTEXT],
-            },
-            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-                data: mask,
-                extents: [1, CONTEXT],
-            },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+            &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
             weights,
         );
         let vocab = logits.extents[2];
@@ -166,8 +165,8 @@ export fn run() with (Stdout, Stderr, Environment) {
     }
     let tokenizer = tiny();
     let ids = tokenizer.encode(&prompt);
-    if ids.is_empty() || ids.len() + STEPS > CONTEXT {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${CONTEXT - STEPS}`);
+    if ids.is_empty() {
+        eprintln("the prompt encodes to no token");
         return;
     }
     println(tokenizer.decode(&greedy(&ids, STEPS, &gpt2::Weights::embedded())));

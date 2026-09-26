@@ -11,7 +11,7 @@ use gpt2 from "./gpt2.onnxtext"
             module: "../../src/generator.wado",
             inputs: ["./gpt2-header.safetensors"],
             options: {
-                dims: { batch_size: 1, sequence_length: 32 },
+                dims: { batch_size: 1 },
                 outputs: ["logits"],
                 layout: [
                     {
@@ -76,7 +76,11 @@ use gpt2 from "./gpt2.onnxtext"
                         axes: ["Embed", "Vocab"],
                     },
                     {
-                        pattern: "/transformer/Reshape_1_output_0",
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
                         axes: ["Batch", "Seq"],
                     },
                     {
@@ -115,6 +119,16 @@ use gpt2 from "./gpt2.onnxtext"
                         pattern: "*/attn/Reshape_2_output_0",
                         axes: ["Batch", "Seq", "Head", "Dim"],
                     },
+                    // The causal mask, sliced from a buffer the size of the
+                    // context to the sequence the run gives.
+                    {
+                        pattern: "onnx::Slice_335",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
                     {
                         pattern: "*/attn/Slice_4_output_0",
                         axes: ["Batch", "Head", "Seq", "Seq"],
@@ -126,20 +140,13 @@ use gpt2 from "./gpt2.onnxtext"
 
 global STEPS: i32 = 8;
 
-/// The token the model ranks first after `ids`, padded on the right to the
-/// fixed context: attention is causal, so no real position reads the padding.
+/// The token the model ranks first after `ids`.
 fn next_token(ids: &List<i32>, weights: &gpt2::Weights) -> i32 {
-    let mut input: List<i64> = [];
-    let mut mask: List<i64> = [];
-    for let i of 0..<gpt2::Seq::EXTENT {
-        let real = i < ids.len();
-        input.push(if real { ids[i] as i64 } else { 0 });
-        mask.push(if real { 1 } else { 0 });
-    }
-    let extents: List<i32> = [gpt2::Batch::EXTENT, gpt2::Seq::EXTENT];
+    let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
+    let extents: List<i32> = [gpt2::Batch::EXTENT, ids.len()];
     let logits = gpt2::forward(
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(ids.len(), 1), extents },
         weights,
     );
     let vocab = gpt2::Vocab::EXTENT;
@@ -160,8 +167,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     }
     let tokenizer = Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
     let mut ids = tokenizer.encode(&prompt);
-    if ids.is_empty() || ids.len() + STEPS > gpt2::Seq::EXTENT {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${gpt2::Seq::EXTENT - STEPS}`);
+    if ids.is_empty() {
+        eprintln("the prompt encodes to no token");
         return;
     }
     let checkpoint = match fs::read("gpt2.safetensors") {
