@@ -299,7 +299,10 @@ fn read_model<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     for let n of graph.node {
         nodes.push(read_node(&n)?);
     }
-    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [o.domain.unwrap_or(""), o.version.unwrap_or(0)]).collect();
+    let imports: List<[String, i64]> = model.opset_import.into_iter().map(|o| [
+        o.domain.unwrap_or(""),
+        o.version.unwrap_or(0),
+    ]).collect();
     let opset = default_opset(&imports);
     return Result::Ok(Graph {
         name: graph.name.unwrap_or(""),

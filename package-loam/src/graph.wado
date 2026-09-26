@@ -294,7 +294,10 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
         }
         if version < 4 && node.op == "Concat" && node.attr("axis") matches { None } {
             let mut attrs = node.attrs;
-            attrs.push(Attr { name: "axis", values: ["1"] });
+            attrs.push(Attr {
+                name: "axis",
+                values: ["1"],
+            });
             out.push(Node { ..node, attrs });
             continue;
         }
