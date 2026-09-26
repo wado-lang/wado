@@ -4,7 +4,7 @@
 use { to_string } from "core:json";
 use { TreeMap } from "core:collections";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
-use { Checkpoint, Expected, HeaderEntry, LoadError } from "./runtime/checkpoint.wado";
+use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY } from "./runtime/checkpoint.wado";
 use { element_count } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
@@ -49,16 +49,19 @@ pub struct StoredTensor {
 }
 
 /// `graph` with every weight it carries moved out, and those weights as a
-/// checkpoint holds them, under the graph's names.
+/// checkpoint holds them, under the graph's names. A weight named `METADATA_KEY`
+/// has no checkpoint entry, so it stays in the graph.
 pub fn split_weights(graph: Graph) -> [Graph, List<StoredTensor>] {
     let mut kept: List<ValueInfo> = [];
     let mut stored: List<StoredTensor> = [];
     for let vi of graph.initializers {
-        if let Some(data) = vi.data {
+        if let Some(data) = vi.data && vi.name != METADATA_KEY {
             let shape: List<i64> = static_extents(&vi.rank).unwrap().into_iter().map(|e| e as i64).collect();
             stored.push(StoredTensor { name: vi.name, dtype: element_of(&vi.dtype).unwrap().stored, shape, data });
+            kept.push(ValueInfo { ..vi, data: null });
+        } else {
+            kept.push(vi);
         }
-        kept.push(ValueInfo { ..vi, data: null });
     }
     return [
         Graph { ..graph, initializers: kept },

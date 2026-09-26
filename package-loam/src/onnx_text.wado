@@ -352,14 +352,15 @@ fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32, tensor: &Str
             return Result::Ok(Dim::Symbol(quotable_text(s, toks, c)));
         }
         if s.is_token(c) {
-            let text = toks.token_text(s.token_index(c));
-            if text == "?" {
+            // The grammar's only tokens here are `?` and `INT`: a name is a node.
+            let token = s.token_index(c);
+            if toks.kind_at(token) != onnx::TK_INT {
                 return Result::Ok(Dim::Unknown);
             }
+            let text = toks.token_text(token);
             return match i32::from_str(&text) {
-                Ok(n) && n < 0 => Result::Err(`${tensor}: dimension ${n}`),
-                Ok(n) => Result::Ok(Dim::Static(n)),
-                Err(_) => Result::Ok(Dim::Symbol(text)),
+                Ok(n) && n >= 0 => Result::Ok(Dim::Static(n)),
+                _ => Result::Err(`${tensor}: dimension ${text}`),
             };
         }
     }

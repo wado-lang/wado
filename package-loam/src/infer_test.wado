@@ -893,7 +893,13 @@ test "a tensor of more elements than a list holds stops the build, however it ar
     let declared = `g (float[N, 65536, 65536] X) => (float[N, 65536, 65536] Y) {
         Y = Relu(X)
     }`;
-    assert y_axes(declared, [rule("*", ["B", "R", "C"])]).unwrap_err() == "X: its extents hold more elements than a list can";
+    assert y_axes(declared, [rule("*", ["B", "R", "C"])]).unwrap_err() == "X: its extents multiply past what a list can hold";
+
+    // Empty, but a kernel counting the trailing axes would still overflow.
+    let empty = `g (float[0, 65536, 65536] X) => (float[0, 65536, 65536] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(empty, [rule("*", ["B", "R", "C"])]).unwrap_err() == "X: its extents multiply past what a list can hold";
 
     let produced = `g (float[65536, 1] A, float[1, 65536] B) => (float[65536, 65536] Y) {
         Y = MatMul(A, B)
@@ -903,5 +909,5 @@ test "a tensor of more elements than a list holds stops the build, however it ar
         rule("B", ["K", "C"]),
         rule("Y", ["R", "C"]),
     ];
-    assert y_axes(produced, layout).unwrap_err() == "Y: its extents hold more elements than a list can";
+    assert y_axes(produced, layout).unwrap_err() == "Y: its extents multiply past what a list can hold";
 }

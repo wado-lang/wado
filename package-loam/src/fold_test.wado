@@ -226,7 +226,7 @@ test "a Reshape target no list can hold is refused, even where its product wraps
         ["T", ints([4], [65536, 65536, 65536, 65536])],
     ]);
     let e = fold(&node("Reshape", ["D", "T"], []), &k, &runtime([2])).unwrap_err();
-    assert e == "the target shape [65536, 65536, 65536, 65536] holds more elements than a list can";
+    assert e == "the target shape [65536, 65536, 65536, 65536] multiplies past what a list can hold";
 }
 
 test "an operator the build does not evaluate is left to the run" {

@@ -72,6 +72,15 @@ test "a weight the checkpoint lacks names itself" {
     assert check([]).unwrap_err() == "W: the checkpoint has no such tensor";
 }
 
+test "a weight named as the format's metadata stays in the graph, which can name it" {
+    let graph = read(
+        `g (float[2] X) => (float[2] Y) <float[2] "__metadata__" = {1.0, 2.0}> { Y = Add(X, "__metadata__") }`,
+    ).unwrap();
+    let [kept, stored] = split_weights(graph);
+    assert kept.initializers[0].data matches { Some(_) };
+    assert stored.is_empty();
+}
+
 test "splitting moves every carried weight into the checkpoint, under its name" {
     let graph = read(&GRAPH).unwrap();
     let [kept, stored] = split_weights(graph);

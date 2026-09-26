@@ -296,6 +296,11 @@ test "a negative dimension names the tensor, as the protobuf reader does" {
     assert e == "W: dimension -2";
 }
 
+test "a dimension past i32 names the tensor rather than reading as a symbol" {
+    let e = read(`agraph (float[2147483648] X) => (float[2] Y) { Y = Relu(X) }`).unwrap_err().reason;
+    assert e == "X: dimension 2147483648";
+}
+
 test "inline values that disagree with the shape name the tensor" {
     let e = read(
         `agraph (float[2] X) => (float[2] Y)

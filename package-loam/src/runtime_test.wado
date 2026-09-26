@@ -73,16 +73,21 @@ test "a negative extent names the axis" {
     assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some("X: axis Batch is -1 in the tensor");
 }
 
-test "an input whose extents hold more elements than a list can says so" {
-    let t = tensor::<[Batch, Row]>([65536, 65536], []);
-    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, -1]) == Option::Some(
-        "X: extents [65536, 65536] hold more elements than a list can",
+test "an input whose extents multiply past what a list holds says so, even where it is empty" {
+    let wide = tensor::<[Batch, Row]>([65536, 65536], []);
+    assert input_mismatch(&wide, "X", ["Batch", "Row"], [-1, -1]) == Option::Some(
+        "X: extents [65536, 65536] multiply past what a list can hold",
+    );
+    let empty = tensor::<[Batch, Row, Col]>([0, 65536, 65536], []);
+    assert input_mismatch(&empty, "X", ["Batch", "Row", "Col"], [-1, -1, -1]) == Option::Some(
+        "X: extents [0, 65536, 65536] multiply past what a list can hold",
     );
 }
 
-test "an element count is checked against what a list holds, and an empty axis holds none" {
+test "every partial product of the extents is checked, since a kernel counts a sub-shape" {
     assert checked_element_count(&[46341, 46341]) matches { None };
-    assert checked_element_count(&[65536, 65536, 0]) == Option::Some(0);
+    assert checked_element_count(&[65536, 65536, 0]) matches { None };
+    assert checked_element_count(&[65536, 0]) == Option::Some(0);
     assert checked_element_count(&[2, 3]) == Option::Some(6);
     assert checked_element_count(&[]) == Option::Some(1);
 }

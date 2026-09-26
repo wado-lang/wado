@@ -217,7 +217,7 @@ impl Display for InferError {
             AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
-            Oversized(name) => f.write_str(`${name}: its extents hold more elements than a list can`),
+            Oversized(name) => f.write_str(`${name}: its extents multiply past what a list can hold`),
             Undefined(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
             ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
@@ -532,8 +532,8 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     return held(&vi.name, Shape { axes });
 }
 
-/// `shape`, which a list must be able to hold. A symbolic extent is at least 1,
-/// so the stated extents alone already bound the count from below.
+/// `shape`, which a list must be able to hold. A symbolic extent can only raise
+/// the product `checked_element_count` bounds, so the stated extents decide it.
 fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
     let mut stated: List<i32> = [];
     for let axis of &shape.axes {

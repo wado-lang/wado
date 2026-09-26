@@ -24,8 +24,11 @@ pub struct HeaderEntry {
     pub data_offsets: List<i64>,
 }
 
-/// The header's tensor entries. `__metadata__` is a map of strings the format
-/// leaves free, so it is skipped rather than read as an entry.
+/// The header key the format reserves for a map of free strings, which no tensor
+/// can be stored under.
+pub global METADATA_KEY: String = "__metadata__";
+
+/// The header's tensor entries, `METADATA_KEY` skipped.
 struct Header {
     entries: TreeMap<String, HeaderEntry>,
 }
@@ -36,7 +39,7 @@ impl Deserialize for Header {
         let mut map = d.begin_map()?;
         let mut entries = TreeMap::<String, HeaderEntry>::new();
         while let Some(key) = map.next_key_string()? {
-            if key == "__metadata__" {
+            if key == METADATA_KEY {
                 let _ = map.next_value::<IgnoredAny>()?;
                 continue;
             }

@@ -88,7 +88,7 @@ fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> 
         extents.push(e as i32);
     }
     let Some(stated) = checked_element_count(&extents) else {
-        return Result::Err(`the target shape ${*written} holds more elements than a list can`);
+        return Result::Err(`the target shape ${*written} multiplies past what a list can hold`);
     };
     let mut known = stated as i64;
     if inferred >= 0 && known != 0 && total % known == 0 {

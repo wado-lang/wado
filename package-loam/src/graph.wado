@@ -110,7 +110,9 @@ pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
     let Some(declared) = checked_element_count(extents) else {
-        return Result::Err(`${tensor}: ${elements} elements for a shape holding more than a list can`);
+        return Result::Err(
+            `${tensor}: ${elements} elements for a shape whose extents multiply past what a list can hold`,
+        );
     };
     if declared != elements {
         return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
