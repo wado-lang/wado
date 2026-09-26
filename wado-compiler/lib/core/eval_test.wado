@@ -54,7 +54,8 @@ test "fuel bounds the run" {
 
 test "the memory ceiling bounds the run" {
     let out = eval(`export fn run() {
-    let big = List::<u8>::with_capacity(2_000_000_000);
+    // Kept opaque, or the optimizer drops an allocation nothing reads.
+    let big = builtin::black_box(List::<u8>::with_capacity(2_000_000_000));
     assert big.is_empty();
 }`).unwrap();
     assert out.status matches { OutOfMemory }, `${out.status}`;
