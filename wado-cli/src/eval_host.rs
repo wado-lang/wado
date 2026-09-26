@@ -120,25 +120,21 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
-    /// One permit per compile thread, held until the thread ends.
-    compilers: Arc<Semaphore>,
+    /// The runner's CPU budget, which a compile outliving its test keeps a
+    /// permit of.
+    cpu: Arc<Semaphore>,
 }
 
 impl EvalHost {
-    /// A host compiling at the test's `-O` and with its `-f` flags, at most
-    /// `parallelism` compiles at once. `--no-cache` skips reading the outcome
-    /// cache.
+    /// A host compiling at the test's `-O` and with its `-f` flags, on permits
+    /// of `cpu`. `--no-cache` skips reading the outcome cache.
     #[must_use]
-    pub fn new(knobs: &CompileKnobs, parallelism: usize) -> Self {
-        assert!(
-            parallelism > 0,
-            "a host with no compile permits never compiles"
-        );
+    pub fn new(knobs: &CompileKnobs, cpu: Arc<Semaphore>) -> Self {
         Self {
             knobs: knobs.clone(),
             engine: OnceLock::new(),
             slots: Mutex::new(IndexMap::default()),
-            compilers: Arc::new(Semaphore::new(parallelism)),
+            cpu,
         }
     }
 
@@ -159,11 +155,17 @@ impl EvalHost {
         hasher.finalize().into()
     }
 
-    async fn outcome(self: &Arc<Self>, caller: &Path, source: String, fuel: u64) -> Outcome {
+    async fn outcome(
+        self: &Arc<Self>,
+        caller: &Path,
+        cpu: &mut Option<OwnedSemaphorePermit>,
+        source: String,
+        fuel: u64,
+    ) -> Outcome {
         let key = self.key(&source, fuel);
         let slot = Arc::clone(lock(&self.slots).entry(key).or_default());
         let outcome = slot
-            .get_or_init(|| self.cached_or_evaluate(key, caller, source, fuel))
+            .get_or_init(|| self.cached_or_evaluate(key, caller, cpu, source, fuel))
             .await
             .clone();
         let mut slots = lock(&self.slots);
@@ -178,6 +180,7 @@ impl EvalHost {
         self: &Arc<Self>,
         key: [u8; 32],
         caller: &Path,
+        cpu: &mut Option<OwnedSemaphorePermit>,
         source: String,
         fuel: u64,
     ) -> Outcome {
@@ -189,7 +192,7 @@ impl EvalHost {
         {
             return outcome;
         }
-        let outcome = self.evaluate(source, fuel).await;
+        let outcome = self.evaluate(cpu, source, fuel).await;
         if !matches!(outcome, Outcome::CompileTimedOut) {
             let bytes = serde_json::to_vec(&outcome).expect("an outcome serializes");
             // Losing the cache is never an error: the next run evaluates again.
@@ -198,8 +201,13 @@ impl EvalHost {
         outcome
     }
 
-    async fn evaluate(self: &Arc<Self>, source: String, fuel: u64) -> Outcome {
-        let wasm = match self.compile(source).await {
+    async fn evaluate(
+        self: &Arc<Self>,
+        cpu: &mut Option<OwnedSemaphorePermit>,
+        source: String,
+        fuel: u64,
+    ) -> Outcome {
+        let wasm = match self.compile(cpu, source).await {
             Compiled::Wasm(wasm) => wasm,
             Compiled::Failed(failure) => return Outcome::CompileFailed(failure),
             Compiled::TimedOut => return Outcome::CompileTimedOut,
@@ -218,31 +226,32 @@ impl EvalHost {
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
     /// the limit that thread is abandoned, not stopped: nothing can interrupt a
     /// compile. It is not one of the runtime's blocking threads, which the
-    /// runtime would wait for when `wado test` shuts it down. It holds one of
-    /// [`Self::compilers`] until it ends, so abandoned threads never outnumber
-    /// the runner's CPUs. Waiting for one counts against the limit.
+    /// runtime would wait for when `wado test` shuts it down. The thread takes
+    /// the caller's CPU permit and keeps it until it ends, and the caller waits
+    /// for a fresh one, so abandoned threads and running tests share one budget.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
-    async fn compile(&self, source: String) -> Compiled {
+    async fn compile(&self, cpu: &mut Option<OwnedSemaphorePermit>, source: String) -> Compiled {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };
-        let compiled = async {
-            let permit = Arc::clone(&self.compilers)
-                .acquire_owned()
-                .await
-                .expect("the compile semaphore is never closed");
-            spawn_compile(source, options, permit)
-                .await
+        let permit = cpu.take().expect("the caller holds its CPU permit");
+        let report = tokio::time::timeout(COMPILE_TIME_LIMIT, spawn_compile(source, options, permit));
+        let compiled = match report.await {
+            Ok(report) => report
                 .expect("the compile thread reports before it exits")
-        };
-        match tokio::time::timeout(COMPILE_TIME_LIMIT, compiled).await {
-            Ok(outcome) => outcome.unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
             Err(_) => Compiled::TimedOut,
-        }
+        };
+        let permit = Arc::clone(&self.cpu)
+            .acquire_owned()
+            .await
+            .expect("the CPU semaphore is never closed");
+        *cpu = Some(permit);
+        compiled
     }
 
     fn engine(&self) -> &(Engine, Linker<Program>) {
@@ -477,22 +486,24 @@ fn trap_kind(trap: Trap) -> TrapKind {
     }
 }
 
-/// One test's handle on the run's [`EvalHost`]: which file is calling, and how
-/// long it has spent inside `eval`.
-#[derive(Clone)]
+/// One test's handle on the run's [`EvalHost`]: which file is calling, the CPU
+/// permit it runs on, and how long it has spent inside `eval`.
 pub struct EvalSession {
     host: Arc<EvalHost>,
-    caller: Arc<Path>,
+    caller: PathBuf,
+    /// Empty only while a compile holds it.
+    cpu: Option<OwnedSemaphorePermit>,
     paused: Duration,
 }
 
 impl EvalSession {
-    /// A session for a test in the file at `caller`.
+    /// A session for a test in the file at `caller`, running on `cpu`.
     #[must_use]
-    pub fn new(host: Arc<EvalHost>, caller: &str) -> Self {
+    pub fn new(host: Arc<EvalHost>, caller: &str, cpu: OwnedSemaphorePermit) -> Self {
         Self {
             host,
-            caller: Arc::from(Path::new(caller)),
+            caller: PathBuf::from(caller),
+            cpu: Some(cpu),
             paused: Duration::ZERO,
         }
     }
@@ -508,7 +519,10 @@ impl EvalSession {
 impl eval_host::Host for EvalSession {
     async fn run(&mut self, source: String, fuel: u64) -> Outcome {
         let start = Instant::now();
-        let outcome = self.host.outcome(&self.caller, source, fuel).await;
+        let outcome = self
+            .host
+            .outcome(&self.caller, &mut self.cpu, source, fuel)
+            .await;
         self.paused += start.elapsed();
         outcome
     }

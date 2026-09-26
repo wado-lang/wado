@@ -505,7 +505,8 @@ pub(crate) struct LoadFailure {
 ///
 /// `cpu` caps total CPU-bound tasks across all three stages — every worker
 /// acquires one permit. This makes `--parallel N` a truthful global cap
-/// that per-stage buffer sizes can't multiply.
+/// that per-stage buffer sizes can't multiply. It is the whole run's
+/// budget, shared with `core:eval`, whose compiles can outlive a package.
 ///
 /// `modules` caps live wasmtime `Component`s independently of channel
 /// buffering, bounding peak memory. The permit is held via
@@ -516,11 +517,11 @@ struct PipelineBudget {
 }
 
 impl PipelineBudget {
-    fn new(parallel_cap: usize, compile_jobs: usize, execute_jobs: usize) -> Self {
+    fn new(cpu: Arc<Semaphore>, compile_jobs: usize, execute_jobs: usize) -> Self {
         // A zero-permit semaphore is a stage that never runs.
-        assert!(parallel_cap > 0 && compile_jobs > 0 && execute_jobs > 0);
+        assert!(compile_jobs > 0 && execute_jobs > 0);
         Self {
-            cpu: Arc::new(Semaphore::new(parallel_cap)),
+            cpu,
             modules: Arc::new(Semaphore::new(compile_jobs + execute_jobs)),
         }
     }
@@ -579,7 +580,7 @@ fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
 
 struct TestJob {
     module: Arc<LoadedModule>,
-    eval: EvalSession,
+    eval_host: Arc<EvalHost>,
     test_name: String,
     display_name: String,
     expect_trap: bool,
@@ -1247,7 +1248,7 @@ async fn run_execute_stage(
             .iter()
             .map(|t| TestJob {
                 module: module.clone(),
-                eval: EvalSession::new(Arc::clone(&eval_host), &module.path),
+                eval_host: Arc::clone(&eval_host),
                 test_name: t.export_name.clone(),
                 display_name: t.display_name(),
                 expect_trap: t.parsed.kind == TestKind::ExpectTrap,
@@ -1283,12 +1284,14 @@ async fn run_execute_stage(
                 // few I/O-dominated tests pay a small fairness cost
                 // but the vast majority of fixtures are CPU-bound
                 // and would otherwise trip the 5 s default timeout
-                // under contention on 2 vCPU CI runners.
-                let _cpu_permit = cpu_budget
+                // under contention on 2 vCPU CI runners. The test's
+                // `EvalSession` holds it, since an `eval` compile that
+                // outlives the test keeps it.
+                let cpu_permit = cpu_budget
                     .acquire_owned()
                     .await
                     .expect("cpu semaphore closed");
-                run_single_test_safe(job, &preopened_dirs).await
+                run_single_test_safe(job, cpu_permit, &preopened_dirs).await
             })
         })
         .buffer_unordered(parallelism.max(1));
@@ -1431,7 +1434,7 @@ impl Drop for EpochTicker {
 async fn run_pipeline(
     paths: &[String],
     flags: Arc<CompileFlags>,
-    parallel_cap: usize,
+    cpu: Arc<Semaphore>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
@@ -1445,11 +1448,7 @@ async fn run_pipeline(
     run_cache: Arc<RunCache>,
 ) -> PipelineOutcome {
     let opt_level = flags.knobs.opt_level.to_wasmtime();
-    let budget = Arc::new(PipelineBudget::new(
-        parallel_cap,
-        compile_jobs,
-        execute_jobs,
-    ));
+    let budget = Arc::new(PipelineBudget::new(cpu, compile_jobs, execute_jobs));
 
     // Inter-stage channel capacities: small. The `modules` semaphore
     // and per-stage `buffer_unordered` caps are what actually limit
@@ -1609,9 +1608,13 @@ fn fail_result(job: &TestJob, error: String, start: Instant) -> TestResult {
 /// `run_single_test` wrapped in `catch_unwind` so a panic anywhere
 /// inside (host-side bug, wasmtime debug assertion, allocator OOM)
 /// becomes a per-test `Fail` rather than aborting the whole pipeline.
-async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)]) -> TestResult {
+async fn run_single_test_safe(
+    job: TestJob,
+    cpu_permit: OwnedSemaphorePermit,
+    preopened_dirs: &[(String, String)],
+) -> TestResult {
     let start = Instant::now();
-    let panic_or_result = AssertUnwindSafe(run_single_test(&job, preopened_dirs))
+    let panic_or_result = AssertUnwindSafe(run_single_test(&job, cpu_permit, preopened_dirs))
         .catch_unwind()
         .await;
     panic_or_result.unwrap_or_else(|payload| {
@@ -1621,7 +1624,11 @@ async fn run_single_test_safe(job: TestJob, preopened_dirs: &[(String, String)])
 }
 
 /// Run a single test in its own Store
-async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> TestResult {
+async fn run_single_test(
+    job: &TestJob,
+    cpu_permit: OwnedSemaphorePermit,
+    preopened_dirs: &[(String, String)],
+) -> TestResult {
     let start = Instant::now();
     let module = job.module.as_ref();
 
@@ -1629,7 +1636,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         &module.engine,
         preopened_dirs,
         &module.path,
-        job.eval.clone(),
+        EvalSession::new(Arc::clone(&job.eval_host), &module.path, cpu_permit),
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
@@ -2095,7 +2102,7 @@ fn tally_test_results(results: &[TestResult]) -> (u32, u32, u32, u32) {
 async fn run_one_package(
     pkg_run: &PackageRun,
     flags: Arc<CompileFlags>,
-    parallel_cap: usize,
+    cpu: Arc<Semaphore>,
     compile_jobs: usize,
     load_jobs: usize,
     execute_jobs: usize,
@@ -2114,7 +2121,7 @@ async fn run_one_package(
     let outcome = run_pipeline(
         &pkg_run.paths,
         flags,
-        parallel_cap,
+        cpu,
         compile_jobs,
         load_jobs,
         execute_jobs,
@@ -2321,7 +2328,9 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    let eval_host = Arc::new(EvalHost::new(&flags.knobs, jobs));
+    assert!(jobs > 0, "a CPU budget of zero never runs anything");
+    let cpu = Arc::new(Semaphore::new(jobs));
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu)));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
@@ -2331,7 +2340,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
         let totals = run_one_package(
             pkg_run,
             Arc::clone(&flags),
-            jobs,
+            Arc::clone(&cpu),
             compile_jobs,
             load_jobs,
             execute_jobs,
