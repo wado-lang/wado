@@ -196,17 +196,21 @@ impl EvalHost {
         let host = Arc::clone(self);
         // The AOT compile takes seconds, so it runs off the async workers, on a
         // runtime of its own as the compile does.
-        join_blocking(tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let (engine, linker) = host.engine();
             current_thread_runtime().block_on(run(engine, linker, &wasm, fuel))
-        }))
+        })
         .await
+        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
     }
 
     /// The compile's future is `!Send`, so it runs on a thread of its own. Past
     /// the limit that thread is abandoned, not stopped: nothing can interrupt a
     /// compile. It is not one of the runtime's blocking threads, which the
     /// runtime would wait for when `wado test` shuts it down.
+    ///
+    /// A panic on either thread `evaluate` starts is a bug in the compiler or
+    /// the host, so it carries on into the calling test, which reports it.
     async fn compile(&self, source: String) -> Compiled {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
@@ -222,9 +226,13 @@ impl EvalHost {
                     // A host with no sources: the program is one module, and
                     // nothing on the host's disk is read.
                     let host = InMemoryCompilerHost::new();
-                    let compiled = current_thread_runtime().block_on(
-                        wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
-                    );
+                    let compiled =
+                        current_thread_runtime().block_on(wado_compiler::compile_with_options(
+                            &source,
+                            &host,
+                            Some(EVAL_FILE),
+                            options,
+                        ));
                     match compiled {
                         Ok(result) => Compiled::Wasm(result.wasm),
                         Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
@@ -260,8 +268,7 @@ enum Compiled {
 
 fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
     CompileFailure {
-        rendered: render_error_diagnostics(diagnostics)
-            .expect("a failed compile reports an error"),
+        rendered: render_error_diagnostics(diagnostics).expect("a failed compile reports an error"),
         codes: diagnostics
             .iter()
             .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
@@ -292,14 +299,6 @@ fn current_thread_runtime() -> tokio::runtime::Runtime {
         .expect("building a current-thread runtime")
 }
 
-/// A panic on the blocking thread is a bug in the compiler or the host, so it
-/// carries on into the calling test, which reports it.
-async fn join_blocking<T>(handle: tokio::task::JoinHandle<T>) -> T {
-    handle
-        .await
-        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
-}
-
 /// The store data of an evaluated program.
 struct Program {
     ctx: WasiCtx,
@@ -317,8 +316,8 @@ impl WasiView for Program {
 }
 
 /// Stops a program that would grow a memory past [`MEMORY_CEILING`] or a table
-/// past [`TABLE_CEILING`]. Failing the growth, rather than denying it, is what
-/// tells the trap that follows apart from any other.
+/// past [`TABLE_CEILING`]. It fails the growth rather than denying it, so the
+/// program stops on an error that [`stopped`] can name.
 struct Ceiling;
 
 #[derive(Debug)]

@@ -37,6 +37,15 @@ const DEFAULT_TIMEOUT_MS: u64 = 5000;
 // overshoot, which is fine because timeouts only fire on runaway tests.
 const EPOCH_INTERVAL_MS: u64 = 1000;
 
+/// The epoch ticks `span` takes, rounded up and never zero.
+fn epoch_ticks(span: Duration) -> u64 {
+    let ticks = span
+        .as_millis()
+        .div_ceil(u128::from(EPOCH_INTERVAL_MS))
+        .max(1);
+    u64::try_from(ticks).expect("a timeout fits in u64 ticks")
+}
+
 pub struct TestOptions {
     /// First entry is the root package (label `"."` outside a `wado.toml`
     /// project); later entries are sub-packages discovered recursively.
@@ -1637,26 +1646,21 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         });
         store.set_epoch_deadline(1);
     } else {
-        // Time inside `eval` is spent compiling another program, so each time
-        // the test reaches the deadline, it gets back what it has left of its
-        // own. The epoch has moved on by then, so the extension counts from now.
+        // Time inside `eval` does not count, so reaching the deadline grants
+        // what is left of the test's own time. It counts from the current
+        // epoch, which an `eval` may have carried far past the deadline.
         let timeout = Duration::from_millis(job.timeout_ms);
-        let tick = Duration::from_millis(EPOCH_INTERVAL_MS);
         store.epoch_deadline_callback(move |mut store_ctx| {
             let own = start
                 .elapsed()
                 .saturating_sub(store_ctx.data_mut().eval_session().paused());
-            match timeout.checked_sub(own) {
-                Some(left) if !left.is_zero() => {
-                    let ticks = left.as_nanos().div_ceil(tick.as_nanos());
-                    Ok(UpdateDeadline::Continue(
-                        u64::try_from(ticks).expect("a timeout fits in u64 ticks"),
-                    ))
-                }
-                _ => Err(Trap::Interrupt.into()),
+            let left = timeout.saturating_sub(own);
+            if left.is_zero() {
+                return Err(Trap::Interrupt.into());
             }
+            Ok(UpdateDeadline::Continue(epoch_ticks(left)))
         });
-        store.set_epoch_deadline((job.timeout_ms / EPOCH_INTERVAL_MS).max(1));
+        store.set_epoch_deadline(epoch_ticks(timeout));
     }
 
     let instance = match module
