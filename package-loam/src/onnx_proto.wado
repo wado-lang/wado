@@ -219,6 +219,7 @@ fn payload(
 fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
     let name = a.name.unwrap_or("");
     let mut values: List<String> = [];
+    let is_list = a.type matches { Some(onnx::AttributeProtoAttributeType::Floats | onnx::AttributeProtoAttributeType::Ints | onnx::AttributeProtoAttributeType::Strings) };
     match a.type {
         Some(onnx::AttributeProtoAttributeType::Float) => values.push(`${a.f.unwrap_or(0.0)}`),
         Some(onnx::AttributeProtoAttributeType::Int) => values.push(`${a.i.unwrap_or(0)}`),
@@ -241,7 +242,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         // A tensor has no text form, so it travels whole.
         Some(onnx::AttributeProtoAttributeType::Tensor) => {
             if let Some(t) = &a.t && let Some(known) = known_tensor(t)? {
-                return Result::Ok(Attr { name, values, tensor: Option::Some(known) });
+                return Result::Ok(Attr { name, values, is_list, tensor: Option::Some(known) });
             }
         },
         // A graph or a type has no text form, so the attribute is carried with
@@ -249,7 +250,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         _ => {
         },
     }
-    return Result::Ok(Attr { name, values });
+    return Result::Ok(Attr { name, values, is_list });
 }
 
 fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {

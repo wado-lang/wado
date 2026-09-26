@@ -18,7 +18,7 @@ test "a graph carrying every form the reader takes prints as itself" {
             H = MatMul("input.1", W)
             S = Constant <value = float {0.125}> ()
             K = Constant <value = int64[2] {3, -4}> ()
-            C = com.microsoft.Gelu <alpha = 1.5, count = 3, mode = "SAME UPPER", sizes = [1, 2], names = ["a", "b"]> (H)
+            C = com.microsoft.Gelu <alpha = 1.5, count = 3, mode = "SAME UPPER", sizes = [1, 2], axes = [3], names = ["a", "b"]> (H)
             "/out" = Add(C, B)
         }`,
     ).unwrap();

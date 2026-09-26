@@ -167,9 +167,9 @@ fn read_initializer_of(weight: onnx::TensorProto) -> Result<Graph, ReadError> {
 }
 
 test "a rank-0 tensor is a scalar, as the textual reader reads one" {
-    let g = read_initializer_of(TensorProto {
-        data_type: 1,
-        name: "S",
+    let g = read_initializer_of(onnx::TensorProto {
+        data_type: Option::Some(1),
+        name: Option::Some("S"),
         float_data: [2.0],
     }).unwrap();
 
