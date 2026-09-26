@@ -20,7 +20,7 @@
 //
 // Any other text reply goes out gzip-coded to a client whose Accept-Encoding
 // admits it. A request body in a gzip or deflate Content-Encoding is decoded;
-// one in any other coding is 415.
+// one in any other coding is 415, and one decoding past MAX_BODY_SIZE is 413.
 
 use {
     Request,
@@ -104,11 +104,23 @@ struct RouteResponse {
     gzip: bool = false,
 }
 
+/// The most bytes a request body may decode to, so a small bomb cannot exhaust memory.
+global MAX_BODY_SIZE: i32 = 1 << 20;
+
 variant BodyError {
     UnsupportedCoding(String),
+    TooLarge,
     Corrupt(ZlibError),
 }
-impl From<ZlibError> for BodyError;
+
+impl From<ZlibError> for BodyError {
+    fn from(e: ZlibError) -> BodyError {
+        return match e {
+            OutputExceedsMax => BodyError::TooLarge,
+            _ => BodyError::Corrupt(e),
+        };
+    }
+}
 
 type Handler = fn(Request, PathParams) -> RouteResponse;
 
@@ -187,21 +199,26 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
                 ["accept-encoding", "gzip, deflate"],
             ],
         }),
+        Err(TooLarge) => Result::Err(json_response(413, json_error(`Request body decodes past ${MAX_BODY_SIZE} bytes`))),
         Err(Corrupt(e)) => Result::Err(json_response(400, json_error(`Malformed request body: ${e}`))),
     };
 }
 
-/// `body` with each coding a `Content-Encoding` value lists undone, last applied first.
-fn decode_content(content_encoding: &String, body: ByteList) -> Result<ByteList, BodyError> {
+/// `body` with each coding a `Content-Encoding` value lists undone, last applied first,
+/// no layer of it longer than `max_size`.
+fn decode_content(content_encoding: &String, body: ByteList, max_size: i32 = MAX_BODY_SIZE) -> Result<ByteList, BodyError> {
     let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(
         |c| !c.is_empty(),
     ).collect();
     codings.reverse();
+    if body.len() > max_size {
+        return Result::Err(BodyError::TooLarge);
+    }
     let mut decoded = body;
     for let coding of codings {
         decoded = match coding {
-            "gzip" | "x-gzip" => inflate_gzip(&decoded)?,
-            "deflate" => inflate_zlib(&decoded)?,
+            "gzip" | "x-gzip" => inflate_gzip(&decoded, max_size)?,
+            "deflate" => inflate_zlib(&decoded, max_size)?,
             _ => {
                 return Result::Err(BodyError::UnsupportedCoding(coding));
             },
@@ -461,4 +478,12 @@ test "a request body in an unknown or broken coding is refused" {
     assert decode_content(&"br", data) matches { Err(UnsupportedCoding(c)) && c == "br" };
     assert decode_content(&"gzip", data) matches { Err(Corrupt(_)) };
     assert decode_content(&"gzip", zlib_compress(&data)) matches { Err(Corrupt(_)) };
+}
+
+test "a request body decoding past the limit is refused, however it is coded" {
+    let data: ByteList = "wado ".repeat(20).bytes().collect();
+    assert decode_content(&"gzip", gzip_compress(&data), 100) matches { Ok(d) && d == data };
+    assert decode_content(&"gzip", gzip_compress(&data), 99) matches { Err(TooLarge) };
+    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data)), 99) matches { Err(TooLarge) };
+    assert decode_content(&"", data, 99) matches { Err(TooLarge) };
 }

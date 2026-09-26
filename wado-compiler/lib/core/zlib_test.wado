@@ -39,6 +39,7 @@ use {
     inflate_zlib,
     compress_bound,
     deflate_raw,
+    deflate_stored,
     inflate_raw,
     gzip_compress,
     gzip_compress_with_header,
@@ -385,7 +386,7 @@ test "stored block round-trip empty" {
     let data: ByteList = [];
     let compressed = deflate_raw(&data, Z_NO_COMPRESSION);
     assert compressed.len() == 5;
-    assert bytes_equal(&data, &inflate_raw(&compressed));
+    assert bytes_equal(&data, &inflate_raw(&compressed).unwrap());
     assert bytes_equal(&data, &inflate_zlib(&zlib_compress(&data, Z_NO_COMPRESSION)).unwrap());
 }
 
@@ -397,7 +398,7 @@ test "a match deep in the hash chain is still found" {
     let data = make_wordy(60000);
     let compressed = deflate_raw(&data, 6);
     assert compressed.len() < 17000, `hash chain walk degraded: ${compressed.len()} bytes`;
-    assert bytes_equal(&data, &inflate_raw(&compressed));
+    assert bytes_equal(&data, &inflate_raw(&compressed).unwrap());
 }
 
 test "default strategy never loses to fixed or stored" {
@@ -420,7 +421,7 @@ test "default strategy never loses to fixed or stored" {
         let stored = deflate_raw(data, 0);
         assert chosen.len() <= fixed.len();
         assert chosen.len() <= stored.len();
-        assert bytes_equal(data, &inflate_raw(&chosen));
+        assert bytes_equal(data, &inflate_raw(&chosen).unwrap());
     }
 }
 
@@ -449,22 +450,22 @@ test "raw deflate round-trip" {
     let data = string_to_bytes("Hello, raw deflate!");
     let compressed = deflate_raw(&data);
     assert compressed[0] != 0x78, "raw should not have zlib header";
-    let decompressed = inflate_raw(&compressed);
+    let decompressed = inflate_raw(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
 test "raw deflate levels" {
     let data = string_to_bytes("Hello, raw deflate!");
     let c1 = deflate_raw(&data, Z_BEST_SPEED);
-    assert bytes_equal(&data, &inflate_raw(&c1));
+    assert bytes_equal(&data, &inflate_raw(&c1).unwrap());
     let c9 = deflate_raw(&data, Z_BEST_COMPRESSION);
-    assert bytes_equal(&data, &inflate_raw(&c9));
+    assert bytes_equal(&data, &inflate_raw(&c9).unwrap());
 }
 
 test "raw deflate large data" {
     let data = make_pattern_data(2000);
     let compressed = deflate_raw(&data);
-    let decompressed = inflate_raw(&compressed);
+    let decompressed = inflate_raw(&compressed).unwrap();
     assert bytes_equal(&data, &decompressed);
 }
 
@@ -690,6 +691,55 @@ test "uncompress with limit (exceeded)" {
     assert result matches { Err(ZlibError::OutputExceedsMax) };
 }
 
+test "every inflate entry point stops once its output would pass max_output" {
+    let data = make_pattern_data(4096);
+    let raw = deflate_raw(&data);
+    let zlib = zlib_compress(&data);
+    let gz = gzip_compress(&data);
+    assert inflate_raw(&raw, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_raw(&raw, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_zlib(&zlib, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_zlib(&zlib, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_gzip(&gz, 4096) matches { Ok(out) && bytes_equal(&out, &data) };
+    assert inflate_gzip(&gz, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    assert uncompress(&gz, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    assert InflateStream::new_with_format(RAW_FORMAT).decompress(&raw, 4095) matches { Err(ZlibError::OutputExceedsMax) };
+    let mut stream = InflateStream::new();
+    stream.update(&zlib);
+    assert stream.finish(4095) matches { Err(ZlibError::OutputExceedsMax) };
+}
+
+// RFC 1951 3.2.3 / 3.2.4: stored bytes, literals and back-references each grow
+// the output, so each is held to the limit.
+test "max_output holds stored, literal and match output alike" {
+    let data = make_pattern_data(1000);
+    let stored = deflate_stored(&data);
+    assert inflate_raw(&stored, 999) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_raw(&stored, 1000) matches { Ok(out) && bytes_equal(&out, &data) };
+    let literals_then_match: ByteList = [0x73, 0x74, 0x02, 0x43, 0x00];  // "AB" + <5, 2>
+    assert inflate_raw(&literals_then_match, 1) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_raw(&literals_then_match, 6) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_raw(&literals_then_match, 7) matches { Ok(out) && out.len() == 7 };
+}
+
+test "max_output bounds all gzip members together" {
+    let data = make_pattern_data(100);
+    let mut members = gzip_compress(&data);
+    for let b of gzip_compress(&data) {
+        members.push(b);
+    }
+    assert inflate_gzip(&members, 200) matches { Ok(out) && out.len() == 200 };
+    assert inflate_gzip(&members, 199) matches { Err(ZlibError::OutputExceedsMax) };
+}
+
+// RFC 1951 3.2.3: BTYPE=11 is reserved; a stream cut short never ends its block.
+test "inflate_raw reports a malformed stream" {
+    let reserved: ByteList = [0x07];
+    let truncated: ByteList = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72];
+    assert inflate_raw(&reserved) matches { Err(ZlibError::InvalidDeflateData) };
+    assert inflate_raw(&truncated) matches { Err(ZlibError::InvalidDeflateData) };
+}
+
 test "round-trip large data (>32KB window boundary)" {
     // Regression: inflate_zlib failed for data exceeding the 32KB LZ77 window
     let data = make_pattern_data(34054);
@@ -740,13 +790,13 @@ fn gzip_hello_world() -> ByteList {
 // LEN=5 and NLEN=~5, then the five literal bytes of "Hello".
 test "inflate raw stored block (RFC 1951 3.2.4)" {
     let stream: ByteList = [0x01, 0x05, 0x00, 0xFA, 0xFF, 72, 101, 108, 108, 111];
-    assert bytes_equal(&inflate_raw(&stream), &string_to_bytes("Hello"));
+    assert bytes_equal(&inflate_raw(&stream).unwrap(), &string_to_bytes("Hello"));
 }
 
 // RFC 1951 section 3.2.4: an empty final stored block (LEN=0, NLEN=0xFFFF).
 test "inflate raw empty stored block (RFC 1951 3.2.4)" {
     let stream: ByteList = [0x01, 0x00, 0x00, 0xFF, 0xFF];
-    assert inflate_raw(&stream).len() == 0;
+    assert inflate_raw(&stream).unwrap().len() == 0;
 }
 
 // RFC 1951 section 3.2.3: an overlapping back-reference. After the literals
@@ -756,14 +806,14 @@ test "inflate raw empty stored block (RFC 1951 3.2.4)" {
 test "inflate raw overlapping match (RFC 1951 3.2.3)" {
     let stream: ByteList = [0x73, 0x74, 0x02, 0x43, 0x00];
     let expected: ByteList = [65, 66, 65, 66, 65, 66, 65];  // "ABABABA"
-    assert bytes_equal(&inflate_raw(&stream), &expected);
+    assert bytes_equal(&inflate_raw(&stream).unwrap(), &expected);
 }
 
 // RFC 1951 section 3.2.5: the maximum match length, 258, encoded with length
 // code 285. Here a run of 259 identical bytes under fixed Huffman.
 test "inflate raw max-length match (RFC 1951 3.2.5)" {
     let stream: ByteList = [139, 138, 26, 241, 0, 0];
-    let out = inflate_raw(&stream);
+    let out = inflate_raw(&stream).unwrap();
     assert out.len() == 259;
     for let mut i = 0; i < 259; i += 1 {
         assert out[i] == 90;  // 'Z'
@@ -783,7 +833,7 @@ test "inflate raw dynamic Huffman block (RFC 1951 3.2.7)" {
         63,
     ];
     let text = "In the beginning the Universe was created. This has made a lot of people very angry and been widely regarded as a bad move. Many races believe that it was created by some sort of god.";
-    let out = inflate_raw(&stream);
+    let out = inflate_raw(&stream).unwrap();
     assert out.len() == 183;
     assert bytes_equal(&out, &string_to_bytes(text));
 }
