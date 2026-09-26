@@ -972,7 +972,6 @@ fn nir_binary_op_str(op: NirBinaryOp) -> &'static str {
         NirBinaryOp::BitXor => "^",
         NirBinaryOp::Shl => "<<",
         NirBinaryOp::Shr => ">>",
-        NirBinaryOp::RefEq => "ref.eq",
         NirBinaryOp::RefNotEq => "ref.ne",
     }
 }

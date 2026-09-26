@@ -457,18 +457,15 @@ impl Stream<u8> for MockCM {
         resume [id as Stream<u8>, id as StreamWritable<u8>]
     }
 
-    fn read(&mut self, stream: &Stream<u8>, max: i32) -> List<u8> {
+    fn read(&mut self, stream: &Stream<u8>, max: i32) -> StreamChunk<u8> {
         let id = *stream as i32;
         let buf = &mut self.stream_buffers[id];
-        let available = buf.data.len() - buf.read_pos;
-        if available == 0 { resume [] }
-        let count = i32::min(max, available);
-        let mut result: List<u8> = [];
-        for let mut i = 0; i < count; i += 1 {
-            result.push(buf.data[buf.read_pos + i]);
-        }
-        buf.read_pos += count;
-        resume result
+        let end = i32::min(buf.read_pos + max, buf.data.len());
+        let mut items: List<u8> = [];
+        items.extend_from_slice(buf.data.slice(buf.read_pos, end));
+        buf.read_pos = end;
+        let drained = end == buf.data.len() && buf.write_closed;
+        resume StreamChunk { items, result: if drained { CopyResult::Dropped } else { CopyResult::Completed } }
     }
 
     fn drop(&self, stream: &Stream<u8>) { resume () }
@@ -476,19 +473,16 @@ impl Stream<u8> for MockCM {
 }
 
 impl StreamWritable<u8> for MockCM {
-    fn write(&mut self, writable: &StreamWritable<u8>, data: List<u8>) {
+    fn write(&mut self, writable: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
         let id = *writable as i32;
-        self.stream_buffers[id].data.extend(data);
-        resume ()  // buffered — never blocks
+        self.stream_buffers[id].data.extend(&data);
+        resume StreamWrite { count: data.len(), result: CopyResult::Completed }  // buffered — never blocks
     }
 
-    fn write_raw(&mut self, writable: &StreamWritable<u8>, data: builtin::array<u8>, len: i32) {
+    fn write_raw_all(&mut self, writable: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         let id = *writable as i32;
-        let buf = &mut self.stream_buffers[id];
-        for let mut i = 0; i < len; i += 1 {
-            buf.data.push(builtin::array_get_u8(data, i));
-        }
-        resume ()
+        self.stream_buffers[id].data.extend_from_slice(data);
+        resume CopyResult::Completed
     }
 
     fn drop(&mut self, writable: &StreamWritable<u8>) {
@@ -593,11 +587,7 @@ impl MockStdout {
     fn drain(&mut self) -> String {
         let mut result = String::with_capacity(256);
         for let stream of self.streams {
-            loop {
-                let chunk = stream.read(4096);
-                if chunk.is_empty() { break; }
-                result.push_str(String::from_utf8(chunk));
-            }
+            result.push_str(&String::from_utf8_lossy(stream.read_to_end()));
             stream.drop();
         }
         self.streams = [];
@@ -624,12 +614,12 @@ Execution flow:
 println("hello"):
   Stream::<u8>::new()            → MockCM: creates buffer #0, returns fake handles
   Stdout::write_via_stream(rx)  → MockStdout: stores rx, creates fake Future, resumes
-  tx.write_raw(bytes, len)      → MockCM: appends to buffer #0 (no block)
+  tx.write_raw_all(bytes)       → MockCM: appends to buffer #0 (no block)
   tx.drop()                     → MockCM: marks buffer #0 as write-closed
   future.drop()                 → MockCM: no-op
 
 stdout.drain():
-  stream.read(4096)             → MockCM: reads from buffer #0 (immediate)
+  stream.read_to_end()          → MockCM: reads buffer #0 until Dropped (immediate)
   stream.drop()                 → MockCM: no-op
 ```
 

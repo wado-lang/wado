@@ -42,7 +42,7 @@ use crate::component_model::{
 };
 use crate::flat_package::FlatPackage;
 use crate::synthesis::cm_binding::lower::{
-    synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
+    buffer_bytes, synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
 };
 use crate::synthesis::cm_binding::types::cm_package_from_source;
 use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
@@ -51,18 +51,17 @@ use crate::{ast, tir};
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
-const CM_PACKED_COUNT_SHIFT: i32 = 4;
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
 
-/// `result >> 4`: the element count of a packed CM async result.
+/// `cm_packed_count(result)`: the element count of a packed CM async result.
 fn packed_count(result: TirExpr) -> TirExpr {
-    binary(
-        TirBinaryOp::Shr,
-        result,
-        i32_const(CM_PACKED_COUNT_SHIFT),
-        TypeTable::I32,
-    )
+    internal_call("cm_packed_count", vec![result], TypeTable::I32)
+}
+
+/// `cm_copy_count(count)`: the part of `count` one CM copy may move.
+fn copy_count(count: TirExpr) -> TirExpr {
+    internal_call("cm_copy_count", vec![count], TypeTable::I32)
 }
 
 /// `result & 0xF`: the status bits of a packed CM async result.
@@ -629,7 +628,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
             vec![
                 local_ref(handle_idx, "handle", TypeTable::I32),
                 local_ref(ptr_local, "$list_base", TypeTable::I32),
-                local_ref(count_local, "$list_len", TypeTable::I32),
+                copy_count(local_ref(count_local, "$list_len", TypeTable::I32)),
             ],
             TypeTable::I32,
         ),
@@ -1277,7 +1276,23 @@ fn synthesize_stream_read_func(
         false,
     );
 
-    // let byte_count = max * elem_size
+    // let room = cm_copy_count(max)
+    let room_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("room".to_string()),
+        TypeTable::I32,
+        false,
+    );
+    stmts.push(let_stmt(
+        "room",
+        room_idx,
+        TypeTable::I32,
+        copy_count(local_ref(max_idx, "max", TypeTable::I32)),
+    ));
+    let room = || local_ref(room_idx, "room", TypeTable::I32);
+
+    // let byte_count = cm_buffer_bytes(room, elem_size)
     let byte_count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1285,12 +1300,7 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let byte_count = binary(
-        TirBinaryOp::Mul,
-        local_ref(max_idx, "max", TypeTable::I32),
-        i32_const(elem_size),
-        TypeTable::I32,
-    );
+    let byte_count = buffer_bytes(room(), elem_size);
     stmts.push(let_stmt(
         "byte_count",
         byte_count_idx,
@@ -1318,7 +1328,7 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
 
-    // let mut result = stream-read:directory-entry(handle, ptr, max)
+    // let mut result = stream-read:directory-entry(handle, ptr, room)
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1331,7 +1341,7 @@ fn synthesize_stream_read_func(
         vec![
             local_ref(handle_idx, "handle", TypeTable::I32),
             local_ref(ptr_idx, "ptr", TypeTable::I32),
-            local_ref(max_idx, "max", TypeTable::I32),
+            room(),
         ],
         TypeTable::I32,
     );
@@ -1639,7 +1649,7 @@ fn internal_cm_binding(cm_name: &str) -> Option<CompilerItem> {
     Some(match cm_name {
         "stream-read" => CompilerItem::CmStreamReadU8,
         "stream-write" => CompilerItem::CmStreamWriteU8,
-        "stream-write-raw" => CompilerItem::CmStreamWriteRawU8,
+        "stream-write-raw-all" => CompilerItem::CmStreamWriteRawAllU8,
         "error-context-new" => CompilerItem::CmErrorContextNew,
         "error-context-debug-message" => CompilerItem::CmErrorContextDebugMessage,
         "waitable-set-wait" => CompilerItem::CmWaitableSetWait,
@@ -2046,7 +2056,10 @@ mod cm_binding_tests {
         ("stream-new", None),
         ("stream-read", Some("internal cm_stream_read_u8")),
         ("stream-write", Some("internal cm_stream_write_u8")),
-        ("stream-write-raw", Some("internal cm_stream_write_raw_u8")),
+        (
+            "stream-write-raw-all",
+            Some("internal cm_stream_write_raw_all_u8"),
+        ),
         ("stream-cancel-read", Some("canonical stream-cancel-read")),
         ("stream-cancel-write", Some("canonical stream-cancel-write")),
         (

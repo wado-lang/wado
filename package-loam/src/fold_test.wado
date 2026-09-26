@@ -15,7 +15,7 @@ fn floats(extents: List<i32>, values: List<f32>) -> Known {
 }
 
 fn attr(name: String, values: List<String>) -> Attr {
-    return Attr { name, values };
+    return Attr { name, values, is_list: false };
 }
 
 fn node(op: String, inputs: List<String>, attrs: List<Attr>) -> Node {
@@ -217,6 +217,16 @@ test "Reshape infers the one negative extent" {
         ["T", ints([2], [1, -1])],
     ]);
     assert folded(node("Reshape", ["D", "T"], []), k) == ints([1, 4], [0, 1, 2, 3]);
+}
+
+test "a Reshape target no list can hold is refused, even where its product wraps to the count" {
+    // 65536^4 is 2^64, which an i64 product wraps to the empty input's 0.
+    let k = knowns([
+        ["D", ints([0], [])],
+        ["T", ints([4], [65536, 65536, 65536, 65536])],
+    ]);
+    let e = fold(&node("Reshape", ["D", "T"], []), &k, &runtime([2])).unwrap_err();
+    assert e == "the target shape [65536, 65536, 65536, 65536] multiplies past what a list can hold";
 }
 
 test "an operator the build does not evaluate is left to the run" {

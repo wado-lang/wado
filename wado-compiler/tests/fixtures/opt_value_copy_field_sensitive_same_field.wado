@@ -1,4 +1,5 @@
-// A persisting borrow of the same field being moved must keep the deep copy.
+// A borrow of the same field being moved, still read after the move, must keep
+// the deep copy.
 
 use { println, Stdout } from "core:cli";
 
@@ -7,9 +8,8 @@ struct R { x: List<i32> }
 
 fn split_same(p: P) -> i32 {
     let r = &p.a;
-    let n = r.len();
     let out = R { x: p.a };
-    return n + out.x.len();
+    return r.len() + out.x.len();
 }
 
 fn make(n: i32) -> P {
@@ -26,5 +26,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "6\n",
+    "wir_scope": "/split_same",
     "wir_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"]
 }

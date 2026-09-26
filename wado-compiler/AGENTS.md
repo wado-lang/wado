@@ -53,6 +53,9 @@ rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
 `wado-from-idl/AGENTS.md` first.
 
+The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
+faster marks a case the optimizer misses, so the fix belongs in the optimizer.
+
 A module re-exports an effect only where it owns it: `core:cli` hands out
 `Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an
 ambient effect imports it privately, and its callers take the name from

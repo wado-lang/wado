@@ -1,0 +1,23 @@
+// A cast reads through its operand's references before it converts, so a
+// reference to a wide integer converts as the integer does, in either
+// direction.
+
+test "a reference to a wide integer, to a narrower one" {
+    let big: i128 = 300;
+    let r = &big;
+    assert r as i64 == 300;
+    assert r as u8 == 44;
+}
+
+test "a reference to an integer, to a wide one" {
+    let n: i64 = -5;
+    let r = &n;
+    assert r as i128 == -5;
+}
+
+test "a reference to a wide integer, to a float and across signedness" {
+    let big: u128 = 7;
+    let r = &big;
+    assert r as f64 == 7.0;
+    assert r as i128 == 7;
+}

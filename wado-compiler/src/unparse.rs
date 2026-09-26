@@ -2062,13 +2062,10 @@ impl<'a> Unparser<'a> {
     fn unparse_unary(&mut self, u: &UnaryExpr) {
         self.output.push_str(unary_op_str(u.op));
 
-        // Space between consecutive same operators: "- -5" not "--5", "& &x" not "&&x"
+        // "- -5", not "--5". "&&x" needs no space: the parser splits `&&`.
         let needs_space = matches!(
             (&u.op, &u.expr),
             (UnaryOp::Neg, Expr::Unary(inner)) if inner.op == UnaryOp::Neg
-        ) || matches!(
-            (&u.op, &u.expr),
-            (UnaryOp::Ref, Expr::Unary(inner)) if inner.op == UnaryOp::Ref
         );
         if needs_space {
             self.output.push(' ');
@@ -3369,7 +3366,7 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             // either operand of another comparison must keep its parens, or the
             // round-trip silently rewrites the meaning. The same-precedence arm
             // below would otherwise drop them for the left operand.
-            if is_comparison_op(inner.op) && is_comparison_op(parent_op) {
+            if inner.op.is_comparison() && parent_op.is_comparison() {
                 return true;
             }
             if inner_prec == parent_prec && !is_left {
@@ -3396,20 +3393,6 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // `ends_in_trailing_cast`), covering both a bare cast and a nested one.
         _ => false,
     }
-}
-
-/// Comparison operators chain (`a < b < c`) rather than associate, so they
-/// need parenthesization rules distinct from ordinary same-precedence binaries.
-fn is_comparison_op(op: BinaryOp) -> bool {
-    matches!(
-        op,
-        BinaryOp::Eq
-            | BinaryOp::NotEq
-            | BinaryOp::Lt
-            | BinaryOp::LtEq
-            | BinaryOp::Gt
-            | BinaryOp::GtEq
-    )
 }
 
 /// Returns true if `name` can be emitted as a bare identifier or keyword in a
@@ -5465,7 +5448,6 @@ fn tir_binary_op_str(op: TirBinaryOp) -> &'static str {
         TirBinaryOp::BitXor => "^",
         TirBinaryOp::Shl => "<<",
         TirBinaryOp::Shr => ">>",
-        TirBinaryOp::RefEq => "ref.eq",
         TirBinaryOp::RefNotEq => "ref.ne",
     }
 }

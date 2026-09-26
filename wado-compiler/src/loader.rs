@@ -2034,11 +2034,8 @@ fn resolve_include_path_impl(
     }
 }
 
-/// Whether an include path keeps its module's directory as a prefix, or collapses
-/// to the bare filename. Two cases collapse, both because re-prepending `dir`
-/// would duplicate what `base_path.join` adds: the cwd-relative entry module,
-/// whose `dir` *is* `base_path`, and any module whose `dir` does not look
-/// base_path-relative. Absolute paths and `./`-rooted imports keep the prefix.
+/// The directory an include path keeps as its prefix: an absolute or `./`/`../`
+/// module's, except a cwd-relative entry's, which `base_path.join` already adds.
 fn dir_prefix_to_keep<'a>(
     entry_module_source: Option<&str>,
     module_source_str: &'a str,
@@ -2049,11 +2046,7 @@ fn dir_prefix_to_keep<'a>(
     }
     let dir_end = module_source_str.rfind('/')?;
     let dir = &module_source_str[..dir_end];
-    if module_source_str.starts_with('/') || is_cwd_relative(dir) {
-        Some(dir)
-    } else {
-        None
-    }
+    (module_source_str.starts_with('/') || is_cwd_relative(module_source_str)).then_some(dir)
 }
 
 #[cfg(test)]
@@ -2107,14 +2100,11 @@ mod resolve_include_path_tests {
     }
 
     #[test]
-    fn import_at_base_root_returns_filename_only() {
+    fn import_at_base_root_stays_at_base_root() {
         let entry = "./main.wado";
         let import = "./helper.wado";
         let resolved = resolve(Some(entry), import, "./data.txt");
-        // dir = ".", which doesn't match the `./` / `../` prefix branch,
-        // so we fall back to the bare filename and let the host's join
-        // place it under base_path.
-        assert_eq!(resolved, "data.txt");
+        assert_eq!(resolved, "./data.txt");
     }
 
     #[test]
@@ -2123,6 +2113,14 @@ mod resolve_include_path_tests {
         let import = "../sibling/helper.wado";
         let resolved = resolve(Some(entry), import, "./data.txt");
         assert_eq!(resolved, "../sibling/data.txt");
+    }
+
+    #[test]
+    fn import_from_the_parent_dir_keeps_its_dir() {
+        let entry = "./main.wado";
+        let import = "../helper.wado";
+        let resolved = resolve(Some(entry), import, "../data.txt");
+        assert_eq!(resolved, "../../data.txt");
     }
 
     #[test]

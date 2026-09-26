@@ -28,7 +28,15 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use { resolve_ci, fold_range_ci, lexer_alts_have_non_greedy, lexer_alts_contested } from "./lexer_gen.wado";
+use {
+    resolve_ci,
+    fold_range_ci,
+    lexer_alts_have_non_greedy,
+    lexer_alts_contested,
+    Casing,
+    casing_of,
+    callee_casing,
+} from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -99,7 +107,7 @@ pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci
     let mut reach_visited: List<String> = [];
     return scan_recursive_ng(&rule.name, &rule.body, all_rules)
         || calls_recursive_ng_rule(&rule.body, all_rules, &mut reach_visited)
-        || scan_undecidable_arms(&rule.body, all_rules, ci, &mut visiting);
+        || scan_undecidable_arms(&rule.body, all_rules, casing_of(ci), &mut visiting);
 }
 
 /// A rule that CALLS a recursive rule holding a non-greedy repeat. The loop's
@@ -197,12 +205,12 @@ fn elem_calls_recursive_ng_rule(elem: &LexerElement, all_rules: &List<LexerRule>
 fn scan_undecidable_arms(
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     visiting: &mut List<String>,
 ) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
-            if scan_undecidable_arms_elem(elem, all_rules, ci, visiting) {
+            if scan_undecidable_arms_elem(elem, all_rules, casing, visiting) {
                 return true;
             }
         }
@@ -213,25 +221,25 @@ fn scan_undecidable_arms(
 fn scan_undecidable_arms_elem(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     visiting: &mut List<String>,
 ) -> bool {
     match *elem {
         Repeat(rep) => {
             if !rep.non_greedy && rep.kind matches { Star | Plus } {
                 if let Group(inner) = &rep.element {
-                    if lexer_alts_contested(inner, all_rules, ci) {
+                    if lexer_alts_contested(inner, all_rules, casing) {
                         return true;
                     }
                 }
             }
-            return scan_undecidable_arms_elem(&rep.element, all_rules, ci, visiting);
+            return scan_undecidable_arms_elem(&rep.element, all_rules, casing, visiting);
         },
         Group(inner) => {
-            return scan_undecidable_arms(&inner, all_rules, ci, visiting);
+            return scan_undecidable_arms(&inner, all_rules, casing, visiting);
         },
         Not(n) => {
-            return scan_undecidable_arms_elem(&n.element, all_rules, ci, visiting);
+            return scan_undecidable_arms_elem(&n.element, all_rules, casing, visiting);
         },
         RuleRef(name) => {
             // The arms are as undecidable behind a reference as in the body:
@@ -244,7 +252,7 @@ fn scan_undecidable_arms_elem(
                 return false;
             };
             visiting.push(name);
-            let found = scan_undecidable_arms(&r.body, all_rules, ci, visiting);
+            let found = scan_undecidable_arms(&r.body, all_rules, callee_casing(r, all_rules, casing), visiting);
             visiting.pop();
             return found;
         },

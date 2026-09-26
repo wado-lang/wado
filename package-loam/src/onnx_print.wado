@@ -1,0 +1,227 @@
+//! A graph in the ONNX textual format, spelled so `onnx_text.wado` reads the
+//! same graph back.
+
+use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo, element_of } from "./graph.wado";
+use { Refusal } from "./infer.wado";
+
+/// What the textual format has no spelling for.
+pub struct PrintError {
+    pub reason: String,
+}
+
+impl Display for PrintError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for PrintError {
+}
+
+fn fail<T>(reason: String) -> Result<T, PrintError> {
+    return Result::Err(PrintError { reason });
+}
+
+/// `graph` in the textual format.
+pub fn print(graph: &Graph) -> Result<String, PrintError> {
+    let mut out = String::with_capacity(4096);
+    if let Some(version) = graph.opset {
+        out.push_str(`<opset_import: ["" : ${version}]>\n`);
+    }
+    out.push_str(`${name(&graph.name)?} (${value_infos(&graph.inputs)?}) => (${value_infos(&graph.outputs)?})\n`);
+    let mut declared: List<String> = [];
+    for let vi of &graph.initializers {
+        declared.push(initializer(vi)?);
+    }
+    for let [tensor, known] of graph.constants.entries() {
+        declared.push(`${known_type(known)} ${name(tensor)?} = ${known_values(tensor, known)?}`);
+    }
+    out.push_str(`<${declared.join(", ")}>\n{\n`);
+    for let node of &graph.nodes {
+        out.push_str(`    ${node_line(node)?}\n`);
+    }
+    out.push_str("}\n");
+    return Result::Ok(out);
+}
+
+fn value_infos(list: &List<ValueInfo>) -> Result<String, PrintError> {
+    let mut spelled: List<String> = [];
+    for let vi of *list {
+        spelled.push(`${tensor_type(&vi.dtype, &vi.rank)?} ${name(&vi.name)?}`);
+    }
+    return Result::Ok(spelled.join(", "));
+}
+
+fn tensor_type(dtype: &String, rank: &Rank) -> Result<String, PrintError> {
+    return match rank {
+        Scalar => Result::Ok(*dtype),
+        Unranked => Result::Ok(`${dtype}[]`),
+        Dims(dims) => {
+            let mut spelled: List<String> = [];
+            for let d of *dims {
+                spelled.push(match d {
+                    Static(n) => `${n}`,
+                    Symbol(s) => name(&s)?,
+                    Unknown => "?",
+                });
+            }
+            Result::Ok(`${dtype}[${spelled.join(", ")}]`);
+        },
+    };
+}
+
+/// An initializer with its elements where the graph carries them. A half is
+/// written as its bit pattern, as ONNX's parser reads one.
+fn initializer(vi: &ValueInfo) -> Result<String, PrintError> {
+    let declared = `${tensor_type(&vi.dtype, &vi.rank)?} ${name(&vi.name)?}`;
+    let Some(data) = &vi.data else {
+        return Result::Ok(declared);
+    };
+    let mut elements: List<String> = [];
+    if element_of(&vi.dtype).unwrap().width == 4 {
+        for let v of List::<f32>::from_le_bytes(data) {
+            elements.push(float_text(&vi.name, v)?);
+        }
+    } else {
+        for let bits of List::<u16>::from_le_bytes(data) {
+            elements.push(`${bits}`);
+        }
+    }
+    return Result::Ok(`${declared} = {${elements.join(", ")}}`);
+}
+
+fn known_type(known: &Known) -> String {
+    let dtype = match &known.elements {
+        Ints(_) => "int64",
+        Floats(_) => "float",
+        Bools(_) => "bool",
+    };
+    if known.extents.is_empty() {
+        return dtype;
+    }
+    return `${dtype}[${known.extents.join(", ")}]`;
+}
+
+fn known_values(tensor: &String, known: &Known) -> Result<String, PrintError> {
+    let mut elements: List<String> = [];
+    match &known.elements {
+        Ints(v) => {
+            for let x of *v {
+                elements.push(`${x}`);
+            }
+        },
+        Floats(v) => {
+            for let x of *v {
+                elements.push(float_text(tensor, x)?);
+            }
+        },
+        Bools(v) => {
+            for let x of *v {
+                elements.push(if x { "1" } else { "0" });
+            }
+        },
+    }
+    return Result::Ok(`{${elements.join(", ")}}`);
+}
+
+/// The grammar has no literal for a float that is not finite.
+fn float_text(tensor: &String, v: f32) -> Result<String, PrintError> {
+    if !v.is_finite() {
+        return fail(`${tensor}: ${v} has no text form`);
+    }
+    return Result::Ok(`${v}`);
+}
+
+fn node_line(node: &Node) -> Result<String, PrintError> {
+    let mut outputs: List<String> = [];
+    for let output of node.outputs {
+        outputs.push(name(&output)?);
+    }
+    let mut inputs: List<String> = [];
+    for let input of node.inputs {
+        inputs.push(name(&input)?);
+    }
+    let mut attrs: List<String> = [];
+    for let a of node.attrs {
+        attrs.push(`${a.name} = ${attr_value(node, &a)?}`);
+    }
+    let spelled_attrs = if attrs.is_empty() { "" } else { ` <${attrs.join(", ")}>` };
+    return Result::Ok(`${outputs.join(", ")} = ${node.op}${spelled_attrs} (${inputs.join(", ")})`);
+}
+
+fn attr_value(node: &Node, a: &Attr) -> Result<String, PrintError> {
+    let refused = |reason: String| PrintError { reason: `${Refusal::of(node, reason)}` };
+    if let Some(known) = &a.tensor {
+        return Result::Ok(`${known_type(known)} ${known_values(&a.name, known)?}`);
+    }
+    let mut values: List<String> = [];
+    for let v of a.values {
+        if is_number(&v) {
+            values.push(v);
+        } else if v.contains("\"") {
+            return Result::Err(refused(`attribute ${a.name} holds a quote, which the grammar cannot spell`));
+        } else {
+            values.push(`"${v}"`);
+        }
+    }
+    if a.is_list {
+        return Result::Ok(`[${values.join(", ")}]`);
+    }
+    if values.len() != 1 {
+        return Result::Err(refused(`attribute ${a.name} has no text form`));
+    }
+    return Result::Ok(values[0]);
+}
+
+/// A name as the grammar's `quotableId`: bare where it lexes as an `ID`.
+fn name(text: &String) -> Result<String, PrintError> {
+    if is_id(text) {
+        return Result::Ok(*text);
+    }
+    if text.contains("\"") {
+        return fail(`${text}: a name holding a quote has no text form`);
+    }
+    return Result::Ok(`"${text}"`);
+}
+
+fn is_id(text: &String) -> bool {
+    for let [i, c] of text.chars().enumerate() {
+        if !(c.is_ascii_alphabetic() || c == '_' || i > 0 && c.is_ascii_digit()) {
+            return false;
+        }
+    }
+    return !text.is_empty();
+}
+
+/// Whether `text` lexes as the grammar's `INT` or `FLOAT`.
+fn is_number(text: &String) -> bool {
+    let chars: List<char> = text.chars().collect();
+    let mut at = if !chars.is_empty() && chars[0] == '-' { 1 } else { 0 };
+    let digits = |from: i32| -> i32 {
+        let mut end = from;
+        while end < chars.len() && chars[end].is_ascii_digit() {
+            end += 1;
+        }
+        return end;
+    };
+    let whole = digits(at);
+    if whole == at {
+        return false;
+    }
+    at = whole;
+    if at < chars.len() && chars[at] == '.' {
+        at = digits(at + 1);
+    }
+    if at < chars.len() && (chars[at] == 'e' || chars[at] == 'E') {
+        let mut exponent = at + 1;
+        if exponent < chars.len() && (chars[exponent] == '+' || chars[exponent] == '-') {
+            exponent += 1;
+        }
+        let end = digits(exponent);
+        if end == exponent {
+            return false;
+        }
+        at = end;
+    }
+    return at == chars.len();
+}

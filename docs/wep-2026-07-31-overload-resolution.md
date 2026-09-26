@@ -654,6 +654,12 @@ Trade-offs:
 - Colliding associated functions stay unspellable (see The uncovered case). The
   spec's "not yet implemented" list keeps that entry, narrowed.
 
+## Known gaps
+
+- A conversion reachable only through a blanket generic in its source type
+  (`impl<T: Display> From<T> for W`) is rejected at `W::from(x)`, since its
+  instantiation is not selected from the argument.
+
 ## See Also
 
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) — the

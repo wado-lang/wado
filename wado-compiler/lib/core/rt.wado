@@ -26,7 +26,9 @@ use {
     WaitEvent,
     Waitable,
     WaitableSet,
+    cm_packed_upper,
     cm_subtask_settled,
+    write_copy_is_final,
 } from "core:prelude/types.wado";
 
 /// Split a packed `future.new` result (`readable | writable << 32`) into the
@@ -74,7 +76,7 @@ internal fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i
 /// Writes a string to a StreamWritable<u8> with an optional newline, then drops it.
 /// Internal helper for log_stdout and log_stderr.
 ///
-/// Uses write_raw to pass String's internal GC array directly to the stream,
+/// Uses write_raw_all to pass String's internal GC array directly to the stream,
 /// avoiding the intermediate String → List<u8> byte-by-byte copy.
 internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: bool) {
     let len = message.len();
@@ -98,7 +100,7 @@ internal fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_
 /// Each call to waitable-set.wait delivers one transition, so we loop until
 /// the subtask leaves the in-flight states.
 internal fn wait_for_subtask(packed: i32) with (WaitableSet, Subtask) {
-    let handle = packed >> 4;
+    let handle = cm_packed_upper(packed);
     if handle != 0 {
         let subtask = handle as Subtask;
         let ws = WaitableSet::new();
@@ -174,7 +176,13 @@ internal fn cm_lower_string(s: String) -> i64 {
     let bytes = s.internal_raw_bytes();
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(bytes, 0, ptr, len);
-    return ptr as i64 | len as i64 << 32;
+    return pack_ptr_len(ptr, len);
+}
+
+/// `(ptr | (len << 32))`, the pointer taken unsigned: one past 2 GiB would
+/// otherwise sign-extend over the length.
+fn pack_ptr_len(ptr: i32, len: i32) -> i64 {
+    return ptr as u32 as i64 | len as i64 << 32;
 }
 
 /// Lowers `data[start..<start + len]` of a GC array to CM linear memory.
@@ -183,7 +191,7 @@ internal fn cm_lower_string(s: String) -> i64 {
 internal fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
     let ptr = builtin::realloc(0, 0, 1, len);
     gc_array_to_memory(data, start, ptr, len);
-    return ptr as i64 | len as i64 << 32;
+    return pack_ptr_len(ptr, len);
 }
 
 /// Lowers a GC List<u8> (e.g., FieldValue) to CM linear memory representation.
@@ -302,17 +310,46 @@ internal fn cm_copy_result(packed: i32) -> CopyResult {
     return CopyResult::Cancelled;
 }
 
+/// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
+global CM_COPY_MAX: i32 = (1 << 28) - 1;
+
+/// The part of `count` elements one copy may move, since a longer copy traps.
+#[compiler_item("cm_copy_count")]
+internal fn cm_copy_count(count: i32) -> i32 {
+    return i32::min(count, CM_COPY_MAX);
+}
+
+/// The bytes `count` elements of `elem_size` take in linear memory, which an
+/// `i32` must be able to count.
+#[compiler_item("cm_buffer_bytes")]
+internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
+    // A panic rather than an assert: every program reaches this, and an assert
+    // would pull the formatting of its operands into each one.
+    if count < 0 || count > i32::MAX / elem_size {
+        builtin::cold_path();
+        panic("a buffer's length is negative or past what linear memory can address");
+    }
+    return count * elem_size;
+}
+
+/// The element count of a packed CM copy result.
+#[compiler_item("cm_packed_count")]
+internal fn cm_packed_count(packed: i32) -> i32 {
+    return cm_packed_upper(packed);
+}
+
 /// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
-    let ptr = builtin::realloc(0, 0, 1, max);
-    let mut result = builtin::stream_read(handle, ptr, max);
+    let room = cm_buffer_bytes(cm_copy_count(max), 1);
+    let ptr = builtin::realloc(0, 0, 1, room);
+    let mut result = builtin::stream_read(handle, ptr, room);
     if result == -1 {
         result = cm_await_blocked(handle);
     }
-    let count = result >> 4;
+    let count = cm_packed_count(result);
     let arr = memory_to_gc_array(ptr, count);
-    let freed = builtin::realloc(ptr, max, 1, 0);
+    let freed = builtin::realloc(ptr, room, 1, 0);
     return StreamChunk {
         items: List::internal_from_raw(arr, count),
         result: cm_copy_result(result),
@@ -331,31 +368,36 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
     return written;
 }
 
-/// One `stream.write` of `count` elements from `ptr`, awaiting a BLOCKED copy.
+/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED copy.
 internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
-    let mut result = builtin::stream_write(handle, ptr, count);
+    let mut result = builtin::stream_write(handle, ptr, cm_copy_count(count));
     if result == -1 {
         result = cm_await_blocked(handle);
     }
     return StreamWrite {
-        count: result >> 4,
+        count: cm_packed_count(result),
         result: cm_copy_result(result),
     };
 }
 
-/// CM adapter for stream.write_raw(slice) on Stream<u8>.
-/// Lowers the slice's byte window to linear memory, calls stream-write, handles BLOCKED.
-/// `#[inline(always)]` so the caller's `Slice` argument is scalarized away
-/// (no intermediate slice `struct.new`) rather than crossing the call boundary.
-#[inline(always)]
-#[compiler_item("cm_stream_write_raw_u8")]
-internal fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) -> StreamWrite {
-    let packed = cm_lower_list_u8(data.internal_repr(), data.internal_start(), data.len());
-    let ptr = packed as i32;
-    let raw_len = (packed >> 32) as i32;
-    let written = cm_stream_write_once(handle, ptr, raw_len);
-    let freed = builtin::realloc(ptr, raw_len, 1, 0);
-    return written;
+/// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is
+/// lowered once, since a reader may take a short prefix of each copy.
+#[compiler_item("cm_stream_write_raw_all_u8")]
+internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResult {
+    let len = data.len();
+    if len == 0 {
+        return CopyResult::Completed;
+    }
+    let ptr = cm_lower_list_u8(data.internal_repr(), data.internal_start(), len) as i32;
+    let mut taken = 0;
+    loop {
+        let written = cm_stream_write_once(handle, ptr + taken, len - taken);
+        taken += written.count;
+        if write_copy_is_final(&written) || taken >= len {
+            let freed = builtin::realloc(ptr, len, 1, 0);
+            return written.result;
+        }
+    }
 }
 
 /// CM adapter for ErrorContext::new(msg).

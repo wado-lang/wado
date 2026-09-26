@@ -22,7 +22,9 @@ use crate::synthesis::common::{
 };
 
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
-use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
+use super::lower::{
+    buffer_bytes, synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory,
+};
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
     cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
@@ -865,7 +867,7 @@ impl<'a> AdapterBuilder<'a> {
             len_expr,
         ));
 
-        // $base = realloc(0, 0, align, $len * elem_size)
+        // $base = realloc(0, 0, align, cm_buffer_bytes($len, elem_size))
         let base_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
             &format!("${param_name}_base"),
@@ -877,11 +879,9 @@ impl<'a> AdapterBuilder<'a> {
                     i32_const(0),
                     i32_const(0),
                     i32_const(elem_align),
-                    binary(
-                        TirBinaryOp::Mul,
+                    buffer_bytes(
                         local_ref(len_local, &format!("${param_name}_len"), TypeTable::I32),
-                        i32_const(elem_size),
-                        TypeTable::I32,
+                        elem_size,
                     ),
                 ],
                 TypeTable::I32,

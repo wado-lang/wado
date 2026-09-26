@@ -1205,5 +1205,5 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         opts.runtime,
     )
     .await
-    .map_err(|e| CliExit::error(format!("Server error: {e}")))
+    .map_err(|e| CliExit::error(format!("Server error: {e:#}")))
 }

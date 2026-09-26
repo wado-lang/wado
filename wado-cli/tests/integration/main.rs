@@ -28,6 +28,7 @@ mod kiln_options;
 mod kiln_pipeline;
 mod kiln_probe;
 mod kiln_read_text;
+mod kiln_trap;
 mod lsp;
 mod manifest_integration;
 mod run_inprocess;

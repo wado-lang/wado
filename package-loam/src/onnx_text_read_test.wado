@@ -167,6 +167,46 @@ test "a float attribute may end its fraction at the point" {
     assert g.nodes[0].attrs[0].values == ["1.0"];
 }
 
+test "a tensor attribute is read as the tensor it spells" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            S = Constant <value = float {0.125}> ()
+            K = Constant <value = int64[2] {3, -4}> ()
+            M = Constant <value = bool[2] {1, 0}> ()
+            Y = Mul(X, S)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].tensor == Option::Some(Known { extents: [], elements: Elements::Floats([0.125]) });
+    assert g.nodes[1].attrs[0].tensor == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Ints([3, -4]),
+    });
+    assert g.nodes[2].attrs[0].tensor == Option::Some(Known {
+        extents: [2],
+        elements: Elements::Bools([true, false]),
+    });
+}
+
+test "a tensor attribute of an element type not read carries no value" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            S = Constant <value = float16 {15360}> ()
+            Y = Identity(X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].attrs[0].tensor matches { None };
+    assert g.nodes[0].attrs[0].values.is_empty();
+}
+
+test "a list of tensor attributes is refused as one" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = Foo <values = [float {1}, float {2}]> (X)
+        }`,
+    ).unwrap_err().reason;
+    assert e.ends_with("values: a list of tensors is not read");
+}
+
 test "an attribute after the input list reads as the same attribute" {
     let g = read(
         `agraph (float[2, 3] X) => (float[3, 2] Y) {
@@ -236,8 +276,29 @@ test "an int64 initializer without inline values names itself" {
     assert e == "S: the build reads this tensor, so the graph must carry its values";
 }
 
+test "an initializer's extents are integers, as ONNX's tensors state them" {
+    let e = read(
+        `agraph (float[N, 2] X) => (float[N, 2] Y)
+        <float[N] W>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err().reason;
+    assert e == "W: an initializer's extents are integers";
+}
+
 test "an initializer without inline values carries no data" {
     assert mlp().initializers[0].data matches { None };
+}
+
+test "a negative dimension names the tensor, as the protobuf reader does" {
+    let e = read(`agraph (float[2] X) => (float[2] Y) <float[-2] W = {1.0}> { Y = Add(X, W) }`).unwrap_err().reason;
+    assert e == "W: dimension -2";
+}
+
+test "a dimension past i32 names the tensor rather than reading as a symbol" {
+    let e = read(`agraph (float[2147483648] X) => (float[2] Y) { Y = Relu(X) }`).unwrap_err().reason;
+    assert e == "X: dimension 2147483648";
 }
 
 test "inline values that disagree with the shape name the tensor" {
@@ -248,7 +309,7 @@ test "inline values that disagree with the shape name the tensor" {
             Y = Add(X, W)
         }`,
     ).unwrap_err().reason;
-    assert e == "W: 2 elements for a shape of 3 or more";
+    assert e == "W: 2 elements for a shape of 3";
 }
 
 test "a zero extent after a larger one still means no elements" {

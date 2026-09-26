@@ -388,7 +388,7 @@ impl<T> Iterator for SliceWindows<T> {
     type Item = Slice<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index + self.size > self.end {
+        if self.size > self.end - self.index {
             return null;
         }
         let slice = Slice {
@@ -432,7 +432,7 @@ impl<T> Iterator for SliceChunks<T> {
         if self.index >= self.end {
             return null;
         }
-        let stop = i32::min(self.index + self.size, self.end);
+        let stop = self.index + i32::min(self.size, self.end - self.index);
         let slice = Slice {
             repr: self.repr,
             start: self.index,

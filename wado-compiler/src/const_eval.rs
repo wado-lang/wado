@@ -688,7 +688,7 @@ pub(crate) fn eval_int_binary(
             prim,
         }),
 
-        NirBinaryOp::And | NirBinaryOp::Or | NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => None,
+        NirBinaryOp::And | NirBinaryOp::Or | NirBinaryOp::RefNotEq => None,
     }
 }
 

@@ -139,10 +139,7 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        // The reference-identity operators take operands with no scalar kind.
-        if let NirBinaryOp::RefEq = op {
-            return WirInstr::RefEq(left, right);
-        }
+        // The reference-identity operator takes operands with no scalar kind.
         if let NirBinaryOp::RefNotEq = op {
             return WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)));
         }
@@ -303,7 +300,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed => WirInstr::I32ShrS(left, right),
             },
             // Returned above, before the operand kind is classified.
-            NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => unreachable!(),
+            NirBinaryOp::RefNotEq => unreachable!(),
         }
     }
 
@@ -583,6 +580,9 @@ impl FunctionTranslator<'_, '_> {
                     | PrimitiveType::U16),
                 ),
             ) => Self::truncate_to_sub_i32(inner_instr, to_prim),
+            // A diverging operand traps before the cast runs, so any target
+            // representation holds: nothing is ever converted.
+            (ResolvedType::Never, _) => inner_instr,
             _ => {
                 // Other casts — newtype and SIMD reinterprets, enum→i32,
                 // struct→struct — are Wasm-level no-ops and pass through, which

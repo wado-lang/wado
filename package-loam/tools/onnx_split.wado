@@ -1,0 +1,37 @@
+//! Split an `.onnx` into the two files Loam reads: a textual graph whose
+//! weights carry no values, and a safetensors checkpoint holding them.
+
+use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { read as read_proto } from "../src/onnx_proto.wado";
+use { print } from "../src/onnx_print.wado";
+use { split_weights, write_safetensors } from "../src/safetensors.wado";
+
+/// The value, or the failure after `prefix` on stderr and exit status 1.
+fn or_exit<T, E: Display>(result: Result<T, E>, prefix: String) -> T with (Stderr, Exit) {
+    return match result {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln(`${prefix}${e}`);
+            exit(1);
+        },
+    };
+}
+
+export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
+    let given = args();
+    if given.len() != 2 {
+        eprintln("usage: onnx_split <model.onnx> <stem>, writing <stem>.onnxtext and <stem>.safetensors");
+        exit(2);
+    }
+    let [source, stem] = [given[0], given[1]];
+    // A filesystem error names its path; a read or print error does not.
+    let bytes = or_exit(fs::read(&source), "");
+    let graph = or_exit(read_proto(bytes), `${source}: `);
+    let [kept, stored] = split_weights(graph);
+    let text = or_exit(print(&kept), `${source}: `);
+    or_exit(fs::write(`${stem}.onnxtext`, &text), "");
+    or_exit(fs::write(`${stem}.safetensors`, &write_safetensors(&stored)), "");
+    println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
+}

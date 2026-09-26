@@ -250,7 +250,6 @@ fn parse_loop_guard(
         | NirBinaryOp::BitXor
         | NirBinaryOp::Shl
         | NirBinaryOp::Shr
-        | NirBinaryOp::RefEq
         | NirBinaryOp::RefNotEq => return None,
     };
     Some((guard_idx, var, h, guard_le))

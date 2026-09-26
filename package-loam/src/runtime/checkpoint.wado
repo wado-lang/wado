@@ -1,0 +1,161 @@
+use json from "core:json";
+use { TreeMap } from "core:collections";
+use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_key } from "core:serde";
+
+/// A checkpoint that disagrees with the graph, or is not a safetensors file.
+pub struct LoadError {
+    pub reason: String,
+}
+
+impl Display for LoadError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for LoadError {
+}
+
+/// One tensor as the header states it: its element type, its extents, and its
+/// byte range after the header.
+pub struct HeaderEntry {
+    pub dtype: String,
+    pub shape: List<i64>,
+    pub data_offsets: List<i64>,
+}
+
+/// The header key the format reserves for a map of free strings, which no tensor
+/// can be stored under.
+pub global METADATA_KEY: String = "__metadata__";
+
+/// The header's tensor entries, `METADATA_KEY` skipped.
+struct Header {
+    entries: TreeMap<String, HeaderEntry>,
+}
+
+impl Deserialize for Header {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Header, DeserializeError> {
+        let on_duplicate = d.on_duplicate_key();
+        let mut map = d.begin_map()?;
+        let mut entries = TreeMap::<String, HeaderEntry>::new();
+        while let Some(key) = map.next_key_string()? {
+            if key == METADATA_KEY {
+                let _ = map.next_value::<IgnoredAny>()?;
+                continue;
+            }
+            let entry = map.next_value::<HeaderEntry>()?;
+            if !entries.try_insert(key, entry) {
+                report_duplicate_key(on_duplicate, &key)?;
+                entries[key] = entry;
+            }
+        }
+        map.end()?;
+        return Result::Ok(Header { entries });
+    }
+}
+
+/// A checkpoint's header, read, and where its payloads start.
+pub struct Checkpoint {
+    entries: TreeMap<String, HeaderEntry>,
+    data_start: i32,
+}
+
+/// Where the header ends, which the bytes must reach.
+pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
+    let view = bytes.as_byte_slice();
+    if view.len() < 8 {
+        return Result::Err(LoadError { reason: `the header is 8 bytes, past the ${view.len()} given` });
+    }
+    let end = declared_header_end(view)?;
+    if end > view.len() {
+        return Result::Err(LoadError { reason: `the header is ${end - 8} bytes, past the ${view.len() - 8} given` });
+    }
+    return Result::Ok(end);
+}
+
+/// Where the header the leading 8 bytes declare ends, whether or not the bytes
+/// reach it.
+pub fn declared_header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
+    let view = bytes.as_byte_slice();
+    assert view.len() >= 8;
+    let length = List::<u64>::from_le_bytes(view.slice(0, 8))[0];
+    if length > (i32::MAX - 8) as u64 {
+        return Result::Err(LoadError { reason: `the header is ${length} bytes, past what a module can address` });
+    }
+    return Result::Ok(8 + length as i32);
+}
+
+/// The header of the checkpoint `bytes` begins with; the payloads may be absent.
+pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError> {
+    let view = bytes.as_byte_slice();
+    let data_start = header_end(view)?;
+    let header = match json::from_bytes::<Header>(view.slice(8, data_start)) {
+        Ok(header) => header,
+        Err(e) => {
+            return Result::Err(LoadError { reason: `the header is not JSON: ${e}` });
+        },
+    };
+    return Result::Ok(Checkpoint { entries: header.entries, data_start });
+}
+
+/// What the build compiled a checkpoint tensor as, which its header must state.
+/// `elements` is the extents' product, which the build has shown a list holds.
+pub struct Expected {
+    pub tensor: String,
+    pub dtype: String,
+    pub axes: List<String>,
+    pub extents: List<i32>,
+    pub elements: i32,
+    pub width: i32,
+}
+
+impl Checkpoint {
+    /// The byte range holding `e`, once the header states it as the build compiled it.
+    pub fn range(&self, e: &Expected) -> Result<[i32, i32], LoadError> {
+        let fail = |reason: String| LoadError { reason: `${e.tensor}: ${reason}` };
+        let Some(entry) = self.entries.get(e.tensor) else {
+            return Result::Err(fail("the checkpoint has no such tensor"));
+        };
+        if entry.dtype != e.dtype {
+            return Result::Err(fail(`the checkpoint holds ${entry.dtype}, and the graph ${e.dtype}`));
+        }
+        if entry.shape.len() != e.axes.len() {
+            return Result::Err(fail(
+                `the checkpoint gives ${entry.shape.len()} axes, and the graph [${e.axes.join(", ")}]`,
+            ));
+        }
+        for let [i, axis] of e.axes.into_iter().enumerate() {
+            if entry.shape[i] != e.extents[i] as i64 {
+                return Result::Err(fail(
+                    `axis ${axis} is ${entry.shape[i]} in the checkpoint and ${e.extents[i]} in the graph`,
+                ));
+            }
+        }
+        let offsets = &entry.data_offsets;
+        let held = if offsets.len() == 2 { offsets[1] - offsets[0] } else { -1 };
+        let needed = e.elements as i64 * e.width as i64;
+        if held != needed {
+            return Result::Err(
+                fail(
+                    `the checkpoint's offsets hold ${held} bytes, and ${e.elements} ${e.dtype} elements need ${needed}`,
+                ),
+            );
+        }
+        if offsets[0] < 0 || offsets[1] > (i32::MAX - self.data_start) as i64 {
+            return Result::Err(fail(`the checkpoint's offsets ${*offsets} fall outside what a module can address`));
+        }
+        return Result::Ok([self.data_start + offsets[0] as i32, self.data_start + offsets[1] as i32]);
+    }
+
+    /// `e`'s bytes within `bytes`, the whole checkpoint this header was read from.
+    pub fn payload<B: AsByteSlice>(&self, bytes: B, e: &Expected) -> Result<ByteSlice, LoadError> {
+        let view = bytes.as_byte_slice();
+        let [start, end] = self.range(e)?;
+        if end > view.len() {
+            return Result::Err(
+                LoadError { reason: `${e.tensor}: the payload ends at byte ${end}, past the ${view.len()} given` },
+            );
+        }
+        return Result::Ok(view.slice(start, end));
+    }
+}

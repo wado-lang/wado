@@ -13,6 +13,12 @@ repository ships them (SHA-256
 `2c2bb27afe24f304c7883ed6529abd4f092e53882701eaa22d444c90f0f5a784` and
 `06e116ab37805f782ce4493bf28984f565d2c9019d14a1b932d0a67f97d85147`).
 
+`model.onnxtext` and `model.safetensors` are `model.onnx` split by Loam's own
+tool, the graph with its weights left out and the checkpoint holding them:
+
+    cd package-loam/tests/models/tiny-gpt2
+    wado run ../../../tools/onnx_split.wado -- model.onnx model
+
 The repository ships no expected outputs, so `test_data_set_0/` is
 onnxruntime's. `oracle.mjs` writes it with onnxruntime-node 1.30.0: four token
 ids, a mask of ones, and the logits the model computes from them.

@@ -115,9 +115,6 @@ impl Stream<T> {
 impl StreamWritable<T> {
     /// Write every element, or stop early if the readable end drops.
     pub fn write_all(&self, data: List<T>) -> CopyResult;
-
-    /// The same loop over `write_raw`, for elements already in one array.
-    pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult;
 }
 ```
 
@@ -125,8 +122,31 @@ These are ordinary Wado, generic over the element type, and are what most call
 sites use. A call site that streams — bounded memory, incremental work — writes
 the loop over `read` itself.
 
-`write_raw` and `write_raw_all` hand the backing array to the canonical as it
-stands, which lines up with the CM buffer only for bytes. A wider element is a
+`write_all` offers the whole buffer once, then at most `STREAM_CHUNK_ELEMENTS`
+per copy. Each copy lowers what it offers, and a reader may take a short
+prefix, so offering the whole rest every time would make the loop quadratic.
+
+No copy offers more than the Canonical ABI's `2^28 - 1` elements, which is where
+the canonical traps. `read` and `write` hand it at most that many, so a longer
+list writes short and a larger `max` reads short, as any copy may. The buffer a
+copy uses must still fit linear memory: one whose bytes an `i32` cannot count
+traps before the copy, as a list that large does at any component boundary.
+
+`write_raw_all` is the same loop for elements already in one array, without the
+value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A
+loop in Wado cannot hold a linear-memory pointer, so it would lower the view
+again on every copy. `core:rt` lowers it once and advances the pointer. A file
+write is the case that needs it: wasmtime's filesystem stream takes 8 KiB per
+copy. Being a primitive, it is also what a handler for `StreamWritable<u8>`
+claims to capture `println`.
+
+A view has no single-copy write. A caller looping over one would lower the rest
+again on every copy, which is the quadratic write above. A single copy matters
+only to a caller doing other work between copies, and `BLOCKED` is not
+reachable yet (see Known gaps).
+
+`write_raw_all` hands the backing array to the canonical as it stands, which
+lines up with the CM buffer only for bytes. A wider element is a
 diagnostic naming `write_all`, not a lowering: `cm_binding_function`'s stream
 arms are the hand-written `u8` path, and the rewriter checks the element rather
 than trusting that everything else was parameterized above it.
@@ -217,14 +237,9 @@ Neutral:
   `cancel_write` remain unreachable — see
   [Async Canonical Options](./wep-2026-07-25-async-stream-canonical.md). This is
   what a Go-style channel needs and does not have yet.
-- A non-byte `write_raw` has no lowering. `synthesize_lower_list_to_buffer` reads
+- A non-byte `write_raw_all` has no lowering. `synthesize_lower_list_to_buffer` reads
   its length and elements through `List` alone, so nothing sources them from a
   slice.
-- `write_all` and `write_raw_all` re-lower the untransferred tail on every
-  iteration, where the loop inside the compiler lowered once and advanced a
-  pointer. Against a reader taking short prefixes that is quadratic in the
-  bytes copied. A loop in Wado cannot hold the linear-memory pointer the old one
-  advanced, and the decision above requires `write_raw` itself to stay one copy.
 - `STREAM_CHUNK_ELEMENTS` is 4096 for every payload, where the call sites this
   WEP replaced picked per site (`read(65536)` for bytes, `read(16)` for
   records). The read helper allocates `max * elem_size` up front, so one number

@@ -1,0 +1,26 @@
+// `&&` lexes as one token, yet a reference to a reference spells it in both
+// type and expression position, as in Rust.
+fn read(r: &&i32) -> i32 {
+    return **r;
+}
+
+fn read_mut(r: &&mut i32) -> i32 {
+    return **r;
+}
+
+test "a type and an expression spell `&&`" {
+    let x = 1;
+    let rr = &&x;
+    assert read(rr) == 1;
+    assert read(&&x) == 1;
+}
+
+test "`&&mut` is a shared reference to a mutable one" {
+    let mut y = 7;
+    assert read_mut(&&mut y) == 7;
+}
+
+test "`&&` still means logical and between operands" {
+    let t = true;
+    assert t && !false;
+}

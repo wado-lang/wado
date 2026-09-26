@@ -3,13 +3,83 @@ pub struct Tensor<E, Axes> {
     pub extents: List<i32>,
 }
 
-pub fn element_count(extents: &List<i32>) -> i32 {
+/// The elements `extents` hold, or `None` where its non-empty extents multiply
+/// past `i32::MAX`. A kernel counts sub-shapes, so every partial product must fit.
+pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {
     let mut count = 1;
+    let mut empty = false;
     for let e of *extents {
         assert e >= 0;
-        count *= e;
+        if e == 0 {
+            empty = true;
+        } else if count > i32::MAX / e {
+            return null;
+        } else {
+            count *= e;
+        }
     }
+    return Option::Some(if empty { 0 } else { count });
+}
+
+/// The elements a tensor of `extents` holds, which a list must be able to hold.
+pub fn element_count(extents: &List<i32>) -> i32 {
+    let Some(count) = checked_element_count(extents) else {
+        panic(`extents ${*extents} multiply past what a list can hold`);
+    };
     return count;
+}
+
+/// Why the input `tensor` disagrees with the graph. `stated` holds each axis's
+/// extent where the graph states one, and -1 where it leaves the axis to the run.
+pub fn input_mismatch<E, Axes>(
+    t: &Tensor<E, Axes>,
+    tensor: String,
+    axes: List<String>,
+    stated: List<i32>,
+) -> Option<String> {
+    if t.extents.len() != axes.len() {
+        return Option::Some(`${tensor}: the tensor gives ${t.extents.len()} axes, and the graph [${axes.join(", ")}]`);
+    }
+    for let [i, axis] of axes.into_iter().enumerate() {
+        let extent = t.extents[i];
+        if extent < 0 {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor`);
+        }
+        if stated[i] >= 0 && extent != stated[i] {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${stated[i]} in the graph`);
+        }
+    }
+    let Some(count) = checked_element_count(&t.extents) else {
+        return Option::Some(`${tensor}: extents ${t.extents} multiply past what a list can hold`);
+    };
+    if count != t.data.len() {
+        return Option::Some(`${tensor}: extents ${t.extents} hold ${count} elements, and the data ${t.data.len()}`);
+    }
+    return null;
+}
+
+/// Why two inputs disagree on an extent the graph leaves to the run as `symbol`.
+pub fn axis_mismatch(
+    symbol: String,
+    tensor: String,
+    axis: String,
+    extent: i32,
+    other: String,
+    other_extent: i32,
+) -> Option<String> {
+    if extent == other_extent {
+        return null;
+    }
+    return Option::Some(
+        `${tensor}: axis ${axis} is ${extent} in the tensor and ${other_extent} in ${other}, and the graph makes both ${symbol}`,
+    );
+}
+
+/// Stops `forward` with the reason an input disagrees with the graph.
+pub fn refuse(reason: Option<String>) {
+    if let Some(r) = reason {
+        panic(r);
+    }
 }
 
 pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
@@ -29,7 +99,7 @@ pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..B
     let batch = element_count(&extents);
     extents.push(rows);
     extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, batch, rows, inner, cols, inner * cols), extents };
+    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, inner * cols), extents };
 }
 
 /// `matmul` with one matrix on the right, shared by every batch element, as a
@@ -45,13 +115,17 @@ pub fn matmul_shared<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f3
     let batch = element_count(&extents);
     extents.push(rows);
     extents.push(cols);
-    return Tensor { data: products(&a.data, &b.data, batch, rows, inner, cols, 0), extents };
+    return Tensor { data: products(&a.data, &b.data, &extents, batch, inner, 0), extents };
 }
 
-/// `batch` matrix products of `rows x inner` by `inner x cols`, row-major. The
-/// right operand's matrix for batch element `s` starts at `s * b_step`.
-fn products(a: &List<f32>, b: &List<f32>, batch: i32, rows: i32, inner: i32, cols: i32, b_step: i32) -> List<f32> {
-    let mut out = List::<f32>::filled(batch * rows * cols, 0.0);
+/// `batch` matrix products of `rows x inner` by `inner x cols`, row-major, where
+/// `out_extents` ends in `rows, cols`. The right operand's matrix for batch
+/// element `s` starts at `s * b_step`.
+fn products(a: &List<f32>, b: &List<f32>, out_extents: &List<i32>, batch: i32, inner: i32, b_step: i32) -> List<f32> {
+    let rank = out_extents.len();
+    let rows = out_extents[rank - 2];
+    let cols = out_extents[rank - 1];
+    let mut out = List::<f32>::filled(element_count(out_extents), 0.0);
     for let mut s = 0; s < batch; s += 1 {
         let a_base = s * rows * inner;
         let b_base = s * b_step;
@@ -81,7 +155,7 @@ pub fn gather_rows<E, Row, ..Rest, ..Ix>(
         extents.push(data.extents[i]);
         width *= data.extents[i];
     }
-    let mut out = List::<E>::with_capacity(indices.data.len() * width);
+    let mut out = List::<E>::with_capacity(element_count(&extents));
     for let index of indices.data {
         let row = if index < 0 { index + rows } else { index };
         assert 0 <= row < rows;
@@ -330,7 +404,8 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
     let planes = x.extents[0] * x.extents[1];
     let in_size = element_count(&input);
     let out_size = element_count(&window.output);
-    let mut out = List::<f32>::filled(planes * out_size, -f32::INFINITY);
+    let extents = windowed_extents(x.extents[0], x.extents[1], window);
+    let mut out = List::<f32>::filled(element_count(&extents), -f32::INFINITY);
     for let at of 0..<out_size {
         for let tap of 0..<element_count(&window.kernel) {
             let offset = tap_offset(&input, window, at, tap);
@@ -342,7 +417,7 @@ pub fn max_pool<N, C, ..In, ..Out>(x: &Tensor<f32, [N, C, ..In]>, window: &Windo
             }
         }
     }
-    return Tensor { data: out, extents: windowed_extents(x.extents[0], x.extents[1], window) };
+    return Tensor { data: out, extents };
 }
 
 pub fn conv<N, Ci, Co, ..In, ..K, ..Out>(
@@ -373,7 +448,8 @@ fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, wi
     let out_size = element_count(&window.output);
     let taps = element_count(&window.kernel);
     assert element_count(&spatial_extents(&w.extents)) == taps;
-    let mut out = List::<f32>::with_capacity(batch * outputs * out_size);
+    let extents = windowed_extents(batch, outputs, window);
+    let mut out = List::<f32>::with_capacity(element_count(&extents));
     for let _ of 0..<batch {
         for let oc of 0..<outputs {
             for let _ of 0..<out_size {
@@ -398,7 +474,7 @@ fn convolve<X, W, Y>(x: &Tensor<f32, X>, w: &Tensor<f32, W>, bias: List<f32>, wi
             }
         }
     }
-    return Tensor { data: out, extents: windowed_extents(batch, outputs, window) };
+    return Tensor { data: out, extents };
 }
 
 /// The extents past the batch and channel axes, which a window slides over.

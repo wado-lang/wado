@@ -10,7 +10,7 @@ export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
     let subtask = Stderr::write_via_stream(rx);
     let body: List<u8> = [72, 101, 108, 108, 111];
-    tx.write_raw(body.as_slice());
+    tx.write_raw_all(body.as_slice());
     tx.drop();
     subtask.read();
 }

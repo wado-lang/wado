@@ -1,0 +1,13 @@
+// A function value is a reference; `as` never turns it into a number, nor a
+// number into one. This once reached WIR as an unlowered cast and crashed.
+
+fn id(x: i32) -> i32 {
+    return x;
+}
+
+test "fn to i32" {
+    let a = id as i32;
+}
+
+__DATA__
+{"compile_error": "a function converts only to a function type"}
