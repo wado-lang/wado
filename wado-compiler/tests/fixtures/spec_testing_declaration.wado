@@ -1,0 +1,84 @@
+// Test declarations: named, unnamed, expect-trap, timeout and synopsis tests.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn length(&self) -> f64 {
+        return f64::sqrt((self.x * self.x + self.y * self.y) as f64);
+    }
+}
+
+fn compute_something() -> i32 {
+    return 1;
+}
+
+fn expensive_computation() -> i32 {
+    let mut sum = 0;
+    for let i of 0..<7 {
+        sum += i * 2;
+    }
+    return sum;
+}
+
+fn process_large_dataset() -> List<i32> {
+    return List::<i32>::filled(100_000, 1);
+}
+
+// Named test
+test "addition works" {
+    assert 1 + 1 == 2;
+}
+
+// Unnamed test
+test {
+    let result = compute_something();
+    assert result > 0;
+}
+
+// Test with multiple assertions
+test "string operations" {
+    let s = "hello";
+    assert s.len() == 5;
+    assert s + " world" == "hello world";
+}
+
+// Expect-trap test: the test passes when the body traps
+#[expect_trap]
+test "panics on bad input" {
+    panic("intentional panic");
+}
+
+#[expect_trap]
+test {
+    unreachable();
+}
+
+// Custom timeout: override the default 5000ms limit
+#[timeout_ms(30000)]
+test "slow computation" {
+    let result = expensive_computation();
+    assert result == 42;
+}
+
+// Synopsis test: runs like any test; `wado doc` renders its body as the
+// module's `## Synopsis` section.
+#[synopsis]
+test {
+    let p = Point { x: 3, y: 4 };
+    assert p.length() == 5.0;
+}
+
+#[expect_trap]
+test "panics on null dereference" {
+    let opt: Option<i32> = null;
+    assert opt.unwrap() == 0;
+}
+
+#[timeout_ms(30000)]
+test "large data processing" {
+    let result = process_large_dataset();
+    assert result.len() > 0;
+}

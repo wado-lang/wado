@@ -6,6 +6,8 @@
 with a message showing the condition's source and the values of its operands,
 as power-assert does.
 
+<!-- {"fixture":"spec_testing_assert.wado"} -->
+
 ```wado
 // If x is not greater than 0, the program will panic, printing x.
 assert x > 0;
@@ -17,6 +19,8 @@ assert x > 0, "x must be checked elsewhere";
 `assert` evaluates its condition exactly as the surrounding code would, so a
 guarded operand never runs when its guard fails. An operand the run did not
 reach is reported as `<not evaluated>`.
+
+<!-- {"fixture":"spec_testing_power_assert.wado"} -->
 
 ```wado
 let list: List<i32> = [1, 2, 3];
@@ -48,6 +52,8 @@ finds and runs them. The runner's flags are described by `wado test --help`.
 
 Tests are declared using the `test` keyword followed by an optional name and a block:
 
+<!-- {"fixture":"spec_testing_declaration.wado"} -->
+
 ```wado
 // Named test
 test "addition works" {
@@ -78,13 +84,6 @@ test {
     unreachable();
 }
 
-// TODO test: marks a test for an unimplemented feature.
-// Reported on a separate axis from pass/fail (see Test Outcome Model).
-#[TODO]
-test "not yet implemented" {
-    panic("TODO: implement this feature");
-}
-
 // Custom timeout: override the default 5000ms limit
 #[timeout_ms(30000)]
 test "slow computation" {
@@ -98,6 +97,16 @@ test "slow computation" {
 test {
     let p = Point { x: 3, y: 4 };
     assert p.length() == 5.0;
+}
+```
+
+A TODO test marks a test for an unimplemented feature:
+
+```wado
+// Reported on a separate axis from pass/fail (see Test Outcome Model).
+#[TODO]
+test "not yet implemented" {
+    panic("TODO: implement this feature");
 }
 ```
 
@@ -130,11 +139,13 @@ The `#[expect_trap]` attribute inverts the pass/fail condition for a test:
 
 This is useful for verifying that invalid operations are correctly rejected at runtime:
 
+<!-- {"fixture":"spec_testing_declaration.wado"} -->
+
 ```wado
 #[expect_trap]
 test "panics on null dereference" {
     let opt: Option<i32> = null;
-    opt.unwrap();
+    assert opt.unwrap() == 0;
 }
 ```
 
@@ -145,6 +156,8 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 #### `#[timeout_ms(N)]` Attribute
 
 The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. This is useful for tests that involve expensive computation or I/O:
+
+<!-- {"fixture":"spec_testing_declaration.wado"} -->
 
 ```wado
 #[timeout_ms(30000)]
@@ -278,9 +291,11 @@ Rationale: [WEP: Test Discovery](./wep-2026-05-02-test-discovery.md).
 
 ### Example Test File
 
+<!-- {"fixture":"spec_testing_math_test.wado"} -->
+
 ```wado
-// math_test.wado
-use {add, multiply} from "./math.wado";
+// spec_testing_math_test.wado
+use {add, multiply} from "./sub/spec_testing_math.wado";
 
 test "add positive numbers" {
     assert add(2, 3) == 5;
