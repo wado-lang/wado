@@ -25,8 +25,7 @@ use {
     lexer_rule_routes,
     lexer_alt_suffix,
     find_fragment,
-    lexer_rule_plan,
-    lexer_fragment_fns,
+    lexer_matcher_plans,
     LexerBodyPlan,
     LexerSeqPlan,
     LexerGroupPlan,
@@ -100,10 +99,11 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
         text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
     };
     o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
+    let plans = lexer_matcher_plans(&ctx.rules, &ctx.routes, &ctx.grammar_opts, &ctx.atn_class);
     for let mut i = 0; i < ctx.rules.len(); i += 1 {
-        render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i]);
+        render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i], &plans.rules[i]);
     }
-    for let frag of &lexer_fragment_fns(&ctx.rules, &ctx.routes, &ctx.grammar_opts, &ctx.atn_class) {
+    for let frag of &plans.fragments {
         let Some(rule) = find_fragment(&ctx.rules, &frag.key.name) else {
             panic("a fragment matcher names no fragment");
         };
@@ -131,11 +131,11 @@ fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
     return out;
 }
 
-fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRuleRoute) {
+fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRuleRoute, plan: &Option<LexerBodyPlan>) {
     o.text.push_str(`rule ${rule.name} — `);
     // An ATN-class rule's matcher is one `latn_match` call: the static
     // strategies below never apply to it.
-    if let Some(idx) = ctx.atn_class.get(rule.name) && route_emits_body(route) {
+    if let Some(idx) = ctx.atn_class.get(rule.name) && route.has_match_fn() {
         o.route_atn += 1;
         o.text.push_str(`ATN-class: latn_match (latn rule ${idx})\n`);
         return;
@@ -144,8 +144,8 @@ fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRu
     o.text.push_str(&route_label(rule, route));
     o.text.push('\n');
 
-    if route_emits_body(route) {
-        walk_rule_body(o, ctx, rule);
+    if let Some(p) = plan {
+        render_body(o, ctx, &rule.body, p, /*top=*/ true);
     }
 }
 
@@ -189,27 +189,9 @@ fn also_matcher_suffix<S: AsStrSlice>(also: bool, try_fn: S) -> String {
     return ` + matcher ${try_fn} (another rule calls it)`;
 }
 
-/// Whether the rule's body is emitted somewhere, so its decisions belong under
-/// this entry. An inlined fragment's are reported at its use sites instead, and
-/// a called one's under each `frag_` matcher.
-fn route_emits_body(route: &LexerRuleRoute) -> bool {
-    return match route {
-        Matcher | RecursiveFragment => true,
-        Virtual | CalledFragment | InlinedFragment | Unreached => false,
-        Keyword(k) => k.also_matcher,
-        SharedLiteral(l) => l.also_matcher,
-        Subsumed(s) => s.also_matcher,
-    };
-}
-
 // ==========================================================================
 // The walk — the plan gen_lexer emits from, rendered
 // ==========================================================================
-
-fn walk_rule_body(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
-    let plan = lexer_rule_plan(rule, &ctx.rules, &ctx.grammar_opts);
-    render_body(o, ctx, &rule.body, &plan, /*top=*/ true);
-}
 
 /// `top` is the rule's own body alternation, reported even out of tail position
 /// — that it cannot take maximal munch is a thing someone asks this dump for.

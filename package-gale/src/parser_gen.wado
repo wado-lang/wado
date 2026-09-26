@@ -43,6 +43,7 @@ use {
     follow_composed,
     follow_forward_args,
     follow_yields_call,
+    follow_yields_call_if,
     follow_yields_call_of,
     rule_kind_const,
     collect_called_names,
@@ -2045,7 +2046,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
     // Stop the scan where the caller's continuation matches, or the tournament
     // picking the calling rule's alt over-counts this Repeat. Inert when
     // `follow` is empty; mirrors the parse side.
-    let caller_follow_gate = if re.gate_caller_follow { follow_yields_call("tokens", "pos") } else { "" };
+    let caller_follow_gate = follow_yields_call_if(re.gate_caller_follow, "tokens", "pos");
 
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
@@ -2054,14 +2055,14 @@ fn gen_scan_op_repeat<S: AsStrSlice>(
         return;
     }
 
+    if scan_takes_optional_probe(re, ctx) {
+        gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
+        return;
+    }
     if let Optional = re.kind {
         // OptionalLookahead doesn't reach this path (it's a
         // ScanElement::OptionalLookahead, not a ScanElement::Repeat).
         let body_is_rulecall = re.body matches { RuleCall(_) };
-        if scan_optional_probe_decides(re, ctx) {
-            gen_scan_optional_probe(w, re, ctx, &caller_follow_gate);
-            return;
-        }
         // Hold a RuleCall body back from what may follow the Optional, so the
         // scan does not eat a token its own suffix needs.
         let excludes_follow = body_is_rulecall && !re.caller_follow_first.is_empty();
@@ -2533,11 +2534,9 @@ fn gen_scan_op_elements<S: AsStrSlice>(
                 };
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                let caller_follow_gate = if re.gate_caller_follow { follow_yields_call("tokens", "pos") } else { "" };
-                gen_scan_optional_probe(w, re, ctx, &caller_follow_gate, &cont_done);
+                gen_scan_optional_probe(w, re, ctx, &follow_yields_call_if(re.gate_caller_follow, "tokens", "pos"), &cont_done);
                 w.begin(`if !${cont_done}`);
-                let rest_known = known_after(se, &k, ctx);
-                gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &rest_known);
+                gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
                 return;
             }
@@ -2554,13 +2553,16 @@ fn probe_scans_rest(se: &ScanElement, scan_elems: &List<ScanElement>, from: i32,
     let Repeat(re) = se else {
         return false;
     };
-    if !re.kind matches { Optional }
-        || admits_is_untestable(&re.inner_admits)
-        || !scan_optional_probe_decides(re, ctx) {
+    if !scan_takes_optional_probe(re, ctx) {
         return false;
     }
     let rest: List<ScanElement> = scan_elems.iter_value().skip(from).take(end - from).collect();
     return re.continuation_scan == rest;
+}
+
+/// Whether an optional's scan runs as a probe of its body and continuation.
+fn scan_takes_optional_probe(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
+    return re.kind matches { Optional } && !admits_is_untestable(&re.inner_admits) && scan_optional_probe_decides(re, ctx);
 }
 
 /// Step over tokens the scan already proved, as one move.
@@ -3789,9 +3791,8 @@ fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String
     w.begin(`${dedup_name("_first_iter", name_counts)}:`);
 }
 
-/// ANTLR4's sync ahead of a decision, calling `method` when the current token
-/// is none the decision expects. Nothing where the rule may end (`expected` null)
-/// or where an enclosing guard already `proven` the token is one it expects.
+/// ANTLR4's sync ahead of a decision, calling `method` on a token it does not
+/// expect. Nothing where the rule may end or a guard `proven` the token expected.
 fn gen_decision_sync<S: AsStrSlice>(
     w: &mut CodeWriter,
     ctx: &mut GenContext,
@@ -6295,7 +6296,7 @@ fn gen_op_repeat_optional_rulecall(
         },
     };
 
-    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call("&p.kinds", "p.pos") } else { "" };
+    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     let proven: List<String> = match &rep_op.body_admits {
         Kinds(kinds) => subtract_sets(kinds, follow),
         _ => [],
@@ -6387,7 +6388,7 @@ fn gen_op_repeat_optional_leaf(
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
-    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call("&p.kinds", "p.pos") } else { "" };
+    let caller_follow_gate = follow_yields_call_if(rep_op.gate_caller_follow, "&p.kinds", "p.pos");
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &repeat_guard_cond(
         &rep_op.body_admits,
         &NO_EXCLUSION,

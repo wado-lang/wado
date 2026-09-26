@@ -101,13 +101,12 @@ pub struct AltBranch {
 }
 
 /// The partition every group decision branches on (invariant 9): one branch per
-/// set of alternatives a lookahead token selects, so a token only one of them
-/// starts dispatches to it without a scan. An open-ended or unresolved empty
-/// alternative is selected by tokens outside its first set, so its overlap
-/// group stays one branch.
+/// set of alternatives a lookahead token selects.
 pub fn decision_partition(classes: &List<AltClass>) -> List<AltBranch> {
     let mut out: List<AltBranch> = [];
     for let group of &compute_overlap_groups_of(classes) {
+        // Tokens outside its first set select an open-ended or unresolved empty
+        // alternative too, so no token split can leave it out.
         let whole = group.len() == 1
             || group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])
                 || alt_class_is_nullable(&classes[*slot]));

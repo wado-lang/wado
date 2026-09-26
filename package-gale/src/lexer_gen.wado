@@ -681,12 +681,13 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     sc_name: S,
 ) {
     check_lexer_calls_resolve(lexer_rules, routes, atn_class);
+    let plans = lexer_matcher_plans(lexer_rules, routes, grammar_opts, atn_class);
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         if routes[i].has_match_fn() {
-            gen_lexer_match_fn(w, &lexer_rules[i], lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
+            gen_lexer_match_fn(w, &lexer_rules[i], &plans.rules[i], lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
     }
-    for let frag of &lexer_fragment_fns(lexer_rules, routes, grammar_opts, atn_class) {
+    for let frag of &plans.fragments {
         gen_lexer_fragment_fn(w, frag, lexer_rules, ea, hm, sc_name);
     }
 }
@@ -1098,10 +1099,8 @@ fn fragment_is_callable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     );
 }
 
-/// Splice into its sequence each single-alternative group or fragment reference
-/// that ends in a contested alternation and has something after it. Sequence is
-/// associative, so the alternation then sees that suffix and scores its arms
-/// against it rather than taking the first one (`lexer_group_emit`).
+/// Rewrite each group or fragment reference hiding a contested alternation from
+/// what follows it, so the alternation scores its arms against that suffix.
 pub fn splice_suffixed_alternations(grammar: &mut Grammar) {
     let rules = grammar.lexer_rules;
     for let rule of &mut grammar.lexer_rules {
@@ -1119,10 +1118,10 @@ fn splice_alt(alt: &mut LexerAlternative, rules: &List<LexerRule>) {
         if i + 1 == alt.elements.len() {
             continue;
         }
-        let Some(inner) = spliceable_seq(&alt.elements[i], rules) else {
+        let Some(inner) = spliced_elements(&alt.elements[i], rules) else {
             continue;
         };
-        let added = inner.elements.len() - 1;
+        let added = inner.len() - 1;
         for let a of &mut alt.actions {
             if a.before_index > i {
                 a.before_index += added;
@@ -1131,7 +1130,7 @@ fn splice_alt(alt: &mut LexerAlternative, rules: &List<LexerRule>) {
         let mut spliced: List<LexerElement> = [];
         for let mut j = 0; j < alt.elements.len(); j += 1 {
             if j == i {
-                spliced.extend(&inner.elements);
+                spliced.extend(&inner);
             } else {
                 spliced.push(alt.elements[j]);
             }
@@ -1154,9 +1153,9 @@ fn splice_within(elem: &mut LexerElement, rules: &List<LexerRule>) {
     }
 }
 
-/// The one action-free alternative `elem` stands for, when it ends in a
-/// contested alternation.
-fn spliceable_seq(elem: &LexerElement, rules: &List<LexerRule>) -> Option<LexerAlternative> {
+/// The elements `elem` stands for in its sequence, when a contested alternation
+/// sits at its end: a single alternative's own, or a fragment body as a group.
+fn spliced_elements(elem: &LexerElement, rules: &List<LexerRule>) -> Option<List<LexerElement>> {
     let body = match elem {
         Group(arms) => *arms,
         RuleRef(name) => match find_fragment(rules, name) {
@@ -1169,11 +1168,13 @@ fn spliceable_seq(elem: &LexerElement, rules: &List<LexerRule>) -> Option<LexerA
             return null;
         },
     };
-    if body.len() != 1 || !body[0].actions.is_empty() {
-        return null;
+    if body.len() == 1 && body[0].actions.is_empty() && seq_ends_contested(&body[0], rules) {
+        return Option::Some(body[0].elements);
     }
-    let seq = body[0];
-    return if seq_ends_contested(&seq, rules) { Option::Some(seq) } else { null };
+    if elem matches { RuleRef(_) } && alts_contested(&body, rules) {
+        return Option::Some([LexerElement::Group(body)]);
+    }
+    return null;
 }
 
 fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
@@ -1181,12 +1182,16 @@ fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
         return false;
     }
     let last = &seq.elements[seq.elements.len() - 1];
-    if let Group(arms) = last && arms.len() >= 2 {
-        // Folded as the widest case folding would, since a splice is only ever
-        // a rewrite to an equal sequence.
-        return lexer_alts_scan(arms, rules) matches { Longest } && lexer_alts_can_collide(arms, rules, true);
+    if let Group(arms) = last && alts_contested(arms, rules) {
+        return true;
     }
-    return spliceable_seq(last, rules) matches { Some(_) };
+    return spliced_elements(last, rules) matches { Some(_) };
+}
+
+fn alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>) -> bool {
+    // Folded as the widest case folding would, since a splice is only ever a
+    // rewrite to an equal sequence.
+    return arms.len() >= 2 && lexer_alts_scan(arms, rules) matches { Longest } && lexer_alts_can_collide(arms, rules, true);
 }
 
 /// Whether a fragment references itself (directly or through another
@@ -1298,6 +1303,7 @@ fn lexer_elem_refs_rule<S: AsStrSlice>(elem: &LexerElement, name: S) -> bool {
 fn gen_lexer_match_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &LexerRule,
+    plan: &Option<LexerBodyPlan>,
     all_rules: &List<LexerRule>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
@@ -1316,8 +1322,10 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
         w.blank();
         return;
     }
-    let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
-    end_lexer_matcher(w, rule, &plan, all_rules, resolve_ci(grammar_opts, &rule.options), ea, hm);
+    let Some(plan) = plan else {
+        unreachable();
+    };
+    end_lexer_matcher(w, rule, plan, all_rules, resolve_ci(grammar_opts, &rule.options), ea, hm);
 }
 
 /// Emit each semantic predicate at position `before` as a guard
@@ -2436,19 +2444,29 @@ pub struct LexerFragmentFn {
     pub plan: LexerBodyPlan,
 }
 
-/// Every `frag_` matcher the emitted `try_` matchers reach, directly or through
-/// another `frag_` matcher, in first-reached order.
-pub fn lexer_fragment_fns(
+/// The plan of each rule whose `try_` body is emitted here, by declaration index,
+/// and every `frag_` matcher those plans reach, in first-reached order.
+pub struct LexerMatcherPlans {
+    pub rules: List<Option<LexerBodyPlan>>,
+    pub fragments: List<LexerFragmentFn>,
+}
+
+pub fn lexer_matcher_plans(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
-) -> List<LexerFragmentFn> {
+) -> LexerMatcherPlans {
+    let mut rules: List<Option<LexerBodyPlan>> = [];
     let mut keys: List<LexerFragmentKey> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let rule = &lexer_rules[i];
         if emits_static_matcher(&routes[i], rule, atn_class) {
-            collect_body_calls(&lexer_rule_plan(rule, lexer_rules, grammar_opts), &mut keys);
+            let plan = lexer_rule_plan(rule, lexer_rules, grammar_opts);
+            collect_body_calls(&plan, &mut keys);
+            rules.push(Option::Some(plan));
+        } else {
+            rules.push(null);
         }
     }
     let mut out: List<LexerFragmentFn> = [];
@@ -2461,7 +2479,7 @@ pub fn lexer_fragment_fns(
         collect_body_calls(&plan, &mut keys);
         out.push(LexerFragmentFn { key, plan });
     }
-    return out;
+    return LexerMatcherPlans { rules, fragments: out };
 }
 
 fn collect_body_calls(plan: &LexerBodyPlan, out: &mut List<LexerFragmentKey>) {
@@ -3211,7 +3229,12 @@ fn add_second_chars(
         CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, ci, acc),
         Group(alts) => add_alts_second_chars(&alts, &rest, all_rules, ci, budget, acc),
         RuleRef(name) => match find_lexer_rule(all_rules, &name) {
-            Some(r) => add_alts_second_chars(&r.body, &rest, all_rules, ci, budget, acc),
+            // A rule its own `try_` matches folds case its own way, so it is read
+            // folded, as `lexer_elem_leading_chars` reads it.
+            Some(r) => {
+                let folds_own_way = !r.is_fragment || fragment_is_recursive(r, all_rules);
+                add_alts_second_chars(&r.body, &rest, all_rules, ci || folds_own_way, budget, acc);
+            },
             None => false,
         },
         Repeat(rep) => {
@@ -5406,9 +5429,8 @@ fn gen_second_char_dispatch(
     gen_group_calls(w, calls, &trailing, needs_extras, has_actions, has_members);
 }
 
-/// A partition of the second char among `members`, each arm keeping grammar
-/// order. A call whose second char is unknown, or that can end after the first,
-/// is in every arm; the `_` arm holds only those.
+/// A partition of the second char among `members`, each arm in grammar order.
+/// The `_` arm holds the calls `second_char_admits` places in every arm.
 fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<DispatchGroup> {
     let mut cuts = TreeSet::<i32>::new();
     for let m of members {
@@ -5910,20 +5932,20 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
 
 /// `TOKEN_NAMES`, ANTLR4's `Vocabulary.getDisplayName` by kind, which `<missing X>`
 /// reads: a rule whose whole body is one literal shows as that literal.
-pub fn gen_token_names_global(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, num_kinds: i32) {
-    w.begin("fn _token_names() -> List<String>");
-    w.line(`let mut v: List<String> = List::with_capacity(${num_kinds});`);
-    w.begin(`for let mut k = 0; k < ${num_kinds}; k += 1`);
-    w.line("v.push(token_kind_name(k));");
-    w.end();
-    for let rule of lexer_rules {
-        if let Some(text) = lexer_alias_text(rule) {
-            w.line(wado`v[TK_${rule.name}] = "${lit_name(text)}";`);
-        }
+pub fn gen_token_names_global(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
+    let mut names: List<String> = [];
+    for let slot of &token_slot_order(lexer_rules, lit_tokens) {
+        let name = match *slot {
+            Rule(ri) => match lexer_alias_text(&lexer_rules[ri]) {
+                Some(text) => `${lit_name(text)}`,
+                None => lexer_rules[ri].name,
+            },
+            Eof => "Eof",
+            Error => "Error",
+            Lit(li) => `${lit_name(lit_tokens[li].text)}`,
+        };
+        names.push(wado`"${name}"`);
     }
-    w.line("return v;");
-    w.end();
-    w.blank();
-    w.line("global TOKEN_NAMES: List<String> = _token_names();");
+    w.line(`global TOKEN_NAMES: List<String> = [${names.join(", ")}];`);
     w.blank();
 }

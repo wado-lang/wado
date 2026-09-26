@@ -31,3 +31,7 @@ J : . ;
 E : F 'h' ;
 fragment F : 'x' ('y' | 'yz') ;
 G : ('g' ('i' | 'ik')) 'l' ;
+
+// A fragment whose whole body is the alternation: the caller supplies the suffix.
+K : W 'v' ;
+fragment W : 'w' | 'wv' ;

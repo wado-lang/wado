@@ -270,10 +270,10 @@ B : 'b' ;");
 }
 
 test "lexer dump separates called, inlined and recursive fragments" {
-    // `NEST` references itself, so it keeps a matcher. `AB` gets a `frag_`
-    // matcher, and one in tail position too, since there its alternation takes
-    // maximal munch. `P` carries a predicate, so it is inlined and reported
-    // under the `P › ` prefix.
+    // `NEST` references itself, so it keeps a matcher. `AB` in tail position
+    // gets a `frag_tail_` matcher, and before a suffix becomes a group scored
+    // against it. Both uses of `CD` share one matcher, and `P` carries a
+    // predicate, so it is inlined.
     let report = lexer_dump("grammar T;
 r : N ;
 N : NEST ;
@@ -281,16 +281,20 @@ fragment NEST : '(' NEST* ')' ;
 fragment AB : 'a' | 'ab' ;
 X : AB ;
 Y : AB 'c' ;
+fragment CD : 'c' 'd' ;
+Z : CD ;
+W : CD 'e' ;
 fragment P : {true}? 'p' | 'pq' ;
 PP : P ;");
 
     assert report.contains("rule NEST — recursive fragment: matcher try_NEST"), report;
     assert report.contains("rule AB — fragment: a frag_ matcher per use context"), report;
     assert report.contains("fragment matcher frag_tail_AB\n  alternation ('a' | 'ab') — maximal munch"), report;
-    assert report.contains("fragment matcher frag_AB\n  alternation ('a' | 'ab') — first-match: not in tail"), report;
+    assert report.contains("rule Y — matcher try_Y\n  alternation ('a' | 'ab') then 'c' — arm scoring"), report;
+    assert report.contains("fragment matcher frag_CD\n"), report;
     assert report.contains("rule P — fragment: inlined at each use site"), report;
     assert report.contains("  P › alternation ('p' | 'pq')"), report;
-    assert report.contains("called fragment 1 (2 frag_ matchers), inlined fragment 1, recursive fragment 1"), report;
+    assert report.contains("called fragment 2 (2 frag_ matchers), inlined fragment 1, recursive fragment 1"), report;
 }
 
 test "lexer dump reports a tokens-block entry as a virtual token" {
