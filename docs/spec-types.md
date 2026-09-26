@@ -42,10 +42,56 @@ bool
 char
 ```
 
-`f16` and `bf16` hold a value but do no arithmetic, and `as` does not cast them.
-`to_bits` / `from_bits` reach the bits, and `From` / `TryFrom` / `from_f32`
-convert the value. A comparison widens both operands to `f32` and compares
-those. See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+### Half Precision (`f16`, `bf16`)
+
+`f16` is IEEE 754 binary16. `bf16` is bfloat16: `f32`'s exponent range with an
+8-bit significand. Both are storage types. They hold a value and do no
+arithmetic:
+
+- No arithmetic or bitwise operator applies to either, unary `-` included.
+- `as` does not convert them in either direction (see
+  [Type Cast](./spec-lexical.md#type-cast-as)). The error names the method to
+  write instead.
+- A numeric literal coerces to either type and is rounded once (see
+  [Type coercion](./spec-literals.md#type-coercion-1)).
+- A comparison widens both operands to `f32` and compares those, so `<` is
+  IEEE and `Ord` is the total order (see
+  [Ord](./spec-traits.md#ord---ordering)).
+- Neither type crosses a component boundary (see
+  [Type Mapping](./spec-components.md#type-mapping-at-component-boundaries)).
+
+Values convert through methods and the conversion traits:
+
+```wado
+let one = f16::from_bits(0x3C00);   // 1.0; `one.to_bits()` is 0x3C00 again
+let wide = f32::from(one);          // exact; `f64::from` too
+let near = f16::from_f32(0.1);      // rounds to the nearest f16
+let same = f16::try_from(wide);     // Ok: 1.0 survives the round trip
+```
+
+- `to_bits` and `from_bits` read and write the 16 bits as a `u16`.
+- `From<f16>` and `From<bf16>` are implemented for `f32` and `f64`. Widening is
+  exact.
+- `from_f32` and `from_f64` narrow. They round once, to nearest with ties to
+  even. A value that rounds past the largest finite one becomes an infinity.
+- `TryFrom<f32>` and `TryFrom<f64>` answer `Ok` only where the value survives the
+  round trip, a NaN included. Otherwise they answer `Err(ConvertError)`.
+- `from_str` rounds the decimal text once, as a literal is rounded. Text that
+  rounds past the largest finite value parses to an infinity. `from_str_lenient` takes the
+  spellings `LenientFromStr` accepts.
+- There is no conversion between `f16` and `bf16`, because each keeps something
+  the other drops: `f16` has the shorter exponent range, `bf16` the shorter
+  significand. Widen to `f32` and narrow again.
+
+Both types carry `f32`'s associated constants under the same names (`MAX`,
+`MIN`, `MIN_POSITIVE`, `EPSILON`, `INFINITY`, `NAN`, `MANTISSA_DIGITS`, …) and
+`is_nan`.
+
+`${x}` prints the value widened to `f32`, so every format specifier applies.
+`${x:?}` prints it in exponent notation: `1e0`. `Serialize` writes the widened
+`f32`. `Deserialize` rounds the number it reads once, straight to the half.
+
+Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
 ## Associated Constants
 
@@ -102,8 +148,6 @@ Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u
 
 ## SIMD Types (v128)
 
-See [WEP: SIMD v128](./wep-2026-01-31-simd-v128.md) for full design and rationale.
-
 Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive type `v128` represents a 128-bit vector, with 10 newtype aliases providing type-safe interpretations:
 
 | Category | Types                              |
@@ -130,7 +174,26 @@ let sum = v + w;                   // [11, 12, 13, 14]
 let mask = v.lt(&w);              // per-lane comparison mask
 ```
 
-Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u` and `sub_sat_s/u` on signed types, `add_sat` and `sub_sat` on unsigned ones), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. See the `core:simd` module documentation for the full API.
+`v128` itself takes no arithmetic, bitwise or shift operator. The lane types
+carry those, and each works lane by lane. A shift takes one `u32` count and shifts every lane by
+it.
+
+The comparison methods (`eq`, `ne`, `lt`, `le`, `gt`, `ge`) answer a mask of
+the same lane type: each lane is all ones where the comparison holds and all
+zeros where it does not. `bitselect` takes such a mask.
+
+`==` and `!=` are not lane-wise. They compare all 128 bits and answer one
+`bool`, on `v128` and every lane type alike. Every lane type is the same `v128`,
+so there is no lane reading to defer to. A NaN lane therefore equals itself,
+and a `0.0` lane differs from a `-0.0` lane. Use `eq` for the IEEE reading.
+
+```wado
+let nan = f32x4::splat(f32::NAN);
+assert nan == nan;                  // the bits are equal
+let mask = nan.eq(&nan);            // every lane zero: IEEE says NaN != NaN
+```
+
+Beyond basic arithmetic and comparison, types provide specialized operations: saturating arithmetic (`add_sat_s/u` and `sub_sat_s/u` on signed types, `add_sat` and `sub_sat` on unsigned ones), lane narrowing/extension, extended multiplication, pairwise addition, type conversion between integer and float, and bit selection. Where an input is out of range, the strict operations are defined: `trunc_sat_*` saturates, and `swizzle` gives a zero lane for an index past the last lane. See [`core:simd`](./stdlib-core-simd.md) for the full API.
 
 ### Relaxed SIMD
 
@@ -144,7 +207,9 @@ Relaxed SIMD operations trade strict determinism for performance. Edge-case beha
 - Dot product: `i16x8.relaxed_dot_i8x16_i7x16_s`, `i32x4::relaxed_dot_i8x16_i7x16_add_s(a, b, &c)`
 - Q15 multiply: `i16x8.relaxed_q15mulr_s`
 
-Relaxed SIMD is not modeled as an effect because: (1) results are deterministic within an environment, (2) hardware behavior cannot be intercepted, and (3) standard floats already have similar NaN non-determinism.
+A relaxed method is an ordinary method. Calling one declares no effect.
+
+Rationale: [WEP: SIMD v128 Types](./wep-2026-01-31-simd-v128.md).
 
 ## String Type
 
@@ -244,11 +309,11 @@ s += " world";     // s = s + " world"
 s += "!";
 ```
 
-See `docs/wep-2026-01-15-string-type-design.md` for design rationale.
+Rationale: [WEP: String Type Design](./wep-2026-01-15-string-type-design.md).
 
 ## Newtype
 
-`type T = U` creates a newtype: a distinct type with the same values as its base type. See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
+`type T = U` creates a newtype: a distinct type with the same values as its base type.
 
 ```wado
 type Meters = f64;
@@ -275,7 +340,11 @@ A newtype does not carry an invariant of its own. `as` converts in both
 directions at no cost, so `T` admits exactly what `U` admits. An invariant the
 base type does not enforce, such as UTF-8 in a byte view, belongs in a `struct`
 with a private field and a checked constructor, where the check is the only way
-in.
+in. So does a type that must hide its base type's methods:
+
+```wado
+struct Miles { value: i32 }
+```
 
 ### Method Signature Substitution
 
@@ -293,6 +362,31 @@ let loc2: Location = Point { x: 3, y: 4 } as Location;
 loc1.distance(&loc2);  // params expect &Location, returns f64
 ```
 
+Every occurrence of the base type in the signature is substituted: the
+receiver, each parameter, and the return type, including inside a generic
+argument. A method returning `Option<Point>` or `List<Point>` returns
+`Option<Location>` or `List<Location>` on a `Location`. An argument of the base
+type where the substituted signature expects the newtype is a type mismatch:
+`loc1.distance(&Point { x: 0, y: 0 })` is an error.
+
+### Inherited Associated Functions and Traits
+
+A newtype inherits its base type's associated functions too. A function whose
+return type is the base type returns the newtype, and the base's type arguments
+settle the call, so it needs no turbofish:
+
+```wado
+type ByteList = List<u8>;
+
+let mut b = ByteList::with_capacity(16);   // b: ByteList
+b.push(0xff);
+```
+
+A newtype implements every trait its base implements. It satisfies a bound
+the base satisfies (`fn max<T: Ord>(a: T, b: T)` takes two `Meters`). `for-of`
+iterates it as it iterates the base, by value and through `&`, and `collect()`
+builds it wherever it builds the base (`let b: ByteList = s.bytes().collect()`).
+
 ### Newtype-Specific Methods
 
 ```wado
@@ -301,7 +395,15 @@ impl Location {
 }
 ```
 
-### Chained Newtypes
+A trait impl written for the newtype wins over the one it inherits from the
+base. See [The Order](./spec-traits.md#the-order).
+
+### Casts
+
+`as` converts between a newtype and its base in both directions, between two
+newtypes over the same base, and through a chain of newtypes in one step. A
+reference casts the same way: `&Meters as &f64`. A generic newtype casts to and
+from its base instantiation.
 
 ```wado
 type A = i32;
@@ -311,13 +413,17 @@ type C = B;
 let c: C = 1;
 let a = c as A;    // OK: direct cast through chain
 let i = c as i32;  // OK: direct cast to ultimate base
+
+type Wrapper<T> = List<T>;
+let w = [1] as Wrapper<i32>;
+let l = w as List<i32>;    // OK
 ```
 
-For complete type isolation where you want to hide base type methods, use a struct wrapper:
+`as` does not reach a newtype nested inside another type. `List<Meters>` does
+not cast to `List<f64>`, `Option<Meters>` does not cast to `Option<f64>`, and
+`fn(Meters)` does not cast to `fn(f64)`.
 
-```wado
-struct Miles { value: i32 }
-```
+Rationale: [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ## Structs
 
@@ -378,7 +484,16 @@ The spread is leading and single: a field written before it would be overwritten
 and unused, so `User { age: 31, ..user }`, a second spread, and a bare
 `User { ..user }` (a plain copy) are all errors. A `..base` cannot read a field
 that is not reachable at the use site, so it never exposes a private field across
-a module boundary. See [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+a module boundary.
+
+`base` must have the literal's own type, which an implicit literal takes from
+its expected type (`let u: User = { ..user, age: 31 }`). Its type arguments take
+part in inference like an explicit field. An override cannot change one, so with
+`b: Box<i32>`, `Box { ..b, value: "s" }` is a type mismatch. The members are
+evaluated once each, in source order, so `base` comes first. An override may
+repeat the value `base` already holds.
+
+Rationale: [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
 
 ### Struct Destructuring
 
@@ -421,8 +536,6 @@ Variants derive `Eq` only (not `Ord`) the same on-demand way, when all payload t
 
 ### Struct Field Defaults
 
-See [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
-
 Struct fields may declare a default expression with `= expr`. Fields with defaults may be omitted at construction sites; fields without defaults are required:
 
 ```wado
@@ -442,9 +555,32 @@ let c = ServerConfig { host: "localhost", port: 3000 };
 ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 ```
 
-Default expressions are evaluated at the construction site. They must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults.
+Default expressions are evaluated at the construction site. They must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults. A literal may omit every field that has a default, down to `ServerConfig {}` where all of them do.
 
-A non-generic struct whose every field has a default auto-derives `Default`. A fieldless struct has no field to default, so it qualifies. See [Default Trait](./spec-traits.md#default-trait).
+A default resolves its names in the module that declares the struct, not where
+the literal is written. It may name that module's private items, its import
+aliases, and a type or variant case the constructing module never imports.
+Nothing the constructing module declares, imports, or binds changes what an
+omitted field evaluates to.
+
+A default may name the struct's own type parameters. Each literal settles them
+first, from a turbofish, its annotation, or the fields it lists, and the default
+is evaluated at those types:
+
+```wado
+struct Holder<T: Default> { a: T, b: T = T::default() }
+
+let h: Holder<String> = { a: "x" };   // b is ""
+let s = Holder { a: 5 };              // T = i32 from `a`, so b is 0
+```
+
+A field with a default is optional in deserialization too: when the input
+leaves the field out, it takes its default.
+
+Whether a struct derives `Default` from its field defaults is stated in
+[Auto-Derivation](./spec-traits.md#auto-derivation).
+
+Rationale: [WEP: Default Arguments](./wep-2026-04-11-default-arguments.md).
 
 ## Generic Type Inference
 
@@ -706,4 +842,9 @@ pub flags PathFlags {
 
 Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
 
----
+## Known gaps
+
+`as` converts between function types that differ only by a newtype in their
+signatures: `g as fn(Meters) -> Meters` compiles for `g: fn(f64) -> f64`.
+[Casts](#casts) refuses it, as it refuses `List<Meters>` to `List<f64>`. So a
+function value can be retyped to take and return a newtype it never declared.
