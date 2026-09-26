@@ -5905,10 +5905,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        if self
-            .tysys
-            .compares_handles(op, left.type_id, right.type_id)
-        {
+        if self.tysys.compares_handles(op, left.type_id, right.type_id) {
             return handle_comparison(op, left, right, span);
         }
         TirExpr::new(
@@ -10640,9 +10637,8 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
 }
 
 /// Map an AST [`ast::BinaryOp`] to its TIR counterpart. The mapping is
-/// 1:1 for the source-level ops; TIR adds `RefEq` / `RefNotEq` as
-/// internal variants that the elaborator only synthesises after
-/// coercion analysis, so reify never produces them from this helper.
+/// 1:1 for the source-level ops; TIR adds `RefNotEq` as an internal
+/// variant that lowering synthesises, so this helper never produces it.
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
     match op {
         ast::BinaryOp::Add => TirBinaryOp::Add,

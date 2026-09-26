@@ -888,9 +888,9 @@ impl SolverBridge {
         }
         // A reference is itself the thing a `Ref` bound asks for.
         let holds_of_a_reference: Vec<DefId> = [CompilerItem::Ref, CompilerItem::RefMut]
-                .into_iter()
-                .filter_map(|item| tysys.compiler_trait_def(item))
-                .collect();
+            .into_iter()
+            .filter_map(|item| tysys.compiler_trait_def(item))
+            .collect();
         for (&trait_, header) in &tysys.trait_env.trait_decl_headers {
             let defaults: Vec<Option<ArgDefault>> = header
                 .type_params
