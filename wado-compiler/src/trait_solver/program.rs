@@ -223,7 +223,7 @@ pub enum RefRule {
     /// `&T` holds the bound when `T` does, by auto-deref at the call.
     #[default]
     Inherits,
-    /// `&T` holds it of itself — `Eq`, which compares references by identity.
+    /// `&T` holds it of itself: the `Ref` / `RefMut` markers.
     Always,
     /// `&T` never inherits it: `Ord`, or a trait whose receiverless method
     /// names `Self`.

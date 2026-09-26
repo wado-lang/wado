@@ -28,9 +28,17 @@ The table below is the Wado↔CM correspondence, read in both directions: Wado�
 | `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
 | `Future<T>`               | `future<T>`               | Component Model async future                                                               |
 
-`f16` and `bf16` have no Component Model type, so they do not cross a component
-boundary. An `export fn` whose signature names either one is a compile error.
-See [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+For function types, see [Component Model Callbacks](./spec-functions.md#component-model-callbacks).
+
+`f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
+`v128` have no Component Model type, so they do not cross a component boundary.
+Neither does a SIMD lane type such as `f32x4`, since each is a newtype over
+`v128`. An `export fn` whose signature names any of them is a compile error.
+Every `export fn` is checked, not only a world's entry point, because each one
+lands on the component's surface. A component that carries half precision data
+exports its bits, as a `List<u16>`.
+
+Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
 ## Concurrency Model
 
@@ -60,10 +68,26 @@ fn fetch(req: Request) -> Result<Response, ErrorCode> with Client {
 ```
 
 An `AsyncCall<T>` is used once: after `wait` or `cancel` it must not be touched
-again. A handler for an async operation resumes with the `T` itself, and the
-caller's `.wait()` returns it at once. See
-[WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md) and
-[WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
+again. `join` only registers the call with the set, so the caller still owes the
+`wait` or `cancel` that ends it.
+
+#### Handling an Async Operation
+
+A [handler](./spec-effects.md#handlers) implements an async operation that a
+Component Model import declares as a plain `fn` that returns `T` and resumes
+with a `T`. The caller still receives an
+`AsyncCall<T>`, one that has already completed, so its `.wait()` returns the
+value at once.
+
+```wado
+impl Client for MockClient {
+    fn send(&mut self, request: Request) -> Result<Response, ErrorCode> {
+        resume Result::<Response, ErrorCode>::Ok(canned_response());
+    }
+}
+```
+
+Rationale: [WEP: Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md).
 
 ### Async Exports
 
@@ -95,7 +119,7 @@ This distinction is not part of the Component Model specification, which treats 
 
 ### World Declaration
 
-A world imports whole interfaces and exports interfaces or functions:
+A world imports whole interfaces, as a WIT world does, and exports interfaces or functions:
 
 ```wado
 #[cm("example:app/plugin@0.1.0")]
@@ -109,11 +133,9 @@ pub world Plugin {
 }
 ```
 
-- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version.
+- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version, and an export takes its signatures from the interface.
 - `export [async] fn name(...) -> T;` exports a freestanding function. `async` marks an export that maps to a WIT `async func`.
 - `#[cm("namespace:package/world@version")]` on the world gives its Component Model name.
-
-A package's `wado.toml` maps each hosted world it targets to an entry file in its `[world]` table, and `[package].lib` names the entry of its library world. See [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
 
 ### WASI CLI World Example
 
@@ -155,27 +177,36 @@ export fn run() with Stdout {
 
 ### Selecting a World
 
-A program does not name its world in source. The `--world` option of `wado compile` selects it, or the `[world]` table of `wado.toml` maps each world to its entry file. Without either, `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve` targets `wasi:http/service`.
+A program does not name its world in source. The package's `wado.toml` maps each world it targets to an entry module, or the `--world` option of `wado compile` selects the world for a single file. Without either, `wado compile` and `wado run` target `wasi:cli/command`, and `wado serve` targets `wasi:http/service`.
 
-A package may target several worlds, one entry file each:
+The manifest declares worlds in two places:
+
+- The `[world]` table maps a hosted world, keyed by its fully qualified Component Model name, to its entry file. The path is relative to `wado.toml`.
+- `[package].lib` names the entry module of the package's library world.
+
+A package declares at least one world, and may declare several:
 
 ```toml
+[package]
+namespace = "acme"
+name = "markdown"
+version = "0.1.0"
+lib = "src/lib.wado"
+
 [world]
 "wasi:cli/command" = "src/cli.wado"
 "wasi:http/service" = "src/server.wado"
 ```
 
-### Design Notes
+A hosted world's entry module exports the entry point that world requires (see [Entry Points](#entry-points)). The library world requires none: every `export` item of its entry module becomes part of an interface named after the package, `<namespace>:<name>/<name>@<version>`. A library world therefore needs `[package].namespace` to be built. The world itself is named `root`, so no package may take that name, in any letter case.
 
-- Interface imports: a world imports whole interfaces, as a WIT world does.
-- Versions: the `#[cm(...)]` of each interface and of the world carries its version (`@0.3.0`).
-- Exports: an interface export takes its signatures from the interface. A function export spells its own.
+A dependency is imported through its library world's entry module, the file its `[package].lib` names. A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
+
+Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
 
 ## WASI / Browser Support
 
 Wado targets WASI Preview 3 (0.3.0), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
-
-All Wado types map directly to Component Model (WIT) types. See the [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries) table in the Type System section for the complete mapping reference.
 
 ### WASI P3 CLI Interfaces
 
@@ -204,7 +235,7 @@ Each hosted world defines its entry point:
 
 ### `task return` Statement
 
-`task return expr;` is a statement valid only inside `export async fn` bodies. It calls the Component Model `task.return` instruction, delivering the function's result to the CM runtime without terminating the Wasm function. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
+`task return expr;` is a statement that calls the Component Model `task.return` instruction, delivering the function's result without terminating the Wasm function. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
 
 #### Motivation
 
@@ -224,11 +255,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 #### Rules
 
 - `task return` is only valid inside `export async fn` bodies.
-- An `export async fn` body must carry a `task return`. One that carries none can never deliver, so every call of it would reach the boundary with the task unfinished; the compiler rejects it instead. A body whose every path provably exits first (`panic`, an endless loop) has no delivery to make and is exempt.
+- An `export async fn` body must carry a `task return`, because a body without one could never deliver its result. A body whose every path provably exits first (`panic`, an endless loop) has no result to deliver and is exempt.
 - Whether a `task return` under a branch is reached is not checked. A path that misses it traps at the boundary, the same as a declared result the body never binds.
 - Regular `return` is forbidden in `async fn` bodies. It would exit the Wasm function without notifying the CM runtime.
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
-- `task return` names the function's result, and where it goes depends on who entered the function. The Component Model runtime receives it when the export binding did; a Wado caller receives it as an ordinary return value.
+- `task return` delivers the result to the function's caller. A call through the component boundary delivers it to the Component Model runtime, and a Wado caller receives it as an ordinary return value.
 - The `async` of an `export async fn` asks nothing of a Wado call site, which calls it as any other function. It selects the CM async calling convention at the component boundary.
 
 ### Attribute Syntax for Component Model Linking
@@ -263,15 +294,80 @@ pub enum ErrorCode {
 
 #### Resource linearity
 
-A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`.
+A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`, and a resource without `#[cm(...)]` is affine.
 
-An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
+An affine resource is move-only and carries a drop obligation (see [Resource Ownership](#resource-ownership)). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets. `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one.
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain `f64` the host interprets (see [Handle Encoding](#handle-encoding)). `as` converts an unrestricted handle to or from `f64`, keeping every bit, or upcasts it to a resource it extends. No other cast accepts one, so an affine resource and an unrestricted one never convert into each other.
+
+An unrestricted resource is not a Component Model `resource`. Its operations are plain CM functions that take the handle as an ordinary parameter, so a `#[cm(...)]` name written in the `[constructor]T`, `[method]T.m` or `[static]T.m` form is an error on one. `classes = "..."` (see [Resource Inheritance](#resource-inheritance)) is accepted only beside `linearity = "unrestricted"`.
+
+### Resource Ownership
+
+An affine resource is move-only. Assigning it, passing it by value, returning it, placing it in an aggregate, and calling a method that takes `self` by value each move it. Using a binding after it has moved is a compile error.
+
+```wado
+pub resource Counter {
+    fn bump(&self);
+    fn consume(self);
+}
+
+fn eat(c: Counter) { ... }
+
+fn misuse(c: Counter, d: Counter) {
+    eat(c);          // moves `c`
+    c.bump();        // ERROR: resource `c` used after it was moved
+    d.consume();     // a by-value `self` moves `d` too
+}
+```
+
+The check follows control flow. A move on one branch of an `if` or `match` counts after the branches meet, unless that branch diverges. A move inside a loop body is a use after move on the next iteration. A new `let` of the name, or an assignment to it, makes it usable again.
+
+A value that holds an affine resource, directly or through a field, element or payload, is move-only in the same way. It moves as a whole: a resource is not moved out of it on its own, so a consuming method (below) is how one is taken out.
+
+A method consumes a resource through a bare `self` receiver, and borrows it through `&self` or `&mut self` (see [Method Receiver: `self` by Value](./spec-memory.md#method-receiver-self-by-value)). `Option` and `Result` take `self` by value in `unwrap`, `expect`, `unwrap_or`, `unwrap_err` and `expect_err`, so extracting a resource consumes the container and leaves the resource with one owner.
+
+#### No Move Out of a Borrow
+
+Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A borrow leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the borrowed value, and a `let` bound from any of these. A resource the function produces itself may be returned.
+
+```wado
+struct Holder { f: Fields }
+
+impl Holder {
+    fn peek(&self) -> Fields {
+        return self.f;       // ERROR: cannot move resource `Fields` out of a borrow
+    }
+
+    fn into_fields(self) -> Fields {
+        return self.f;       // OK: the holder is consumed
+    }
+}
+```
+
+#### Drop
+
+An owned resource that has not moved is dropped when its scope ends, on every path out of it. A move suppresses that drop, so each handle is dropped exactly once. An imported resource drops through the Component Model's `resource.drop`. A value holding resources drops each of them, a struct's fields in declaration order. A resource value discarded as a statement (`Fields::new();`, `let _ = ...`) is dropped there.
+
+A resource's `fn drop(self)` consumes its receiver, so the scope does not drop it again, and a use after it is a use after move.
+
+A panic does not unwind, so it runs no drops.
+
+#### Handles at the Boundary
+
+| Wado position                                      | CM handle                           |
+| -------------------------------------------------- | ----------------------------------- |
+| By-value `R` parameter or result                   | `own<R>`                            |
+| `&R` or `&mut R` parameter, `&self` or `&mut self` | `borrow<R>`                         |
+| Bare `self` receiver                               | `own<R>`, transferring the receiver |
+
+A reference crosses a Component Model import only as a borrowed resource handle. An import taking any other reference, such as `&String`, is a compile error.
+
+Rationale: [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. The clause stands between the resource's name and its body, and names one resource as the parent. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
 #[cm("example:ui/target", linearity = "unrestricted", classes = "0..=1")]
@@ -292,17 +388,53 @@ fn use_it(w: Widget) {
 }
 ```
 
-Rules:
+A generic resource takes no part in `extends`, on either side.
 
-- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
-- Narrowing back to a child is never implicit. It is written as a type pattern (below), which tests the class the host tagged the handle with.
-- `classes = "lo..=hi"` numbers those classes: a resource's own is `lo`, and the resources extending it hold the rest. A child's range lies inside its parent's, above the parent's own class. Sibling ranges do not overlap, and an `extends` tree declares `classes` on every resource or on none. A type pattern narrows only to a resource that declares them.
-- `==` and `!=` compare two handles when one type extends the other. The host hands out one handle per object, so equal handles name one object. Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`. An unrestricted resource is `Eq`, so a type holding one derives `Eq` too. There is no ordering.
-- A child may not redeclare a method it inherits. A name reachable through both the chain and a trait impl is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
-- Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
-- A generic resource takes no part in `extends`.
+#### Subtyping
 
-See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and its known gaps.
+`extends` induces `Child <: Parent`. The relation is reflexive and transitive, and resources `extends` does not relate are incomparable.
+
+- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet.
+- A type parameter is solved to the most specific type, and the upcast happens later, at a use. So a constructor's payload is not upcast: `Option::Some(el)` against `Option<Node>` is an `Option<Element>`, and is written `Option::Some(el as Node)`.
+- `&mut T` is invariant, and so is every generic type, a tuple's elements, and a struct's fields. A write through any of them could install a parent where a child is required. There is no variance annotation.
+- A function type is invariant in its parameters and its result.
+- Narrowing back to a child is never implicit. It is written as a [type pattern](#type-patterns).
+
+```wado
+let r: Option<HtmlInputElement> = ...;
+let n: Option<Node> = r;                    // ERROR: Option is invariant
+let n: Option<Node> = r.map(|el| el as Node);  // OK: each element is upcast
+```
+
+#### Methods
+
+A method call resolves statically. `recv.m()` gathers every `m` declared along `recv`'s `extends` chain and every `m` of a trait impl that applies to it. None is an error, and one resolves the call, upcasting the receiver to the resource that declares it. Two or more is ambiguous: write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
+
+- A child may not redeclare a method it inherits.
+- Static methods (no `&self`) are not inherited.
+- `Self` in an inherited method names the resource that declares it, not the receiver's type.
+
+#### Handle Encoding
+
+An unrestricted handle is a number the host mints: an integer-valued `f64` below 2^53, equal to `class * 2^37 + index`. The class takes 16 bits and the index into the host's object table takes 37. The host hands out one handle per object, and tags each object with the class of the nearest ancestor of its runtime type that the program declares. A type the program does not name therefore reads as its nearest named ancestor.
+
+`classes = "lo..=hi"` on the `#[cm(...)]` numbers the classes of an `extends` tree. A resource's own class is `lo`, and the resources extending it hold the rest of the range:
+
+- A child's range lies inside its parent's, above the parent's own class.
+- Sibling ranges do not overlap.
+- A tree declares `classes` on every resource or on none.
+- A range may leave gaps, which stand for classes the program does not declare.
+
+A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s range. A negative value, an infinity and a NaN lie in no range. A type pattern narrows only to a resource that declares `classes`.
+
+#### Traits on Handles
+
+- `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object (see [Handle Encoding](#handle-encoding)). Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
+- `Ord`: none. Handles have no order.
+- `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
+- `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.
+
+Rationale: [WEP: Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
 
 ### Type Patterns
 
@@ -336,4 +468,4 @@ A type match over resources always needs a final `_` arm, because the host may h
 
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
-This is not [`match type`](./wep-2026-09-05-total-reflection.md), which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
+A type pattern narrows a value at runtime, unlike `match type`, which narrows a type parameter at compile time, is exhaustive, and takes no `_`.

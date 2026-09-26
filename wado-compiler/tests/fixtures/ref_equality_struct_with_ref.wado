@@ -1,4 +1,4 @@
-// Struct containing reference fields: struct-level Eq compares refs by identity (ref.eq)
+// A struct's derived `Eq` compares a reference field by the value it points to.
 struct Inner {
     value: i32,
 }
@@ -15,12 +15,20 @@ test "struct eq with same ref field" {
     assert c1 == c2;
 }
 
-test "struct neq with different ref field" {
+test "struct eq with equal values behind different refs" {
     let inner1 = Inner { value: 42 };
     let inner2 = Inner { value: 42 };
     let c1 = Container { name: "a", data: &inner1 };
     let c2 = Container { name: "a", data: &inner2 };
-    // Same values but different references → not equal
+    assert c1 == c2;
+    assert !ref_eq(c1.data, c2.data);
+}
+
+test "struct neq with different values behind refs" {
+    let inner1 = Inner { value: 42 };
+    let inner2 = Inner { value: 43 };
+    let c1 = Container { name: "a", data: &inner1 };
+    let c2 = Container { name: "a", data: &inner2 };
     assert c1 != c2;
 }
 
@@ -29,11 +37,4 @@ test "struct neq with different name same ref" {
     let c1 = Container { name: "a", data: &inner };
     let c2 = Container { name: "b", data: &inner };
     assert c1 != c2;
-}
-
-test "struct with mut ref field" {
-    let mut inner = Inner { value: 42 };
-    let c1 = Container { name: "x", data: &inner };
-    let c2 = Container { name: "x", data: &inner };
-    assert c1 == c2;
 }

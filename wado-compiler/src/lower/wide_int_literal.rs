@@ -12,6 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::elaborator::reify::ord_bool_from_cmp;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
+use crate::synthesis::common::not_expr;
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
     TypeTable,
@@ -226,14 +227,7 @@ pub(crate) fn compare(
     };
     Some(match op {
         TirBinaryOp::Eq => eq(),
-        TirBinaryOp::NotEq => TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(eq()),
-            },
-            TypeTable::BOOL,
-            span,
-        ),
+        TirBinaryOp::NotEq => not_expr(eq(), span),
         TirBinaryOp::Lt => ord(BinaryOp::Lt),
         TirBinaryOp::Gt => ord(BinaryOp::Gt),
         TirBinaryOp::LtEq => ord(BinaryOp::LtEq),

@@ -1,7 +1,5 @@
 #![generated(by = "gale", sources = ["tests/grammars/JSON.g4"])]
 
-use { TreeSet } from "core:collections";
-
 pub struct Span {
     pub start: i32,
     pub end: i32,
@@ -935,283 +933,6 @@ fn emit_lexer_token(
     }
     out.push_str(`${lc.0}:${lc.1}]\n`);
 }
-pub global ATN_BASIC: i32 = 1;
-pub global ATN_RULE_START: i32 = 2;
-pub global ATN_RULE_STOP: i32 = 3;
-pub global ATN_BLOCK_START: i32 = 4;
-pub global ATN_BLOCK_END: i32 = 5;
-pub global ATN_STAR_LOOP_ENTRY: i32 = 6;
-pub global ATN_STAR_LOOP_BACK: i32 = 7;
-pub global ATN_PLUS_LOOP_BACK: i32 = 8;
-pub global ATN_LOOP_END: i32 = 9;
-
-pub global ATN_TR_EPSILON: i32 = 0;
-pub global ATN_TR_ATOM: i32 = 1;
-pub global ATN_TR_NOT_ATOM: i32 = 2;
-pub global ATN_TR_WILDCARD: i32 = 3;
-pub global ATN_TR_RULE: i32 = 4;
-pub global ATN_TR_PRECEDENCE: i32 = 5;
-
-pub struct AtnSim {
-    pub state_kind: List<i32>,
-    pub state_tr_start: List<i32>,
-    pub state_tr_count: List<i32>,
-    pub tr_kind: List<i32>,
-    pub tr_target: List<i32>,
-    pub tr_label: List<i32>,
-    pub tr_follow: List<i32>,
-    pub tr_prec: List<i32>,
-    pub decision_state: List<i32>,
-    pub rule_start: List<i32>,
-    pub rule_nullable: List<bool> = [],
-    pub rule_first: List<List<i32>> = [],
-    pub rule_first_neg: List<List<i32>> = [],
-    pub rule_first_open: List<bool> = [],
-    pub state_cont_nullable: List<bool> = [],
-    pub state_cont_first_start: List<i32> = [],
-    pub state_cont_first_count: List<i32> = [],
-    pub state_cont_neg_start: List<i32> = [],
-    pub state_cont_neg_count: List<i32> = [],
-    pub cont_first_label: List<i32> = [],
-    pub cont_neg_label: List<i32> = [],
-    pub state_cont_first_open: List<bool> = [],
-    pub state_collapse_to: List<i32> = [],
-    pub state_call_prec: List<i32>,
-}
-
-fn atn_read_u8(bytes: &ByteList, pos: i32) -> i32 {
-    return bytes.get_byte_unchecked(pos) as i32;
-}
-
-fn atn_read_u16(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = bytes.get_byte_unchecked(pos) as i32;
-    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
-    return b0 | b1 << 8;
-}
-
-fn atn_read_u24(bytes: &ByteList, pos: i32) -> i32 {
-    let b0 = bytes.get_byte_unchecked(pos) as i32;
-    let b1 = bytes.get_byte_unchecked(pos + 1) as i32;
-    let b2 = bytes.get_byte_unchecked(pos + 2) as i32;
-    return b0 | b1 << 8 | b2 << 16;
-}
-
-pub fn atn_decode(bytes: &ByteList) -> AtnSim {
-    let mut p = 0;
-    let nrules = atn_read_u16(bytes, p);
-    p += 2;
-    let ndec = atn_read_u16(bytes, p);
-    p += 2;
-    let nstates = atn_read_u16(bytes, p);
-    p += 2;
-
-    let mut rule_start: List<i32> = List::with_capacity(nrules);
-    for let mut i = 0; i < nrules; i += 1 {
-        rule_start.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
-    let mut decision_state: List<i32> = List::with_capacity(ndec);
-    for let mut i = 0; i < ndec; i += 1 {
-        decision_state.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
-
-    let mut state_kind: List<i32> = List::with_capacity(nstates);
-    for let mut i = 0; i < nstates; i += 1 {
-        state_kind.push(atn_read_u8(bytes, p));
-        p += 1;
-    }
-    let mut state_tr_start: List<i32> = List::with_capacity(nstates);
-    let mut state_tr_count: List<i32> = List::with_capacity(nstates);
-    let mut ntrans_total = 0;
-    for let mut i = 0; i < nstates; i += 1 {
-        let count = atn_read_u16(bytes, p);
-        p += 2;
-        state_tr_start.push(ntrans_total);
-        state_tr_count.push(count);
-        ntrans_total += count;
-    }
-
-    let mut tr_kind: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_kind.push(atn_read_u8(bytes, p));
-        p += 1;
-    }
-    let mut tr_target: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_target.push(atn_read_u16(bytes, p) - 1);
-        p += 2;
-    }
-    let mut tr_label: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_label.push(atn_read_u24(bytes, p) - 1);
-        p += 3;
-    }
-    let mut tr_follow: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_follow.push(atn_read_u24(bytes, p) - 1);
-        p += 3;
-    }
-    let mut tr_prec: List<i32> = List::with_capacity(ntrans_total);
-    for let mut i = 0; i < ntrans_total; i += 1 {
-        tr_prec.push(atn_read_u16(bytes, p));
-        p += 2;
-    }
-
-    let mut state_call_prec = List::filled(nstates, 0);
-    for let mut j = 0; j < ntrans_total; j += 1 {
-        if tr_kind[j] == ATN_TR_RULE {
-            assert tr_follow[j] >= 0, "a rule transition returns to a follow state";
-            state_call_prec[tr_follow[j]] = tr_prec[j];
-        }
-    }
-
-    return AtnSim {
-        state_kind,
-        state_tr_start,
-        state_tr_count,
-        tr_kind,
-        tr_target,
-        tr_label,
-        tr_follow,
-        tr_prec,
-        decision_state,
-        rule_start,
-        state_call_prec,
-    };
-}
-
-struct LThread {
-    state: i32,
-    stack: List<i32>,
-    accept: bool,
-}
-
-fn latn_sig(state: i32, stack: &List<i32>) -> String {
-    let mut s = `${state}#`;
-    for let mut i = 0; i < stack.len(); i += 1 {
-        if i > 0 {
-            s.push_str(",");
-        }
-        s.push_str(`${stack[i]}`);
-    }
-    return s;
-}
-
-fn latn_closure(
-    sim: &AtnSim,
-    out: &mut List<LThread>,
-    visited: &mut TreeSet<String>,
-    state: i32,
-    stack: &List<i32>,
-    open: &List<i32>,
-) {
-    let key = latn_sig(state, stack);
-    if visited.contains(key) {
-        return;
-    }
-    visited.insert(key);
-
-    if sim.state_kind[state] == ATN_RULE_STOP {
-        if stack.is_empty() {
-            out.push(LThread { state, stack: [], accept: true });
-        } else {
-            let ret = stack[stack.len() - 1];
-            let mut rest: List<i32> = [];
-            for let mut i = 0; i < stack.len() - 1; i += 1 {
-                rest.push(stack[i]);
-            }
-            let mut rest_open: List<i32> = [];
-            for let mut i = 0; i < open.len() - 1; i += 1 {
-                rest_open.push(open[i]);
-            }
-            latn_closure(sim, out, visited, ret, &rest, &rest_open);
-        }
-        return;
-    }
-
-    let ts = sim.state_tr_start[state];
-    let tc = sim.state_tr_count[state];
-    if tc > 0 {
-        let k0 = sim.tr_kind[ts];
-        if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
-            out.push(LThread { state, stack: *stack, accept: false });
-            return;
-        }
-    }
-    for let mut i = 0; i < tc; i += 1 {
-        let idx = ts + i;
-        let target = sim.tr_target[idx];
-        if sim.tr_kind[idx] == ATN_TR_RULE {
-            if target < 0 {
-                continue;
-            }
-            if open.iter_ref().any(|o: &i32| *o == target) {
-                continue;
-            }
-            let mut ns: List<i32> = *stack;
-            ns.push(sim.tr_follow[idx]);
-            let mut open2: List<i32> = *open;
-            open2.push(target);
-            latn_closure(sim, out, visited, target, &ns, &open2);
-        } else {
-            latn_closure(sim, out, visited, target, stack, open);
-        }
-    }
-}
-
-pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
-    let mut best = -1;
-    let mut clist: List<LThread> = [];
-    let mut seed = TreeSet::<String>::new();
-    let empty: List<i32> = [];
-    let no_open: List<i32> = [];
-    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty, &no_open);
-
-    let mut pos = start;
-    loop {
-        let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
-        let mut nlist: List<LThread> = [];
-        let mut nseen = TreeSet::<String>::new();
-        let mut i = 0;
-        let mut stop = false;
-        while i < clist.len() && !stop {
-            let th = &clist[i];
-            if th.accept {
-                best = pos;
-                stop = !longest;
-            } else {
-                let ts = sim.state_tr_start[th.state];
-                let tc = sim.state_tr_count[th.state];
-                for let mut j = 0; j < tc; j += 1 {
-                    let idx = ts + j;
-                    let kind = sim.tr_kind[idx];
-                    let matched = if cur < 0 {
-                        false;
-                    } else if kind == ATN_TR_ATOM {
-                        cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
-                    } else if kind == ATN_TR_WILDCARD {
-                        true;
-                    } else if kind == ATN_TR_NOT_ATOM {
-                        cur != sim.tr_label[idx];
-                    } else {
-                        false;
-                    };
-                    if matched {
-                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack, &no_open);
-                    }
-                }
-            }
-            i += 1;
-        }
-        clist = nlist;
-        if clist.is_empty() {
-            break;
-        }
-        pos += 1;
-    }
-    return best;
-}
 pub global TK_STRING: i32 = 0;
 pub global TK_NUMBER: i32 = 1;
 pub global TK_WS: i32 = 2;
@@ -1243,51 +964,80 @@ impl Lexer {
 }
 
 fn try_STRING(chars: &List<char>, start: i32) -> i32 {
-    return latn_match(&LATN_SIM, 0, chars, start, true);
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    loop {
+        let rep_saved_0 = pos;
+        rep_0: {
+            let alts_saved_1 = pos;
+            alts_done_1: {
+                alts_1_0: {
+                    pos = alts_saved_1;
+                    pos = frag_ESC(chars, pos);
+                    if pos < 0 { break alts_1_0; }
+                    break alts_done_1;
+                }
+                alts_1_1: {
+                    pos = alts_saved_1;
+                    pos = frag_SAFECODEPOINT(chars, pos);
+                    if pos < 0 { break alts_1_1; }
+                    break alts_done_1;
+                }
+                break rep_0;
+            }
+            continue;
+        }
+        pos = rep_saved_0;
+        break;
+    }
+    if pos >= chars.len() || chars[pos] != '"' { return -1; }
+    pos += 1;
+    return pos;
 }
 
 fn try_NUMBER(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let opt_saved_0 = pos;
-    let mut opt_ok_0 = false;
-    opt_0: {
-        if pos >= chars.len() || chars[pos] != '-' { break opt_0; }
+    let opt_saved_2 = pos;
+    let mut opt_ok_2 = false;
+    opt_2: {
+        if pos >= chars.len() || chars[pos] != '-' { break opt_2; }
         pos += 1;
-        opt_ok_0 = true;
+        opt_ok_2 = true;
     }
-    if !opt_ok_0 { pos = opt_saved_0; }
+    if !opt_ok_2 { pos = opt_saved_2; }
     pos = frag_INT(chars, pos);
     if pos < 0 { return -1; }
-    let opt_saved_1 = pos;
-    let mut opt_ok_1 = false;
-    opt_1: {
-        if pos >= chars.len() || chars[pos] != '.' { break opt_1; }
+    let opt_saved_3 = pos;
+    let mut opt_ok_3 = false;
+    opt_3: {
+        if pos >= chars.len() || chars[pos] != '.' { break opt_3; }
         pos += 1;
-        if pos >= chars.len() { break opt_1; }
-        if !((chars[pos] matches { '0'..='9' })) { break opt_1; }
+        if pos >= chars.len() { break opt_3; }
+        if !((chars[pos] matches { '0'..='9' })) { break opt_3; }
         pos += 1;
         loop {
-            let rep_saved_2 = pos;
-            rep_2: {
-                if pos >= chars.len() { break rep_2; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_2; }
+            let rep_saved_4 = pos;
+            rep_4: {
+                if pos >= chars.len() { break rep_4; }
+                if !((chars[pos] matches { '0'..='9' })) { break rep_4; }
                 pos += 1;
                 continue;
             }
-            pos = rep_saved_2;
+            pos = rep_saved_4;
             break;
         }
-        opt_ok_1 = true;
+        opt_ok_3 = true;
     }
-    if !opt_ok_1 { pos = opt_saved_1; }
-    let opt_saved_4 = pos;
-    let mut opt_ok_4 = false;
-    opt_4: {
+    if !opt_ok_3 { pos = opt_saved_3; }
+    let opt_saved_6 = pos;
+    let mut opt_ok_6 = false;
+    opt_6: {
         pos = frag_EXP(chars, pos);
-        if pos < 0 { break opt_4; }
-        opt_ok_4 = true;
+        if pos < 0 { break opt_6; }
+        opt_ok_6 = true;
     }
-    if !opt_ok_4 { pos = opt_saved_4; }
+    if !opt_ok_6 { pos = opt_saved_6; }
     return pos;
 }
 
@@ -1297,46 +1047,78 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_5 = pos;
-        rep_5: {
-            if pos >= chars.len() { break rep_5; }
-            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_5; }
+        let rep_saved_7 = pos;
+        rep_7: {
+            if pos >= chars.len() { break rep_7; }
+            if !((chars[pos] matches { ' ' | '\t' | '\n' | '\r' })) { break rep_7; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_5;
+        pos = rep_saved_7;
         break;
     }
     return pos;
 }
 
+fn frag_ESC(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != '\\' { return -1; }
+    pos += 1;
+    let alts_saved_9 = pos;
+    alts_done_9: {
+        alts_9_0: {
+            pos = alts_saved_9;
+            if pos >= chars.len() { break alts_9_0; }
+            if !((chars[pos] matches { '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' })) { break alts_9_0; }
+            pos += 1;
+            break alts_done_9;
+        }
+        alts_9_1: {
+            pos = alts_saved_9;
+            pos = frag_UNICODE(chars, pos);
+            if pos < 0 { break alts_9_1; }
+            break alts_done_9;
+        }
+        return -1;
+    }
+    return pos;
+}
+
+fn frag_SAFECODEPOINT(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() { return -1; }
+    if (chars[pos] matches { '"' | '\\' | '\u{0}'..='\u{1f}' }) { return -1; }
+    pos += 1;
+    return pos;
+}
+
 fn frag_INT(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_7 = pos;
-    alts_done_7: {
-        alts_7_0: {
-            pos = alts_saved_7;
-            if pos >= chars.len() || chars[pos] != '0' { break alts_7_0; }
+    let alts_saved_10 = pos;
+    alts_done_10: {
+        alts_10_0: {
+            pos = alts_saved_10;
+            if pos >= chars.len() || chars[pos] != '0' { break alts_10_0; }
             pos += 1;
-            break alts_done_7;
+            break alts_done_10;
         }
-        alts_7_1: {
-            pos = alts_saved_7;
-            if pos >= chars.len() { break alts_7_1; }
-            if !((chars[pos] matches { '1'..='9' })) { break alts_7_1; }
+        alts_10_1: {
+            pos = alts_saved_10;
+            if pos >= chars.len() { break alts_10_1; }
+            if !((chars[pos] matches { '1'..='9' })) { break alts_10_1; }
             pos += 1;
             loop {
-                let rep_saved_8 = pos;
-                rep_8: {
-                    if pos >= chars.len() { break rep_8; }
-                    if !((chars[pos] matches { '0'..='9' })) { break rep_8; }
+                let rep_saved_11 = pos;
+                rep_11: {
+                    if pos >= chars.len() { break rep_11; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_11; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_8;
+                pos = rep_saved_11;
                 break;
             }
-            break alts_done_7;
+            break alts_done_10;
         }
         return -1;
     }
@@ -1348,29 +1130,48 @@ fn frag_EXP(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'E' | 'e' })) { return -1; }
     pos += 1;
-    let opt_saved_9 = pos;
-    let mut opt_ok_9 = false;
-    opt_9: {
-        if pos >= chars.len() { break opt_9; }
-        if !((chars[pos] matches { '+' | '-' })) { break opt_9; }
+    let opt_saved_12 = pos;
+    let mut opt_ok_12 = false;
+    opt_12: {
+        if pos >= chars.len() { break opt_12; }
+        if !((chars[pos] matches { '+' | '-' })) { break opt_12; }
         pos += 1;
-        opt_ok_9 = true;
+        opt_ok_12 = true;
     }
-    if !opt_ok_9 { pos = opt_saved_9; }
+    if !opt_ok_12 { pos = opt_saved_12; }
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { '0'..='9' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_10 = pos;
-        rep_10: {
-            if pos >= chars.len() { break rep_10; }
-            if !((chars[pos] matches { '0'..='9' })) { break rep_10; }
+        let rep_saved_13 = pos;
+        rep_13: {
+            if pos >= chars.len() { break rep_13; }
+            if !((chars[pos] matches { '0'..='9' })) { break rep_13; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_10;
+        pos = rep_saved_13;
         break;
     }
+    return pos;
+}
+
+fn frag_UNICODE(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    if pos >= chars.len() || chars[pos] != 'u' { return -1; }
+    pos += 1;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { return -1; }
+    pos += 1;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { return -1; }
+    pos += 1;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { return -1; }
+    pos += 1;
+    if pos >= chars.len() { return -1; }
+    if !((chars[pos] matches { '0'..='9' | 'A'..='F' | 'a'..='f' })) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1454,8 +1255,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '"' => {
-                end = try_STRING(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_STRING; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    ' '..='\u{10ffff}' => {
+                        end = try_STRING(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_STRING; }
+                    },
+                    _ => {
+                    },
+                }
             },
             ',' => {
                 end = try_lit_COMMA(&lexer.chars, start);
@@ -1955,12 +1763,9 @@ fn _parse_obj__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_3, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_3, &EXPECTED_3); }
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACE {
-        p.pos += 1;
-        if p.peek_kind() == TK_STRING {
-            p.pos -= 1;
+        if p.peek_at(1) == TK_STRING {
             return _parse_obj__inner_alt_0(p);
-        } else if p.peek_kind() == TK_LIT_RBRACE {
-            p.pos -= 1;
+        } else if p.peek_at(1) == TK_LIT_RBRACE {
             return _parse_obj__inner_alt_1(p);
         }
     }
@@ -2027,12 +1832,9 @@ fn _parse_arr__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_7, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_7, &EXPECTED_7); }
     let kind = p.peek_kind();
     if kind == TK_LIT_LBRACKET {
-        p.pos += 1;
-        if _kind_set_0(p.peek_kind()) {
-            p.pos -= 1;
+        if _kind_set_0(p.peek_at(1)) {
             return _parse_arr__inner_alt_0(p);
-        } else if p.peek_kind() == TK_LIT_RBRACKET {
-            p.pos -= 1;
+        } else if p.peek_at(1) == TK_LIT_RBRACKET {
             return _parse_arr__inner_alt_1(p);
         }
     }
@@ -2182,6 +1984,4 @@ global EXPECTED_5: List<i32> = [TK_LIT_COMMA, TK_LIT_RBRACKET];
 global SYNC_6: List<i32> = [1024];
 global SYNC_7: List<i32> = [512];
 global EXPECTED_7: List<i32> = [TK_LIT_LBRACKET];
-
-global LATN_SIM: AtnSim = atn_decode(&b"\x05\x00\x00\x00\x40\x00\x00\x00\x02\x00\x04\x00\x06\x00\x08\x00\x02\x03\x02\x03\x02\x03\x02\x03\x02\x03\x04\x05\x01\x01\x01\x06\x09\x04\x05\x01\x01\x01\x01\x01\x01\x07\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x01\x04\x05\x01\x01\x01\x04\x05\x01\x01\x01\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x00\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x02\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x02\x00\x01\x00\x01\x00\x08\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x01\x00\x01\x00\x01\x00\x03\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00\x00\x04\x00\x00\x01\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x01\x01\x01\x01\x01\x01\x01\x01\x00\x00\x04\x00\x00\x00\x00\x01\x00\x04\x00\x04\x00\x04\x00\x04\x00\x00\x00\x00\x01\x01\x01\x00\x00\x00\x00\x01\x01\x01\x00\x0b\x00\x1d\x00\x2a\x00\x37\x00\x3c\x00\x0d\x00\x02\x00\x0e\x00\x0f\x00\x10\x00\x12\x00\x11\x00\x1b\x00\x14\x00\x17\x00\x1a\x00\x15\x00\x03\x00\x13\x00\x18\x00\x09\x00\x13\x00\x10\x00\x1c\x00\x0c\x00\x1f\x00\x04\x00\x20\x00\x21\x00\x22\x00\x24\x00\x27\x00\x1e\x00\x25\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x26\x00\x23\x00\x28\x00\x05\x00\x23\x00\x2c\x00\x06\x00\x2d\x00\x2e\x00\x2f\x00\x07\x00\x31\x00\x07\x00\x33\x00\x07\x00\x35\x00\x07\x00\x2b\x00\x39\x00\x08\x00\x3a\x00\x3b\x00\x3b\x00\x3b\x00\x38\x00\x3e\x00\x0a\x00\x3f\x00\x40\x00\x40\x00\x40\x00\x3d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x5d\x00\x00\x30\x00\x00\x63\x00\x00\x67\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x00\x00\x00\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x31\x00\x00\x62\x00\x00\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x21\x00\x00\x24\x00\x00\x5e\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x16\x00\x00\x00\x00\x00\x00\x00\x00\x19\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x5d\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x23\x00\x00\x5d\x00\x00\x30\x00\x00\x63\x00\x00\x67\x00\x00\x6f\x00\x00\x73\x00\x00\x75\x00\x00\x00\x00\x00\x00\x00\x00\x29\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x76\x00\x00\x00\x00\x00\x30\x00\x00\x00\x00\x00\x32\x00\x00\x00\x00\x00\x34\x00\x00\x00\x00\x00\x36\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3a\x00\x00\x67\x00\x00\x47\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x22\x00\x00\x5c\x00\x00\x00\x00\x11\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
 

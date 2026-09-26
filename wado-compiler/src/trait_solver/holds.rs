@@ -130,11 +130,7 @@ impl Query<'_> {
             return Some(Holds::default());
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
-        // Identity answers the trait at `Self` alone; another argument asks an impl.
-        if matches!(ty, SolverType::Ref { .. })
-            && on_ref == RefRule::Always
-            && args.iter().all(|arg| arg == ty)
-        {
+        if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
             return Some(Holds::default());
         }
         // A pack's bound holds of each element, so an element in a variadic
@@ -524,6 +520,7 @@ mod tests {
     const BASE: TraitDeclId = TraitDeclId(2);
     const SUB: TraitDeclId = TraitDeclId(3);
     const EQ: TraitDeclId = TraitDeclId(4);
+    const MARKER: TraitDeclId = TraitDeclId(5);
     const POINT: TypeDeclId = TypeDeclId(0);
     const LIST: TypeDeclId = TypeDeclId(1);
     const I32: TypeDeclId = TypeDeclId(2);
@@ -748,14 +745,13 @@ mod tests {
     }
 
     /// `&T` holds a bound `T` holds, by auto-deref at the call — unless the
-    /// trait says otherwise: `Eq` holds of every reference by identity, and
+    /// trait says otherwise: the `Ref` markers hold of every reference, and
     /// `Ord` of none. A reference's own impl is asked first.
     #[test]
     fn a_reference_answers_by_the_trait_s_reference_rule() {
         let mut p = Builder::default()
             .concrete(ALPHA, decl(POINT))
             .concrete(BETA, decl(POINT))
-            .concrete(EQ, decl(POINT))
             .concrete(SUB, ref_to(decl(I32)))
             .build();
         p.traits.insert(
@@ -766,7 +762,7 @@ mod tests {
             },
         );
         p.traits.insert(
-            EQ,
+            MARKER,
             TraitDef {
                 on_ref: RefRule::Always,
                 ..TraitDef::default()
@@ -777,32 +773,10 @@ mod tests {
         assert_eq!(ask(ref_to(decl(POINT)), ALPHA), Some(Holds::default()));
         assert_eq!(ask(ref_to(decl(I32)), ALPHA), None);
         assert_eq!(ask(ref_to(decl(POINT)), BETA), None);
-        assert_eq!(ask(ref_to(decl(I32)), EQ), Some(Holds::default()));
+        assert_eq!(ask(ref_to(decl(I32)), MARKER), Some(Holds::default()));
+        assert_eq!(ask(decl(I32), MARKER), None);
         assert_eq!(ask(ref_to(decl(I32)), SUB), Some(Holds::default()));
         assert_eq!(ask(decl(I32), SUB), None);
-    }
-
-    /// Identity is `Eq<Self>`: `&Point: Eq<i32>` asks an impl, and only the
-    /// one written for `&Point` answers.
-    #[test]
-    fn a_reference_s_identity_answers_no_other_argument() {
-        let mut p = Builder::default().build();
-        p.traits.insert(
-            EQ,
-            TraitDef {
-                on_ref: RefRule::Always,
-                ..TraitDef::default()
-            },
-        );
-        let ask = |ty: &SolverType, args: &[SolverType]| {
-            holds_with_args(&p, &Env::default(), ty, EQ, HERE, args)
-        };
-        let point = ref_to(decl(POINT));
-        assert_eq!(
-            ask(&point, std::slice::from_ref(&point)),
-            Some(Holds::default())
-        );
-        assert_eq!(ask(&point, &[decl(I32)]), None);
     }
 
     /// `impl<T: Alpha> Beta for T` answers `Point: Beta` exactly when

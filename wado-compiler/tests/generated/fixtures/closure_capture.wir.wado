@@ -612,14 +612,15 @@ condition: !any_matching(&rows, &miss)
 }
 
 fn "closure_capture.wado/$test_27_a_nested_closure_over_a_local_derived_in_the_outer_body"() {
+    let rows: ref "core:prelude//List<i32>";
     let hits: i32;
     let self_6: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>";
     let n: i32;
     let pred: ref "closure_capture.wado//$Closure_33";
-    let $sroa_rows_repr_17: ref Array<i32>;
-    $sroa_rows_repr_17 = array.new_fixed<i32>(1, 2, 3);
-    pred = struct.new "closure_capture.wado//$Closure_33" { $capture_0: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 } };
-    self_6 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_rows_repr_17, index: 0, end: 3 }), pred: struct.new "canonical//CanonicalClosure_5" { env: pred, func: ref.func "closure/closure_capture.wado/$closure_wrapper_3" } };
+    let $sroa_v_repr_16: ref Array<i32>;
+    rows = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
+    pred = struct.new "closure_capture.wado//$Closure_33" { $capture_0: rows };
+    self_6 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: ref.as_non_null($sroa_v_repr_16 = rows.repr; struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_v_repr_16, index: 0, end: 3 }), pred: struct.new "canonical//CanonicalClosure_5" { env: pred, func: ref.func "closure/closure_capture.wado/$closure_wrapper_3" } };
     n = 0;
     b10: block {
         l11: loop {

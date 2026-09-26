@@ -277,6 +277,13 @@ Unix convention).
       nested paths need an accumulated breadcrumb, so this waits until nested
       subcommand diagnostics are a real pain.
 
+## Known gaps
+
+- A struct's positional declarations are not checked. Required after optional,
+  a variadic before another positional, or a variadic beside a subcommand
+  parses by greedy binding into a confusing `MissingArgument` or a swallowed
+  tag, rather than failing where the struct is declared.
+
 ## References
 
 - [Serde](./wep-2026-02-28-serde.md),

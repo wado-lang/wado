@@ -536,33 +536,10 @@ impl TypeSystem {
         }
     }
 
-    /// How `==` / `!=` compares these operands by identity, if it does.
-    pub(super) fn identity_of(
-        &self,
-        op: BinaryOp,
-        left: TypeId,
-        right: TypeId,
-    ) -> Option<Identity> {
-        if !matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
-            return None;
-        }
-        let type_table = self.type_table.borrow();
-        if matches!(
-            (type_table.get(left), type_table.get(right)),
-            (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
-        ) {
-            return Some(Identity::Reference);
-        }
-        type_table
-            .handles_compare(left, right)
-            .then_some(Identity::Handle)
+    /// Whether `==` / `!=` compares these operands as unrestricted resource
+    /// handles, which the host interns, by their bits.
+    pub(super) fn compares_handles(&self, op: BinaryOp, left: TypeId, right: TypeId) -> bool {
+        matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
+            && self.type_table.borrow().handles_compare(left, right)
     }
-}
-
-/// What `==` compares when it compares by identity.
-pub(super) enum Identity {
-    Reference,
-    /// An unrestricted resource handle, which the host interns.
-    Handle,
 }

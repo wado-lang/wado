@@ -1,0 +1,19 @@
+// The SIMD lane types: construction, lane-wise operators, and comparison.
+
+use { i32x4, f32x4 } from "core:simd";
+
+test "lanes" {
+    let v: i32x4 = [1, 2, 3, 4];     // sequence literal coercion
+    let w = i32x4::splat(10);        // broadcast
+    let sum = v + w;
+    assert sum.extract_lane(0) == 11 && sum.extract_lane(3) == 14;
+    let mask = v.lt(&w);             // per-lane comparison mask
+    assert mask.extract_lane(0) == -1;
+}
+
+test "equality compares the bits" {
+    let nan = f32x4::splat(f32::NAN);
+    assert nan == nan;                  // the bits are equal
+    let mask = nan.eq(&nan);            // an i32x4: IEEE says NaN != NaN
+    assert mask.extract_lane(0) == 0;
+}

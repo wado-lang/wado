@@ -1,0 +1,13 @@
+// A struct field takes a visibility modifier; within its own file every field
+// is in reach.
+
+pub struct Config {
+    pub name: String,   // visible to other packages
+    internal tag: i32,  // visible to other files in this package
+    secret: i32,        // private to this file
+}
+
+test {
+    let c = Config { name: "app", tag: 1, secret: 2 };
+    assert c.secret == 2;
+}

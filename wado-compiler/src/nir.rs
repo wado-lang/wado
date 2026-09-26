@@ -164,7 +164,6 @@ pub enum NirBinaryOp {
     BitXor,
     Shl,
     Shr,
-    RefEq,
     RefNotEq,
 }
 

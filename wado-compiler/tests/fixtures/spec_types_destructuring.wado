@@ -1,0 +1,47 @@
+// Every form of struct destructuring.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+test "unnamed" {
+    let p = Point { x: 10, y: 20 };
+    let { x, y } = p;                  // the type comes from `p`
+    assert x == 10 && y == 20;
+}
+
+test "named, renamed, mutable" {
+    let p = Point { x: 10, y: 20 };
+    let Point { x, y } = p;            // the type is written, and checked
+    assert x + y == 30;
+
+    let { x: horizontal, y: vertical } = p;
+    assert horizontal == 10 && vertical == 20;
+}
+
+test "mutable" {
+    let p = Point { x: 10, y: 20 };
+    let mut { x, y } = p;
+    x += 1;
+    assert x == 11 && p.x == 10;
+}
+
+test "rest, nested, for-of" {
+    struct Person { name: String, age: i32, email: String }
+    let person = Person { name: "Ann", age: 40, email: "ann@example.com" };
+    let { name, .. } = person;
+    assert name == "Ann";
+
+    struct Line { start: Point, end: Point }
+    let line = Line { start: Point { x: 0, y: 1 }, end: Point { x: 2, y: 3 } };
+    let { start: { x: x1, y: y1 }, end: { x: x2, y: y2 } } = line;
+    assert x1 + y1 + x2 + y2 == 6;
+
+    let points: List<Point> = [Point { x: 1, y: 2 }, Point { x: 3, y: 4 }];
+    let mut sum = 0;
+    for let { x, y } of points {
+        sum += x * y;
+    }
+    assert sum == 14;
+}

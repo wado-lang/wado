@@ -1,0 +1,12 @@
+// The return type is held to the same newtype-step rule as the parameters.
+
+fn length(s: String) -> i32 {
+    return s.len();
+}
+
+test "unrelated return" {
+    let h = length as fn(String) -> String;
+}
+
+__DATA__
+{"compile_error": "the return type: `i32` and `String` share no representation"}

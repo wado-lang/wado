@@ -1,7 +1,8 @@
 // The transient-borrow reading of a `&`-borrowed match scrutinee holds only
-// while nothing derived from it persists: an arm binding handed to a retaining
-// callee leaves a reference into the scrutinee's storage, so the later
-// whole-value read copies rather than moves.
+// while nothing derived from it is still read: an arm binding handed to a
+// retaining callee leaves a reference into the scrutinee's storage in what the
+// callee returns, so a whole-value read while that is live copies rather than
+// moves.
 
 use { println, Stdout } from "core:cli";
 
@@ -29,9 +30,11 @@ fn build(n: i32) -> i32 {
         let op = make(i);
         if let Repeat(rep) = &op {
             let h = hold(rep);
+            ops.push(op);
             tagged += h.r.tags.len();
+        } else {
+            ops.push(op);
         }
-        ops.push(op);
     }
     return ops.len() * 10 + tagged;
 }
@@ -43,8 +46,9 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "44\n",
+    "wir_scope": "/build",
     "wir_expect:O0": [
-        "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"
+        "$value_copy$opt_value_copy_ref_match_binding_stored.wado/Op"
     ],
     "wir_expect:O2": [
         "array_clone_deep_prefix"
