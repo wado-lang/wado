@@ -336,9 +336,9 @@ where it cannot prove move / share / fresh; no elision pass):
   so `view.chars().count()` pins nothing past the count.
 
   The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
-  `a` to `b`, but `b` is dead right after it, so `b` is rebound before it is
-  read again. When a storage-sharing check walks that edge, it does not count
-  `b` as holding the storage `a` took.
+  `a` to `b`. Where `b` is dead after every binding that reads it, it is
+  rebound before it is read again. A storage-sharing check walks through such
+  an edge but does not count `b` as holding the storage `a` took.
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
