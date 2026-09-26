@@ -8,26 +8,10 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::monomorphize::dispatch_receiver_name;
-use crate::name::{
-    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, Receiver, RefKind,
-    mangle_generic_name,
-};
-use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TirTypeParam, TypeId, TypeTable};
-||||||| 2c9c5304996
-use crate::monomorphize::dispatch_receiver_name;
-use crate::name::{
-    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, RefKind,
-    mangle_generic_name,
-};
-use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TirTypeParam, TypeId, TypeTable};
-=======
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_reaches;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirTypeParam, TypeId, TypeTable};
->>>>>>> origin/main
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {
@@ -229,32 +213,8 @@ impl Monomorphizer {
         names.contains(&self.method_instantiation_name(&base_key, type_table))
     }
 
-<<<<<<< HEAD
-    /// Whether `info` names its trait's universal `&T` / `&mut T` blanket.
-    pub(super) fn names_universal_ref_blanket(&self, info: &LocalMethodName) -> bool {
-        let Receiver::Ref(kind) = info.receiver() else {
-            return false;
-        };
-        info.trait_decl().is_some_and(|trait_| {
-            self.functions
-                .trait_env
-                .has_universal_ref_blanket(trait_, *kind == RefKind::Mut)
-        })
-    }
-
-    /// Queue a function instantiation unless its body is already queued. Two
-    /// dispatch sites can derive distinct-but-equivalent `TypeId`s for one
-    /// argument (a `GenericInstance` and the `Struct` it became), so the body
-    /// is identified by its mangled name rather than by the key.
-||||||| 2c9c5304996
-    /// Queue a function instantiation unless its body is already queued. Two
-    /// dispatch sites can derive distinct-but-equivalent `TypeId`s for one
-    /// argument (a `GenericInstance` and the `Struct` it became), so the body
-    /// is identified by its mangled name rather than by the key.
-=======
     /// Queue a function instantiation unless its body already is. A body is its
     /// module and mangled name, since one type can reach it under two `TypeId`s.
->>>>>>> origin/main
     pub fn try_queue_function(
         &mut self,
         key: InstantiationKey,
@@ -264,58 +224,6 @@ impl Monomorphizer {
         if self.functions.instantiated.contains_key(&key) {
             return false;
         }
-<<<<<<< HEAD
-        if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
-            return false;
-        }
-        // A blanket instance is one body wherever it is asked from, queued
-        // under the blanket's home module: a request under another module
-        // is dropped, and its call site reaches the body through
-        // `lookup_instantiation_with_trait_fallback`. Only a *universal* `&T`
-        // blanket qualifies for the ref case, or a newtype-peeled `&List^Trait`
-        // shape impl would dedup wrongly.
-        let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && key
-                .method_info
-                .as_ref()
-                .is_some_and(|i| self.names_universal_ref_blanket(i));
-        let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
-        if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
-            return false;
-        }
-        // Any other instance is one body per module. A second key under the
-        // body's own module — a `GenericInstance` and the `Struct` it became —
-        // is an alias of that body.
-||||||| 2c9c5304996
-        if self.concrete_impl_owns_name(&key, &mangled_name, type_table) {
-            return false;
-        }
-        // A blanket instance is one body wherever it is asked from, queued
-        // under the blanket's home module: a request under another module
-        // is dropped, and its call site reaches the body through
-        // `lookup_instantiation_with_trait_fallback`. Only a *universal* `&T`
-        // blanket qualifies for the ref case, or a newtype-peeled `&^Trait`
-        // shape impl would dedup wrongly.
-        let is_ref_universal_blanket = key.impl_type_args.len() == 1
-            && key.method_info.as_ref().is_some_and(|i| {
-                i.ref_receiver().is_some_and(|ref_kind| {
-                    i.trait_decl().is_some_and(|trait_| {
-                        self.functions
-                            .trait_env
-                            .has_universal_ref_blanket(trait_, ref_kind == RefKind::Mut)
-                    })
-                })
-            });
-        let is_blanket_key = key.impl_type_args.len() == 2 || is_ref_universal_blanket;
-        if is_blanket_key && self.functions.instantiated_names.contains(&mangled_name) {
-            return false;
-        }
-        // Any other instance is one body per module, the module being part of
-        // its identity: `&List<T>`'s and `&Array<T>`'s impls of one trait
-        // mangle alike under the collapsed `&` head and live in two modules.
-        // A second key under the body's own module — a `GenericInstance` and
-        // the `Struct` it became — is an alias of that body.
-=======
         assert!(
             !self.concrete_impl_owns_name(&key, &mangled_name, type_table),
             "`{mangled_name}` instantiates a generic block where a written impl answers"
@@ -326,7 +234,6 @@ impl Monomorphizer {
             .template
             .clone()
             .expect("a function instance names its template");
->>>>>>> origin/main
         let home = (key.module_source.clone(), mangled_name.clone());
         if let Some(prior) = self.functions.instantiated_homes.get(&home) {
             assert_eq!(

@@ -1037,20 +1037,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The name an `impl` block's receiver registers under. One block, one
     /// name: two spellings of it register two templates.
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
-<<<<<<< HEAD
         self.receiver_name_of_impl(
             &impl_block.ty,
             &impl_block.type_params,
-            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
-||||||| 2c9c5304996
-        self.qualified_receiver_name_owned(
-            &self.get_type_name(&impl_block.ty),
-            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
-=======
-        self.qualified_receiver_name_owned(
-            &self.get_type_name(&impl_block.ty),
             Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
->>>>>>> origin/main
         )
     }
 
@@ -1948,21 +1938,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-<<<<<<< HEAD
-                .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
-||||||| 2c9c5304996
-                .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
-            let is_ref_impl = matches!(
-                &impl_block.ty,
-                ast::Type::Reference(_) | ast::Type::MutReference(_),
-            );
-=======
                 .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
-            let is_ref_impl = matches!(
-                &impl_block.ty,
-                ast::Type::Reference(_) | ast::Type::MutReference(_),
-            );
->>>>>>> origin/main
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // what this block's methods are recorded under — owned, or the
@@ -1996,17 +1972,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Some(qualified_struct_name.clone())
                 } else if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
-<<<<<<< HEAD
-                    let is_instantiation = match tt.get(self_type) {
-                        ResolvedType::GenericInstance { .. } => true,
-||||||| 2c9c5304996
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
-                        ResolvedType::GenericInstance { .. } => true,
-=======
-                    let peeled = tt.peel_refs(self_type);
-                    let is_instantiation = match tt.get(peeled) {
->>>>>>> origin/main
                         ResolvedType::Newtype { type_args, .. } => {
                             // A trait impl needs none: the trait index keys it.
                             !type_args.is_empty() && trait_name.is_none()

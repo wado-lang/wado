@@ -444,25 +444,6 @@ impl TypeSystem {
             _ => self.type_table.borrow().type_name(handler_type),
         }
     }
-<<<<<<< HEAD
-
-    /// The type a handler value points at, under one `&` or `&mut`: the `T`
-    /// that indexes its `impl Effect for T`.
-    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
-        self.pointee_of(type_id).unwrap_or(type_id)
-    }
-||||||| 2c9c5304996
-
-    /// The type a handler value points at, under one `&` or `&mut`: the `T`
-    /// that indexes its `impl Effect for T`.
-    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
-        match self.type_table.borrow().get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => type_id,
-        }
-    }
-=======
->>>>>>> origin/main
 }
 
 /// Short label for a [`ResolvedType`] variant, used in diagnostic

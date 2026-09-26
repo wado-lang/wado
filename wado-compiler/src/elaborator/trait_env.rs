@@ -319,29 +319,6 @@ impl ImplHeader {
         self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
     }
 
-    /// What the block's own parameters stand for where its target is
-    /// instantiated at `args`; `None` where a position it pins differs.
-    fn binders_at(&self, args: &[name::FqTypeName]) -> Option<IndexMap<String, name::FqTypeName>> {
-        let target = match self.target_id.split_reference() {
-            Some((_, referent)) => referent,
-            None => self.target_id.clone(),
-        };
-        let mut bound = IndexMap::default();
-        if target.args().len() != args.len() {
-            return Some(bound);
-        }
-        for (written, actual) in target.args().iter().zip(args) {
-            match written.binder_name() {
-                Some(binder) if written.args().is_empty() => {
-                    bound.insert(binder.to_string(), actual.clone());
-                }
-                _ if written.mentions_binder() || written.head_only() == actual.head_only() => {}
-                _ => return None,
-            }
-        }
-        Some(bound)
-    }
-
     /// The receiver a `&X` / `&mut X` block registers under, naming `X`'s head;
     /// `None` for a `&T` blanket and any other target.
     pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
@@ -763,24 +740,7 @@ fn index_impl_modules(
         let Some(trait_) = header.trait_def() else {
             continue;
         };
-<<<<<<< HEAD
-        out.record(
-            &header.target.receiver(defs),
-            fq_trait.base_name(),
-            &header.module,
-        );
-        if let Some(referent) = header.ref_receiver() {
-            out.record(&referent, fq_trait.base_name(), &header.module);
-        }
-||||||| 2c9c5304996
-        out.record(
-            &header.target.receiver(defs),
-            fq_trait.base_name(),
-            &header.module,
-        );
-=======
         out.record(&header.target.receiver(defs), trait_, &header.module);
->>>>>>> origin/main
     }
     out
 }
@@ -1408,87 +1368,25 @@ impl TraitEnv {
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
-    /// The trait arguments the impl on `receiver` (instantiated at
-    /// `receiver_args`) answering a bound writing `wanted` names itself by: as
-    /// the impl spells them, its own parameters included.
+    /// The trait arguments the impl on `receiver` answering a bound writing
+    /// `wanted` names itself by, as it spells them.
     pub(crate) fn impl_written_trait_args(
         &self,
         receiver: &name::Receiver,
-        receiver_args: &[name::FqTypeName],
         trait_: DefId,
         wanted: &[name::FqTypeName],
-<<<<<<< HEAD
-    ) -> Option<Vec<name::FqTypeName>> {
-        let defaults = &self.decl_header_of(&trait_)?.default_args;
-||||||| 2c9c5304996
-    ) -> Option<usize> {
-        let defaults = &self.decl_header_of(&trait_)?.default_args;
-=======
-    ) -> Option<usize> {
->>>>>>> origin/main
+    ) -> Option<&[name::FqTypeName]> {
         self.entries_by_receiver(receiver).find_map(|entry| {
-<<<<<<< HEAD
-            let header = self.impl_headers.get(&entry)?;
-            if header.trait_def() != Some(trait_) {
-                return None;
-            }
-            let bound = header.binders_at(receiver_args)?;
-            let default_at =
-                |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
-            let args = header.trait_arg_ids();
-            let at_instance = |arg: name::FqTypeName| {
-                arg.rewrite(&|node| {
-                    node.args()
-                        .is_empty()
-                        .then(|| bound.get(node.binder_name()?).cloned())
-                        .flatten()
-                })
-            };
-            let answers = (0..args.len().max(wanted.len())).all(|i| {
-                let Some(asks) = wanted
-                    .get(i)
-                    .cloned()
-                    .or_else(|| default_at(i).map(at_instance))
-                else {
-                    return true;
-                };
-                let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
-                    return false;
-                };
-                let effective = at_instance(effective);
-                effective.mentions_binder() || effective.head_only() == asks.head_only()
-            });
-            // The count the impl's own name spells, not every argument
-            // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-            answers.then(|| args[..non_default_named_arg_count(args, &default_at)].to_vec())
-||||||| 2c9c5304996
-            let header = self.impl_headers.get(&entry)?;
-            if header.trait_def() != Some(trait_) {
-                return None;
-            }
-            let default_at =
-                |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
-            let args = header.trait_arg_ids();
-            let answers = wanted.iter().enumerate().all(|(i, want)| {
-                let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
-                    return false;
-                };
-                effective.head_only() == want.head_only()
-            });
-            // The count the impl's own name spells, not every argument
-            // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-            answers.then(|| non_default_named_arg_count(args, &default_at))
-=======
             let header = &self.impl_headers[&entry];
+            let args = header.trait_arg_ids();
             (header.trait_def() == Some(trait_) && self.block_answers(entry, trait_, wanted))
                 // The count the impl's own name spells, not every argument
                 // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
                 .then(|| {
-                    non_default_named_arg_count(header.trait_arg_ids(), &|i| {
+                    &args[..non_default_named_arg_count(args, &|i| {
                         self.default_arg_at(trait_, i, &header.target_id)
-                    })
+                    })]
                 })
->>>>>>> origin/main
         })
     }
 
@@ -2582,53 +2480,6 @@ pub(super) fn inherent_impl_overlaps(
             .push((header, pointee));
     }
     let mut violations = Vec::new();
-<<<<<<< HEAD
-
-    // Two inherent impls minting one function name are one definition
-    // downstream, which monomorphization asserts away with a panic. Keyed on
-    // what the definition side mints, since the target's *arguments* answer a
-    // different question and discard the pointee of a reference target.
-    let mut minted: IndexSet<(String, &str)> = IndexSet::default();
-    for header in &instantiations {
-        let receiver = written_type_arg(header.ty.referent(), resolutions);
-        for method in &header.methods {
-            if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::DuplicateInherentMethod {
-                        // What this impl wrote: the minted head is one
-                        // string for both, so it names neither.
-                        self_type_name: written_type_source(&header.ty),
-                        method_name: method.name.clone(),
-                        span: method.span,
-                    },
-                ));
-||||||| 2c9c5304996
-
-    // Two inherent impls minting one function name are one definition
-    // downstream, which monomorphization asserts away with a panic. Keyed on
-    // what the definition side mints, since the target's *arguments* answer a
-    // different question and discard the pointee of a reference target.
-    let mut minted: IndexSet<(String, &str)> = IndexSet::default();
-    for header in &instantiations {
-        let peeled = match &header.ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        let receiver = written_type_arg(peeled, resolutions);
-        for method in &header.methods {
-            if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
-                violations.push((
-                    header.module.clone(),
-                    TypeError::DuplicateInherentMethod {
-                        // What this impl wrote: the minted head is one
-                        // string for both, so it names neither.
-                        self_type_name: written_type_source(&header.ty),
-                        method_name: method.name.clone(),
-                        span: method.span,
-                    },
-                ));
-=======
     for blocks in by_target.values() {
         for (at, &(later, later_target)) in blocks.iter().enumerate() {
             if !is_user_local(&later.module) {
@@ -2658,7 +2509,6 @@ pub(super) fn inherent_impl_overlaps(
                         ));
                     }
                 }
->>>>>>> origin/main
             }
         }
     }

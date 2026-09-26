@@ -57,55 +57,6 @@ pub(super) enum NewtypePeel {
     Here,
 }
 
-<<<<<<< HEAD
-/// The compiler traits a written spelling can name where the scope resolves
-/// nothing: every [`OnBoundTrait`], plus `Display` and the `From` marker.
-const SPELLED_COMPILER_TRAITS: [CompilerItem; 17] = [
-    CompilerItem::Eq,
-    CompilerItem::Ord,
-    CompilerItem::Serialize,
-    CompilerItem::Deserialize,
-    CompilerItem::Default,
-    CompilerItem::Reflect,
-    CompilerItem::ReflectStruct,
-    CompilerItem::ReflectVariant,
-    CompilerItem::ReflectEnum,
-    CompilerItem::ReflectFlags,
-    CompilerItem::ReflectNewtype,
-    CompilerItem::ReflectTemplate,
-    CompilerItem::Ref,
-    CompilerItem::RefMut,
-    CompilerItem::Inspect,
-    CompilerItem::Display,
-    CompilerItem::From,
-];
-
-||||||| 2c9c5304996
-/// The compiler traits a written spelling can name where the scope resolves
-/// nothing: every [`OnBoundTrait`], plus `Display` and the `From` marker.
-const SPELLED_COMPILER_TRAITS: [CompilerItem; 18] = [
-    CompilerItem::Eq,
-    CompilerItem::Ord,
-    CompilerItem::Serialize,
-    CompilerItem::Deserialize,
-    CompilerItem::WireNumbered,
-    CompilerItem::Default,
-    CompilerItem::Reflect,
-    CompilerItem::ReflectStruct,
-    CompilerItem::ReflectVariant,
-    CompilerItem::ReflectEnum,
-    CompilerItem::ReflectFlags,
-    CompilerItem::ReflectNewtype,
-    CompilerItem::ReflectTemplate,
-    CompilerItem::Ref,
-    CompilerItem::RefMut,
-    CompilerItem::Inspect,
-    CompilerItem::Display,
-    CompilerItem::From,
-];
-
-=======
->>>>>>> origin/main
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OnBoundTrait {
     Eq,
@@ -1693,10 +1644,7 @@ impl TypeSystem {
         });
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
-<<<<<<< HEAD
-                let Some(header) = trait_env.impl_headers.get(&entry) else {
-                    continue;
-                };
+                let header = &trait_env.impl_headers[&entry];
                 if let Some(referent) = header.ref_receiver()
                     && subject_ref
                         .as_ref()
@@ -1704,13 +1652,6 @@ impl TypeSystem {
                 {
                     continue;
                 }
-||||||| 2c9c5304996
-                let Some(header) = trait_env.impl_headers.get(&entry) else {
-                    continue;
-                };
-=======
-                let header = &trait_env.impl_headers[&entry];
->>>>>>> origin/main
                 // Both sides are declarations: the query's comes from the
                 // reference site that asked (a bound, a `T::method()` prefix),
                 // the header's from the site it writes, and each was resolved by
@@ -1839,20 +1780,10 @@ impl TypeSystem {
             // A value blanket mints no instance for a reference, so it does not
             // answer one. This is what left `&i32: Sum` holding with nothing to
             // dispatch to.
-<<<<<<< HEAD
-            .filter(|b| b.receiver == BlanketReceiver::Value && type_key.ref_kind().is_none())
-            .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
-||||||| 2c9c5304996
-            .filter(|b| {
-                b.receiver == BlanketReceiver::Value && !matches!(type_key, Receiver::Ref(_))
-            })
-            .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
-=======
             .filter(|b| {
                 b.receiver == BlanketReceiver::Value && !matches!(type_key, Receiver::Ref(_))
             })
             .filter(|b| !(structural && self.is_reflect_bounded(b)))
->>>>>>> origin/main
         {
             let bounds_satisfied = blanket.bounds.iter().all(|bound| {
                 self.synthesized_reflect_bound_holds(scope, type_key, bound)

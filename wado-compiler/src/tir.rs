@@ -4314,41 +4314,14 @@ impl TypeTable {
     }
 
     fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
-        match self.get(id) {
-<<<<<<< HEAD
-            ResolvedType::AssocTypeProjection { .. } => out.push(id),
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.collect_assoc_type_projections(*inner, out),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                for &p in params {
-                    self.collect_assoc_type_projections(p, out);
-                }
-                self.collect_assoc_type_projections(*return_type, out);
-||||||| 2c9c5304996
-            ResolvedType::AssocTypeProjection { .. } => true,
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_assoc_type_projection(*inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params
-                    .iter()
-                    .any(|p| self.contains_assoc_type_projection(*p))
-                    || self.contains_assoc_type_projection(*return_type)
-=======
-            ResolvedType::AssocTypeProjection { .. } => true,
-            _ => self.any_constituent(id, &mut |t| self.contains_assoc_type_projection(t)),
+        if let ResolvedType::AssocTypeProjection { .. } = self.get(id) {
+            out.push(id);
+            return;
         }
+        self.any_constituent(id, &mut |t| {
+            self.collect_assoc_type_projections(t, out);
+            false
+        });
     }
 
     /// The frame slot `id` names where it is a type parameter or a pack.
@@ -4356,25 +4329,8 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 Some(*index)
->>>>>>> origin/main
             }
-<<<<<<< HEAD
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                for &t in type_args {
-                    self.collect_assoc_type_projections(t, out);
-                }
-            }
-            _ => {}
-||||||| 2c9c5304996
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args
-                .iter()
-                .any(|t| self.contains_assoc_type_projection(*t)),
-            _ => false,
-=======
             _ => None,
->>>>>>> origin/main
         }
     }
 

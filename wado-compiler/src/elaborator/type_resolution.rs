@@ -2,17 +2,8 @@
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-<<<<<<< HEAD
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, SlotProjections, TypeId, TypeTable};
-||||||| 2c9c5304996
-use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
-=======
-
-use crate::tir::{ResolvedType, TypeId, TypeTable};
->>>>>>> origin/main
 use crate::token::Span;
 
 use super::Elaborator;

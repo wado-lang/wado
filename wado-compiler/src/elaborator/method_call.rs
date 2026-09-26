@@ -360,22 +360,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut blanket_type_param: Option<String> = None;
         let mut blanket_binder: Option<FqTypeName> = None;
         let mut trait_impl_struct_name: Option<FqTypeName> = None;
-<<<<<<< HEAD
-        let mut matched_impl_struct_name: Option<String> = None;
-        // `Some` when the ref-priority path below adopts a `&X` / `&mut X` impl,
-        // so the receiver keys back to its typed reference without re-inspecting
-        // a string.
-||||||| 2c9c5304996
-        let mut matched_impl_struct_name: Option<String> = None;
-        // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
-        // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
-        // `Receiver::Ref` without re-inspecting the string.
-=======
         let mut matched_impl_decl: Option<DefId> = None;
         // `Some` when the ref-priority path below adopts a `&T` / `&mut T` impl,
         // so `base_struct_name` (then `"&"` / `"&mut"`) keys back to its typed
         // `Receiver::Ref` without re-inspecting the string.
->>>>>>> origin/main
         let mut matched_ref_kind: Option<RefKind> = None;
 
         // If receiver is a reference type, try ref-type trait impls first.
@@ -2988,22 +2976,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow()
                 .compiler_trait_fq(CompilerItem::Default);
-<<<<<<< HEAD
-            let (module_source, struct_name) = {
-                let tt = self.tysys.type_table.borrow();
-                (tt.def_module(*def).clone(), tt.def_name(*def).to_string())
-            };
-||||||| 2c9c5304996
-            let module_source = self.declaring_module_of(struct_name);
-=======
-            let module_source = self
+            let (struct_name, module_source) = self
                 .tysys
                 .type_table
                 .borrow()
                 .nominal_head(struct_type)
-                .expect("a derivable struct names its declaration")
-                .1;
->>>>>>> origin/main
+                .expect("a derivable struct names its declaration");
             self.tysys
                 .type_table
                 .borrow_mut()

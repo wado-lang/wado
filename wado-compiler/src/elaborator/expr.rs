@@ -1643,16 +1643,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-<<<<<<< HEAD
-        let base_type_id = self.tysys.pointee_of(expr_type).unwrap_or(expr_type);
-||||||| 2c9c5304996
-        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr_type,
-        };
-=======
         let base_type_id = self.tysys.through_ref(expr_type);
->>>>>>> origin/main
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1909,16 +1900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-<<<<<<< HEAD
-        let base_type_id = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
-||||||| 2c9c5304996
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
-=======
         let base_type_id = self.tysys.through_ref(recv_type);
->>>>>>> origin/main
         let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);

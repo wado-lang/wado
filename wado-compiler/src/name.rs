@@ -920,7 +920,7 @@ impl Receiver {
     pub fn def(&self) -> Option<DefId> {
         match self {
             Receiver::Type(fq) => fq.head().def(),
-            Receiver::Ref(_) => None,
+            Receiver::Ref(_) | Receiver::RefTo(..) => None,
         }
     }
 
@@ -971,28 +971,8 @@ impl Receiver {
 
     /// Whether this receiver is the built-in tuple.
     #[must_use]
-<<<<<<< HEAD
-    pub fn is_module_qualified(&self) -> bool {
-        matches!(
-            self,
-            Receiver::Type(fq) | Receiver::RefTo(_, fq) if matches!(
-                fq.head(),
-                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::ParamBucket { .. }
-            )
-        )
-||||||| 2c9c5304996
-    pub fn is_module_qualified(&self) -> bool {
-        matches!(
-            self,
-            Receiver::Type(fq) if matches!(
-                fq.head(),
-                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::ParamBucket { .. }
-            )
-        )
-=======
     pub fn is_tuple(&self) -> bool {
         matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Tuple))
->>>>>>> origin/main
     }
 
     /// The name an `impl` header writes its target as — no module, no type
@@ -1152,6 +1132,12 @@ impl LocalMethodName {
     #[must_use]
     pub fn receiver_decl_name(&self) -> DeclName {
         self.fq_base_struct_name().decl_name()
+    }
+
+    /// The receiver's reference kind, or `None` for a value receiver.
+    #[must_use]
+    pub fn ref_receiver(&self) -> Option<RefKind> {
+        self.receiver.ref_kind()
     }
 
     /// Create a new `LocalMethodName` directly from components.
@@ -1375,50 +1361,6 @@ impl LocalMethodName {
         }
     }
 
-<<<<<<< HEAD
-    /// Replace the type `old` with `new` throughout this method's identity — the
-    /// receiver and its type arguments, not the rendered `name`, which a
-    /// monomorphized call overwrites from its own key.
-    ///
-    /// The trait is left alone: a CM type swap changes the receiver, not the
-    /// trait it implements.
-    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
-        match &self.receiver {
-            Receiver::Type(fq) => self.receiver = Receiver::Type(fq.substitute(old, new)),
-            Receiver::RefTo(kind, referent) => {
-                self.receiver = Receiver::RefTo(*kind, referent.substitute(old, new));
-            }
-            Receiver::Ref(_) => {}
-        }
-        for arg in &mut self.struct_type_args {
-            *arg = arg.substitute(old, new);
-        }
-        for arg in &mut self.method_type_args {
-            *arg = arg.substitute(old, new);
-        }
-    }
-
-||||||| 2c9c5304996
-    /// Replace the type `old` with `new` throughout this method's identity — the
-    /// receiver and its type arguments, not the rendered `name`, which a
-    /// monomorphized call overwrites from its own key.
-    ///
-    /// The trait is left alone: a CM type swap changes the receiver, not the
-    /// trait it implements.
-    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
-        if let Receiver::Type(fq) = &self.receiver {
-            self.receiver = Receiver::Type(fq.substitute(old, new));
-        }
-        for arg in &mut self.struct_type_args {
-            *arg = arg.substitute(old, new);
-        }
-        for arg in &mut self.method_type_args {
-            *arg = arg.substitute(old, new);
-        }
-    }
-
-=======
->>>>>>> origin/main
     /// A monomorphization-invariant identity: base struct / trait names and the
     /// bare method name, every type argument dropped, so a generic method and its
     /// instantiations share one key where [`Self::to_mangled_name`] would not.

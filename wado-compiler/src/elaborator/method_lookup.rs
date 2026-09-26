@@ -13,18 +13,11 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable, positional_substitution,
-};
-||||||| 2c9c5304996
-use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
-=======
 use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
-use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TemplateId, TypeId, TypeTable};
->>>>>>> origin/main
+use crate::tir::{
+    FunctionRef, ResolvedType, SubstitutionContext, TemplateId, TypeId, TypeTable,
+    positional_substitution,
+};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -2519,10 +2512,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .pointee_of(receiver)
                 .expect("a reference key is asked of a reference receiver")
         });
-        let pointee_key = pointee.map(|pointee| {
-            let name = self.tysys.fq_receiver_head(pointee).into_string();
-            self.impl_target_of(pointee, &DeclName::new(&name))
-        });
         let concrete_type_args: Vec<TypeId> = match pointee {
             Some(pointee) => self
                 .tysys
@@ -2552,52 +2541,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-<<<<<<< HEAD
-                let mut slots = positional_substitution(&concrete_type_args);
-                if let Some(pointee) = pointee {
-                    match header.referent_key(&s.tysys.resolutions)? {
-                        ImplTargetKey::TypeParam(_, binder) => {
-                            let slot = header
-                                .type_params
-                                .iter()
-                                .filter(|p| p.is_real_type_param())
-                                .position(|p| p.name == binder)?;
-                            slots = [(slot as u32, pointee)].into_iter().collect();
-                        }
-                        referent => {
-                            if Some(referent) != pointee_key {
-                                return None;
-                            }
-                        }
-                    }
-                }
-                // A concrete type argument in the impl target is a constraint,
-                // not a free parameter: `impl … for TreeMap<String, V>` does
-                // not answer for a `TreeMap<i32, String>` receiver. Without
-                // this the method signature instantiates against the wrong
-                // arguments and the mismatch only surfaces at WIR build.
-                if !s.tysys.verify_impl_type_compatibility(
-                    header.ty.referent(),
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
-||||||| 2c9c5304996
-                // A concrete type argument in the impl target is a constraint,
-                // not a free parameter: `impl … for TreeMap<String, V>` does
-                // not answer for a `TreeMap<i32, String>` receiver. Without
-                // this the method signature instantiates against the wrong
-                // arguments and the mismatch only surfaces at WIR build.
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
-=======
->>>>>>> origin/main
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
@@ -2613,6 +2556,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // in the impl's frame; instantiating it with the receiver's
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
+                let mut slots = positional_substitution(&concrete_type_args);
+                if let Some(pointee) = pointee {
+                    if !s
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .impl_reaches_instance(impl_ref.0, receiver)
+                    {
+                        return None;
+                    }
+                    if let ImplTargetKey::TypeParam(_, binder) =
+                        header.referent_key(&s.tysys.resolutions)?
+                    {
+                        let slot = header
+                            .type_params
+                            .iter()
+                            .filter(|p| p.is_real_type_param())
+                            .position(|p| p.name == binder)?;
+                        slots = [(slot as u32, pointee)].into_iter().collect();
+                    }
+                }
+
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
                 let method_sig = s.tysys.signatures.method_sig(method_header.def)?;
                 let self_kind = method_sig.self_kind;
@@ -2627,16 +2592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The declared parameter is `&Rhs`; the operand is the
                 // referent, so admissibility compares against that.
                 if let Some(class) = rhs {
-<<<<<<< HEAD
-                    let declared = rhs_type.map(|t| s.tysys.pointee_of(t).unwrap_or(t));
-||||||| 2c9c5304996
-                    let declared = rhs_type.map(|t| match s.tysys.type_table.borrow().get(t) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                        _ => t,
-                    });
-=======
                     let declared = rhs_type.map(|t| s.tysys.through_ref(t));
->>>>>>> origin/main
                     if let Some(declared) = declared
                         && !s.class_admits(declared, class)
                     {
@@ -2648,7 +2604,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `impl_sig` was filled from.
                 let ref_sig = pointee.map(|_| {
                     s.tysys
-                        .impl_sig(impl_ref)
+                        .signatures
+                        .impl_sig(impl_ref.0)
                         .instantiate_slots(&s.tysys.type_table, &slots)
                 });
                 let output_type = ref_sig
@@ -2664,7 +2621,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     output_type,
                     self_kind,
                     impl_module_source: header.module.clone(),
-                    receiver: s.impl_receiver(header, base_type_id),
+                    receiver: s.impl_receiver(header, receiver),
                     // The *full* spelling (`Add<Feet>`), not the operator's
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
@@ -2804,19 +2761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<(String, TypeId)> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-<<<<<<< HEAD
-        let base_type_id = self
-            .tysys
-            .pointee_of(container_type)
-            .unwrap_or(container_type);
-||||||| 2c9c5304996
-        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_type,
-        };
-=======
         let base_type_id = self.tysys.through_ref(container_type);
->>>>>>> origin/main
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -2895,16 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
-<<<<<<< HEAD
-        let output_base_type_id = self.tysys.pointee_of(output_type).unwrap_or(output_type);
-||||||| 2c9c5304996
-        let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => output_type,
-        };
-=======
         let output_base_type_id = self.tysys.through_ref(output_type);
->>>>>>> origin/main
 
         let (output_struct_name, output_module_source, output_type_args) = match self
             .tysys

@@ -6065,17 +6065,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
             let base = receiver.type_id;
-<<<<<<< HEAD
-            let unwrapped = self.tysys.pointee_of(base).unwrap_or(base);
-||||||| 2c9c5304996
-            let unwrapped = match tt.get(base) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => base,
-            };
-            tt.as_tuple(unwrapped)
-=======
             let unwrapped = self.tysys.through_ref(base);
->>>>>>> origin/main
             self.tysys.type_table.borrow().as_tuple(unwrapped)
         };
         if let Some(elems) = &tuple_elems
