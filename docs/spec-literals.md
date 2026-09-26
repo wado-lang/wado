@@ -295,36 +295,6 @@ For characters outside BMP (U+10000 and above), use either:
 "😀"             // Direct Unicode character
 ```
 
-Template strings (interpolation) use backticks. Interpolation is introduced
-with `${expr}` (ES/TypeScript-style); a bare `{` or `}` is literal text, so
-JSON-like content needs no escaping:
-
-```wado
-let name = "Alice";
-let greeting = `Hello, ${name}!`;  // "Hello, Alice!"
-
-let count = 42;
-let message = `Count: ${count}`;   // "Count: 42"
-
-// Format specifiers
-let pi = 3.14159;
-let formatted = `Pi: ${pi:.2}`;   // "Pi: 3.14"
-let hex = `${255:x}`;             // "ff"
-let sci = `${1200:e}`;            // "1.2e3" (integers as well as floats)
-let padded = `${"あい":>6}`;       // "    あい" (width counts characters)
-
-// Inspect (debug) format — works for any type
-let p = Point { x: 10, y: 20 };
-let debug = `${p:?}`;            // "Point { x: 10, y: 20 }"
-let pretty = `${p:#?}`;          // pretty-print: "Point {\n  x: 10,\n  y: 20,\n}"
-// `${p}` (Display) needs an `impl Display` for `Point`; use `${p:?}` for debug output.
-
-// Braces are literal — JSON embeds cleanly without escaping
-let json = `{"key": "${name}"}`;  // {"key": "Alice"}
-```
-
-See [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md) for the full specifier table, [WEP: Format Traits](./wep-2026-02-01-format-traits.md) for the trait/Formatter infrastructure, and [WEP: Inspect](./wep-2026-02-21-inspect-debug-output.md) for the `:?` debug output format.
-
 Multiline strings are supported in both regular and template strings. Literal newlines are preserved:
 
 ```wado
@@ -342,6 +312,397 @@ Welcome to Wado!
 
 Best regards`;
 ```
+
+### Template Strings
+
+A template string is written in backticks and has the type `String`. `${expr}`
+interpolates the value of `expr`, and everything else is literal text. A bare
+`{` or `}` is literal, so JSON-like content needs no escaping:
+
+```wado
+let name = "Alice";
+let greeting = `Hello, ${name}!`;   // "Hello, Alice!"
+let json = `{"key": "${name}"}`;    // {"key": "Alice"}
+
+let pi = 3.14159;
+let formatted = `Pi: ${pi:.2}`;     // "Pi: 3.14"
+let p = Point { x: 10, y: 20 };
+let debug = `${p:?}`;               // "Point { x: 10, y: 20 }"
+```
+
+#### Interpolation
+
+An interpolation is `${expr}` or `${expr:spec}`. The expression may be any
+expression, not only a name:
+
+```wado
+`${x + 1}`
+`${x * 2:x}`
+`${p.x + p.y}`
+`${arr.len()}`
+```
+
+The specifier starts at the first `:` outside parentheses, brackets and braces.
+A `::` is always a path separator, so `${foo::bar}` and `${foo::<T>}` hold only
+an expression, while `${foo:x}` has the specifier `x`. The interpolation ends at
+the `}` that closes its `${`. A `}` inside a string, a char, a nested template
+or a comment does not close it.
+
+Whitespace around the expression and around the specifier is ignored, so
+`${ x : 5 }` reads as `${x:5}`.
+
+#### Format Specifiers
+
+```text
+interpolation := '${' expression [ ':' spec ] '}'
+spec          := [[fill] align] ['+'] ['#'] ['0'] [width] ['.' precision] [type]
+align         := '<' | '^' | '>'
+type          := 'b' | 'o' | 'x' | 'X' | 'e' | 'E' | 'f' | '?'
+width         := digit+
+precision     := digit+
+```
+
+Every part of `spec` is optional, but `spec` itself is not: a `:` must be
+followed by one. `width` and `precision` must fit in an `i32`. A character is a
+fill only when an alignment follows it. The
+fill may be any character except `'`, `"`, `` ` ``, `{`, `}` and a `/` that
+opens a comment, which the interpolation reads as structure. Only `+` is a sign,
+so `${42:-<4}` is `-` as the fill and renders `42--`.
+
+The grammar is closed. Anything it does not accept is a compile error, so a
+printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
+
+| Input              | Error                                                 |
+| ------------------ | ----------------------------------------------------- |
+| `${x:}`            | empty format specifier                                |
+| `${x:d}`           | unknown format specifier `d`                          |
+| `${x:5x1}`         | unexpected `1` after the format specifier             |
+| `${x:.}`           | expected digits after `.` in format specifier         |
+| `${x:99999999999}` | format specifier width `99999999999` is too large     |
+
+#### Format Types
+
+The type character selects the trait the value renders through. A value whose
+type does not implement that trait is a compile error.
+
+| Type   | Trait      | Applies to                      | Example                   |
+| ------ | ---------- | ------------------------------- | ------------------------- |
+| (none) | `Display`  | types with an impl              | `${42}` → `42`            |
+| `f`    | `Display`  | types with an impl              | `${3.14159:.2f}` → `3.14` |
+| `?`    | `Inspect`  | every type                      | `${"a":?}` → `"a"`        |
+| `b`    | `Binary`   | integers                        | `${42:b}` → `101010`      |
+| `o`    | `Octal`    | integers                        | `${42:o}` → `52`          |
+| `x`    | `LowerHex` | integers                        | `${42:x}` → `2a`          |
+| `X`    | `UpperHex` | integers                        | `${42:X}` → `2A`          |
+| `e`    | `LowerExp` | integers, `f32`, `f64`          | `${1200:e}` → `1.2e3`     |
+| `E`    | `UpperExp` | integers, `f32`, `f64`          | `${1200:E}` → `1.2E3`     |
+
+`f` selects no trait of its own. `Display` already honours precision, so
+`${x:.2f}` and `${x:.2}` render the same, and `f` only makes a float format read
+as one. There is no adaptive `g` and no pointer `p`.
+
+Which types implement `Display` is stated in
+[Format Traits](./spec-traits.md#format-traits). `${x}` on a type without one is
+a compile error that names `${x:?}` as the debug form.
+
+`b`, `o`, `x` and `X` render a negative signed integer as the two's complement
+bit pattern of its own width: `${-1 as i32:x}` renders `ffffffff`.
+
+`e` and `E` write one digit before the point. On an integer the mantissa drops
+its trailing zeros (`${1200:e}` renders `1.2e3`). With a precision it carries
+exactly that many decimal places, rounded half to even (`${1250:.1e}` renders
+`1.2e3`, `${1350:.1e}` renders `1.4e3`). A carry moves the exponent up a decade:
+`${99:.0e}` renders `1e2`.
+
+#### Width, Fill and Alignment
+
+`width` is a minimum length, counted in characters, not bytes or display
+columns. Padding uses the fill character, a space by default, and every type
+aligns right by default. Centering puts the odd character of padding on the
+right. A multi-byte fill pads by whole characters.
+
+```wado
+`${42:5}`        // "   42"
+`${42:<5}`       // "42   "
+`${42:^5}`       // " 42  "
+`${42:_>5}`      // "___42"
+`${"あい":>6}`    // "    あい"  two characters, six bytes
+`${42:€>8}`      // "€€€€€€42"
+```
+
+#### Sign and Zero Padding
+
+`+` writes a sign on a non-negative number. Without it only a negative number
+carries one.
+
+`0` is a flag, not a width digit, so `${x:0.2f}` is zero padding plus a
+precision. Zeros go after the sign and after any radix prefix, and the flag wins
+over an explicit fill and alignment:
+
+```wado
+`${42:+}`         // "+42"
+`${42:05}`        // "00042"
+`${-42:08}`       // "-0000042"
+`${-42:*<08}`     // "-0000042"
+`${42:#08x}`      // "0x00002a"
+`${-1200.0:012e}` // "-0000001.2e3"
+```
+
+#### Alternate Form
+
+`#` asks for the alternate form. It selects no trait: it sets a flag the
+implementation reads, or ignores.
+
+| Type     | Effect of `#`          | Example    | Output     |
+| -------- | ---------------------- | ---------- | ---------- |
+| `x`, `X` | `0x` prefix            | `${42:#x}` | `0x2a`     |
+| `b`      | `0b` prefix            | `${42:#b}` | `0b101010` |
+| `o`      | `0o` prefix            | `${42:#o}` | `0o52`     |
+| `?`      | indented, multi-line   | `${p:#?}`  | multi-line |
+| (none)   | up to the `Display`    | `${42:#}`  | `42`       |
+| `e`, `E` | none                   | `${42:#e}` | `4.2e1`    |
+
+`${x:#X}` prefixes `0x`, not `0X`. The flag chooses the prefix, and the type
+character chooses the case of the digits.
+
+A hand-written `Display` may branch on the flag. `core:temporal`'s `Instant`
+renders whole seconds plainly and milliseconds under `#`. Every primitive
+ignores it.
+
+#### Precision
+
+`precision` means something different for each kind of value:
+
+| Value                         | Meaning                          | Example                               |
+| ----------------------------- | -------------------------------- | ------------------------------------- |
+| Float                         | decimal places                   | `${3.14159:.2}` → `3.14`              |
+| Integer or float under `e`/`E` | mantissa decimal places         | `${12345:.2e}` → `1.23e4`             |
+| Integer otherwise             | ignored                          | `${42:.2}` → `42`                     |
+| `String`, `StrSlice`          | maximum length in characters     | `${"hello world":.5}` → `hello`       |
+| `List`, `Array`, `Slice`      | maximum number of elements       | `${[1, 2, 3, 4, 5]:.3}` → `[1, 2, 3]` |
+
+`Display` truncates silently. `Inspect` marks the cut: a string gets `...` after
+its closing quote, and a sequence gets `, ...` in place of the dropped elements.
+The marker does not count toward the precision.
+
+```wado
+let s = "hello world";
+`${s:.5}`        // hello
+`${s:.5?}`       // "hello"...
+`${s:.20}`       // hello world
+
+let a: List<i32> = [1, 2, 3, 4, 5];
+`${a:.3}`        // [1, 2, 3]
+`${a:.3?}`       // [1, 2, 3, ...]
+```
+
+A container renders its elements with the same spec it was given, so precision
+and width reach every element. A tuple or struct never caps its own arity, but
+its string and sequence fields honour the precision, and `${a:6?}` pads each
+element rather than the whole list.
+
+#### The Formatter
+
+Every format trait writes into a `Formatter`, which carries the parsed spec and
+the string being built. Both types are in the prelude:
+
+```wado
+pub enum Alignment { Left, Center, Right }
+
+pub struct Formatter {
+    pub fill: char,          // ' ' when the spec sets none
+    pub align: Alignment,    // Right when the spec sets none
+    pub sign_plus: bool,     // `+`
+    pub alternate: bool,     // `#`
+    pub zero_pad: bool,      // `0`
+    pub width: i32,          // Formatter::NO_WIDTH (-1) when the spec sets none
+    pub precision: i32,      // Formatter::PRECISION_DEFAULT (-2) when the spec sets none
+    pub indent: i32,         // nesting depth of the alternate Inspect
+    pub buf: &mut String,    // the output, which the Formatter does not own
+}
+
+pub trait Display with ()  { fn fmt(&self, f: &mut Formatter); }
+pub trait Inspect with ()  { fn inspect(&self, f: &mut Formatter); }
+pub trait Binary with ()   { fn fmt_binary(&self, f: &mut Formatter); }
+pub trait Octal with ()    { fn fmt_octal(&self, f: &mut Formatter); }
+pub trait LowerHex with () { fn fmt_lower_hex(&self, f: &mut Formatter); }
+pub trait UpperHex with () { fn fmt_upper_hex(&self, f: &mut Formatter); }
+pub trait LowerExp with () { fn fmt_lower_exp(&self, f: &mut Formatter); }
+pub trait UpperExp with () { fn fmt_upper_exp(&self, f: &mut Formatter); }
+```
+
+Each method is named after its trait, so a type implementing several declares
+no overloads. Every format trait is `with ()`, so rendering a value performs no
+effect.
+
+An interpolation builds one `Formatter` from its spec and calls the one method
+its type character selects. It writes nothing around that call. Padding, sign
+and truncation belong to the implementation, which reads the public fields and
+writes through `f`. An implementation that writes its text with `f.write_str`
+ignores the spec; one that hands its rendered text to `f.pad` honours width,
+fill, alignment and zero padding.
+
+```wado
+struct Celsius { degrees: i32 }
+
+impl Display for Celsius {
+    fn fmt(&self, f: &mut Formatter) {
+        f.pad(`${self.degrees}°C`);
+    }
+}
+
+`${Celsius { degrees: 21 }:>8}`   // "    21°C"
+```
+
+`Formatter::new(buf)` builds a formatter with the default spec, and
+`String::push_display(&value)` renders one `Display` value into a string in
+place. The full method set is in [`core:prelude`](./stdlib-core-prelude.md).
+
+`precision` holds three kinds of value:
+
+| Value                     | Meaning                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `>= 0`                    | the precision the spec wrote                                                      |
+| `PRECISION_DEFAULT` (-2)  | none written; an `Inspect` of a string or sequence caps at `DEFAULT_SEQ_LIMIT`    |
+| `PRECISION_INFINITE` (-1) | uncapped; an `Inspect` of a string or sequence renders all of it                  |
+
+`.N` cannot write a negative number, so `PRECISION_INFINITE` is reachable only
+by building a `Formatter` directly.
+
+#### Display Output
+
+The prelude's `Display` impls render as follows. Plain enums and newtypes render
+as [Format Traits](./spec-traits.md#format-traits) states.
+
+- An integer renders in decimal.
+- A float renders the shortest digits that read back as the same value, in
+  positional notation and with no trailing `.0`: `${5.0}` renders `5`,
+  `${3.14}` renders `3.14`. The special values render `NaN`, `inf` and `-inf`,
+  and negative zero renders `-0`. `f16` and `bf16` render as their `f32` value.
+- `bool` renders `true` or `false`, `char` the character itself, and `String`
+  and `StrSlice` their text. `()` renders `()`.
+- `List`, `Array` and `Slice` render `[a, b, c]`, each element in its `Inspect`
+  form, with no default cap and no truncation marker.
+- A tuple renders `[a, b]`, each element in its `Display` form. A tuple has
+  `Display` only when every element does.
+- A range renders `start..<end` or `start..=end`.
+- A closure renders as its `Inspect` form, so `${f}` writes the signature and
+  `${f:#}` the source.
+
+#### Inspect Output
+
+`Inspect` is the debug form behind `${x:?}` and `${x:#?}`. Every type has it,
+so a `T: Inspect` bound always holds. The prelude implements it for the
+primitives, `String`, references, sequences, tuples and the standard
+collections. A struct, variant, enum, flags or newtype gets it from its shape,
+and a resource and a closure get one from the compiler. A hand-written
+`impl Inspect` replaces the derived one.
+
+The output follows Wado's literal syntax where it has one:
+
+| Type                       | Output                                   | Example                               |
+| -------------------------- | ---------------------------------------- | ------------------------------------- |
+| Integer                    | decimal                                  | `42`, `-7`                            |
+| `f32`, `f64`               | shortest round-trip digits, see below    | `3.14`, `5.0`, `inf`, `-0.0`          |
+| `f16`, `bf16`              | exponent form of the `f32` value         | `1e0`                                 |
+| `bool`                     | `true` / `false`                         | `true`                                |
+| `char`                     | quoted, escaped                          | `'A'`, `'\n'`                         |
+| `String`, `StrSlice`       | quoted, escaped                          | `"say \"hi\""`                        |
+| `()`                       | `()`                                     | `()`                                  |
+| `v128`                     | its 16 bytes in hex, byte lane 0 first   | `v128(0x000102030405060708090a0b0c0d0e0f)` |
+| Struct                     | `Name { field: value, ... }`             | `Point { x: 10, y: 20 }`              |
+| Struct, no fields          | `Name {}`                                | `Empty {}`                            |
+| Tuple                      | `[elem, ...]`                            | `[1, "a", true]`                      |
+| `List`, `Array`, `Slice`   | `[elem, ...]`                            | `[1, 2, 3]`                           |
+| `TreeMap<K, V>`            | `{key: value, ...}`                      | `{"a": 1, "b": 2}`                    |
+| `TreeSet<T>`               | `{elem, ...}`                            | `{10, 20, 30}`                        |
+| Enum                       | `Type::Case`                             | `Color::Red`                          |
+| Variant                    | `Type::Case(payload)`, a unit case bare  | `Shape::Circle(5.0)`, `Option::None`  |
+| Flags                      | set members joined by ` \| `             | `Perms::Read \| Perms::Write`         |
+| Flags, none set            | `Type::none()`                           | `Perms::none()`                       |
+| Newtype                    | base value, then `as Name`               | `1.5 as Meters`                       |
+| `&T`, `&mut T`             | `&` or `&mut `, then the referent        | `&42`, `&mut Point { x: 1, y: 2 }`    |
+| Closure                    | its signature                            | `\|i32, i32\| -> i32`                 |
+| Affine resource            | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                        |
+
+Rules the table does not carry:
+
+- A float renders its shortest round-trip digits. A value with no fractional
+  part keeps `.0`, and a value whose decimal exponent is below -4 or at least 16
+  renders in exponent form (`1e300`). The special values render `NaN`, `inf`,
+  `-inf` and `-0.0`.
+- A string escapes `"`, `\`, newline, carriage return and tab as `\"`, `\\`,
+  `\n`, `\r` and `\t`. Any other control character (below `0x20`, or `0x7F`)
+  renders as `\u{HEX}` in lowercase hex. Every other character, non-ASCII
+  included, renders as itself. A `char` escapes `'`, `\`, newline, carriage
+  return and tab the same way.
+- A struct writes its fields in declaration order and never its type arguments,
+  so `Box<i32>` renders `Box { value: 42 }`. A
+  [`#[secret]`](./spec-attributes.md) field is left out and `..` appended:
+  `User { name: "Alice", .. }`, or `Name { .. }` when every field is secret.
+- An enum, variant or flags case is always qualified by its type, as its
+  construction is spelled. `Option` and `Result` are ordinary variants and get
+  no short form.
+- A newtype writes its base, then `as` and its own name, as the cast that
+  builds it reads. A chain writes one link per newtype: `7 as A as B`.
+- An [unrestricted resource](./spec-components.md#resource-linearity) renders
+  as the resource its handle's class names, whatever the static type says, with
+  the class and object index: `Element { type_id: 1, object_id: 7 }`. A class no
+  resource in the [inheritance tree](./spec-components.md#resource-inheritance)
+  owns keeps the static type's name. An `f64` that encodes no class and object,
+  or the handle of a resource that declares no classes, renders as the `f64`:
+  `Node { handle: 1.5 }`. Inspecting a handle never traps.
+- A closure under `#` renders its own source, reprinted with each binary
+  operation parenthesised: `|x: i32| (x + 1)`. A captured variable appears by
+  name. A function used as a value renders as a closure that forwards to it:
+  `|x: i32| double(x)`.
+
+Under `#`, each composite writes one element, field or entry per line, indented
+two spaces per level, each followed by a comma. An empty one stays on one line
+(`[]`, `{}`), and a variant's payload goes on its own line:
+
+```wado
+let arr: List<i32> = [1, 2, 3];
+`${arr:#?}`                        // "[\n  1,\n  2,\n  3,\n]"
+`${Option::Some(42):#?}`           // "Option::Some(\n  42,\n)"
+`${Point { x: 1, y: 2 }:#?}`       // "Point {\n  x: 1,\n  y: 2,\n}"
+```
+
+#### Inspect Truncation
+
+With no precision in the spec, `Inspect` of a string or a sequence caps it at
+`Formatter::DEFAULT_SEQ_LIMIT`, 256 characters or elements, and marks the cut as
+an explicit precision does. This keeps debug output readable, the operand dumps
+of a failed [`assert`](./spec-testing.md) included. An explicit precision
+replaces the cap. `Display` never applies it.
+
+The cap covers `String`, `StrSlice`, `List`, `Array` and `Slice`. A sequence
+that shows no element before the cut renders `[...]`, and the `#` form puts
+`...` on a line of its own. A tuple, a struct, a `TreeMap` and a `TreeSet` are
+never capped.
+
+```wado
+let long = "a".repeat(300);
+`${long}`.len()      // 300
+`${long:?}`.len()    // 261: two quotes, 256 characters, and "..."
+```
+
+#### Known Gaps
+
+- Width and precision are literal digits, so neither can be computed at run
+  time.
+- A spec part that means nothing for its value is dropped rather than rejected,
+  against the closed grammar: a precision on an integer, `+` on a `String`, `#`
+  under `e` or `E`.
+- The `0` flag and the default alignment do not tell a number from any other
+  value. `${true:08}` renders `0000true`, and text aligns right by default where
+  Rust aligns it left.
+- Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length, so
+  inspecting a deeply recursive value runs until the stack is exhausted.
+
+Rationale: [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md),
+[WEP: Format Traits](./wep-2026-02-01-format-traits.md),
+[WEP: Inspect (Debug Output)](./wep-2026-02-21-inspect-debug-output.md).
 
 ### Tuple Literals
 
@@ -452,21 +813,7 @@ fn process(data: List<i32>) { ... }
 process([1, 2, 3]);              // OK - implicit coercion
 ```
 
-#### Design Rationale
-
-This design aligns with TypeScript (primary target audience) and enables intuitive JSON interoperability. JSON arrays are heterogeneous and map naturally to tuples:
-
-```json
-{ "point": [10, 20], "mixed": [1, "hello", true] }
-```
-
-```wado
-// A JSON array maps naturally to a tuple:
-let point: [i32, i32] = [10, 20];
-let mixed: [i32, String, bool] = [1, "hello", true];
-```
-
-See `docs/wep-2026-01-15-tuple-and-array-literals.md` for detailed rationale.
+Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
 
 #### List Constructors
 
@@ -509,7 +856,7 @@ Sorting (stable, O(n log n) worst case):
 
 On a float, `Ord` is the IEEE 754 total order rather than the order `<` gives,
 so a NaN still has a place in a sorted list. See
-[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
+[Ord - Ordering](./spec-traits.md#ord---ordering).
 
 ```wado
 let mut nums: List<i32> = [5, 3, 8, 1];
@@ -556,28 +903,66 @@ impl<T> From<Array<T>> for MyVec<T> {
 }
 ```
 
-Where a type accepts both literal forms, `{ … }` takes the impl whose element
-is a two-element tuple and `[ … ]` prefers the one whose element is not;
-several candidates for one form are an ambiguity error the site reports, and
-`T::from(…)` written out resolves it.
+#### Impl Selection
 
-#### Implicit conversion
+The target's `From<Array<X>>` impls decide which literal form it accepts:
 
-A literal is implicitly converted to its target type through `From`. No other
-expression is implicitly converted — a literal position is the whole of it.
+- `{ … }` considers only the impls whose `X` is a two-element tuple. A target
+  with none is a compile error: it cannot be built from a key-value literal.
+- `[ … ]` considers every `From<Array<X>>` impl. Where several match, the one
+  whose `X` is not a two-element tuple wins.
+- Several candidates left for one form are an ambiguity error at the literal.
+  Writing `T::from(…)` out resolves it by ordinary overload resolution, with a
+  turbofish where the target is generic (`List::<i32>::from(…)`).
+
+`core:value::Value` accepts both forms, and each literal reads as JSON reads it:
+
+| Literal      | `List<i32>`     | `TreeMap<String, i32>` | `Value`                        |
+| ------------ | --------------- | ---------------------- | ------------------------------ |
+| `[1, 2]`     | accepted        | error: not pairs       | `Value::List`                  |
+| `{a: 1}`     | error: no impl  | accepted               | `Value::Object`                |
+| `[["a", 1]]` | error           | accepted, as a map     | `Value::List` of `Value::List` |
+
+The selected impl's `X` types every element, and every key and value. Where the
+target's type arguments are still open, as in a generic callee's parameter, the
+elements decide them.
+
+Every key a key-value literal writes is a field name, so the selected impl's
+key type must accept a `String`. A target that builds from another key type is
+a compile error at the literal.
+
+A newtype target is built through the first type on its newtype chain that has
+an impl, and the result is cast to the newtype:
 
 ```wado
-let v: List<Value> = [1, "x"];   // OK — every element is a literal
-let v: List<Value> = [a, b];     // ERROR — write [Value::from(a), Value::from(b)]
+type Scores = List<i32>;
+let s: Scores = [90, 85];   // List::from, then `as Scores`
 ```
 
-Coercion is literal-only — it does not apply to bound variables. If the target
-type is a struct with matching fields, it is interpreted as a struct literal and
-coercion is not attempted.
+#### Implicit Conversion
 
-#### `..base` spread
+A literal is implicitly converted to its target type through `From`. No other
+expression is implicitly converted. A literal here is a number, string, char,
+`bool`, `null` or byte literal, or a `[ … ]` or `{ … }` literal. A template
+string, a variable and a call are not literals.
 
-`..base` inside a literal merges through `LiteralSpread`, last write wins:
+```wado
+let v: List<Value> = [1, "x"];   // OK: every element is a literal
+let v: List<Value> = [a, b];     // Error: write [Value::from(a), Value::from(b)]
+let w: List<i64> = [x];          // Error: no implicit widening of `x: i32`
+```
+
+Literal typing runs first, so `42` against `i64` is an `i64`, not an
+`i64::from`. `From` applies only where literal typing cannot reach the target:
+against `Value`, the `1` in `{ n: 1 }` takes its default type `i32` and then
+converts through `Value::from`. An element that reaches no conversion is
+reported with the rule that refused it: the element is not a literal, or the
+slot's type has no `From` for the element's type.
+
+#### `..base` Spread
+
+A key-value literal may carry `..base` members, which merge through
+`LiteralSpread`:
 
 ```wado
 pub trait LiteralSpread with () {
@@ -585,11 +970,35 @@ pub trait LiteralSpread with () {
 }
 ```
 
-A type without the impl rejects `..base` where it is written, and a sequence
-literal cannot carry one at all — `[..xs, 4]` is a tuple spread.
+The members apply in source order and the last write wins. Each subexpression
+is evaluated once, in source order. A spread may stand anywhere in the literal,
+and there may be several. Each `base` must have the literal's target type.
 
-See [`docs/wep-2026-08-24-literal-from-array.md`](./wep-2026-08-24-literal-from-array.md)
-for the impl-selection rule and newtype targets.
+```wado
+let base: TreeMap<String, i32> = { a: 1, b: 2 };
+let more: TreeMap<String, i32> = { a: 9, d: 4 };
+let m: TreeMap<String, i32> = { ..base, ..more, c: 3 };   // a: 9, b: 2, c: 3, d: 4
+```
+
+These are compile errors:
+
+- a target type without a `LiteralSpread` impl;
+- `{ ..base }` with no other member, which only copies `base`;
+- the same key written twice as an explicit member.
+
+A sequence literal cannot carry a spread: `[..xs, 4]` is a
+[tuple spread](./spec-functions.md#value-spread). The struct forms of `..base`
+are in [Struct Construction](./spec-types.md#struct-construction) and
+[Serialization and Deserialization](./spec-traits.md#bound-driven-serialize--deserialize).
+
+#### Known Gaps
+
+- A key is always a field name. A computed key such as `{ [Color::Red]: 1 }`
+  cannot be written, so a map whose key type is not `String` has no key-value
+  literal.
+
+Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md),
+[WEP: Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md).
 
 ## Compile-Time Location Literals
 
@@ -629,12 +1038,16 @@ __DATA__
 
 `#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
 
-The path argument must be a string literal. Paths are resolved relative to the source file containing the expression. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
+The argument is a parenthesized string literal; any other expression is a compile error. The path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
 
 ```wado
 let template = #include_str("./templates/header.html");
 let icon: ByteList = #include_bytes("./assets/logo.png");
 ```
+
+The file is read once, at compile time, and its content is a constant. Changing the file after compilation does not change the compiled program. The content is inserted as data and never expanded, so a file may include itself: `#include_str` of its own path yields its own source text.
+
+Rationale: [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ### `#function` Format
 
@@ -687,10 +1100,9 @@ let keys = map.keys();  // an iterator over the keys, in insertion order
 let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
 ```
 
-A `{ ..base, "k": v }` key-value literal seeds the builder with every entry of
-`base` (same map type) and then applies the explicit keys, so explicit keys
-override the base. Like the struct form, the spread is leading and single. See
-[WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+A `{ ..base, "k": v }` literal takes every entry of `base` and then the
+explicit keys, so an explicit key overrides the base. The rules for spreads in a
+key-value literal are in [`..base` Spread](#base-spread).
 
 ### Access Methods
 
