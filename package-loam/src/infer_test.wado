@@ -865,7 +865,9 @@ test "Slice bounds past either end of a symbolic axis keep it whole and owe noth
         Y = Slice(X, B, E)
     }`;
     let graph = read(&source).unwrap();
-    let checked = infer(&graph, &Schema { layout: [rule("X", ["Seq"])] }).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("X", ["Seq"])],
+    }).unwrap();
     assert checked.owed.is_empty();
     assert checked.shapes["Y"].axes[0].name == "Seq";
 }

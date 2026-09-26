@@ -316,6 +316,18 @@ fn concat(parts: &List<Known>, axis: i64) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements: picked(&joined_elements(parts)?, &picks) });
 }
 
+/// The axes a `Slice` lists, or the first `count` where it lists none.
+pub fn sliced_axes(node: &Node, known: &TreeMap<String, Known>, count: i32) -> Result<List<i64>, String> {
+    if let Some(listed) = axes_of(node, known, 3, "axes")? {
+        return Result::Ok(listed);
+    }
+    let mut axes: List<i64> = [];
+    for let i of 0..<count {
+        axes.push(i as i64);
+    }
+    return Result::Ok(axes);
+}
+
 /// `Slice` of a known tensor, or `None` where a bound only the run knows
 /// leaves the slice to it.
 fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Option<Known>, String> {
@@ -326,13 +338,7 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
     let Some(ends) = numbers(&polys_at(node, known, 2, "ends")?.ok_or("ends is absent")?) else {
         return Result::Ok(null);
     };
-    let mut axes: List<i64> = [];
-    for let i of 0..<starts.len() {
-        axes.push(i as i64);
-    }
-    if let Some(listed) = axes_of(node, known, 3, "axes")? {
-        axes = listed;
-    }
+    let axes = sliced_axes(node, known, starts.len())?;
     let steps = axes_of(node, known, 4, "steps")?.unwrap_or(List::<i64>::filled(starts.len(), 1));
     let sliced = starts.len();
     if ends.len() != sliced || axes.len() != sliced || steps.len() != sliced {
@@ -709,7 +715,7 @@ fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, String> {
     return node.int_attr(name, fallback).map_err(|e| `${e}`);
 }
 
-pub fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
+fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
     let i = resolve_index(axis, rank as i64);
     if !(0 <= i < rank as i64) {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);

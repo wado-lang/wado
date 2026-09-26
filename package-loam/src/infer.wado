@@ -4,7 +4,17 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { axes_of, axis_indices, count_of, fits, fold, polys_at, regrouped_extents, resolve_index } from "./fold.wado";
+use {
+    axes_of,
+    axis_indices,
+    count_of,
+    fits,
+    fold,
+    polys_at,
+    regrouped_extents,
+    resolve_index,
+    sliced_axes,
+} from "./fold.wado";
 use {
     AttrError,
     Dim,
@@ -877,13 +887,7 @@ pub fn slice_cuts(
 ) -> Result<List<Cut>, InferError> {
     let starts = required_polys(node, known, 1, "starts")?;
     let ends = required_polys(node, known, 2, "ends")?;
-    let mut axes: List<i64> = [];
-    for let i of 0..<starts.len() {
-        axes.push(i as i64);
-    }
-    if let Some(listed) = axes_of(node, known, 3, "axes").map_err(|reason| refusal(node, reason))? {
-        axes = listed;
-    }
+    let axes = sliced_axes(node, known, starts.len()).map_err(|reason| refusal(node, reason))?;
     let steps = axes_of(node, known, 4, "steps").map_err(|reason| refusal(node, reason))?;
     if ends.len() != starts.len() || axes.len() != starts.len() {
         return Result::Err(refusal(

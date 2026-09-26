@@ -2647,12 +2647,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 // annotate types a direct literal operand as the target but not
                 // one under a `Neg`: `-9e15 as i64` would truncate as `i32.const`.
-                let (numeric_target, wide_target) = {
-                    let tt = self.tysys.type_table.borrow();
-                    (tt.is_numeric(target_type), tt.is_wide_int(target_type))
-                };
+                let numeric_target = self.tysys.type_table.borrow().is_numeric(target_type);
                 let inner = match int_literal_cast_operand(&cast.expr) {
-                    Some((lit, _, negated)) if numeric_target && !wide_target => {
+                    Some((lit, _, negated)) if numeric_target => {
                         let lit_tir = self.reify_literal(lit, target_type, ctx);
                         if negated {
                             TirExpr::new(
@@ -8524,7 +8521,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Replay a literal cast to i128/u128, modulo newtypes of one, as the
     /// constructor call that holds a value past `u64`. `None` for any other cast.
-    fn try_reify_int128_literal_cast(&self, cast: &ast::CastExpr, target_type: TypeId) -> Option<TirExpr> {
+    fn try_reify_int128_literal_cast(
+        &self,
+        cast: &ast::CastExpr,
+        target_type: TypeId,
+    ) -> Option<TirExpr> {
         let target_base = self
             .tysys
             .type_table
@@ -8592,8 +8593,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let target_base = tt.representation_head(target_type);
         let target_item = tt.wide_int_item(target_base);
         let Some(source_item) = tt.wide_int_item(source_base) else {
-            let item = target_item?;
-            return tt.is_numeric(source_type).then_some(Int128Cast::FromNumeric(item));
+            target_item?;
+            return tt
+                .is_numeric(source_type)
+                .then_some(Int128Cast::FromNumeric);
         };
         let signed_source = source_item == CompilerItem::I128;
         Some(match tt.get(target_base) {
@@ -8639,7 +8642,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// rounded `as_f64`/`as_f32`, integer targets through `low()` plus a
     /// primitive cast (truncation), and `i128 ↔ u128` through the
     /// bit-reinterpreting `from_u128`/`from_i128` constructors.
-    fn build_int128_cast(&self, inner: TirExpr, cast: Int128Cast, target_type: TypeId, span: Span) -> TirExpr {
+    fn build_int128_cast(
+        &self,
+        inner: TirExpr,
+        cast: Int128Cast,
+        target_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
         let (source_base, target_base) = {
             let tt = self.tysys.type_table.borrow();
             (
@@ -8695,8 +8704,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             build_tir_method_call(receiver, func, vec![], vec![], returns, span)
         };
         match cast {
-            Int128Cast::FromNumeric(item) => {
-                let (_, name) = self
+            Int128Cast::FromNumeric => {
+                let (item, name) = self
                     .tysys
                     .wide_int_of(target_base)
                     .expect("int128_cast saw a wide target");
@@ -10267,7 +10276,7 @@ fn build_int128_literal_call(
 /// decides it.
 enum Int128Cast {
     /// A numeric operand widened through `u64`/`i64` into the wide target.
-    FromNumeric(CompilerItem),
+    FromNumeric,
     /// `i128 as i128` / `u128 as u128`.
     Identity,
     /// A `&self` accessor returning the target primitive directly.

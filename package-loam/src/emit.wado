@@ -915,7 +915,9 @@ fn node_call(
         let count = settled(range_count(node, &checked.known, &mut []));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
         return Result::Ok(
-            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&count.poly())?}, ${symbols.spell(&delta)?})`,
+            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&count.poly())?}, ${symbols.spell(
+                &delta,
+            )?})`,
         );
     }
     if op == "Cast" {

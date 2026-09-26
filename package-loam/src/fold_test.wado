@@ -120,7 +120,10 @@ test "numbers beside a symbol divide as numbers do" {
             "S",
             Known {
                 extents: [2],
-                elements: Elements::integers([Poly::symbol(&"N"), Poly::constant(7)]),
+                elements: Elements::integers([
+                    Poly::symbol(&"N"),
+                    Poly::constant(7),
+                ]),
             },
         ],
         ["T", ints([2], [1, 2])],
@@ -128,7 +131,10 @@ test "numbers beside a symbol divide as numbers do" {
     let quotient = folded(node("Div", ["S", "T"], []), k);
     assert quotient == Known {
         extents: [2],
-        elements: Elements::integers([Poly::symbol(&"N"), Poly::constant(3)]),
+        elements: Elements::integers([
+            Poly::symbol(&"N"),
+            Poly::constant(3),
+        ]),
     };
 }
 
