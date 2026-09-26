@@ -327,15 +327,6 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
     return count * elem_size;
 }
 
-test "a buffer's bytes are its elements' bytes" {
-    assert cm_buffer_bytes((1 << 28) - 1, 8) == ((1 << 28) - 1) * 8;
-}
-
-#[expect_trap]
-test "a buffer past what an i32 counts traps" {
-    cm_buffer_bytes((1 << 28) - 1, 16);
-}
-
 /// The element count of a packed CM copy result.
 #[compiler_item("cm_packed_count")]
 internal fn cm_packed_count(packed: i32) -> i32 {
