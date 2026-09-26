@@ -340,8 +340,7 @@ positional fields from bare tokens (see [Command-Line Arguments](./spec-serializ
 
 #### Optional Fields
 
-No `#[wire]` key makes a field optional: a field default does. [Missing,
-Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)
+No `#[wire]` key makes a field optional: a field default does. [Missing, Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)
 states the rule, `#[wire(default)]` included.
 
 ## Standard Library Attributes

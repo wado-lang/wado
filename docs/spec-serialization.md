@@ -27,8 +27,8 @@ The data model a `Serializer` accepts is:
 
 - integers as `i32`, `i64`, `i128`, `u32`, `u64`, `u128`, with the narrower
   types widened to `i32` / `u32`;
-- floats as `f32` and `f64`, with `f16` and `bf16` written as the `f32` they
-  widen to;
+- floats as `f32` and `f64`. `f16` and `bf16` are written as the `f32` they
+  widen to, and read back by rounding the number once, straight to the half;
 - `bool`, `char`, a string, a byte string, and null;
 - a sequence, a map with runtime keys, and a struct with fields named at compile
   time;
@@ -41,16 +41,24 @@ Failure is one of two fixed error types, whichever direction failed.
 `UnknownVariant`, `DuplicateField`, `InvalidValue`, `Overflow`,
 `MalformedInput`, `TrailingData`, `Eof`, `DepthLimitExceeded`, `Custom`), a
 message, and the byte offset into the input, or `-1` where the failure has no
-position.
+position. Nesting deeper than a format's `max_depth` is a `DepthLimitExceeded`
+error, not a trap.
 
 A format is self-describing (SD) when the input names what it holds, such as
 `core:json` writing a struct as an object keyed by field name. A
-non-self-describing (NSD) format leaves the reader to know it: `core:json_nsd`
-writes a struct as an array of its fields in declaration order. The same
-`Deserialize` impl reads both. A self-describing format resolves each key to a
-field by its wire name.
+self-describing format resolves each key to a field by its wire name. A
+non-self-describing (NSD) format leaves the reader to know what the input holds,
+as [`core:json_nsd`](#json-nsd-module-corejson_nsd) does. The same
+`Deserialize` impl reads both.
 
 Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
+## Serialization Names
+
+A struct field, enum case, variant case, or flags member goes on the wire under
+its name in the source, unchanged: `user_name` stays `user_name` and `Red`
+stays `Red`. This is its wire name. [Wire Names](./spec-attributes.md#wire-names)
+states how `#[wire(...)]` renames one.
 
 ## Serialized Shapes
 
@@ -67,8 +75,8 @@ A derived impl writes each kind of type in one shape:
 Reading back is the mirror. A variant is read by its discriminant where the
 format reports one, as an NSD format does, and by its wire name otherwise.
 
-The default variant representation is externally tagged, as in Rust's serde,
-and it is the only one. In JSON:
+A variant is externally tagged, as in Rust's serde, and no other representation
+exists. In JSON:
 
 | Value                            | JSON                          |
 | -------------------------------- | ----------------------------- |
@@ -99,8 +107,9 @@ reads back as `None`. A `()` anywhere else round-trips. Likewise
 A missing field is a `MissingField` error unless the field declares a default
 (`f: T = expr`, see [Struct Field Defaults](./spec-types.md#struct-field-defaults)).
 A defaulted field is optional and falls back to its default when absent. This is
-the only mechanism for an optional field, and no type is special-cased: a bare
-`Option<T>` field is required, and `Option<T> = null` is the optional one. For a
+the only mechanism for an optional field, and no type is special-cased. A bare
+`Option<T>` field is required: a self-describing format needs its key present,
+though the value may be null. `Option<T> = null` is the optional one. For a
 zero-value fallback, write the zero literal (`= 0`, `= ""`, `= false`, `= []`,
 `= null`).
 
@@ -115,41 +124,31 @@ struct Config {
 `#[wire(default)]` does not exist. Writing it is a compile error that points to
 a field default instead.
 
-Deserialization rejects a repeated field or key by default; a format overrides `Deserializer::on_duplicate_key` to be lenient. Nesting past a format's `max_depth` is a `DepthLimitExceeded` error, not a trap.
+Deserialization rejects a repeated field or key by default. A format that
+overrides `Deserializer::on_duplicate_key` may accept one instead.
 
 A self-describing format skips a key that names no field, whatever value it
 holds.
 
-## Serialization Names
-
-A name on the wire is the name in the source, unchanged, unless an attribute
-says otherwise:
-
-| Element      | Source convention | Wire name by default     |
-| ------------ | ----------------- | ------------------------ |
-| Struct field | `snake_case`      | as written (`user_name`) |
-| Enum member  | `PascalCase`      | as written (`Red`)       |
-| Variant case | `PascalCase`      | as written (`Circle`)    |
-| Flags member | `PascalCase`      | as written (`Read`)      |
-
-`#[wire(name_policy = "...")]` on a struct, enum, variant, or flags type renames
-each of its members by a case convention, and `#[wire(name = "...")]` renames one
-field or case, taking precedence over the policy. A flags member reads only the
-type's policy. [`#[wire(...)]`](./spec-attributes.md#wire) lists the options.
-
 ## Bound-Driven Serialize / Deserialize
 
-The marker `impl Serialize for T;` ([Compiler-Synthesized `impl`](./spec-traits.md#compiler-synthesized-impl)) is optional: a `T: Serialize` bound is satisfied structurally once every field or case of `T` satisfies the trait — the same on-demand model `Eq` / `Ord` use ([Derivation Policy](./spec-traits.md#derivation-policy)). This is how an anonymous struct, which has no name for a marker, becomes serializable:
+`Serialize` and `Deserialize` derive on demand, as
+[Derivation Policy](./spec-traits.md#derivation-policy) states, so a type needs
+no marker to be serializable. An anonymous struct, which no marker can name, is
+serializable the same way:
 
 ```wado
 use { to_string } from "core:json";
 
 struct Point { x: i32, y: i32 }              // no impl marker needed
 let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
-let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
+let anon = to_string(&{ x: 1, y: 2 });       // the same JSON, from an anonymous struct
 ```
 
-The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[wire(name_policy = "...")]` customization. Like `Eq` / `Ord`'s marker, it is a conformance check: an ineligible field or case is a compile error at the marker's own span.
+The marker `impl Serialize for T;`
+([Compiler-Synthesized `impl`](./spec-traits.md#compiler-synthesized-impl))
+forces the impl where no bound asks for it. `#[wire(...)]` attributes apply
+with or without it.
 
 Deriving on demand means a type becomes serializable the moment some code asks,
 and a field added later extends its wire shape. A hand-written impl is the
@@ -167,7 +166,8 @@ let json = to_string::<User>(&user);   // Result<String, SerializeError>
 let user = from_string::<User>(json);  // Result<User, DeserializeError>
 ```
 
-JSON serialization returns `Err` for `NaN` and `Infinity` float values. JSON deserialization returns `Err` for malformed input, missing required fields, type mismatches, and trailing data.
+Serializing a `NaN` or an infinite float is an `Err`. Deserializing malformed
+input, a type mismatch, or input with trailing data is an `Err`.
 
 `core:json` writes `i64`, `u64`, `i128`, and `u128` as a JSON number while the
 magnitude is at most 2^53 - 1, the largest integer a JavaScript number holds
@@ -176,7 +176,10 @@ type accepts either form.
 
 ## JSON NSD Module (`core:json_nsd`)
 
-Non-self-describing JSON format. Structs are encoded as positional arrays (field names omitted), unit variants as discriminant integers, and payload variants as `[disc, payload]`.
+`core:json_nsd` is a non-self-describing JSON format. It writes a struct as an
+array of its fields in declaration order, with no field names. It writes a unit
+variant case as its discriminant integer, and a payload case as
+`[discriminant, payload]`.
 
 ```wado
 use { to_string, from_string } from "core:json_nsd";
@@ -188,22 +191,20 @@ let json = to_string::<User>(&user);   // Result: Ok("[\"Alice\",30]")
 let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeError>
 ```
 
-The same `Serialize` and `Deserialize` trait impls work with both `core:json` and `core:json_nsd`.
-
 ## Command-Line Arguments (`core:args`)
 
-`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[wire(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`.
+`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. An
+argument type is an ordinary struct. Each field is a `--long` option, unless
+`#[wire(positional)]` marks it as a positional.
 
 ```wado
 use { parse } from "core:args";
-use { Deserialize } from "core:serde";
 
 struct Cli {
     #[wire(positional)] input: String,
     jobs: i32 = 1,
     verbose: bool = false,
 }
-impl Deserialize for Cli;
 
 let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
 ```
@@ -236,7 +237,7 @@ A field's type and whether it declares a default decide its arity:
 | `List<T>`          | repeatable, at least once                   |
 
 A repeated option may be interspersed with others, and always takes a value.
-An all-defaulted struct derives `Default`, so an empty `argv` cannot fail.
+A struct whose every field has a default parses an empty `argv` without error.
 
 A token converts to a scalar with `LenientFromStr`, so `--jobs 0x10`,
 `--retries 1_000`, and `--verbose=1` parse. A failed conversion is
