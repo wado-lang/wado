@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790421949873,
+  "lastUpdate": 1790435988416,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60337,6 +60337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c3a438b9ce798a85cb7d74f9a7ef6de6ab299ba0"
         },
         "date": 1790421949320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20153,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288925,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "61cd2700a52caf3701255bed73e02040cfbb130c",
+          "message": "Merge pull request #2180 from wado-lang/claude/ref-eq-migration-g24c3g\n\nfeat!: `==` on references compares values as in Rust; `ref_eq` asks identity",
+          "timestamp": "2026-09-26T23:47:12+09:00",
+          "tree_id": "12d5481b77dd43e07f0bf008582abade9d25c79c",
+          "url": "https://github.com/wado-lang/wado/commit/61cd2700a52caf3701255bed73e02040cfbb130c"
+        },
+        "date": 1790435988123,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
