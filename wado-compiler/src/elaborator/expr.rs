@@ -25,6 +25,7 @@ use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
+use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -1210,7 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
         // has no call to infer from, so a `_` slot is unanswerable.
         if !ident.type_args.is_empty() {
-            if let Some(span) = ident.type_args.iter().find_map(Self::first_infer_span) {
+            if let Some(span) = ident.type_args.iter().find_map(first_infer_span) {
                 let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
                 return TypeTable::ERROR;
             }

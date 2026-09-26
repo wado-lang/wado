@@ -7,15 +7,7 @@ use crate::ast::{self, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
-||||||| 1a62dbf31
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method};
-=======
-use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, RefKind, mangle_local_method, unalias_namespace_member,
-};
->>>>>>> origin/main
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, unalias_namespace_member};
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -45,7 +37,6 @@ use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
 use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::escape::unescape_bytes;
-use crate::hashmap::IndexMap;
 use crate::primitive::PrimitiveType;
 use crate::{Span, token};
 
@@ -843,9 +834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeIdentKind::AsIs(_) | CalleeIdentKind::Rewritten(_) => {
                 self.case_owner_of_path(ident)?
             }
-            CalleeIdentKind::Operation { .. } | CalleeIdentKind::AbstractTypeParam { .. } => {
-                return None;
-            }
+            CalleeIdentKind::AbstractTypeParam { .. } => return None,
         };
         let variant = self.type_lookup().variant_cases_of(owner.def)?.clone();
         let (_, case) = variant.case_named(ident.case_name())?;
@@ -1127,12 +1116,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_static_call_visibility(&receiver, effective_name, Some(call.id), call.span);
         }
 
-<<<<<<< HEAD
-        let effect_op = callee_kind
-            .as_is()
-            .and_then(|ident| self.effect_operation_of(ident));
-||||||| 1a62dbf31
-=======
         if let Some((owner, variant, case_data)) = self.case_of_callee(&callee_kind, ident) {
             self.record_case_path(ident, owner.def, case_data.ast_id);
             // A bare case is spelled by the type that supplied it.
@@ -1168,7 +1151,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
->>>>>>> origin/main
+        let effect_op = callee_kind
+            .as_is()
+            .and_then(|ident| self.effect_operation_of(ident));
         // First, determine expected parameter types to handle coercion.
         let signature = self.lookup_function_signature(
             effective_name,
@@ -1233,100 +1218,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-<<<<<<< HEAD
-        // Whether `param_types` holds a variant payload rather than declared
-        // function params (see the hole-pin loop below).
-        let mut is_variant_payload = false;
-
-        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty()
-            && let Some(pos) = effective_name.find("::")
-        {
-            let prefix = &effective_name[..pos];
-            let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
-                .cloned()
-                && let Some((_, case_data)) = variant_info.case_named(suffix)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
-                let mut payload_type = case_data.payload;
-                if !type_args.is_empty() {
-                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
-                } else if let Some(expected) = expected_type {
-                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                    if let ResolvedType::GenericInstance {
-                        def: expected_def,
-                        type_args: expected_args,
-                    } = expected_resolved
-                        && expected_def
-                            == self
-                                .tysys
-                                .resolutions
-                                .defs()
-                                .def_at(variant_info.defined_at)
-                        && expected_args.len() == variant_info.type_param_type_ids.len()
-                    {
-                        payload_type = self
-                            .tysys
-                            .substitute_type_params(payload_type, &expected_args);
-                    }
-                }
-                param_types.push(payload_type);
-                is_variant_payload = true;
-            }
-        }
-
-||||||| 1a62dbf31
-        // Whether `param_types` holds a variant payload rather than declared
-        // function params (see the hole-pin loop below).
-        let mut is_variant_payload = false;
-
-        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty()
-            && let Some(pos) = effective_name.find("::")
-        {
-            let prefix = &effective_name[..pos];
-            let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
-                .cloned()
-                && let Some((_, case_data)) = variant_info.case_named(suffix)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
-                let mut payload_type = case_data.payload;
-                if !type_args.is_empty() {
-                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
-                } else if let Some(expected) = expected_type {
-                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                    if let ResolvedType::GenericInstance {
-                        def: expected_def,
-                        type_args: expected_args,
-                    } = expected_resolved
-                        && Some(expected_def)
-                            == self
-                                .tysys
-                                .resolutions
-                                .defs()
-                                .of_ast_id(variant_info.defined_at)
-                        && expected_args.len() == variant_info.type_param_type_ids.len()
-                    {
-                        payload_type = self
-                            .tysys
-                            .substitute_type_params(payload_type, &expected_args);
-                    }
-                }
-                param_types.push(payload_type);
-                is_variant_payload = true;
-            }
-        }
-
-=======
->>>>>>> origin/main
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
@@ -1703,63 +1594,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let type_name = &suffix[..inner_pos];
                     let method_name = &suffix[inner_pos + 2..];
 
-<<<<<<< HEAD
-                    // Check if this is a variant construction in the namespace.
-                    // `ns::Type::Case` names `Type` with its middle segment,
-                    // which the resolve walk answered for under the `ns$Type`
-                    // alias — so the declaration comes from the site rather
-                    // than from asking the namespace module about a spelling.
-                    let ns_variant = self
-                        .tysys
-                        .resolutions
-                        .owner_decl(ident)
-                        .and_then(|def| self.tysys.data.variant_cases.get(&def))
-                        .cloned();
-                    if let Some(variant_info) = ns_variant
-                        && let Some((_, case_data)) = variant_info.case_named(method_name)
-                    {
-                        self.record_namespaced_case(ident, case_data.ast_id);
-                        return self.construct_variant_case(
-                            &variant_info,
-                            case_data,
-                            &args,
-                            &[],
-                            type_name,
-                            expected_type,
-                            call.id,
-                            call.span,
-                        );
-                    }
-
-||||||| 1a62dbf31
-                    // Check if this is a variant construction in the namespace.
-                    // `ns::Type::Case` names `Type` with its middle segment,
-                    // which the resolve walk answered for under the `ns$Type`
-                    // alias — so the declaration comes from the site rather
-                    // than from asking the namespace module about a spelling.
-                    let ns_variant = self
-                        .tysys
-                        .qualified_owner_decl(ident)
-                        .and_then(|def| self.tysys.data.variant_cases.get(&def))
-                        .cloned();
-                    if let Some(variant_info) = ns_variant
-                        && let Some((_, case_data)) = variant_info.case_named(method_name)
-                    {
-                        self.record_namespaced_case(ident, case_data.ast_id);
-                        return self.construct_variant_case(
-                            &variant_info,
-                            case_data,
-                            &args,
-                            &[],
-                            type_name,
-                            expected_type,
-                            call.id,
-                            call.span,
-                        );
-                    }
-
-=======
->>>>>>> origin/main
                     // The branch below reads the middle segment as a type, and
                     // says so here where nothing names one — otherwise the call
                     // types `unknown` with nothing reported, and whatever first
@@ -4268,14 +4102,14 @@ impl TypeSystem {
         &self,
         variant_info: &VariantInfo,
         expected: Option<TypeId>,
-    ) -> Option<(DefId, Vec<TypeId>)> {
+    ) -> Option<Vec<TypeId>> {
         let table = self.type_table.borrow();
         let ResolvedType::GenericInstance { def, type_args } = table.get(expected?) else {
             return None;
         };
-        (Some(*def) == table.defs().of_ast_id(variant_info.defined_at)
+        (*def == table.defs().def_at(variant_info.defined_at)
             && type_args.len() == variant_info.type_param_type_ids.len())
-        .then(|| (*def, type_args.clone()))
+        .then(|| type_args.clone())
     }
 
     /// Each slot of `variant_info` as a site pins it: the written argument, else
@@ -4292,7 +4126,7 @@ impl TypeSystem {
                 Some(&arg) if arg != TypeTable::UNKNOWN => arg,
                 _ => from_expected
                     .as_ref()
-                    .map_or(TypeTable::UNKNOWN, |(_, args)| args[i]),
+                    .map_or(TypeTable::UNKNOWN, |args| args[i]),
             })
             .collect()
     }
@@ -4315,32 +4149,11 @@ impl TypeSystem {
         expected_type: Option<TypeId>,
         explicit_args: &[TypeId],
     ) -> TypeId {
-<<<<<<< HEAD
         let variant_def = self
             .type_table
             .borrow()
             .defs()
             .def_at(variant_info.defined_at);
-
-||||||| 1a62dbf31
-        // An expected type pins the declaration the instance is interned
-        // against: a `Result` annotation and the variant reached through the
-        // prelude are one declaration, and the annotation is the one the
-        // caller's frame resolved.
-        let mut canonical_def = None;
-        let variant_def = self
-            .type_table
-            .borrow()
-            .defs()
-            .of_ast_id(variant_info.defined_at);
-
-=======
-        // An expected type pins the declaration the instance is interned
-        // against: a `Result` annotation and the variant reached through the
-        // prelude are one declaration, and the annotation is the one the
-        // caller's frame resolved.
-        let mut canonical_def = None;
->>>>>>> origin/main
         let mut infer = InferCtx::new(&self.type_table, variant_info.type_param_type_ids.clone());
 
         // Explicit turbofish args pin their slots as strong constraints; a `_`
@@ -4363,54 +4176,13 @@ impl TypeSystem {
         // Backward inference: extract type args from the caller's expected type.
         // Queued through `add_expected_return` so it runs after the payload pass,
         // preserving the "stronger constraint wins" policy via `or_insert`.
-<<<<<<< HEAD
-        if let Some(expected) = expected_type {
-            let expected_resolved = self.type_table.borrow().get(expected).clone();
-            if let ResolvedType::GenericInstance {
-                def,
-                type_args: expected_args,
-            } = expected_resolved
-                && def == variant_def
-                && expected_args.len() == variant_info.type_param_type_ids.len()
-||||||| 1a62dbf31
-        if let Some(expected) = expected_type {
-            let expected_resolved = self.type_table.borrow().get(expected).clone();
-            if let ResolvedType::GenericInstance {
-                def,
-                type_args: expected_args,
-            } = expected_resolved
-                && Some(def) == variant_def
-                && expected_args.len() == variant_info.type_param_type_ids.len()
-=======
-        if let Some((def, expected_args)) = self.expected_variant_args(variant_info, expected_type)
-        {
-            canonical_def = Some(def);
+        if let Some(expected_args) = self.expected_variant_args(variant_info, expected_type) {
             for (&param_id, &expected_arg) in variant_info
                 .type_param_type_ids
                 .iter()
                 .zip(expected_args.iter())
->>>>>>> origin/main
             {
-<<<<<<< HEAD
-                for (&param_id, &expected_arg) in variant_info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(expected_args.iter())
-                {
-                    infer.add_expected_return(param_id, expected_arg);
-                }
-||||||| 1a62dbf31
-                canonical_def = Some(def);
-                for (&param_id, &expected_arg) in variant_info
-                    .type_param_type_ids
-                    .iter()
-                    .zip(expected_args.iter())
-                {
-                    infer.add_expected_return(param_id, expected_arg);
-                }
-=======
                 infer.add_expected_return(param_id, expected_arg);
->>>>>>> origin/main
             }
         }
 

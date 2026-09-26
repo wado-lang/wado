@@ -461,74 +461,6 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
-<<<<<<< HEAD
-    /// A `Type::Case` identifier as the declaration owning the case and the
-    /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
-    /// read it off the expected type.
-    fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<DefId>, String)> {
-        if let Some(owner) = self.ann_bare_case(ident.id) {
-            return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
-        }
-        let (prefix, _) = ident.name.split_once("::")?;
-        let owner = self
-            .type_lookup()
-            .declaration_at(ident.owner_segment().map(|seg| seg.id), prefix);
-        Some((owner, ident.name.clone()))
-||||||| 1a62dbf31
-    /// The symbol `name` reaches from `module` — see
-    /// [`super::Elaborator::symbol_named`], which answers the same way from the
-    /// same tables, so annotate and reify cannot disagree about what a name
-    /// means.
-    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
-    }
-
-    /// A `Type::Case` identifier as the declaration owning the case and the
-    /// spelling: `Color::Red` at its own segments, a bare `Red` as annotate
-    /// read it off the expected type.
-    fn case_path(&self, ident: &ast::IdentExpr) -> Option<(Option<DefId>, String)> {
-        if let Some(owner) = self.ann_bare_case(ident.id) {
-            return Some((Some(owner), self.tysys.qualified_case(owner, &ident.name)));
-        }
-        let (prefix, _) = ident.name.split_once("::")?;
-        let owner = self
-            .type_lookup()
-            .declaration_at(ident.owner_segment().map(|seg| seg.id), prefix);
-        Some((owner, ident.name.clone()))
-    }
-
-=======
-    /// The symbol `name` reaches from `module` — see
-    /// [`super::Elaborator::symbol_named`], which answers the same way from the
-    /// same tables, so annotate and reify cannot disagree about what a name
-    /// means.
-    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
->>>>>>> origin/main
-    }
-
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -7841,75 +7773,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let ast::Expr::Ident(ident) = &call.callee
             && let Some(owner) = self.ann_case_owner(ident.id)
         {
-<<<<<<< HEAD
-            // `ns::Type::Case(payload)` reaches its owner through the namespace;
-            // the nullary form is `reify_ident`'s.
-            let (owner, case_name) = match suffix.split_once("::") {
-                None => (owner, suffix),
-                Some((_, case_name)) if self.sem.imports.namespace_imports.contains_key(prefix) => {
-                    (self.tysys.resolutions.owner_decl(ident), case_name)
-                }
-                Some(_) => (None, suffix),
-            };
-            let case = owner
-                .and_then(|owner| self.type_lookup().variant_cases_of(owner))
-                .and_then(|info| info.case_named(case_name))
-                .map(|(index, case)| (index as u32, case.name.clone(), case.payload));
-            if let Some((case_index, case_name, payload_type)) = case {
-                let variant_type = self
-                    .ann_generic_instantiations(call.id)
-                    .map(|gi| gi.instance_type)
-                    .unwrap_or(recorded_type);
-                let payload = call
-                    .args
-                    .first()
-                    .map(|arg_expr| Box::new(self.reify_expr(arg_expr, ctx, Some(payload_type))));
-                return TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type,
-                        case_index,
-                        case_name,
-                        payload,
-                    },
-                    variant_type,
-                    span,
-                );
-            }
-||||||| 1a62dbf31
-            // `ns::Type::Case(payload)` reaches its owner through the namespace;
-            // the nullary form is `reify_ident`'s.
-            let (owner, case_name) = match suffix.split_once("::") {
-                None => (owner, suffix),
-                Some((_, case_name)) if self.sem.imports.namespace_imports.contains_key(prefix) => {
-                    (self.tysys.qualified_owner_decl(ident), case_name)
-                }
-                Some(_) => (None, suffix),
-            };
-            let case = owner
-                .and_then(|owner| self.type_lookup().variant_cases_of(owner))
-                .and_then(|info| info.case_named(case_name))
-                .map(|(index, case)| (index as u32, case.name.clone(), case.payload));
-            if let Some((case_index, case_name, payload_type)) = case {
-                let variant_type = self
-                    .ann_generic_instantiations(call.id)
-                    .map(|gi| gi.instance_type)
-                    .unwrap_or(recorded_type);
-                let payload = call
-                    .args
-                    .first()
-                    .map(|arg_expr| Box::new(self.reify_expr(arg_expr, ctx, Some(payload_type))));
-                return TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type,
-                        case_index,
-                        case_name,
-                        payload,
-                    },
-                    variant_type,
-                    span,
-                );
-            }
-=======
             return self.reify_case_construction(
                 owner,
                 ident.case_name(),
@@ -7919,7 +7782,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 ctx,
             );
->>>>>>> origin/main
         }
 
         // Static-method / builtin dispatch (`Type::method(args)`,
@@ -8770,49 +8632,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
-<<<<<<< HEAD
-        // 5. Free function reference — the ident names a function in
-||||||| 1a62dbf31
-        // 4b. Primitive associated constant (`i32::MAX`, `u8::MIN`, …) that
-        //     is not in `associated_constants`. This happens when reify is
-        //     walking a swapped-in callee module (a default-argument
-        //     expression — e.g. `max_output: i32 = i32::MAX`) whose
-        //     `ModuleSemantics` came from the stdlib snapshot, which does
-        //     not rehydrate `associated_constants`. The value is a compile
-        //     -time constant of the named primitive type, so emit it as a
-        //     typed integer literal directly.
-        if let Some((prefix, suffix)) = ident.name.split_once("::")
-            && !suffix.contains("::")
-            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
-        {
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: value as u64,
-                    repr: value.to_string(),
-                },
-                prim_type,
-                ident.span,
-            );
-        }
-
-        // 5. Free function reference — the ident names a function in
-=======
-        // 4b. `i32::MAX` in a foreign default argument: the stdlib snapshot
-        //     does not rehydrate `associated_constants`.
-        if let Some((prefix, suffix)) = ident.name.split_once("::")
-            && !suffix.contains("::")
-            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
-        {
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: value as u64,
-                    repr: value.to_string(),
-                },
-                prim_type,
-                ident.span,
-            );
-        }
-
         // 5. A case path, in `resolve_qualified_case`'s order. Its recorded type
         //    is the newtype its prefix named, or the case's own.
         if let Some(owner) = self.ann_case_owner(ident.id) {
@@ -8862,7 +8681,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // 6. Free function reference — the ident names a function in
->>>>>>> origin/main
         //    the current module or imported via a `use` declaration.
         //    Emit `TirExprKind::FuncRef` with the recorded
         //    instantiation's type_args when present.
