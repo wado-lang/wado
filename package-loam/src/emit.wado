@@ -592,7 +592,6 @@ fn literal_tensor(checked: &Checked, tensor: &String) -> String {
     return `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents_of(&shape)} }`;
 }
 
-/// The extents of a shape stage 0 has shown static.
 /// Checks at the top of `forward` that stop it naming the axis an input
 /// disagrees on, before any kernel reads the input.
 fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
@@ -625,6 +624,7 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
     }
 }
 
+/// The extents of a shape stage 0 has shown static.
 fn extents_of(shape: &Shape) -> List<i32> {
     return shape.axes.into_iter().map(|axis| axis.static_extent()).collect();
 }
