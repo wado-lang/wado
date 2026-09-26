@@ -638,7 +638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let pattern = let_stmt.else_pattern();
-        if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
+        if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type, ctx) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \
                           use a plain `let` instead"
@@ -657,12 +657,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         pattern: &Pattern,
         scrutinee_type: TypeId,
+        ctx: &FunctionContext,
     ) -> bool {
         match pattern {
             Pattern::Wildcard | Pattern::MutIdent { .. } => true,
             Pattern::Ident { name, .. } => {
                 !self.is_known_case_of_type(scrutinee_type, name, None)
-                    && !self.is_immutable_global(name)
+                    && self.pattern_constant_type(name, ctx).is_none()
             }
             Pattern::Typed { pattern, ty, .. } => {
                 let target = self.resolve_type(ty);
@@ -671,7 +672,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .type_table
                     .borrow()
                     .is_resource_narrowing(scrutinee_type, target)
-                    && self.let_else_pattern_is_irrefutable(pattern, target)
+                    && self.let_else_pattern_is_irrefutable(pattern, target, ctx)
             }
             // Destructuring may hold refutable sub-patterns; the rest are
             // refutable outright (or a parser-recovery placeholder). Never flag.
@@ -1399,6 +1400,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.immutable_global_type(name).is_some()
     }
 
+    /// The type of the immutable global a bare name in a pattern tests against.
+    /// None where a binding in scope has taken the name, since the global is
+    /// then out of reach and the name binds as any local's would.
+    fn pattern_constant_type(&self, name: &str, ctx: &FunctionContext) -> Option<TypeId> {
+        if ctx.binding(name).is_some() {
+            return None;
+        }
+        self.immutable_global_type(name)
+    }
+
     /// The type of the immutable global `name` refers to, if it names one.
     fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
         match self.sem.decls.current_module_globals.get(name) {
@@ -1524,7 +1535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // pattern there could only be rejected as refutable.
                 if !is_mut
                     && ctx.must_bind.is_none()
-                    && let Some(constant) = self.immutable_global_type(name)
+                    && let Some(constant) = self.pattern_constant_type(name, ctx)
                 {
                     self.record_item_reference_by_name(*id, name);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);

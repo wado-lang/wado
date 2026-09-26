@@ -429,7 +429,9 @@ since `None` may not match, while `let limit = 1` binds even where a
 A refutable pattern reads a bare name that names an immutable global as a
 constant pattern instead. The refutable positions are a `match` arm, `if let`,
 `while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
-block unless `v == limit`.
+block unless `v == limit`. A local, a parameter, or a closure capture that takes
+the name puts the global out of reach, so the name binds there as it would
+anywhere else.
 
 An uninitialized `let x: T;` declares a single name, or `_`.
 

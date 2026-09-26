@@ -1,0 +1,61 @@
+// A local that shadows a global takes the name, so a refutable pattern spelling
+// it binds as it would any other local's name, rather than testing against the
+// global it hides.
+
+global limit: i32 = 5;
+
+fn after_local(v: i32) -> i32 {
+    #[allow(shadowed_name)]
+    let limit = 3;
+    return match v {
+        limit => limit + 100,
+    };
+}
+
+fn after_param(#[allow(shadowed_name)] limit: i32, o: Option<i32>) -> i32 {
+    if let Some(limit) = o {
+        return limit;
+    }
+    return -limit;
+}
+
+test "a match binds the name a local took" {
+    assert after_local(3) == 103;
+    assert after_local(5) == 105;
+}
+
+test "an if let binds the name a parameter took" {
+    assert after_param(1, Some(4)) == 4;
+    assert after_param(1, null) == -1;
+}
+
+test "a closure binds the name its enclosing local took" {
+    #[allow(shadowed_name)]
+    let limit = 3;
+    let f = |v: i32| match v {
+        limit => limit * 2,
+    };
+    assert f(7) == 14 && limit == 3;
+}
+
+test "a let else binds the name a local took" {
+    #[allow(shadowed_name)]
+    let limit = 3;
+    let o: Option<i32> = Some(4);
+    let Some(limit) = o else {
+        return;
+    };
+    assert limit == 4;
+}
+
+test "an unshadowed name still reads the global" {
+    let hit = match 5 {
+        limit => true,
+        _ => false,
+    };
+    assert hit;
+    assert !(4 matches { limit });
+}
+
+__DATA__
+{"test": {}}
