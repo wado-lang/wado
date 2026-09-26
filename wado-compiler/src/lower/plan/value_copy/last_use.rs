@@ -1306,36 +1306,32 @@ impl Analyzer<'_> {
     }
 
     /// One call argument. A `&`/`&mut` is transient unless the callee stores
-    /// that position. `receiver` is the borrow a `&self` / `&mut self` method
-    /// takes of the place its receiver names, whose writes the call records.
+    /// that position; `borrowing_receiver` marks the one it reads through,
+    /// whose writes the call records.
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
         callee: Option<(&FunctionRef, u32)>,
         kept: &Kept,
-        receiver: Option<TirUnaryOp>,
+        borrowing_receiver: bool,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        let borrow = match &arg.kind {
-            TirExprKind::Unary {
-                op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
-                expr: place,
-            } => Some((*op, &**place)),
-            _ if !is_reference_type(arg.type_id, self.type_table) => receiver.map(|op| (op, arg)),
-            _ => None,
-        };
-        let Some((op, place)) = borrow else {
-            self.walk_kept(arg, kept, receiver.is_some(), live, record);
+        let TirExprKind::Unary {
+            op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
+            expr: place,
+        } = &arg.kind
+        else {
+            self.walk_kept(arg, kept, borrowing_receiver, live, record);
             return;
         };
         // Which fields a `&mut` argument is written through is the callee's
         // own answer. Only one this walk cannot name writes the whole place.
         let Some((c, position)) = callee else {
-            self.walk_borrow(op, place, kept, live, record);
+            self.walk_borrow(*op, place, kept, live, record);
             return;
         };
-        if record && receiver.is_none() && op == TirUnaryOp::MutRef {
+        if record && !borrowing_receiver && *op == TirUnaryOp::MutRef {
             self.record_call_mutation(c, place, position, live);
         }
         // A call handing its receiver back as its result keeps the borrow in
@@ -1344,7 +1340,7 @@ impl Analyzer<'_> {
             && self
                 .returns_receiver_alias
                 .contains(&c.module_source, &c.name);
-        let op = if handed_back { TirUnaryOp::Ref } else { op };
+        let op = if handed_back { TirUnaryOp::Ref } else { *op };
         self.hold_borrow(op, place, kept, live, record);
     }
 
@@ -2030,17 +2026,12 @@ impl Analyzer<'_> {
                 } else {
                     Vec::new()
                 };
-                let receiver_borrow = borrowing_receiver.then_some(if mutated_receiver.is_some() {
-                    TirUnaryOp::MutRef
-                } else {
-                    TirUnaryOp::Ref
-                });
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(
                         &arg.expr,
                         Some((func, pos as u32)),
                         kept.get(pos).unwrap_or(&Kept::Transient),
-                        receiver_borrow.filter(|_| pos == 0),
+                        borrowing_receiver && pos == 0,
                         live,
                         record,
                     );
@@ -2048,7 +2039,7 @@ impl Analyzer<'_> {
             }
             TirExprKind::CmRawCall { args, .. } => {
                 for arg in args.iter().rev() {
-                    self.walk_call_arg(arg, None, &Kept::Transient, None, live, record);
+                    self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
