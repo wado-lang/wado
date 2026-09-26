@@ -1,0 +1,8 @@
+// A negated or cast literal bound counts as a literal.
+
+test {
+    let b = (-1 as u8)..=5;   // Error: `-1 as u8` is 255
+}
+
+__DATA__
+{"compile_error": "reversed range `..=` is not supported (start must be less than end)"}

@@ -1,0 +1,36 @@
+// Casts, grouping, and comparison chains.
+
+test "type cast" {
+    let a = 1;
+    let b = 0.5;
+    let i = 42;
+    let f = i as f64;           // i32 to f64
+    let truncated = 3.14 as i32; // f64 to i32 (truncates to 3)
+    assert f == 42.0 && truncated == 3;
+
+    // Chained casts
+    let x = 10 as f64 as i32 as f64;
+    assert x == 10.0;
+
+    // Cast in expressions
+    let result = (a as f64) + b;
+    assert result == 1.5;
+}
+
+test "parentheses" {
+    let a = 2 + 3 * 4;      // multiplication first
+    let b = (2 + 3) * 4;    // addition first due to parentheses
+    assert a == 14 && b == 20;
+
+    let c = 3 | 4 & 6;      // & has higher precedence than |
+    let d = (3 | 4) & 6;    // | first due to parentheses
+    assert c == 7 && d == 6;
+}
+
+test "comparison chaining" {
+    let [a, b, c, x] = [1, 2, 3, 50];
+    assert a < b < c;               // (a < b) & (b < c)
+    assert c >= b >= a;             // (c >= b) & (b >= a)
+    assert a + 1 == b == c - 1;     // (a + 1 == b) & (b == c - 1)
+    assert 0 <= x <= 100;           // a range check
+}
