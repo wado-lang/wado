@@ -127,8 +127,10 @@ per copy. Each copy lowers what it offers, and a reader may take a short
 prefix, so offering the whole rest every time would make the loop quadratic.
 
 No copy offers more than the Canonical ABI's `2^28 - 1` elements, which is where
-the canonical traps. `read` and `write` hand it at most that many, so a larger
-buffer reads or writes short, as any copy may.
+the canonical traps. `read` and `write` hand it at most that many, so a longer
+list writes short and a larger `max` reads short, as any copy may. The buffer a
+copy uses must still fit linear memory: one whose bytes an `i32` cannot count
+traps before the copy, as a list that large does at any component boundary.
 
 `write_raw_all` is the same loop for elements already in one array, without the
 value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A

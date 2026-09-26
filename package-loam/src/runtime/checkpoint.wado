@@ -35,8 +35,12 @@ impl Deserialize for Header {
         while let Some(key) = map.next_key_string()? {
             if key == "__metadata__" {
                 let _ = map.next_value::<IgnoredAny>()?;
-            } else if !entries.try_insert(key, map.next_value::<HeaderEntry>()?) {
+                continue;
+            }
+            let entry = map.next_value::<HeaderEntry>()?;
+            if !entries.try_insert(key, entry) {
                 report_duplicate_key(on_duplicate, &key)?;
+                entries[key] = entry;
             }
         }
         map.end()?;

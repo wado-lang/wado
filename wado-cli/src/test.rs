@@ -927,7 +927,7 @@ fn load_module(
             reporter.on_load(
                 &artifact.path,
                 LoadEvent::Failed {
-                    detail: Some(format!("{e}")),
+                    detail: Some(format!("{e:#}")),
                 },
                 load_duration,
             );
@@ -1613,7 +1613,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let (mut store, stdout_pipe, stderr_pipe) =
         match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
             Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e}"), start),
+            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
         };
 
     // Profiling samples on every epoch tick, so it takes the deadline the
@@ -1637,7 +1637,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         .await
     {
         Ok(inst) => inst,
-        Err(e) => return fail_result(job, format!("failed to instantiate: {e}"), start),
+        Err(e) => return fail_result(job, format!("failed to instantiate: {e:#}"), start),
     };
 
     let test_func = instance.get_typed_func::<(), (Result<(), ()>,)>(&mut store, &job.test_name);
@@ -1683,7 +1683,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         },
         Err(e) => (
             TestOutcome::Fail,
-            Some(format!("failed to get test function: {e}")),
+            Some(format!("failed to get test function: {e:#}")),
         ),
     };
 

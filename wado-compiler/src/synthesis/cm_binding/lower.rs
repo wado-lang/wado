@@ -616,6 +616,16 @@ pub(super) fn synthesize_lower_result_to_memory(
     synthesize_lower_variant_to_memory(value, addr, cases, disc_of, next_local, stmts, locals, ctx);
 }
 
+/// `cm_buffer_bytes(count, elem_size)`: a buffer's size, trapping where an `i32`
+/// cannot count it.
+pub(super) fn buffer_bytes(count: TirExpr, elem_size: i32) -> TirExpr {
+    internal_call(
+        "cm_buffer_bytes",
+        vec![count, i32_const(elem_size)],
+        TypeTable::I32,
+    )
+}
+
 /// Lower a `List<T>` (GC value) to a CM `list` element buffer in linear memory,
 /// returning the statements plus the locals holding `(base_ptr, len)`.
 ///
@@ -678,7 +688,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
         ),
     ));
 
-    // $base = realloc(0, 0, elem_align, $len * elem_size)
+    // $base = realloc(0, 0, elem_align, cm_buffer_bytes($len, elem_size))
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
         "$list_base",
@@ -690,12 +700,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
                 i32_const(0),
                 i32_const(0),
                 i32_const(elem_align),
-                binary(
-                    TirBinaryOp::Mul,
-                    local_ref(len_local, "$list_len", TypeTable::I32),
-                    i32_const(elem_size),
-                    TypeTable::I32,
-                ),
+                buffer_bytes(local_ref(len_local, "$list_len", TypeTable::I32), elem_size),
             ],
             TypeTable::I32,
         ),
@@ -943,12 +948,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 i32_const(0),
                 i32_const(0),
                 i32_const(pair_align),
-                binary(
-                    TirBinaryOp::Mul,
-                    local_ref(len_local, "$len", TypeTable::I32),
-                    i32_const(pair_size),
-                    TypeTable::I32,
-                ),
+                buffer_bytes(local_ref(len_local, "$len", TypeTable::I32), pair_size),
             ],
             TypeTable::I32,
         ),

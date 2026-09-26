@@ -151,6 +151,14 @@ test "metadata keyed like a tensor entry's fields still reads" {
     assert read_checkpoint(&bytes) matches { Ok(_) };
 }
 
+test "a tensor named twice in the header is refused" {
+    let header = "{\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[0,4]},\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[4,8]}}";
+    let mut bytes: ByteList = [];
+    push_element(&mut bytes, header.len() as u64, 8);
+    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    assert `${read_checkpoint(&bytes).unwrap_err()}`.starts_with("the header is not JSON");
+}
+
 test "the header's metadata is not a tensor" {
     let bytes: ByteList = b"\x20\x00\x00\x00\x00\x00\x00\x00{\"__metadata__\":{\"format\":\"pt\"}}";
     let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();

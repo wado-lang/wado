@@ -663,6 +663,8 @@ pub enum CompilerItem {
     CmCopyResult,
     /// `core:rt::cm_copy_count`.
     CmCopyCount,
+    /// `core:rt::cm_buffer_bytes`.
+    CmBufferBytes,
     /// `core:rt::cm_packed_count`.
     CmPackedCount,
     /// `core:rt::cm_stream_read_u8`.
@@ -901,6 +903,7 @@ impl CompilerItem {
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
         Self::CmCopyCount,
+        Self::CmBufferBytes,
         Self::CmPackedCount,
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
@@ -1074,6 +1077,7 @@ impl CompilerItem {
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
             Self::CmCopyCount => "cm_copy_count",
+            Self::CmBufferBytes => "cm_buffer_bytes",
             Self::CmPackedCount => "cm_packed_count",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
@@ -1171,6 +1175,7 @@ impl CompilerItem {
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
             | Self::CmCopyCount
+            | Self::CmBufferBytes
             | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
@@ -1435,6 +1440,7 @@ impl CompilerItem {
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
             | Self::CmCopyCount
+            | Self::CmBufferBytes
             | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8

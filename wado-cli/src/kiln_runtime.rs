@@ -128,7 +128,7 @@ async fn instantiate(
 ) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
     let mut linker: Linker<KilnHostState> = Linker::new(engine);
     kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-        .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
+        .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e:#}")))?;
 
     let mut store = Store::new(engine, KilnHostState { diagnostics });
     let fuel = if policy.fuel == 0 {
@@ -138,12 +138,12 @@ async fn instantiate(
     };
     store
         .set_fuel(fuel)
-        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
+        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e:#}")))?;
 
     let instance = linker
         .instantiate_async(&mut store, component)
         .await
-        .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+        .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e:#}")))?;
     Ok((store, instance))
 }
 
@@ -386,7 +386,7 @@ pub fn compile_component(
     component_wasm: &[u8],
 ) -> Result<Component, GeneratorRunnerError> {
     Component::from_binary(engine, component_wasm)
-        .map_err(|e| GeneratorRunnerError::Host(format!("component compile: {e}")))
+        .map_err(|e| GeneratorRunnerError::Host(format!("component compile: {e:#}")))
 }
 
 /// Instantiate a pre-built [`Component`] against the
@@ -431,7 +431,7 @@ pub async fn run_generator(
         args.push(Val::List(inputs));
         if let Some(ty) = &options_ty {
             let val = options_to_val(&request.options, ty)
-                .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?;
+                .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?;
             args.push(val);
         }
 
@@ -442,7 +442,7 @@ pub async fn run_generator(
         generate
             .call_async(&mut store, &args, &mut results)
             .await
-            .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e}")))?;
+            .map_err(|e| GeneratorRunnerError::Host(format!("generate call: {e:#}")))?;
 
         let [result] = results;
         match result {
@@ -504,7 +504,7 @@ pub async fn run_probe(
             if let Some(ty) = &options_ty {
                 args.push(
                     options_to_val(&request.options, ty)
-                        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?,
+                        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e:#}")))?,
                 );
             }
 
@@ -512,7 +512,7 @@ pub async fn run_probe(
             probe
                 .call_async(&mut store, &args, &mut results)
                 .await
-                .map_err(|e| GeneratorRunnerError::Host(format!("probe call: {e}")))?;
+                .map_err(|e| GeneratorRunnerError::Host(format!("probe call: {e:#}")))?;
 
             let [result] = results;
             match result {

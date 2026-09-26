@@ -319,6 +319,23 @@ internal fn cm_copy_count(count: i32) -> i32 {
     return i32::min(count, CM_COPY_MAX);
 }
 
+/// The bytes `count` elements of `elem_size` take in linear memory, which an
+/// `i32` must be able to count.
+#[compiler_item("cm_buffer_bytes")]
+internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
+    assert count <= i32::MAX / elem_size, "the buffer is past what linear memory can address";
+    return count * elem_size;
+}
+
+test "a buffer's bytes are its elements' bytes" {
+    assert cm_buffer_bytes((1 << 28) - 1, 8) == ((1 << 28) - 1) * 8;
+}
+
+#[expect_trap]
+test "a buffer past what an i32 counts traps" {
+    cm_buffer_bytes((1 << 28) - 1, 16);
+}
+
 /// The element count of a packed CM copy result.
 #[compiler_item("cm_packed_count")]
 internal fn cm_packed_count(packed: i32) -> i32 {

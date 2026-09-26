@@ -34,6 +34,7 @@ use super::cm_free::{
 use super::import_adapter::make_binding_function;
 use super::lift::synthesize_lift_list;
 use super::lift::synthesize_lift_map;
+use super::lower::buffer_bytes;
 use super::lower::synthesize_lower_map_to_buffer;
 use super::lower::synthesize_lower_wasi_type_to_memory;
 use super::types::{
@@ -216,17 +217,15 @@ fn lower_to_flat_inner(
                 ),
             ));
 
-            // $bytes = $len * elem_size
+            // $bytes = cm_buffer_bytes($len, elem_size)
             let bytes_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
                 "$arr_bytes",
                 bytes_local,
                 TypeTable::I32,
-                binary(
-                    TirBinaryOp::Mul,
+                buffer_bytes(
                     local_ref(len_local, "$arr_len", TypeTable::I32),
-                    i32_const(elem_size as i32),
-                    TypeTable::I32,
+                    elem_size as i32,
                 ),
             ));
 

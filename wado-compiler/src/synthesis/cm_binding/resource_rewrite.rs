@@ -42,7 +42,7 @@ use crate::component_model::{
 };
 use crate::flat_package::FlatPackage;
 use crate::synthesis::cm_binding::lower::{
-    synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
+    buffer_bytes, synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
 };
 use crate::synthesis::cm_binding::types::cm_package_from_source;
 use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
@@ -1287,7 +1287,7 @@ fn synthesize_stream_read_func(
     ));
     let room = || local_ref(room_idx, "room", TypeTable::I32);
 
-    // let byte_count = room * elem_size
+    // let byte_count = cm_buffer_bytes(room, elem_size)
     let byte_count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1295,12 +1295,7 @@ fn synthesize_stream_read_func(
         TypeTable::I32,
         false,
     );
-    let byte_count = binary(
-        TirBinaryOp::Mul,
-        room(),
-        i32_const(elem_size),
-        TypeTable::I32,
-    );
+    let byte_count = buffer_bytes(room(), elem_size);
     stmts.push(let_stmt(
         "byte_count",
         byte_count_idx,
