@@ -1,0 +1,34 @@
+// An impl written for one instantiation beats a partly generic one on the same
+// head for that instantiation, and the generic one answers the rest (the
+// generality rank).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Name {
+    fn name(&self) -> String;
+}
+
+impl Name for Pair<i32, i32> {
+    fn name(&self) -> String {
+        return "exact";
+    }
+}
+
+impl<T> Name for Pair<T, i32> {
+    fn name(&self) -> String {
+        return "head";
+    }
+}
+
+test "exact wins where it applies" {
+    let p: Pair<i32, i32> = Pair { a: 1, b: 2 };
+    let q: Pair<String, i32> = Pair { a: "x", b: 2 };
+    assert p.name() == "exact";
+    assert q.name() == "head";
+}
+
+__DATA__
+{"test": {}}

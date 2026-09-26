@@ -2,7 +2,7 @@
 
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
-use crate::module_source::ModuleSource;
+
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -46,7 +46,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect();
                 let return_type = self.resolve_type(&func_ty.return_type);
                 // Resolve effect names in function type position
-                let effects = self.resolve_effects(&func_ty.effects, &func_ty.effect_ids);
+                let effects = self.resolve_effects(&func_ty.effects);
                 self.tysys.type_table.borrow_mut().make_function_with_mut(
                     func_ty.is_mut,
                     params,
@@ -106,14 +106,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_param_bounds
             .get(param_name)?;
-        // Each bound is resolved through its own reference site. Asking by the
-        // written name first would answer from this frame, which a default body
-        // materialized for an impl in another module does not share.
         self.tysys
             .trait_env
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.trait_decl_at(bound.id, &bound.name)
-            })
+            .bound_declaring_assoc_type(bounds, assoc_name, &self.tysys.resolutions)
     }
 
     /// The identity an impl header names: the trait, plus the arguments it
@@ -163,7 +158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let declaring: Vec<&ScopedBound> = bounds
             .iter()
             .filter(|bound| {
-                self.trait_decl_at(bound.id, &bound.name)
+                self.trait_decl_of(bound)
                     .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
             })
             .collect();
@@ -375,7 +370,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        if let Some(def) = self.type_decl_at(Some(site), name) {
+        if let Some(def) = self.decl_key_at(Some(site), name) {
             return match self.tysys.resolutions.defs().kind(def) {
                 DefKind::Effect => Some("an interface"),
                 DefKind::Trait => Some("a trait"),
@@ -660,11 +655,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return type_id;
         }
 
-        if let Some(primitive) = TypeTable::primitive_by_name(name) {
-            return primitive;
-        }
-
-        if let Some(def) = self.type_decl_at(site, name) {
+        if let Some(def) = self.decl_key_at(site, name) {
+            if let Some(primitive) =
+                TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def)
+            {
+                return primitive;
+            }
             if let Some(expected) = self.bare_generic_type_arity(def) {
                 // Every parameter declaring a default makes the bare name the
                 // defaulted instantiation; otherwise the site must write them.
@@ -736,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a generic application resolves to. `site` names the head's
-    /// declaration; `name` is the compiler-item spelling and the diagnostic.
+    /// declaration; `name` is its spelling, for the diagnostics.
     pub(super) fn resolve_generic_type(
         &mut self,
         site: AstId,
@@ -754,149 +750,69 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[Type],
         span: Span,
     ) -> TypeId {
-        // Prelude module path for looking up Option/Result
-        let prelude_source = ModuleSource::prelude();
-
-        match name {
-            "Option" => {
-                // Verify Option variant exists in symbol table (declared in prelude)
-                // First check local imports, then fall back to prelude module
-                let found_as_variant = self
-                    .symbol_named(&self.current_module_source, "Option")
-                    .or_else(|| self.symbols.lookup_in_module(&prelude_source, "Option"))
-                    .is_some_and(|s| matches!(s.kind, SymbolKind::Variant(_)));
-
-                if !found_as_variant {
-                    // Option not found as a variant - likely #![no_prelude] without explicit import
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: "Option".to_string(),
-                        span,
-                    });
-                }
-                let inner = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_option(inner)
-            }
-            "Stream" => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_stream(elem)
-            }
-            "StreamWritable" => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_stream_writable(elem)
-            }
-            "Future" => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys.type_table.borrow_mut().make_future(elem)
-            }
-            "FutureWritable" => {
-                let elem = args
-                    .first()
-                    .map(|t| self.resolve_type(t))
-                    .unwrap_or(TypeTable::UNKNOWN);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_future_writable(elem)
-            }
-            // `Array<T>` is the user-facing spelling of the raw GC array
-            // builtin (`ResolvedType::BuiltinArray`), declared
-            // definition-less via `#[compiler_item("array")]` in
-            // `core:prelude`. Resolved by its canonical name, like the
-            // other prelude builtins (`Option` / `Stream` / `Future`);
-            // this also resolves the builtin module's own signatures,
-            // which are elaborated before the compiler-item registry is
-            // populated.
-            _ if name == TypeTable::ARRAY_TYPE_NAME => {
-                if args.len() != 1 {
-                    let _ = self.emit(TypeError::ArgumentCountMismatch {
-                        expected: 1,
-                        found: args.len(),
-                        span,
-                    });
-                    return TypeTable::ERROR;
-                }
-                let element_type = self.resolve_type(&args[0]);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_builtin_array(element_type)
-            }
-            _ => {
-                // Which declaration the head names is the site's answer; the
-                // kind it turns out to be decides which shape is built.
-                let Some(def) = self.type_decl_at(site, name) else {
-                    return self.resolve_generic_type_out_of_scope(site, name, args, span);
-                };
-                let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
-                // A trait head reaches here too (`impl IndexValue<i32> for T`),
-                // and a trait's parameters live on its own declaration, so only
-                // a type declaration's list is a ceiling to exceed.
-                let declared = struct_info
-                    .as_ref()
+        let def = self.decl_key_at(site, name);
+        let builder =
+            def.and_then(|def| self.tysys.type_table.borrow().compiler_generic_builder(def));
+        if let Some(make) = builder {
+            let [arg] = args else {
+                let _ = self.emit(TypeError::ArgumentCountMismatch {
+                    expected: 1,
+                    found: args.len(),
+                    span,
+                });
+                return TypeTable::ERROR;
+            };
+            let elem = self.resolve_type(arg);
+            return make(&mut self.tysys.type_table.borrow_mut(), elem);
+        }
+        // The kind of the declaration the head names decides which shape is built.
+        let Some(def) = def else {
+            return self.resolve_generic_type_out_of_scope(site, name, args, span);
+        };
+        let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
+        // A trait head (`impl IndexValue<i32> for T`) keeps its parameters on
+        // its own declaration, so only a type declaration's list is a ceiling.
+        let declared = struct_info
+            .as_ref()
+            .map(|info| info.type_params.clone())
+            .or_else(|| {
+                self.lookup_variant_case_of_decl(def)
                     .map(|info| info.type_params.clone())
-                    .or_else(|| {
-                        self.lookup_variant_case_of_decl(def)
-                            .map(|info| info.type_params.clone())
-                    })
-                    .or_else(|| {
-                        self.lookup_generic_newtype_of_decl(def)
-                            .map(|info| info.type_params.clone())
-                    });
-                if let Some(params) = declared
-                    && self.reject_surplus_type_args(name, &params, args, span)
-                {
-                    return TypeTable::ERROR;
-                }
-                if struct_info
-                    .as_ref()
-                    .is_some_and(|info| !info.type_params.is_empty())
-                {
-                    let type_args = self.type_args_of_application(def, args);
-                    self.check_type_decl_arg_bounds(def, &type_args, span);
-
-                    // The instantiation is named by the declaration its head
-                    // resolved to, and keeps its arguments beside it rather
-                    // than fused into a rendered `Box<i32>` head no `impl`
-                    // header writes.
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, type_args)
-                } else if let Some(variant_info) = self.lookup_variant_case_of_decl(def).cloned() {
-                    // Check if it's a generic variant (like Result<T, E>)
-                    if variant_info.type_params.is_empty() {
-                        TypeTable::UNKNOWN
-                    } else {
-                        let type_args = self.type_args_of_application(def, args);
-                        self.check_type_decl_arg_bounds(def, &type_args, span);
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_generic_instance(def, type_args)
-                    }
-                } else if self.lookup_generic_newtype_of_decl(def).is_some() {
-                    let type_args = self.type_args_of_application(def, args);
-                    self.check_type_decl_arg_bounds(def, &type_args, span);
-                    self.generic_newtype_instance(def, type_args)
-                } else {
-                    self.resolve_generic_type_out_of_scope(site, name, args, span)
-                }
+            })
+            .or_else(|| {
+                self.lookup_generic_newtype_of_decl(def)
+                    .map(|info| info.type_params.clone())
+            });
+        if let Some(params) = declared
+            && self.reject_surplus_type_args(name, &params, args, span)
+        {
+            return TypeTable::ERROR;
+        }
+        let instance_params = match struct_info {
+            Some(info) if !info.type_params.is_empty() => Some(info.type_params),
+            _ => self
+                .lookup_variant_case_of_decl(def)
+                .map(|info| info.type_params.clone()),
+        };
+        if let Some(params) = instance_params {
+            if params.is_empty() {
+                TypeTable::UNKNOWN
+            } else {
+                let type_args = self.type_args_of_application(def, args);
+                self.check_type_decl_arg_bounds(def, &type_args, span);
+                // Named by the declaration its head resolved to, the arguments beside
+                // it rather than fused into a rendered `Box<i32>` no `impl` header writes.
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .make_generic_instance(def, type_args)
             }
+        } else if self.lookup_generic_newtype_of_decl(def).is_some() {
+            let type_args = self.type_args_of_application(def, args);
+            self.check_type_decl_arg_bounds(def, &type_args, span);
+            self.generic_newtype_instance(def, type_args)
+        } else {
+            self.resolve_generic_type_out_of_scope(site, name, args, span)
         }
     }
 
@@ -983,7 +899,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |e| {
                 let mut out: Vec<FrameBound> = Vec::new();
                 for bound in bounds {
-                    let Some(decl) = e.trait_decl_at(bound.id, &bound.name) else {
+                    let Some(decl) = e.trait_decl_of(&bound) else {
                         out.push((bound, Vec::new()));
                         continue;
                     };
@@ -1155,7 +1071,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
-            .map(|b| self.tysys.fq_trait_name_at(b.id, &b.name))
+            .map(|b| self.fq_trait_name_of(b))
             .collect();
         let assoc_type_bindings = self.frame_assoc_bindings(base, base_name, &assoc_bounds);
         self.tysys
@@ -1183,8 +1099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.bound_closure_of(base_name)?
                 .into_iter()
                 .find_map(|(bound, space)| {
-                    let fq = self.tysys.fq_trait_name_at(bound.id, &bound.name);
-                    (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                    (self.trait_decl_of(&bound) == Some(trait_))
                         .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
                         .flatten()
                         .map(|binding| (binding.ty, space, bound))

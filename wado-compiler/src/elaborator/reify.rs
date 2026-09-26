@@ -11,8 +11,8 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    self, ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT,
-    RETAIN, SECRET, TRAP, WIRE,
+    self, ALLOC, AMBIENT, EXPORT_NAME, IMMEDIATE, INLINE, LINEAR_MEMORY, PARAM, RESULT, RETAIN,
+    SECRET, TRAP, WIRE,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -63,8 +63,7 @@ use crate::elaborator::sem::types::{
     OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    RefBinding, collect_pattern_bindings_with_index, primitive_assoc_const_to_i128,
-    primitive_int_bound, remap_pattern_local,
+    RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
 };
 use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
@@ -82,12 +81,11 @@ use crate::name::{
     minted_name, test_function_name,
 };
 use crate::primitive::PrimitiveType;
-use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
 use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
 use crate::tir::{
-    EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
+    EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
 };
 use crate::tir::{
@@ -231,23 +229,21 @@ pub(super) struct ReifyAssertSlot {
 /// The callee a literal coercion names, as annotate resolved and mangled it
 /// (WEP 2026-08-24).
 fn literal_callee_ref(callee: &LiteralCallee) -> tir::FunctionRef {
+    let method_info = callee.method_info();
     FunctionRef {
         module_source: callee.impl_module_source.clone(),
-        name: callee.mangled_name.clone(),
+        name: method_info.to_mangled_name(),
+        template: callee.method_def.map(|def| TemplateId::Declared {
+            def,
+            block: callee.impl_def,
+        }),
         monomorph_info: (!callee.type_arg_ids.is_empty()).then(|| MonomorphInfo {
-            generic_name: format!("{}::{}", callee.target_base_name, callee.method),
+            generic_name: MethodName::format_local(&callee.target_base_name, None, callee.method),
             impl_type_args: callee.type_arg_ids.clone(),
             method_type_args: vec![],
             is_blanket: false,
         }),
-        method_info: Some(
-            LocalMethodName::new(
-                callee.target_base_name.clone(),
-                Some(callee.trait_name.clone()),
-                callee.method.to_string(),
-            )
-            .with_struct_type_args(&callee.type_arg_names),
-        ),
+        method_info: Some(method_info),
     }
 }
 
@@ -408,15 +404,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) current_module_source: ModuleSource,
     /// Items of the current module, set before per-Item dispatch.
     pub(crate) current_module_items: &'a [Item],
-    /// Names of the effect parameters (`<effect E>`) in scope for the
-    /// function / method currently being reified. `reify_effects` and
-    /// `apply_function_type_effects` consult this so an effect name that is a
-    /// param resolves to [`crate::tir::EffectRef::Param`] rather than a
-    /// `Concrete` effect — matching `Elaborator::resolve_effects`. Without
-    /// it a `fn(...) with E` parameter type would carry `Concrete { E }`,
-    /// which fails to unify with the enclosing function's recorded
-    /// `Param { E }` declared effect at indirect-call effect checks.
-    pub(crate) current_effect_param_names: Vec<String>,
+
     /// Active per-element annotation overlays for the tuple `for-of`(s)
     /// currently being unrolled, innermost last. While reifying element
     /// `i` of a tuple for-of, that element's [`super::sem::types::BodyFacts`]
@@ -473,31 +461,18 @@ pub(crate) struct CallSiteLocation {
 }
 
 impl<'a, H: CompilerHost> Reify<'a, H> {
-    /// The symbol `name` reaches from `module` — see
-    /// [`super::Elaborator::symbol_named`], which answers the same way from the
-    /// same tables, so annotate and reify cannot disagree about what a name
-    /// means.
-    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
-        self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
-    }
-
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
     fn symbol_at(&self, site: AstId) -> Option<&'a Symbol> {
         let def = self.tysys.resolutions.declared_if_walked(site)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
+    }
+
+    /// What a call of the function `site` names instantiates.
+    fn template_at(&self, site: AstId) -> Option<TemplateId> {
+        let def = self.tysys.resolutions.declared_if_walked(site)?;
+        Some(self.tysys.signatures.declared_template(def))
     }
 
     /// Construct a per-module `Reify` for the orchestration driver. The `tysys`
@@ -523,7 +498,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
-            current_effect_param_names: Vec::new(),
+
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
             emit_live,
@@ -602,40 +577,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Resolve an effect-name list into [`crate::tir::EffectRef`]s
-    /// for a function signature. Mirrors
-    /// [`super::Elaborator::resolve_effects`] without the use→def
-    /// recording side-effect (annotate already recorded the edges).
-    fn reify_effects(&self, effects: &[String]) -> Vec<EffectRef> {
-        effects
+    /// A function type's effects, read off the sites the resolve walk answered.
+    /// Annotate already reported a name that reaches no effect.
+    fn reify_effects(&self, ft: &ast::FunctionType) -> Vec<EffectRef> {
+        ft.effects
             .iter()
-            .map(|name| {
-                // Effect params in scope (`<effect E>`) become `Param`, matching
-                // `Elaborator::resolve_effects`; otherwise they would resolve to
-                // a `Concrete` effect and fail to unify with the recorded
-                // `Param` declared effect at effect checks.
-                if self.current_effect_param_names.iter().any(|p| p == name) {
-                    EffectRef::Param { name: name.clone() }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    let canonical = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| sym.module_source().clone())
-                        .unwrap_or_else(|| source.clone());
-                    EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: canonical,
-                    }
-                } else {
-                    let canonical = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| sym.module_source().clone())
-                        .unwrap_or_else(|| self.current_module_source.clone());
-                    EffectRef::Concrete {
-                        name: name.clone(),
-                        module_source: canonical,
-                    }
-                }
+            .map(|effect| {
+                self.tysys
+                    .resolutions
+                    .effect_named(effect, &self.current_module_source)
             })
             .collect()
     }
@@ -689,7 +639,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
             }
             ast::Type::Function(ft) if !ft.effects.is_empty() => {
-                let effects = self.reify_effects(&ft.effects);
+                let effects = self.reify_effects(ft);
                 let rebuilt = match self.tysys.type_table.borrow().get(resolved) {
                     ResolvedType::Function {
                         is_mut,
@@ -1208,14 +1158,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx.is_async = func.is_async;
         ctx.task_return_type = task_return_type;
 
-        // Effect params (`<effect E>`) drive `Param` effect resolution in
-        // function-type params; publish them for the body walk.
-        let effect_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| p.name.clone())
-            .collect();
         let param_types = self
             .ann_fn_param_types(func.id)
             .expect("the declaring walk records param types for every function reify emits");
@@ -1248,17 +1190,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             });
         }
 
-        let body = util::replaced(
-            self,
-            |reify| &mut reify.current_effect_param_names,
-            effect_param_names,
-            |this| {
-                func.body
-                    .as_ref()
-                    .map(|b| this.reify_block(b, &mut ctx, None))
-            },
-        )
-        .0;
+        let body = func
+            .body
+            .as_ref()
+            .map(|b| self.reify_block(b, &mut ctx, None));
 
         // Projected while the type-param scope was alive, so defaults are
         // resolved; after it is torn down they cannot be.
@@ -1289,6 +1224,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_async: func.is_async,
             type_params,
             impl_type_params: vec![],
+            impl_origin: None,
             monomorph_info: None,
             method_info: None,
             params,
@@ -1317,7 +1253,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
-            benign_effects: self.reify_effects(&extract_benign_effect_names(&func.attrs)),
             inline_hint: extract_inline_hint_attr(&func.attrs),
             compiler_item: extract_compiler_item(
                 &func.attrs,
@@ -1390,6 +1325,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // agrees with method dispatch's `from_concrete_impl` (and is not fooled
         // by a param named like a known type). Methods become concrete fns.
         let concrete_owner: Option<FqTypeName> = facts.concrete_owner.clone();
+        let origin = self.impl_origin(impl_block);
 
         let live: Vec<&ast::Function> = impl_block
             .methods
@@ -1397,8 +1333,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .filter(|method| !self.is_dead_item(method.id))
             .collect();
         live.into_iter()
-            .map(|method| self.reify_method(method, &facts, concrete_owner.as_ref()))
+            .map(|method| self.reify_method(method, &facts, concrete_owner.as_ref(), origin))
             .collect()
+    }
+
+    fn impl_origin(&self, impl_block: &ast::ImplBlock) -> DefId {
+        self.tysys.resolutions.defs().def_at(impl_block.id)
     }
 
     /// Synthesise a `Struct^Trait::method` `TirFunction` for each default method
@@ -1429,9 +1369,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // The impl header names the trait at a site of its own, which the walk
         // answered for in the module that wrote the header.
-        let Some(trait_decl) =
-            head_site(trait_ast).and_then(|site| self.tysys.resolutions.declared(site))
-        else {
+        let Some(trait_decl) = self.tysys.resolutions.head_decl(trait_ast) else {
             return Vec::new();
         };
         let Some(trait_sig) =
@@ -1447,6 +1385,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .map(|(_, body)| std::rc::Rc::clone(body))
             .collect();
         let trait_module = trait_sig.module.clone();
+        let origin = self.impl_origin(impl_block);
 
         let trait_items: &'a [ast::Item] = self
             .loaded_modules
@@ -1471,7 +1410,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
             let mut tir_func =
                 self.with_perspective(trait_module.clone(), trait_items, synth_sem, |this| {
-                    this.reify_method(default_method, &facts, concrete_owner.as_ref())
+                    this.reify_method(default_method, &facts, concrete_owner.as_ref(), origin)
                 });
 
             // No declaring walk recorded `method_names` for a synthesized default.
@@ -1501,6 +1440,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // monomorphization, so distinct instantiations stay distinct and call
         // sites resolve it directly (mirroring a monomorphized instance).
         concrete_owner: Option<&FqTypeName>,
+        origin: DefId,
     ) -> TirFunction {
         let mut impl_type_params: Vec<TirTypeParam> =
             self.ann_method_impl_type_params(func.id).expect(
@@ -1545,6 +1485,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut tir_func = self.reify_callable(func, display_name, facts.is_handler_method);
         tir_func.name = mangled_name;
         tir_func.is_export = false;
+        tir_func.impl_origin = Some(origin);
         tir_func.impl_type_params = impl_type_params;
         tir_func.method_info = Some(method_info);
         tir_func
@@ -1584,6 +1525,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_async: false,
             type_params: vec![],
             impl_type_params: vec![],
+            impl_origin: None,
             monomorph_info: None,
             method_info: None,
             params: vec![],
@@ -1604,7 +1546,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -3848,6 +3789,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 func: Box::new(FunctionRef {
                     module_source,
                     name,
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -5910,8 +5852,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.as_option(inner_type).is_some(),
                 matches!(
                     tt.get(inner_type),
-                    ResolvedType::GenericInstance { def, .. }
-                        if tt.is_compiler_item(*def, CompilerItem::Result)
+                    ResolvedType::GenericInstance { .. } if tt.is_result(inner_type)
                 ),
             )
         };
@@ -6319,13 +6260,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // literal. Matches `Elaborator::resolve_index`'s tuple
         // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
-            let tt = self.tysys.type_table.borrow();
             let base = receiver.type_id;
-            let unwrapped = match tt.get(base) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => base,
-            };
-            tt.as_tuple(unwrapped)
+            let unwrapped = self.tysys.through_ref(base);
+            self.tysys.type_table.borrow().as_tuple(unwrapped)
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index
@@ -6613,14 +6550,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         {
             return;
         }
-        let ResolvedType::GenericInstance { def, type_args } =
-            self.tysys.type_table.borrow().get(expected).clone()
-        else {
+        let Some(type_args) = self.tysys.type_table.borrow().as_tuple(expected) else {
             return;
         };
-        if !TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) {
-            return;
-        }
         let after = elements.len() - at - 1;
         if type_args.len() < at + after {
             return;
@@ -6731,7 +6663,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     def,
                     type_args: inner_elems,
                 } = spread_type
-                    && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
+                    && self.tysys.type_table.borrow().is_tuple_def(def)
                 {
                     // Concrete tuple: expand inline via FieldAccess. Bind a
                     // non-trivial operand to a temporary for single evaluation.
@@ -7009,24 +6941,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  ?-op, Type::from(x), and Type::<…>::from(x)",
         );
         let from_trait = facts.from_trait_name.with_args(vec![facts.from_name]);
+        let method_info =
+            LocalMethodName::new(facts.target_name, Some(from_trait), "from".to_string());
 
         TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
-                    module_source: facts.module_source,
-                    name: facts.mangled_name,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName {
-                        receiver: Receiver::Type(facts.target_name),
-                        struct_type_args: Vec::new(),
-                        trait_name: Some(from_trait),
-                        trait_type_args: vec![],
-                        method_name: "from".to_string(),
-                        method_type_args: vec![],
-                        is_type_param_receiver: false,
-                        is_ref_impl: false,
-                        cm_name: None,
+                    template: Some(match facts.method_def {
+                        Some(def) => self.tysys.signatures.declared_template(def),
+                        None => TemplateId::derived(facts.module_source.clone(), &method_info),
                     }),
+                    module_source: facts.module_source,
+                    name: method_info.to_mangled_name(),
+                    monomorph_info: None,
+                    method_info: Some(method_info),
                 }),
                 type_args: vec![],
                 args: vec![CallArg::new(value, false)],
@@ -7925,43 +7853,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return Self::hoist_block(call, prelude);
         }
 
-        // `Type::from(x)` with no explicit `From` impl — reflexive and
-        // newtype conversions. Production's `resolve_call` handles these
-        // inline and records no `static_method_dispatch`,
-        // tagging the reflexive case with `NewtypeFromCollapse`; reify must
-        // reproduce the same three shapes (otherwise it falls through to an
-        // unresolvable `Type::from` `Call`). Only reached when a user `From`
-        // impl coexists, since that routes `from` through the static-call
-        // path while the builtin reflexive/newtype conversion stays implicit.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && let Some(pos) = ident.name.find("::")
-            && &ident.name[pos + 2..] == "from"
-            && !ident.name[pos + 2..].contains("::")
-            && call.args.len() == 1
-        {
+        // `Type::from(x)` resolved inline, with no `static_method_dispatch`:
+        // a bodyless `impl From<X> for Type;` (shared with the `?` operator),
+        // or a reflexive or newtype conversion.
+        if self.ann_from_call_facts(call.id).is_some() {
             let arg = self.reify_expr(&call.args[0], ctx, None);
-
-            // Bodyless `impl From<X> for Type;` marker impl — production
-            // synthesizes a `From::from` call inline via
-            // `resolve_from_call` and records `FromCallFacts`
-            // under `call.id`. Reify reuses `reify_from_call` so both the
-            // ?-op path and this static-call path emit identical TIR.
-            if self.ann_from_call_facts(call.id).is_some() {
-                return self.reify_from_call(recorded_type, arg, span, call.id);
+            return self.reify_from_call(recorded_type, arg, span, call.id);
+        }
+        match self.ann_desugars(call.id) {
+            Some(DesugarKind::NewtypeFromCollapse) => {
+                return self.reify_expr(&call.args[0], ctx, None);
             }
-
-            // Reflexive: `T::from(T_val)` — identity, return the argument.
-            // Annotate tags the call with `NewtypeFromCollapse`; reify
-            // recognises it and emits the argument's TIR directly.
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromCollapse) {
-                return arg;
-            }
-
-            // Newtype→Base: `Base::from(Newtype_val)`. Annotate records
-            // `NewtypeFromUnwrap` on the call and lowers to a `Cast` to
-            // the base type; reify replays the shape using the recorded
-            // expression type (which is the base type).
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromUnwrap) {
+            Some(DesugarKind::NewtypeFromUnwrap | DesugarKind::NewtypeFromWrap) => {
+                let arg = self.reify_expr(&call.args[0], ctx, None);
                 return TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(arg),
@@ -7971,25 +7875,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     span,
                 );
             }
-
-            // Base→Newtype: `Newtype::from(Base_val)`. Annotate records
-            // `NewtypeFromWrap` on the call and lowers to a `Cast` to the
-            // newtype; reify replays the shape using the recorded
-            // expression type (which is the newtype).
-            if self.ann_desugars(call.id) == Some(DesugarKind::NewtypeFromWrap) {
-                return TirExpr::new(
-                    TirExprKind::Cast {
-                        expr: Box::new(arg),
-                        target_type: recorded_type,
-                    },
-                    recorded_type,
-                    span,
-                );
-            }
-
-            // Not a reflexive/newtype `from` — fall through to the generic
-            // call handling below, which reifies args itself; `arg` here is
-            // dropped (no side effects: `reify_expr` is pure TIR shaping).
+            _ => {}
         }
 
         // Indirect call: the callee is a value rather than a named function.
@@ -8082,6 +7968,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 func: Box::new(tir::FunctionRef {
                                     module_source: ns_source,
                                     name: rest.to_string(),
+                                    template: None,
                                     monomorph_info: None,
                                     method_info: None,
                                 }),
@@ -8154,6 +8041,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     func: Box::new(tir::FunctionRef {
                         module_source: callee_module,
                         name: callee_name,
+                        template: self.template_at(ident.id),
                         monomorph_info: None,
                         method_info: None,
                     }),
@@ -8508,14 +8396,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // struct-fields lookup below misses and the `(0, …)` fallback
                 // would collapse every `t.N` onto field 0. Resolve the numeric
                 // field name into the element index directly.
-                let name = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(receiver_type)
-                    .map(|(n, _)| n)
-                    .unwrap_or_default();
-                if TypeTable::is_tuple_type(&name)
+                let is_tuple = self.tysys.type_table.borrow().is_tuple(receiver_type);
+                if is_tuple
                     && let Ok(index) = field_name.parse::<usize>()
                     && let Ok(elem) = self.tysys.tuple_literal_index_type(&type_args, index)
                 {
@@ -8750,22 +8632,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(resolved.kind, type_id, ident.span);
         }
 
-        // 4b. `i32::MAX` in a foreign default argument: the stdlib snapshot
-        //     does not rehydrate `associated_constants`.
-        if let Some((prefix, suffix)) = ident.name.split_once("::")
-            && !suffix.contains("::")
-            && let Some((value, prim_type)) = primitive_int_assoc_const(prefix, suffix)
-        {
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: value as u64,
-                    repr: value.to_string(),
-                },
-                prim_type,
-                ident.span,
-            );
-        }
-
         // 5. A case path, in `resolve_qualified_case`'s order. Its recorded type
         //    is the newtype its prefix named, or the case's own.
         if let Some(owner) = self.ann_case_owner(ident.id) {
@@ -8833,6 +8699,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: self.current_module_source.clone(),
                     name: ident.name.clone(),
                     type_args,
+                    template: self.template_at(ident.id),
                 },
                 recorded_type,
                 ident.span,
@@ -8856,6 +8723,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: import_src,
                     name: original_name,
                     type_args,
+                    template: Some(self.tysys.signatures.declared_template(def)),
                 },
                 recorded_type,
                 ident.span,
@@ -8880,6 +8748,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     module_source: symbol.module_source().clone(),
                     name: symbol.name.clone(),
                     type_args,
+                    template: self.template_at(ident.id),
                 },
                 recorded_type,
                 ident.span,
@@ -9133,6 +9002,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: method_info.to_mangled_name(),
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }
@@ -9488,41 +9358,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         })
     }
 
-    /// [`super::util::range_endpoint_to_i128`] plus the one endpoint shape only
-    /// reify reaches: a user associated constant (`TokenKind::FOO`).
-    fn pattern_endpoint_value(
-        &mut self,
-        endpoint: &ast::Pattern,
-        is_unsigned: bool,
-        ctx: &mut FunctionContext,
-    ) -> i128 {
-        if let ast::Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            bindings,
-            ..
-        } = endpoint
-            && bindings.is_empty()
-            && primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name).is_none()
-            && let Some(AssocConstSig {
-                module: const_module,
-                ty: type_id,
-                value: const_expr,
-                ..
-            }) = self
-                .tysys
-                .associated_constant_qualified(variant_qualifier.as_ref(), variant_name)
-        {
-            let resolved = self.with_module_perspective(&const_module, |this| {
-                this.reify_expr(&const_expr, ctx, Some(type_id))
-            });
-            if let TirExprKind::IntLiteral { repr, .. } = &resolved.kind {
-                return parse_int_bits(repr, is_unsigned).unwrap_or_else(|e| {
-                    panic!("a const range endpoint annotate accepted parses: {e}")
-                });
-            }
-        }
-        range_endpoint_to_i128(endpoint, is_unsigned)
+    fn pattern_endpoint_value(&self, endpoint: &ast::Pattern, is_unsigned: bool) -> i128 {
+        range_endpoint_to_i128(endpoint, is_unsigned, &self.tysys.resolutions)
             .expect("annotate diagnoses a range endpoint that denotes no integer")
     }
 
@@ -9974,8 +9811,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .borrow()
                     .is_unsigned_int(scrutinee_type);
                 TirPattern::Range {
-                    start: self.pattern_endpoint_value(start, is_unsigned, ctx),
-                    end: self.pattern_endpoint_value(end, is_unsigned, ctx),
+                    start: self.pattern_endpoint_value(start, is_unsigned),
+                    end: self.pattern_endpoint_value(end, is_unsigned),
                     inclusive,
                     is_unsigned,
                 }
@@ -10308,12 +10145,7 @@ impl TypeSystem {
         }
         recorded
             .filter(|t| !matches!(self.type_table.borrow().get(*t), ResolvedType::Unknown))
-            .unwrap_or_else(
-                || match self.type_table.borrow().get(dispatch.return_type) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => dispatch.return_type,
-                },
-            )
+            .unwrap_or_else(|| self.through_ref(dispatch.return_type))
     }
 
     /// The trait read `*recv.index(idx)` (or `recv.index_value(idx)`) `dispatch`
@@ -10411,18 +10243,6 @@ fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|a| a.name == AMBIENT)
 }
 
-/// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
-/// attributes and arguments accumulate. The caller resolves them to
-/// `EffectRef`s via `reify_effects`.
-fn extract_benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
-    attrs
-        .iter()
-        .filter(|a| a.name == BENIGN)
-        .flat_map(|a| a.args.iter().map(AttrArg::as_str))
-        .map(str::to_string)
-        .collect()
-}
-
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
     let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
@@ -10461,20 +10281,6 @@ fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
 /// instead of the effects inferred from its body.
 fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
     matches!(arg, ast::Expr::Closure(c) if c.params.iter().any(|p| p.ty.is_none()))
-}
-
-/// Compile-time value and primitive `TypeId` for a primitive integer
-/// associated constant named `<prefix>::<suffix>` (e.g. `i32::MAX`).
-/// Returns `None` for non-primitive or unknown constants. Used by
-/// `reify_ident` to resolve such constants when they are not present in
-/// `associated_constants` — e.g. a default-argument expression reified
-/// under a stdlib-snapshot callee module whose `associated_constants` map
-/// was not rehydrated.
-fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
-    Some((
-        primitive_int_bound(prefix, suffix)?,
-        TypeTable::primitive_by_name(prefix)?,
-    ))
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks
@@ -10700,6 +10506,7 @@ fn build_int128_from_pair(
             func: Box::new(tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }),
@@ -10768,6 +10575,7 @@ fn build_int128_literal_call(
                 func: Box::new(tir::FunctionRef {
                     module_source: ModuleSource::int128(),
                     name: mangled_func_name,
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 }),
@@ -10805,6 +10613,7 @@ fn build_int128_from_intermediate(
             func: Box::new(tir::FunctionRef {
                 module_source: ModuleSource::int128(),
                 name: mangled_func_name,
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }),

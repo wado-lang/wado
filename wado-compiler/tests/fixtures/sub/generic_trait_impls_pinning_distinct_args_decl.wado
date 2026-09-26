@@ -1,0 +1,20 @@
+// `Pair`, `Tag`, and the impl pinning `i32`. The impl pinning `i64` lives in
+// the importing module.
+pub struct Pair<A, B> {
+    pub a: A,
+    pub b: B,
+}
+
+pub trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl<T> Tag for Pair<T, i32> {
+    fn tag(&self) -> i32 {
+        return 100 + self.b;
+    }
+}
+
+pub fn tag_here<X: Tag>(x: &X) -> i32 {
+    return x.tag();
+}

@@ -1,0 +1,17 @@
+// A struct with no `#[cm]` belongs to no interface, so no import can name it.
+use { Foo } from "./sub/alias_user_struct_as_primitive_dep.wado";
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: Foo) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(Foo { v: 1 });
+}
+
+__DATA__
+{
+  "compile_error": "`Foo` crosses the Component Model boundary in `get_count` but declares no interface; bind it with `#[cm(\"<interface>#<name>\")]`",
+  "compile_error_codes": ["CM_BOUNDARY_TYPE"]
+}

@@ -3562,6 +3562,8 @@ Create a Formatter with the default spec, writing into the given buffer.
 
 #### `pub fn write_str<S: AsStrSlice>(&mut self, s: S)`
 
+`#[compiler_item("formatter_write_str")]`
+
 Write any `AsStrSlice` text to the output buffer.
 
 #### `pub fn write_display<T: Display>(&mut self, value: &T)`
@@ -5140,6 +5142,8 @@ _Fields are private._
 
 #### `pub fn with_capacity(capacity: i32) -> List<T>`
 
+`#[compiler_item("list_with_capacity")]`
+
 #### `pub fn grow(&mut self)`
 
 #### `pub fn filled(n: i32, element: T) -> List<T>`
@@ -5151,6 +5155,8 @@ _Fields are private._
 Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 #### `pub fn len(&self) -> i32`
+
+`#[compiler_item("list_len")]`
 
 #### `pub fn capacity(&self) -> i32`
 
@@ -5274,6 +5280,8 @@ Joins elements into a string with the given separator.
 #### `impl IndexValue<i32> for List<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
+
+`#[compiler_item("list_index_value")]`
 
 #### `impl IndexAssign<i32> for List<T>`
 

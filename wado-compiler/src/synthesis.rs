@@ -14,11 +14,12 @@ pub mod serde_synth;
 pub mod template;
 pub mod traits;
 
+use crate::defs::DefId;
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
+use crate::tir;
 use crate::tir::{ResolvedType, TypeTable};
-use crate::{name, tir};
 
 /// The five reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a
@@ -108,22 +109,18 @@ pub fn synthesize(project: Package) -> Result<Package, String> {
 /// receiver's. Per-module stubs are excluded via [`receiver_is_per_module_synth`].
 fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     let mut impls = SynthesisedImpls::default();
-    let mut instantiations: Vec<(String, String, ModuleSource)> = Vec::new();
+    let mut instantiations: Vec<(String, DefId, ModuleSource)> = Vec::new();
     // Every impl TIR carries is recorded, user-written ones included. This
     // layer answers "where is the code", and reify flattens a user impl's
     // methods into `module.functions` exactly like a generated one — so
     // excluding them would leave a mangled query with nothing to find.
-    let mut record =
-        |receiver: &name::Receiver, trait_name: &str, module: &ModuleSource, is_concrete: bool| {
-            impls.record_impl(receiver, trait_name, module, is_concrete);
-        };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
         let type_table = tir_module.type_table.borrow();
         for func_rc in &tir_module.functions {
             let func = func_rc.borrow();
             if let Some(ref info) = func.method_info
-                && let Some(ref trait_name) = info.trait_name
+                && let Some(trait_) = info.trait_decl()
             {
                 // Resolve the impl's receiver type from `self`'s declared
                 // type and skip per-module synthesis stubs (Fn dispatch
@@ -137,16 +134,15 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
                     continue;
                 }
                 let is_concrete = func.impl_type_params.is_empty();
-                let trait_base = trait_name.base_name().to_string();
-                record(info.receiver(), &trait_base, module_source, is_concrete);
+                impls.record_impl(info.receiver(), trait_, module_source, is_concrete);
                 if info.struct_name() != info.base_struct_name() {
-                    instantiations.push((info.struct_name(), trait_base, module_source.clone()));
+                    instantiations.push((info.struct_name(), trait_, module_source.clone()));
                 }
             }
         }
     }
-    for (mangled, trait_name, module) in instantiations {
-        impls.record_instantiation(mangled, &trait_name, &module);
+    for (mangled, trait_, module) in instantiations {
+        impls.record_instantiation(mangled, trait_, &module);
     }
     impls
 }

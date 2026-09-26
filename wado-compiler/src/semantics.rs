@@ -9,9 +9,8 @@ use std::sync::Arc;
 use crate::analyze::Analyzer;
 use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
-use crate::bail_with;
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
-use crate::component_model::{CmInterfaceRegistry, declares_cm_binding};
+use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
 use crate::elaborator::liveness::Liveness;
@@ -21,7 +20,7 @@ use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
-use crate::logger::{Bail, Logger};
+use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
 use crate::resolve::Resolutions;
@@ -32,7 +31,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::WorldRegistry;
-use crate::{ast, load, loader, parse, symbol_notation};
+use crate::{ast, load, loader, parse, report_without_span, symbol_notation};
 
 /// A ready-to-query analysis result.
 ///
@@ -199,16 +198,15 @@ impl Semantics {
         self.state.as_ref().map(|s| &*s.world_registry)
     }
 
-    /// Component Model interface registry produced during annotate: the resolved
-    /// `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface the frontend
-    /// saw, powering binding synthesis, lift/lower, and WIT emission. `None`
-    /// under the same conditions as [`Self::world_registry`].
-    #[must_use]
     /// Name resolution: which declaration a spelling in a module reaches.
+    #[must_use]
     pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
     }
 
+    /// The resolved `#[cm(…)]` / `#[cm_import(…)]` view of every CM interface
+    /// the frontend saw. `None` under the same conditions as [`Self::world_registry`].
+    #[must_use]
     pub fn cm_interface_registry(&self) -> Option<&CmInterfaceRegistry> {
         self.state.as_ref().map(|s| &*s.tysys.cm_interface_registry)
     }
@@ -1173,14 +1171,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             Err(_) => (IndexMap::default(), false),
         }
     };
-    let lower_ok = lower_ok
-        && register_user_cm_modules(
-            &mut state.tysys.cm_interface_registry,
-            &load_result.modules,
-            logger,
-        )
-        .is_ok();
-
     // Take an immutable snapshot of the type table at the end of lowering.
     // LSP queries read this snapshot; any further lowering (none today) would
     // continue interning into the shared `Rc<RefCell<TypeTable>>` held by
@@ -1208,6 +1198,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
 
+    let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
+
     let space_modules = load_result
         .modules
         .iter()
@@ -1225,19 +1217,19 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         fact_home,
         tir_modules,
         liveness,
-        is_complete: lower_ok && no_syntax_errors,
+        is_complete: cm_bound && no_syntax_errors,
         wit_contract: None,
     }
 }
 
-/// Register the CM bindings the program's own modules declare, for the back end
-/// and WIT emission to read.
-fn register_user_cm_modules<H: CompilerHost>(
-    registry: &mut Arc<CmInterfaceRegistry>,
+/// Register the CM bindings the program's own modules and its dependencies
+/// declare into the analysis' registry. False once one is refused.
+fn register_user_cm_bindings<H: CompilerHost>(
+    state: &mut AnnotateState,
     modules: &IndexMap<ModuleSource, Module>,
     logger: &Logger<'_, H>,
-) -> Result<(), Bail> {
-    let modules: Vec<(&ModuleSource, &Module)> = modules
+) -> bool {
+    let bindings: Vec<(&ModuleSource, &Module)> = modules
         .iter()
         .filter(|(source, module)| {
             !source.is_core()
@@ -1246,23 +1238,27 @@ fn register_user_cm_modules<H: CompilerHost>(
                 && declares_cm_binding(module)
         })
         .collect();
-    if modules.is_empty() {
-        return Ok(());
+    if bindings.is_empty() {
+        return true;
     }
-    let registry = Arc::make_mut(registry);
-    for (source, module) in &modules {
-        registry
-            .register_user_cm_decls(module, source)
-            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+    let refuse = |code: Code, message: String| {
+        report_without_span(logger, code, message);
+        false
+    };
+    let tysys = &mut state.tysys;
+    let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
+    if let Err(error) = registry.register_user_cm_modules(&bindings, &tysys.resolutions) {
+        return match error {
+            UserCmError::Duplicate(msg) => refuse(Code::DuplicateDefinition, msg),
+            UserCmError::UnboundType(msg) => refuse(Code::CmBoundaryType, msg),
+        };
     }
     // Only once every module is registered: an `interface` naming a resource's
     // operations may sit in a module other than the one declaring it.
-    for (_, module) in &modules {
-        registry
-            .validate_cm_function_names(module)
-            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
-    }
-    Ok(())
+    bindings
+        .iter()
+        .try_for_each(|(_, module)| registry.validate_cm_function_names(module))
+        .map_or_else(|msg| refuse(Code::UnknownType, msg), |()| true)
 }
 
 /// True when `b` is an `impl` on `want_type` and — if `want_trait` is set —

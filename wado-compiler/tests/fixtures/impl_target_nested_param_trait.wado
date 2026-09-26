@@ -1,0 +1,60 @@
+// A trait impl whose target nests its type parameter inside an argument binds
+// the parameter to what the receiver holds there, not to the whole argument.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Head {
+    fn head(&self) -> String;
+}
+
+impl<T: Display> Head for Pair<List<T>, i32> {
+    fn head(&self) -> String {
+        let x: T = self.a[0];
+        return `${x}`;
+    }
+}
+
+impl<T: Display> Head for Pair<[T, bool], i64> {
+    fn head(&self) -> String {
+        let x: T = self.a.0;
+        return `${x}:${self.a.1}`;
+    }
+}
+
+struct Holder<F> {
+    f: F,
+}
+
+impl<T: Display> Head for Holder<fn(i32) -> T> {
+    fn head(&self) -> String {
+        let x: T = (self.f)(3);
+        return `${x}`;
+    }
+}
+
+test "a parameter inside a generic argument" {
+    let p: Pair<List<String>, i32> = Pair { a: ["x", "y"], b: 0 };
+    let q: Pair<List<u8>, i32> = Pair { a: [7], b: 0 };
+    assert p.head() == "x";
+    assert q.head() == "7";
+}
+
+test "a parameter inside a tuple argument" {
+    let p: Pair<[String, bool], i64> = Pair { a: ["x", true], b: 0 };
+    let q: Pair<[u8, bool], i64> = Pair { a: [9, false], b: 0 };
+    assert p.head() == "x:true";
+    assert q.head() == "9:false";
+}
+
+test "a parameter inside a function type" {
+    let h: Holder<fn(i32) -> String> = Holder { f: |v| `n${v}` };
+    let g: Holder<fn(i32) -> bool> = Holder { f: |v| v > 0 };
+    assert h.head() == "n3";
+    assert g.head() == "true";
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,38 @@
+// Two trait impls whose targets nest their parameter in different shapes. Each
+// receiver reaches the one its argument's shape matches, and the parameter binds
+// to what the argument holds (finding 1).
+
+struct Wrap<W> {
+    w: W,
+}
+
+trait Tag {
+    fn tag(&self) -> String;
+}
+
+impl<T: Display> Tag for Wrap<Option<T>> {
+    fn tag(&self) -> String {
+        if let Some(x) = self.w {
+            return `some ${x}`;
+        }
+        return "none";
+    }
+}
+
+impl<T: Display> Tag for Wrap<[T, i32]> {
+    fn tag(&self) -> String {
+        return `pair ${self.w.0} ${self.w.1}`;
+    }
+}
+
+test "each shape reaches its own impl" {
+    let a: Wrap<Option<i32>> = Wrap { w: Some(4) };
+    let b: Wrap<Option<String>> = Wrap { w: null };
+    let c: Wrap<[String, i32]> = Wrap { w: ["x", 2] };
+    assert a.tag() == "some 4";
+    assert b.tag() == "none";
+    assert c.tag() == "pair x 2";
+}
+
+__DATA__
+{"test": {}}

@@ -507,9 +507,9 @@ serial advances on read, so a template nested inside a hole mints its own
 
 ### Reflect resolution (`elaborator/reflect.rs`, `solver_bridge.rs`, `trait_query.rs`)
 
-- `ReflectDispatch::Template`, a `TemplateMethods::resolve` reading the method
-  names off the registry, and `is_reflect_template_trait_call`, wired into
-  `reflect_dispatch_of` and `resolve_static_method_call`.
+- `ReflectDispatch::Template` and a `TemplateMethods::resolve` reading the
+  method names off the registry, reached through the `ReflectTemplate` arm of
+  `reflect_dispatch_of`.
 - `reflect_template_holes` reads hole types off the shape. The concrete
   resolver types `members()` as `payload_members_ty(ReflectTemplateHole, T,
   holes)` and `tail()` / `raw_tail()` as `String`. The generic resolver, for a
@@ -521,8 +521,8 @@ serial advances on read, so a template nested inside a hole mints its own
 - `solver_bridge`: `ReflectTemplate` joins `REFLECT`; every template shape
   lowers under the one `DeclKey::TemplateShape` head with its hole types as
   the arguments, and `state_reflect_facts` states it visible from every module.
-- `trait_query`: `OnBoundTrait::ReflectTemplate`, `classify_on_bound_trait`,
-  and `reflect_members_visible` answering true.
+- `trait_query`: `OnBoundTrait::ReflectTemplate`, `on_bound_of`, and
+  `reflect_members_visible` answering true.
 - The seal list in `orchestration.rs` names `ReflectTemplate`.
 
 ### Synthesis (`synthesis/traits.rs`, `synthesis/template.rs`)

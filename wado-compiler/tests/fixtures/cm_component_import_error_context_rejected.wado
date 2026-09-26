@@ -1,0 +1,10 @@
+// A component carrying `error-context` in a signature, which has no import
+// mapping, is rejected where it is imported rather than crashing the compiler.
+use { Fails } from "./sub/wasm_import_cm_error_context.wat" with { type: "wat" };
+
+export fn run() {
+    Fails::fail();
+}
+
+__DATA__
+{"compile_error": "importing a component whose signature carries `error-context` is not yet supported"}

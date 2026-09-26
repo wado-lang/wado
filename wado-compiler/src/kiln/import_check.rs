@@ -20,12 +20,6 @@ pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 /// The shared CM interface FQ that carries `InputFile` / `Response` / `Error`.
 pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 
-/// The `core:kiln/types` record/variant names shared across every generator's
-/// `generate` signature. Single source of truth: a `generate` param or return
-/// type naming one of these must be stamped with [`KILN_TYPES_INTERFACE`], or
-/// the CM lift/lower falls back to an i32 handle. Add a new shared type here.
-pub const KILN_SHARED_TYPE_NAMES: &[&str] = &["InputFile", "OutputFile", "Response", "Error"];
-
 /// Reject the WASI interfaces the author's own `use` names, blaming that span.
 /// Returns the count of rejected sites; zero means the generator passed.
 pub fn check_loaded<H: CompilerHost>(
@@ -139,10 +133,8 @@ pub fn inject_kiln_request_adapter(
         )),
     };
 
-    // Stamp `InputFile` with its shared `core:kiln/types` source so downstream
-    // CM resolution (and the world-synthesis local-type annotation) treats it as
-    // that interface's type, not a generator-local one — otherwise it falls back
-    // to an i32 handle when lifted as a `List<InputFile>` element.
+    // Without its `core:kiln/types` source, CM resolution takes `InputFile` for a
+    // generator-local type and lifts a `List<InputFile>` element as an i32 handle.
     let mut input_file_ty = |module: &mut Module| {
         let named = NamedType::new(module.alloc_ast_id(), "InputFile".to_string(), span);
         source_interfaces.insert(named.id, KILN_TYPES_INTERFACE.to_string());

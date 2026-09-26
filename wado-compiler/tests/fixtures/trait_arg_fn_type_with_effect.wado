@@ -1,0 +1,27 @@
+// `fn() with Stdout` as a trait argument names the effect by declaration, so
+// the impl's `Tag<fn() with Stdout>` and the bound's are one trait.
+use { Stdout } from "core:cli";
+
+trait Tag<T> with () {
+    fn tag(&self) -> i32;
+}
+
+struct S {}
+
+impl Tag<fn() with Stdout> for S {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+fn read_tag<T: Tag<fn() with Stdout>>(t: &T) -> i32 {
+    return t.tag();
+}
+
+test {
+    let s = S {};
+    assert read_tag(&s) == 1;
+}
+
+__DATA__
+{"test": {}}

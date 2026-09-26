@@ -1,0 +1,33 @@
+// `option<own<t>>` as an import parameter. The shared type walk mints the `own`
+// itself from the resource's index, so the instance must hand it the resource
+// and not the `own` it already defined, which would come out `own<own<t>>`.
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+    #[cm("wasi:demo/gfx@0.1.0#pick")]
+    #[cm_params("d", "label", "bytes")]
+    fn pick(d: Option<Device>, label: Option<String>, bytes: Option<List<u8>>) -> u32;
+}
+
+export fn run() with (Gfx, Device) {
+    let _ = Gfx::pick(Option::Some(Gfx::get_device()), Option::Some("a"), null);
+    let _ = Gfx::pick(null, null, null);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(own "], "count": 1 },
+    { "contains": ["(own 0)"], "count": 1 },
+    { "contains": ["(option 1)"], "count": 1 }
+  ]
+}

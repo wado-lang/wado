@@ -14,14 +14,14 @@ use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
 use crate::tir::{
-    ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::common::{
     binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
 };
@@ -56,6 +56,10 @@ pub struct CmStdlibNames {
     pub index_value: FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
     pub array_fq: FqTypeName,
+    /// `List::len`, the declaration a list adapter's length call instantiates.
+    pub list_len: TemplateId,
+    /// `List`'s `index_value`, likewise for the element read.
+    pub list_index_value: TemplateId,
     /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
     pub tree_map: Option<String>,
 }
@@ -93,6 +97,8 @@ impl CmStdlibNames {
             err_index,
             index_value: items.trait_fq(CompilerItem::IndexValue),
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
+            list_len: items.require_template(CompilerItem::ListLen),
+            list_index_value: items.require_template(CompilerItem::ListIndexValue),
             tree_map: items
                 .struct_name_opt(CompilerItem::TreeMap)
                 .map(str::to_string),
@@ -289,8 +295,7 @@ pub fn cm_type_to_type_id(
             "f64" => TypeTable::F64,
             "bool" => TypeTable::BOOL,
             "char" => TypeTable::CHAR,
-            // Unit type written as a named type "()"
-            "()" => TypeTable::UNIT,
+            UNIT_TYPE_NAME => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
             //
             // The type's own `source_interface` leads: a package holds several
@@ -556,16 +561,44 @@ pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
 /// itself: WIT has no recursive types, and synthesis would inline one forever.
 pub(super) fn check_cm_boundary_representable(
     type_id: TypeId,
+    slot: Slot,
+    boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
     let names = CmStdlibNames::from_type_table(type_table);
-    check_cm_boundary_representable_inner(type_id, type_table, tir_modules, &names, visited)
+    check_cm_boundary_representable_inner(
+        type_id,
+        slot,
+        boundary,
+        type_table,
+        tir_modules,
+        &names,
+        visited,
+    )
+}
+
+/// Where a type sits: `()` fills only a slot the Component Model lets stay empty,
+/// a function result, a `result` arm or a case payload.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Slot {
+    Value,
+    Optional,
+}
+
+/// Which way a signature crosses: an import also carries a borrowed resource
+/// handle.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Boundary {
+    Export,
+    Import,
 }
 
 fn check_cm_boundary_representable_inner(
     type_id: TypeId,
+    slot: Slot,
+    boundary: Boundary,
     type_table: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     names: &CmStdlibNames,
@@ -588,15 +621,23 @@ fn check_cm_boundary_representable_inner(
 
     // Container shapes resolve through the type-table accessors regardless of
     // their declaring module, keeping this free of source-prefix branching.
-    let recurse = |tid, visited: &mut Vec<TypeId>| {
-        check_cm_boundary_representable_inner(tid, type_table, tir_modules, names, visited)
+    let recurse = |tid, slot, visited: &mut Vec<TypeId>| {
+        check_cm_boundary_representable_inner(
+            tid,
+            slot,
+            boundary,
+            type_table,
+            tir_modules,
+            names,
+            visited,
+        )
     };
     let result = (|visited: &mut Vec<TypeId>| {
         if let Some(inner) = type_table.as_option(type_id) {
-            return recurse(inner, visited);
+            return recurse(inner, Slot::Value, visited);
         }
         if let Some(elem) = type_table.as_list(type_id) {
-            return recurse(elem, visited);
+            return recurse(elem, Slot::Value, visited);
         }
         if let Some(elems) = type_table.as_tuple(type_id) {
             if elems.is_empty() {
@@ -607,7 +648,7 @@ fn check_cm_boundary_representable_inner(
                 );
             }
             for e in elems {
-                recurse(e, visited)?;
+                recurse(e, Slot::Value, visited)?;
             }
             return Ok(());
         }
@@ -625,6 +666,20 @@ fn check_cm_boundary_representable_inner(
                     type_table.type_name(type_id)
                 ))
             }
+            R::Unit if slot == Slot::Value => Err(
+                "`()` has no Component Model representation here — it stands only where a \
+                 type may be absent: a function result, a `Result` arm or a case payload"
+                    .to_string(),
+            ),
+            R::Enum { def } | R::Flags { def } | R::Variant { def }
+                if declares_no_case(*def, tir_modules) =>
+            {
+                Err(format!(
+                    "`{}` declares no case, and an empty enum, flags or variant has no \
+                     Component Model representation — add at least one",
+                    type_table.type_name(type_id)
+                ))
+            }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
@@ -634,17 +689,17 @@ fn check_cm_boundary_representable_inner(
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
             R::GenericResource { def, type_args } => {
-                let name = type_table.def_name(*def).to_string();
+                let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
-                    recurse(a, visited)?;
+                    recurse(a, Slot::Optional, visited)?;
                 }
                 if let Some(&payload) = args.first()
-                    && let Some(reason) = match name.as_str() {
-                        "Future" | "FutureWritable" => {
+                    && let Some(reason) = match item {
+                        Some(CompilerItem::Future | CompilerItem::FutureWritable) => {
                             future_payload_rejection(type_table, payload)
                         }
-                        "Stream" | "StreamWritable" => {
+                        Some(CompilerItem::Stream | CompilerItem::StreamWritable) => {
                             stream_payload_rejection(type_table, payload)
                         }
                         _ => None,
@@ -655,10 +710,10 @@ fn check_cm_boundary_representable_inner(
                 Ok(())
             }
             R::Struct { def, type_args } => {
-                let name = type_table.struct_head_name(*def);
-                if name == names.string {
+                if type_table.is_string(type_id) {
                     return Ok(());
                 }
+                let name = type_table.struct_head_name(*def);
                 match struct_decl_of(*def, type_args, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -668,7 +723,7 @@ fn check_cm_boundary_representable_inner(
                         let field_tys: Vec<TypeId> =
                             decl.fields.iter().map(|f| f.type_id).collect();
                         for ft in field_tys {
-                            recurse(ft, visited)?;
+                            recurse(ft, Slot::Value, visited)?;
                         }
                         Ok(())
                     }
@@ -683,26 +738,23 @@ fn check_cm_boundary_representable_inner(
                 Some(decl) => {
                     let payloads: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
                     for p in payloads {
-                        recurse(p, visited)?;
+                        recurse(p, Slot::Optional, visited)?;
                     }
                     Ok(())
                 }
                 None => Ok(()),
             },
             R::GenericInstance { def, type_args } => {
-                let name = &type_table.def_name(*def).to_string();
                 // Option/List/Tuple were handled above by the `as_*` accessors;
                 // `Result<T, E>` recurses into its arms. Any other generic
                 // instance has no concrete CM lowering at this boundary (it
                 // should have monomorphized to a named type), so reject it
                 // rather than lowering it as an opaque i32.
-                let result_name = type_table
-                    .compiler_items()
-                    .variant_name(CompilerItem::Result);
-                if name == result_name {
+                let item = type_table.compiler_type_item(*def);
+                if item == Some(CompilerItem::Result) {
                     let args = type_args.clone();
                     for a in args {
-                        recurse(a, visited)?;
+                        recurse(a, Slot::Optional, visited)?;
                     }
                     Ok(())
                 } else if let Some((key, value)) = type_table.as_tree_map(type_id) {
@@ -711,23 +763,31 @@ fn check_cm_boundary_representable_inner(
                     if let Some(reason) = map_key_rejection(type_table, key) {
                         return Err(reason);
                     }
-                    recurse(value, visited)
+                    recurse(value, Slot::Value, visited)
                 } else {
                     Err(format!(
-                        "generic type `{}` has no Component Model value \
-                         representation at an export boundary",
+                        "generic type `{}` has no Component Model value representation",
                         type_table.type_name(type_id)
                     ))
                 }
             }
             R::Newtype { base_type, .. } => {
                 let base = *base_type;
-                recurse(base, visited)
+                recurse(base, slot, visited)
             }
-            // These never carry a CM value at a concrete export boundary
-            // (diverging/never, closures, reactive cells, raw GC arrays,
-            // unmonomorphized type parameters, or unresolved/error types).
-            // Reject explicitly instead of silently lowering to i32.
+            R::Ref(inner) | R::MutRef(inner) if boundary == Boundary::Import => {
+                let inner = *inner;
+                match type_table.get(type_table.representation_head(inner)) {
+                    R::Resource { .. } | R::GenericResource { .. } => {
+                        recurse(inner, Slot::Value, visited)
+                    }
+                    _ => Err(format!(
+                        "a reference crosses a Component Model import only as a borrowed \
+                         resource handle, and `{}` borrows no resource",
+                        type_table.type_name(type_id)
+                    )),
+                }
+            }
             R::Never
             | R::Ref(_)
             | R::MutRef(_)
@@ -1046,8 +1106,7 @@ fn flat_types_from_type_id_inner(
         },
         ResolvedType::Unit => {} // no flat values
         ResolvedType::Struct { def, type_args } => {
-            let name = &type_table.struct_head_name(*def);
-            if name == &names.string {
+            if type_table.is_string(type_id) {
                 out.push(cm_abi::CmValType::I32); // ptr
                 out.push(cm_abi::CmValType::I32); // len
             } else if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
@@ -1057,7 +1116,10 @@ fn flat_types_from_type_id_inner(
                 // flattening it as one i32 would emit a wrong-arity lowering for
                 // a multi-field record. Fail loudly rather than corrupt the
                 // component (the memory lowerer panics on the same condition).
-                panic!("struct `{name}` has no TIR declaration; cannot compute its flat CM types");
+                panic!(
+                    "struct `{}` has no TIR declaration; cannot compute its flat CM types",
+                    type_table.struct_head_name(*def)
+                );
             }
         }
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
@@ -1076,40 +1138,44 @@ fn flat_types_from_type_id_inner(
             }
         }
         ResolvedType::GenericInstance { def, type_args } => {
-            let name = &type_table.def_name(*def).to_string();
-            if TypeTable::is_tuple_type(name) {
+            if type_table.is_tuple_def(*def) {
                 for &elem in type_args {
                     flat_types_from_type_id_inner(elem, out, tir_modules, type_table, names);
                 }
-            } else if name == &names.option && type_args.len() == 1 {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                flat_types_from_type_id_inner(type_args[0], out, tir_modules, type_table, names);
-            } else if name == &names.result && type_args.len() == 2 {
-                out.push(cm_abi::CmValType::I32); // discriminant
-                let mut ok_flat = Vec::new();
-                let mut err_flat = Vec::new();
-                flat_types_from_type_id_inner(
-                    type_args[0],
-                    &mut ok_flat,
-                    tir_modules,
-                    type_table,
-                    names,
-                );
-                flat_types_from_type_id_inner(
-                    type_args[1],
-                    &mut err_flat,
-                    tir_modules,
-                    type_table,
-                    names,
-                );
-                out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
-            } else if name == &names.array || names.tree_map.as_deref() == Some(name.as_str()) {
+                return;
+            }
+            match (type_table.compiler_type_item(*def), type_args.as_slice()) {
+                (Some(CompilerItem::Option), [inner]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    flat_types_from_type_id_inner(*inner, out, tir_modules, type_table, names);
+                }
+                (Some(CompilerItem::Result), [ok, err]) => {
+                    out.push(cm_abi::CmValType::I32); // discriminant
+                    let mut ok_flat = Vec::new();
+                    let mut err_flat = Vec::new();
+                    flat_types_from_type_id_inner(
+                        *ok,
+                        &mut ok_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    flat_types_from_type_id_inner(
+                        *err,
+                        &mut err_flat,
+                        tir_modules,
+                        type_table,
+                        names,
+                    );
+                    out.extend(cm_abi::join_flat_unions(&ok_flat, &err_flat));
+                }
                 // A `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
                 // carries that type's pair.
-                out.push(cm_abi::CmValType::I32); // ptr
-                out.push(cm_abi::CmValType::I32); // len
-            } else {
-                out.push(cm_abi::CmValType::I32);
+                (Some(CompilerItem::List | CompilerItem::TreeMap), _) => {
+                    out.push(cm_abi::CmValType::I32); // ptr
+                    out.push(cm_abi::CmValType::I32); // len
+                }
+                _ => out.push(cm_abi::CmValType::I32),
             }
         }
         ResolvedType::Newtype { base_type, .. }
@@ -1137,6 +1203,24 @@ pub(super) fn variant_decl_of(
         .flat_map(|module| &module.variants)
         .find(|variant| variant.def == def)
         .cloned()
+}
+
+/// Whether the enum, flags or variant `def` declares no case at all.
+fn declares_no_case(def: DefId, tir_modules: &IndexMap<ModuleSource, TirModule>) -> bool {
+    tir_modules.values().any(|module| {
+        module
+            .enums
+            .iter()
+            .any(|e| e.def == def && e.cases.is_empty())
+            || module
+                .flags
+                .iter()
+                .any(|f| f.def == def && f.members.is_empty())
+            || module
+                .variants
+                .iter()
+                .any(|v| v.def == def && v.cases.is_empty())
+    })
 }
 
 /// The struct declaration `def` names, at `type_args` where the module holds
@@ -1282,7 +1366,7 @@ pub(super) fn type_id_to_ast_type(
     };
     match resolved {
         ResolvedType::Primitive(p) => named_no_source(p.as_str()),
-        ResolvedType::Unit => named_no_source(TypeTable::UNIT_TYPE_NAME),
+        ResolvedType::Unit => Type::unit(AstId::fresh(), span),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
         ResolvedType::Struct { .. }
@@ -1307,7 +1391,7 @@ pub(super) fn type_id_to_ast_type(
             // The tuple family is a `GenericInstance`, but its CM surface is a
             // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
             // the tuple arm rather than the generic catch-all.
-            if TypeTable::is_tuple_type(name) {
+            if type_table.is_tuple_def(*def) {
                 Type::Tuple(args)
             } else {
                 Type::Generic(GenericType {

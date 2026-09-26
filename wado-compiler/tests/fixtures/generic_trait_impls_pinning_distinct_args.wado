@@ -1,0 +1,46 @@
+// Two generic impls of one trait on one head, differing only in the argument
+// each pins. Each is its own template, whether the call names the receiver or
+// reaches it through a bound: sharing the name `Pair^Tag::tag` built both
+// instances from one of them.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl<T> Tag for Pair<T, i32> {
+    fn tag(&self) -> i32 {
+        return 100 + self.b;
+    }
+}
+
+impl<T> Tag for Pair<T, i64> {
+    fn tag(&self) -> i32 {
+        return 200 + self.b as i32;
+    }
+}
+
+fn tag_of<X: Tag>(x: &X) -> i32 {
+    return x.tag();
+}
+
+test "direct call" {
+    let p = Pair { a: 0, b: 1 };
+    let q: Pair<i32, i64> = Pair { a: 0, b: 2 };
+    assert p.tag() == 101;
+    assert q.tag() == 202;
+}
+
+test "through a bound" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 3 };
+    let q: Pair<String, i64> = Pair { a: "y", b: 4 };
+    assert tag_of(&p) == 103;
+    assert tag_of(&q) == 204;
+}
+
+__DATA__
+{"test": {}}

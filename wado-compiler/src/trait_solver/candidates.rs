@@ -2,8 +2,8 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::holds::{impl_applies, newtype_base};
-use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId, TraitDef};
+use super::holds::{answers_args, impl_applies, newtype_base};
+use super::program::{Env, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
 /// The candidates at one call site, and what the diagnostic needs where there
@@ -33,21 +33,51 @@ pub fn candidates(
         .scopes
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
-    let answered = collect(program, env, receiver, scope, in_scope, |decl, own| {
-        decl.is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
+    let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
+    let answered = collect(program, env, receiver, scope, in_scope, |trait_, own| {
+        decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
         return answered;
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, scope, in_scope, |decl, _| {
-        decl.is_some_and(|d| d.reserved.contains(&method))
+    let reserved = collect(program, env, receiver, scope, in_scope, |trait_, _| {
+        decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
         return reserved;
     }
     answered
+}
+
+/// The impls of `trait_` that could answer a bound on `ty` writing `args`, for
+/// [`rank`](super::rank) to order as it orders a call's. A bound needs no import.
+#[must_use]
+pub fn bound_candidates(
+    program: &Program,
+    env: &Env,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+    scope: ModuleId,
+    args: &[SolverType],
+) -> Vec<Candidate> {
+    let levels = chain(program, ty);
+    collect(program, env, ty, scope, &[trait_], |t, _| t == trait_)
+        .in_scope
+        .into_iter()
+        .filter(|c| {
+            let level = &levels[c.depth as usize];
+            answers_args(
+                program,
+                &program.impls[&c.impl_],
+                level,
+                Some(ty),
+                &c.trait_args,
+                args,
+            )
+        })
+        .collect()
 }
 
 /// The impls whose trait or own body `declares` the method.
@@ -57,7 +87,7 @@ fn collect(
     receiver: &SolverType,
     scope: ModuleId,
     in_scope: &[TraitDeclId],
-    declares: impl Fn(Option<&TraitDef>, &[MethodId]) -> bool,
+    declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
     let mut found = Candidates::default();
     for (depth, ty) in chain(program, receiver).iter().enumerate() {
@@ -70,7 +100,7 @@ fn collect(
                 .impl_methods
                 .get(&impl_)
                 .map_or(&[][..], Vec::as_slice);
-            if !declares(program.traits.get(&trait_), own) {
+            if !declares(trait_, own) {
                 continue;
             }
             let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {

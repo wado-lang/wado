@@ -3,6 +3,7 @@
 use crate::ast::Pattern;
 use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::escape::{unescape_byte, unescape_char};
+use crate::resolve::Resolutions;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
@@ -63,7 +64,11 @@ pub(super) fn parse_int_bits(repr: &str, is_unsigned: bool) -> Result<i128, Stri
 
 /// A range-pattern endpoint's value, as the bits of the scrutinee's own type.
 /// `None` for an endpoint denoting no integer, which annotate diagnoses.
-pub(super) fn range_endpoint_to_i128(pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
+pub(super) fn range_endpoint_to_i128(
+    pattern: &Pattern,
+    is_unsigned: bool,
+    resolutions: &Resolutions,
+) -> Option<i128> {
     use crate::ast::{Literal, Pattern};
     match pattern {
         Pattern::Literal(Literal::Number(repr)) => parse_int_bits(repr, is_unsigned).ok(),
@@ -71,15 +76,14 @@ pub(super) fn range_endpoint_to_i128(pattern: &Pattern, is_unsigned: bool) -> Op
             unescape_char(raw).ok().map(|c| i128::from(c as u32))
         }
         Pattern::Literal(Literal::Byte(raw)) => unescape_byte(raw).ok().map(i128::from),
-        // An associated constant (`i32::MAX`) resolved by value; a user constant
-        // needs the reify-side lookup its caller adds.
+        // Only a primitive's bound (`i32::MAX`); a user constant is no endpoint.
         Pattern::Variant {
             variant_name,
             variant_qualifier,
             bindings,
             ..
         } if bindings.is_empty() => {
-            primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+            primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name, resolutions)
         }
         _ => None,
     }

@@ -3,24 +3,26 @@
 //! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
 //! source function and run on the LSP path. Violations are returned.
 
+use std::rc::Rc;
+
 use crate::attribute::{AMBIENT, BENIGN};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, is_test_function};
+use crate::resolve::Resolutions;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Stmt, TraitDecl, cm_import_of,
+    self, AstId, AstVisitor, Attribute, Block, CmImport, EffectHandlerBinding, Expr, Function,
+    ImplBlock, Item, Pattern, Stmt, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
-use crate::resolve::Resolutions;
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -51,6 +53,8 @@ pub enum EffectFault {
     UndeclaredByTrait,
     /// The callee's effects are left open, and the caller forwards none.
     MissingOpen,
+    /// A `#[benign]` argument names no effect in the function's module.
+    UnknownBenign,
 }
 
 /// Error from effect checking
@@ -70,25 +74,41 @@ pub struct EffectError {
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let message = match e.fault {
-            EffectFault::Missing(kind) => format!(
-                "missing {} '{}' required by '{}'",
-                kind.noun(),
-                e.missing_effect,
-                e.callee
+        let (code, message) = match e.fault {
+            EffectFault::Missing(kind) => (
+                Code::TypeMismatch,
+                format!(
+                    "missing {} '{}' required by '{}'",
+                    kind.noun(),
+                    e.missing_effect,
+                    e.callee
+                ),
             ),
-            EffectFault::UndeclaredByTrait => format!(
-                "effect '{}' is not declared by trait method '{}'",
-                e.missing_effect, e.callee
+            EffectFault::UndeclaredByTrait => (
+                Code::TypeMismatch,
+                format!(
+                    "effect '{}' is not declared by trait method '{}'",
+                    e.missing_effect, e.callee
+                ),
             ),
-            EffectFault::MissingOpen => format!(
-                "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
-                e.callee
+            EffectFault::MissingOpen => (
+                Code::TypeMismatch,
+                format!(
+                    "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
+                    e.callee
+                ),
+            ),
+            EffectFault::UnknownBenign => (
+                Code::UnknownType,
+                format!(
+                    "`#[benign({})]` on '{}' names no effect in scope",
+                    e.missing_effect, e.callee
+                ),
             ),
         };
         Diagnostic {
             severity: Severity::Error,
-            code: Code::TypeMismatch,
+            code,
             message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -214,75 +234,90 @@ impl MemberTables {
     }
 }
 
-/// Walk a type recursively, collecting every resource (`Resource` or
-/// `GenericResource`) reference as an `EffectRef::Concrete`.
-///
-/// Handles nested containers (`Option<T>`, `Result<T,E>`, tuples, `List<T>`,
-/// function types, refs, newtypes, struct fields, variant case payloads).
-/// Uses `visited` to stop at cycles (e.g. recursive struct types).
-fn collect_resource_refs(
-    type_id: TypeId,
-    tt: &TypeTable,
-    members: &MemberTables,
-    out: &mut IndexSet<EffectRef>,
-    visited: &mut TypeSet,
-) {
-    if !visited.insert(type_id) {
-        return;
-    }
-    let ty = tt.get(type_id);
-    match ty {
-        ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
+/// What collecting the resources a type references reads.
+struct ResourceScan<'a> {
+    tt: &'a TypeTable,
+    resolutions: &'a Resolutions,
+    members: &'a MemberTables,
+}
+
+impl ResourceScan<'_> {
+    /// Collect into `out` the effect of every resource `type_id` references,
+    /// through containers, signatures and members. `visited` stops at a cycle.
+    fn collect(&self, type_id: TypeId, out: &mut IndexSet<EffectRef>, visited: &mut TypeSet) {
+        if !visited.insert(type_id) {
+            return;
+        }
+        let ty = self.tt.get(type_id);
+        if let Some((def, type_args)) = resource_handle(ty) {
             // A `resource Child extends Parent` value is usable wherever the
             // parent is, so holding it holds every ancestor too.
-            for ancestor in tt.resource_chain(*def) {
-                out.insert(EffectRef::Concrete {
-                    name: tt.def_name(ancestor).to_string(),
-                    module_source: tt.def_module(ancestor).clone(),
-                });
+            out.extend(resource_chain_effects(self.tt, self.resolutions, def));
+            for ta in type_args {
+                self.collect(*ta, out, visited);
             }
-            if let ResolvedType::GenericResource { type_args, .. } = ty {
+            return;
+        }
+        match ty {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 for ta in type_args {
-                    collect_resource_refs(*ta, tt, members, out, visited);
+                    self.collect(*ta, out, visited);
+                }
+                for member in self.members.of(type_id, self.tt) {
+                    self.collect(member, out, visited);
                 }
             }
-        }
-        ResolvedType::GenericInstance { type_args, .. } => {
-            for ta in type_args {
-                collect_resource_refs(*ta, tt, members, out, visited);
+            ResolvedType::Ref(t)
+            | ResolvedType::MutRef(t)
+            | ResolvedType::Reactive(t)
+            | ResolvedType::BuiltinArray(t) => {
+                self.collect(*t, out, visited);
             }
-            for member in members.of(type_id, tt) {
-                collect_resource_refs(member, tt, members, out, visited);
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    self.collect(*p, out, visited);
+                }
+                self.collect(*return_type, out, visited);
             }
-        }
-        ResolvedType::Ref(t)
-        | ResolvedType::MutRef(t)
-        | ResolvedType::Reactive(t)
-        | ResolvedType::BuiltinArray(t) => {
-            collect_resource_refs(*t, tt, members, out, visited);
-        }
-        ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } => {
-            for p in params {
-                collect_resource_refs(*p, tt, members, out, visited);
+            ResolvedType::Newtype { base_type, .. } => {
+                self.collect(*base_type, out, visited);
             }
-            collect_resource_refs(*return_type, tt, members, out, visited);
-        }
-        ResolvedType::Newtype { base_type, .. } => {
-            collect_resource_refs(*base_type, tt, members, out, visited);
-        }
-        ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-            for member in members.of(type_id, tt) {
-                collect_resource_refs(member, tt, members, out, visited);
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+                for member in self.members.of(type_id, self.tt) {
+                    self.collect(member, out, visited);
+                }
             }
+            // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
+            // AssocTypeProjection, Unknown, Error — no resource refs.
+            _ => {}
         }
-        // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
-        // AssocTypeProjection, Unknown, Error — no resource refs.
-        _ => {}
     }
+}
+
+/// The resource a value of `ty` is a handle to, with its type arguments.
+fn resource_handle(ty: &ResolvedType) -> Option<(DefId, &[TypeId])> {
+    match ty {
+        ResolvedType::Resource { def } => Some((*def, &[])),
+        ResolvedType::GenericResource { def, type_args } => Some((*def, type_args)),
+        _ => None,
+    }
+}
+
+/// The effects of resource `def` and every resource it extends, nearest first.
+fn resource_chain_effects<'a>(
+    tt: &'a TypeTable,
+    resolutions: &'a Resolutions,
+    def: DefId,
+) -> impl Iterator<Item = EffectRef> + 'a {
+    tt.resource_chain(def).map(|ancestor| {
+        resolutions
+            .effect_decl(ancestor)
+            .expect("a resource is an effect")
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -376,54 +411,34 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
     }
 }
 
-/// A trait method, by the trait's declaring module, the trait name, and the
-/// method name.
-type TraitMethodKey = (ModuleSource, String, String);
-
-/// A trait, by its declaring module and name.
-type TraitKey = (ModuleSource, String);
+/// A trait method, by the trait's declaration and the method name.
+type TraitMethodKey = (DefId, String);
 
 /// One trait impl, by the head of the type it targets and the trait it
 /// implements.
-type ImplKey = (FqTypeName, TraitKey);
+type ImplKey = (FqTypeName, DefId);
 
 /// The key one `impl Trait for Type` is recorded under. `None` for a trait
-/// whose name carries no declaring module.
+/// reaching no declaration.
 fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
-    Some((
-        struct_name.head_only(),
-        (
-            trait_name.module()?.clone(),
-            trait_name.base_name().to_string(),
-        ),
-    ))
-}
-
-/// Whether `name` is an effect parameter of the trait or of the method, rather
-/// than an effect declaration the module can resolve.
-fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) -> bool {
-    let mut params = trait_decl.type_params.iter().chain(&method.type_params);
-    params.any(|p| p.is_effect && p.name == name)
+    Some((struct_name.head_only(), trait_name.canonical()?))
 }
 
 /// The traits bounding each type parameter, by the slot
 /// `Scope::register_generic_params` gives it.
 fn bound_traits_per_slot(
     type_params: &[ast::GenericParam],
-    sem: &Semantics,
-    trait_by_def: &IndexMap<DefId, TraitKey>,
-) -> Vec<Vec<TraitKey>> {
-    let Some(resolutions) = sem.resolutions() else {
-        return Vec::new();
-    };
+    resolutions: &Resolutions,
+) -> Vec<Vec<DefId>> {
+    let defs = resolutions.defs();
     type_params
         .iter()
         .filter(|p| p.is_real_type_param())
         .map(|p| {
             p.bounds
                 .iter()
-                .filter_map(|bound| resolutions.declared(bound.id))
-                .filter_map(|def| trait_by_def.get(&def).cloned())
+                .filter_map(|bound| resolutions.bound_decl(bound))
+                .filter(|def| defs.kind(*def) == DefKind::Trait)
                 .collect()
         })
         .collect()
@@ -440,24 +455,23 @@ struct OwnedEffectData {
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// The traits that leave their effects to the impl — a `with _` head, or a
     /// bare one, which reads as the same.
-    open_traits: IndexSet<TraitKey>,
+    open_traits: IndexSet<DefId>,
     /// Per type-parameter slot of a function declaration, the traits bounding
     /// it, so a call site can read what its type arguments implement.
-    fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>>,
     /// Every effect an impl's methods declare, for resolving a trait head's
     /// effect hole against the type a call instantiates it with.
     impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
-    resource_names: IndexSet<(ModuleSource, String)>,
+    resources: IndexSet<EffectRef>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: IndexMap<String, EffectRef>,
-    /// `#[cm]` FQ per interface declaration.
-    interface_cm_fq: IndexMap<DefId, Option<String>>,
+    /// Each interface declaration's effect and `#[cm]` FQ.
+    interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
-    /// CM interface FQs the consumer satisfies with a provider component; a
-    /// reconstructed host-leaf import in this set is discharged (composition-
-    /// relative — it bottoms out at a fused sibling, not the host).
+    /// CM interface FQs the consumer satisfies with a provider component, which
+    /// discharge a reconstructed host-leaf import.
     provided_import_fqs: IndexSet<String>,
+    resolutions: Rc<Resolutions>,
 }
 
 impl OwnedEffectData {
@@ -492,14 +506,17 @@ impl OwnedEffectData {
             }
         }
 
-        let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
-        for (src, module) in &sem.modules {
-            for item in &module.items {
-                if let Item::Resource(resource) = item {
-                    resource_names.insert((src.clone(), resource.name.clone()));
-                }
-            }
-        }
+        let resolutions = &*state.tysys.resolutions;
+        let defs = resolutions.defs();
+        let resources: IndexSet<EffectRef> = sem
+            .modules
+            .values()
+            .flat_map(|module| &module.items)
+            .filter_map(|item| match item {
+                Item::Resource(resource) => resolutions.effect_decl(defs.def_at(resource.id)),
+                _ => None,
+            })
+            .collect();
 
         let members = MemberTables::collect(sem, state);
 
@@ -507,62 +524,32 @@ impl OwnedEffectData {
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
         let closure = build_propagation_closure_sem(sem, state, &members);
 
-        // Name → resolved `EffectRef` for every declared effect / resource,
-        // used to resolve `#[benign(E)]` names and to canonicalise.
-        let mut effect_by_name: IndexMap<String, EffectRef> = IndexMap::default();
-        for key in closure.keys() {
-            if let EffectRef::Concrete { name, .. } = key {
-                effect_by_name
-                    .entry(name.clone())
-                    .or_insert_with(|| key.clone());
-            }
-        }
-
         // An empty entry is meaningful: the method exists and grants nothing.
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
-        let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
-        let mut open_traits: IndexSet<TraitKey> = IndexSet::default();
+        let mut open_traits: IndexSet<DefId> = IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
                     continue;
                 };
-                if let Some(def) = sem.resolutions().and_then(|r| r.declared(trait_decl.id)) {
-                    trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
-                }
+                let def = defs.def_at(trait_decl.id);
                 if trait_decl.head.is_open() {
-                    open_traits.insert((src.clone(), trait_decl.name.clone()));
+                    open_traits.insert(def);
                 }
                 for method in &trait_decl.methods {
                     let effects = method
                         .effects
                         .iter()
-                        .map(|name| {
-                            // A name the trait or the method declares as an
-                            // effect parameter stands for whatever the impl
-                            // brings, so it never resolves to a declaration.
-                            if declares_effect_param(trait_decl, method, name) {
-                                return EffectRef::Param { name: name.clone() };
-                            }
-                            effect_named_in(name, src, sem, &closure, &effect_by_name).unwrap_or(
-                                EffectRef::Concrete {
-                                    name: name.clone(),
-                                    module_source: src.clone(),
-                                },
-                            )
-                        })
+                        .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
-                    trait_method_effects.insert(
-                        (src.clone(), trait_decl.name.clone(), method.name.clone()),
-                        effects,
-                    );
+                    trait_method_effects.insert((def, method.name.clone()), effects);
                 }
             }
         }
 
-        let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>> = IndexMap::default();
+        let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>> = IndexMap::default();
         let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
         for (src, module) in &sem.modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
@@ -571,7 +558,7 @@ impl OwnedEffectData {
                     Item::Function(func) if !func.type_params.is_empty() => {
                         fn_bound_traits.insert(
                             func.id,
-                            bound_traits_per_slot(&func.type_params, sem, &trait_by_def),
+                            bound_traits_per_slot(&func.type_params, resolutions),
                         );
                     }
                     Item::Impl(block) => {
@@ -603,30 +590,27 @@ impl OwnedEffectData {
             }
         }
 
-        let defs = sem.resolutions().map(Resolutions::defs);
-        let mut interface_cm_fq: IndexMap<DefId, Option<String>> = IndexMap::default();
+        let mut interfaces: IndexMap<DefId, (EffectRef, Option<String>)> = IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
-        for (src, module) in &sem.modules {
+        for module in sem.modules.values() {
             for item in &module.items {
                 let Item::Interface(decl) = item else {
                     continue;
                 };
+                let def = defs.def_at(decl.id);
                 let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
-                if let Some(def) = defs.and_then(|defs| defs.of_ast_id(decl.id)) {
-                    interface_cm_fq.insert(def, cm_fq.clone());
-                }
-                let key = EffectRef::Concrete {
-                    name: decl.name.clone(),
-                    module_source: src.clone(),
-                };
+                let key = resolutions
+                    .effect_decl(def)
+                    .expect("an interface is an effect");
                 if closure.contains_key(&key)
-                    && let Some(fq) = cm_fq
+                    && let Some(fq) = &cm_fq
                 {
-                    effect_by_cm_fq.entry(fq).or_insert(key);
+                    effect_by_cm_fq.entry(fq.clone()).or_insert(key.clone());
                 }
+                interfaces.insert(def, (key, cm_fq));
             }
         }
 
@@ -639,13 +623,13 @@ impl OwnedEffectData {
             open_traits,
             fn_bound_traits,
             impl_effects,
-            resource_names,
+            resources,
             members,
             closure,
-            effect_by_name,
-            interface_cm_fq,
+            interfaces,
             effect_by_cm_fq,
             provided_import_fqs,
+            resolutions: Rc::clone(&state.tysys.resolutions),
         }
     }
 
@@ -659,13 +643,13 @@ impl OwnedEffectData {
             open_traits: &self.open_traits,
             fn_bound_traits: &self.fn_bound_traits,
             impl_effects: &self.impl_effects,
-            resource_names: &self.resource_names,
+            resources: &self.resources,
             members: &self.members,
             closure: &self.closure,
-            effect_by_name: &self.effect_by_name,
-            interface_cm_fq: &self.interface_cm_fq,
+            interfaces: &self.interfaces,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
+            resolutions: &self.resolutions,
         }
     }
 }
@@ -684,55 +668,31 @@ struct EffectIndex<'a> {
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// The traits that leave their effects to the impl.
-    open_traits: &'a IndexSet<TraitKey>,
+    open_traits: &'a IndexSet<DefId>,
     /// Per type-parameter slot of a function declaration, the traits bounding it.
-    fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
     /// Every effect one impl's methods declare.
     impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
-    /// Declared resources, for resource injection and effect classification.
-    resource_names: &'a IndexSet<(ModuleSource, String)>,
+    /// Declared resources, for classifying a missing effect.
+    resources: &'a IndexSet<EffectRef>,
     /// Declared members, for nested-resource detection.
     members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
-    /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
-    effect_by_name: &'a IndexMap<String, EffectRef>,
-    /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
-    /// callee to its effect and FQ.
-    interface_cm_fq: &'a IndexMap<DefId, Option<String>>,
+    /// Interface declaration → its effect and `#[cm]` FQ.
+    interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
-}
-
-/// `Resolutions::operation_at` for a callee expression.
-fn operation_at<'a>(sem: &'a Semantics, callee: &'a Expr) -> Option<(DefId, &'a str)> {
-    let Expr::Ident(ident) = callee else {
-        return None;
-    };
-    sem.resolutions()?.operation_at(ident)
-}
-
-/// The `interface` `def` is, as its declaring module, its name, and its `#[cm]`
-/// FQ. `None` when `def` declares anything else.
-fn interface_at<'a>(
-    sem: &Semantics,
-    index: &EffectIndex<'a>,
-    def: DefId,
-) -> Option<(ModuleSource, String, &'a Option<String>)> {
-    let cm_fq = index.interface_cm_fq.get(&def)?;
-    let defs = sem.resolutions()?.defs();
-    Some((defs.module(def).clone(), defs.name(def).to_string(), cm_fq))
+    resolutions: &'a Resolutions,
 }
 
 /// The effects `with E => h do` grants to its body.
 fn binding_granted_effects(
-    sem: &Semantics,
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
-    module_source: &ModuleSource,
     binding: &EffectHandlerBinding,
 ) -> Vec<EffectRef> {
     // One fact per walk that reached the binding. A handler installed in a
@@ -765,27 +725,21 @@ fn binding_granted_effects(
         .effect
         .as_ref()
         .and_then(|ty| match ty {
-            ast::Type::Named(named) => effect_named_in(
-                &named.name,
-                module_source,
-                sem,
-                index.closure,
-                index.effect_by_name,
-            ),
+            ast::Type::Named(named) => index.resolutions.effect_at(named.id, &named.name),
             _ => None,
         })
         .into_iter()
         .collect()
 }
 
-/// What a direct `E::op()` call through `interface` demands of its caller:
-/// nothing for a user-defined effect or a purely computational component.
+/// What a direct call of an operation `owner` declares demands of its caller.
+/// A user-defined effect demands nothing: an unhandled dispatch traps at runtime.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
-    interface: DefId,
+    owner: Option<DefId>,
 ) -> Vec<EffectRef> {
-    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, interface) else {
+    let Some((effect, cm_fq)) = owner.and_then(|def| index.interfaces.get(&def)) else {
         return Vec::new();
     };
     let Some(fq) = cm_fq else {
@@ -803,10 +757,7 @@ fn operation_requirements(
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
             .collect();
     }
-    vec![EffectRef::Concrete {
-        name,
-        module_source: decl_module,
-    }]
+    vec![effect.clone()]
 }
 
 /// What the elaborator recorded about one `impl` block.
@@ -837,11 +788,9 @@ fn handled_effect(
     if !facts.is_handler_method {
         return None;
     }
-    let trait_name = facts.trait_name.as_ref()?;
-    let effect = EffectRef::Concrete {
-        name: trait_name.base_name().to_string(),
-        module_source: trait_name.module()?.clone(),
-    };
+    let effect = index
+        .resolutions
+        .effect_decl(facts.trait_name.as_ref()?.canonical()?)?;
     index.closure.contains_key(&effect).then_some(effect)
 }
 
@@ -870,12 +819,8 @@ fn check_impl_effect_conformance(
         if declared_by_trait.iter().any(EffectRef::is_param) {
             continue;
         }
-        let allowed: IndexSet<EffectRef> = declared_by_trait
-            .iter()
-            .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
-            .collect();
+        let allowed: IndexSet<&EffectRef> = declared_by_trait.iter().collect();
         for effect in declared {
-            let effect = &canonicalize_effect(effect, index.closure, index.effect_by_name);
             if effect.is_param() || allowed.contains(effect) {
                 continue;
             }
@@ -899,6 +844,20 @@ fn check_function_effects_sem(
     handled: Option<&EffectRef>,
     out: &mut Vec<EffectError>,
 ) {
+    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
+    let mut benign = Vec::new();
+    for (name, span) in benign_effect_names(&func.attrs) {
+        match effect_named_in(&name, module, index) {
+            Some(effect) => benign.push(effect),
+            None => out.push(EffectError {
+                callee: func.name.clone(),
+                missing_effect: name,
+                fault: EffectFault::UnknownBenign,
+                span,
+                module: module.source_path(),
+            }),
+        }
+    }
     let Some(body) = &func.body else {
         return;
     };
@@ -927,30 +886,26 @@ fn check_function_effects_sem(
         .unwrap_or_default()
         .into_iter()
         .collect();
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions: index.resolutions,
+        members: index.members,
+    };
     if let Some(ann) = annotations {
-        add_signature_resources(ann, caller_key, &sem.types, index.members, &mut current);
+        add_signature_resources(ann, caller_key, &scan, &mut current);
     }
     // A handler method holds the effect it handles: `E::op()` from inside
     // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
     if let Some(effect) = handled {
         current.insert(effect.clone());
     }
-    // `#[benign(E)]` admits `E` in the body without a `with E` clause.
-    for name in benign_effect_names(&func.attrs) {
-        if let Some(effect) =
-            effect_named_in(&name, module, sem, index.closure, index.effect_by_name)
-        {
-            current.insert(effect);
-        }
+    current.extend(benign);
+    // A function holding `Stdout` may call operations that internally need
+    // `Stream`, etc.
+    let mut current = expand_through_closure(&current, index.closure);
+    if let Some(ann) = annotations {
+        add_narrowed_resources(body, ann, &scan, index.closure, &mut current);
     }
-    // Canonicalise before expanding so the closure keys (built from the
-    // declarations, i.e. canonical) match, then expand: a function holding
-    // `Stdout` may call operations that internally need `Stream`, etc.
-    let current: IndexSet<EffectRef> = current
-        .iter()
-        .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
-        .collect();
-    let current = expand_through_closure(&current, index.closure);
 
     // Parameter name → type id (aligned with the recorded signature types),
     // for resolving indirect calls through function-typed parameters.
@@ -968,7 +923,6 @@ fn check_function_effects_sem(
         current,
         param_types,
         module: module.source_path(),
-        module_source: module.clone(),
         out,
     };
     ast::walk_block(&mut walker, body);
@@ -984,7 +938,12 @@ fn build_propagation_closure_sem(
     state: &AnnotateState,
     members: &MemberTables,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
-    let type_table = &sem.types;
+    let resolutions = &*state.tysys.resolutions;
+    let scan = ResourceScan {
+        tt: &sem.types,
+        resolutions,
+        members,
+    };
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
 
     for (src, module) in &sem.modules {
@@ -992,9 +951,9 @@ fn build_propagation_closure_sem(
             continue;
         };
         for item in &module.items {
-            let (decl_id, decl_name, is_resource) = match item {
-                Item::Interface(decl) => (decl.id, &decl.name, false),
-                Item::Resource(decl) => (decl.id, &decl.name, true),
+            let (decl_id, is_resource) = match item {
+                Item::Interface(decl) => (decl.id, false),
+                Item::Resource(decl) => (decl.id, true),
                 _ => continue,
             };
             let Some(ops) = annotations.effect_ops.get(&decl_id) else {
@@ -1003,26 +962,13 @@ fn build_propagation_closure_sem(
             let mut refs: IndexSet<EffectRef> = IndexSet::default();
             for op in ops {
                 for param in &op.params {
-                    collect_resource_refs(
-                        param.type_id,
-                        type_table,
-                        members,
-                        &mut refs,
-                        &mut TypeSet::default(),
-                    );
+                    scan.collect(param.type_id, &mut refs, &mut TypeSet::default());
                 }
-                collect_resource_refs(
-                    op.return_type,
-                    type_table,
-                    members,
-                    &mut refs,
-                    &mut TypeSet::default(),
-                );
+                scan.collect(op.return_type, &mut refs, &mut TypeSet::default());
             }
-            let key = EffectRef::Concrete {
-                name: decl_name.clone(),
-                module_source: src.clone(),
-            };
+            let key = resolutions
+                .effect_decl(resolutions.defs().def_at(decl_id))
+                .expect("an interface or resource is an effect");
             if is_resource {
                 // Holding `with R` already implies `R` — drop the self-reference.
                 refs.shift_remove(&key);
@@ -1063,56 +1009,11 @@ fn build_propagation_closure_sem(
     direct
 }
 
-/// The effect a name written in `module` refers to. An attribute argument and a
-/// `with` clause type carry a spelling, so the declaration it reaches decides —
-/// the module's own first, then what it imported, aliases and all.
-fn effect_named_in(
-    name: &str,
-    module: &ModuleSource,
-    sem: &Semantics,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: &IndexMap<String, EffectRef>,
-) -> Option<EffectRef> {
-    let local = EffectRef::Concrete {
-        name: name.to_string(),
-        module_source: module.clone(),
-    };
-    if closure.contains_key(&local) {
-        return Some(local);
-    }
-    if let Some(resolutions) = sem.resolutions()
-        && let Some(def) = resolutions.imported_as(module, name)
-    {
-        let defs = resolutions.defs();
-        let imported = EffectRef::Concrete {
-            name: defs.name(def).to_string(),
-            module_source: defs.module(def).clone(),
-        };
-        if closure.contains_key(&imported) {
-            return Some(imported);
-        }
-    }
-    effect_by_name.get(name).cloned()
-}
-
-/// The declaration an effect reference names. One the closure knows already is;
-/// a spelling it does not — a re-export seen from the recording module —
-/// resolves through the by-name index. Effect parameters pass through.
-fn canonicalize_effect(
-    effect: &EffectRef,
-    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
-    effect_by_name: &IndexMap<String, EffectRef>,
-) -> EffectRef {
-    if closure.contains_key(effect) {
-        return effect.clone();
-    }
-    match effect {
-        EffectRef::Concrete { name, .. } => effect_by_name
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| effect.clone()),
-        EffectRef::Param { .. } => effect.clone(),
-    }
+/// The effect an attribute argument written in `module` refers to. It has no
+/// reference site, so the module's scope decides.
+fn effect_named_in(name: &str, module: &ModuleSource, index: &EffectIndex) -> Option<EffectRef> {
+    let resolutions = index.resolutions;
+    resolutions.effect_decl(resolutions.resolve_in(module, name)?)
 }
 
 /// Expand an effect set through the propagation closure.
@@ -1134,45 +1035,100 @@ fn expand_through_closure(
     out
 }
 
-/// Union into `out` the resources that appear in a function's signature —
-/// parameter types, the return type, and the async task-return type — so a
-/// signature that already exposes a resource does not also require an explicit
-/// `with R`.
-///
-/// Resources nested inside a type's own members are followed via `members`;
-/// direct and container-nested ones (`Option<R>`, `List<R>`, `&R`,
-/// `fn() -> R`) are too.
+/// Union into `out` the resources a function's signature exposes, which it
+/// then holds without a `with R`: params, return and async task return.
 fn add_signature_resources(
     annotations: &TypeAnnotations,
     fn_key: AstId,
-    type_table: &TypeTable,
-    members: &MemberTables,
+    scan: &ResourceScan<'_>,
     out: &mut IndexSet<EffectRef>,
 ) {
     let mut visited = TypeSet::default();
-    for &type_id in annotations
+    let params = annotations
         .fn_param_types
         .get(&fn_key)
         .into_iter()
-        .flatten()
-    {
-        collect_resource_refs(type_id, type_table, members, out, &mut visited);
-    }
-    if let Some(&return_type) = annotations.fn_return_types.get(&fn_key) {
-        collect_resource_refs(return_type, type_table, members, out, &mut visited);
-    }
-    if let Some(&task_return) = annotations.function_task_returns.get(&fn_key) {
-        collect_resource_refs(task_return, type_table, members, out, &mut visited);
+        .flatten();
+    let results = [
+        annotations.fn_return_types.get(&fn_key),
+        annotations.function_task_returns.get(&fn_key),
+    ];
+    for &type_id in params.chain(results.into_iter().flatten()) {
+        scan.collect(type_id, out, &mut visited);
     }
 }
 
-/// `#[benign(E, F)]` effect names declared on a function.
-fn benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
+/// Union into `held` the resources the body's type patterns narrow to. A
+/// narrowing hands out a held ancestor's handle, as an operation returning it would.
+fn add_narrowed_resources(
+    body: &Block,
+    annotations: &TypeAnnotations,
+    scan: &ResourceScan<'_>,
+    closure: &IndexMap<EffectRef, IndexSet<EffectRef>>,
+    held: &mut IndexSet<EffectRef>,
+) {
+    let mut sites = TypePatternSites::default();
+    ast::walk_block(&mut sites, body);
+    let mut targets: Vec<DefId> = sites
+        .0
+        .into_iter()
+        .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
+        .filter_map(|&target| resource_handle(scan.tt.get(target)).map(|(def, _)| def))
+        .collect();
+    let chain = |target| resource_chain_effects(scan.tt, scan.resolutions, target);
+    // A grant expands through the closure, which may hold another target's ancestor.
+    loop {
+        let pending = targets.len();
+        targets.retain(|&target| {
+            let narrows_held = chain(target)
+                .skip(1)
+                .any(|ancestor| held.contains(&ancestor));
+            if narrows_held {
+                let granted = chain(target).collect();
+                held.extend(expand_through_closure(&granted, closure));
+            }
+            !narrows_held
+        });
+        if targets.len() == pending {
+            return;
+        }
+    }
+}
+
+/// The ids a body's type patterns are recorded under: each `p: T`, and each
+/// `let … else` whose annotation is one.
+#[derive(Default)]
+struct TypePatternSites(Vec<AstId>);
+
+impl AstVisitor for TypePatternSites {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if let Stmt::Let(let_stmt) = stmt
+            && let_stmt.else_block.is_some()
+        {
+            self.0.push(let_stmt.id);
+        }
+        ast::walk_stmt(self, stmt);
+    }
+
+    fn visit_pattern(&mut self, pat: &Pattern) {
+        if let Pattern::Typed { id, .. } = pat {
+            self.0.push(*id);
+        }
+        ast::walk_pattern(self, pat);
+    }
+}
+
+/// `#[benign(E, F)]` effect names declared on a function, each with its
+/// attribute's span.
+fn benign_effect_names(attrs: &[Attribute]) -> Vec<(String, Span)> {
     attrs
         .iter()
         .filter(|attr| attr.name == BENIGN)
-        .flat_map(|attr| attr.args.iter().map(AttrArg::as_str))
-        .map(str::to_string)
+        .flat_map(|attr| {
+            attr.args
+                .iter()
+                .map(|arg| (arg.as_str().to_string(), attr.span))
+        })
         .collect()
 }
 
@@ -1268,7 +1224,10 @@ fn call_site_effects(
     }
     // Only a free function in this program dispatches through the path: a
     // method names its receiver, and a host binding is already the import.
-    let interface = operation_at(sem, callee).map(|(def, _)| def);
+    let owner = match callee {
+        Expr::Ident(ident) => index.resolutions.operation_owner(ident),
+        _ => None,
+    };
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1283,11 +1242,11 @@ fn call_site_effects(
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
-                dispatched: interface
-                    .filter(|_| dispatches_through_path)
-                    .map_or_else(Vec::new, |interface| {
-                        operation_requirements(sem, index, interface)
-                    }),
+                dispatched: if dispatches_through_path {
+                    operation_requirements(sem, index, owner)
+                } else {
+                    Vec::new()
+                },
             }
         })
         .collect()
@@ -1308,7 +1267,6 @@ struct SemEffectWalker<'a> {
     /// `references` edge or recorded expression type at the call site).
     param_types: IndexMap<String, TypeId>,
     module: String,
-    module_source: ModuleSource,
     out: &'a mut Vec<EffectError>,
 }
 
@@ -1329,22 +1287,15 @@ impl EffectIndex<'_> {
         effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
+            && let Some(def) = method_info.receiver().def()
+            && self.resolutions.defs().kind(def) == DefKind::Resource
         {
-            // `resource_names` is keyed by the declaration name, as the
-            // `resource` item writes it — a mangled head would carry the
-            // declaring module and match nothing, silently dropping the
-            // resource requirement instead of reporting it.
-            let decl_name = method_info.receiver_decl_name();
-            let decl_name = decl_name.into_string();
-            let resource_key = (func_ref.module_source.clone(), decl_name.clone());
-            if self.resource_names.contains(&resource_key) {
-                let resource_effect = EffectRef::Concrete {
-                    name: decl_name,
-                    module_source: func_ref.module_source.clone(),
-                };
-                if !effects.contains(&resource_effect) {
-                    effects.push(resource_effect);
-                }
+            let resource_effect = self
+                .resolutions
+                .effect_decl(def)
+                .expect("a resource is an effect");
+            if !effects.contains(&resource_effect) {
+                effects.push(resource_effect);
             }
         }
         effects
@@ -1378,7 +1329,7 @@ impl EffectIndex<'_> {
     fn close_over_args(
         &self,
         declared: &[EffectRef],
-        trait_key: &TraitKey,
+        trait_key: &DefId,
         args: &[FqTypeName],
         depth: u32,
     ) -> IndexSet<EffectRef> {
@@ -1393,8 +1344,7 @@ impl EffectIndex<'_> {
             }
             let mut filled = false;
             for arg in args {
-                let Some(inner) = self.impl_effects.get(&(arg.head_only(), trait_key.clone()))
-                else {
+                let Some(inner) = self.impl_effects.get(&(arg.head_only(), *trait_key)) else {
                     continue;
                 };
                 filled = true;
@@ -1417,13 +1367,8 @@ impl EffectIndex<'_> {
     /// The effects one trait method declares. `None` for a name no trait
     /// declares, an `interface` operation, or a `resource` method.
     fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
-        let module = trait_name.module()?;
         self.trait_method_effects
-            .get(&(
-                module.clone(),
-                trait_name.base_name().to_string(),
-                method.to_string(),
-            ))
+            .get(&(trait_name.canonical()?, method.to_string()))
             .map(Vec::as_slice)
     }
 
@@ -1544,7 +1489,7 @@ fn resolve_bound_effect_params(
             };
             let head = sem.types.fq_base_type_name(type_arg).head_only();
             for key in traits.iter().filter(|key| index.open_traits.contains(*key)) {
-                let Some(declared) = index.impl_effects.get(&(head.clone(), key.clone())) else {
+                let Some(declared) = index.impl_effects.get(&(head.clone(), *key)) else {
                     continue;
                 };
                 resolved_any = true;
@@ -1587,23 +1532,11 @@ impl SemEffectWalker<'_> {
     /// host-leaf effect set — empty for a purely-computational component, so its
     /// operations need no `with`. Returns empty for a non-effect-op callee.
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
-        binding_granted_effects(
-            self.sem,
-            self.annotations,
-            self.index,
-            &self.module_source,
-            binding,
-        )
+        binding_granted_effects(self.annotations, self.index, binding)
     }
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
         for effect in effects {
-            // Canonicalise: `EffectRef::Concrete.module_source` reflects the
-            // recording module's import perspective (a user `with Stdout`
-            // records `Stdout` against the entry module, while stdlib records
-            // it against `wasi:cli`), so compare through the declaration's
-            // canonical form rather than by raw `module_source`.
-            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             if effect.is_param() {
                 // An undetermined parameter stands for whatever the callee
                 // brings, so only a caller with one of its own forwards it.
@@ -1618,22 +1551,13 @@ impl SemEffectWalker<'_> {
                 }
                 continue;
             }
-            if self.current.contains(&effect) {
+            if self.current.contains(effect) {
                 continue;
             }
-            let effect = &effect;
-            let kind = match effect {
-                EffectRef::Concrete {
-                    name,
-                    module_source,
-                } if self
-                    .index
-                    .resource_names
-                    .contains(&(module_source.clone(), name.clone())) =>
-                {
-                    EffectKind::Resource
-                }
-                _ => EffectKind::Effect,
+            let kind = if self.index.resources.contains(effect) {
+                EffectKind::Resource
+            } else {
+                EffectKind::Effect
             };
             self.out.push(EffectError {
                 callee: callee.to_string(),
@@ -1916,12 +1840,11 @@ impl PurityWalker<'_> {
 
     /// Whether any of `effects` is one no enclosing `with … do` installs.
     fn unanswered(&self, effects: &[EffectRef]) -> bool {
-        effects.iter().any(|effect| {
-            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // A `Param` left after resolution stands for effects no handler
-            // here can have installed, so it is unanswered like any other.
-            effect.is_param() || !self.granted.contains(&effect)
-        })
+        // A `Param` left after resolution stands for effects no handler here
+        // can have installed, so it is unanswered like any other.
+        effects
+            .iter()
+            .any(|effect| effect.is_param() || !self.granted.contains(effect))
     }
 
     fn flag_if_effectful(
@@ -1939,10 +1862,12 @@ impl PurityWalker<'_> {
         }
     }
 
-    /// Flags a call of `interface`'s operation `op` when the dispatch demands a
-    /// capability the position does not hold. An operation declares no `with` clause.
-    fn flag_if_operation(&mut self, interface: DefId, op: &str, span: Span) {
-        let required = operation_requirements(self.sem, self.index, interface);
+    /// Flags a call of an operation whose owner demands a capability the
+    /// position does not hold.
+    fn flag_if_operation(&mut self, owner: Option<DefId>, op: &str, span: Span) {
+        // An operation declares no effect parameters, so there is nothing for
+        // the arguments to resolve.
+        let required = operation_requirements(self.sem, self.index, owner);
         if self.unanswered(&required) {
             self.flag(Impurity::Dispatch(op.to_string()), span);
         }
@@ -1960,8 +1885,8 @@ impl PurityWalker<'_> {
             id,
             args,
         );
-        // `dispatched` is left to `flag_if_operation`, which asks the path
-        // rather than each dispatch and so answers once per site.
+        // `dispatched` is left to `flag_if_operation`, which asks the owner
+        // once per site rather than once per dispatch.
         for site in sites {
             if self.unanswered(&site.declared) {
                 self.flag(Impurity::Call(site.name), span);
@@ -1974,8 +1899,11 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if let Some((interface, op)) = operation_at(self.sem, &call.callee) {
-                    self.flag_if_operation(interface, op, call.span);
+                if let Expr::Ident(ident) = &call.callee
+                    && let Some(op) = ident.segments.last()
+                {
+                    let owner = self.index.resolutions.operation_owner(ident);
+                    self.flag_if_operation(owner, &op.name, call.span);
                 }
                 self.flag_call(&call.callee, call.id, &call.args, call.span);
             }
@@ -1998,11 +1926,9 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                if let ast::Type::Named(named) = &static_call.target_type
-                    && let Some(interface) =
-                        self.sem.resolutions().and_then(|r| r.declared(named.id))
-                {
-                    self.flag_if_operation(interface, &static_call.method, static_call.span);
+                if let ast::Type::Named(named) = &static_call.target_type {
+                    let owner = self.index.resolutions.declared(named.id);
+                    self.flag_if_operation(owner, &static_call.method, static_call.span);
                 }
                 for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);
@@ -2028,13 +1954,7 @@ impl AstVisitor for PurityWalker<'_> {
                     .handlers
                     .iter()
                     .flat_map(|binding| {
-                        binding_granted_effects(
-                            self.sem,
-                            self.annotations,
-                            self.index,
-                            self.module_source,
-                            binding,
-                        )
+                        binding_granted_effects(self.annotations, self.index, binding)
                     })
                     .filter(|effect| self.granted.insert(effect.clone()))
                     .collect();

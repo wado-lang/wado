@@ -9,14 +9,14 @@ use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
 use crate::compiler_item::CompilerItem;
-use crate::component_model::used_wasi_key;
+use crate::component_model::operation_key;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, closure_call_method_name,
-    closure_call_name, closure_functor_type, is_fn_type_name, mangle_generic_name,
-    mangle_local_trait_method, mangle_method_generic,
+    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, UNIT_TYPE_NAME,
+    closure_call_method_name, closure_call_name, closure_functor_type, is_fn_type_name,
+    mangle_generic_name, mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -454,7 +454,7 @@ fn resolve_imports(
     for func_id in reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (interface_name, op_name) in effects {
-                used_wasi_functions.insert(used_wasi_key(interface_name, op_name));
+                used_wasi_functions.insert(operation_key(interface_name, op_name));
             }
         }
     }
@@ -466,18 +466,15 @@ fn resolve_imports(
         })
     };
 
-    // Mark an ambient stdio function used when its `log_*` (panic /
-    // assert-diagnostic) builtin is reachable and the world provides that
-    // stream's sink — each stream gated on its own interface. In a sink-less
-    // world (`--lib`, kiln) the builtin lowers to `unreachable` in `calls.rs`,
-    // which keys off the `func_map` this populates, so the two stay in
-    // agreement per stream and a purely-computational component stays
-    // import-free.
-    if project.provides_ambient_stdio_sink("Stdout") && reaches_intrinsic("call_indirect_stdout") {
-        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
-    }
-    if project.provides_ambient_stdio_sink("Stderr") && reaches_intrinsic("call_indirect_stderr") {
-        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
+    // A sink-less world (`--lib`, kiln) leaves the ambient builtin unimported,
+    // and `calls.rs` lowers it to `unreachable` off the `func_map` this fills.
+    for (interface, intrinsic) in [
+        ("Stdout", "call_indirect_stdout"),
+        ("Stderr", "call_indirect_stderr"),
+    ] {
+        if project.provides_ambient_stdio_sink(interface) && reaches_intrinsic(intrinsic) {
+            used_wasi_functions.insert(operation_key(interface, "write_via_stream"));
+        }
     }
 
     // Collect imports using registry lookup instead of hard-coded match
@@ -762,12 +759,9 @@ fn collect_inspectable_signatures_from_reachable(
 ) -> InspectableSignatures {
     let mut sigs = InspectableSignatures::default();
     let type_table = &*project.type_table.borrow();
-    // The registry, not a literal, so a stdlib rename flows through.
-    // `base_trait_name` drops the declaring module, so this matches on the
-    // simple name alone — as `dae` does for the same impls.
-    let inspect_name = type_table
-        .compiler_items()
-        .trait_name(CompilerItem::Inspect);
+    let Some(inspect) = type_table.compiler_items().trait_def(CompilerItem::Inspect) else {
+        return sigs;
+    };
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
@@ -775,7 +769,7 @@ fn collect_inspectable_signatures_from_reachable(
             continue;
         }
         if let Some(body) = func.body.as_ref() {
-            scan_inspect_signatures_block(body, type_table, descriptors, inspect_name, &mut sigs);
+            scan_inspect_signatures_block(body, type_table, descriptors, inspect, &mut sigs);
         }
     }
     sigs
@@ -815,7 +809,7 @@ fn scan_inspect_signatures_block(
     body: &Body,
     type_table: &TypeTable,
     descriptors: &[FunctionRef],
-    inspect_name: &str,
+    inspect: DefId,
     sigs: &mut InspectableSignatures,
 ) {
     body.for_each_reachable_node(|node| {
@@ -823,7 +817,7 @@ fn scan_inspect_signatures_block(
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
             && is_fn_type_name(&info.base_struct_name())
-            && let Some(trait_name) = info.base_trait_name()
+            && info.trait_decl() == Some(inspect)
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
             // boxing pass); peel both to read the function's arity + return type.
@@ -833,7 +827,6 @@ fn scan_inspect_signatures_block(
                 return_type,
                 ..
             } = type_table.get(recv_type)
-                && trait_name == inspect_name
             {
                 sigs.insert((params.len(), *return_type));
             }
@@ -1109,19 +1102,17 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::Unit => {
-                // `()` methods: `().to_string()`, `().fmt(&f)`, etc.
                 let method_id = FunctionId::Method(MethodName::new(
                     ModuleSource::primitive(),
-                    FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
+                    FqTypeName::builtin(UNIT_TYPE_NAME),
                     trait_name,
                     method_name,
                 ));
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.type_table.def_name(def)) =>
+                if self.type_table.is_tuple_def(def) =>
             {
-                // Tuple method call: synthesized with struct_name `"[]<f64,f64>"`.
                 let elements: Vec<FqTypeName> = type_args
                     .iter()
                     .map(|t| self.type_table.fq_type_name(*t))
@@ -1366,7 +1357,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
         ResolvedType::Unit => {
             let method_id = FunctionId::Method(MethodName::new(
                 ModuleSource::primitive(),
-                FqTypeName::builtin(TypeTable::UNIT_TYPE_NAME),
+                FqTypeName::builtin(UNIT_TYPE_NAME),
                 None,
                 "to_string".to_string(),
             ));

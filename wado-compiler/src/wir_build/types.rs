@@ -339,13 +339,8 @@ fn register_struct(
 
     ctx.struct_type_map.insert(struct_name, type_id.clone());
 
-    // Also register under the qualified-args mangle so that lookups
-    // through `mangle_type_name(GenericInstance)` (which threads
-    // `mangle_type_arg_for_generic` through its args, see bug-2 fix)
-    // resolve to this same struct. The monomorphizer's
-    // `instantiation_name` keeps producing the unqualified form so that
-    // method dispatch / `current_impl_struct_name` keep working; this
-    // alias bridges the two name forms in the WIR layer only.
+    // A `GenericInstance` mangles its arguments qualified, while the
+    // monomorphizer names the struct unqualified; alias the one to the other.
     if let Some(ref mono) = tir_struct.monomorph_info {
         let qualified_args: Vec<String> = mono
             .impl_type_args
@@ -511,13 +506,18 @@ fn register_raw_array_type(
     }
 }
 
+/// Whether `s` is an instance of the compiler's `Box<T>`.
+fn is_box_instance(s: &NirStruct, type_table: &TypeTable) -> bool {
+    s.monomorph_info.is_some()
+        && s.def
+            .decl()
+            .is_some_and(|def| type_table.is_compiler_item(def, CompilerItem::Box))
+}
+
 fn register_box_structs(ctx: &mut WirContext<'_>) {
     let type_table = &*ctx.package.type_table.borrow();
     for s in &ctx.package.structs {
-        if s.monomorph_info
-            .as_ref()
-            .is_some_and(|info| info.generic_name == "Box")
-        {
+        if is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -606,10 +606,10 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
         for type_id in type_table.iter_type_ids() {
             let resolved = type_table.get(type_id);
             if let ResolvedType::GenericInstance {
-                def,
                 type_args: elements,
+                ..
             } = resolved
-                && TypeTable::is_tuple_type(type_table.def_name(*def))
+                && type_table.is_tuple(type_id)
             {
                 if ctx.tuple_type_map.contains_key(elements) {
                     continue;
@@ -747,14 +747,8 @@ fn register_mono_library_types(ctx: &mut WirContext<'_>) {
         if s.module_source == *entry_source {
             continue;
         }
-        if s.monomorph_info.is_some() {
-            // Skip Box<T> (already registered in Phase 0)
-            if s.monomorph_info
-                .as_ref()
-                .is_some_and(|info| info.generic_name == "Box")
-            {
-                continue;
-            }
+        // A `Box<T>` was registered in Phase 0.
+        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -782,13 +776,7 @@ fn register_mono_entry_types(ctx: &mut WirContext<'_>) {
         if s.module_source != *entry_source {
             continue;
         }
-        if s.monomorph_info.is_some() {
-            if s.monomorph_info
-                .as_ref()
-                .is_some_and(|info| info.generic_name == "Box")
-            {
-                continue;
-            }
+        if s.monomorph_info.is_some() && !is_box_instance(s, type_table) {
             register_struct(ctx, s, type_table, &s.module_source);
         }
     }
@@ -1342,10 +1330,10 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 let type_table = &*ctx.package.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
                     if let ResolvedType::GenericInstance {
-                        def,
                         type_args: elements,
+                        ..
                     } = type_table.get(type_id)
-                        && TypeTable::is_tuple_type(type_table.def_name(*def))
+                        && type_table.is_tuple(type_id)
                     {
                         // Check if this tuple maps to the same WIR type
                         if let Some(wir_tid) = ctx.tuple_type_map.get(elements)

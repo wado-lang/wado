@@ -14,9 +14,9 @@ use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TemplateId, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -36,6 +36,7 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: name.to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -55,6 +56,7 @@ pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> Tir
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::rt(),
                 name: name.to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -79,6 +81,7 @@ pub fn entry_call(
             func: Box::new(FunctionRef {
                 module_source: entry_module_source,
                 name: name.to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -424,17 +427,13 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
     }
 }
 
-/// Create a static call to a generic struct method with proper monomorphization info.
-///
-/// For example, `List::<String>::with_capacity(n)` needs:
-/// - `method_info` with `struct_name: "List"`, `method_name: "with_capacity"`
-/// - `monomorph_info` with `generic_name: "List::with_capacity"`, `type_args: [String]`
-///
-/// Without these, the monomorphizer won't instantiate the generic method.
+/// A static call to `template`, a method of a generic type such as
+/// `List::<String>::with_capacity(n)`, instantiated at `type_args`.
 pub fn generic_static_call(
     receiver: &FqTypeName,
     method_name: &str,
     module_source: ModuleSource,
+    template: TemplateId,
     type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
@@ -451,12 +450,12 @@ pub fn generic_static_call(
             is_blanket: false,
         })
     };
-    let _n = args.len();
     TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source,
                 name: mangled_name,
+                template: Some(template),
                 monomorph_info,
                 method_info: Some(info),
             }),
@@ -469,28 +468,26 @@ pub fn generic_static_call(
     )
 }
 
-/// Create a method call on a generic struct with proper monomorphization info.
-///
-/// For example, `arr.push(elem)` where `arr: List<String>` needs:
-/// - `method_info` with `struct_name: "List"`, `method_name: "push"`
-/// - The receiver's `type_id` must be the concrete `List<String>` `TypeId`
+/// A method call on a generic type such as `arr.push(elem)`; `receiver`
+/// carries the concrete instance type, which the template is keyed at.
 pub fn generic_method_call(
     receiver: TirExpr,
     head: &FqTypeName,
     method_name: &str,
     method_module_source: ModuleSource,
+    template: TemplateId,
     args: Vec<TirExpr>,
     return_type: TypeId,
 ) -> TirExpr {
     let info = LocalMethodName::new(head.clone(), None, method_name.to_string());
     let mangled_name = info.to_mangled_name();
-    let _n = args.len();
     TirExpr::new(
         TirExprKind::method_call(
             Box::new(receiver),
             FunctionRef {
                 module_source: method_module_source,
                 name: mangled_name,
+                template: Some(template),
                 monomorph_info: None,
                 method_info: Some(info),
             },
@@ -509,6 +506,7 @@ pub fn generic_method_call_monomorphized(
     head: &FqTypeName,
     method_name: &str,
     method_module_source: ModuleSource,
+    template: TemplateId,
     impl_type_args: Vec<TypeId>,
     args: Vec<TirExpr>,
     return_type: TypeId,
@@ -521,6 +519,7 @@ pub fn generic_method_call_monomorphized(
             FunctionRef {
                 module_source: method_module_source,
                 name: mangled_name.clone(),
+                template: Some(template),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: mangled_name,
                     impl_type_args,
@@ -575,6 +574,7 @@ pub fn make_synthetic_free_function(
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params,
@@ -595,7 +595,6 @@ pub fn make_synthetic_free_function(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -607,6 +606,24 @@ pub fn make_synthetic_free_function(
     }
 }
 
+/// `Formatter::write_str`, as a synthesized body names and instantiates it.
+#[derive(Clone, Debug)]
+pub struct FormatterWriteStr {
+    pub formatter: FqTypeName,
+    pub template: TemplateId,
+}
+
+impl FormatterWriteStr {
+    pub fn from_type_table(type_table: &TypeTable) -> Self {
+        Self {
+            formatter: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
+            template: type_table
+                .compiler_items()
+                .require_template(CompilerItem::FormatterWriteStr),
+        }
+    }
+}
+
 /// Build a `f.write_str::<String>("text")` statement. The named type argument
 /// is what instantiates the `AsStrSlice` monomorph.
 pub fn write_str_stmt(
@@ -614,8 +631,9 @@ pub fn write_str_stmt(
     fmt: TirExpr,
     string_type: TypeId,
     span: Span,
-    formatter_name: &FqTypeName,
+    write_str: &FormatterWriteStr,
 ) -> TirStmt {
+    let formatter_name = &write_str.formatter;
     let arg = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
     let call = TirExpr::new(
         TirExprKind::method_call(
@@ -623,6 +641,7 @@ pub fn write_str_stmt(
             FunctionRef {
                 module_source: ModuleSource::format(),
                 name: format!("{formatter_name}::write_str"),
+                template: Some(write_str.template.clone()),
                 monomorph_info: None,
                 method_info: Some(LocalMethodName::new(
                     formatter_name.clone(),
@@ -632,34 +651,6 @@ pub fn write_str_stmt(
             },
             vec![string_type],
             vec![CallArg::new(arg, false)],
-        ),
-        TypeTable::UNIT,
-        span,
-    );
-    TirStmt::new(TirStmtKind::Expr(call), span)
-}
-
-/// Build a trait method call statement: `receiver.TraitName::method(args)`.
-pub fn trait_method_call(
-    receiver: TirExpr,
-    method_info: LocalMethodName,
-    module_source: ModuleSource,
-    args: Vec<TirExpr>,
-    span: Span,
-) -> TirStmt {
-    let fn_name = method_info.to_mangled_name();
-    let _n = args.len();
-    let call = TirExpr::new(
-        TirExprKind::method_call(
-            Box::new(receiver),
-            FunctionRef {
-                module_source,
-                name: fn_name,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            },
-            vec![],
-            args.into_iter().map(|e| CallArg::new(e, false)).collect(),
         ),
         TypeTable::UNIT,
         span,

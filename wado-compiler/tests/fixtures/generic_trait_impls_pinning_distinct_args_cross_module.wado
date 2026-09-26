@@ -1,0 +1,34 @@
+// Two generic impls of one trait on one head, differing only in the argument
+// each pins, declared in two modules. Each call reaches the impl pinning its
+// receiver's argument, from either module.
+
+use { Pair, Tag, tag_here } from "./sub/generic_trait_impls_pinning_distinct_args_decl.wado";
+
+impl<T> Tag for Pair<T, i64> {
+    fn tag(&self) -> i32 {
+        return 200 + self.b as i32;
+    }
+}
+
+fn tag_there<X: Tag>(x: &X) -> i32 {
+    return x.tag();
+}
+
+test "direct call" {
+    let p = Pair { a: 0, b: 1 };
+    let q: Pair<i32, i64> = Pair { a: 0, b: 2 };
+    assert p.tag() == 101;
+    assert q.tag() == 202;
+}
+
+test "through a bound in either module" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 3 };
+    let q: Pair<String, i64> = Pair { a: "y", b: 4 };
+    assert tag_here(&p) == 103;
+    assert tag_here(&q) == 204;
+    assert tag_there(&p) == 103;
+    assert tag_there(&q) == 204;
+}
+
+__DATA__
+{"test": {}}

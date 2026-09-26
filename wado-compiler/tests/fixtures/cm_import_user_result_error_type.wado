@@ -1,0 +1,29 @@
+// A `Result` returned from an import is spelled with the error type it
+// declares. Only `ErrorCode` is WASI's shared `error-code`; any other error,
+// and `()`, is its own type, not that one.
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#count")]
+    fn count() -> Result<u32, u32>;
+    #[cm("wasi:demo/gfx@0.1.0#name")]
+    fn name() -> Result<String, String>;
+    #[cm("wasi:demo/gfx@0.1.0#flag")]
+    fn flag() -> Result<bool, ()>;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::count();
+    let _ = Gfx::name();
+    let _ = Gfx::flag();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(result u32 (error u32))"], "count": 1 },
+    { "contains": ["(result string (error string))"], "count": 1 },
+    { "contains": ["(result bool)"], "count": 1 },
+    { "contains": ["error-code"], "count": 0 }
+  ]
+}

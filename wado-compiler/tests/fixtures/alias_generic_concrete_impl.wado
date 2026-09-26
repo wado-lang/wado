@@ -1,0 +1,26 @@
+// An impl on one instantiation of a generic reached through an import alias
+// is that type's impl.
+use { Box2 as Bx } from "./sub/alias_named_prelude_generic_dep.wado";
+
+trait First {
+    fn first(&self) -> i32;
+}
+
+impl First for Bx<i32> {
+    fn first(&self) -> i32 {
+        return self.a;
+    }
+}
+
+impl Bx<bool> {
+    fn flipped(&self) -> bool {
+        return !self.a;
+    }
+}
+
+test "a concrete impl through an alias" {
+    let l = Bx::<i32> { a: 7 };
+    assert l.first() == 7;
+    assert First::first(&l) == 7;
+    assert Bx::<bool> { a: false }.flipped();
+}

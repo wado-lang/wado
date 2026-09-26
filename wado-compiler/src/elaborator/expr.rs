@@ -11,7 +11,8 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
+    DeclName, FqTypeName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
+    split_local_method,
 };
 use crate::tir::{
     FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
@@ -24,6 +25,7 @@ use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
+use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -31,7 +33,7 @@ use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
@@ -42,7 +44,7 @@ use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
-use crate::elaborator::trait_env::written_type_arg;
+use crate::elaborator::trait_env::{ImplTargetKey, written_type_arg};
 use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
@@ -790,8 +792,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.value_without_turbofish(ident, ty);
         }
 
-        if let Some((decl, _)) = self.tysys.dispatched_operation(ident) {
-            let callable = if self.tysys.trait_env.effect_decl_index.contains(&decl) {
+        if let Some(op) = self.effect_operation_of(ident) {
+            let callable = if self.tysys.resolutions.defs().kind(op.decl) == DefKind::Effect {
                 CallableKind::Operation
             } else {
                 CallableKind::StaticFunction
@@ -920,7 +922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ident.owner_segment().is_some()
             && self
-                .lookup_function_signature(&ident.name, Some(ident.id))
+                .lookup_function_signature(&ident.name, None, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {
@@ -1209,7 +1211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
         // has no call to infer from, so a `_` slot is unanswerable.
         if !ident.type_args.is_empty() {
-            if let Some(span) = ident.type_args.iter().find_map(Self::first_infer_span) {
+            if let Some(span) = ident.type_args.iter().find_map(first_infer_span) {
                 let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
                 return TypeTable::ERROR;
             }
@@ -1473,9 +1475,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a generic instance names a declaration")
                     .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if TypeTable::is_tuple_type(&name)
-                    && let Ok(index) = field_name.parse::<usize>()
-                {
+                let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
+                if is_tuple && let Ok(index) = field_name.parse::<usize>() {
                     match self.tysys.tuple_literal_index_type(&type_args, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
@@ -1643,10 +1644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr_type,
-        };
+        let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1654,7 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             type_args: ref elements,
         } = base_type
-            && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
+            && self.tysys.type_table.borrow().is_tuple_def(def)
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -1720,11 +1718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
-            let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                _ => None,
-            };
-            if let Some(expected) = derefed_index_type {
+            if let Some(expected) = self.tysys.pointee_of(index_type) {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
@@ -1795,6 +1789,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1847,6 +1846,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1897,10 +1901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
+        let base_type_id = self.tysys.through_ref(recv_type);
         let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
@@ -1991,7 +1992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if then_type != TypeTable::UNIT {
                         let type_name = self.tysys.type_table.borrow().type_name(then_type);
                         let _ = self.emit(TypeError::TypeMismatch {
-                            expected: "()".to_string(),
+                            expected: UNIT_TYPE_NAME.to_string(),
                             found: type_name,
                             span: if_expr.then_block.span,
                         });
@@ -3028,8 +3029,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .is_unsigned_int(scrutinee_type);
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned)?;
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned)?;
+        let resolutions = &self.tysys.resolutions;
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions)?;
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions)?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
@@ -3598,11 +3600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let substitution: hashmap::IndexMap<u32, TypeId> = params
                     .iter()
                     .zip(args.iter())
-                    .filter_map(|(param, arg)| match tt.get(*param) {
-                        ResolvedType::TypeParam { index, .. }
-                        | ResolvedType::TypePack { index, .. } => Some((*index, *arg)),
-                        _ => None,
-                    })
+                    .filter_map(|(param, arg)| Some((tt.param_slot(*param)?, *arg)))
                     .collect();
                 fields
                     .into_iter()
@@ -4523,10 +4521,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
-                let index = match table.get(decl_param) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => *index,
-                    _ => continue,
+                let Some(index) = table.param_slot(decl_param) else {
+                    continue;
                 };
                 !decl_field_types
                     .iter()
@@ -4756,13 +4752,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // arity `|F|`, expanded at monomorphization.
                     elem_types.push(mapped);
                 } else {
-                    let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
-                    if let ResolvedType::GenericInstance {
-                        def,
-                        type_args: inner_elems,
-                    } = spread_type
-                        && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
-                    {
+                    let spread_elems = self.tysys.type_table.borrow().as_tuple(spread_type_id);
+                    if let Some(inner_elems) = spread_elems {
                         // A concrete tuple spread expands inline to one element
                         // per field.
                         elem_types.extend(inner_elems);
@@ -5021,29 +5012,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let target_name = tt.type_name(target_type);
+        let target_name = DeclName::new(tt.type_name(target_type));
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
 
-        // `From<SourceType>` as the trait segment disambiguates several `From`
-        // impls on one target type.
-        let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
-        // The receiver the method name is built from — the same value reify
-        // puts on the call's `method_info`, so the two cannot drift.
-        let target_receiver = self.qualified_receiver_name(&target_name);
-        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
+        let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
+        let target_receiver = match impl_def {
+            Some(def) => self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type),
+            None => self.tysys.fq_receiver_head(target_type),
+        };
 
-        // The block that provides the `From` impl, and where its body lives.
-        let (impl_def, module_source) = self.find_from_impl(&target_name, &from_name);
-
-        let key = caller_id;
         self.sem.types.from_call_facts.insert(
-            key,
+            caller_id,
             FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
                 module_source,
-                mangled_name: method_name,
                 target_name: target_receiver,
                 from_name,
                 from_trait_name,
@@ -5053,52 +5037,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// The `impl From<from_name> for target_name` block and the module that
+    /// The `impl From<from_name> for target_type` block and the module that
     /// wrote it. No block where the synthesis pass mints the impl later.
     fn find_from_impl(
         &self,
-        target_name: &str,
+        target_type: TypeId,
+        target_name: &DeclName,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let from_trait_name = self
+        let target_args = self
             .tysys
             .type_table
             .borrow()
-            .compiler_trait_name(CompilerItem::From)
-            .to_string();
-        // Read off the impl headers: a block's trait reference and its
-        // argument are header facts, so the impls are reached by the target's
-        // canonical key rather than by scanning every module for one whose
-        // written target name matches.
-        let declares_from = |key: &DefId| -> bool {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| {
-                    header.trait_head_name() == Some(from_trait_name.as_str())
-                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
-                        if g.args.first().is_some_and(|arg| {
-                            // The header's argument and the call's source type
-                            // are compared as the declarations they name, not
-                            // as the spellings each side wrote.
-                            written_type_arg(arg, &self.tysys.resolutions)
-                                == *from_name
-                        }))
-                })
-        };
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(target_name));
+            .nominal_type_args(target_type)
+            .unwrap_or_default();
+        let mut keys =
+            self.impl_keys_of_from(&self.impl_target_of(target_type, target_name), from_name);
+        keys.retain(|&key| !self.impl_at_other_instantiation(key, &target_args));
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()
-            .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
-            .or_else(|| keys.iter().find(|key| declares_from(key)))
+            .find(|key| *defs.module(**key) == self.current_module_source)
+            .or_else(|| keys.first())
             .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
+    }
+
+    /// The `impl From<from> for …` blocks on `target`, a bodyless synthesis
+    /// request among them. The argument is compared by the declaration it names.
+    pub(super) fn impl_keys_of_from(
+        &self,
+        target: &ImplTargetKey,
+        from: &FqTypeName,
+    ) -> Vec<DefId> {
+        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
+            return Vec::new();
+        };
+        let env = &self.tysys.trait_env;
+        env.all_impl_keys(target)
+            .into_iter()
+            .filter(|key| {
+                let header = &env.impl_headers[key];
+                header.trait_def() == Some(from_trait)
+                    && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
+                        if g.args.len() == 1
+                            && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
+            })
+            .collect()
     }
 }
 

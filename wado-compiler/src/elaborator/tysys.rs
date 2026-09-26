@@ -12,7 +12,7 @@ use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::resource_move_check::carries_affine_resource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
@@ -25,7 +25,7 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::name::FqTypeName;
+use crate::name::{FqTypeName, NEVER_TYPE_NAME, UNIT_TYPE_NAME};
 use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
@@ -74,23 +74,6 @@ pub(crate) struct TypeSystem {
     /// Key: `[module_source_display, raw_path]`, value: raw bytes.
     pub(crate) included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
 
-    /// Flat set of every name that resolves to a declared type
-    /// (primitive, struct, enum, variant, flags, newtype, resource).
-    /// Built globally during annotate; read-only afterwards. Powers fast
-    /// `is_known_type_name` lookups in the body walk.
-    pub(crate) known_type_names_cache: Rc<IndexSet<String>>,
-
-    /// Per-module *visible* type names: the type names each module can
-    /// actually resolve — its own declarations, the auto-imported prelude,
-    /// the primitives, and the types it explicitly `use`s. Always a subset
-    /// of [`Self::known_type_names_cache`]; unlike that global union it is
-    /// **not** polluted by type names from unrelated modules. This is what
-    /// distinguishes a free impl type parameter (`E` in the prelude's
-    /// `impl Result<T, E>`, which `core:prelude/types` cannot resolve) from
-    /// a concrete instantiation argument (`u8` in `impl List<u8>`), even
-    /// when a *user* module declares a type that happens to be named `E`.
-    pub(crate) module_visible_types: Rc<IndexMap<ModuleSource, IndexSet<String>>>,
-
     /// Per-module index from function name → position in `module.items`
     /// for O(1) lookup. Built globally during annotate; read-only
     /// afterwards.
@@ -127,13 +110,6 @@ impl TypeSystem {
         }
     }
 
-    /// Check if a name refers to a known type (struct, variant, enum,
-    /// flags, newtype, or primitive). Uses the pre-built cache for O(1)
-    /// lookup instead of scanning all module maps.
-    pub(crate) fn is_known_type_name(&self, name: &str) -> bool {
-        self.known_type_names_cache.contains(name)
-    }
-
     /// The `TypeId` of each field of the struct `type_id` names, in declaration
     /// order, or `None` if it names no registered struct. Keyed by the type
     /// itself rather than a spelling of it, which is what every caller holds:
@@ -153,18 +129,6 @@ impl TypeSystem {
             type_id,
             &mut Vec::new(),
         )
-    }
-
-    /// Whether `name` resolves to a declared type *from `module`'s perspective*
-    /// — its own declarations, the prelude, a primitive, or an explicit import.
-    /// Unlike the global union [`Self::is_known_type_name`], no unrelated module
-    /// can pollute it: a user type named `E` does not stop the prelude's
-    /// `impl Result<T, E>` treating `E` as free. Unknown modules use the union.
-    pub(crate) fn is_known_type_name_in(&self, module: &ModuleSource, name: &str) -> bool {
-        match self.module_visible_types.get(module) {
-            Some(visible) => visible.contains(name),
-            None => self.is_known_type_name(name),
-        }
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare
@@ -409,7 +373,7 @@ impl TypeSystem {
                     return self.type_table.borrow().def_name(def).to_string();
                 }
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
-                ResolvedType::Flags { .. } => return "u32".to_string(),
+                ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
                 // The raw GC array's base method-owner name is "Array"
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
@@ -510,7 +474,7 @@ impl TypeSystem {
             ResolvedType::Struct { def, .. } => self.type_table.borrow().struct_head_name(def),
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.type_table.borrow().def_name(def).to_string();
-                if TypeTable::is_tuple_type(&name) {
+                if self.type_table.borrow().is_tuple_def(def) {
                     let parts: Vec<String> = type_args
                         .iter()
                         .map(|&t| self.type_id_to_string(t))
@@ -565,8 +529,8 @@ impl TypeSystem {
                 assoc_name,
                 ..
             } => format!("{}::{}", self.type_id_to_string(param_id), assoc_name),
-            ResolvedType::Unit => "()".to_string(),
-            ResolvedType::Never => "!".to_string(),
+            ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
+            ResolvedType::Never => NEVER_TYPE_NAME.to_string(),
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),
         }

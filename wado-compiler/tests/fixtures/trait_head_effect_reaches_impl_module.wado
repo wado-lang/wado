@@ -1,0 +1,19 @@
+// A default method reads its trait head's effect in the trait's module, not in
+// the impl's, which declares a `Stdout` of its own.
+
+use { Greet } from "./sub/trait_head_effect_reaches_impl_module_trait.wado";
+
+interface Stdout {
+    fn write(s: String);
+}
+
+struct Quiet {}
+
+impl Greet for Quiet {}
+
+test "the default method keeps the trait's effect" {
+    assert Quiet {}.greet() == 1;
+}
+
+__DATA__
+{"test": {}}

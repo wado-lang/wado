@@ -3,22 +3,21 @@
 
 use crate::ast::Type;
 use crate::compiler_item::CompilerItem;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_name};
+use crate::name::{FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, derive, holds_with_args, rank,
 };
 
-use super::trait_env::{BlanketReceiver, ImplHeader, written_arg_nodes};
+use super::trait_env::{BlanketReceiver, ImplHeader, ImplTargetKey, written_arg_nodes};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
-use crate::defs::DefKind;
 use crate::elaborator::scope;
 use crate::elaborator::types::TypeLookup;
 use crate::resolve::Resolutions;
@@ -97,6 +96,16 @@ impl Lowering {
 
     fn builtin(&mut self, name: &str) -> TypeDeclId {
         TypeDeclId(intern(&mut self.decls, DeclKey::Builtin(name.to_string())))
+    }
+
+    /// The head a written type reaching `def` lowers under, keyed as the impl
+    /// index keys it.
+    fn head_of(&mut self, defs: &DefTable, def: DefId) -> TypeDeclId {
+        match ImplTargetKey::of_decl(defs, def) {
+            ImplTargetKey::Builtin(name) => self.builtin(&name),
+            ImplTargetKey::Decl(def) => self.type_decl(def),
+            key => unreachable!("a declaration keys as itself or a builtin, not {key:?}"),
+        }
     }
 
     fn anonymous_struct(&mut self) -> TypeDeclId {
@@ -215,26 +224,17 @@ impl Lowering {
         resolutions: &Resolutions,
         self_type: Option<&SolverType>,
     ) -> Option<SolverType> {
-        // A builtin shape is keyed by its spelling, as `ImplTargetKey::of_decl`
-        // keys it.
         match ty {
             Type::Named(named) if named.name == "Self" => self_type.cloned(),
             Type::Named(named) => match param(&named.name) {
                 Some(ParamKind::Type(index)) => Some(SolverType::Param(index)),
                 Some(ParamKind::Pack(index)) => Some(SolverType::Pack(index)),
-                None if is_builtin_shape_name(&named.name) => {
-                    Some(SolverType::Decl(self.builtin(&named.name), Vec::new()))
-                }
                 None => resolutions
                     .declared(named.id)
-                    .map(|def| SolverType::Decl(self.type_decl(def), Vec::new())),
+                    .map(|def| SolverType::Decl(self.head_of(resolutions.defs(), def), Vec::new())),
             },
             Type::Generic(generic) => {
-                let head = if is_builtin_shape_name(&generic.name) {
-                    self.builtin(&generic.name)
-                } else {
-                    self.type_decl(resolutions.declared(generic.id)?)
-                };
+                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
                 let args = generic
                     .args
                     .iter()
@@ -254,10 +254,8 @@ impl Lowering {
                 is_mut: matches!(ty, Type::MutReference(_)),
                 inner: Box::new(self.ast_type(inner, param, resolutions, self_type)?),
             }),
-            // `impl Greet for geo::Tag` names a declaration like any other; a
-            // qualified spelling is never a builtin shape.
             Type::NamespacedGeneric(generic) => {
-                let head = self.type_decl(resolutions.declared(generic.id)?);
+                let head = self.head_of(resolutions.defs(), resolutions.declared(generic.id)?);
                 let args = generic
                     .args
                     .iter()
@@ -332,7 +330,7 @@ impl Lowering {
             ),
             // `()` is the unit declaration, not the empty tuple
             // (WEP 2026-09-01, "The candidates").
-            ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
+            ResolvedType::Unit => decl(DeclKey::Builtin(UNIT_TYPE_NAME.into()), vec![]),
             ResolvedType::Struct {
                 def: StructDef::Decl(def),
                 type_args,
@@ -402,7 +400,7 @@ impl Lowering {
             }
             // `impl Inspect for !` is written in the prelude, so the receiver
             // side names the same shape.
-            ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
+            ResolvedType::Never => decl(DeclKey::Builtin(NEVER_TYPE_NAME.into()), vec![]),
             // A projection on a rigid parameter, satisfying what its trait
             // declares of the associated type.
             ResolvedType::AssocTypeProjection {
@@ -465,7 +463,7 @@ pub(super) fn lower_impls<'a>(
             .map(|p| {
                 let mut def = ParamDef::default();
                 for b in &p.bounds {
-                    let Some(bound) = b.resolved.or_else(|| resolutions.declared(b.id)) else {
+                    let Some(bound) = resolutions.bound_decl(b) else {
                         continue;
                     };
                     let bound = lowering.trait_decl(bound);
@@ -583,11 +581,7 @@ fn representative(
             if let Some(id) = TypeTable::primitive_by_name(name) {
                 return Some(table.get(id).clone());
             }
-            if name == TypeTable::UNIT_TYPE_NAME {
-                Some(ResolvedType::Unit)
-            } else if name == "!" {
-                Some(ResolvedType::Never)
-            } else if name == TypeTable::ARRAY_TYPE_NAME {
+            if name == TypeTable::ARRAY_TYPE_NAME {
                 Some(ResolvedType::BuiltinArray(TypeTable::UNIT))
             } else if name == fn_shape_name(false) || name == fn_shape_name(true) {
                 Some(ResolvedType::Function {
@@ -682,21 +676,16 @@ impl SolverBridge {
             || Self::OPERATORS.contains(&item)
     }
 
-    pub(crate) fn build(tysys: &TypeSystem) -> Self {
+    pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::default();
         let mut program = Program::default();
         let table = tysys.type_table.borrow();
         lowering.tuple = table.compiler_item_def(CompilerItem::Tuple);
         program.tuple = lowering.tuple.map(|def| lowering.type_decl(def));
-        Self::intern_declarations(tysys, &mut lowering);
+        Self::intern_declarations(tysys, modules, &mut lowering);
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
-            if let Some(trait_) = tysys
-                .trait_env
-                .impl_headers
-                .get(&def)
-                .and_then(ImplHeader::trait_def)
-            {
+            if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {
                 let trait_ = lowering.trait_decl(trait_);
                 lowering.derivation_source.insert((trait_, kind), def);
             }
@@ -713,7 +702,7 @@ impl SolverBridge {
         );
         Self::state_primitive_impls(tysys, &mut lowering, &mut program);
         Self::state_traits(tysys, &mut lowering, &mut program);
-        Self::state_scopes(tysys, &mut lowering, &mut program);
+        Self::state_scopes(tysys, modules, &mut lowering, &mut program);
         Self::state_newtype_bases(tysys, &table, &mut lowering, &mut program);
         Self::derive_all(tysys, &table, &mut lowering, &mut program);
         Self::name_derived_impls(tysys, &mut lowering, &program);
@@ -793,7 +782,7 @@ impl SolverBridge {
 
     /// Intern every declaration and module up front, so a query lowers without
     /// interning and a shape nothing lowered is unknown to it.
-    fn intern_declarations(tysys: &TypeSystem, lowering: &mut Lowering) {
+    fn intern_declarations(tysys: &TypeSystem, modules: &[ModuleSource], lowering: &mut Lowering) {
         for def in tysys.data.declarations() {
             lowering.type_decl(def);
         }
@@ -807,8 +796,8 @@ impl SolverBridge {
             fn_shape_name(false),
             fn_shape_name(true),
             TypeTable::ARRAY_TYPE_NAME,
-            TypeTable::UNIT_TYPE_NAME,
-            "!",
+            UNIT_TYPE_NAME,
+            NEVER_TYPE_NAME,
         ]
         .into_iter()
         .chain(PrimitiveType::all_primitive_names())
@@ -825,7 +814,7 @@ impl SolverBridge {
             let head = lowering.type_decl(def);
             lowering.opaque_heads.insert(head);
         }
-        for module in tysys.module_visible_types.keys() {
+        for module in modules {
             lowering.module(module);
         }
     }
@@ -936,7 +925,7 @@ impl SolverBridge {
                     let bounds = assoc
                         .bounds
                         .iter()
-                        .filter_map(|b| b.resolved.or_else(|| tysys.resolutions.declared(b.id)))
+                        .filter_map(|b| tysys.resolutions.bound_decl(b))
                         .map(|def| lowering.trait_decl(def))
                         .collect();
                     (lowering.assoc(id, &assoc.name), bounds)
@@ -954,8 +943,13 @@ impl SolverBridge {
     /// What each module may name. A trait's methods are candidates at a call
     /// site only where that trait's declaration is in scope there
     /// (WEP 2026-09-01); where its impls were written does not enter.
-    fn state_scopes(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
-        for module in tysys.module_visible_types.keys() {
+    fn state_scopes(
+        tysys: &TypeSystem,
+        modules: &[ModuleSource],
+        lowering: &mut Lowering,
+        program: &mut Program,
+    ) {
+        for module in modules {
             // A declaration reachable under two names is in scope once.
             let traits_in_scope: IndexSet<TraitDeclId> = tysys
                 .resolutions
@@ -974,15 +968,14 @@ impl SolverBridge {
         }
     }
 
-    /// A newtype inherits its base's impls. A `flags` type is stored as a
-    /// `u32` and inherits the same way.
+    /// A newtype inherits its base's impls, and a `flags` type its primitive's.
     fn state_newtype_bases(
         tysys: &TypeSystem,
         table: &TypeTable,
         lowering: &mut Lowering,
         program: &mut Program,
     ) {
-        let u32_ = SolverType::Decl(lowering.builtin("u32"), vec![]);
+        let u32_ = SolverType::Decl(lowering.builtin(TypeTable::FLAGS_BASE_NAME), vec![]);
         let mut newtype_base = |head: TypeDeclId, base: SolverType| {
             program.types.insert(
                 head,
@@ -1039,7 +1032,20 @@ impl SolverBridge {
                 }
                 other => unreachable!("{other:?} is not derived"),
             };
-            derive(program, lowering.trait_decl(trait_), eligible);
+            let trait_ = lowering.trait_decl(trait_);
+            // An impl with no block is one the compiler states on a primitive,
+            // whose target writes no argument.
+            let covers = |id: ImplId, def: &ImplDef| {
+                if let Some(&block) = lowering.impl_defs.get(&id) {
+                    return table.impl_covers_every_instance(block);
+                }
+                assert!(
+                    matches!(&def.target, SolverType::Decl(_, args) if args.is_empty()),
+                    "a compiler-stated impl targets a head writing no argument"
+                );
+                true
+            };
+            derive(program, trait_, eligible, covers);
         }
     }
 
@@ -1260,8 +1266,13 @@ impl SolverBridge {
             .resource_types
             .iter()
             .filter(|&(&def, _)| table.is_unrestricted_resource(def))
-            .filter_map(|(&def, info)| {
-                lowered(def, 0, &mut std::iter::empty(), &info.module_source)
+            .filter_map(|(&def, _)| {
+                lowered(
+                    def,
+                    0,
+                    &mut std::iter::empty(),
+                    tysys.resolutions.defs().module(def),
+                )
             })
             .collect();
         (out, variants, handles)
@@ -1291,21 +1302,18 @@ impl SolverBridge {
                 .into_iter()
                 .flatten()
             {
-                let stated = bound
-                    .resolved
-                    .or_else(|| tysys.resolutions.declared(bound.id))
-                    .and_then(|def| {
-                        let args = tysys
-                            .bound_written(bound)?
-                            .args()
-                            .iter()
-                            .map(|arg| self.lowering.named_arg(arg))
-                            .collect::<Option<Vec<_>>>()?;
-                        Some(ParamBound {
-                            trait_: self.lowering.known_trait(def)?,
-                            args,
-                        })
-                    });
+                let stated = tysys.resolutions.bound_decl(bound).and_then(|def| {
+                    let args = tysys
+                        .bound_written(bound)?
+                        .args()
+                        .iter()
+                        .map(|arg| self.lowering.named_arg(arg))
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(ParamBound {
+                        trait_: self.lowering.known_trait(def)?,
+                        args,
+                    })
+                });
                 match stated {
                     Some(bound) => ids.push(bound),
                     None => unstated.push(position as u32),
@@ -1374,6 +1382,33 @@ impl SolverBridge {
     ) -> Option<bool> {
         let q = self.question(tysys, ctx, scope, type_id, asked)?;
         Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
+    }
+
+    /// The impls the order ties for a bound `answer` holds: a bound reaches
+    /// them as a call does, so neither may win by declaration order.
+    pub(super) fn tied_through_bound(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        asked: &FqTraitName,
+    ) -> Vec<Option<DefId>> {
+        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
+            return Vec::new();
+        };
+        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
+        match rank(&found) {
+            Selection::AmbiguousBlankets(live) => live
+                .iter()
+                .map(|&i| self.impl_def_of(found[i].impl_))
+                .collect(),
+            Selection::None
+            | Selection::One(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::Overloaded(_)
+            | Selection::Duplicated(_) => Vec::new(),
+        }
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in
