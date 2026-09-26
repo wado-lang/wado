@@ -544,8 +544,8 @@ pub enum TypeError {
         name: String,
         span: Span,
     },
-    /// A name resolving to nothing, spelled like a local of the frame whose
-    /// scope has ended.
+    /// A name resolving to nothing that a source binding of the frame took,
+    /// read outside the scope it had.
     OutOfScope {
         name: String,
         span: Span,
