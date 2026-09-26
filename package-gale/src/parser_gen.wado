@@ -7306,13 +7306,8 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
     return true;
 }
 
-/// Emit the strict-`>` argmax update that resolves ties to the first
-/// grammar alternative: `if ${end_expr} > ${best_var} { best = end; winner =
-/// value }`. Both scan-winner sites call this while iterating candidates in
-/// ASCENDING alt-index order, so the first (lowest-index) candidate to reach
-/// the running max keeps it — ANTLR4's ambiguity resolution.
 /// Take the longest candidate, where `best` holds a length: nothing runs a scan
-/// from it, so there is no gate to carry.
+/// from it, so there is no gate to carry. The strict `>` keeps ties on the first.
 fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w: &mut CodeWriter,
     best_var: S,
@@ -7351,7 +7346,7 @@ fn emit_argmax_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// Longest-match scan tournament over `sorted_group`: each alt scans from
 /// `p.pos`, the greatest end wins, and ties resolve to the LOWEST grammar
 /// alt index (ANTLR4's ambiguity resolution). Iterating in grammar order
-/// (`sorted_group.sorted()`) with `emit_argmax_update`'s strict `>` gives
+/// (`sorted_group.sorted()`) with `emit_argmax_commit`'s strict `>` gives
 /// that tie-break.
 ///
 /// Returns the winner variable holding the winning ALT INDEX (`-1` when no
@@ -7429,7 +7424,6 @@ fn arms_fallback_last(untestable: &List<bool>) -> List<i32> {
     }
     return out;
 }
-
 
 /// The one place a partition becomes emitted branches. The dispatch, the scan
 /// and every caller deciding whether to enter the group read this list, so a

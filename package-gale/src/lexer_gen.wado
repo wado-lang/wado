@@ -5372,31 +5372,22 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     w.blank();
 }
 
-/// ANTLR4's `Vocabulary.getDisplayName`, which `<missing X>` reads: a rule whose
-/// whole body is one literal shows as that literal.
-pub fn gen_token_display_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>) {
-    let mut f = FnSpec::new("token_display_name");
-    f.add_param("kind", "i32");
-    f.set_return_type("String");
-    f.emit_begin(w);
-    let mut arms: List<String> = [];
+/// `TOKEN_NAMES`, ANTLR4's `Vocabulary.getDisplayName` by kind, which `<missing X>`
+/// reads: a rule whose whole body is one literal shows as that literal.
+pub fn gen_token_names_global(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, num_kinds: i32) {
+    w.begin("fn _token_names() -> List<String>");
+    w.line(`let mut v: List<String> = List::with_capacity(${num_kinds});`);
+    w.begin(`for let mut k = 0; k < ${num_kinds}; k += 1`);
+    w.line("v.push(token_kind_name(k));");
+    w.end();
     for let rule of lexer_rules {
         if let Some(text) = lexer_alias_text(rule) {
-            arms.push(wado`TK_${rule.name} => "${lit_name(text)}",`);
+            w.line(wado`v[TK_${rule.name}] = "${lit_name(text)}";`);
         }
     }
-    if arms.is_empty() {
-        w.line("return token_kind_name(kind);");
-    } else {
-        w.line("return match kind {");
-        w.indent();
-        for let arm of &arms {
-            w.line(arm);
-        }
-        w.line("_ => token_kind_name(kind),");
-        w.dedent();
-        w.line("};");
-    }
+    w.line("return v;");
     w.end();
+    w.blank();
+    w.line("global TOKEN_NAMES: List<String> = _token_names();");
     w.blank();
 }

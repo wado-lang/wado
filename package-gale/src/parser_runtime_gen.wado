@@ -336,16 +336,14 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
 
     let mut sd = FnSpec::new("sync_delete");
     sd.set_receiver("&mut self");
+    sd.add_param("sync", "&List<i32>");
     sd.add_param("expected", "&List<i32>");
-    sd.add_param("names", "&List<i32>");
     sd.set_return_type("bool");
     sd.emit_begin(w);
-    w.begin(
-        "if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1))",
-    );
+    w.begin("if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1))");
     w.line("return false;");
     w.end();
-    w.line("self.report_extraneous(names, RecoveryAction::Deleted);");
+    w.line("self.report_extraneous(expected, RecoveryAction::Deleted);");
     w.line("self.skip_one();");
     w.line("return true;");
     w.end();
@@ -353,22 +351,22 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
 
     let mut se = FnSpec::new("sync_enter");
     se.set_receiver("&mut self");
+    se.add_param("sync", "&List<i32>");
     se.add_param("expected", "&List<i32>");
-    se.add_param("names", "&List<i32>");
     se.emit_begin(w);
-    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
-    w.line("self.fail_expecting(names);");
+    w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
+    w.line("self.fail_expecting(expected);");
     w.end();
     w.end();
     w.blank();
 
     let mut sa = FnSpec::new("sync_alts");
     sa.set_receiver("&mut self");
+    sa.add_param("sync", "&List<i32>");
     sa.add_param("expected", "&List<i32>");
-    sa.add_param("names", "&List<i32>");
     sa.emit_begin(w);
-    w.begin("if !self.recovering && !self.sync_delete(expected, names)");
-    w.line("self.no_viable(\"no viable alternative\", self.peek_span(), names);");
+    w.begin("if !self.recovering && !self.sync_delete(sync, expected)");
+    w.line("self.no_viable(\"no viable alternative\", self.peek_span(), expected);");
     w.end();
     w.end();
     w.blank();
@@ -377,39 +375,39 @@ fn gen_rule_recovery(w: &mut CodeWriter) {
     // reports itself.
     let mut sb = FnSpec::new("sync_back");
     sb.set_receiver("&mut self");
+    sb.add_param("sync", "&List<i32>");
     sb.add_param("expected", "&List<i32>");
-    sb.add_param("names", "&List<i32>");
     sb.emit_begin(w);
     w.line("if self.recovering || self.kinds[self.pos] == TK_EOF { return; }");
     w.begin("if self.speculating");
-    w.line("self.fail_expecting(names);");
+    w.line("self.fail_expecting(expected);");
     w.line("return;");
     w.end();
-    w.line("self.report_extraneous(names, RecoveryAction::SkippedTo);");
-    w.line("self.skip_until(&self.resync_set(expected));");
+    w.line("self.report_extraneous(expected, RecoveryAction::SkippedTo);");
+    w.line("self.skip_until(&self.resync_set(sync));");
     w.end();
     w.blank();
 
     // At EOF the wanted terminal closes a construct the input never finished.
     let mut fd = FnSpec::new("fail_expecting");
     fd.set_receiver("&mut self");
-    fd.add_param("names", "&List<i32>");
+    fd.add_param("expected", "&List<i32>");
     fd.emit_begin(w);
     w.line(
         "let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };",
     );
-    w.line("self.fail_on_token(\"got\", names, code);");
+    w.line("self.fail_on_token(\"got\", expected, code);");
     w.end();
     w.blank();
 
     let mut rsy = FnSpec::new("report_extraneous");
     rsy.set_receiver("&mut self");
-    rsy.add_param("names", "&List<i32>");
+    rsy.add_param("expected", "&List<i32>");
     rsy.add_param("recovery", "RecoveryAction");
     rsy.emit_begin(w);
     emit_diag_prologue(w);
     w.line(
-        "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));",
+        "self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input \"${self.tokens.token_text(self.pos)}\"`, self.tokens.span_at(self.pos), *expected, self.kinds[self.pos], recovery));",
     );
     w.end();
     w.blank();
@@ -705,7 +703,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         frst.set_receiver("&self");
         frst.set_return_type("String");
         frst.emit_begin(w);
-        w.line("return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
+        w.line("return self.b.render_open(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
         w.end();
         w.blank();
 
@@ -716,7 +714,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         frta.add_param("row", "i32");
         frta.set_return_type("String");
         frta.emit_begin(w);
-        w.line("return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
+        w.line("return self.b.render_at(row, &self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
         w.end();
         w.blank();
 
@@ -734,7 +732,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         frstf.set_receiver("&self");
         frstf.set_return_type("String");
         frstf.emit_begin(w);
-        w.line("return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);");
+        w.line("return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);");
         w.end();
         w.blank();
     }
@@ -846,7 +844,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };");
     w.line("let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };");
     w.line(
-        "self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
+        "self.report(Diagnostic::error(code, `missing ${TOKEN_NAMES[kind]}`, self.tokens.span_at(self.pos), [kind], found, recovery));",
     );
     w.end();
     w.blank();

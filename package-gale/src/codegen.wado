@@ -311,7 +311,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
     warn_unhandled_lexer_actions(grammar, &mut ctx);
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
-    gen_string_tree_helper(&mut w, grammar, &lit_tokens, ctx.emit_actions());
+    gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
         if any_base {
             let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };
