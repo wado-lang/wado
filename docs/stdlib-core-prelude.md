@@ -1030,15 +1030,12 @@ can be short of `data.len()`. Writing to an end whose result was
 blocks until a reader rendezvouses rather than writing nothing.
 `write_all` is the loop that finishes the buffer.
 
-#### `fn write_raw(&self, data: Slice<T>) -> StreamWrite`
+#### `fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
 
-`#[cm("stream-write-raw")]`
+`#[cm("stream-write-raw-all")]`
 
-Write a view directly to the stream, without the deep copy that
-value-semantics `write` makes. The slice references its backing array
-(`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
-only the CM lowering copy remains. `T` must be a byte: any other element
-type is a compile error, and `write` is what carries it.
+`write_all` for a byte view, lowered once with no value-semantics copy.
+Any element type but a byte is a compile error.
 
 #### `fn cancel_write(&self)`
 
@@ -1058,12 +1055,6 @@ Drop the writable end, signaling end-of-stream.
 
 Write every element, or stop early when the readable end drops.
 Returns the result of the copy that ended the loop.
-
-#### `pub fn write_raw_all(&self, data: Slice<T>) -> CopyResult`
-
-`write_all` for elements already held in one array, without its
-value-semantics copy. The tail view skips `Slice::slice`, whose clamp
-these offsets cannot need and every program that prints would pay for.
 
 ### `pub resource WaitableSet`
 

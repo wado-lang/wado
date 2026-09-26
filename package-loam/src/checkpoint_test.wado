@@ -1,0 +1,173 @@
+//! A safetensors checkpoint as the loader reads it, and every way one can
+//! disagree with the graph a module was compiled for.
+
+use { push_element } from "./graph.wado";
+use { Expected, LoadError, declared_header_end, header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { StoredTensor, write_safetensors } from "./safetensors.wado";
+
+fn is_error<E: Error>() {
+}
+
+test "a checkpoint's failure is an Error" {
+    is_error::<LoadError>();
+}
+
+fn floats(values: List<f32>) -> ByteList {
+    let mut bytes = ByteList::with_capacity(values.len() * 4);
+    for let v of values {
+        push_element(&mut bytes, v.to_bits() as u64, 4);
+    }
+    return bytes;
+}
+
+/// A checkpoint of `header` alone, its length prefixed as the format lays out.
+fn with_header(header: String) -> ByteList {
+    let mut bytes: ByteList = [];
+    push_element(&mut bytes, header.len() as u64, 8);
+    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    return bytes;
+}
+
+fn two_tensors() -> ByteList {
+    return write_safetensors(&[
+        StoredTensor {
+            name: "w",
+            dtype: "F32",
+            shape: [2, 3],
+            data: floats([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+        },
+        StoredTensor {
+            name: "b",
+            dtype: "F32",
+            shape: [3],
+            data: floats([-1.0, 0.5, 0.25]),
+        },
+    ]);
+}
+
+fn w() -> Expected {
+    return Expected {
+        tensor: "w",
+        dtype: "F32",
+        axes: ["Out", "In"],
+        extents: [2, 3],
+        elements: 6,
+        width: 4,
+    };
+}
+
+fn b() -> Expected {
+    return Expected {
+        tensor: "b",
+        dtype: "F32",
+        axes: ["In"],
+        extents: [3],
+        elements: 3,
+        width: 4,
+    };
+}
+
+test "a payload comes back as the elements written under its name" {
+    let bytes = two_tensors();
+    let checkpoint = read_checkpoint(&bytes).unwrap();
+    let weight = checkpoint.payload(&bytes, &w()).unwrap();
+    assert List::<f32>::from_le_bytes(weight) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    let bias = checkpoint.payload(&bytes, &b()).unwrap();
+    assert List::<f32>::from_le_bytes(bias) == [-1.0, 0.5, 0.25] as List<f32>;
+}
+
+test "the header is read from its prefix alone" {
+    let bytes = two_tensors();
+    let prefix = bytes.as_byte_slice().slice(0, header_end(&bytes).unwrap());
+    let checkpoint = read_checkpoint(prefix).unwrap();
+    let [start, end] = checkpoint.range(&w()).unwrap();
+    assert end - start == 24;
+}
+
+test "a tensor the checkpoint lacks names itself" {
+    let bytes = two_tensors();
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "missing" }).unwrap_err();
+    assert `${e}` == "missing: the checkpoint has no such tensor";
+}
+
+test "an element type that disagrees names both" {
+    let bytes = two_tensors();
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), dtype: "F16", width: 2 }).unwrap_err();
+    assert `${e}` == "b: the checkpoint holds F32, and the graph F16";
+}
+
+test "a rank that disagrees names the graph's axes" {
+    let bytes = two_tensors();
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected {
+        ..w(),
+        axes: ["Out", "In", "Extra"],
+        extents: [2, 3, 1],
+        elements: 6,
+    }).unwrap_err();
+    assert `${e}` == "w: the checkpoint gives 2 axes, and the graph [Out, In, Extra]";
+}
+
+test "an extent that disagrees names the axis" {
+    let bytes = two_tensors();
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected {
+        ..w(),
+        extents: [2, 4],
+        elements: 8,
+    }).unwrap_err();
+    assert `${e}` == "w: axis In is 3 in the checkpoint and 4 in the graph";
+}
+
+test "offsets that disagree with the shape name the tensor" {
+    let bytes = write_safetensors(&[
+        StoredTensor {
+            name: "b",
+            dtype: "F32",
+            shape: [3],
+            data: floats([1.0, 2.0]),
+        },
+    ]);
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &b()).unwrap_err();
+    assert `${e}` == "b: the checkpoint's offsets hold 8 bytes, and 3 F32 elements need 12";
+}
+
+test "a payload past the end of the bytes given names the tensor" {
+    let bytes = two_tensors();
+    let cut = bytes.as_byte_slice().slice(0, bytes.len() - 1);
+    let e = read_checkpoint(cut).unwrap().payload(cut, &b()).unwrap_err();
+    assert `${e}` == `b: the payload ends at byte ${bytes.len()}, past the ${cut.len()} given`;
+}
+
+test "a header longer than the bytes given is refused" {
+    let bytes = two_tensors();
+    let e = read_checkpoint(bytes.as_byte_slice().slice(0, 12)).unwrap_err();
+    assert `${e}`.starts_with("the header is ");
+}
+
+test "a header no module can address is refused from its length alone" {
+    let bytes: ByteList = b"\xff\xff\xff\xff\x00\x00\x00\x00";
+    let e = declared_header_end(&bytes).unwrap_err();
+    assert `${e}` == "the header is 4294967295 bytes, past what a module can address";
+}
+
+test "a header that is not JSON is refused" {
+    let e = read_checkpoint(&with_header("{x}")).unwrap_err();
+    assert `${e}`.starts_with("the header is not JSON");
+}
+
+test "metadata keyed like a tensor entry's fields still reads" {
+    let bytes = with_header("{\"__metadata__\":{\"shape\":\"NCHW\",\"data_offsets\":\"none\"}}");
+    assert read_checkpoint(&bytes) matches { Ok(_) };
+}
+
+test "a tensor named twice in the header is refused" {
+    let bytes = with_header(
+        "{\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[0,4]},\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[4,8]}}",
+    );
+    assert `${read_checkpoint(&bytes).unwrap_err()}`.starts_with("the header is not JSON");
+}
+
+test "the header's metadata is not a tensor" {
+    let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
+    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
+    assert `${e}` == "__metadata__: the checkpoint has no such tensor";
+}

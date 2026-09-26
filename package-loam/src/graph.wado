@@ -2,6 +2,7 @@
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use { TreeMap } from "core:collections";
+use { checked_element_count } from "./runtime/tensor.wado";
 
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
@@ -17,6 +18,14 @@ pub variant Rank {
     Scalar,
     Unranked,
     Dims(List<Dim>),
+}
+
+/// The rank stating `dims`, which is a scalar where there are none.
+pub fn rank_of(dims: List<Dim>) -> Rank {
+    if dims.is_empty() {
+        return Rank::Scalar;
+    }
+    return Rank::Dims(dims);
 }
 
 /// The dimensions a rank states, a scalar's being none. `None` is a tensor
@@ -53,11 +62,13 @@ pub struct ValueInfo {
 }
 
 /// An element type a kernel reaches: the primitive a tensor is held in, its
-/// width in a payload, and the primitive the kernels compute it in.
+/// width in a payload, the primitive the kernels compute it in, and its name
+/// in a safetensors header.
 pub struct Element {
     pub primitive: String,
     pub width: i32,
     pub computed: String,
+    pub stored: String,
 }
 
 /// The one element type the kernels have arithmetic for. A layout kernel moves
@@ -68,10 +79,12 @@ pub global KERNEL_ELEMENT: String = "f32";
 /// read. Half precision is held and widened, never computed.
 pub fn element_of(dtype: &String) -> Option<Element> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some(Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT }),
-        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT }),
-        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT }),
-        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64" }),
+        "float" => Option::Some(
+            Element { primitive: KERNEL_ELEMENT, width: 4, computed: KERNEL_ELEMENT, stored: "F32" },
+        ),
+        "float16" => Option::Some(Element { primitive: "f16", width: 2, computed: KERNEL_ELEMENT, stored: "F16" }),
+        "bfloat16" => Option::Some(Element { primitive: "bf16", width: 2, computed: KERNEL_ELEMENT, stored: "BF16" }),
+        "int64" => Option::Some(Element { primitive: "i64", width: 8, computed: "i64", stored: "I64" }),
         _ => null,
     };
 }
@@ -87,25 +100,21 @@ pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Resul
 
 /// One element's low `width` bytes, little-endian, as the protobuf form lays
 /// out a payload.
-pub fn push_element(bytes: &mut ByteList, bits: u32, width: i32) {
+pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
     for let mut at = 0; at < width; at += 1 {
-        bytes.push((bits >> (8 * at) as u32) as u8);
+        bytes.push((bits >> (8 * at) as u64) as u8);
     }
 }
 
 /// The extents' product is how many elements the tensor says it has, and a
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
-    let mut declared: i64 = if extents.contains(&0) { 0 } else { 1 };
-    for let e of *extents {
-        declared = declared * e as i64;
-        // No payload is longer than what was read, so a product past it is
-        // already wrong and cannot overflow on the way.
-        if declared > elements as i64 {
-            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
-        }
-    }
-    if declared != elements as i64 {
+    let Some(declared) = checked_element_count(extents) else {
+        return Result::Err(
+            `${tensor}: ${elements} elements for a shape whose extents multiply past what a list can hold`,
+        );
+    };
+    if declared != elements {
         return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
     }
     return Result::Ok(());
@@ -141,6 +150,7 @@ impl Known {
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
+    pub is_list: bool,
     pub tensor: Option<Known> = null,
 }
 
@@ -297,6 +307,7 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
             attrs.push(Attr {
                 name: "axis",
                 values: ["1"],
+                is_list: false,
             });
             out.push(Node { ..node, attrs });
             continue;

@@ -773,6 +773,19 @@ fn test_test_failing() {
 }
 
 #[test]
+fn test_test_trap_names_its_reason() {
+    // The reason is the cause under wasmtime's backtrace context: a plain
+    // `Display` leaves it out, and `Debug` adds the host's own backtrace.
+    wado()
+        .args(["test", "wado-cli/tests/fixtures/test_trap.wado"])
+        .env("RUST_BACKTRACE", "1")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("integer divide by zero"))
+        .stdout(predicate::str::contains("Stack backtrace").not());
+}
+
+#[test]
 fn test_test_heartbeat_is_default_and_reports_failure_immediately() {
     // `heartbeat` is the default `--format`: no per-file `Compiled`/`Loaded`
     // log lines and no per-test `ok`/`FAILED` lines (that's `verbose`
