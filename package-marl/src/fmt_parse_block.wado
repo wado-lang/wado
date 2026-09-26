@@ -294,7 +294,7 @@ fn is_html_block_start(chars: &List<char>) -> bool {
 /// paragraph. CommonMark types 1–5 do; any other tag is read as type 7, which
 /// cannot, and so continues the paragraph as inline content.
 fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
-    return html_block_end_marker(chars) matches { Some(_) };
+    return html_block_end_markers(chars) matches { Some(_) };
 }
 
 /// Where a raw HTML block starting at `lines[start]` (whose `chars` these are)
@@ -302,29 +302,36 @@ fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
 /// the start line included, or to `end` when no line holds it. Types 6/7 end at
 /// the next blank line.
 fn html_block_bounds(lines: &List<String>, chars: &List<char>, start: i32, end: i32) -> i32 {
-    let Some([marker, after_open]) = html_block_end_marker(chars) else {
+    let Some([markers, after_open]) = html_block_end_markers(chars) else {
         let mut k = start + 1;
         while k < end && !is_blank(&lines[k]) {
             k += 1;
         }
         return k;
     };
-    if slice_chars(chars, after_open, chars.len()).to_ascii_lowercase().contains(&marker) {
+    if contains_any(&slice_chars(chars, after_open, chars.len()), &markers) {
         return start + 1;
     }
     for let mut k = start + 1; k < end; k += 1 {
-        if lines[k].to_ascii_lowercase().contains(&marker) {
+        if contains_any(&lines[k], &markers) {
             return k + 1;
         }
     }
     return end;
 }
 
-global RAW_TEXT_TAGS: List<String> = ["script", "pre", "style", "textarea"];
+fn contains_any(line: &String, lowercase_markers: &List<String>) -> bool {
+    let lower = line.to_ascii_lowercase();
+    return lowercase_markers.into_iter().any(|m| lower.contains(m));
+}
 
-/// The lowercase end marker of a CommonMark HTML block of types 1–5, and the
-/// char offset past its start marker, or `null` for types 6/7.
-fn html_block_end_marker(chars: &List<char>) -> Option<[String, i32]> {
+global RAW_TEXT_TAGS: List<String> = ["script", "pre", "style", "textarea"];
+global RAW_TEXT_END_TAGS: List<String> = ["</script>", "</pre>", "</style>", "</textarea>"];
+
+/// The lowercase end markers of a CommonMark HTML block of types 1–5, any one
+/// of which ends it, and the char offset past its start marker, or `null` for
+/// types 6/7. A type-1 block ends at any raw-text end tag, not only its own.
+fn html_block_end_markers(chars: &List<char>) -> Option<[List<String>, i32]> {
     let len = chars.len();
     let p = skip_indent(chars, len);
     let rest = slice_chars(chars, p, len);
@@ -333,20 +340,20 @@ fn html_block_end_marker(chars: &List<char>) -> Option<[String, i32]> {
         let open = `<${tag}`;
         let after = p + open.len();
         if lower.starts_with(&open) && (after >= len || chars[after] matches { ' ' | '\t' | '>' }) {
-            return Option::Some([`</${tag}>`, after]);
+            return Option::Some([RAW_TEXT_END_TAGS, after]);
         }
     }
     if rest.starts_with("<!--") {
-        return Option::Some(["-->", p + 4]);
+        return Option::Some([["-->"], p + 4]);
     }
     if rest.starts_with("<?") {
-        return Option::Some(["?>", p + 2]);
+        return Option::Some([["?>"], p + 2]);
     }
     if rest.starts_with("<![CDATA[") {
-        return Option::Some(["]]>", p + 9]);
+        return Option::Some([["]]>"], p + 9]);
     }
     if rest.starts_with("<!") && p + 2 < len && chars[p + 2].is_ascii_alphabetic() {
-        return Option::Some([">", p + 2]);
+        return Option::Some([[">"], p + 2]);
     }
     return null;
 }

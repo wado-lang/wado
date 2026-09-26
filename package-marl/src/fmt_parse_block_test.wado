@@ -378,6 +378,22 @@ test "parse_document keeps a blank line inside a pre block" {
     }
 }
 
+test "parse_document ends a raw-text block at any raw-text end tag" {
+    for let [source, html] of [
+        ["<script>\nx\n</pre>\n# after", "<script>\nx\n</pre>"],
+        ["<pre>a</textarea>\n# after", "<pre>a</textarea>"],
+    ] {
+        let children = doc_children(&source);
+        assert children.len() == 2;
+        if let Some(Node::Html(s)) = children.get(0) {
+            assert s == html;
+        } else {
+            panic("expected an Html node");
+        }
+        assert children[1] matches { Heading(_) };
+    }
+}
+
 test "parse_document lets a pre block interrupt a paragraph" {
     let children = doc_children("text\n<pre>\na\n</pre>\n");
     assert children.len() == 2;

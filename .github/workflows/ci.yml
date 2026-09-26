@@ -18,8 +18,8 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  # A docs-only (*.md) change skips every test job below, and the aggregator
-  # `test` reports success on their behalf.
+  # A change to Markdown no gate reads skips every test job below, and the
+  # aggregator `test` reports success on their behalf.
   #
   # The skip is a job-level `if`, not a workflow-level `paths-ignore`: a
   # path-ignored workflow never creates the "Test" check run, so the required
@@ -60,7 +60,10 @@ jobs:
           # `grep -q` exits at the first match, the producer dies of SIGPIPE, and
           # pipefail reports the pipeline as failed — misclassifying a large diff
           # as docs-only and skipping every test job.
-          if [ -z "$files" ] || grep -qvE '\.md$' <<< "$files"; then
+          # `check-spec-examples` reads the specification and the WEPs, so a
+          # change to either is code.
+          if [ -z "$files" ] || grep -qvE '\.md$' <<< "$files" \
+            || grep -qE '^docs/(spec|wep)-[^/]*\.md$' <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "Docs-only (*.md) change: skipping test jobs."
