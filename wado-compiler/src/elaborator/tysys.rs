@@ -185,7 +185,7 @@ impl TypeSystem {
     /// acquires its inner type from an expected-type context, so callers that
     /// can supply one (e.g. binary operands) check this to route the type
     /// through.
-    pub(crate) fn is_null_literal(&self, expr: &Expr) -> bool {
+    pub(crate) fn is_null_literal(expr: &Expr) -> bool {
         matches!(expr, Expr::Literal(lit) if matches!(lit.value, Literal::Null))
     }
 }

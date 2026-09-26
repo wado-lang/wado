@@ -148,14 +148,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |expr, hint| self.resolve_expr(expr, ctx, hint),
                 |&ty| ty,
             )
-        } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
+        } else if TypeSystem::is_null_literal(right_ast) && !TypeSystem::is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete
             // `Option<T>` instead of `Option<!>`.
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let right = self.resolve_expr(right_ast, ctx, Some(left));
             (left, right)
-        } else if self.tysys.is_null_literal(left_ast) && !self.tysys.is_null_literal(right_ast) {
+        } else if TypeSystem::is_null_literal(left_ast) && !TypeSystem::is_null_literal(right_ast) {
             // `null == expr`: symmetric to the above.
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let left = self.resolve_expr(left_ast, ctx, Some(right));

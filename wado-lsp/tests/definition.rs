@@ -1064,3 +1064,38 @@ fn index_ref_mut_method_call_definition() {
         assert_range(&result, 2, 7, 10);
     });
 }
+
+#[test]
+fn self_definition() {
+    futures::executor::block_on(async {
+        // `Self` stands for the impl's type wherever it is written: a type,
+        // a case path, a struct literal, a static call.
+        let source = concat!(
+            "variant Mb { J(i32), N }\n",
+            "impl Mb {\n",
+            "    fn mk(v: i32) -> Mb {\n",
+            "        let x: Self = Self::J(v);\n",
+            "        return x;\n",
+            "    }\n",
+            "    fn none() -> Mb { return Self::N; }\n",
+            "}\n",
+            "struct P { x: i32 }\n",
+            "impl P {\n",
+            "    fn make() -> P { return Self { x: 1 }; }\n",
+            "    fn again() -> P { return Self::make(); }\n",
+            "}\n",
+        );
+        for (line, character) in [(3, 15), (3, 22), (6, 29)] {
+            let result = def_at(source, line, character)
+                .await
+                .expect("Self in impl Mb");
+            assert_range(&result, 0, 8, 10);
+        }
+        for (line, character) in [(10, 28), (11, 29)] {
+            let result = def_at(source, line, character)
+                .await
+                .expect("Self in impl P");
+            assert_range(&result, 8, 7, 8);
+        }
+    });
+}

@@ -1091,6 +1091,11 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Whether `id` names a newtype, erased or not.
+    pub fn is_newtype(&self, id: TypeId) -> bool {
+        matches!(self.get_unerased(id), ResolvedType::Newtype { .. })
+    }
+
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
         self.types.get(self.resolved_id(id))
@@ -1111,10 +1116,10 @@ impl TypeTable {
         )
     }
 
-    /// True when `id` resolves to the never type `!`. An expression of this type
-    /// diverges and never yields a value (`panic`, `unreachable`, …).
+    /// True when `id` resolves to the never type `!`, through any newtype. An
+    /// expression of this type diverges and never yields a value.
     pub fn is_never(&self, id: TypeId) -> bool {
-        matches!(self.get(id), ResolvedType::Never)
+        matches!(self.get(self.representation_head(id)), ResolvedType::Never)
     }
 
     /// Iterate over all live types in the type table. Erased slots (`None`,
@@ -2878,7 +2883,8 @@ impl TypeTable {
     /// never, or a reference to either — `&x` is transparent at the WIR level.
     /// `type_id_to_wir_type` asserts it answers `WirType::Unit` for exactly these.
     pub fn is_stackless(&self, type_id: TypeId) -> bool {
-        matches!(self.peel_refs(type_id), TypeTable::UNIT | TypeTable::NEVER)
+        let head = self.representation_head(self.peel_refs(type_id));
+        matches!(self.get(head), ResolvedType::Unit | ResolvedType::Never)
     }
 
     /// Peel through Ref/MutRef wrappers to get the underlying type.

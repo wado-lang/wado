@@ -1,0 +1,35 @@
+// A newtype over `()` or `!` has no value on the stack, as its base has none.
+
+type Marker = ();
+type Void = !;
+
+fn keep(m: Marker) -> Marker { return m; }
+
+fn value_or_zero(r: Result<i32, Void>) -> i32 {
+    if let Ok(v) = r { return v; }
+    return 0;
+}
+
+fn marked(r: Result<i32, Marker>) -> i32 {
+    return match r { Ok(v) => v, Err(_) => -1 };
+}
+
+fn fail() -> Void { panic("unreachable"); }
+
+fn pick(c: bool) -> i32 {
+    if !c { fail(); }
+    return 1;
+}
+
+test "a unit newtype" {
+    keep(() as Marker);
+    assert marked(Err(() as Marker)) == -1;
+}
+
+test "a never newtype" {
+    assert value_or_zero(Ok(3)) == 3;
+    assert pick(true) == 1;
+}
+
+__DATA__
+{"test": {}}

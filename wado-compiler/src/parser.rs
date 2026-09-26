@@ -4106,10 +4106,21 @@ impl Parser {
             };
 
         // `Head::<Args>::Case` with no call: the qualified path the untargeted
-        // `Head::Case` produces, with the type args pinned on it. A
-        // method-level turbofish rules this out — `method::<U>` is never a case
-        // name — so that keeps expecting the call.
-        if method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+        // `Head::Case` produces, with the type args pinned on it. Only a call
+        // takes a second turbofish, the static method's own.
+        if !method_type_args.is_empty() && !self.check(&TokenKind::LParen) {
+            let owner = match &head.namespace {
+                Some((namespace, _)) => format!("{namespace}::{}", head.name),
+                None => head.name.clone(),
+            };
+            return Err(ParseError {
+                message: format!(
+                    "type arguments on both `{owner}` and `{method}` need a static method call; a case takes them on one"
+                ),
+                span: head.span.merge(&method_span),
+            });
+        }
+        if !self.check(&TokenKind::LParen) {
             let mut segments = Vec::new();
             if let Some((namespace, namespace_span)) = &head.namespace {
                 segments.push(PathSegment {

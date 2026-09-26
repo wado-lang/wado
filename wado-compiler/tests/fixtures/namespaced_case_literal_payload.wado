@@ -1,0 +1,17 @@
+// A literal payload of a namespaced case takes its type from the case, as it
+// does under `Type::Case`.
+
+use lib from "./sub/turbofish_namespaced_path_lib.wado";
+
+test "the turbofish types the literal" {
+    let e = lib::Either::Left::<i64, String>(7);
+    assert e matches { Left(7) };
+}
+
+test "the expected type types the literal" {
+    let e: lib::Either<i64, String> = lib::Either::Left(7);
+    assert e matches { Left(7) };
+}
+
+__DATA__
+{"test": {}}

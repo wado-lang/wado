@@ -1,0 +1,10 @@
+// The on-both diagnostic names the variant as the path spells it.
+
+use dep from "./sub/aliased_variant_type_arg_inference_dep.wado";
+
+test {
+    let m = dep::Maybe::<i32>::Just::<i32>(1);
+}
+
+__DATA__
+{"compile_error": "type arguments are written on both `dep::Maybe` and `Just`; write them on one", "compile_error_count": 1}

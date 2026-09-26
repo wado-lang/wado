@@ -1,0 +1,68 @@
+// A turbofish after the case name pins the variant's parameters, as one on the
+// type does: `Option::Some::<i64>(1)` is `Option::<i64>::Some(1)`.
+
+use lib from "./sub/turbofish_namespaced_path_lib.wado";
+
+fn takes_i64(o: Option<i64>) -> i64 {
+    return o.unwrap_or(0);
+}
+
+fn takes_i32(o: Option<i32>) -> i32 {
+    return o.unwrap_or(-1);
+}
+
+fn takes_result(r: Result<i64, String>) -> i64 {
+    return r.unwrap_or(0);
+}
+
+test "a payload case takes the written type" {
+    let o = Option::Some::<i64>(1);
+    assert takes_i64(o) == 1 as i64;
+    assert o == Option::<i64>::Some(1);
+}
+
+test "a payload-less case takes the written type" {
+    let o = Option::None::<i32>;
+    assert takes_i32(o) == -1;
+    assert takes_i32(None::<i32>) == -1;
+}
+
+test "every parameter is pinned, the ones the payload leaves open included" {
+    let r = Result::Ok::<i32, String>(1);
+    assert r.unwrap_or(0) == 1;
+    let e = Result::Err::<i32, String>("x");
+    assert e.is_err();
+}
+
+test "a bare case takes a turbofish where its type is known" {
+    assert takes_result(Ok::<i64, String>(2)) == 2 as i64;
+}
+
+test "a `_` slot is left to inference" {
+    let r = Result::Ok::<_, String>(3);
+    assert r.unwrap_or(0) == 3;
+}
+
+test "a `_` slot takes the expected type's argument" {
+    let x: Option<Option<i32>> = Option::Some::<_>(null);
+    assert x matches { Some(None) };
+    let r: Result<i64, String> = Result::Ok::<_, String>(3);
+    assert r.unwrap_or(0) == 3 as i64;
+    let n: Option<i32> = Option::None::<_>;
+    assert n matches { None };
+}
+
+test "a turbofish on the type reads the expected type too" {
+    let r: Result<i32, String> = Result::<i32, _>::Ok(1);
+    assert r.unwrap_or(0) == 1;
+}
+
+test "a namespaced case takes the written type" {
+    let e = lib::Either::Left::<i32, String>(7);
+    assert e matches { Left(7) };
+    let m = lib::Maybe::Nothing::<i32>;
+    assert m matches { Nothing };
+}
+
+__DATA__
+{"test": {}}
