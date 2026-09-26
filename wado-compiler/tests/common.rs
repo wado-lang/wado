@@ -1005,10 +1005,10 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     Ok(linker)
 }
 
-/// [`linker`] for `component` as `wado` builds it, each `web:*` import a trap.
+/// [`linker`] for `component` as `wado` builds it, each import no host provides a trap.
 pub fn host_linker(component: &Component) -> anyhow::Result<Linker<WasiState>> {
     let mut linker = linker(component.engine())?;
-    web_host::define_web_imports_as_traps(&mut linker, component)?;
+    linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }
 
@@ -1064,8 +1064,6 @@ pub fn lib_func(
 // The host modules of `wado` itself, which the compiler tests cannot depend on.
 #[path = "../../wado-cli/src/timezone_host.rs"]
 mod timezone_host;
-#[path = "../../wado-cli/src/web_host.rs"]
-mod web_host;
 
 /// Backward-compat alias
 pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
@@ -1320,7 +1318,7 @@ pub fn compile_capturing_diagnostics(
     }
 }
 
-/// The coordinate `package-web` publishes the `web:dom` bindings under.
+/// The coordinate `package-web` publishes its bindings under, and the CM package they import.
 pub const WEB_PACKAGE: &str = "wado-lang:web";
 
 /// The `[dependencies]` binding [`WEB_PACKAGE`] to `package-web`, relative to

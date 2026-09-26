@@ -131,7 +131,7 @@ true
 false
 
 // Null
-null // coerce to Option::None
+null // the None of the Option its context expects; Option<!> with none
 
 // Unit
 ()
@@ -520,11 +520,16 @@ let none_val: Option<i32> = null;                        // Option::None
 let ok_val: Result<i32, String> = Ok(42);                // bare: the annotation supplies the type
 let err_val: Result<i32, String> = Result::Err("fail");
 
-// Explicit turbofish (required when inference is insufficient). It sits on the
-// path's prefix, and a payload-less case takes it the same way.
+// Explicit turbofish (required when inference is insufficient), on the type or
+// on the case as in Rust, but not on both. A payload-less case takes it too.
 let opt = Option::<i32>::Some(42);
-let res = Result::<i32, String>::Ok(42);
+let res = Result::Ok::<i32, String>(42);
 let none = Option::<i32>::None;
+
+// Inside an impl, `Self::Case` names a case of the impl's own type, as in Rust.
+impl<T> Maybe<T> {
+    fn wrap(v: T) -> Maybe<T> { return Self::Just(v); }
+}
 ```
 
 `Option` and `Result` carry a deliberately small method set. `unwrap` and

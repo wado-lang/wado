@@ -21,7 +21,6 @@ use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
 use crate::timezone_host::add_to_linker;
 use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
-use crate::web_host::define_web_imports_as_traps;
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -564,19 +563,19 @@ pub fn create_test_store(
     Ok((Store::new(engine, state), stdout, stderr))
 }
 
-/// Create a Linker for `component`: WASI P3, HTTP and TLS, plus a trap for each
-/// `web:*` import.
+/// Create a Linker for `component`: WASI P3, HTTP and TLS, and a trap for every
+/// other import.
 ///
 /// # Errors
 ///
-/// Returns an error if WASI bindings cannot be added to the linker, or if a
-/// `web:*` import is not an instance of functions.
+/// Returns an error if WASI bindings cannot be added to the linker, or if an
+/// import is a module or a component.
 pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(component.engine());
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
-    define_web_imports_as_traps(&mut linker, component)?;
+    linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }

@@ -4,12 +4,12 @@ This is the documentation directory of Wado.
 
 ## Rules for Markdown
 
-- Keep documentation simple and MECE.
+The `markdown` skill holds the rules for every Markdown file. These add what is
+particular to `docs/`.
+
 - Don't document implementation details outside a WEP. They go stale, and a reader this far from the code has no way to notice.
-- Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
-- Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`).
 - A document's first `#` heading is its title in the index below.
-- After updating any docs, run `mise run format`. After adding, removing, or retitling one, run `mise run update-docs-index`.
+- After adding, removing, or retitling a document, run `mise run update-docs-index`.
 
 ## Specification
 

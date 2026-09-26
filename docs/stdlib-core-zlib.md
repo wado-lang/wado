@@ -30,6 +30,10 @@ All compression entry points share the same shape: the input buffer is
 required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 `Z_DEFAULT_STRATEGY` respectively.
 
+All decompression entry points take a non-negative `max_output`, default
+`i32::MAX`. Output that would pass it fails with `ZlibError::OutputExceedsMax`
+before it is written, so untrusted input cannot expand without bound.
+
 ## Synopsis
 
 ```wado
@@ -45,7 +49,7 @@ let raw = deflate_raw(&data);  // no header or trailer
 assert uncompress(&compressed) matches { Ok(round) && round == data };
 assert inflate_zlib(&smallest) matches { Ok(round) && round == data };
 assert inflate_gzip(&gz) matches { Ok(round) && round == data };
-assert inflate_raw(&raw) == data;
+assert inflate_raw(&raw) matches { Ok(round) && round == data };
 
 // A stream, for input arriving in pieces.
 let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
@@ -168,13 +172,15 @@ Returns the maximum compressed size for a given source length.
 Uses the larger of the stored-block worst case and the classic
 `compressBound` formula to match zlib-rs/zlib-ng behavior.
 
-### `pub fn inflate_raw(input: &ByteList) -> ByteList`
+### `pub fn inflate_raw(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses raw DEFLATE data (no header/checksum).
+Decompresses raw DEFLATE data (no header/checksum), failing with
+`ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 
-### `pub fn inflate_zlib(input: &ByteList) -> Result<ByteList, ZlibError>`
+### `pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32).
+Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32),
+failing with `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 
 ### `pub fn deflate_stored(input: &ByteList) -> ByteList`
 
@@ -203,11 +209,10 @@ Compresses data in zlib format (RFC 1950).
 `level` defaults to `Z_DEFAULT_COMPRESSION` and `strategy` defaults to
 `Z_DEFAULT_STRATEGY`.
 
-### `pub fn inflate_gzip(input: &ByteList) -> Result<ByteList, ZlibError>`
+### `pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses gzip-wrapped data (RFC 1952).
-
-Supports multi-member gzip streams; member outputs are concatenated.
+Decompresses gzip-wrapped data (RFC 1952), concatenating its members and failing
+with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
 
 ### `pub fn gzip_compress(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList`
 
@@ -219,10 +224,8 @@ name, comment, and other gzip header fields.
 
 ### `pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Auto-detects the wrapper format (zlib or gzip) and decompresses.
-
-Returns `ZlibError::OutputExceedsMax` if the decompressed size exceeds
-`max_output` (default: `i32::MAX`).
+Auto-detects the wrapper format (zlib or gzip) and decompresses, failing with
+`ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 
 ### `pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strategy: i32 = Z_DEFAULT_STRATEGY) -> ByteList`
 
@@ -443,15 +446,15 @@ Returns an independent copy of this stream, including buffered input.
 
 Appends `chunk` to the buffered compressed input.
 
-#### `pub fn finish(&mut self) -> Result<ByteList, ZlibError>`
+#### `pub fn finish(&mut self, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses the buffered input and clears the buffer. The stream may
-be reused for further input.
+Decompresses the buffered input into at most `max_output` bytes and
+clears the buffer. The stream may be reused for further input.
 
-#### `pub fn decompress(&self, input: &ByteList) -> Result<ByteList, ZlibError>`
+#### `pub fn decompress(&self, input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError>`
 
-Decompresses `input` in one shot using the stream's `format`. Does not
-touch the internal buffer.
+Decompresses `input` in one shot into at most `max_output` bytes, using
+the stream's `format`. Does not touch the internal buffer.
 
 ## Enums
 

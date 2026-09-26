@@ -334,17 +334,6 @@ pub fn cm_type_to_type_id(
                         .lib_local_type_source(&named.name)
                         .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
                 })
-                // An extern-handle resource keeps its own type in a guest
-                // signature, and its package is one flat module (`web:dom`),
-                // not a module per interface.
-                .or_else(|| {
-                    let source = registry.resolve_cm_source_for(named)?;
-                    if !registry.is_unrestricted_resource(&source, &named.name) {
-                        return None;
-                    }
-                    let (namespace, package) = cm_package_from_source(&source)?;
-                    type_table.find_named_type_by_module_name(&named.name, package, Some(namespace))
-                })
                 // Resources are bare i32 handles at the CM boundary and need no
                 // registered GC type. Anything else without a TypeId would
                 // miscompile (e.g. FieldAccess on an i32), so fail loudly.
@@ -517,8 +506,7 @@ pub(super) fn module_source_for_cm_interface(
 }
 
 /// The module a bundled CM interface FQ maps to, with its owning namespace —
-/// `None` for a `core:` module, which carries none. A module name alone cannot
-/// tell a `wasi:` type from a same-named `web:` one, so the two travel together.
+/// `None` for a `core:` module, which carries none.
 pub(crate) fn cm_interface_module(source_interface: &str) -> Option<(Option<CmNamespace>, String)> {
     if let Some((namespace, rest)) = CmNamespace::split_specifier(source_interface) {
         return Some((Some(namespace), interface_module_name(rest)));

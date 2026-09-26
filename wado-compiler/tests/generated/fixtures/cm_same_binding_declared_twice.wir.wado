@@ -4,7 +4,7 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//wasi/web:a/Dom::f" = fn() -> i32;  // TypeId(1)
+type "functype//wasi/example:a/Dom::f" = fn() -> i32;  // TypeId(1)
 
 type "functype//cm_same_binding_declared_twice.wado/$cm_binding__Dom_f" = fn() -> i32;  // TypeId(2)
 
@@ -13,12 +13,12 @@ type "functype//cm_same_binding_declared_twice.wado/$cm_export__run" = fn();  //
 type "functype//wasi/task-return" = fn(i32);  // TypeId(4)
 
 import fn mem/realloc from "mem/realloc";
-import fn wasi/web:a/Dom::f from "wasi/web:a/Dom::f";
+import fn wasi/example:a/Dom::f from "wasi/example:a/Dom::f";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_same_binding_declared_twice.wado/$cm_binding__Dom_f"() with Dom {
-    return "wasi/web:a/Dom::f"();
+    return "wasi/example:a/Dom::f"();
 }
 
 fn "cm_same_binding_declared_twice.wado/$cm_export__run"() {

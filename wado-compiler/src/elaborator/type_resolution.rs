@@ -520,16 +520,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         }
         let expected = params.iter().filter(|p| !p.is_effect).count();
-        if args.len() <= expected {
-            return false;
-        }
-        let _ = self.emit(TypeError::SurplusTypeArguments {
-            name: name.to_string(),
-            expected,
-            found: args.len(),
-            span,
-        });
-        true
+        self.reject_surplus_turbofish(name, expected, args.len(), span)
     }
 
     /// The type arguments an application of `def` supplies, each slot the site
@@ -717,6 +708,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::UNKNOWN
     }
 
+    /// The instance of the generic newtype `def` over `type_args`. Its base is a
+    /// type the declaration wrote, so it resolves against the arguments.
+    pub(super) fn generic_newtype_instance(
+        &mut self,
+        def: DefId,
+        type_args: Vec<TypeId>,
+    ) -> TypeId {
+        let gn_info = self
+            .lookup_generic_newtype_of_decl(def)
+            .cloned()
+            .expect("`def` declares a generic newtype");
+        let names: Vec<String> = gn_info.type_params.iter().map(|p| p.name.clone()).collect();
+        let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
+            e.resolve_type(&gn_info.base_type_ast)
+        });
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .make_newtype_instance(def, type_args, base_type_id)
+    }
+
     /// How many type arguments the declaration `def` requires, when it requires
     /// any. The three kinds are asked of one declaration, so "is this generic"
     /// and "whose parameters are these" can never be about two of them.
@@ -878,24 +890,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow_mut()
                             .make_generic_instance(def, type_args)
                     }
-                } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
-                    // Generic newtype instantiation: `type MyArray<T> = List<T>`.
-                    // Its base is a type the declaration wrote, so it resolves
-                    // against the arguments rather than at the use site — the
-                    // same rule its defaults follow, so no kind is the odd one
-                    // out.
+                } else if self.lookup_generic_newtype_of_decl(def).is_some() {
                     let type_args = self.type_args_of_application(def, args);
-                    let names: Vec<String> =
-                        gn_info.type_params.iter().map(|p| p.name.clone()).collect();
-                    let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
-                        e.resolve_type(&gn_info.base_type_ast)
-                    });
                     self.check_type_decl_arg_bounds(def, &type_args, span);
-                    self.tysys.type_table.borrow_mut().make_newtype_instance(
-                        def,
-                        type_args,
-                        base_type_id,
-                    )
+                    self.generic_newtype_instance(def, type_args)
                 } else {
                     self.resolve_generic_type_out_of_scope(site, name, args, span)
                 }

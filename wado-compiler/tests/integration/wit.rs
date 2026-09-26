@@ -213,9 +213,9 @@ fn full_scope_reconstructs_resource_methods_and_reparses() {
 /// interface the host calls it back through, which a full scope declares.
 #[test]
 fn a_callback_exports_the_interface_the_host_calls_it_back_through() {
-    let source = "#[cm(\"web:demo/target\", linearity = \"unrestricted\", classes = \"0..=0\")]\n\
+    let source = "#[cm(\"example:demo/target\", linearity = \"unrestricted\", classes = \"0..=0\")]\n\
          resource Target {\n\
-             #[cm(\"web:demo/target#listen\")]\n\
+             #[cm(\"example:demo/target#listen\")]\n\
              #[cm_params(\"self\", \"listener\")]\n\
              fn listen(&self, listener: fn mut(Target));\n\
          }\n\
@@ -271,7 +271,7 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
         ),
         WitScope::Full,
     );
-    assert!(text.contains("package web:dom {"), "\n{text}");
+    assert!(text.contains("package wado-lang:web {"), "\n{text}");
     assert!(
         text.contains("append-child: func(self: f64, node: f64) -> f64;"),
         "a handle is the same f64 in every position\n{text}"
@@ -288,7 +288,7 @@ fn full_scope_reconstructs_an_interface_per_unrestricted_wado_type() {
     let mut resolve = wit_parser::Resolve::new();
     resolve
         .push_str("dom.wit", &text)
-        .expect("web:dom WIT failed to re-parse");
+        .expect("wado-lang:web WIT failed to re-parse");
 }
 
 /// A handle in an exported signature is resolved from the type table, not from

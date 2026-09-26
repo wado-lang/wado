@@ -529,30 +529,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record use→def edges for a case path: the `Type` prefix by name, the
-    /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
-    pub(super) fn record_qualified_case(
-        &mut self,
-        ident: &IdentExpr,
-        type_name: &str,
-        case_ast_id: AstId,
-    ) {
+    /// Record a case path's `owner` for reify, and its use→def edges; a namespace
+    /// path's leading segments are the import's.
+    pub(super) fn record_case_path(&mut self, ident: &IdentExpr, owner: DefId, case_ast_id: AstId) {
+        self.record_case_owner(ident.id, owner);
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
-            [prefix, case, ..] => {
-                self.record_item_reference_by_name(prefix.id, type_name);
+            [prefix, case] => {
+                self.record_type_name_reference(prefix.id, &prefix.name);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
-            [_] => unreachable!("a qualified path has two or more segments"),
-        }
-    }
-
-    /// Record the suffix (`Case`) segment of a `ns::Type::Case`
-    /// namespace-qualified case path. The leading `ns` and `Type`
-    /// segments are left to existing namespace-import edges.
-    pub(super) fn record_namespaced_case(&mut self, ident: &IdentExpr, case_ast_id: AstId) {
-        if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_def(seg.id, case_ast_id);
+            [.., case] => self.record_reference_to_def(case.id, case_ast_id),
         }
     }
 
@@ -570,16 +557,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
-    /// otherwise.
+    /// otherwise. `Self` lands on the declaration of the type it stands for.
     pub(in crate::elaborator) fn record_type_name_reference(&mut self, use_id: AstId, name: &str) {
-        if let Some(decl_id) = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(name)
-            .and_then(|b| b.decl)
-        {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        if let Some(decl_id) = trait_ctx.type_params.get(name).and_then(|b| b.decl) {
             self.record_reference(use_id, decl_id);
+        } else if name == "Self" {
+            if let Some(def) = trait_ctx.self_type.and_then(|ty| self.tysys.type_def(ty)) {
+                let node = self.tysys.resolutions.defs().ast_id(def);
+                self.insert_reference(use_id, node);
+            }
         } else {
             self.record_item_reference_by_name(use_id, name);
         }
@@ -1378,10 +1365,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.assign_places.insert(key, place);
     }
 
-    /// Record that the bare case at `site` is a case of `owner`, the expected
-    /// type there.
-    pub(super) fn record_bare_case(&mut self, site: AstId, owner: DefId) {
-        self.sem.types.bare_cases.insert(site, owner);
+    /// Record that the case construction at `site` is a case of `owner`.
+    pub(super) fn record_case_owner(&mut self, site: AstId, owner: DefId) {
+        self.sem.types.case_owners.insert(site, owner);
     }
 
     /// Look up the recorded assignment-target place classification for the

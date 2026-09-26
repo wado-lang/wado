@@ -15,7 +15,12 @@
 //   GET  /user-agent    — returns User-Agent as JSON
 //   GET  /status/:code  — returns the given HTTP status code
 //   GET  /base64/:val   — decodes base64-encoded value
+//   GET  /gzip          — returns request info as gzip-coded JSON
 //   *    /anything      — returns request info for any method (incl. custom)
+//
+// Any other text reply goes out gzip-coded to a client whose Accept-Encoding
+// admits it. A request body in a gzip or deflate Content-Encoding is decoded;
+// one in any other coding is 415, and one decoding past MAX_BODY_SIZE is 413.
 
 use {
     Request,
@@ -38,6 +43,8 @@ use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Router, PathParams } from "core:router";
 use json from "core:json";
+use { ZlibError, gzip_compress, inflate_gzip, inflate_zlib, zlib_compress } from "core:zlib";
+use { field_list, request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
 
 struct RequestInfo {
     method: String,
@@ -65,6 +72,14 @@ struct IpResponse {
 }
 impl Serialize for IpResponse;
 
+struct GzipResponse {
+    gzipped: bool,
+    method: String,
+    headers: TreeMap<String, String>,
+    origin: String,
+}
+impl Serialize for GzipResponse;
+
 #[wire(name_policy = "kebab-case")]
 struct UserAgentResponse {
     user_agent: Option<String>,
@@ -85,7 +100,26 @@ struct RouteResponse {
     status: StatusCode,
     content_type: String,
     body: ByteList,
-    allow: Option<String>,
+    headers: List<[String, String]> = [],
+    gzip: bool = false,
+}
+
+/// The most bytes a request body may decode to, so a small bomb cannot exhaust memory.
+global MAX_BODY_SIZE: i32 = 1 << 20;
+
+variant BodyError {
+    UnsupportedCoding(String),
+    TooLarge,
+    Corrupt(ZlibError),
+}
+
+impl From<ZlibError> for BodyError {
+    fn from(e: ZlibError) -> BodyError {
+        return match e {
+            OutputExceedsMax => BodyError::TooLarge,
+            _ => BodyError::Corrupt(e),
+        };
+    }
 }
 
 type Handler = fn(Request, PathParams) -> RouteResponse;
@@ -150,15 +184,51 @@ fn parse_url(request: &Request) -> Url {
     return Url::from_parts(scheme, authority, request.get_path_with_query(), null);
 }
 
-fn read_body_from_request(request: Request) -> String {
+/// The request body, decoded from its `Content-Encoding`, or the reply refusing it.
+fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
+    let coding = field_list(&request.get_headers(), "content-encoding");
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let buf = body_stream.read_to_end();
     body_stream.drop();
-    return match String::from_utf8(buf) {
-        Ok(s) => s,
-        Err(_) => "",
+    return match decode_content(&coding, buf as ByteList) {
+        Ok(decoded) => Result::Ok(String::from_utf8(decoded).unwrap_or("")),
+        Err(UnsupportedCoding(c)) => Result::Err(RouteResponse {
+            ..json_response(415, json_error(`Unsupported Content-Encoding: ${c}`)),
+            headers: [
+                ["accept-encoding", "gzip, deflate"],
+            ],
+        }),
+        Err(TooLarge) => Result::Err(json_response(413, json_error(`Request body decodes past ${MAX_BODY_SIZE} bytes`))),
+        Err(Corrupt(e)) => Result::Err(json_response(400, json_error(`Malformed request body: ${e}`))),
     };
+}
+
+/// `body` with each coding a `Content-Encoding` value lists undone, last applied first,
+/// no decoded layer of it longer than `max_size`.
+fn decode_content(
+    content_encoding: &String,
+    body: ByteList,
+    max_size: i32 = MAX_BODY_SIZE,
+) -> Result<ByteList, BodyError> {
+    let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(
+        |c| !c.is_empty(),
+    ).collect();
+    codings.reverse();
+    if codings.is_empty() && body.len() > max_size {
+        return Result::Err(BodyError::TooLarge);
+    }
+    let mut decoded = body;
+    for let coding of codings {
+        decoded = match coding {
+            "gzip" | "x-gzip" => inflate_gzip(&decoded, max_size)?,
+            "deflate" => inflate_zlib(&decoded, max_size)?,
+            _ => {
+                return Result::Err(BodyError::UnsupportedCoding(coding));
+            },
+        };
+    }
+    return Result::Ok(decoded);
 }
 
 fn parse_status_code(s: String) -> Option<u16> {
@@ -204,7 +274,6 @@ fn json_response(status: StatusCode, body: ByteList) -> RouteResponse {
         status,
         content_type: "application/json",
         body,
-        allow: null,
     };
 }
 
@@ -212,7 +281,15 @@ fn echo(request: Request, read_body: bool) -> RouteResponse {
     let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
-    let body = if read_body { Option::Some(read_body_from_request(request)) } else { null };
+    let mut body: Option<String> = null;
+    if read_body {
+        match read_body_from_request(request) {
+            Ok(text) => body = Option::Some(text),
+            Err(refusal) => {
+                return refusal;
+            },
+        }
+    }
     return json_response(200, build_request_json(method, url, &h, body));
 }
 
@@ -221,7 +298,6 @@ fn respond_home() -> RouteResponse {
         status: 200,
         content_type: "text/html; charset=utf-8",
         body: HOMEPAGE,
-        allow: null,
     };
 }
 
@@ -255,7 +331,6 @@ fn respond_status(code_str: String) -> RouteResponse {
             status: code as StatusCode,
             content_type: "text/plain",
             body: [],
-            allow: null,
         };
     }
     return json_response(400, json_error("Invalid status code"));
@@ -267,18 +342,25 @@ fn respond_base64(encoded: String) -> RouteResponse {
             status: 200,
             content_type: "text/plain",
             body: decoded_bytes,
-            allow: null,
         };
     }
     return json_response(400, json_error("Invalid base64"));
 }
 
-fn respond_anything(request: Request) -> RouteResponse {
-    let url = parse_url(&request);
-    let method = request.get_method();
+fn respond_gzip(request: Request) -> RouteResponse {
     let h = request.get_headers();
-    let body = if method matches { Post | Put | Patch } { Option::Some(read_body_from_request(request)) } else { null };
-    return json_response(200, build_request_json(method, url, &h, body));
+    let body = json_line(&GzipResponse {
+        gzipped: true,
+        method: method_name(request.get_method()),
+        headers: headers_to_map(&h),
+        origin: get_header(&h, "x-forwarded-for").unwrap_or(""),
+    });
+    return RouteResponse { ..json_response(200, body), gzip: true };
+}
+
+fn respond_anything(request: Request) -> RouteResponse {
+    let method = request.get_method();
+    return echo(request, method matches { Post | Put | Patch });
 }
 
 fn format_allow(methods: &List<Method>) -> String {
@@ -299,6 +381,7 @@ fn build_router() -> Router<Handler> {
     r.get("/user-agent", |req, _p| respond_user_agent(req));
     r.get("/status/:code", |_req, p| respond_status(p["code"]));
     r.get("/base64/:val", |_req, p| respond_base64(p["val"]));
+    r.get("/gzip", |req, _p| respond_gzip(req));
     r.any("/anything", |req, _p| respond_anything(req));
     r.any("/anything/*rest", |req, _p| respond_anything(req));
     return r;
@@ -313,6 +396,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let method = request.get_method();
     let h = request.get_headers();
     let user_agent = get_header(&h, "user-agent");
+    let accepts_gzip = request_accepts_gzip(&h);
 
     let resp = if let Some(m) = ROUTER.match_request(&request) {
         (m.handler)(request, m.params);
@@ -323,14 +407,15 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
                 status: 405,
                 content_type: "application/json",
                 body: json_error("Method Not Allowed"),
-                allow: Option::Some(format_allow(&allowed)),
+                headers: [
+                    ["allow", format_allow(&allowed)],
+                ],
             };
         } else {
             RouteResponse {
                 status: 404,
                 content_type: "application/json",
                 body: json_error("Not Found"),
-                allow: null,
             };
         }
     };
@@ -342,15 +427,24 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     resp_headers.append("server", #file.bytes().collect() as FieldValue);
     resp_headers.append("content-type", resp.content_type.bytes().collect() as FieldValue);
     resp_headers.append("trailer", "server-timing".bytes().collect() as FieldValue);
-    if let Some(a) = resp.allow {
-        resp_headers.append("allow", a.bytes().collect() as FieldValue);
+    for let [name, value] of resp.headers {
+        resp_headers.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    let codable = worth_gzip(&resp.content_type, resp.body.len() as u64);
+    let gzip = resp.gzip || codable && accepts_gzip;
+    if codable {
+        resp_headers.append("vary", "accept-encoding".bytes().collect() as FieldValue);
+    }
+    if gzip {
+        resp_headers.append("content-encoding", "gzip".bytes().collect() as FieldValue);
     }
     let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(resp.status);
 
     task return Result::Ok(response);
 
-    body_tx.write_raw_all(resp.body.as_slice());
+    let body = if gzip { gzip_compress(&resp.body) } else { resp.body };
+    body_tx.write_raw_all(body.as_slice());
     body_tx.drop();
 
     // Server-Timing trailer carries the handler's wall-clock time so curious
@@ -372,4 +466,34 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
         status: resp.status,
         duration_us: elapsed as u64 / 1000,
     }).unwrap());
+}
+
+test "a request body is decoded from each coding, last applied first" {
+    let data: ByteList = b"wado wado wado wado";
+    assert decode_content(&"gzip", gzip_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"X-Gzip", gzip_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"deflate", zlib_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data))) matches { Ok(d) && d == data };
+    assert decode_content(&"", data) matches { Ok(d) && d == data };
+}
+
+test "a request body in an unknown or broken coding is refused" {
+    let data: ByteList = b"wado wado wado wado";
+    assert decode_content(&"br", data) matches { Err(UnsupportedCoding(c)) && c == "br" };
+    assert decode_content(&"gzip", data) matches { Err(Corrupt(_)) };
+    assert decode_content(&"gzip", zlib_compress(&data)) matches { Err(Corrupt(_)) };
+}
+
+test "a request body decoding past the limit is refused, however it is coded" {
+    let data: ByteList = "wado ".repeat(20).bytes().collect();
+    assert decode_content(&"gzip", gzip_compress(&data), 100) matches { Ok(d) && d == data };
+    assert decode_content(&"gzip", gzip_compress(&data), 99) matches { Err(TooLarge) };
+    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data)), 99) matches { Err(TooLarge) };
+    assert decode_content(&"", data, 99) matches { Err(TooLarge) };
+}
+
+test "the limit is on the decoded body, not on its coded form" {
+    let data: ByteList = b"wado";
+    assert gzip_compress(&data).len() > data.len();
+    assert decode_content(&"gzip", gzip_compress(&data), 4) matches { Ok(d) && d == data };
 }

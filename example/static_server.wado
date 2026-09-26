@@ -9,13 +9,16 @@
 //
 // A directory named without its trailing `/` redirects to it. A path that
 // names nothing under the directory, or climbs out of it, is 404. Other
-// methods are 405. For a full-featured service, see http_bin.wado.
+// methods are 405. A text file goes out gzip-coded to a client whose
+// `Accept-Encoding` admits it. For a full-featured service, see http_bin.wado.
 
 use { Request, Response, ErrorCode, FieldName, FieldValue, Headers, Trailers, StatusCode, Method } from "wasi:http";
 use { log_stderr } from "core:cli";
 use { Preopens } from "core:fs";
 use fs from "core:fs";
 use { percent_decode, percent_encode } from "core:url";
+use { gzip_compress } from "core:zlib";
+use { request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
 
 struct Reply {
     status: StatusCode,
@@ -26,9 +29,10 @@ struct Reply {
 export async fn handle(request: Request) -> Result<Response, ErrorCode> with Preopens {
     let method = request.get_method();
     let target = request.get_path_with_query().unwrap_or("/");
+    let accepts_gzip = request_accepts_gzip(&request.get_headers());
     let reply = match method {
-        Get => serve(target, true),
-        Head => serve(target, false),
+        Get => serve(target, true, accepts_gzip),
+        Head => serve(target, false, accepts_gzip),
         _ => {
             let mut reply = text(405, "method not allowed");
             reply.headers.push(["allow", "GET, HEAD"]);
@@ -53,7 +57,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Pre
 }
 
 /// The reply to a GET of `target`, or to a HEAD where `with_body` is false.
-fn serve(target: String, with_body: bool) -> Reply with Preopens {
+fn serve(target: String, with_body: bool, accepts_gzip: bool) -> Reply with Preopens {
     let Some(path) = file_path(target) else {
         return text(404, "not found");
     };
@@ -79,16 +83,25 @@ fn serve(target: String, with_body: bool) -> Reply with Preopens {
             return text(404, "not found");
         },
     }
+    let type = content_type(&path);
+    let codable = worth_gzip(&type, meta.size);
+    let gzip = codable && accepts_gzip;
     let mut reply = Reply {
         status: 200,
         headers: [
-            ["content-type", content_type(&path)],
+            ["content-type", type],
         ],
         body: [],
     };
+    if codable {
+        reply.headers.push(["vary", "accept-encoding"]);
+    }
+    if gzip {
+        reply.headers.push(["content-encoding", "gzip"]);
+    }
     if with_body {
         match fs::read(&path) {
-            Ok(body) => reply.body = body,
+            Ok(body) => reply.body = if gzip { gzip_compress(&body) } else { body },
             Err(e) => {
                 return failure(e);
             },

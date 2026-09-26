@@ -354,4 +354,4 @@ external WIT support; they are listed so the inventory stays honest.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)
 - [Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md)
 - [Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)
-- [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
+- [The Web Interface for Wado](./wep-2026-04-01-web.md)

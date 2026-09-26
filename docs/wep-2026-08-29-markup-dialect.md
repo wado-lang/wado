@@ -9,7 +9,7 @@ Wado has to emit HTML on two fronts and has a surface for neither.
   by [`core:router`](./wep-2026-05-06-core-router.md) returns HTML. Marl already
   exports `escape_text` / `escape_attr` for HTML-templating consumers; the
   consumer does not exist.
-- Client-side. [`web:dom`](./wep-2026-04-01-tide.md) is eight resources
+- Client-side. [`wado-lang:web`](./wep-2026-04-01-web.md) is eight resources
   generated from a WebIDL slice, with no host to run against, and
   [Reactive Signals](./wep-2026-04-04-reactive-signals.md) is designed around a
   UI surface it does not have.
@@ -181,7 +181,7 @@ render function is its whole interface.
 - [Reactive Signals](./wep-2026-04-04-reactive-signals.md) — reserves `<` for JSX and assumes it in its codegen
 - [Overload Resolution](./wep-2026-07-31-overload-resolution.md) — spends the reservation, ruling out `<Type as Trait>::method`
 - [Gale — Grammar Adaptive LL Engine](./wep-2026-03-02-gale.md) — the parser generator a dialect grammar feeds
-- [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md) — `web:dom`, the client-side target
+- [The Web Interface for Wado](./wep-2026-04-01-web.md) — `wado-lang:web`, the client-side target
 - [Marl — Markdown Renderer and Formatter](./wep-2026-07-05-marl.md) — the server-side consumer, and its escaping helpers
 - [HTTP Path Router (`core:router`)](./wep-2026-05-06-core-router.md) — the other server-side consumer
 - [Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md) — the interpolation-based surface; an `html` tag with contextual escaping is its worked example

@@ -829,10 +829,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
-    /// A case of a one-case type cannot.
+    /// A case cannot when no other case of its type holds a value.
     fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
         match pattern {
-            Pattern::Variant { .. } if self.case_count(scrutinee) == 1 => None,
+            Pattern::Variant { variant_name, .. }
+                if !self.another_case_holds_a_value(scrutinee, variant_name) =>
+            {
+                None
+            }
             Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
                 Some(format!("`{name}` may not match"))
             }
@@ -840,20 +844,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn case_count(&self, scrutinee: TypeId) -> usize {
+    /// Whether a value of `scrutinee` can be a case other than `name`. A type
+    /// with no cases to ask about answers `true`.
+    fn another_case_holds_a_value(&self, scrutinee: TypeId, name: &str) -> bool {
         let head = self
             .tysys
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee);
-        match (
-            self.tysys.variant_of_type(head),
-            self.tysys.enum_of_type(head),
-        ) {
-            (Some(variant), _) => variant.cases.len(),
-            (None, Some(enumeration)) => enumeration.cases.len(),
-            (None, None) => 0,
+        if let Some(enumeration) = self.tysys.enum_of_type(head) {
+            return enumeration.cases.len() > 1;
         }
+        let (Some(variant), Some(payloads)) = (
+            self.tysys.variant_of_type(head),
+            self.case_payload_types(head),
+        ) else {
+            return true;
+        };
+        let name = self.strip_ns_prefix(name).unwrap_or(name);
+        variant
+            .cases
+            .iter()
+            .zip(payloads)
+            .any(|(case, payload)| case.name != name && !self.is_uninhabited(payload))
     }
 
     fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
@@ -1894,6 +1907,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     }
                 };
+                if self.is_uninhabited(payload_type) {
+                    let [scrutinee_name, payload_name] = [scrutinee_type, payload_type]
+                        .map(|t| self.tysys.type_table.borrow().type_name(t));
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: format!(
+                            "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `{payload_name}` has no value"
+                        ),
+                        span: *span,
+                    });
+                }
 
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.

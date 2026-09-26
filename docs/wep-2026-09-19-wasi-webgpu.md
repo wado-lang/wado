@@ -71,7 +71,7 @@ answers `Future<GpuDeviceLostInfo>` and `on_uncaptured_error()` a
 
 ### The handles are affine CM resources
 
-`web:dom` collapses its handles into one unrestricted universal handle
+`wado-lang:web` collapses its handles into one unrestricted universal handle
 ([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Nothing of
 the sort applies here: every `wasi:webgpu` resource is a CM `resource`, so
 [Ownership Analysis](./wep-2026-05-21-resource-ownership.md) governs it and the
@@ -174,5 +174,5 @@ binding is covered end to end and not only to the point of compiling.
   needs `as u64` to meet a `u64`. 13 typedefs carry this, most of them widths.
 - An `option<descriptor>` parameter takes an explicit `Option::Some(…)`, since
   the compiler rejects a default argument on a `#[cm]` operation
-  ([WebIDL Binding Generator](./wep-2026-04-01-tide.md) records the same gap).
+  ([The Web Interface for Wado](./wep-2026-04-01-web.md) records the same gap).
   WebGPU makes most descriptors optional, so this is the common call shape.

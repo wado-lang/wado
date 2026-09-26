@@ -23,7 +23,7 @@ use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_type_bindings, turbofish_leaves_slot,
 };
-use super::coercion::is_numeric_literal_arg;
+use super::coercion::answers_last;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
@@ -1441,7 +1441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
-            if is_numeric_literal_arg(raw_args.get(i)) {
+            if answers_last(raw_args.get(i)) {
                 infer.add_deferred(param_type, *arg);
             } else {
                 infer.add(param_type, *arg);

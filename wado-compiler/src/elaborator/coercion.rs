@@ -123,10 +123,10 @@ pub(super) fn is_numeric_literal_expr(expr: &Expr) -> bool {
     classify_numeric_literal(expr).is_some()
 }
 
-/// Whether a call argument is a numeric literal, so type-arg inference defers
-/// it to a second phase and lets the other arguments bind the parameter first.
-pub(super) fn is_numeric_literal_arg(arg: Option<&Expr>) -> bool {
-    arg.is_some_and(is_numeric_literal_expr)
+/// Whether a call argument takes its type from its context: a numeric literal or
+/// `null`. Inference defers it, so the other arguments bind the parameter first.
+pub(super) fn answers_last(arg: Option<&Expr>) -> bool {
+    arg.is_some_and(|arg| is_numeric_literal_expr(arg) || TypeSystem::is_null_literal(arg))
 }
 
 /// Whether `expr` is a byte literal. Among numeric literals it is the one that
@@ -377,10 +377,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// Re-coerce numeric literal arguments to inferred parameter types: a literal
-    /// resolved before inference took the default `i32` / `f64`, its expected
-    /// type still being an unsubstituted `TypeParam`, so once `T` is concrete
-    /// every literal at a now-numeric parameter is coerced again.
+    /// Re-coerce the arguments that answered last (see [`answers_last`]) to the
+    /// inferred parameter types, which they were resolved before.
     /// `expected_param_types` must already carry the inferred type arguments.
     pub(super) fn recoerce_literal_args(
         &mut self,
@@ -395,24 +393,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&expected) = expected_param_types.get(i) else {
                 continue;
             };
-            if !is_numeric_literal_arg(Some(raw)) {
+            if *arg == expected || !answers_last(Some(raw)) {
                 continue;
             }
-            if *arg == expected {
-                continue;
-            }
-            if !is_numeric_literal_target(&self.tysys.type_table.borrow(), expected) {
-                continue;
-            }
-            // try_coerce_numeric_literal records `expression_types` for
-            // every visited AST id (outer + inner `-NUM` literal) with
-            // the new `expected` type, so the post-inference re-coercion
-            // overwrites the stale pre-inference type that the original
-            // resolve_expr wrapper wrote.
-            if let Some(coerced) = self.try_coerce_numeric_literal(raw, expected) {
+            // Each records `expression_types` for the literal, overwriting the
+            // pre-inference type the original `resolve_expr` wrote.
+            let coerced = if is_numeric_literal_expr(raw) {
+                if !is_numeric_literal_target(&self.tysys.type_table.borrow(), expected) {
+                    continue;
+                }
+                self.try_coerce_numeric_literal(raw, expected)
+            } else {
+                self.try_coerce_null(raw, expected)
+            };
+            if let Some(coerced) = coerced {
                 *arg = coerced;
             }
         }
+    }
+
+    /// `null` at an `Option<T>` is that `Option<T>`.
+    fn try_coerce_null(&mut self, expr: &Expr, target_type: TypeId) -> Option<TypeId> {
+        let null_at_option = TypeSystem::is_null_literal(expr)
+            && self
+                .tysys
+                .type_table
+                .borrow()
+                .as_option(target_type)
+                .is_some();
+        if !null_at_option {
+            return None;
+        }
+        self.record_coercion(expr.id(), CoercionKind::NullToOption, target_type);
+        self.record_expression_type(expr.id(), target_type);
+        Some(target_type)
     }
 
     /// Try to coerce an expression to the expected type — numeric literals,
@@ -433,18 +447,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Some(coerced);
         }
 
-        // Null literal → Option<T>
-        if let Expr::Literal(lit) = expr
-            && matches!(&lit.value, Literal::Null)
-            && self
-                .tysys
-                .type_table
-                .borrow()
-                .as_option(target_type)
-                .is_some()
-        {
-            self.record_coercion(expr.id(), CoercionKind::NullToOption, target_type);
-            return Some(target_type);
+        if let Some(coerced) = self.try_coerce_null(expr, target_type) {
+            return Some(coerced);
         }
 
         // String/template literal → String newtype
@@ -843,7 +847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // `null`'s own type is what a target converts from to accept it, and
         // `Option<!>` reads badly in the message that says none was found.
-        if self.tysys.is_null_literal(element) {
+        if TypeSystem::is_null_literal(element) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
                     "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
