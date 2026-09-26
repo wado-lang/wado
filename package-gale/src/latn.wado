@@ -28,13 +28,7 @@ use {
     find_lexer_rule,
 } from "./ir.wado";
 use { Atn, AtnState, AtnTransition } from "./atn.wado";
-use {
-    resolve_ci,
-    fold_range_ci,
-    lexer_alts_have_non_greedy,
-    lexer_alts_scan,
-    lexer_alts_can_collide,
-} from "./lexer_gen.wado";
+use { resolve_ci, fold_range_ci, lexer_alts_have_non_greedy, lexer_alts_contested } from "./lexer_gen.wado";
 use {
     ATN_BASIC,
     ATN_RULE_START,
@@ -226,9 +220,7 @@ fn scan_undecidable_arms_elem(
         Repeat(rep) => {
             if !rep.non_greedy && rep.kind matches { Star | Plus } {
                 if let Group(inner) = &rep.element {
-                    if inner.len() >= 2
-                        && lexer_alts_scan(inner, all_rules) matches { Longest }
-                        && lexer_alts_can_collide(inner, all_rules, ci) {
+                    if lexer_alts_contested(inner, all_rules, ci) {
                         return true;
                     }
                 }

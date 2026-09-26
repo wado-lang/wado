@@ -270,10 +270,8 @@ B : 'b' ;");
 }
 
 test "lexer dump separates called, inlined and recursive fragments" {
-    // `NEST` references itself, so it keeps a matcher. `AB` in tail position
-    // gets a `frag_tail_` matcher, and before a suffix becomes a group scored
-    // against it. Both uses of `CD` share one matcher, and `P` carries a
-    // predicate, so it is inlined.
+    // `AB` before a suffix becomes a group scored against it, while both uses of
+    // `CD` share one matcher. `P` carries a predicate, so it is inlined.
     let report = lexer_dump("grammar T;
 r : N ;
 N : NEST ;
@@ -319,9 +317,8 @@ CMT : '/*' (CMT | .)+? '*/' ;");
 }
 
 test "lexer dump gives no matcher to a rule only an ATN-class rule calls" {
-    // `RAW` and `CMT` are routed to `latn_match`, which simulates what they
-    // reference itself, so neither `CONTENT` nor `ANY_CMT` gets a `try_`
-    // matcher nothing would call.
+    // `latn_match` simulates what `RAW` and `CMT` reference itself, so neither
+    // `CONTENT` nor `ANY_CMT` gets a `try_` matcher nothing would call.
     let report = lexer_dump("grammar T;
 r : RAW | CMT ;
 RAW : 'r' CONTENT ;

@@ -81,9 +81,8 @@ test "every form CSS allows keeps its classes" {
 }
 
 test "a half-written declaration keeps the classes its partial parse placed" {
-    // Input the language rejects. The loop over rulesets commits on its first
-    // token, as ANTLR4's does, so `b` is parsed under `declaration` before the
-    // missing value is reported, and the file stays classified while typed.
+    // The loop commits on its first token, as ANTLR4's does, so `b` is parsed
+    // under `declaration` before the missing value is reported.
     let half_written = highlight_page("<style>a { b: }</style>");
     assert half_written.contains(`<span class="property">b</span>`), half_written;
     assert half_written.contains(`<span class="punctuation delimiter">:</span>`), half_written;

@@ -2534,7 +2534,13 @@ fn gen_scan_op_elements<S: AsStrSlice>(
                 };
                 let cont_done = `cont_done_${w.next_id()}`;
                 w.line(`let mut ${cont_done} = false;`);
-                gen_scan_optional_probe(w, re, ctx, &follow_yields_call_if(re.gate_caller_follow, "tokens", "pos"), &cont_done);
+                gen_scan_optional_probe(
+                    w,
+                    re,
+                    ctx,
+                    &follow_yields_call_if(re.gate_caller_follow, "tokens", "pos"),
+                    &cont_done,
+                );
                 w.begin(`if !${cont_done}`);
                 gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &k);
                 w.end();
@@ -2562,7 +2568,9 @@ fn probe_scans_rest(se: &ScanElement, scan_elems: &List<ScanElement>, from: i32,
 
 /// Whether an optional's scan runs as a probe of its body and continuation.
 fn scan_takes_optional_probe(re: &ScanRepeatElement, ctx: &mut GenContext) -> bool {
-    return re.kind matches { Optional } && !admits_is_untestable(&re.inner_admits) && scan_optional_probe_decides(re, ctx);
+    return re.kind matches { Optional }
+        && !admits_is_untestable(&re.inner_admits)
+        && scan_optional_probe_decides(re, ctx);
 }
 
 /// Step over tokens the scan already proved, as one move.
@@ -7416,17 +7424,8 @@ fn emit_argmax_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w.end();
 }
 
-/// Longest-match scan tournament over `sorted_group`: each alt scans from
-/// `p.pos`, the greatest end wins, and ties resolve to the LOWEST grammar
-/// alt index (ANTLR4's ambiguity resolution). Iterating in grammar order
-/// (`sorted_group.sorted()`) with `emit_argmax_commit`'s strict `>` gives
-/// that tie-break.
-///
-/// Returns the winner variable holding the winning ALT INDEX (`-1` when no
-/// scan matched — callers route that to their last branch).
-///
-/// `scan_alts` drives the scan via the op-driven walker against the
-/// lowered `ScanBody`.
+/// Longest-match scan tournament over `sorted_group`, ties to the lowest alt
+/// index as ANTLR4 resolves them. Returns the variable holding the winner, or -1.
 fn gen_scan_winner_tournament(
     w: &mut CodeWriter,
     sorted_group: &List<i32>,

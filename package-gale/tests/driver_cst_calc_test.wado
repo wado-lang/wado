@@ -33,10 +33,8 @@ test "tree: parenthesised subexpression" {
 }
 
 test "fail-soft: a syntax error yields a tree plus one diagnostic" {
-    // `1 +` — the `('+' term)*` loop enters on `+`, as ANTLR4's LL(1) loop
-    // does, and the missing right operand is reported at `EOF` (the jar:
-    // "line 1:3 mismatched input '<EOF>' expecting {'(', INT}"). The parser
-    // records one diagnostic and folds the tree closed rather than trapping.
+    // The loop enters on `+` and reports the missing operand at EOF, as the jar
+    // does: "line 1:3 mismatched input '<EOF>' expecting {'(', INT}".
     let result = calc::parse("1 +");
     assert result.has_errors();
     assert result.diagnostics.len() == 1;

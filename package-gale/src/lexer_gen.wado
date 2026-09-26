@@ -684,7 +684,17 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     let plans = lexer_matcher_plans(lexer_rules, routes, grammar_opts, atn_class);
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         if routes[i].has_match_fn() {
-            gen_lexer_match_fn(w, &lexer_rules[i], &plans.rules[i], lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
+            gen_lexer_match_fn(
+                w,
+                &lexer_rules[i],
+                &plans.rules[i],
+                lexer_rules,
+                grammar_opts,
+                atn_class,
+                ea,
+                hm,
+                sc_name,
+            );
         }
     }
     for let frag of &plans.fragments {
@@ -752,15 +762,8 @@ fn end_lexer_matcher(
     w.blank();
 }
 
-/// Which matcher covers a lexer rule's text.
-///
-/// Dispatch needs a `try_` matcher unless another one already covers the text — a
-/// keyword rides its carrier's reclassification, a fixed literal the shared
-/// literal matcher — and a virtual token has no text at all. A rule an emitted
-/// matcher references is called by name and needs one whatever dispatch
-/// decided; a non-recursive fragment gets a `frag_` matcher per use context.
-///
-/// `has_match_fn` is this reduced to "does the rule get its own".
+/// Which matcher covers a lexer rule's text. `has_match_fn` reduces it to
+/// whether the rule gets a `try_` matcher of its own.
 pub variant LexerRuleRoute {
     /// Own `try_` matcher, reached from the first-char dispatch.
     Matcher,
@@ -1171,7 +1174,9 @@ fn spliced_elements(elem: &LexerElement, rules: &List<LexerRule>) -> Option<List
     if body.len() == 1 && body[0].actions.is_empty() && seq_ends_contested(&body[0], rules) {
         return Option::Some(body[0].elements);
     }
-    if elem matches { RuleRef(_) } && alts_contested(&body, rules) {
+    // Read folded: a splice rewrites to an equal sequence, so reading wide only
+    // splices more.
+    if elem matches { RuleRef(_) } && lexer_alts_contested(&body, rules, /*ci=*/ true) {
         return Option::Some([LexerElement::Group(body)]);
     }
     return null;
@@ -1182,16 +1187,17 @@ fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
         return false;
     }
     let last = &seq.elements[seq.elements.len() - 1];
-    if let Group(arms) = last && alts_contested(arms, rules) {
+    if let Group(arms) = last && lexer_alts_contested(arms, rules, /*ci=*/ true) {
         return true;
     }
     return spliced_elements(last, rules) matches { Some(_) };
 }
 
-fn alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>) -> bool {
-    // Folded as the widest case folding would, since a splice is only ever a
-    // rewrite to an equal sequence.
-    return arms.len() >= 2 && lexer_alts_scan(arms, rules) matches { Longest } && lexer_alts_can_collide(arms, rules, true);
+/// Whether an alternation takes the longest arm and two arms can match the same text.
+pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>, ci: bool) -> bool {
+    return arms.len() >= 2
+        && lexer_alts_scan(arms, rules) matches { Longest }
+        && lexer_alts_can_collide(arms, rules, ci);
 }
 
 /// Whether a fragment references itself (directly or through another
@@ -2625,9 +2631,8 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
             inner: plan_elem(&rep.element, all_rules, ci, false),
         }),
         Not(n) => LexerElemPlan::Not(LexerNestedPlan { inner: plan_elem(&n.element, all_rules, ci, false) }),
-        // A non-recursive fragment is planned in this site's case folding and
-        // tail position; a recursive one keeps its own matcher and is reached by
-        // call, as `EOF` and a non-fragment rule are.
+        // A recursive fragment keeps its own matcher and is reached by call, as
+        // `EOF` and a non-fragment rule are.
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => if fragment_is_recursive(f, all_rules) {
                 LexerElemPlan::Leaf;
