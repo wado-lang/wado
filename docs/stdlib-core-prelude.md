@@ -24,6 +24,11 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ## Functions
 
+### `pub fn ref_eq<T>(a: &T, b: &T) -> bool`
+
+Whether `a` and `b` refer to the same value, not merely equal ones. `==`
+on references compares the values they refer to.
+
 ### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 
 The tag an untagged template means: every hole rendered through its

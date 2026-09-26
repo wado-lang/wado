@@ -1689,19 +1689,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `&mut X` coerces to `&X`, so a block for `&X` answers where none
         // for `&mut X` does. A `&` right operand never coerces to `&mut`, so
         // there the `&X` block goes first: `&mut a == &b` compares as `&a == &b`.
-        let kinds = match kind {
-            RefKind::Shared => vec![RefKind::Shared],
-            RefKind::Mut
-                if matches!(
-                    self.tysys.type_table.borrow().get(right),
-                    ResolvedType::Ref(_)
-                ) =>
-            {
-                vec![RefKind::Shared, RefKind::Mut]
-            }
-            RefKind::Mut => vec![RefKind::Mut, RefKind::Shared],
+        let right_is_shared = matches!(
+            self.tysys.type_table.borrow().get(right),
+            ResolvedType::Ref(_)
+        );
+        let kinds: &[RefKind] = match kind {
+            RefKind::Shared => &[RefKind::Shared],
+            RefKind::Mut if right_is_shared => &[RefKind::Shared, RefKind::Mut],
+            RefKind::Mut => &[RefKind::Mut, RefKind::Shared],
         };
-        let (kind, info) = kinds.into_iter().find_map(|kind| {
+        let (kind, info) = kinds.iter().find_map(|&kind| {
             let info = self.find_operator_impl_on(
                 &ImplTargetKey::Ref(kind),
                 left,
@@ -1713,11 +1710,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })?;
         // The block's `Self` is the reference it is written for, which a
         // coerced `&mut` left operand is not.
-        let receiver = match self.tysys.pointee_of(left) {
-            Some(pointee) if kind == RefKind::Shared => {
-                self.tysys.type_table.borrow_mut().make_ref(pointee)
-            }
-            _ => left,
+        let receiver = if kind == RefKind::Shared {
+            let pointee = self.tysys.pointee_of(left).expect("`left` is a reference");
+            self.tysys.type_table.borrow_mut().make_ref(pointee)
+        } else {
+            left
         };
         let found = OperatorImpl {
             info,

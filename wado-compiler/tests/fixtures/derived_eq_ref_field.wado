@@ -1,4 +1,4 @@
-// A derived `Eq` compares a reference field by identity through `Eq for &T`,
+// A derived `Eq` compares a reference field by value through `Eq for &T`,
 // whatever else implements `Eq` for a reference.
 use { println, Stdout } from "core:cli";
 
@@ -6,8 +6,9 @@ struct P { m: &List<i32> }
 
 export fn run() with Stdout {
     let l: List<i32> = [1];
+    let same: List<i32> = [1];
     let k: List<i32> = [2];
-    println(`${P { m: &l } == P { m: &l }} ${P { m: &l } == P { m: &k }}`);
+    println(`${P { m: &l } == P { m: &same }} ${P { m: &l } == P { m: &k }}`);
 }
 
 __DATA__
