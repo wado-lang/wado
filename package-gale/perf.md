@@ -119,14 +119,24 @@ already exact, so size this on a keyword-dense or mode-bearing grammar.
 
 ### String tokens stay off the lexer ATN, and the ATN got cheaper (landed, 2026-09)
 
-JSON's `STRING` ran through `latn_match` on every string. Every rule ref is read
-case-folded, and a negated set read that way counted as unknown, so the
-`SAFECODEPOINT` arm "might collide" with `ESC`. Folding moves only ASCII
-letters, so a complement that keeps the letters in is a sound reading. With it,
+JSON's `STRING` ran through `latn_match` on every string. Every rule ref was
+read case-folded, and a negated set read that way counted as unknown, so the
+`SAFECODEPOINT` arm "might collide" with `ESC`. A leading-chars read now folds
+as the emitter does: a non-recursive fragment in its caller's casing, a rule
+with its own matcher in `Casing::Unknown`, a superset of either. With it,
 `STRING` is a static matcher. Tokenizing `twitter.json` went from 206 KB/s to
 87 MB/s.
 
-A rule that does need the ATN (Rust's `STRING_LITERAL`, css3's `String_`) paid
+Rust's `STRING_LITERAL` and `BYTE_STRING_LITERAL` stayed on the ATN because
+every escape arm starts with `\`. Two arms sharing a first char now collide only
+if they can share the second too (`second_chars_apart`), and none of those can.
+
+Rust's identifier class spent 66% of tokenizing in a `c matches { … }` over
+`\p{L}`. The compiler tested an or-pattern one range at a time, with no short
+circuit. It now binary-searches a set too sparse for a bitset or a `br_table`.
+With both changes, tokenizing 1.5 MB of Rust went from 1.9 MB/s to 29 MB/s.
+
+A rule that does need the ATN (a nested block comment, a raw string) paid
 for a formatted `String` key and a `TreeSet` insert per visited state per
 character, plus a copy of the rule stack per thread. Stacks are now interned
 ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
@@ -266,13 +276,12 @@ re-measure before committing. Candidates read off the profile above:
   `push_row` (6.4% self-time, called every row) and `finish` itself, and
   that per-access cost on the hot path outweighs the per-parse copies it
   removes. Full numbers in the `wado-performance` skill's `dead-ends.md`.
-- **First-char dispatch is linear in the ranges, not the rules.** The dispatch is an
-  `if / else if` chain over the first-char sets, so a rule opening on a large set costs
-  a comparison per range — a `[\p{L}]` rule is ~700. Coalescing branches with identical
-  call lists keeps the emitted code small (Rust: 56 branches, 161 `try_` calls) but
-  leaves ~2000 comparisons on the fall-through path. ASCII resolves early (single-char
-  branches are sorted and come first), so this is a worst case rather than a
-  benchmark-visible cost. A sorted interval table with a binary search would bound it.
+- **First-char dispatch is linear in the branches.** The dispatch is a `match` over
+  the first-char sets, tested arm by arm. Since the compiler searches an or-pattern's
+  ranges, a `[\p{L}]` arm costs a search rather than ~700 compares, but a char
+  falling through still tests every arm before it (Rust: 56 branches, 161 `try_`
+  calls). ASCII resolves early (single-char branches are sorted and come first), so
+  this is a worst case rather than a benchmark-visible cost.
 - **Scan time grows exponentially with nesting (measured, deferred 2026-09).**
   On the dev profile, one parse takes these times:
 
