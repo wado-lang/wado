@@ -344,13 +344,13 @@ struct FunctionTranslator<'a, 'p> {
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
     address_taken: IndexSet<u32>,
-    /// Last-use spans for this function's module (WEP 2026-05-21). A `Local`
-    /// read whose span is present is a final use, so its copy is elided.
-    func_moved_spans: Option<&'a IndexSet<Span>>,
+    /// The elaborator's final-use reads (WEP 2026-05-21) of locals no kept
+    /// borrow pins. A `Local` read whose span is present moves.
+    move_eligible_read_spans: IndexSet<Span>,
     /// TIR-level move-eligible locals for this function (WEP 2026-05-21):
     /// backward liveness plus a freshness fixpoint proves each read is a final
     /// use of a local that exclusively owns fresh storage. Reaches synthesized
-    /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
+    /// bodies the AST-keyed read spans cannot see (serde de/serialize,
     /// derives). Unioned with the span check.
     move_eligible_locals: IndexSet<u32>,
     /// Spans of field / whole-value materializations that alias out of a *dead*
@@ -404,7 +404,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
         let address_taken = func.address_taken_locals.clone();
-        let func_moved_spans = Some(&base.moved_local_spans);
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
@@ -441,6 +440,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                     &type_table,
                     &resolver,
                     base.value_copy,
+                    &base.moved_local_spans,
                 ),
                 value_copy::last_use::compute_ref_targets(func, &resolver),
             )
@@ -453,12 +453,13 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         let move_eligible = ownership.move_eligible;
         let share_eligible_locals = ownership.share_eligible;
         let moved_roots = if needs_copy_analysis {
-            value_copy::last_use::compute_moved_roots(func, &move_eligible, func_moved_spans)
+            value_copy::last_use::compute_moved_roots(func, &move_eligible)
         } else {
             IndexSet::default()
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
+        let move_eligible_read_spans = move_eligible.read_spans;
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {
@@ -479,7 +480,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             }),
             immutable_locals,
             address_taken,
-            func_moved_spans,
+            move_eligible_read_spans,
             move_eligible_locals,
             move_eligible_place_spans,
             hands_out_payload,
@@ -505,7 +506,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             extra: None,
             immutable_locals: IndexSet::default(),
             address_taken: IndexSet::default(),
-            func_moved_spans: None,
+            move_eligible_read_spans: IndexSet::default(),
             move_eligible_locals: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             hands_out_payload: false,
@@ -806,9 +807,7 @@ impl FunctionTranslator<'_, '_> {
             return false;
         };
         self.move_eligible_locals.contains(index)
-            || self
-                .func_moved_spans
-                .is_some_and(|spans| spans.contains(&value.span))
+            || self.move_eligible_read_spans.contains(&value.span)
     }
 
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
