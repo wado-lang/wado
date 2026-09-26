@@ -46,3 +46,9 @@ test "a function may gain an effect it does not perform" {
     g();
     println("called");
 }
+
+test "a closure literal takes its parameter types from the target" {
+    let h = (|x| x + x) as fn(Meters) -> Meters;
+    let m: Meters = 1.5;
+    assert h(m) as f64 == 3.0;
+}

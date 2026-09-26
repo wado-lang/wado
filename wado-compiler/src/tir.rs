@@ -2887,6 +2887,25 @@ impl TypeTable {
         matches!(self.get(head), ResolvedType::Unit | ResolvedType::Never)
     }
 
+    /// The referents a cast of `source` to `target` reads through, outermost
+    /// first: a cast to anything but a reference converts what its operand's
+    /// references point at, and the last of these is the type it converts.
+    #[must_use]
+    pub fn cast_read_through(&self, source: TypeId, target: TypeId) -> Vec<TypeId> {
+        let mut referents = Vec::new();
+        if RefKind::from_resolved(self.get(self.representation_head(target))).is_some() {
+            return referents;
+        }
+        let mut operand = source;
+        while let ResolvedType::Ref(referent) | ResolvedType::MutRef(referent) =
+            self.get(self.representation_head(operand))
+        {
+            operand = *referent;
+            referents.push(operand);
+        }
+        referents
+    }
+
     /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {
@@ -4448,11 +4467,17 @@ impl TypeTable {
                     [one] => format!(" with {one}"),
                     many => format!(" with ({})", many.join(", ")),
                 };
+                // A function-typed return is parenthesized, or a `with` after it
+                // would not say which of the two function types carries it.
+                let return_name = type_name(*return_type);
+                let return_name = match self.get(*return_type) {
+                    ResolvedType::Function { .. } => format!("({return_name})"),
+                    _ => return_name,
+                };
                 format!(
-                    "{}({}) -> {}{clause}",
+                    "{}({}) -> {return_name}{clause}",
                     keyword,
-                    param_names.join(", "),
-                    type_name(*return_type)
+                    param_names.join(", ")
                 )
             }
             ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),

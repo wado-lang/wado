@@ -1,0 +1,16 @@
+// A reference to a function reads through to the function it names. The cast
+// once compiled with no dereference and trapped at the call.
+
+type Meters = f64;
+
+fn double(x: f64) -> f64 {
+    return x * 2.0;
+}
+
+test "a reference to a function converts its referent" {
+    let f = double;
+    let r = &f;
+    let g = r as fn(Meters) -> Meters;
+    let m: Meters = 1.5;
+    assert g(m) as f64 == 3.0;
+}

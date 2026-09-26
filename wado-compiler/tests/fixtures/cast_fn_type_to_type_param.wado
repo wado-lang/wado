@@ -1,0 +1,18 @@
+// A function value casts only to a function type, and a type parameter is not
+// known to be one. Checked where the cast is written: `conv::<i32>` once
+// reached WIR as an unlowered cast and crashed.
+
+fn double(x: f64) -> f64 {
+    return x * 2.0;
+}
+
+fn conv<T>(f: fn(f64) -> f64) -> T {
+    return f as T;
+}
+
+test "fn to type parameter" {
+    let a = conv::<i32>(double);
+}
+
+__DATA__
+{"compile_error": "cannot cast 'fn(f64) -> f64' to 'T': a function converts only to a function type"}

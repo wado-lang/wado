@@ -258,7 +258,7 @@ fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
     let from_half = tt.primitive_head(source).filter(|p| p.is_half());
     let to_half = tt.primitive_head(target).filter(|p| p.is_half());
     let half = from_half.or(to_half)?.as_str();
-    if tt.representation_head(source) == tt.representation_head(target) {
+    if tt.share_common_base(source, target) {
         return None;
     }
     let source_half = from_half.is_some();
@@ -289,6 +289,35 @@ fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
     })
 }
 
+/// Whether a cast from or to `id` has nothing to judge: a diverging operand
+/// yields no value, and an error was already reported.
+fn imposes_no_representation(tt: &TypeTable, id: TypeId) -> bool {
+    matches!(
+        tt.get(tt.representation_head(id)),
+        ResolvedType::Never | ResolvedType::Error | ResolvedType::Unknown
+    )
+}
+
+/// The reason a cast to a reference is refused: only a reference converts to
+/// one, whose referent it already is, and `&mut` narrows to `&`. A cast to
+/// anything else reads through its operand's references first.
+fn ref_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let reference = |id| match tt.get(tt.representation_head(id)) {
+        ResolvedType::Ref(referent) => Some((false, *referent)),
+        ResolvedType::MutRef(referent) => Some((true, *referent)),
+        _ => None,
+    };
+    let (to_mut, to) = reference(target)?;
+    match reference(source) {
+        Some((false, _)) if to_mut => {
+            Some("`as` narrows `&mut` to `&`, never the reverse".to_string())
+        }
+        Some((_, from)) => representation_refusal(tt, from, to),
+        None if imposes_no_representation(tt, source) => None,
+        None => Some("only a reference converts to a reference".to_string()),
+    }
+}
+
 /// A function type's parts, borrowed from the table.
 struct FnParts<'a> {
     is_mut: bool,
@@ -315,25 +344,14 @@ fn fn_parts(tt: &TypeTable, id: TypeId) -> Option<FnParts<'_>> {
 }
 
 /// The reason a cast naming a function type is refused, or `None` where it
-/// names none or is a newtype step.
+/// names none or is a newtype step. A type parameter is not known to be a
+/// function type, so a function never casts to one.
 fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    // A reference reads through, and a parameter settles later.
-    let unsettled = |id| {
-        matches!(
-            tt.get(tt.representation_head(id)),
-            ResolvedType::Ref(_)
-                | ResolvedType::MutRef(_)
-                | ResolvedType::TypeParam { .. }
-                | ResolvedType::InferVar(_)
-                | ResolvedType::TypePack { .. }
-                | ResolvedType::AssocTypeProjection { .. }
-        )
-    };
     match (fn_parts(tt, source), fn_parts(tt, target)) {
         (None, None) => None,
         (Some(from), Some(to)) => fn_step_refusal(tt, &from, &to, true),
-        (Some(_), None) if unsettled(target) => None,
-        (None, Some(_)) if unsettled(source) => None,
+        (Some(_), None) if imposes_no_representation(tt, target) => None,
+        (None, Some(_)) if imposes_no_representation(tt, source) => None,
         _ => Some("a function converts only to a function type".to_string()),
     }
 }
@@ -351,52 +369,62 @@ fn fn_step_refusal(
     if from.params.len() != to.params.len() {
         return Some("the function types take different numbers of parameters".to_string());
     }
-    if from.is_mut != to.is_mut && !(widening && to.is_mut) {
-        return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
+    if from.is_mut != to.is_mut {
+        if !widening {
+            return Some("one function type is `fn mut` and the other `fn`".to_string());
+        }
+        if from.is_mut {
+            return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
+        }
     }
     if let Some(dropped) = from.effects.iter().find(|e| !to.effects.contains(e)) {
-        return Some(format!("`as` cannot drop the effect `{}`", dropped.name()));
+        return Some(if widening {
+            format!("`as` cannot drop the effect `{}`", dropped.name())
+        } else {
+            format!("only one function type has the effect `{}`", dropped.name())
+        });
     }
-    if let Some(added) = to
-        .effects
-        .iter()
-        .find(|e| !widening && !from.effects.contains(e))
-    {
+    if !widening && let Some(added) = to.effects.iter().find(|e| !from.effects.contains(e)) {
         return Some(format!(
-            "the nested function types differ in `{}`",
+            "only one function type has the effect `{}`",
             added.name()
         ));
     }
-    let unrelated = "no representation; `as` reinterprets only across a newtype boundary";
-    if let Some(index) = from
-        .params
+    from.params
         .iter()
         .zip(to.params)
-        .position(|(&a, &b)| !same_representation(tt, a, b))
-    {
-        return Some(format!("parameter {} shares {unrelated}", index + 1));
-    }
-    (!same_representation(tt, from.return_type, to.return_type))
-        .then(|| format!("the return types share {unrelated}"))
+        .enumerate()
+        .find_map(|(index, (&a, &b))| {
+            representation_refusal(tt, a, b).map(|reason| format!("parameter {}: {reason}", index + 1))
+        })
+        .or_else(|| {
+            representation_refusal(tt, from.return_type, to.return_type)
+                .map(|reason| format!("the return type: {reason}"))
+        })
 }
 
-/// Whether a value of `a` is a value of `b` as it stands: the two differ only
-/// by newtype steps, at the top, under a reference, or inside a function type
-/// that is otherwise identical.
-fn same_representation(tt: &TypeTable, a: TypeId, b: TypeId) -> bool {
+/// Why a value of `a` is not a value of `b` as it stands: the two must differ
+/// only by newtype steps, at the top, under a reference, or inside a function
+/// type that is otherwise identical.
+fn representation_refusal(tt: &TypeTable, a: TypeId, b: TypeId) -> Option<String> {
     if tt.share_common_base(a, b) {
-        return true;
+        return None;
     }
     if let (Some(from), Some(to)) = (fn_parts(tt, a), fn_parts(tt, b)) {
-        return fn_step_refusal(tt, &from, &to, false).is_none();
+        return fn_step_refusal(tt, &from, &to, false);
     }
     match (
         tt.get(tt.representation_head(a)),
         tt.get(tt.representation_head(b)),
     ) {
         (ResolvedType::Ref(x), ResolvedType::Ref(y))
-        | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => same_representation(tt, *x, *y),
-        _ => false,
+        | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => representation_refusal(tt, *x, *y),
+        _ => Some(format!(
+            "`{}` and `{}` share no representation; `as` reinterprets only across a newtype \
+             boundary",
+            tt.type_name(a),
+            tt.type_name(b)
+        )),
     }
 }
 
@@ -3402,31 +3430,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.record_expression_type(lit.id, TypeTable::I32);
                 TypeTable::I32
             }
-            None => self.resolve_expr(&cast.expr, ctx, None),
+            // A closure takes its parameter types from the function type it is
+            // cast to, as it would from an annotation.
+            None => {
+                let expected = matches!(&cast.expr, ast::Expr::Closure(_)).then_some(target_type);
+                self.resolve_expr(&cast.expr, ctx, expected)
+            }
         };
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
-
-        let handle_cast = {
-            let tt = self.tysys.type_table.borrow();
-            handle_cast_hint(&tt, source_type, target_type)
-                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
-        };
-        if let Some((from, to, hint)) = handle_cast {
-            let _ = self.emit(TypeError::InvalidCast {
-                from,
-                to,
-                hint,
-                span: cast.span,
-            });
-            return target_type;
-        }
+        let source_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .cast_read_through(source_type, target_type)
+            .last()
+            .copied()
+            .unwrap_or(source_type);
 
         let refused_cast = {
             let tt = self.tysys.type_table.borrow();
-            half_cast_hint(&tt, source_type, target_type)
+            handle_cast_hint(&tt, source_type, target_type)
+                .or_else(|| half_cast_hint(&tt, source_type, target_type))
+                .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
         };
@@ -3457,17 +3485,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
             };
             // Only a settled scalar is known to share nothing with an aggregate:
-            // a reference reads through, and a parameter settles later.
-            let source_base = tt.representation_head(source_type);
+            // a parameter settles later.
             let source_is_scalar = matches!(
-                tt.get(source_base),
+                tt.get(tt.representation_head(source_type)),
                 ResolvedType::Primitive(_)
                     | ResolvedType::Unit
                     | ResolvedType::Enum { .. }
                     | ResolvedType::Flags { .. }
             );
             (is_aggregate(source_type) || (source_is_scalar && is_aggregate(target_type)))
-                && source_base != tt.representation_head(target_type)
+                && !tt.share_common_base(source_type, target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();

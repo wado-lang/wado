@@ -475,6 +475,8 @@ value across a newtype boundary, between any two types sharing an ultimate base.
 It converts a `flags` value to and from `u32`, and coerces a collection literal
 to its target type (see
 [Collection Literal Coercion](./spec-literals.md#collection-literal-coercion)).
+A diverging operand (`!`) casts to any type. References and function types
+follow [Casts](./spec-types.md#casts).
 
 Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see

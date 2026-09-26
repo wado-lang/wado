@@ -401,8 +401,12 @@ base. See [The Order](./spec-traits.md#the-order).
 
 `as` converts between a newtype and its base in both directions, between two
 newtypes over the same base, and through a chain of newtypes in one step. A
-reference casts the same way: `&Meters as &f64`. A generic newtype casts to and
-from its base instantiation.
+generic newtype casts to and from its base instantiation.
+
+A cast to a reference takes a reference and converts its referent the same way:
+`&Meters as &f64`. `&mut T` may narrow to `&T`, never the reverse. A cast to
+anything else reads through its operand's references and converts what they
+point at, so `(&x) as i64` converts `x`.
 
 ```wado
 type A = i32;
@@ -426,7 +430,8 @@ A function type is the exception, since a function value is reused unchanged.
 parameters and each parameter and the return type differ only by newtype steps,
 at the top, under a reference, or inside a function type that is otherwise
 identical. The cast may also widen `fn` to `fn mut` and add effects, never the
-reverse. A function type casts to no other kind of type.
+reverse. A function type casts to no other kind of type, and a type parameter
+is not known to be a function type, so `f as T` is an error.
 
 ```wado
 type Meters = f64;

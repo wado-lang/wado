@@ -266,6 +266,23 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
     )
 }
 
+/// `operand` dereferenced through what a cast to `target` reads through.
+fn read_through_for_cast(tt: &TypeTable, operand: TirExpr, target: tir::TypeId) -> TirExpr {
+    tt.cast_read_through(operand.type_id, target)
+        .into_iter()
+        .fold(operand, |operand, referent| {
+            let span = operand.span;
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(operand),
+                },
+                referent,
+                span,
+            )
+        })
+}
+
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
@@ -2915,6 +2932,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
                 };
+                let inner = read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
                 let (from_handle, to_handle) = {
                     let tt = self.tysys.type_table.borrow();
                     (
