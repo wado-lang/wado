@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790395297957,
+  "lastUpdate": 1790407218184,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60132,6 +60132,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19683,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "feb6d2a9391fc86a639f6ff8ff7e83bb92112114",
+          "message": "Merge pull request #2175 from wado-lang/claude/protobuf-codegen-grog-nabnby\n\nfeat(grog)!: Grog carries its own protobuf runtime; core:protobuf and wire numbers leave the compiler",
+          "timestamp": "2026-09-26T15:53:19+09:00",
+          "tree_id": "30cbb5df22e8bc96dd42320ed08e5bc889407295",
+          "url": "https://github.com/wado-lang/wado/commit/feb6d2a9391fc86a639f6ff8ff7e83bb92112114"
+        },
+        "date": 1790407217143,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19655,
             "unit": "bytes"
           },
           {
