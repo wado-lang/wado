@@ -173,16 +173,8 @@ fn read_initializer(t: &onnx::TensorProto, name: String, dtype: String) -> Resul
     return Result::Ok(ValueInfo {
         name,
         dtype,
-<<<<<<< HEAD
         rank: rank_of(dims),
-        data: payload(t, &dtype, &extents)?,
-||||||| c8b5409d130
-        rank: Rank::Dims(dims),
-        data: payload(t, &dtype, &extents)?,
-=======
-        rank: Rank::Dims(dims),
         data: payload(t, &name, &dtype, &extents)?,
->>>>>>> origin/main
     });
 }
 
@@ -206,13 +198,7 @@ fn payload(
             }
         } else {
             for let v of t.int32_data {
-<<<<<<< HEAD
-                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)? as u64, width);
-||||||| c8b5409d130
-                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)?, width);
-=======
-                push_element(&mut bytes, bit_pattern(name, dtype, v, width)?, width);
->>>>>>> origin/main
+                push_element(&mut bytes, bit_pattern(name, dtype, v, width)? as u64, width);
             }
         }
     }
