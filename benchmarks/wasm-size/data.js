@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790461211109,
+  "lastUpdate": 1790464560430,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60484,6 +60484,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 20153,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "56988813914cc079164e8f217c0a056a480846a1",
+          "message": "Merge pull request #2183 from wado-lang/claude/jsonc-support-design-eodfx4\n\nfeat(core): core:jsonc with comment-preserving edits, and `as` casts that match Rust",
+          "timestamp": "2026-09-27T07:47:06+09:00",
+          "tree_id": "e3e2d4d2d8b15f769253823c21ead00f523dc471",
+          "url": "https://github.com/wado-lang/wado/commit/56988813914cc079164e8f217c0a056a480846a1"
+        },
+        "date": 1790464559671,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20200,
             "unit": "bytes"
           },
           {
