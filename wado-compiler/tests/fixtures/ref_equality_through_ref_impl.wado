@@ -1,0 +1,34 @@
+// A reference compared with a value dispatches to an `Eq` impl for `&T`, as
+// the same comparison does once a generic body is instantiated with `&T`.
+struct Tag {
+    id: i32,
+}
+
+struct Item {
+    id: i32,
+}
+
+impl Eq<Tag> for &Item {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.id == other.id;
+    }
+}
+
+fn same<S: AsStrSlice>(s: S, lit: String) -> bool {
+    return s == lit;
+}
+
+test "a reference to a string equals the string it names" {
+    let s = "float";
+    let r = &s;
+    assert r == "float";
+    assert r != "double";
+    assert same(r, "float");
+}
+
+test "a user impl for a reference answers ==" {
+    let item = Item { id: 3 };
+    let r = &item;
+    assert r == Tag { id: 3 };
+    assert r != Tag { id: 4 };
+}

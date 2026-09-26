@@ -5,9 +5,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{FunctionRef, ResolvedType, TemplateId, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::binary_op_str;
 
@@ -21,6 +21,7 @@ use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
@@ -374,6 +375,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if is_comparison {
+            if let Some(resolved) = self.resolve_ref_comparison(left, op, right) {
+                let call = self.dispatch_trait_op_method(
+                    left,
+                    vec![(right, right_span)],
+                    &resolved,
+                    origin,
+                );
+                // Reify rebuilds `!=` and an ordering from `eq` / `cmp`.
+                return if call == TypeTable::ERROR {
+                    TypeTable::ERROR
+                } else {
+                    TypeTable::BOOL
+                };
+            }
+
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
@@ -1660,6 +1676,51 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, rhs)
     }
 
+    /// A comparison of a reference with a value, answered by an impl written
+    /// for the reference itself and chosen by the right operand, as a generic
+    /// body instantiated at `&T` dispatches. `None` leaves the pair to the
+    /// rules for values: nothing here dereferences the left operand.
+    fn resolve_ref_comparison(
+        &mut self,
+        left: TypeId,
+        op: BinaryOp,
+        right: TypeId,
+    ) -> Option<ResolvedTraitMethod> {
+        let kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(left))?;
+        // A pair of references is identity's question, never an impl's.
+        if self.tysys.pointee_of(right).is_some() {
+            return None;
+        }
+        let item = match op {
+            BinaryOp::Eq | BinaryOp::NotEq => CompilerItem::Eq,
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => CompilerItem::Ord,
+            _ => unreachable!("resolve_ref_comparison takes a comparison operator"),
+        };
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        let method = self.tysys.operator_method_name(item);
+        // `&mut X` coerces to `&X`, so a block for `&X` answers where none
+        // for `&mut X` does.
+        let shared = (kind == RefKind::Mut).then_some(RefKind::Shared);
+        let (kind, info) = std::iter::once(kind).chain(shared).find_map(|kind| {
+            let info = self.find_operator_impl_on(
+                &ImplTargetKey::Ref(kind),
+                left,
+                trait_,
+                &method,
+                Some(&ArgClass::Exact(right)),
+            )?;
+            Some((kind, info))
+        })?;
+        let found = OperatorImpl {
+            info,
+            impl_name: kind.prefix().to_string(),
+            impl_type_id: left,
+        };
+        let mut resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, &method);
+        resolved.return_type = self.tysys.auto_derive_return_type(item);
+        Some(resolved)
+    }
+
     /// An operator on a type parameter, dispatched through its bounds. `None`
     /// where `receiver` is no parameter; a missing trait is reported as `ERROR`.
     fn dispatch_operator_through_bounds(
@@ -1790,9 +1851,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        // A block written for a reference has that reference as its `Self`.
+        let receiver_head = match self.ref_impl_of(resolved) {
+            Some(_) => receiver,
+            None => self.tysys.get_base_type(receiver),
+        };
         // An impl read on a link below the receiver answers in the receiver's
         // type, as a method call does (WEP 2026-01-29).
-        let receiver_head = self.tysys.get_base_type(receiver);
         let return_type = match resolved.impl_type_id {
             Some(link) if link != receiver_head => {
                 self.tysys
@@ -1828,7 +1893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let declares_rhs = (resolved.is_type_param_receiver
                     || !resolved.trait_name.args().is_empty())
                     && referent != receiver
-                    && referent != self.tysys.get_base_type(receiver);
+                    && referent != receiver_head;
                 if declares_rhs { referent } else { receiver }
             } else {
                 param_ty
@@ -1837,6 +1902,113 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
+        let function_ref = match self.ref_impl_of(resolved) {
+            Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
+            None => self.operator_impl_function(resolved, receiver),
+        };
+
+        // When the operator-dispatch request carries a source AST id in
+        // `origin`, record the dispatch decision so reify can re-emit the
+        // same method-call TIR for the binary / index expression.
+        // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
+        // comparisons) pass `None` and the record is skipped — they have
+        // no source-level `BinaryExpr` reify would key on.
+        if let Some(ast_id) = origin {
+            self.record_operator_dispatch(
+                ast_id,
+                OperatorDispatch {
+                    function_ref,
+                    method_def: resolved.method_def,
+                    self_kind: resolved.self_kind,
+                    arg_ref_wraps: wrap_flags,
+                    return_type,
+                    needs_deref: false,
+                },
+            );
+        }
+
+        // Reify rebuilds the overloaded operator's method call from the
+        // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
+        // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
+        return_type
+    }
+
+    /// The block `resolved` dispatches to, where it is written for a `&X` /
+    /// `&mut X` target, with that reference's kind.
+    fn ref_impl_of(&self, resolved: &ResolvedTraitMethod) -> Option<(RefKind, &ImplHeader)> {
+        let header = self.tysys.trait_env.impl_headers.get(&resolved.impl_def?)?;
+        Some((header.target.ref_kind()?, header))
+    }
+
+    /// The function a `&X` / `&mut X` block's method is at `receiver`: the
+    /// block's own for a concrete one, else the instance of its template.
+    fn ref_impl_function(
+        &self,
+        kind: RefKind,
+        header: &ImplHeader,
+        resolved: &ResolvedTraitMethod,
+        receiver: TypeId,
+    ) -> FunctionRef {
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(kind, &header.target_id),
+            Some(resolved.trait_name.clone()),
+            resolved.method_name.clone(),
+        );
+        let template_id = resolved
+            .method_def
+            .zip(resolved.impl_def)
+            .map(|(def, block)| TemplateId::in_block(def, block));
+        if header.is_concrete() {
+            let function = template.at_owner(&header.target_id);
+            return FunctionRef {
+                module_source: header.module.clone(),
+                name: function.to_mangled_name(),
+                template: template_id,
+                monomorph_info: None,
+                method_info: Some(function),
+            };
+        }
+        let pointee = self
+            .tysys
+            .pointee_of(receiver)
+            .expect("a reference block answers a reference receiver");
+        // `&T` binds `T` to the pointee; `&Holder<T>` to the pointee's arguments.
+        let is_blanket = matches!(template.receiver(), Receiver::Ref(_));
+        let impl_type_args = if is_blanket {
+            vec![pointee]
+        } else {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(pointee)
+                .unwrap_or_default()
+        };
+        let arg_names: Vec<FqTypeName> = impl_type_args
+            .iter()
+            .map(|&arg| self.tysys.type_table.borrow().fq_type_name(arg))
+            .collect();
+        let instance = template.with_struct_type_args(&arg_names);
+        FunctionRef {
+            module_source: header.module.clone(),
+            name: instance.to_mangled_name(),
+            template: template_id,
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: template.to_mangled_name(),
+                impl_type_args,
+                method_type_args: vec![],
+                is_blanket,
+            }),
+            method_info: Some(instance),
+        }
+    }
+
+    /// The function an operator method is when a value type's impl, or a type
+    /// parameter's bound, answers it.
+    fn operator_impl_function(
+        &self,
+        resolved: &ResolvedTraitMethod,
+        receiver: TypeId,
+    ) -> FunctionRef {
         let receiver_fq = resolved.receiver.clone();
         let mangled_method_name = MethodName::format_local(
             &receiver_fq,
@@ -1879,38 +2051,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
             None => Some(TemplateId::derived(module_source.clone(), &method_info)),
         };
-        let function_ref = FunctionRef {
+        FunctionRef {
             module_source,
             name: mangled_method_name,
             template,
             monomorph_info: None,
             method_info: Some(method_info),
-        };
-
-        // When the operator-dispatch request carries a source AST id in
-        // `origin`, record the dispatch decision so reify can re-emit the
-        // same method-call TIR for the binary / index expression.
-        // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
-        // comparisons) pass `None` and the record is skipped — they have
-        // no source-level `BinaryExpr` reify would key on.
-        if let Some(ast_id) = origin {
-            self.record_operator_dispatch(
-                ast_id,
-                OperatorDispatch {
-                    function_ref,
-                    method_def: resolved.method_def,
-                    self_kind: resolved.self_kind,
-                    arg_ref_wraps: wrap_flags,
-                    return_type,
-                    needs_deref: false,
-                },
-            );
         }
-
-        // Reify rebuilds the overloaded operator's method call from the
-        // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
-        // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
-        return_type
     }
 }
 

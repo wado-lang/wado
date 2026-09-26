@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
+use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -44,9 +44,6 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
-    /// every field or none, which `WireNumbered` is the bound for.
-    pub(super) field_wire_numbers: Vec<Option<u32>>,
     /// The declaration's real type parameters. Bounds, defaults and arity are
     /// all read from here, never from a projection of it.
     pub(super) type_params: RealTypeParams,
@@ -146,7 +143,6 @@ impl StructFieldInfo {
             fields,
             field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
             field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
-            field_wire_numbers: wire_numbers_of(&decl.fields),
             type_params: RealTypeParams::of(&decl.type_params),
             type_param_type_ids,
         }
@@ -559,6 +555,12 @@ pub enum TypeError {
 
     /// Unknown variable
     UnknownIdentifier {
+        name: String,
+        span: Span,
+    },
+    /// A name resolving to nothing that a source binding of the frame took,
+    /// read outside the scope it had.
+    OutOfScope {
         name: String,
         span: Span,
     },
@@ -1657,6 +1659,11 @@ impl TypeError {
             TypeError::Unavailable { message, span } => {
                 (Code::Unavailable, message.clone(), *span)
             }
+            TypeError::OutOfScope { name, span } => (
+                Code::UndefinedVariable,
+                format!("'{name}' is not in scope"),
+                *span,
+            ),
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{}'", unalias_namespace_member(name)),
@@ -2991,6 +2998,9 @@ pub(super) struct FunctionContext {
     /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
     /// at the point of emission.
     pub(super) locals: Vec<TirLocal>,
+    /// Every name a binding written in source has taken in this frame, an
+    /// enclosing one, or a closure it built, in scope or not.
+    pub(super) source_bindings: IndexSet<String>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
@@ -3275,6 +3285,7 @@ impl FunctionContext {
             is_async: false,
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: IndexSet::default(),
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
@@ -3357,6 +3368,7 @@ impl FunctionContext {
             is_async: false, // Closures are never async
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: outer_ctx.source_bindings.clone(),
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
@@ -3431,6 +3443,9 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
+        if defining_ast_id.is_some() {
+            self.source_bindings.insert(name.clone());
+        }
         self.locals.push(TirLocal {
             name: name.clone(),
             type_id,
@@ -3467,6 +3482,12 @@ impl FunctionContext {
                 defining_ast_id: None,
             },
         );
+    }
+
+    /// Whether a binding written in source took `name`, so a lookup of it that
+    /// fails reads it outside the scope it had.
+    pub(super) fn declared(&self, name: &str) -> bool {
+        self.source_bindings.contains(name)
     }
 
     /// Look up a variable by name (searches from innermost to outermost scope)
@@ -3506,7 +3527,8 @@ impl FunctionContext {
         let mut outer = scopes.replacing(|ctx| &mut ctx.outer_locals, IndexMap::default());
         let mut derefs = outer.replacing(|ctx| &mut ctx.deref_overrides, IndexMap::default());
         let mut boxes = derefs.replacing(|ctx| &mut ctx.outer_box_types, IndexMap::default());
-        body(&mut boxes)
+        let mut sources = boxes.replacing(|ctx| &mut ctx.source_bindings, IndexSet::default());
+        body(&mut sources)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.
@@ -3907,10 +3929,6 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.struct_fields_of(self.declaration(name)?)
-    }
-
     /// Field info for a struct type's own head — the form with nothing left to
     /// resolve, since the head is already an identity or a shape.
     pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {

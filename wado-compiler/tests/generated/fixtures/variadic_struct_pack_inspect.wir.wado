@@ -4,28 +4,26 @@
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(0)
 
-enum core:prelude/traits.wado//enum:WireEncoding { Plain = 0, ZigZag = 1, Fixed = 2 };  // TypeId(1)
+enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
-
-struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
+struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/string.wado//StrSlice {  // TypeId(4)
+struct core:prelude/string.wado//StrSlice {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(5)
+array Array<u8> (mut u8);  // TypeId(4)
 
-struct core:prelude/string.wado//String {  // TypeId(6)
+struct core:prelude/string.wado//String {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(7)
+struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -37,140 +35,173 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[i32, bool] {  // TypeId(8)
+struct tuple//[i32, bool] {  // TypeId(7)
     mut 0: i32,
     mut 1: bool,
 }
 
-struct tuple//[i32] {  // TypeId(9)
+struct tuple//[i32] {  // TypeId(8)
     mut 0: i32,
 }
 
-struct tuple//[core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>] {  // TypeId(10)
-    mut 0: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>",
-    mut 1: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>",
-}
-
-struct core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]> {  // TypeId(11)
-    mut index: i32,
-    mut field_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut has_default: bool,
-    mut is_secret: bool,
-    mut wire_number: i32,
-    mut wire_encoding: "core:prelude/traits.wado//enum:WireEncoding",
-}
-
-struct core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String> {  // TypeId(12)
-    mut index: i32,
-    mut field_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut has_default: bool,
-    mut is_secret: bool,
-    mut wire_number: i32,
-    mut wire_encoding: "core:prelude/traits.wado//enum:WireEncoding",
-}
-
-struct variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]> {  // TypeId(13)
+struct variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]> {  // TypeId(9)
     mut tag: ref "core:prelude/string.wado//String",
     mut rest: ref "tuple//[i32, bool]",
 }
 
-struct variadic_struct_pack_inspect.wado//One<[i32]> {  // TypeId(14)
+struct variadic_struct_pack_inspect.wado//One<[i32]> {  // TypeId(10)
     mut a: ref "tuple//[i32]",
 }
 
-struct variadic_struct_pack_inspect.wado//One<[i32,bool]> {  // TypeId(15)
+struct variadic_struct_pack_inspect.wado//One<[i32,bool]> {  // TypeId(11)
     mut a: ref "tuple//[i32, bool]",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(16)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(17)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(14)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(16)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(17)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(18)
 
-type "functype//variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field" = fn();  // TypeId(23)
+type "functype//variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field" = fn();  // TypeId(19)
 
-type "functype//variadic_struct_pack_inspect.wado/$test_1_inspect_a_pack_field_of_one_element" = fn();  // TypeId(24)
+type "functype//variadic_struct_pack_inspect.wado/$test_1_inspect_a_pack_field_of_one_element" = fn();  // TypeId(20)
 
-type "functype//variadic_struct_pack_inspect.wado/$test_2_inspect_a_scalar_parameter_beside_a_pack" = fn();  // TypeId(25)
+type "functype//variadic_struct_pack_inspect.wado/$test_2_inspect_a_scalar_parameter_beside_a_pack" = fn();  // TypeId(21)
 
-type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_0_inspect_a_struct_with_a_pack_field" = fn();  // TypeId(26)
+type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_0_inspect_a_struct_with_a_pack_field" = fn();  // TypeId(22)
 
-type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_1_inspect_a_pack_field_of_one_element" = fn();  // TypeId(27)
+type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_1_inspect_a_pack_field_of_one_element" = fn();  // TypeId(23)
 
-type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_2_inspect_a_scalar_parameter_beside_a_pack" = fn();  // TypeId(28)
+type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_2_inspect_a_scalar_parameter_beside_a_pack" = fn();  // TypeId(24)
 
-type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_3_a_captured_pack_struct_reaches_the_assert_message" = fn();  // TypeId(29)
+type "functype//variadic_struct_pack_inspect.wado/$cm_export__$test_3_a_captured_pack_struct_reaches_the_assert_message" = fn();  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(30)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(31)
+type "functype//core:prelude/primitive.wado/write_u64_base_digits" = fn(ref Array<u8>, i32, i64, i32, i32, i32, bool);  // TypeId(27)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(28)
 
+<<<<<<< HEAD
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(33)
+||||||| c8b5409d130
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(33)
+=======
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(29)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(34)
+||||||| c8b5409d130
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(34)
+=======
+type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(30)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(35)
+||||||| c8b5409d130
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(35)
+=======
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(31)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(36)
+||||||| c8b5409d130
+type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
+=======
+type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(32)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+||||||| c8b5409d130
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+=======
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(33)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(38)
+||||||| c8b5409d130
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(38)
+=======
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(34)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(39)
+||||||| c8b5409d130
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(39)
+=======
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(35)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
+||||||| c8b5409d130
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
+=======
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
+||||||| c8b5409d130
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(41)
+=======
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(37)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(42)
+||||||| c8b5409d130
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(42)
+=======
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(38)
+>>>>>>> origin/main
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(43)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(39)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(40)
 
-type "functype//variadic_struct_pack_inspect.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/ReflectStruct::members" = fn() -> [ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>", ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>"];  // TypeId(45)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(46)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(42)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(47)
+type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "variadic_struct_pack_inspect.wado//One<[i32,bool]>", ref "core:prelude/format.wado//Formatter");  // TypeId(43)
 
-type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "variadic_struct_pack_inspect.wado//One<[i32,bool]>", ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]>", ref "core:prelude/format.wado//Formatter");  // TypeId(44)
 
-type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "variadic_struct_pack_inspect.wado//Tagged<core:prelude/string.wado/String,[i32,bool]>", ref "core:prelude/format.wado//Formatter");  // TypeId(49)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(45)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref Array<u8>, i32);  // TypeId(50)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(46)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(51)
+type "functype//core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "tuple//[i32, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect$spec0" = fn(ref "tuple//[i32, bool]", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(53)
+type "functype//core:prelude/tuple.wado/[i32]^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "tuple//[i32]", ref "core:prelude/string.wado//String");  // TypeId(49)
 
-type "functype//core:prelude/tuple.wado/[i32]^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "tuple//[i32]", ref "core:prelude/string.wado//String");  // TypeId(54)
+type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "variadic_struct_pack_inspect.wado//One<[i32]>", ref "core:prelude/string.wado//String");  // TypeId(50)
 
-type "functype//core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar" = fn(ref "variadic_struct_pack_inspect.wado//One<[i32]>", ref "core:prelude/string.wado//String");  // TypeId(55)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(51)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(56)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(53)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(59)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -189,19 +220,20 @@ global global:variadic_struct_pack_inspect.wado::$const_obj_4: ref null "core:pr
 global global:variadic_struct_pack_inspect.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(79, 110, 101, 32, 123, 32, 97, 58, 32, 91, 49, 44, 32, 116, 114, 117, 101, 93, 32, 125);
 global global:variadic_struct_pack_inspect.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(79, 110, 101, 32, 123, 32, 97, 58, 32, 91, 49, 93, 32, 125);
 global global:variadic_struct_pack_inspect.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(84, 97, 103, 103, 101, 100, 32, 123, 32, 116, 97, 103, 58, 32, 34, 105, 100, 34, 44, 32, 114, 101, 115, 116, 58, 32, 91, 49, 44, 32, 116, 114, 117, 101, 93, 32, 125);
-global global:core:prelude/format.wado::$const_obj_28: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
-global global:core:prelude/format.wado::$const_obj_29: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
-global global:core:prelude/primitive.wado::$const_obj_95: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_104: ref null Array<u8> = array.new_fixed<u8>(32, 125);
-global global:core:prelude/traits.wado::$const_obj_105: ref null Array<u8> = array.new_fixed<u8>(58, 32);
-global global:core:prelude/traits.wado::$const_obj_106: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
-global global:core:prelude/traits.wado::$const_obj_107: ref null Array<u8> = array.new_fixed<u8>(97);
-global global:core:prelude/traits.wado::$const_obj_108: ref null Array<u8> = array.new_fixed<u8>(79, 110, 101);
-global global:core:prelude/traits.wado::$const_obj_116: ref null Array<u8> = array.new_fixed<u8>(44, 32);
-global mut global:core:prelude/traits.wado::$const_obj_119: ref null "tuple//[core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>]" = ref.null none;
-global global:core:prelude/traits.wado::$const_obj_120: ref null Array<u8> = array.new_fixed<u8>(84, 97, 103, 103, 101, 100);
-global global:core:prelude/tuple.wado::$const_obj_121: ref null Array<u8> = array.new_fixed<u8>(93);
-global global:core:prelude/tuple.wado::$const_obj_123: ref null Array<u8> = array.new_fixed<u8>(91);
+global global:core:prelude/format.wado::$const_obj_29: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
+global global:core:prelude/format.wado::$const_obj_30: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
+global global:core:prelude/primitive.wado::$const_obj_97: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_106: ref null Array<u8> = array.new_fixed<u8>(32, 125);
+global global:core:prelude/traits.wado::$const_obj_107: ref null Array<u8> = array.new_fixed<u8>(58, 32);
+global global:core:prelude/traits.wado::$const_obj_108: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
+global global:core:prelude/traits.wado::$const_obj_109: ref null Array<u8> = array.new_fixed<u8>(97);
+global global:core:prelude/traits.wado::$const_obj_110: ref null Array<u8> = array.new_fixed<u8>(79, 110, 101);
+global global:core:prelude/traits.wado::$const_obj_118: ref null Array<u8> = array.new_fixed<u8>(44, 32);
+global global:core:prelude/traits.wado::$const_obj_121: ref null Array<u8> = array.new_fixed<u8>(114, 101, 115, 116);
+global global:core:prelude/traits.wado::$const_obj_122: ref null Array<u8> = array.new_fixed<u8>(116, 97, 103);
+global global:core:prelude/traits.wado::$const_obj_123: ref null Array<u8> = array.new_fixed<u8>(84, 97, 103, 103, 101, 100);
+global global:core:prelude/tuple.wado::$const_obj_124: ref null Array<u8> = array.new_fixed<u8>(93);
+global global:core:prelude/tuple.wado::$const_obj_126: ref null Array<u8> = array.new_fixed<u8>(91);
 
 fn "variadic_struct_pack_inspect.wado/$test_0_inspect_a_struct_with_a_pack_field"() {
     let t: ref "variadic_struct_pack_inspect.wado//One<[i32,bool]>";
@@ -826,7 +858,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 }
                 start_78 = local.tee $hfs_used_347($licm_buf_140.used);
                 $hfs_used_347 = new_used_77;
-                builtin::array_copy<u8>($licm_buf_140.repr, start_78, global:core:prelude/format.wado::$const_obj_29, 0, 3);
+                builtin::array_copy<u8>($licm_buf_140.repr, start_78, global:core:prelude/format.wado::$const_obj_30, 0, 3);
                 $tmpl_buf_142.used = 0;
                 val_i64_91 = builtin::i64_extend_i32_u($fused_slot_136);
                 digit_count = $inline_count_digits_u64_base_36: block -> i32 {
@@ -888,7 +920,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
         }
         start_132 = self_119.used;
         self_119.used = new_used_131;
-        builtin::array_copy<u8>(self_119.repr, start_132, global:core:prelude/format.wado::$const_obj_28, 0, 3);
+        builtin::array_copy<u8>(self_119.repr, start_132, global:core:prelude/format.wado::$const_obj_29, 0, 3);
     }
 }
 
@@ -1110,7 +1142,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 }
                 start_78 = local.tee $hfs_used_347(f.used);
                 $hfs_used_347 = new_used_77;
-                builtin::array_copy<u8>(f.repr, start_78, global:core:prelude/format.wado::$const_obj_29, 0, 3);
+                builtin::array_copy<u8>(f.repr, start_78, global:core:prelude/format.wado::$const_obj_30, 0, 3);
                 $tmpl_buf_142.used = 0;
                 val_i64_91 = builtin::i64_extend_i32_u($fused_slot_136);
                 digit_count = $inline_count_digits_u64_base_36: block -> i32 {
@@ -1170,7 +1202,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
         }
         start_132 = f.used;
         f.used = new_used_131;
-        builtin::array_copy<u8>(f.repr, start_132, global:core:prelude/format.wado::$const_obj_28, 0, 3);
+        builtin::array_copy<u8>(f.repr, start_132, global:core:prelude/format.wado::$const_obj_29, 0, 3);
     }
 }
 
@@ -1672,10 +1704,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
-fn "variadic_struct_pack_inspect.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 97, 103), used: 3 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, struct.new "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 116), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 };
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1691,7 +1719,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(x = builtin::i64_extend_i32_s(self); select i64(x < 0_i64, 0_i64 - x, x)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_95;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_97;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;
@@ -1740,7 +1768,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^c
     }
     start_22 = self_9.used;
     self_9.used = new_used_21;
-    builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_108, 0, 3);
+    builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_110, 0, 3);
     self_40 = f.buf;
     new_used_52 = self_40.used + 3;
     if @unlikely(new_used_52 > builtin::array_len(self_40.repr)) {
@@ -1749,7 +1777,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^c
     }
     start_53 = self_40.used;
     self_40.used = new_used_52;
-    builtin::array_copy<u8>(self_40.repr, start_53, global:core:prelude/traits.wado::$const_obj_106, 0, 3);
+    builtin::array_copy<u8>(self_40.repr, start_53, global:core:prelude/traits.wado::$const_obj_108, 0, 3);
     self_58 = f.buf;
     new_used_70 = self_58.used + 1;
     if @unlikely(new_used_70 > builtin::array_len(self_58.repr)) {
@@ -1758,7 +1786,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^c
     }
     start_71 = self_58.used;
     self_58.used = new_used_70;
-    builtin::array_copy<u8>(self_58.repr, start_71, global:core:prelude/traits.wado::$const_obj_107, 0, 1);
+    builtin::array_copy<u8>(self_58.repr, start_71, global:core:prelude/traits.wado::$const_obj_109, 0, 1);
     self_73 = f.buf;
     new_used_85 = self_73.used + 2;
     if @unlikely(new_used_85 > builtin::array_len(self_73.repr)) {
@@ -1767,7 +1795,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^c
     }
     start_86 = self_73.used;
     self_73.used = new_used_85;
-    builtin::array_copy<u8>(self_73.repr, start_86, global:core:prelude/traits.wado::$const_obj_105, 0, 2);
+    builtin::array_copy<u8>(self_73.repr, start_86, global:core:prelude/traits.wado::$const_obj_107, 0, 2);
     "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect$spec0"(v_89 = self.a; v_89, f);
     self_105 = f.buf;
     new_used_117 = self_105.used + 2;
@@ -1777,12 +1805,10 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32,bool]>^c
     }
     start_118 = self_105.used;
     self_105.used = new_used_117;
-    builtin::array_copy<u8>(self_105.repr, start_118, global:core:prelude/traits.wado::$const_obj_104, 0, 2);
+    builtin::array_copy<u8>(self_105.repr, start_118, global:core:prelude/traits.wado::$const_obj_106, 0, 2);
 }
 
 fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/Inspect::inspect$spec0"(self, f) {
-    let field_6: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>";
-    let field_7: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1817,14 +1843,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_23 = self_10.used;
     self_10.used = new_used_22;
-    builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_120, 0, 6);
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_119) {
-        let $mv_0_1: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>";
-        let $mv_1_2: ref "core:prelude/traits.wado//StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>";
-        multivalue_bind [$mv_0_1, $mv_1_2] = "variadic_struct_pack_inspect.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>^core:prelude/traits.wado/ReflectStruct::members"();
-        global:core:prelude/traits.wado::$const_obj_119 = struct.new "tuple//[core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<variadic_struct_pack_inspect.wado/Tagged<core:prelude/string.wado/String,[i32,bool]>,[i32,bool]>]" { 0: $mv_0_1, 1: $mv_1_2 };
-    }
-    field_6 = global:core:prelude/traits.wado::$const_obj_119.0;
+    builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_123, 0, 6);
     self_41 = f.buf;
     new_used_53 = self_41.used + 3;
     if @unlikely(new_used_53 > builtin::array_len(self_41.repr)) {
@@ -1833,7 +1852,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_54 = self_41.used;
     self_41.used = new_used_53;
-    builtin::array_copy<u8>(self_41.repr, start_54, global:core:prelude/traits.wado::$const_obj_106, 0, 3);
+    builtin::array_copy<u8>(self_41.repr, start_54, global:core:prelude/traits.wado::$const_obj_108, 0, 3);
     self_59 = f.buf;
     new_used_71 = self_59.used + 3;
     if @unlikely(new_used_71 > builtin::array_len(self_59.repr)) {
@@ -1842,7 +1861,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_72 = self_59.used;
     self_59.used = new_used_71;
-    builtin::array_copy<u8>(self_59.repr, start_72, field_6.field_name.repr, 0, 3);
+    builtin::array_copy<u8>(self_59.repr, start_72, global:core:prelude/traits.wado::$const_obj_122, 0, 3);
     self_74 = f.buf;
     new_used_86 = self_74.used + 2;
     if @unlikely(new_used_86 > builtin::array_len(self_74.repr)) {
@@ -1851,12 +1870,11 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_87 = self_74.used;
     self_74.used = new_used_86;
-    builtin::array_copy<u8>(self_74.repr, start_87, global:core:prelude/traits.wado::$const_obj_105, 0, 2);
+    builtin::array_copy<u8>(self_74.repr, start_87, global:core:prelude/traits.wado::$const_obj_107, 0, 2);
     v_92 = self.tag;
-    let $arg_spill_3: ref "core:prelude/string.wado//String";
-    $arg_spill_3 = f.buf;
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_3, v_92.repr, v_92.used);
-    field_7 = global:core:prelude/traits.wado::$const_obj_119.1;
+    let $arg_spill_1: ref "core:prelude/string.wado//String";
+    $arg_spill_1 = f.buf;
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$scalar"($arg_spill_1, v_92.repr, v_92.used);
     self_94 = f.buf;
     new_used_106 = self_94.used + 2;
     if @unlikely(new_used_106 > builtin::array_len(self_94.repr)) {
@@ -1865,7 +1883,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_107 = self_94.used;
     self_94.used = new_used_106;
-    builtin::array_copy<u8>(self_94.repr, start_107, global:core:prelude/traits.wado::$const_obj_116, 0, 2);
+    builtin::array_copy<u8>(self_94.repr, start_107, global:core:prelude/traits.wado::$const_obj_118, 0, 2);
     self_127 = f.buf;
     new_used_139 = self_127.used + 4;
     if @unlikely(new_used_139 > builtin::array_len(self_127.repr)) {
@@ -1874,7 +1892,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_140 = self_127.used;
     self_127.used = new_used_139;
-    builtin::array_copy<u8>(self_127.repr, start_140, field_7.field_name.repr, 0, 4);
+    builtin::array_copy<u8>(self_127.repr, start_140, global:core:prelude/traits.wado::$const_obj_121, 0, 4);
     self_142 = f.buf;
     new_used_154 = self_142.used + 2;
     if @unlikely(new_used_154 > builtin::array_len(self_142.repr)) {
@@ -1883,7 +1901,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_155 = self_142.used;
     self_142.used = new_used_154;
-    builtin::array_copy<u8>(self_142.repr, start_155, global:core:prelude/traits.wado::$const_obj_105, 0, 2);
+    builtin::array_copy<u8>(self_142.repr, start_155, global:core:prelude/traits.wado::$const_obj_107, 0, 2);
     "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect$spec0"(v_158 = self.rest; v_158, f);
     self_174 = f.buf;
     new_used_186 = self_174.used + 2;
@@ -1893,7 +1911,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/Tagged<core:prelu
     }
     start_187 = self_174.used;
     self_174.used = new_used_186;
-    builtin::array_copy<u8>(self_174.repr, start_187, global:core:prelude/traits.wado::$const_obj_104, 0, 2);
+    builtin::array_copy<u8>(self_174.repr, start_187, global:core:prelude/traits.wado::$const_obj_106, 0, 2);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"(self, $mv$content$repr, $mv$content$used) {
@@ -1957,7 +1975,7 @@ fn "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect
     }
     start_20 = self_7.used;
     self_7.used = new_used_19;
-    builtin::array_copy<u8>(self_7.repr, start_20, global:core:prelude/tuple.wado::$const_obj_123, 0, 1);
+    builtin::array_copy<u8>(self_7.repr, start_20, global:core:prelude/tuple.wado::$const_obj_126, 0, 1);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self.0, f.buf);
     v_6 = self.1;
     self_41 = f.buf;
@@ -1968,7 +1986,7 @@ fn "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect
     }
     start_54 = self_41.used;
     self_41.used = new_used_53;
-    builtin::array_copy<u8>(self_41.repr, start_54, global:core:prelude/traits.wado::$const_obj_116, 0, 2);
+    builtin::array_copy<u8>(self_41.repr, start_54, global:core:prelude/traits.wado::$const_obj_118, 0, 2);
     text = (if v_6 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
@@ -1983,7 +2001,7 @@ fn "core:prelude/tuple.wado/[i32,bool]^core:prelude/traits.wado/Inspect::inspect
     }
     start_74 = self_61.used;
     self_61.used = new_used_73;
-    builtin::array_copy<u8>(self_61.repr, start_74, global:core:prelude/tuple.wado::$const_obj_121, 0, 1);
+    builtin::array_copy<u8>(self_61.repr, start_74, global:core:prelude/tuple.wado::$const_obj_124, 0, 1);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
@@ -2003,14 +2021,30 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
+<<<<<<< HEAD
     b193: block {
         l194: loop {
             break_if b193 i >= digit_count_4;
+||||||| c8b5409d130
+    b192: block {
+        l193: loop {
+            break_if b192 i >= digit_count_4;
+=======
+    b191: block {
+        l192: loop {
+            break_if b191 i >= digit_count_4;
+>>>>>>> origin/main
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
+<<<<<<< HEAD
             continue l194;
+||||||| c8b5409d130
+            continue l193;
+=======
+            continue l192;
+>>>>>>> origin/main
         };
     };
 }
@@ -2027,7 +2061,7 @@ fn "core:prelude/tuple.wado/[i32]^core:prelude/traits.wado/Inspect::inspect$spec
     }
     start_117 = f.used;
     f.used = new_used_116;
-    builtin::array_copy<u8>(f.repr, start_117, global:core:prelude/tuple.wado::$const_obj_123, 0, 1);
+    builtin::array_copy<u8>(f.repr, start_117, global:core:prelude/tuple.wado::$const_obj_126, 0, 1);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self.0, f);
     new_used_150 = f.used + 1;
     if @unlikely(new_used_150 > builtin::array_len(f.repr)) {
@@ -2036,7 +2070,7 @@ fn "core:prelude/tuple.wado/[i32]^core:prelude/traits.wado/Inspect::inspect$spec
     }
     start_151 = f.used;
     f.used = new_used_150;
-    builtin::array_copy<u8>(f.repr, start_151, global:core:prelude/tuple.wado::$const_obj_121, 0, 1);
+    builtin::array_copy<u8>(f.repr, start_151, global:core:prelude/tuple.wado::$const_obj_124, 0, 1);
 }
 
 fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(self, f) {
@@ -2061,7 +2095,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:p
     }
     start_22 = f.used;
     f.used = new_used_21;
-    builtin::array_copy<u8>(local.tee $load_3(f.repr), start_22, global:core:prelude/traits.wado::$const_obj_108, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_3(f.repr), start_22, global:core:prelude/traits.wado::$const_obj_110, 0, 3);
     new_used_52 = f.used + 3;
     if @unlikely(new_used_52 > builtin::array_len($load_3)) {
         cold_path;
@@ -2069,7 +2103,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:p
     }
     start_53 = f.used;
     f.used = new_used_52;
-    builtin::array_copy<u8>(local.tee $load_6(f.repr), start_53, global:core:prelude/traits.wado::$const_obj_106, 0, 3);
+    builtin::array_copy<u8>(local.tee $load_6(f.repr), start_53, global:core:prelude/traits.wado::$const_obj_108, 0, 3);
     new_used_70 = f.used + 1;
     if @unlikely(new_used_70 > builtin::array_len($load_6)) {
         cold_path;
@@ -2077,7 +2111,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:p
     }
     start_71 = f.used;
     f.used = new_used_70;
-    builtin::array_copy<u8>(local.tee $load_9(f.repr), start_71, global:core:prelude/traits.wado::$const_obj_107, 0, 1);
+    builtin::array_copy<u8>(local.tee $load_9(f.repr), start_71, global:core:prelude/traits.wado::$const_obj_109, 0, 1);
     new_used_85 = f.used + 2;
     if @unlikely(new_used_85 > builtin::array_len($load_9)) {
         cold_path;
@@ -2085,7 +2119,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:p
     }
     start_86 = f.used;
     f.used = new_used_85;
-    builtin::array_copy<u8>(f.repr, start_86, global:core:prelude/traits.wado::$const_obj_105, 0, 2);
+    builtin::array_copy<u8>(f.repr, start_86, global:core:prelude/traits.wado::$const_obj_107, 0, 2);
     "core:prelude/tuple.wado/[i32]^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(v_89 = self.a; v_89, f);
     new_used_117 = f.used + 2;
     if @unlikely(new_used_117 > builtin::array_len(f.repr)) {
@@ -2094,7 +2128,7 @@ fn "core:prelude/traits.wado/variadic_struct_pack_inspect.wado/One<[i32]>^core:p
     }
     start_118 = f.used;
     f.used = new_used_117;
-    builtin::array_copy<u8>(f.repr, start_118, global:core:prelude/traits.wado::$const_obj_104, 0, 2);
+    builtin::array_copy<u8>(f.repr, start_118, global:core:prelude/traits.wado::$const_obj_106, 0, 2);
 }
 
 export fn "variadic_struct_pack_inspect.wado/$cm_export__$test_0_inspect_a_struct_with_a_pack_field" as "$test_0_inspect_a_struct_with_a_pack_field"

@@ -153,7 +153,6 @@ impl Known {
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
-    pub is_list: bool,
     pub tensor: Option<Known> = null,
 }
 
@@ -310,7 +309,6 @@ pub fn upgraded(nodes: List<Node>, opset: Option<i64>) -> Result<List<Node>, Str
             attrs.push(Attr {
                 name: "axis",
                 values: ["1"],
-                is_list: false,
             });
             out.push(Node { ..node, attrs });
             continue;

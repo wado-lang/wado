@@ -1,12 +1,12 @@
 // A `#[wire]` key the declaration does not read is refused rather than dropped:
-// a variant case has no number on the wire.
+// a variant case has no fields to position.
 
 variant Shape {
-    #[wire(number = 1)]
+    #[wire(positional)]
     Circle(f64),
 }
 
 export fn run() {}
 
 __DATA__
-{"compile_error": "`wire` takes no `number` on a variant case; there it takes `name`", "compile_error_codes": ["ATTR_MISUSE"]}
+{"compile_error": "`wire` takes no `positional` on a variant case; there it takes `name`", "compile_error_codes": ["ATTR_MISUSE"]}

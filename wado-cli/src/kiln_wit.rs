@@ -4,7 +4,7 @@
 //! `pub struct Options` at compile time. A registry generator arrives as an
 //! already-compiled Component Model artifact, so its options shape is read back
 //! from the component's embedded WIT instead: the `generate` export takes an
-//! `options: <record>` parameter (Kiln protocol revision 3, typed options), and
+//! `options: <record>` parameter, and
 //! that record maps field-for-field onto an [`OptionsDescriptor`].
 //!
 //! Defaults do not survive the WIT boundary — a WIT `record` has no notion of an

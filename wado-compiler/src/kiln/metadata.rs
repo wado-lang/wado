@@ -25,6 +25,9 @@ pub struct Metadata {
     pub version: u32,
     pub invocation: String,
     pub generator: String,
+    /// The `invoked_as` the generator was handed, which its output may name.
+    #[serde(default)]
+    pub invoked_as: String,
     /// Hex-encoded SHA-256 of the generator's source closure (entry
     /// `.wado` plus every transitively imported `.wado`). When the
     /// stored value differs from the provider's current hash the
@@ -92,6 +95,7 @@ mod tests {
             version: METADATA_VERSION,
             invocation: "kiln-deadbeef".to_string(),
             generator: "local:src/generator.wado".to_string(),
+            invoked_as: "src/generator.wado".to_string(),
             generator_source_hash: "sha256:gen".to_string(),
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),

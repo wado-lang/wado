@@ -211,9 +211,6 @@ pub enum CompilerItem {
     /// `ReflectStruct::wire_name_policy()` (WEP 2026-06-13). Casing is resolved
     /// library-side by `core:serde::wire_name`.
     CaseStyle,
-    /// `WireEncoding` — a numbered field's `#[wire(encoding)]`, as
-    /// `StructField::wire_encoding()` returns it.
-    WireEncoding,
 
     // ── Traits ────────────────────────────────────────────────────────
     /// `Default` — `Default::default()` synthesis anchor.
@@ -291,9 +288,6 @@ pub enum CompilerItem {
     /// `core:serde::Deserialize` — anchor for `Deserialize` impl
     /// synthesis and for the Kiln CM adapter's options decoding.
     Deserialize,
-    /// `core:serde::WireNumbered` — the bound a format keyed by field numbers
-    /// requires, which holds for a struct whose every field carries one.
-    WireNumbered,
     /// `core:serde::Serializer` — supertrait bound on synthesised
     /// `serialize<S: Serializer>` methods.
     Serializer,
@@ -412,12 +406,6 @@ pub enum CompilerItem {
     /// `Alignment::Right` — anchors the case-name / case-index pair used
     /// by template-string padding lowering.
     AlignmentRight,
-    /// `WireEncoding::Plain` — anchors the case a `StructField` carries.
-    WireEncodingPlain,
-    /// `WireEncoding::ZigZag` — anchors the case a `StructField` carries.
-    WireEncodingZigZag,
-    /// `WireEncoding::Fixed` — anchors the case a `StructField` carries.
-    WireEncodingFixed,
     /// `CaseStyle::Identity` — anchors the case a `#[wire(name_policy)]` names.
     CaseStyleIdentity,
     /// `CaseStyle::Camel` — anchors the case a `#[wire(name_policy)]` names.
@@ -729,7 +717,6 @@ impl CompilerItem {
         Self::StreamChunk,
         Self::StreamWrite,
         Self::CaseStyle,
-        Self::WireEncoding,
         Self::Default,
         Self::FromLeBytes,
         Self::Reflect,
@@ -777,7 +764,6 @@ impl CompilerItem {
         Self::From,
         Self::Serialize,
         Self::Deserialize,
-        Self::WireNumbered,
         Self::Serializer,
         Self::Deserializer,
         Self::SerializeStruct,
@@ -818,9 +804,6 @@ impl CompilerItem {
         Self::AlignmentLeft,
         Self::AlignmentCenter,
         Self::AlignmentRight,
-        Self::WireEncodingPlain,
-        Self::WireEncodingZigZag,
-        Self::WireEncodingFixed,
         Self::CaseStyleIdentity,
         Self::CaseStyleCamel,
         Self::CaseStyleSnake,
@@ -962,7 +945,6 @@ impl CompilerItem {
             Self::StreamChunk => "stream_chunk",
             Self::StreamWrite => "stream_write",
             Self::CaseStyle => "case_style",
-            Self::WireEncoding => "wire_encoding",
             Self::Default => "default",
             Self::FromLeBytes => "from_le_bytes",
             Self::Reflect => "reflect",
@@ -1010,7 +992,6 @@ impl CompilerItem {
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
-            Self::WireNumbered => "wire_numbered",
             Self::Serializer => "serializer",
             Self::Deserializer => "deserializer",
             Self::SerializeStruct => "serialize_struct",
@@ -1051,9 +1032,6 @@ impl CompilerItem {
             Self::AlignmentLeft => "alignment_left",
             Self::AlignmentCenter => "alignment_center",
             Self::AlignmentRight => "alignment_right",
-            Self::WireEncodingPlain => "wire_encoding_plain",
-            Self::WireEncodingZigZag => "wire_encoding_zigzag",
-            Self::WireEncodingFixed => "wire_encoding_fixed",
             Self::CaseStyleIdentity => "case_style_identity",
             Self::CaseStyleCamel => "case_style_camel",
             Self::CaseStyleSnake => "case_style_snake",
@@ -1233,10 +1211,6 @@ impl CompilerItem {
             | Self::StreamChunk
             | Self::StreamWrite
             | Self::CaseStyle
-            | Self::WireEncoding
-            | Self::WireEncodingPlain
-            | Self::WireEncodingZigZag
-            | Self::WireEncodingFixed
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
             | Self::CaseStyleSnake
@@ -1376,7 +1350,6 @@ impl CompilerItem {
             // without being registered.
             Self::Serialize
             | Self::Deserialize
-            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct
@@ -1501,11 +1474,9 @@ impl CompilerItem {
             }
             Self::ByteList | Self::ByteSlice => CompilerItemKind::Newtype,
             Self::Option | Self::Result => CompilerItemKind::Variant,
-            Self::Ordering
-            | Self::Alignment
-            | Self::CaseStyle
-            | Self::WireEncoding
-            | Self::CopyResult => CompilerItemKind::Enum,
+            Self::Ordering | Self::Alignment | Self::CaseStyle | Self::CopyResult => {
+                CompilerItemKind::Enum
+            }
             Self::StreamChunk | Self::StreamWrite => CompilerItemKind::Struct,
             Self::SerializeError | Self::DeserializeError => CompilerItemKind::Struct,
             Self::SerializeErrorKind | Self::DeserializeErrorKind => CompilerItemKind::Enum,
@@ -1533,7 +1504,6 @@ impl CompilerItem {
             | Self::From
             | Self::Serialize
             | Self::Deserialize
-            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct
@@ -1652,9 +1622,6 @@ impl CompilerItem {
             | Self::AlignmentLeft
             | Self::AlignmentCenter
             | Self::AlignmentRight
-            | Self::WireEncodingPlain
-            | Self::WireEncodingZigZag
-            | Self::WireEncodingFixed
             | Self::CaseStyleIdentity
             | Self::CaseStyleCamel
             | Self::CaseStyleSnake

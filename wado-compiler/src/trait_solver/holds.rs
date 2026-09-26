@@ -130,7 +130,11 @@ impl Query<'_> {
             return Some(Holds::default());
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
-        if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
+        // Identity answers the trait at `Self` alone; another argument asks an impl.
+        if matches!(ty, SolverType::Ref { .. })
+            && on_ref == RefRule::Always
+            && args.iter().all(|arg| arg == ty)
+        {
             return Some(Holds::default());
         }
         // A pack's bound holds of each element, so an element in a variadic
@@ -776,6 +780,29 @@ mod tests {
         assert_eq!(ask(ref_to(decl(I32)), EQ), Some(Holds::default()));
         assert_eq!(ask(ref_to(decl(I32)), SUB), Some(Holds::default()));
         assert_eq!(ask(decl(I32), SUB), None);
+    }
+
+    /// Identity is `Eq<Self>`: `&Point: Eq<i32>` asks an impl, and only the
+    /// one written for `&Point` answers.
+    #[test]
+    fn a_reference_s_identity_answers_no_other_argument() {
+        let mut p = Builder::default().build();
+        p.traits.insert(
+            EQ,
+            TraitDef {
+                on_ref: RefRule::Always,
+                ..TraitDef::default()
+            },
+        );
+        let ask = |ty: &SolverType, args: &[SolverType]| {
+            holds_with_args(&p, &Env::default(), ty, EQ, HERE, args)
+        };
+        let point = ref_to(decl(POINT));
+        assert_eq!(
+            ask(&point, std::slice::from_ref(&point)),
+            Some(Holds::default())
+        );
+        assert_eq!(ask(&point, &[decl(I32)]), None);
     }
 
     /// `impl<T: Alpha> Beta for T` answers `Point: Beta` exactly when

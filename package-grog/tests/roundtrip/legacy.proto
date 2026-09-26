@@ -1,0 +1,23 @@
+// proto2's own mappings: presence on every field, closed enums, groups.
+syntax = "proto2";
+
+package legacy;
+
+enum Level {
+  LOW = 1;
+  HIGH = 2;
+}
+
+message Record {
+  required int32 id = 1;
+  optional Level level = 2;
+  repeated Level history = 3;
+  repeated int32 counts = 4;
+  repeated int32 packed_counts = 5 [packed = true];
+  optional group Note = 6 {
+    optional string text = 7;
+  }
+  repeated group Tag = 8 {
+    optional string name = 9;
+  }
+}

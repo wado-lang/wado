@@ -933,10 +933,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Unknown variable - report error
-        let _ = self.emit(TypeError::UnknownIdentifier {
-            name: ident.name.clone(),
-            span: ident.span,
+        let name = ident.name.clone();
+        let span = ident.span;
+        let _ = self.emit(if ctx.declared(&name) {
+            TypeError::OutOfScope { name, span }
+        } else {
+            TypeError::UnknownIdentifier { name, span }
         });
         TypeTable::ERROR
     }
@@ -1494,8 +1496,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type =
-                                self.tysys.substitute_type_params(*ftype, &type_args);
+                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -3921,7 +3922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if type_args.is_empty() {
                             *type_id
                         } else {
-                            self.tysys.substitute_type_params(*type_id, &type_args)
+                            self.substitute_in_frame(*type_id, &type_args)
                         }
                     })
                 else {
@@ -4305,7 +4306,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            field_wire_numbers: vec![None; fields.len()],
             type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };

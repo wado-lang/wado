@@ -1,0 +1,16 @@
+// A struct named through a namespace import derives `Default` for a bound as
+// one imported by name does.
+
+use dep from "./sub/default_bound_through_namespace_dep.wado";
+
+fn make<M: Default>() -> M {
+    return M::default();
+}
+
+test "a namespaced struct satisfies a Default bound" {
+    assert make::<dep::Record>().id == 7;
+}
+
+test "a namespaced struct answers its derived default" {
+    assert dep::Record::default().id == 7;
+}

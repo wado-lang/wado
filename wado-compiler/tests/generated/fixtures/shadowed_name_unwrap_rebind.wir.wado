@@ -178,6 +178,7 @@ fn "shadowed_name_unwrap_rebind.wado/run"() with Stdout {
     let $fuse_at_19: i32;
     let $fuse_at_20: i32;
     let $fuse_at_21: i32;
+    let a_22: ref "core:prelude/types.wado//Option<i32>";
     let a_23: i32;
     let total: i32;
     let item: i32;
@@ -187,16 +188,14 @@ fn "shadowed_name_unwrap_rebind.wado/run"() with Stdout {
     let tx_43: i32;
     let $sroa_xs_repr_53: ref Array<i32>;
     let $sroa_xs_index_54: i32;
-    $v2 = $inline_unwrap_1: block -> i32 {
-        $v1_1 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null($v0_0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }; $v0_0) };
-        let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
-        $match_scrut_0 = $v1_1.value;
-        if ref.test "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0) {
-            a_23 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0;
-            break $inline_unwrap_1: a_23;
+    $v2 = $inline_unwrap_scalar_1: block -> i32 {
+        a_22 = $v1_1 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null($v0_0 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }; $v0_0) }; $v1_1.value;
+        if ref.test "core:prelude/types.wado//Option<i32>::Some"(a_22) {
+            a_23 = ref.cast "core:prelude/types.wado//Option<i32>::Some"(a_22).payload_0;
+            break $inline_unwrap_scalar_1: a_23;
         } else {
         }
-        break $inline_unwrap_1: 0;
+        break $inline_unwrap_scalar_1: 0;
     };
     if @unlikely($v2 != 3) {
         cold_path;
