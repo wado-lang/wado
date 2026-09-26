@@ -1,6 +1,6 @@
 #![generated(by = "gale", sources = ["tests/grammars/css3Lexer.g4", "tests/grammars/css3Parser.g4"])]
 
-use { TreeSet } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 // Grammar metadata from source .g4 prequels:
 //   option tokenVocab = css3Lexer
@@ -1131,49 +1131,94 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
 
 struct LThread {
     state: i32,
-    stack: List<i32>,
+    stack: i32,
     accept: bool,
 }
 
-fn latn_sig(state: i32, stack: &List<i32>) -> String {
-    let mut s = `${state}#`;
-    for let mut i = 0; i < stack.len(); i += 1 {
-        if i > 0 {
-            s.push_str(",");
+struct LatnStacks {
+    parent: List<i32>,
+    ret: List<i32>,
+    ids: TreeMap<i64, i32>,
+}
+
+impl LatnStacks {
+    fn push(&mut self, parent: i32, ret: i32) -> i32 {
+        let key = latn_pair_key(parent, ret);
+        if let Some(id) = self.ids.get(key) {
+            return id;
         }
-        s.push_str(`${stack[i]}`);
+        let id = self.parent.len();
+        self.parent.push(parent);
+        self.ret.push(ret);
+        self.ids[key] = id;
+        return id;
     }
-    return s;
+}
+
+fn latn_pair_key(hi: i32, lo: i32) -> i64 {
+    assert hi >= -1 && lo >= -1, "latn keys pair a state or stack id with -1 for none";
+    return (hi + 1) as i64 << 32 | (lo + 1) as i64;
+}
+
+struct LatnVisited {
+    step: i32,
+    step_of: List<i32>,
+    stack_of: List<i32>,
+    more: TreeSet<i64>,
+}
+
+impl LatnVisited {
+    fn new(nstates: i32) -> LatnVisited {
+        return LatnVisited {
+            step: 0,
+            step_of: List::filled(nstates, -1),
+            stack_of: List::filled(nstates, -1),
+            more: TreeSet::<i64>::new(),
+        };
+    }
+
+    fn first_visit(&mut self, state: i32, stack: i32) -> bool {
+        if self.step_of[state] != self.step {
+            self.step_of[state] = self.step;
+            self.stack_of[state] = stack;
+            return true;
+        }
+        if self.stack_of[state] == stack {
+            return false;
+        }
+        return self.more.insert(latn_pair_key(state, stack));
+    }
+
+    fn next_step(&mut self) {
+        self.step += 1;
+        if !self.more.is_empty() {
+            self.more.clear();
+        }
+    }
 }
 
 fn latn_closure(
     sim: &AtnSim,
+    stacks: &mut LatnStacks,
     out: &mut List<LThread>,
-    visited: &mut TreeSet<String>,
+    visited: &mut LatnVisited,
     state: i32,
-    stack: &List<i32>,
-    open: &List<i32>,
+    stack: i32,
+    open: &mut List<i32>,
 ) {
-    let key = latn_sig(state, stack);
-    if visited.contains(key) {
+    if !visited.first_visit(state, stack) {
         return;
     }
-    visited.insert(key);
 
     if sim.state_kind[state] == ATN_RULE_STOP {
-        if stack.is_empty() {
-            out.push(LThread { state, stack: [], accept: true });
-        } else {
-            let ret = stack[stack.len() - 1];
-            let mut rest: List<i32> = [];
-            for let mut i = 0; i < stack.len() - 1; i += 1 {
-                rest.push(stack[i]);
-            }
-            let mut rest_open: List<i32> = [];
-            for let mut i = 0; i < open.len() - 1; i += 1 {
-                rest_open.push(open[i]);
-            }
-            latn_closure(sim, out, visited, ret, &rest, &rest_open);
+        if stack < 0 {
+            out.push(LThread { state, stack, accept: true });
+            return;
+        }
+        let returned = open.pop();
+        latn_closure(sim, stacks, out, visited, stacks.ret[stack], stacks.parent[stack], open);
+        if let Some(rule) = returned {
+            open.push(rule);
         }
         return;
     }
@@ -1183,7 +1228,7 @@ fn latn_closure(
     if tc > 0 {
         let k0 = sim.tr_kind[ts];
         if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
-            out.push(LThread { state, stack: *stack, accept: false });
+            out.push(LThread { state, stack, accept: false });
             return;
         }
     }
@@ -1191,36 +1236,33 @@ fn latn_closure(
         let idx = ts + i;
         let target = sim.tr_target[idx];
         if sim.tr_kind[idx] == ATN_TR_RULE {
-            if target < 0 {
+            if target < 0 || open.contains(&target) {
                 continue;
             }
-            if open.iter_ref().any(|o: &i32| *o == target) {
-                continue;
-            }
-            let mut ns: List<i32> = *stack;
-            ns.push(sim.tr_follow[idx]);
-            let mut open2: List<i32> = *open;
-            open2.push(target);
-            latn_closure(sim, out, visited, target, &ns, &open2);
+            let pushed = stacks.push(stack, sim.tr_follow[idx]);
+            open.push(target);
+            latn_closure(sim, stacks, out, visited, target, pushed, open);
+            let _ = open.pop();
         } else {
-            latn_closure(sim, out, visited, target, stack, open);
+            latn_closure(sim, stacks, out, visited, target, stack, open);
         }
     }
 }
 
 pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
+    let mut stacks = LatnStacks { parent: [], ret: [], ids: TreeMap::<i64, i32>::new() };
+    let mut open: List<i32> = [];
+    let mut visited = LatnVisited::new(sim.state_kind.len());
     let mut clist: List<LThread> = [];
-    let mut seed = TreeSet::<String>::new();
-    let empty: List<i32> = [];
-    let no_open: List<i32> = [];
-    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty, &no_open);
+    latn_closure(sim, &mut stacks, &mut clist, &mut visited, sim.rule_start[start_rule], -1, &mut open);
 
+    let mut nlist: List<LThread> = [];
     let mut pos = start;
     loop {
         let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
-        let mut nlist: List<LThread> = [];
-        let mut nseen = TreeSet::<String>::new();
+        nlist.clear();
+        visited.next_step();
         let mut i = 0;
         let mut stop = false;
         while i < clist.len() && !stop {
@@ -1228,15 +1270,13 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
             if th.accept {
                 best = pos;
                 stop = !longest;
-            } else {
+            } else if cur >= 0 {
                 let ts = sim.state_tr_start[th.state];
                 let tc = sim.state_tr_count[th.state];
                 for let mut j = 0; j < tc; j += 1 {
                     let idx = ts + j;
                     let kind = sim.tr_kind[idx];
-                    let matched = if cur < 0 {
-                        false;
-                    } else if kind == ATN_TR_ATOM {
+                    let matched = if kind == ATN_TR_ATOM {
                         cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
                     } else if kind == ATN_TR_WILDCARD {
                         true;
@@ -1246,16 +1286,26 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
                         false;
                     };
                     if matched {
-                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack, &no_open);
+                        latn_closure(
+                            sim,
+                            &mut stacks,
+                            &mut nlist,
+                            &mut visited,
+                            sim.tr_target[idx],
+                            th.stack,
+                            &mut open,
+                        );
                     }
                 }
             }
             i += 1;
         }
-        clist = nlist;
-        if clist.is_empty() {
+        if nlist.is_empty() {
             break;
         }
+        let spent = clist;
+        clist = nlist;
+        nlist = spent;
         pos += 1;
     }
     return best;
@@ -187153,113 +187203,213 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Space; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '\u{b}' | '\u{e}'..='\u{1f}' | '%'..='&' | '?' | 'B'..='E' | 'G'..='M' | 'P'..='S' | 'V'..='Z' | '_'..='`' | 'b' | 'd'..='e' | 'g'..='m' | 'q'..='s' | 'w'..='z' => {
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '!' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    '\t' | '\n' | '\u{c}' | '\r' | ' ' | '/' | 'I' | '\\' | 'i' => {
+                    '\u{0}'..='\u{8}' | '\u{b}' | '\u{e}'..='\u{1f}' | '!'..='\'' | '(' | ')'..=',' | '-' | '.' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='H' | 'J'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='h' | 'j'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '\t' | ' ' | '/' | 'I' | '\\' | 'i' => {
                         end = try_Important(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Important; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
-                    _ => {
+                    '\n' | '\u{c}' | '\r' => {
+                        end = try_Important(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Important; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '"' | '\'' => {
-                end = try_String_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_String_; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_String_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_String_; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                    },
+                }
             },
             '#' => {
-                end = try_Hash(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Hash; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '-' | '0'..='9' | 'A'..='F' | 'G'..='Z' | '\\' | '_' | 'a'..='f' | 'g'..='z' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Hash(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Hash; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                    },
+                }
             },
             '$' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '=' => {
                         end = try_SuffixMatch(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_SuffixMatch; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '(' => {
                 end = try_OpenParen(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_OpenParen; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             ')' => {
                 end = try_CloseParen(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_CloseParen; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '*' => {
                 end = try_Multiply(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Multiply; best_channel = 0; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '=' => {
                         end = try_SubstringMatch(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_SubstringMatch; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '+' => {
                 end = try_Plus(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Plus; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             ',' => {
                 end = try_Comma(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Comma; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '-' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Minus(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Minus; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '-' => {
                         end = try_Cdc(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Cdc; best_channel = 0; }
@@ -187267,174 +187417,369 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_Minus; best_channel = 0; }
                         end = try_Variable(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Variable; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
                         end = try_Minus(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Minus; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '.' => {
                 end = try_Dot(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Dot; best_channel = 0; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    '%' | '.' | '0'..='9' => {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='$' | '&'..='\'' | '(' | ')'..=',' | '/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '%' => {
                         end = try_Percentage(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '-' | 'A'..='F' | 'G'..='Z' | '\\' | '_' | 'a'..='f' | 'g'..='z' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_UnknownDimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '.' | '0'..='9' => {
+                        end = try_Percentage(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_UnknownDimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Dimension(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-                end = try_UnknownDimension(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-                end = try_Number(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '/' => {
                 end = try_Divide(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Divide; best_channel = 0; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')' | '+'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '*' => {
                         end = try_Comment(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Comment; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '0'..='9' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    '%' | '.' | '0'..='9' => {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='$' | '&'..='\'' | '(' | ')'..=',' | '/' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '%' => {
                         end = try_Percentage(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '-' | 'A'..='F' | 'G'..='Z' | '\\' | '_' | 'a'..='f' | 'g'..='z' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_UnknownDimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '.' | '0'..='9' => {
+                        end = try_Percentage(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Percentage; best_channel = 0; }
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_UnknownDimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Dimension(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
+                        end = try_Number(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Dimension(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Dimension; best_channel = 0; }
-                end = try_UnknownDimension(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UnknownDimension; best_channel = 0; }
-                end = try_Number(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Number; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             ':' => {
                 end = try_Colon(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Colon; best_channel = 0; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'O'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'o'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     'N' | '\\' | 'n' => {
                         end = try_PseudoNot(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_PseudoNot; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             ';' => {
                 end = try_SemiColon(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SemiColon; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-            },
-            '<' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    '!' => {
-                        end = try_Cdo(&lexer.chars, start);
-                        if end > best_end { best_end = end; best_kind = TK_Cdo; best_channel = 0; }
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+            },
+            '<' => {
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..=' ' | '"'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '!' => {
+                        end = try_Cdo(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Cdo; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                    },
+                }
             },
             '=' => {
                 end = try_Equal(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Equal; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '>' => {
                 end = try_Greater(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Greater; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '@' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '.'..='/' | '0'..='9' | ':'..='@' | '[' | ']'..='^' | '`' | '{'..='\u{7f}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '-' | 'K' | 'k' => {
                         end = try_Keyframes(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Keyframes; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    'A'..='B' | 'D'..='E' | 'G'..='H' | 'J' | 'L' | 'O' | 'Q'..='R' | 'T'..='U' | 'W'..='Z' | '_' | 'a'..='b' | 'd'..='e' | 'g'..='h' | 'j' | 'l' | 'o' | 'q'..='r' | 't'..='u' | 'w'..='z' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'C' => {
                         end = try_CounterStyle(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_CounterStyle; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'F' | 'f' => {
                         end = try_FontFace(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_FontFace; best_channel = 0; }
                         end = try_FontFeatureValues(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'I' | 'i' => {
                         end = try_Import(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Import; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'M' | 'm' => {
                         end = try_Media(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Media; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'N' | 'n' => {
                         end = try_Namespace(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Namespace; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'P' | 'p' => {
                         end = try_Page(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Page; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'S' | 's' => {
                         end = try_Supports(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Supports; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'V' | 'v' => {
                         end = try_Viewport(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Viewport; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '\\' => {
                         end = try_Import(&lexer.chars, start);
@@ -187457,138 +187802,219 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_CounterStyle; best_channel = 0; }
                         end = try_FontFeatureValues(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_FontFeatureValues; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'c' => {
                         end = try_Charset(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Charset; best_channel = 0; }
                         end = try_CounterStyle(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_CounterStyle; best_channel = 0; }
+                        end = try_AtKeyword(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_AtKeyword(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_AtKeyword; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'A' | 'a' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'O'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'o'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '4' | '6' | 'N' | '\\' | 'n' => {
                         end = try_And(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'F' | 'f' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '4' | '6' | 'R' | '\\' | 'r' => {
                         end = try_From(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'N' | 'n' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '4' | '6' | 'N' | 'O' | '\\' | 'n' | 'o' => {
                         end = try_Not(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'O' | 'o' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '5' | '7'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Q' | 'S'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '4' | '6' | 'O' | '\\' | 'o' => {
                         end = try_MediaOnly(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
                         end = try_Or(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'N' | 'n' => {
                         end = try_MediaOnly(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_MediaOnly; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'R' | 'r' => {
                         end = try_Or(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'T' | 't' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='N' | 'P'..='S' | 'U'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='n' | 'p'..='s' | 'u'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '5' | '7' | 'O' | 'T' | '\\' | 'o' | 't' => {
                         end = try_To(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'U' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='T' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='t' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '+' => {
                         end = try_UnicodeRange(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '0' | '5' | '7' | 'R' | 'U' | '\\' | 'r' | 'u' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '[' => {
                 end = try_OpenBracket(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_OpenBracket; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '\\' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '1'..='3' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='M' | 'P'..='Q' | 'S' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='m' | 'p'..='q' | 's' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '0' | '\\' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
@@ -187604,6 +188030,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
                         end = try_To(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '4' | '6' => {
                         end = try_MediaOnly(&lexer.chars, start);
@@ -187616,12 +188046,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
                         end = try_From(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '5' | '7' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
                         end = try_To(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'N' | 'n' => {
                         end = try_MediaOnly(&lexer.chars, start);
@@ -187630,6 +188068,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_Not; best_channel = 0; }
                         end = try_And(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_And; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'O' | 'o' => {
                         end = try_MediaOnly(&lexer.chars, start);
@@ -187640,6 +188082,10 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
                         end = try_To(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'R' | 'r' => {
                         end = try_Url(&lexer.chars, start);
@@ -187648,175 +188094,285 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                         if end > best_end { best_end = end; best_kind = TK_Or; best_channel = 0; }
                         end = try_From(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_From; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'T' | 't' => {
                         end = try_To(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_To; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'U' | 'u' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             ']' => {
                 end = try_CloseBracket(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_CloseBracket; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '^' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '=' => {
                         end = try_PrefixMatch(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_PrefixMatch; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'c' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'b'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     'a' => {
                         end = try_Calc(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Calc; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'p' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     'r' => {
                         end = try_DxImageTransform(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_DxImageTransform; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'u' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '1'..='4' | '6' | '8'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Q' | 'S'..='T' | 'V'..='Z' | '[' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='q' | 's'..='t' | 'v'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '+' => {
                         end = try_UnicodeRange(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '0' | '5' | '7' | 'R' | 'U' | '\\' | 'u' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     'r' => {
                         end = try_Url(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url; best_channel = 0; }
                         end = try_Url_(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Url_; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             'v' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'b'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     'a' => {
                         end = try_Var(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_Var; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '{' => {
                 end = try_OpenBrace(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_OpenBrace; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '|' => {
                 end = try_Pipe(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Pipe; best_channel = 0; }
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..='*' | ',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
                     '+' => {
                         end = try_UnicodeRange(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_UnicodeRange; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     '=' => {
                         end = try_DashMatch(&lexer.chars, start);
                         if end > best_end { best_end = end; best_kind = TK_DashMatch; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
                     },
                 }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
             },
             '}' => {
                 end = try_CloseBrace(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_CloseBrace; best_channel = 0; }
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
-            },
-            '~' => {
                 let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
                 match second_char {
-                    '=' => {
-                        end = try_Includes(&lexer.chars, start);
-                        if end > best_end { best_end = end; best_kind = TK_Includes; best_channel = 0; }
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
                     },
                     _ => {
                     },
                 }
-                end = try_Tilde(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
-                end = try_Ident(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+            },
+            '~' => {
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='<' | '>'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Tilde(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    '=' => {
+                        end = try_Includes(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Includes; best_channel = 0; }
+                        end = try_Tilde(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                        end = try_Tilde(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Tilde; best_channel = 0; }
+                        end = try_Ident(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
+                    },
+                }
             },
             _ => {
                 end = try_Ident(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Ident; best_channel = 0; }
-                end = try_Function_(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='\t' | '\u{b}' | '\u{e}'..='\'' | '(' | ')'..=',' | '-' | '.'..='/' | '0'..='9' | ':'..='@' | 'A'..='F' | 'G'..='Z' | '[' | '\\' | ']'..='^' | '_' | '`' | 'a'..='f' | 'g'..='z' | '{'..='\u{7f}' | '\u{80}'..='\u{10ffff}' => {
+                        end = try_Function_(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_Function_; best_channel = 0; }
+                    },
+                    _ => {
+                    },
+                }
             },
         }
         if best_end <= start {

@@ -1588,7 +1588,7 @@ test "a lexer-ATN-only grammar carries the decoder and no parser simulator" {
 
 test "runtime standard-library imports sit at the top of the file" {
     let output = gen_source(LATN_ONLY_G4);
-    let std_use = output.find("use { TreeSet } from \"core:collections\";").unwrap();
+    let std_use = output.find("use { TreeMap, TreeSet } from \"core:collections\";").unwrap();
     assert std_use < output.find("pub struct Span").unwrap();
 }
 

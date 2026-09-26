@@ -117,6 +117,22 @@ call sites → 161), and a `mode` grammar skipped first-char dispatch outright
 Unmeasured here — both benchmarks run a modeless grammar whose first sets were
 already exact, so size this on a keyword-dense or mode-bearing grammar.
 
+### String tokens stay off the lexer ATN, and the ATN got cheaper (landed, 2026-09)
+
+JSON's `STRING` ran through `latn_match` on every string. Every rule ref is read
+case-folded, and a negated set read that way counted as unknown, so the
+`SAFECODEPOINT` arm "might collide" with `ESC`. Folding moves only ASCII
+letters, so a complement that keeps the letters in is a sound reading. With it,
+`STRING` is a static matcher. Tokenizing `twitter.json` went from 206 KB/s to
+87 MB/s.
+
+A rule that does need the ATN (Rust's `STRING_LITERAL`, css3's `String_`) paid
+for a formatted `String` key and a `TreeSet` insert per visited state per
+character, plus a copy of the rule stack per thread. Stacks are now interned
+ids, and the visited set is a stamp per state. An ATN-routed JSON string rule
+went from 402 KB/s to 3.6 MB/s. What is left is the closure walk itself, which a
+DFA cache would remove (see "What's next").
+
 ### Standing rules (measured)
 
 The four rules these benchmarks established — live set over allocation count,
@@ -277,6 +293,27 @@ re-measure before committing. Candidates read off the profile above:
   a pure function of its inputs. It would be keyed per scan function on
   (pos, min_prec, follow, gate), with a dense array per rule. It is deferred
   because it adds a per-parse cost to every grammar the tournament reaches.
+
+Found by reading generated code (2026-09), not yet measured on a benchmark:
+
+- [ ] **Left-recursive wraps shift the event columns.** `start_node_at` inserts
+      into four columns at the loop's checkpoint on every LR iteration, so a
+      chain of N operators moves O(N²) rows. A forward-parent record resolved in
+      `finish()` would make each wrap O(1).
+- [ ] **`atn_predict` allocates per prediction.** Each call builds a fresh
+      `CtxArena` and `ClosureScratch`, and each step a new `AtnKeyMap`, move list
+      and one `AtnConfig` per work item. Keeping the scratch in `AtnState` and
+      clearing it would remove most of that.
+- [ ] **The LR scan gate runs before every suffix.** `scan_<rule>_lr_N` re-scans
+      the right operand even where the suffix's first token already decides.
+      Emitting it only when FIRST(suffix) meets the atom's FIRST or the non-LR
+      FOLLOW would skip it on plain arithmetic.
+- [ ] **A loop-reserve probe can scan to EOF.** After Rust's last `#![..]`, the
+      `innerAttribute*` reserve check scans `item* EOF`, the whole file. Two
+      tokens (`# !` against `# [`) already decide it.
+- [ ] **The lexer ATN re-walks its closure per character.** Rules without
+      recursion are regular, so a DFA built lazily per (state set, char class)
+      would make an ATN-routed string rule as cheap as a static one.
 
 ### Generation-time cost: the generator itself (2026-07)
 

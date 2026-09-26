@@ -1573,12 +1573,9 @@ fn _parse_m__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if !kind_set_has(&SYNC_4, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_4, &EXPECTED_4); }
     let kind = p.peek_kind();
     if kind == TK_K {
-        p.pos += 1;
-        if p.peek_kind() == TK_X {
-            p.pos -= 1;
+        if p.peek_at(1) == TK_X {
             return _parse_m__inner_alt_0(p, follow);
-        } else if p.peek_kind() == TK_Z {
-            p.pos -= 1;
+        } else if p.peek_at(1) == TK_Z {
             return _parse_m__inner_alt_1(p, follow);
         }
     }
