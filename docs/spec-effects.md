@@ -297,6 +297,7 @@ Effect parameters:
 - Are declared with the `effect` keyword in generic parameter lists
 - Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
 - Can coexist with type parameters: `<T, effect E>`
+- Number at most one per function, so every closure a function takes resolves into the same parameter
 
 The caller of a generic function must hold what its parameter resolves to:
 
@@ -310,7 +311,7 @@ A closure argument's effects are those inferred from its body (see [Closures](./
 
 ### `with _`
 
-`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter:
+`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. It is the function's one effect parameter, so a signature writing `with _` declares no `<effect E>` of its own. Every `_` in one signature is the same parameter:
 
 ```wado
 fn wrapper(f: fn() with _) with _ { f(); }      // == fn wrapper<effect E>(f: fn() with E) with E
@@ -397,12 +398,6 @@ A head that writes nothing reads as `with _`, so a bare trait is open rather tha
 
 Every trait in the standard library says `with ()`. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 
-A bound may fix an open trait's effects, so a caller that accepts only a pure impl says so:
-
-```wado
-fn sum<S: Source with ()>(s: S) -> i32 { ... }   // only a pure `Source`
-```
-
 A type implements a trait once, so two impls that differ only in their effects are rejected. The effects are what the impl brings, not a choice a call makes.
 
 ## Handlers
@@ -442,25 +437,13 @@ impl Fields for CountingFields {
 
 A generic impl such as `impl<T> Greeter for Holder<T>` makes every instance of `Holder` a handler. A generic effect is implemented per instance: `impl Stream<u8> for MockStream` handles `Stream<u8>` and no other `Stream`.
 
-A handler method may declare effects in a `with` clause, like any function. Installing the handler demands them where the `with ... do` stands, since that is where the handler's work is done.
+A handler method may declare effects in a `with` clause, like any function.
 
 ### `resume`
 
 `resume value` hands `value` to the operation's caller and ends the handler method, as `return` would. The value is checked against the operation's return type. A method for an operation that returns `()` may end without one.
 
 `resume` is valid only in a handler method's body. Anywhere else it is a compile error, including in a closure written inside a handler method. A caller is resumed at most once: continuations are one-shot.
-
-A statement after `resume` runs once the caller's `do` block has finished. A handler uses it to clean up after the work it handed out:
-
-```wado
-impl FileSystem for ManagedFs {
-    fn open_file(&self, path: String) -> Handle {
-        let handle = real_open(path);
-        resume handle;
-        real_close(handle);   // after the `do` block completes
-    }
-}
-```
 
 Which names `resume` leaves free is in [Contextual Keywords](./spec-lexical.md#contextual-keywords).
 
@@ -563,7 +546,7 @@ impl Random for Counting {
 }
 ```
 
-Any other effect the method performs is answered by whatever handles that effect at the operation's call, and must be held like any other effect (see [Handler Implementations](#handler-implementations)).
+Any other effect the method performs is answered by whatever handles that effect at the operation's call.
 
 ### Operations a Handler Leaves Out
 
@@ -612,22 +595,6 @@ How a handler answers an async operation is in [Handling an Async Operation](./s
 Rationale: [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 
 ## Known gaps
-
-### Code after `resume`
-
-A statement after `resume` never runs: `resume` ends the handler method as `return` does. So a handler cannot yet clean up after the `do` block, and a program written that way silently skips the cleanup.
-
-### Effects a handler method declares
-
-Installing a handler does not demand the effects its methods declare. A function that holds no `Stdout` can install a handler whose method prints, so the `with` site performs an effect it never declared.
-
-### More than one effect parameter
-
-A function may declare at most one `<effect E>`, and more is rejected. So one function cannot keep the effects of two closures apart: every closure it takes resolves into the same parameter. Since `with _` mints a parameter, a function cannot write `with _` and declare its own `<effect E>` either.
-
-### An effect argument on a bound
-
-`S: Source with ()` does not parse. A caller that wants only a pure impl of an open trait has no way to say so, and writes `with _` to accept any.
 
 ### How deep an open head resolves
 

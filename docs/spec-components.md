@@ -73,8 +73,9 @@ again. `join` only registers the call with the set, so the caller still owes the
 
 #### Handling an Async Operation
 
-A [handler](./spec-effects.md#handlers) implements an async operation as a plain
-`fn` that returns `T` and resumes with a `T`. The caller still receives an
+A [handler](./spec-effects.md#handlers) implements an async operation that a
+Component Model import declares as a plain `fn` that returns `T` and resumes
+with a `T`. The caller still receives an
 `AsyncCall<T>`, one that has already completed, so its `.wait()` returns the
 value at once.
 
@@ -199,7 +200,7 @@ lib = "src/lib.wado"
 
 A hosted world's entry module exports the entry point that world requires (see [Entry Points](#entry-points)). The library world requires none: every `export` item of its entry module becomes part of an interface named after the package, `<namespace>:<name>/<name>@<version>`. A library world therefore needs `[package].namespace` to be built. The world itself is named `root`, so no package may take that name, in any letter case.
 
-A dependency is imported through its library world's entry module, which a specifier with no path segment names (see [Exported files](./spec-modules.md#exported-files)). A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
+A dependency is imported through its library world's entry module, the file its `[package].lib` names. A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
 
 Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
 
@@ -396,7 +397,6 @@ A generic resource takes no part in `extends`, on either side.
 - The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet.
 - A type parameter is solved to the most specific type, and the upcast happens later, at a use. So a constructor's payload is not upcast: `Option::Some(el)` against `Option<Node>` is an `Option<Element>`, and is written `Option::Some(el as Node)`.
 - `&mut T` is invariant, and so is every generic type, a tuple's elements, and a struct's fields. A write through any of them could install a parent where a child is required. There is no variance annotation.
-- `Future<T>` and `Stream<T>` only hand out a `T`, so they are covariant in it. `FutureWritable<T>` and `StreamWritable<T>` only take one, so they are contravariant.
 - A function type is invariant in its parameters and its result.
 - Narrowing back to a child is never implicit. It is written as a [type pattern](#type-patterns).
 
@@ -432,7 +432,6 @@ A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s r
 - `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object (see [Handle Encoding](#handle-encoding)). Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
 - `Ord`: none. Handles have no order.
 - `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
-- `Display`: `${x}` asks the host, through an imported formatter.
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.
 
 Rationale: [WEP: Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
@@ -477,10 +476,6 @@ A type pattern narrows a value at runtime, unlike `match type`, which narrows a 
 
 [Async Imports](#async-imports) says an `AsyncCall<T>` is used once. Nothing checks it: `AsyncCall<T>` is a copyable struct, and `wait`, `cancel` and `join` all borrow it. A second `wait` or `cancel`, on the value or on a copy of it, compiles and reads a result buffer the first one freed.
 
-### Only an Imported Async Operation Can Be Handled
-
-A handler for an async operation that no Component Model import backs, one declared by a user `interface` or `resource`, is a compile error. No async operation may carry a body either (see [Default Implementations](./spec-effects.md#default-implementations)), so dispatching such an operation always traps.
-
 ### Some Resource Holders Are Not Move-Checked or Dropped
 
 [Resource Ownership](#resource-ownership) makes every value holding an affine resource move-only and dropped. Only a struct, a tuple and a `Result` are. An `Option`, a user variant or a `List` holding one can be moved twice with no diagnostic, and is not dropped at scope exit.
@@ -508,11 +503,3 @@ A generic `resource Handle<T>` a user module declares is not move-checked: passi
 ### Unrestricted Handles Are Never Released
 
 Nothing frees an unrestricted handle. Each object the host hands out keeps a slot in its table, and the table keeps the object alive, for the lifetime of the instance. The host interns handles, so repeated calls naming one object cost one slot. Every distinct object costs one, such as each event a dispatch creates.
-
-### `Display` on an Unrestricted Handle
-
-[Traits on Handles](#traits-on-handles) gives `${x}` a host formatter. The import does not exist, so `${x}` on an unrestricted handle is a compile error.
-
-### `Future` and `Stream` Are Invariant
-
-[Subtyping](#subtyping) makes `Future<T>` and `Stream<T>` covariant, and their writable ends contravariant. The compiler treats them as invariant like every other generic type, so a `Future<Element>` does not pass where a `Future<Node>` is expected.

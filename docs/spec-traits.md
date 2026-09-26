@@ -82,8 +82,7 @@ answers:
 
 1. An inherent method (`impl Type { … }`) shadows every trait method of that
    name, along the whole newtype chain.
-2. A reference receiver's `&T` impls come before its pointee's: a concrete
-   `&T` impl first, then a reference blanket (`impl<T: Bound> Tr for &T`).
+2. A reference receiver's concrete `&T` impls come before its pointee's.
 3. The trait impls that apply to the receiver are ranked, below.
 4. A receiver whose type is a type parameter answers from its bounds instead.
    A method that two or more of them declare is an error.
@@ -138,7 +137,7 @@ A supertrait's method called through a bound is not yet gated; see
 
 #### Candidates
 
-A call's candidates come from three places:
+A call's candidates come from two places:
 
 - The impls whose target reaches the receiver anywhere along its newtype chain:
   one written for the receiver's own type, for one instantiation of it
@@ -146,8 +145,6 @@ A call's candidates come from three places:
   (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box_<T>`).
 - Every value blanket (`impl<T: Bound> Tr for T`) whose bounds the receiver
   satisfies.
-- For a reference receiver, every reference blanket
-  (`impl<T: Bound> Tr for &T`) whose bounds the referent satisfies.
 
 A target reaches a receiver when every position it pins holds the receiver's
 argument there. A type parameter stands for one type wherever the target writes
@@ -1572,8 +1569,6 @@ Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 - A supertrait's method called through a bound is not gated on scope. `T: Sub`
   reaches `Base`'s methods with `Base` unimported, where the rule requires the
   import. A module can therefore call a method whose trait it never named.
-- A reference blanket (`impl<T: Bound> Tr for &T`) never answers a method call.
-  The call reports no method, so a program the order accepts is rejected.
 - Only a method call follows [the order](#the-order). A static call
   `Type::m(args)` prefers a trait impl written in the calling module, takes the
   first impl that declares the method, and tries value blankets last. So a
@@ -1601,8 +1596,3 @@ Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 - A float's total equality, `cmp` answering `Equal`, is not `==`: it separates
   `-0.0` from `0.0` and calls a NaN equal to itself. A `TreeMap<f32, V>` orders
   by the total order, and nothing states which equality a keyed lookup owes.
-
-### Standard Library
-
-- `Array<T>` has no `to_list()`, so the `to_*` conversion from `Array` to
-  `List` in [The Sequence Family](#the-sequence-family) cannot be written.

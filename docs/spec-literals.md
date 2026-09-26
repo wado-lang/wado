@@ -1006,7 +1006,7 @@ __DATA__
 
 `#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
 
-The argument is a parenthesized string literal; any other expression is a compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file a dependency exports is named by its package, as [Exported files](./spec-modules.md#exported-files) states. A file that does not exist is a compile error.
+The argument is a parenthesized string literal; any other expression is a compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
 
 ```wado
 let template = #include_str("./templates/header.html");

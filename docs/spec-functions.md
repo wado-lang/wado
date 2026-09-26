@@ -253,8 +253,7 @@ target.listen(|v| seen.push(v));
 - The host may call a callback during an import call, which reenters the
   component, or while `run` is suspended.
 - A callback runs as a task of its own. It may perform an effect a world import
-  backs. A handler that a `with … do` installed around the registering call is
-  not in its extent.
+  backs.
 - Where a Wado handler answers the `#[cm]` interface instead of the host, the
   handler receives the closure itself and may call it.
 
@@ -667,8 +666,6 @@ let t = [..make_pair(), 30];
   releases it.
 - Every callback shape a declared `#[cm]` import takes gets its export, whether
   the program passes such a closure or not.
-- A callback that runs while `run` is suspended inside a `with … do` body
-  dispatches to that body's handlers.
 
 ### Default Arguments
 

@@ -75,7 +75,6 @@ impl Config {
 - Each dependency. A relative import inside a dependency stays in that
   dependency's package.
 - `core:*`, which is one package, and `wasi:*`, which is another.
-- A remote module and the modules it reaches relative to its URL.
 - A [generated module](#generated-imports-kiln) belongs to the package of the
   module that imports it.
 
@@ -151,50 +150,18 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 
 ## Module Source Types
 
-| Source Type   | Syntax                              | Example                                     |
-| ------------- | ----------------------------------- | ------------------------------------------- |
-| WASI standard | `"wasi:<package>"`                  | `"wasi:cli"`, `"wasi:filesystem"`           |
-| Core library  | `"core:<module>"`                   | `"core:cli"`, `"core:json"`                 |
-| CM coordinate | `"<ns>:<pkg>[@<ver>]"`              | `"docs:regex"`, `"docs:regex@1.0.0"`        |
-| Library alias | `"lib:<nick>"`                      | `"lib:router"`, `"lib:shared"`              |
-| Exported file | `"<coordinate or alias>/<path>"`    | `"lib:gale-highlight-wado/grammar/Wado.g4"` |
-| Local file    | `"./<path>"` or `"../<path>"`       | `"./utils.wado"`, `"../config.wado"`        |
-| Remote        | `"http://<url>"`, `"https://<url>"` | `"https://example.com/lib.wado"`            |
+| Source Type   | Syntax                        | Example                              |
+| ------------- | ----------------------------- | ------------------------------------ |
+| WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
+| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
+| CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
+| Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
+| Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
 
-A specifier names a package, optionally followed by one file that package
-exports. It never carries an interface segment: interfaces and their members
+A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
 are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
 `wasi:` are coordinates whose namespace is bundled with the compiler, not a
 separate scheme. Nested namespaces (`a:b:pkg`) follow WIT.
-
-### Exported files
-
-A package lists the files a consumer may name in `[package].exports` of its
-`wado.toml`. The list covers assets and `.wado` submodules alike, and a file it
-does not list does not exist to a consumer.
-
-```wado
-use { highlight } from "wado-lang:gale-highlight-wado/src/highlight.wado";
-let template = #include_str("wado-lang:my-pkg/templates/index.html");
-```
-
-- A specifier with no path segment names the package's `[package].lib` entry.
-  The path segment always carries an extension, which is what tells the two
-  forms apart.
-- The path is relative to the package root and `/`-separated. `..` and an
-  absolute path are errors.
-- A path is compared with the list after NFC normalization, and case must
-  match exactly.
-- Naming an unlisted file is an error that names the package, whether or not
-  the file exists.
-- The reference resolves against the consuming package's own
-  `[dependencies]` / `[build-dependencies]`. A dependency's dependency offers
-  no files.
-- `core:` and `wasi:` export no files.
-- A consumer that names an exported `.wado` submodule may use every `pub` item
-  in it, whether or not the `lib` entry re-exports that item.
-
-Rationale: [WEP: Package File Exports](./wep-2026-09-06-package-file-exports.md).
 
 ## Module Path Validation
 
@@ -210,9 +177,7 @@ A module path resolves by its form:
 
 4. Local modules (`./` or `../`): Resolved relative to importing module.
 
-5. Remote modules (`http://` / `https://`): loaded from the URL. A relative import inside one resolves against its URL.
-
-6. Invalid paths: Paths not matching any pattern are rejected.
+5. Invalid paths: Paths not matching any pattern are rejected.
    - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
@@ -245,12 +210,11 @@ core:collections#TreeMap.get               # instance method
 core:collections#TreeMap<String, i32>.get  # generics use Wado angle brackets
 core:url#Url^Display::fmt                  # trait-impl member
 "./utils.wado"#Helper::new                 # relative path — must be quoted
-"https://x/lib.wado"#foo                   # URL — must be quoted
 ```
 
 `MODULE` is quoted as in `use`. The canonical form, which `wado query` and doc
 anchors use, always quotes it. In prose the quotes may be dropped for a scheme or
-a bare name with no whitespace. A relative path or a URL is always quoted,
+a bare name with no whitespace. A relative path is always quoted,
 because it can contain `#`, `/`, and `.`.
 
 Rationale: [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
@@ -768,14 +732,8 @@ unreachable(); // traps with no message
 
 ## Known gaps
 
-- Exported files are not implemented. `[package].exports` is not read, and a
-  `<coordinate>/<path>` specifier does not resolve, as a module, an
-  `#include_str` path, or a Kiln `from` / `inputs` entry. A dependency's own
-  `with { generator }` clauses do not run in a consuming build either: clauses
-  are collected only from modules reached through `./` / `../` imports. This
-  admits no way to name a file inside a dependency.
-- Remote modules are not fetched. An `http://` / `https://` specifier passes
-  validation, but no host loads it, so the import fails as a missing file.
+- An `http://` / `https://` specifier is not rejected as an invalid path.
+  It passes validation, and the import fails as a missing file.
 - The standard library's implementation modules mark symbols `pub` that only
   their sibling modules use. Such a symbol is left out of its facade, but any
   package can import it by path, so `core:`'s published API is wider than its

@@ -418,9 +418,24 @@ let w = [1] as Wrapper<i32>;
 let l = w as List<i32>;    // OK
 ```
 
-`as` does not reach a newtype nested inside another type. `List<Meters>` does
-not cast to `List<f64>`, `Option<Meters>` does not cast to `Option<f64>`, and
-`fn(Meters)` does not cast to `fn(f64)`.
+`as` does not reach a newtype nested inside another type: `List<Meters>` does
+not cast to `List<f64>`, and `Option<Meters>` does not cast to `Option<f64>`.
+
+A function type is the exception, since a function value is reused unchanged.
+`as` converts one function type to another when both take the same number of
+parameters and each parameter and the return type differ only by newtype steps,
+at the top, under a reference, or inside a function type that is otherwise
+identical. The cast may also widen `fn` to `fn mut` and add effects, never the
+reverse. A function type casts to no other kind of type.
+
+```wado
+type Meters = f64;
+fn double(x: f64) -> f64 { return x * 2.0; }
+
+let h = double as fn(Meters) -> Meters;       // OK
+let r = double as fn mut(f64) -> f64;         // OK: `fn` widens to `fn mut`
+let bad = double as fn(i32) -> f64;           // Error: `i32` is not `f64`
+```
 
 Rationale: [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
@@ -898,10 +913,3 @@ pub flags PathFlags {
 ```
 
 Note: Wado's `enum` maps to Component Model's `enum` (simple enumeration), and `variant` maps to Component Model's `variant` (tagged union with payloads). This differs from Rust where `enum` can have payloads.
-
-## Known gaps
-
-`as` converts between function types that differ only by a newtype in their
-signatures: `g as fn(Meters) -> Meters` compiles for `g: fn(f64) -> f64`.
-[Casts](#casts) refuses it, as it refuses `List<Meters>` to `List<f64>`. So a
-function value can be retyped to take and return a newtype it never declared.

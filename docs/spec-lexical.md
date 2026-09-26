@@ -462,9 +462,9 @@ comparison. So:
 
 ### Prohibited Operators
 
-Wado has no `++`/`--`: write `x += 1` and `x -= 1`. Neither pair forms an
-expression, so `a--b` is an error rather than `a - (-b)` (see
-[Known gaps](#known-gaps)). Write `- -x` for a double negation.
+Wado has no `++`/`--`: write `x += 1` and `x -= 1`. Neither is a token, so each
+reads as two operators. `--x` is `-(-x)` and `a--b` is `a - (-b)`. There is no
+prefix `+`, so `x++` and `a++b` are parse errors.
 
 It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 
@@ -602,8 +602,6 @@ Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
 
 ## Known gaps
 
-- `--` reads as two `-` operators, so `a--b` compiles as `a - (-b)` and `--x`
-  as `-(-x)`.
 - A local `enum`, `variant` or `flags` parses, but its cases do not resolve:
   `Color::Red` is an unknown identifier and `Shape::Circle(1)` an unknown
   function.
