@@ -74,6 +74,13 @@ test "reference to reference" {
     assert &ra == &rb;
 }
 
+test "a reference to a closure is identical only to its own place" {
+    let f = || 1;
+    let g = f;
+    assert ref_eq(&f, &f);
+    assert !ref_eq(&f, &g);
+}
+
 fn same<T: Eq>(a: T, b: T) -> bool {
     return a == b;
 }

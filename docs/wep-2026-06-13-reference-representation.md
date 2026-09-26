@@ -61,7 +61,9 @@ Notes on the non-obvious entries:
   no fixed mutable field to deref-assign into, so `*e = E::B(99)` replaces the
   whole variant value. Hence it is boxed.
 - `fn` / `fn mut` are funcref-backed values; `*r = other_fn` replaces, so they are
-  boxed. (Note: the issue #1333 enumeration omits `fn`; the implementation boxes
+  boxed. A closure is an immutable GC object that copies share, so it cannot
+  stand for the place holding it; the box is that place. `ref_eq(&f, &g)`
+  therefore compares places, and a closure's own identity stays unobservable. (Note: the issue #1333 enumeration omits `fn`; the implementation boxes
   it — see [D3](#known-implementation-divergences).)
 - `i128` / `u128` are GC structs (a low/high `i64` pair), so they are treated as
   `struct` (shared handle), and are deliberately excluded from boxing despite

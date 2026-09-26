@@ -118,7 +118,11 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 `==` and `!=` on two references compare the values they point to, as in Rust
 (see [Eq](./spec-traits.md#eq---equality)). The prelude function
 `ref_eq(a: &T, b: &T) -> bool` compares identity instead: whether the two
-references point to one object.
+references point to one place. A place is where a value is stored: a variable,
+a field, an element. For a `struct`, `List` or `String`, assignment copies the
+object, so each place holds its own and the object is the place. For a type
+that assignment replaces, such as a primitive, `variant` or `fn`, copies share
+one value, so the place is the variable, field or element holding it.
 
 Identity is guaranteed in one direction only. Two references to one object are
 always `ref_eq`. Two references to distinct objects of identical content may
@@ -134,7 +138,15 @@ ref_eq(&xs, &xs);               // always true
 ref_eq(&xs, &ys);               // false or true: the two may be one object
 ```
 
-`ref_eq` takes references only, so a closure's identity stays unobservable.
+A closure's identity stays unobservable. `ref_eq` takes references only, and a
+reference to a closure points to the place holding it:
+
+```wado
+let f = || 1;
+let g = f;
+ref_eq(&f, &f);                 // true
+ref_eq(&f, &g);                 // false: two places holding one closure
+```
 
 ### Design Trade-offs
 
