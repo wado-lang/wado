@@ -105,6 +105,21 @@ export fn run() {
         x *= 10;
     }
     assert called(elements) == [10, 20];
+
+    let mut updated: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3; i += match builtin::black_box(1) {
+        mut step => {
+            bump(&mut step);
+            step
+        },
+    } {
+        updated.push(|| i);
+    }
+    assert called(updated) == [0, 2];
+}
+
+fn bump(r: &mut i32) {
+    *r += 1;
 }
 
 struct Held {
