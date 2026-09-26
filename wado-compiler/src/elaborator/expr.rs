@@ -2844,17 +2844,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(match pattern {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
-            ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
-                // A bare identifier is a case when it names one, a constant-value
-                // pattern when it names an immutable global, else a binding.
-                let is_mut = matches!(pattern, ast::Pattern::MutIdent { .. });
-                if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
+            ast::Pattern::Ident { id, name, .. } | ast::Pattern::MutIdent { id, name, .. } => {
+                if self.pattern_name_bound(*id) {
+                    Pat::Wild
+                } else if self.is_known_case_of_type(scrutinee_type, name, None) {
                     return self.exh_case(scrutinee_type, name, None);
+                } else {
+                    Pat::Opaque
                 }
-                if !is_mut && self.is_immutable_global(name) {
-                    return Some(Pat::Opaque);
-                }
-                Pat::Wild
             }
             ast::Pattern::Literal(lit) => return self.exh_literal(lit, scrutinee_type),
             ast::Pattern::Variant {

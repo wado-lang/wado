@@ -638,6 +638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let pattern = let_stmt.else_pattern();
+        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
         if self.let_else_pattern_is_irrefutable(&pattern, scrutinee_type) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "irrefutable pattern in `let ... else`: the else block can never run; \
@@ -646,13 +647,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: let_stmt.name_span,
             });
         }
-        self.resolve_if_pattern(&pattern, scrutinee_type, ctx, let_stmt.span);
     }
 
-    /// Whether a `let ... else` pattern is definitely irrefutable (always
-    /// binds), which would make its else block unreachable. Conservative: only
-    /// the unambiguous top-level binding forms are flagged, so a refutable
-    /// pattern is never wrongly rejected.
+    /// Whether a resolved `let ... else` pattern is definitely irrefutable
+    /// (always binds), which would make its else block unreachable.
+    /// Conservative: only the unambiguous top-level binding forms are flagged,
+    /// so a refutable pattern is never wrongly rejected.
     fn let_else_pattern_is_irrefutable(
         &mut self,
         pattern: &Pattern,
@@ -660,10 +660,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         match pattern {
             Pattern::Wildcard | Pattern::MutIdent { .. } => true,
-            Pattern::Ident { name, .. } => {
-                !self.is_known_case_of_type(scrutinee_type, name, None)
-                    && !self.is_immutable_global(name)
-            }
+            Pattern::Ident { id, .. } => self.pattern_name_bound(*id),
             Pattern::Typed { pattern, ty, .. } => {
                 let target = self.resolve_type(ty);
                 !self
@@ -1393,14 +1390,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((alias, ty))
     }
 
-    /// Whether `name` refers to an immutable global (defined here or imported),
-    /// which in pattern position is a constant-value match, not a binding.
-    pub(super) fn is_immutable_global(&self, name: &str) -> bool {
-        self.immutable_global_type(name).is_some()
+    /// Whether resolving the pattern made the bare name at `id` a binding,
+    /// rather than a case or a constant.
+    pub(super) fn pattern_name_bound(&self, id: AstId) -> bool {
+        self.sem.types.local_types.contains_key(&id)
     }
 
-    /// The type of the immutable global `name` refers to, if it names one.
-    fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
+    /// The type of the immutable global `name` refers to (defined here or
+    /// imported), if it names one.
+    pub(super) fn immutable_global_type(&self, name: &str) -> Option<TypeId> {
         match self.sem.decls.current_module_globals.get(name) {
             Some(&(ty, mutable)) => (!mutable).then_some(ty),
             None => self
@@ -1520,13 +1518,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                // A pattern that must bind never reads one, since a constant
-                // pattern there could only be rejected as refutable.
-                if !is_mut
-                    && ctx.must_bind.is_none()
-                    && let Some(constant) = self.immutable_global_type(name)
-                {
-                    self.record_item_reference_by_name(*id, name);
+                if let Some(global) = self.tysys.resolutions.declared_if_walked(*id) {
+                    assert!(
+                        ctx.must_bind.is_none(),
+                        "the resolver reads a global only in a refutable pattern"
+                    );
+                    let constant = self
+                        .immutable_global_type(name)
+                        .expect("the resolver answers only an immutable global");
+                    self.record_reference_to_decl(*id, global, *name_span);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant, peeled, *name_span);
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);

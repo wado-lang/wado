@@ -1427,7 +1427,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(binding) => !binding.is_mut,
             // Only a name no binding claims can be the global; one shadowing it
             // answers for itself.
-            None => self.is_immutable_global(root),
+            None => self.immutable_global_type(root).is_some(),
         };
         immutable.then(|| root.to_string())
     }
