@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790387629319,
+  "lastUpdate": 1790389551351,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59985,6 +59985,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/83a01d79ffd19139eddcca608269c70b93ab8f72"
         },
         "date": 1790387628594,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42a3904ae5333ccafb617597f0f0a88d6af930f6",
+          "message": "Merge pull request #2171 from wado-lang/claude/coderubbit-settings-review-xzu7cy\n\nchore(coderabbit): keep the summary out of PR descriptions, skip wado-bot PRs",
+          "timestamp": "2026-09-26T10:51:02+09:00",
+          "tree_id": "60ece8b2314fc34aec222b526280f32618218626",
+          "url": "https://github.com/wado-lang/wado/commit/42a3904ae5333ccafb617597f0f0a88d6af930f6"
+        },
+        "date": 1790389550595,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
