@@ -8955,8 +8955,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
         };
 
-        let make_func_ref =
-            |tysys: &TypeSystem, item: CompilerItem| method_ref(&tysys.type_table.borrow(), item);
         // Repr-compatible `Cast` bridging a newtype boundary (no-op in
         // codegen); identity when the types already match.
         let bridge = |expr: TirExpr, to: TypeId, span: Span| {
@@ -8981,7 +8979,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         match lowering {
             Lowering::Identity => Some(inner),
             Lowering::Method(item) => {
-                let func = make_func_ref(&self.tysys, item);
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
                 let receiver = adjust_receiver_for_self_kind(
                     inner,
                     ast::SelfKind::Ref,
@@ -8998,7 +8996,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 } else {
                     CompilerItem::U128Low
                 };
-                let func = make_func_ref(&self.tysys, item);
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
                 let receiver = adjust_receiver_for_self_kind(
                     inner,
                     ast::SelfKind::Ref,
@@ -9023,7 +9021,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Some(bridge(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
-                let func = make_func_ref(&self.tysys, item);
+                let func = method_ref(&self.tysys.type_table.borrow(), item);
                 let call = TirExpr::new(
                     TirExprKind::Call {
                         func: Box::new(func),

@@ -3444,10 +3444,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         // char -> non-integer is invalid (char -> integer extracts code point)
-        if source_base == TypeTable::CHAR && target_base != TypeTable::CHAR && {
+        let integer_target = {
             let tt = self.tysys.type_table.borrow();
-            !tt.is_integer(target_base) && !tt.is_wide_int(target_base)
-        } {
+            tt.is_integer(target_base) || tt.is_wide_int(target_base)
+        };
+        if source_base == TypeTable::CHAR && target_base != TypeTable::CHAR && !integer_target {
             let to_name = self.tysys.type_table.borrow().type_name(target_type);
             let _ = self.emit(TypeError::InvalidCast {
                 from: "char".to_string(),
