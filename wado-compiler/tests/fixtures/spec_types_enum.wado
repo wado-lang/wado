@@ -1,0 +1,36 @@
+// An enum: cases without payloads.
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+test {
+    let c = Color::Red;
+    let d: Color = Red;   // bare where the expected type supplies it
+    assert c == d;
+
+    let name = match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    };
+    assert name == "red";
+
+    assert c matches { Red };
+    assert !(c matches { Green | Blue });
+}
+
+impl Color {
+    fn is_warm(&self) -> bool {
+        return match *self {
+            Red => true,
+            _ => false,
+        };
+    }
+}
+
+test {
+    assert Color::Red.is_warm() && !Color::Blue.is_warm();
+}

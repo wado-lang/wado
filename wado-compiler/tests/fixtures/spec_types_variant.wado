@@ -1,0 +1,53 @@
+// A variant: each case carries at most one payload.
+
+variant Shape {
+    Circle(f64),           // one payload: the radius
+    Rectangle([f64, f64]), // a tuple payload: width and height
+    Point,                 // no payload
+}
+
+fn area(s: Shape) -> f64 {
+    return match s {
+        Circle(r) => 3.0 * r * r,
+        Rectangle([w, h]) => w * h,
+        Point => 0.0,
+    };
+}
+
+test {
+    let c: Shape = Circle(5.0);   // bare where the expected type supplies it
+    assert area(c) == 75.0;
+    assert area(Shape::Rectangle([10.0, 20.0])) == 200.0;
+    assert area(Shape::Point) == 0.0;
+}
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+impl<T> Maybe<T> {
+    // `Self::Case` names a case of the impl's own type. `Self` already carries
+    // its type arguments, so the case takes no turbofish.
+    fn wrap(v: T) -> Maybe<T> {
+        return Self::Just(v);
+    }
+}
+
+test {
+    assert Maybe::wrap(1) matches { Just(1) };
+}
+
+variant ParseResult {
+    Fail,
+    Number([i32, i32]),  // start and end positions
+}
+
+test {
+    let result = ParseResult::Number([0, 10]);
+    let Number([start, end]) = result else {
+        panic("not a number");
+    };
+    assert end - start == 10;
+    assert !(result matches { ParseResult::Fail });  // a case may be qualified
+}

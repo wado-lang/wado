@@ -1,0 +1,14 @@
+// A function type converts by `as` only across newtype steps: `i32` and `f64`
+// share no representation, so calling through the cast would read an `f64`
+// parameter as an `i32`.
+
+fn double(x: f64) -> f64 {
+    return x * 2.0;
+}
+
+test "unrelated parameter" {
+    let h = double as fn(i32) -> f64;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'fn(f64) -> f64' to 'fn(i32) -> f64': parameter 1: `f64` and `i32` share no representation"}

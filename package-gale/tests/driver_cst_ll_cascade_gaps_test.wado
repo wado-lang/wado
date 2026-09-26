@@ -47,3 +47,11 @@ test "no alt matches: the rule's error path reports it" {
     let d = &result.diagnostics[0];
     assert d.message == "expected X; no alternative of m matches", `unexpected message: ${d.message}`;
 }
+
+// The prediction read past `X W` before giving up; the rule recovers from where
+// the decision began, so neither token drops out of the tree.
+test "no alt matches: recovery starts at the decision, keeping every token" {
+    let result = g::parse_m("X W Z", i32::MAX);
+    assert result.diagnostics[0].span.start == 0;
+    assert g::to_string_tree(&result) == "(m <skip X> <skip W> <skip Z>)";
+}

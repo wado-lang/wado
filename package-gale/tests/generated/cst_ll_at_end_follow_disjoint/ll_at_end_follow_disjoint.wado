@@ -1479,16 +1479,11 @@ fn _parse_x__inner(p: &mut Parser) -> () {
     if !kind_set_has(&SYNC_2, p.kinds[p.pos]) { builtin::cold_path(); p.sync_alts(&SYNC_2, &EXPECTED_2); }
     let kind = p.peek_kind();
     if kind == TK_LIT_a {
-        p.pos += 1;
-        p.pos += 1;
-        if p.peek_kind() == TK_LIT_c {
-            p.pos -= 2;
+        if p.peek_at(2) == TK_LIT_c {
             return _parse_x__inner_alt_1(p);
-        } else if p.peek_kind() == TK_LIT_d {
-            p.pos -= 2;
+        } else if p.peek_at(2) == TK_LIT_d {
             return _parse_x__inner_alt_0(p);
         } else {
-            p.pos -= 2;
             let _sd_tokens = &p.kinds;
             let _sd_pos = p.pos;
             let _sd_p_1 = scan_x_alt_1(_sd_tokens, _sd_pos);
@@ -1509,7 +1504,6 @@ fn _parse_x__inner(p: &mut Parser) -> () {
                 }
                 return _parse_x__inner_alt_0(p);
             }
-            p.pos += 2;
         }
     }
     p.no_viable(

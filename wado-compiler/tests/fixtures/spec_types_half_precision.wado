@@ -1,0 +1,11 @@
+// `f16` converts through methods and the conversion traits, never through `as`.
+
+test "conversions" {
+    let one = f16::from_bits(0x3C00);   // 1.0
+    assert one.to_bits() == 0x3C00;
+    let wide = f32::from(one);          // exact; `f64::from` too
+    assert wide == 1.0;
+    let near = f16::from_f32(0.1);      // rounds to the nearest f16
+    assert near.to_bits() == 0x2E66;
+    assert f16::try_from(wide).unwrap() == one;   // 1.0 survives the round trip
+}

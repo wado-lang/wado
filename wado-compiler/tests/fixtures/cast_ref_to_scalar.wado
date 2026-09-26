@@ -1,0 +1,10 @@
+// A cast to anything but a reference reads through its operand's references,
+// as `r as P` does for a struct. Scalars once reached WIR with the reference
+// still in place and crashed there.
+
+test "a reference to a scalar converts its referent" {
+    let x = builtin::black_box(5);
+    let r = &x;
+    assert (&x) as i64 == 5 as i64;
+    assert (&r) as f64 == 5.0;
+}
