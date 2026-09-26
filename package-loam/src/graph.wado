@@ -99,9 +99,9 @@ pub fn bit_pattern(tensor: &String, dtype: &String, v: i32, width: i32) -> Resul
 
 /// One element's low `width` bytes, little-endian, as the protobuf form lays
 /// out a payload.
-pub fn push_element(bytes: &mut ByteList, bits: u32, width: i32) {
+pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
     for let mut at = 0; at < width; at += 1 {
-        bytes.push((bits >> (8 * at) as u32) as u8);
+        bytes.push((bits >> (8 * at) as u64) as u8);
     }
 }
 

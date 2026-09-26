@@ -3,7 +3,7 @@
 
 use { to_string } from "core:json";
 use { TreeMap } from "core:collections";
-use { Graph, ValueInfo, element_of, static_extents } from "./graph.wado";
+use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
 use { Checkpoint, Expected, HeaderEntry, LoadError } from "./runtime/checkpoint.wado";
 use { Shape } from "./shape.wado";
 
@@ -81,11 +81,10 @@ pub fn write_safetensors(tensors: &List<StoredTensor>) -> ByteList {
     while text.len() % 8 != 0 {
         text.push(' ');
     }
-    let mut out = ByteList::with_capacity(8 + text.len() + offset as i32);
-    let length = text.len() as u64;
-    for let at of 0..<8 {
-        out.push((length >> (8 * at) as u64) as u8);
-    }
+    let size = 8 + text.len() as i64 + offset;
+    assert size <= i32::MAX as i64;
+    let mut out = ByteList::with_capacity(size as i32);
+    push_element(&mut out, text.len() as u64, 8);
     out.extend_from_slice(text.as_bytes() as Slice<u8>);
     for let t of *tensors {
         out.extend(&t.data);

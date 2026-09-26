@@ -92,8 +92,28 @@ pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
         rule("B", ["Batch", "In"]),
     ]).unwrap();
 
-    assert out.contains("refuse(axis_mismatch(\"Batch\", \"B\", B.extents[0], \"A\", A.extents[0]));");
-    assert !out.contains("axis_mismatch(\"In\"");
+    assert out.contains("refuse(axis_mismatch(\"N\", \"B\", \"Batch\", B.extents[0], \"A\", A.extents[0]));");
+    assert !out.contains("axis_mismatch(\"2\"");
+}
+
+test "inputs are checked against each other by the symbol, not the axis name" {
+    let graph = |b_cols: String| `
+outer (float[S, 4] A, float[4, ${b_cols}] B) => (float[S, ${b_cols}] Y)
+{
+    Y = MatMul(A, B)
+}
+`;
+    let same_symbol = generate(graph("S"), [
+        rule("A", ["Row", "Inner"]),
+        rule("B", ["Inner", "Col"]),
+    ]).unwrap();
+    assert same_symbol.contains("refuse(axis_mismatch(\"S\", \"B\", \"Col\", B.extents[1], \"A\", A.extents[0]));");
+
+    let same_name = generate(graph("T"), [
+        rule("A", ["Row", "Inner"]),
+        rule("B", ["Inner", "Row"]),
+    ]).unwrap();
+    assert !emitted(&same_name).contains("axis_mismatch(");
 }
 
 test "the initializers become the weights struct" {

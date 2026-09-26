@@ -200,6 +200,15 @@ test "a tensor attribute of an element type not read carries no value" {
     assert g.nodes[0].attrs[0].values.is_empty();
 }
 
+test "a list of tensor attributes is refused as one" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = Foo <values = [float {1}, float {2}]> (X)
+        }`,
+    ).unwrap_err().reason;
+    assert e.ends_with("values: a list of tensors is not read");
+}
+
 test "an attribute after the input list reads as the same attribute" {
     let g = read(
         `agraph (float[2, 3] X) => (float[3, 2] Y) {

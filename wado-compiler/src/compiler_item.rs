@@ -661,6 +661,10 @@ pub enum CompilerItem {
     StreamWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
+    /// `core:rt::cm_copy_count`.
+    CmCopyCount,
+    /// `core:rt::cm_packed_count`.
+    CmPackedCount,
     /// `core:rt::cm_stream_read_u8`.
     CmStreamReadU8,
     /// `core:rt::cm_stream_write_u8`.
@@ -896,6 +900,8 @@ impl CompilerItem {
         Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
+        Self::CmCopyCount,
+        Self::CmPackedCount,
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
         Self::CmStreamWriteRawAllU8,
@@ -1067,6 +1073,8 @@ impl CompilerItem {
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
+            Self::CmCopyCount => "cm_copy_count",
+            Self::CmPackedCount => "cm_packed_count",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
             Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
@@ -1162,6 +1170,8 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmCopyCount
+            | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8
@@ -1424,6 +1434,8 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmCopyCount
+            | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
             | Self::CmStreamWriteRawAllU8

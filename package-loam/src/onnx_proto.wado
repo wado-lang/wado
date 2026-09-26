@@ -347,11 +347,11 @@ fn payload(t: &TensorProto, dtype: &String, extents: &List<i32>) -> Result<Optio
     if bytes.is_empty() {
         if width == 4 {
             for let v of t.float_data {
-                push_element(&mut bytes, v.to_bits(), width);
+                push_element(&mut bytes, v.to_bits() as u64, width);
             }
         } else {
             for let v of t.int32_data {
-                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)?, width);
+                push_element(&mut bytes, bit_pattern(&t.name, dtype, v, width)? as u64, width);
             }
         }
     }

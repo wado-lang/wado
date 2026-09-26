@@ -1,6 +1,7 @@
 //! A safetensors checkpoint as the loader reads it, and every way one can
 //! disagree with the graph a module was compiled for.
 
+use { push_element } from "./graph.wado";
 use { Expected, LoadError, declared_header_end, header_end, read_checkpoint } from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 
@@ -14,10 +15,7 @@ test "a checkpoint's failure is an Error" {
 fn floats(values: List<f32>) -> ByteList {
     let mut bytes = ByteList::with_capacity(values.len() * 4);
     for let v of values {
-        let bits = v.to_bits();
-        for let at of 0..<4 {
-            bytes.push((bits >> (8 * at) as u32) as u8);
-        }
+        push_element(&mut bytes, v.to_bits() as u64, 4);
     }
     return bytes;
 }
@@ -143,6 +141,14 @@ test "a header that is not JSON is refused" {
     let bytes: ByteList = b"\x03\x00\x00\x00\x00\x00\x00\x00{x}";
     let e = read_checkpoint(&bytes).unwrap_err();
     assert `${e}`.starts_with("the header is not JSON");
+}
+
+test "metadata keyed like a tensor entry's fields still reads" {
+    let header = "{\"__metadata__\":{\"shape\":\"NCHW\",\"data_offsets\":\"none\"}}";
+    let mut bytes: ByteList = [];
+    push_element(&mut bytes, header.len() as u64, 8);
+    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    assert read_checkpoint(&bytes) matches { Ok(_) };
 }
 
 test "the header's metadata is not a tensor" {

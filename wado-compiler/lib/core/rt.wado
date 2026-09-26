@@ -310,17 +310,33 @@ internal fn cm_copy_result(packed: i32) -> CopyResult {
     return CopyResult::Cancelled;
 }
 
+/// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
+global CM_COPY_MAX: i32 = (1 << 28) - 1;
+
+/// The part of `count` elements one copy may move, since a longer copy traps.
+#[compiler_item("cm_copy_count")]
+internal fn cm_copy_count(count: i32) -> i32 {
+    return i32::min(count, CM_COPY_MAX);
+}
+
+/// The element count of a packed CM copy result.
+#[compiler_item("cm_packed_count")]
+internal fn cm_packed_count(packed: i32) -> i32 {
+    return cm_packed_upper(packed);
+}
+
 /// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
-    let ptr = builtin::realloc(0, 0, 1, max);
-    let mut result = builtin::stream_read(handle, ptr, max);
+    let room = cm_copy_count(max);
+    let ptr = builtin::realloc(0, 0, 1, room);
+    let mut result = builtin::stream_read(handle, ptr, room);
     if result == -1 {
         result = cm_await_blocked(handle);
     }
-    let count = cm_packed_upper(result);
+    let count = cm_packed_count(result);
     let arr = memory_to_gc_array(ptr, count);
-    let freed = builtin::realloc(ptr, max, 1, 0);
+    let freed = builtin::realloc(ptr, room, 1, 0);
     return StreamChunk {
         items: List::internal_from_raw(arr, count),
         result: cm_copy_result(result),
@@ -339,20 +355,17 @@ internal fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
     return written;
 }
 
-/// One `stream.write` of `count` elements from `ptr`, awaiting a BLOCKED copy.
+/// One `stream.write` of up to `count` elements from `ptr`, awaiting a BLOCKED copy.
 internal fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
-    let mut result = builtin::stream_write(handle, ptr, count);
+    let mut result = builtin::stream_write(handle, ptr, cm_copy_count(count));
     if result == -1 {
         result = cm_await_blocked(handle);
     }
     return StreamWrite {
-        count: cm_packed_upper(result),
+        count: cm_packed_count(result),
         result: cm_copy_result(result),
     };
 }
-
-/// The most elements one Canonical ABI copy moves (`CanonicalABI.md`, `MAX_LENGTH`).
-global CM_COPY_MAX: i32 = (1 << 28) - 1;
 
 /// CM adapter for stream.write_raw_all(slice) on Stream<u8>. The slice is
 /// lowered once, since a reader may take a short prefix of each copy.
@@ -365,7 +378,7 @@ internal fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResu
     let ptr = cm_lower_list_u8(data.internal_repr(), data.internal_start(), len) as i32;
     let mut taken = 0;
     loop {
-        let written = cm_stream_write_once(handle, ptr + taken, i32::min(len - taken, CM_COPY_MAX));
+        let written = cm_stream_write_once(handle, ptr + taken, len - taken);
         taken += written.count;
         if write_copy_is_final(&written) || taken >= len {
             let freed = builtin::realloc(ptr, len, 1, 0);

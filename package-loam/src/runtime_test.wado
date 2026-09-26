@@ -72,9 +72,11 @@ test "a negative extent names the axis" {
     assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some("X: axis Batch is -1 in the tensor");
 }
 
-test "two inputs that disagree on a shared axis name both" {
-    assert axis_mismatch("Batch", "B", 2, "A", 2) matches { None };
-    assert axis_mismatch("Batch", "B", 3, "A", 2) == Option::Some("B: axis Batch is 3 in the tensor and 2 in A");
+test "two inputs that disagree on one symbol name both" {
+    assert axis_mismatch("N", "B", "Batch", 2, "A", 2) matches { None };
+    assert axis_mismatch("N", "B", "Batch", 3, "A", 2) == Option::Some(
+        "B: axis Batch is 3 in the tensor and 2 in A, and the graph makes both N",
+    );
 }
 
 test "gather_rows looks up one row per index, counting a negative one from the end" {

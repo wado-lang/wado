@@ -51,26 +51,17 @@ use crate::{ast, tir};
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
-const CM_PACKED_COUNT_SHIFT: i32 = 4;
-const CM_PACKED_COUNT_MASK: i32 = 0x0FFF_FFFF;
 const CM_PACKED_STATUS_MASK: i32 = 0xF;
 const CM_BLOCKED: i32 = -1;
 
-/// `result >> 4 & 0x0FFFFFFF`: the element count of a packed CM async result.
-/// The word is unsigned, so the mask clears what the signed shift extends.
+/// `cm_packed_count(result)`: the element count of a packed CM async result.
 fn packed_count(result: TirExpr) -> TirExpr {
-    let shifted = binary(
-        TirBinaryOp::Shr,
-        result,
-        i32_const(CM_PACKED_COUNT_SHIFT),
-        TypeTable::I32,
-    );
-    binary(
-        TirBinaryOp::BitAnd,
-        shifted,
-        i32_const(CM_PACKED_COUNT_MASK),
-        TypeTable::I32,
-    )
+    internal_call("cm_packed_count", vec![result], TypeTable::I32)
+}
+
+/// `cm_copy_count(count)`: the part of `count` one CM copy may move.
+fn copy_count(count: TirExpr) -> TirExpr {
+    internal_call("cm_copy_count", vec![count], TypeTable::I32)
 }
 
 /// `result & 0xF`: the status bits of a packed CM async result.
@@ -633,7 +624,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
             vec![
                 local_ref(handle_idx, "handle", TypeTable::I32),
                 local_ref(ptr_local, "$list_base", TypeTable::I32),
-                local_ref(count_local, "$list_len", TypeTable::I32),
+                copy_count(local_ref(count_local, "$list_len", TypeTable::I32)),
             ],
             TypeTable::I32,
         ),
@@ -1280,7 +1271,23 @@ fn synthesize_stream_read_func(
         false,
     );
 
-    // let byte_count = max * elem_size
+    // let room = cm_copy_count(max)
+    let room_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("room".to_string()),
+        TypeTable::I32,
+        false,
+    );
+    stmts.push(let_stmt(
+        "room",
+        room_idx,
+        TypeTable::I32,
+        copy_count(local_ref(max_idx, "max", TypeTable::I32)),
+    ));
+    let room = || local_ref(room_idx, "room", TypeTable::I32);
+
+    // let byte_count = room * elem_size
     let byte_count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1290,7 +1297,7 @@ fn synthesize_stream_read_func(
     );
     let byte_count = binary(
         TirBinaryOp::Mul,
-        local_ref(max_idx, "max", TypeTable::I32),
+        room(),
         i32_const(elem_size),
         TypeTable::I32,
     );
@@ -1321,7 +1328,7 @@ fn synthesize_stream_read_func(
     );
     stmts.push(let_stmt("ptr", ptr_idx, TypeTable::I32, alloc_call));
 
-    // let mut result = stream-read:directory-entry(handle, ptr, max)
+    // let mut result = stream-read:directory-entry(handle, ptr, room)
     let result_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -1334,7 +1341,7 @@ fn synthesize_stream_read_func(
         vec![
             local_ref(handle_idx, "handle", TypeTable::I32),
             local_ref(ptr_idx, "ptr", TypeTable::I32),
-            local_ref(max_idx, "max", TypeTable::I32),
+            room(),
         ],
         TypeTable::I32,
     );

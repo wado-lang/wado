@@ -39,12 +39,21 @@ pub fn input_mismatch<E, Axes>(
     return null;
 }
 
-/// Why two inputs disagree on an axis the graph leaves to the run.
-pub fn axis_mismatch(axis: String, tensor: String, extent: i32, other: String, other_extent: i32) -> Option<String> {
+/// Why two inputs disagree on an extent the graph leaves to the run as `symbol`.
+pub fn axis_mismatch(
+    symbol: String,
+    tensor: String,
+    axis: String,
+    extent: i32,
+    other: String,
+    other_extent: i32,
+) -> Option<String> {
     if extent == other_extent {
         return null;
     }
-    return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${other_extent} in ${other}`);
+    return Option::Some(
+        `${tensor}: axis ${axis} is ${extent} in the tensor and ${other_extent} in ${other}, and the graph makes both ${symbol}`,
+    );
 }
 
 /// Stops `forward` with the reason an input disagrees with the graph.

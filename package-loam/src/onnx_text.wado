@@ -170,7 +170,7 @@ fn read_constant_data(
     let width = element.width;
     let mut bytes = ByteList::with_capacity(texts.len() * width);
     for let text of texts {
-        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)? as u64, width);
     }
     return Result::Ok(Option::Some(bytes));
 }
@@ -448,6 +448,9 @@ fn single_attr_text(
             return Result::Ok(literal_text(toks, s.token_index(c)));
         }
         if s.is_node(c) {
+            if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {
+                return Result::Err(`${attr_name}: a list of tensors is not read`);
+            }
             return Result::Err(`${attr_name}: a subgraph attribute is not read`);
         }
     }

@@ -604,15 +604,17 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
         let mut stated: List<i32> = [];
         for let [i, axis] of shape.axes.into_iter().enumerate() {
             axes.push(wado`"${axis.name}"`);
-            let here = `${wado`"${vi.name}"`}, ${ident}.extents[${i}]`;
             match axis.extent {
                 Static(e) => stated.push(e),
-                Symbol(_) => {
+                Symbol(symbol) => {
                     stated.push(-1);
-                    if let Some(first) = first_seen.get(axis.name) {
-                        agreements.push(wado`refuse(axis_mismatch("${axis.name}", ${here}, ${first}));`);
+                    let extent = `${ident}.extents[${i}]`;
+                    if let Some(first) = first_seen.get(symbol) {
+                        agreements.push(
+                            wado`refuse(axis_mismatch("${symbol}", "${vi.name}", "${axis.name}", ${extent}, ${first}));`,
+                        );
                     } else {
-                        first_seen[axis.name] = here;
+                        first_seen[symbol] = `${wado`"${vi.name}"`}, ${extent}`;
                     }
                 },
             }
