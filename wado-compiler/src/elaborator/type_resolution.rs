@@ -1170,31 +1170,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: &str,
         bounds: &[TraitBound],
     ) -> Vec<(String, TypeId)> {
-        let projections: Vec<(String, String)> = bounds
-            .iter()
-            .flat_map(|bound| &bound.assoc_types)
-            .filter_map(|binding| match &binding.ty {
-                ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
-                    Some((binding.name.clone(), ns.name.clone()))
+        let mut answered = Vec::new();
+        let mut projections: Vec<(String, String)> = Vec::new();
+        for binding in bounds.iter().flat_map(|bound| &bound.assoc_types) {
+            match &binding.ty {
+                // `Output = Self` pins the bounded type itself.
+                ast::Type::Named(named) if named.name == "Self" => {
+                    answered.push((binding.name.clone(), base));
                 }
-                _ => None,
-            })
-            .collect();
-        projections
-            .into_iter()
-            .filter_map(|(name, assoc)| {
-                // A frame that binds `Self::X` answers with the binding, one
-                // that does not with the projection — which is built from
-                // `assoc`'s own bounds, so a pair already on the walk recurses.
-                let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
-                    self.unless_on_walk(
-                        |scope| &mut scope.assoc_binding_stack,
-                        (base, assoc.clone()),
-                        |e| e.make_frame_projection(base, base_name, &assoc),
-                    )
-                })?;
-                Some((name, answer))
-            })
-            .collect()
+                ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
+                    projections.push((binding.name.clone(), ns.name.clone()));
+                }
+                _ => {}
+            }
+        }
+        answered.extend(projections.into_iter().filter_map(|(name, assoc)| {
+            // A frame that binds `Self::X` answers with the binding, one
+            // that does not with the projection — which is built from
+            // `assoc`'s own bounds, so a pair already on the walk recurses.
+            let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
+                self.unless_on_walk(
+                    |scope| &mut scope.assoc_binding_stack,
+                    (base, assoc.clone()),
+                    |e| e.make_frame_projection(base, base_name, &assoc),
+                )
+            })?;
+            Some((name, answer))
+        }));
+        answered
     }
 }

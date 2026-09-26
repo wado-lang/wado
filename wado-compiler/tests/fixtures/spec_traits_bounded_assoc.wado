@@ -1,0 +1,41 @@
+// An associated type's bound, relied on in a generic body: `C::Builder`
+// builds a `C`, because the bound pins `Output = Self`.
+
+trait CollectionBuilder with () {
+    type Element;
+    type Output;
+
+    fn add(&mut self, e: Self::Element);
+    fn build(&self) -> Self::Output;
+}
+
+struct Bag { items: List<i32> }
+
+impl CollectionBuilder for Bag {
+    type Element = i32;
+    type Output = Bag;
+
+    fn add(&mut self, e: i32) { self.items.push(e); }
+    fn build(&self) -> Bag { return *self; }
+}
+
+impl Collection for Bag {
+    type Element = i32;
+    type Builder = Bag;
+}
+
+trait Collection {
+    type Element;
+    type Builder: CollectionBuilder<Element = Self::Element, Output = Self>;
+}
+
+// A generic body relies on the bound: the builder builds a `C`
+fn build_one<C: Collection>(b: C::Builder, e: C::Element) -> C {
+    let mut b = b;
+    b.add(e);
+    return b.build();
+}
+
+test {
+    assert build_one::<Bag>(Bag { items: [] }, 7).items == [7];
+}
