@@ -6136,13 +6136,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // literal. Matches `Elaborator::resolve_index`'s tuple
         // branch.
         let tuple_elems: Option<Vec<TypeId>> = {
-            let tt = self.tysys.type_table.borrow();
             let base = receiver.type_id;
-            let unwrapped = match tt.get(base) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => base,
-            };
-            tt.as_tuple(unwrapped)
+            let unwrapped = self.tysys.pointee_of(base).unwrap_or(base);
+            self.tysys.type_table.borrow().as_tuple(unwrapped)
         };
         if let Some(elems) = &tuple_elems
             && let ast::Expr::Literal(lit) = &index.index

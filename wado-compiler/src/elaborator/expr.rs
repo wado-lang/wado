@@ -1633,10 +1633,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr_type,
-        };
+        let base_type_id = self.tysys.pointee_of(expr_type).unwrap_or(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1710,11 +1707,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
-            let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                _ => None,
-            };
-            if let Some(expected) = derefed_index_type {
+            if let Some(expected) = self.tysys.pointee_of(index_type) {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
@@ -1887,10 +1880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
+        let base_type_id = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
         let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);

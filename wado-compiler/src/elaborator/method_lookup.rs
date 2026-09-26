@@ -2788,10 +2788,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The declared parameter is `&Rhs`; the operand is the
                 // referent, so admissibility compares against that.
                 if let Some(class) = rhs {
-                    let declared = rhs_type.map(|t| match s.tysys.type_table.borrow().get(t) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                        _ => t,
-                    });
+                    let declared = rhs_type.map(|t| s.tysys.pointee_of(t).unwrap_or(t));
                     if let Some(declared) = declared
                         && !s.class_admits(declared, class)
                     {
@@ -2970,10 +2967,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<(String, TypeId)> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_type,
-        };
+        let base_type_id = self
+            .tysys
+            .pointee_of(container_type)
+            .unwrap_or(container_type);
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -3052,10 +3049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
-        let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => output_type,
-        };
+        let output_base_type_id = self.tysys.pointee_of(output_type).unwrap_or(output_type);
 
         let (output_struct_name, output_module_source, output_type_args) = match self
             .tysys

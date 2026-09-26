@@ -945,13 +945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| {
-                let table = self.tysys.type_table.borrow();
-                match table.get(expected) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                    _ => None,
-                }
-            })
+            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
         } else {
             None
         };
@@ -1199,13 +1193,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        let table = self.tysys.type_table.borrow();
         // Mirror `resolve_index`'s one-level reference peel before the tuple
         // check.
-        let base = match table.get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
+        let base = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
+        let table = self.tysys.type_table.borrow();
         matches!(
             table.get(base),
             ResolvedType::GenericInstance { def, .. }
@@ -1286,11 +1277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
 
-            // Get base type (unwrap reference if needed)
-            let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => indexed_type,
-            };
+            let base_type_id = self.tysys.pointee_of(indexed_type).unwrap_or(indexed_type);
 
             // Check for IndexAssign trait implementation
             // Arrays now use IndexAssign trait like other types
@@ -1318,11 +1305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
-                    let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                        _ => None,
-                    };
-                    if let Some(expected) = derefed_index_type {
+                    if let Some(expected) = self.tysys.pointee_of(index_type) {
                         self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
@@ -1924,10 +1907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
             // the expected type is the parameter type itself.
             let expected = if wrap {
-                let referent = match self.tysys.type_table.borrow().get(param_ty) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => param_ty,
-                };
+                let referent = self.tysys.pointee_of(param_ty).unwrap_or(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
