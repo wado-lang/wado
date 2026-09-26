@@ -1,6 +1,6 @@
 #![generated(by = "gale", sources = ["tests/grammars/lexer_recursive_ng_self.g4"])]
 
-use { TreeSet } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 
 pub struct Span {
     pub start: i32,
@@ -1083,49 +1083,103 @@ pub fn atn_decode(bytes: &ByteList) -> AtnSim {
 
 struct LThread {
     state: i32,
-    stack: List<i32>,
+    stack: i32,
     accept: bool,
 }
 
-fn latn_sig(state: i32, stack: &List<i32>) -> String {
-    let mut s = `${state}#`;
-    for let mut i = 0; i < stack.len(); i += 1 {
-        if i > 0 {
-            s.push_str(",");
+struct LatnStacks {
+    parent: List<i32>,
+    ret: List<i32>,
+    ids: TreeMap<i64, i32>,
+}
+
+impl LatnStacks {
+    fn push(&mut self, parent: i32, ret: i32) -> i32 {
+        let key = latn_pair_key(parent, ret);
+        if let Some(id) = self.ids.get(key) {
+            return id;
         }
-        s.push_str(`${stack[i]}`);
+        let id = self.parent.len();
+        self.parent.push(parent);
+        self.ret.push(ret);
+        self.ids[key] = id;
+        return id;
     }
-    return s;
+}
+
+fn latn_pair_key(hi: i32, lo: i32) -> i64 {
+    assert hi >= -1 && lo >= -1, "latn keys pair a state or stack id with -1 for none";
+    return (hi + 1) as i64 << 32 | (lo + 1) as i64;
+}
+
+struct LatnVisited {
+    step: i32,
+    step_of: List<i32>,
+    stack_of: List<i32>,
+    more: TreeSet<i64>,
+}
+
+global mut LATN_VISITED: LatnVisited = LatnVisited {
+    step: 0,
+    step_of: [],
+    stack_of: [],
+    more: TreeSet::<i64>::new(),
+};
+
+impl LatnVisited {
+    fn cover(&mut self, nstates: i32) {
+        while self.step_of.len() < nstates {
+            self.step_of.push(-1);
+            self.stack_of.push(-1);
+        }
+    }
+
+    fn first_visit(&mut self, state: i32, stack: i32) -> bool {
+        if self.step_of[state] != self.step {
+            self.step_of[state] = self.step;
+            self.stack_of[state] = stack;
+            return true;
+        }
+        if self.stack_of[state] == stack {
+            return false;
+        }
+        return self.more.insert(latn_pair_key(state, stack));
+    }
+
+    fn next_step(&mut self) {
+        if self.step == i32::MAX {
+            self.step_of = List::filled(self.step_of.len(), -1);
+            self.step = -1;
+        }
+        self.step += 1;
+        if !self.more.is_empty() {
+            self.more.clear();
+        }
+    }
 }
 
 fn latn_closure(
     sim: &AtnSim,
+    stacks: &mut LatnStacks,
     out: &mut List<LThread>,
-    visited: &mut TreeSet<String>,
+    visited: &mut LatnVisited,
     state: i32,
-    stack: &List<i32>,
-    open: &List<i32>,
+    stack: i32,
+    open: &mut List<i32>,
 ) {
-    let key = latn_sig(state, stack);
-    if visited.contains(key) {
+    if !visited.first_visit(state, stack) {
         return;
     }
-    visited.insert(key);
 
     if sim.state_kind[state] == ATN_RULE_STOP {
-        if stack.is_empty() {
-            out.push(LThread { state, stack: [], accept: true });
-        } else {
-            let ret = stack[stack.len() - 1];
-            let mut rest: List<i32> = [];
-            for let mut i = 0; i < stack.len() - 1; i += 1 {
-                rest.push(stack[i]);
-            }
-            let mut rest_open: List<i32> = [];
-            for let mut i = 0; i < open.len() - 1; i += 1 {
-                rest_open.push(open[i]);
-            }
-            latn_closure(sim, out, visited, ret, &rest, &rest_open);
+        if stack < 0 {
+            out.push(LThread { state, stack, accept: true });
+            return;
+        }
+        let returned = open.pop();
+        latn_closure(sim, stacks, out, visited, stacks.ret[stack], stacks.parent[stack], open);
+        if let Some(rule) = returned {
+            open.push(rule);
         }
         return;
     }
@@ -1135,7 +1189,7 @@ fn latn_closure(
     if tc > 0 {
         let k0 = sim.tr_kind[ts];
         if k0 == ATN_TR_ATOM || k0 == ATN_TR_NOT_ATOM || k0 == ATN_TR_WILDCARD {
-            out.push(LThread { state, stack: *stack, accept: false });
+            out.push(LThread { state, stack, accept: false });
             return;
         }
     }
@@ -1143,36 +1197,35 @@ fn latn_closure(
         let idx = ts + i;
         let target = sim.tr_target[idx];
         if sim.tr_kind[idx] == ATN_TR_RULE {
-            if target < 0 {
+            if target < 0 || open.contains(&target) {
                 continue;
             }
-            if open.iter_ref().any(|o: &i32| *o == target) {
-                continue;
-            }
-            let mut ns: List<i32> = *stack;
-            ns.push(sim.tr_follow[idx]);
-            let mut open2: List<i32> = *open;
-            open2.push(target);
-            latn_closure(sim, out, visited, target, &ns, &open2);
+            let pushed = stacks.push(stack, sim.tr_follow[idx]);
+            open.push(target);
+            latn_closure(sim, stacks, out, visited, target, pushed, open);
+            let _ = open.pop();
         } else {
-            latn_closure(sim, out, visited, target, stack, open);
+            latn_closure(sim, stacks, out, visited, target, stack, open);
         }
     }
 }
 
 pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32, longest: bool) -> i32 {
     let mut best = -1;
+    let mut stacks = LatnStacks { parent: [], ret: [], ids: TreeMap::<i64, i32>::new() };
+    let mut open: List<i32> = [];
+    let visited = &mut LATN_VISITED;
+    visited.cover(sim.state_kind.len());
+    visited.next_step();
     let mut clist: List<LThread> = [];
-    let mut seed = TreeSet::<String>::new();
-    let empty: List<i32> = [];
-    let no_open: List<i32> = [];
-    latn_closure(sim, &mut clist, &mut seed, sim.rule_start[start_rule], &empty, &no_open);
+    latn_closure(sim, &mut stacks, &mut clist, visited, sim.rule_start[start_rule], -1, &mut open);
 
+    let mut nlist: List<LThread> = [];
     let mut pos = start;
     loop {
         let cur = if pos < chars.len() { chars[pos] as i32 } else { -1 };
-        let mut nlist: List<LThread> = [];
-        let mut nseen = TreeSet::<String>::new();
+        nlist.clear();
+        visited.next_step();
         let mut i = 0;
         let mut stop = false;
         while i < clist.len() && !stop {
@@ -1180,15 +1233,13 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
             if th.accept {
                 best = pos;
                 stop = !longest;
-            } else {
+            } else if cur >= 0 {
                 let ts = sim.state_tr_start[th.state];
                 let tc = sim.state_tr_count[th.state];
                 for let mut j = 0; j < tc; j += 1 {
                     let idx = ts + j;
                     let kind = sim.tr_kind[idx];
-                    let matched = if cur < 0 {
-                        false;
-                    } else if kind == ATN_TR_ATOM {
+                    let matched = if kind == ATN_TR_ATOM {
                         cur >= sim.tr_label[idx] && cur <= sim.tr_follow[idx];
                     } else if kind == ATN_TR_WILDCARD {
                         true;
@@ -1198,16 +1249,26 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
                         false;
                     };
                     if matched {
-                        latn_closure(sim, &mut nlist, &mut nseen, sim.tr_target[idx], &th.stack, &no_open);
+                        latn_closure(
+                            sim,
+                            &mut stacks,
+                            &mut nlist,
+                            visited,
+                            sim.tr_target[idx],
+                            th.stack,
+                            &mut open,
+                        );
                     }
                 }
             }
             i += 1;
         }
-        clist = nlist;
-        if clist.is_empty() {
+        if nlist.is_empty() {
             break;
         }
+        let spent = clist;
+        clist = nlist;
+        nlist = spent;
         pos += 1;
     }
     return best;

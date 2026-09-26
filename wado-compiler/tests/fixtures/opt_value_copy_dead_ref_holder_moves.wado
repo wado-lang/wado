@@ -1,0 +1,112 @@
+// A borrow bound to a local lasts only as long as that local is readable. Where
+// every local holding the borrow is dead, a whole-value read of the referent is
+// its final use and moves, however the moved value flows on afterwards.
+//
+// `value_copy_live_ref_holder_keeps_copy` is the counterpart: the same shapes
+// with the holder still read after the move keep their copy.
+
+use { println, Stdout } from "core:cli";
+
+fn id(x: &List<i32>) -> &List<i32> {
+    return x;
+}
+
+// A reference local, dead at the move.
+fn ref_local() -> i32 {
+    let a: List<i32> = [1];
+    let mut b: List<i32> = [];
+    let mut total = 0;
+    let r = &a;
+    total += r.len();
+    let s = a;
+    b = s;
+    total += b.len();
+    return total;
+}
+
+// A call result holding the borrow, dead at the move.
+fn call_result() -> i32 {
+    let a: List<i32> = [1, 2];
+    let mut b: List<i32> = [];
+    let q = id(&a);
+    let n = q.len();
+    let s = a;
+    b = s;
+    return n + b.len();
+}
+
+// A double buffer: the iterator holding `&a` is dead once the walk ends, so
+// each swap hands the storage over instead of deep-copying it.
+fn swap_buffers(n: i32) -> i32 {
+    let mut a: List<i32> = [1, 2];
+    let mut b: List<i32> = [5];
+    let mut total = 0;
+    for let i of 0..<n {
+        for let v of &a {
+            total += *v;
+        }
+        let spent = a;
+        a = b;
+        b = spent;
+    }
+    return total + a.len() * 100 + b.len() * 10;
+}
+
+// The same swap with the walk indexing through a reference per element.
+fn swap_indexed(n: i32) -> i32 {
+    let mut a: List<i32> = [1, 2];
+    let mut b: List<i32> = [5];
+    let mut total = 0;
+    for let step of 0..<n {
+        let mut i = 0;
+        while i < a.len() {
+            let th = &a[i];
+            total += *th;
+            i += 1;
+        }
+        let spent = a;
+        a = b;
+        b = spent;
+    }
+    return total + a.len() * 100 + b.len() * 10;
+}
+
+struct P {
+    a: i32,
+    b: bool,
+}
+
+// The walk's element reference feeds a literal only its scalar fields, which
+// carry no storage, so the holder hands nothing on.
+fn swap_rebuilt(n: i32) -> i32 {
+    let mut cur: List<P> = [P { a: 1, b: true }];
+    let mut next: List<P> = [];
+    for let k of 0..<n {
+        next.clear();
+        for let p of &cur {
+            next.push(P { a: p.a + k, b: p.b });
+            next.push(P { a: p.a, b: !p.b });
+        }
+        let spent = cur;
+        cur = next;
+        next = spent;
+    }
+    return cur.len() * 10 + cur[cur.len() - 1].a;
+}
+
+export fn run() with Stdout {
+    println(`${ref_local()} ${call_result()} ${swap_buffers(3)} ${swap_indexed(3)} ${swap_rebuilt(3)}`);
+}
+
+__DATA__
+{
+    "stdout": "2 4 131 131 81\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<i32>",
+        "$value_copy$core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>"
+    ],
+    "wir_not_expect:O2": [
+        "$value_copy$core:prelude/list.wado/List<i32>",
+        "$value_copy$core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>"
+    ]
+}

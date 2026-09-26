@@ -22,6 +22,98 @@ use crate::wir_build::translate::ref_binding_needs_boxing;
 use crate::wir_build::types::generic_instance_name;
 use std::assert_matches;
 
+/// Most intervals an or-pattern's test compares one by one. Past it the test
+/// searches, since a scan costs a compare pair per interval, and a Unicode
+/// property class has a thousand.
+const OR_SEARCH_LEAF: usize = 4;
+
+/// Compares against one integer scrutinee, in its width and signedness.
+struct IntCompare {
+    scrut: WirInstr,
+    wide: bool,
+    unsigned: bool,
+}
+
+impl IntCompare {
+    fn operands(&self, value: i128) -> (Box<WirInstr>, Box<WirInstr>) {
+        // A constant outside the signed range is written wrapped; an unsigned
+        // compare reads it back.
+        let value = if self.wide {
+            WirInstr::I64Const(value as i64)
+        } else {
+            WirInstr::I32Const(value as i32)
+        };
+        (Box::new(self.scrut.clone()), Box::new(value))
+    }
+
+    fn lt(&self, value: i128) -> WirInstr {
+        let (s, v) = self.operands(value);
+        match (self.wide, self.unsigned) {
+            (true, true) => WirInstr::I64LtU(s, v),
+            (true, false) => WirInstr::I64LtS(s, v),
+            (false, true) => WirInstr::I32LtU(s, v),
+            (false, false) => WirInstr::I32LtS(s, v),
+        }
+    }
+
+    fn le(&self, value: i128) -> WirInstr {
+        let (s, v) = self.operands(value);
+        match (self.wide, self.unsigned) {
+            (true, true) => WirInstr::I64LeU(s, v),
+            (true, false) => WirInstr::I64LeS(s, v),
+            (false, true) => WirInstr::I32LeU(s, v),
+            (false, false) => WirInstr::I32LeS(s, v),
+        }
+    }
+
+    fn ge(&self, value: i128) -> WirInstr {
+        let (s, v) = self.operands(value);
+        match (self.wide, self.unsigned) {
+            (true, true) => WirInstr::I64GeU(s, v),
+            (true, false) => WirInstr::I64GeS(s, v),
+            (false, true) => WirInstr::I32GeU(s, v),
+            (false, false) => WirInstr::I32GeS(s, v),
+        }
+    }
+
+    fn eq(&self, value: i128) -> WirInstr {
+        let (s, v) = self.operands(value);
+        if self.wide {
+            WirInstr::I64Eq(s, v)
+        } else {
+            WirInstr::I32Eq(s, v)
+        }
+    }
+
+    fn within(&self, (lo, hi): (i128, i128)) -> WirInstr {
+        if lo == hi {
+            return self.eq(lo);
+        }
+        WirInstr::I32And(Box::new(self.ge(lo)), Box::new(self.le(hi)))
+    }
+}
+
+/// Whether the scrutinee lies in one of `intervals` (sorted and disjoint), by
+/// binary search down to a leaf tested without a branch.
+fn interval_search(cmp: &IntCompare, intervals: &[(i128, i128)]) -> WirInstr {
+    let Some((first, others)) = intervals.split_first() else {
+        // Only empty ranges: nothing matches.
+        return WirInstr::I32Const(0);
+    };
+    if intervals.len() <= OR_SEARCH_LEAF {
+        return others.iter().fold(cmp.within(*first), |acc, interval| {
+            WirInstr::I32Or(Box::new(acc), Box::new(cmp.within(*interval)))
+        });
+    }
+    let (below, rest) = intervals.split_at(intervals.len() / 2);
+    WirInstr::If {
+        condition: Box::new(cmp.lt(rest[0].0)),
+        result: Some(WirType::I32),
+        then_body: vec![interval_search(cmp, below)],
+        else_body: Some(vec![interval_search(cmp, rest)]),
+    }
+}
+
 /// Build `if condition { then_body } else { else_body }`, collapsing the
 /// boolean-materialization idiom `if C { 1 } else { 0 }` to `C`.
 ///
@@ -67,10 +159,7 @@ impl FunctionTranslator<'_, '_> {
 
         // Translate scrutinee and adjust for min_value
         let scrut = self.translate_operand(scrutinee);
-        let is_i64 = matches!(
-            self.type_table.get(self.operand_type_id(scrutinee)),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
+        let is_i64 = self.scrut_is_wide(self.operand_type_id(scrutinee));
 
         // A 64-bit offset is range-checked before it narrows: wrapping first
         // would land a value 2^32 away from an entry on that entry.
@@ -734,20 +823,13 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32Const(1) // always matches
             }
             PatKind::Literal(lit) => {
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
+                let scrut_get = self.scrut_get(scrut_local, scrut_type);
                 self.translate_literal_pattern_condition(lit, scrut_get, scrut_type)
             }
             PatKind::Enum { case_index, .. } => {
                 // Enum: compare i32 discriminant
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
                 WirInstr::I32Eq(
-                    Box::new(scrut_get),
+                    Box::new(self.scrut_get(scrut_local, scrut_type)),
                     Box::new(WirInstr::I32Const(*case_index as i32)),
                 )
             }
@@ -756,10 +838,7 @@ impl FunctionTranslator<'_, '_> {
                 case_index,
                 ..
             } => {
-                let scrut_get = WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
-                };
+                let scrut_get = self.scrut_get(scrut_local, scrut_type);
 
                 let (variant_key, case) = self.variant_case(scrut_type, *case_index, variant_name);
                 if case.payload.is_empty() {
@@ -781,61 +860,28 @@ impl FunctionTranslator<'_, '_> {
                 inclusive,
                 is_unsigned,
             } => {
-                let scrut_get = || WirInstr::LocalGet {
-                    name: scrut_local.to_string(),
-                    result_ty: self.wir_type(scrut_type),
+                let cmp = IntCompare {
+                    scrut: self.scrut_get(scrut_local, scrut_type),
+                    wide: self.scrut_is_wide(scrut_type),
+                    unsigned: *is_unsigned,
                 };
-                let is_i64 = matches!(
-                    self.type_table.get(scrut_type),
-                    ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-                );
-                if is_i64 {
-                    let start_const = WirInstr::I64Const(*start as i64);
-                    let end_const = WirInstr::I64Const(*end as i64);
-                    let ge = if *is_unsigned {
-                        WirInstr::I64GeU(Box::new(scrut_get()), Box::new(start_const))
-                    } else {
-                        WirInstr::I64GeS(Box::new(scrut_get()), Box::new(start_const))
-                    };
-                    let upper = if *inclusive {
-                        if *is_unsigned {
-                            WirInstr::I64LeU(Box::new(scrut_get()), Box::new(end_const))
-                        } else {
-                            WirInstr::I64LeS(Box::new(scrut_get()), Box::new(end_const))
-                        }
-                    } else if *is_unsigned {
-                        WirInstr::I64LtU(Box::new(scrut_get()), Box::new(end_const))
-                    } else {
-                        WirInstr::I64LtS(Box::new(scrut_get()), Box::new(end_const))
-                    };
-                    WirInstr::I32And(Box::new(ge), Box::new(upper))
+                let upper = if *inclusive {
+                    cmp.le(*end)
                 } else {
-                    let start_const = WirInstr::I32Const(*start as i32);
-                    let end_const = WirInstr::I32Const(*end as i32);
-                    let ge = if *is_unsigned {
-                        WirInstr::I32GeU(Box::new(scrut_get()), Box::new(start_const))
-                    } else {
-                        WirInstr::I32GeS(Box::new(scrut_get()), Box::new(start_const))
-                    };
-                    let upper = if *inclusive {
-                        if *is_unsigned {
-                            WirInstr::I32LeU(Box::new(scrut_get()), Box::new(end_const))
-                        } else {
-                            WirInstr::I32LeS(Box::new(scrut_get()), Box::new(end_const))
-                        }
-                    } else if *is_unsigned {
-                        WirInstr::I32LtU(Box::new(scrut_get()), Box::new(end_const))
-                    } else {
-                        WirInstr::I32LtS(Box::new(scrut_get()), Box::new(end_const))
-                    };
-                    WirInstr::I32And(Box::new(ge), Box::new(upper))
-                }
+                    cmp.lt(*end)
+                };
+                WirInstr::I32And(Box::new(cmp.ge(*start)), Box::new(upper))
             }
             PatKind::Tuple(_, _) | PatKind::Struct { .. } => {
                 // Tuple/struct patterns: always irrefutable
                 WirInstr::I32Const(1)
             }
             PatKind::Or(alternatives) => {
+                if let Some(cmp) = self.int_compare(scrut_local, scrut_type)
+                    && let Some(intervals) = self.or_pattern_intervals(pattern)
+                {
+                    return interval_search(&cmp, &intervals);
+                }
                 // Or pattern: combine conditions with logical OR
                 let alternatives = alternatives.clone();
                 let mut result = WirInstr::I32Const(0);
@@ -853,6 +899,107 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    fn scrut_get(&self, scrut_local: &str, scrut_type: TypeId) -> WirInstr {
+        WirInstr::LocalGet {
+            name: scrut_local.to_string(),
+            result_ty: self.wir_type(scrut_type),
+        }
+    }
+
+    fn scrut_is_wide(&self, scrut_type: TypeId) -> bool {
+        matches!(
+            self.type_table.get(scrut_type),
+            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
+        )
+    }
+
+    /// Compares against a scrutinee of an integer or `char` type, ordered as
+    /// that type orders its values.
+    fn int_compare(&self, scrut_local: &str, scrut_type: TypeId) -> Option<IntCompare> {
+        let ResolvedType::Primitive(primitive) = self.type_table.get(scrut_type) else {
+            return None;
+        };
+        let unsigned = match primitive {
+            PrimitiveType::I8 | PrimitiveType::I16 | PrimitiveType::I32 | PrimitiveType::I64 => {
+                false
+            }
+            PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::Char => true,
+            PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16
+            | PrimitiveType::Bool
+            | PrimitiveType::V128 => return None,
+        };
+        Some(IntCompare {
+            scrut: self.scrut_get(scrut_local, scrut_type),
+            wide: self.scrut_is_wide(scrut_type),
+            unsigned,
+        })
+    }
+
+    /// The values an or-pattern of integer constants matches, as sorted,
+    /// disjoint, non-adjacent inclusive intervals; `None` when an alternative
+    /// is anything else.
+    fn or_pattern_intervals(&self, pattern: PatId) -> Option<Vec<(i128, i128)>> {
+        let mut intervals = Vec::new();
+        self.collect_pattern_intervals(pattern, &mut intervals)?;
+        intervals.sort_unstable();
+        let mut merged: Vec<(i128, i128)> = Vec::with_capacity(intervals.len());
+        for (lo, hi) in intervals {
+            match merged.last_mut() {
+                Some(last) if lo <= last.1.saturating_add(1) => last.1 = last.1.max(hi),
+                _ => merged.push((lo, hi)),
+            }
+        }
+        Some(merged)
+    }
+
+    fn collect_pattern_intervals(&self, pattern: PatId, out: &mut Vec<(i128, i128)>) -> Option<()> {
+        match &self.body.pats[pattern].kind {
+            PatKind::Literal(NirLiteralPattern::I128(v)) => out.push((*v, *v)),
+            PatKind::Literal(NirLiteralPattern::U128(v)) => {
+                let v = i128::try_from(*v).ok()?;
+                out.push((v, v));
+            }
+            PatKind::Literal(NirLiteralPattern::Char(c)) => {
+                let v = i128::from(u32::from(*c));
+                out.push((v, v));
+            }
+            PatKind::Range {
+                start,
+                end,
+                inclusive,
+                ..
+            } => {
+                let hi = if *inclusive { *end } else { *end - 1 };
+                if *start <= hi {
+                    out.push((*start, hi));
+                }
+            }
+            PatKind::Or(alternatives) => {
+                for alternative in alternatives {
+                    self.collect_pattern_intervals(*alternative, out)?;
+                }
+            }
+            PatKind::Literal(
+                NirLiteralPattern::Bool(_) | NirLiteralPattern::String(_) | NirLiteralPattern::Null,
+            )
+            | PatKind::Wildcard
+            | PatKind::Binding { .. }
+            | PatKind::Tuple(..)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::Struct { .. }
+            | PatKind::ConstantValue { .. } => return None,
+        }
+        Some(())
+    }
+
     /// Generate a condition for a literal pattern.
     fn translate_literal_pattern_condition(
         &self,
@@ -860,52 +1007,19 @@ impl FunctionTranslator<'_, '_> {
         scrut_get: WirInstr,
         scrut_type: TypeId,
     ) -> WirInstr {
-        let is_i64 = matches!(
-            self.type_table.get(scrut_type),
-            ResolvedType::Primitive(PrimitiveType::I64 | PrimitiveType::U64)
-        );
+        let cmp = IntCompare {
+            scrut: scrut_get,
+            wide: self.scrut_is_wide(scrut_type),
+            unsigned: false,
+        };
         match lit {
-            NirLiteralPattern::I128(val) => {
-                if is_i64 {
-                    WirInstr::I64Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I64Const(*val as i64)),
-                    )
-                } else {
-                    WirInstr::I32Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I32Const(*val as i32)),
-                    )
-                }
-            }
-            NirLiteralPattern::U128(val) => {
-                if is_i64 {
-                    WirInstr::I64Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I64Const(*val as i64)),
-                    )
-                } else {
-                    WirInstr::I32Eq(
-                        Box::new(scrut_get),
-                        Box::new(WirInstr::I32Const(*val as i32)),
-                    )
-                }
-            }
-            NirLiteralPattern::Bool(val) => WirInstr::I32Eq(
-                Box::new(scrut_get),
-                Box::new(WirInstr::I32Const(i32::from(*val))),
-            ),
-            NirLiteralPattern::Char(val) => WirInstr::I32Eq(
-                Box::new(scrut_get),
-                Box::new(WirInstr::I32Const(*val as i32)),
-            ),
-            NirLiteralPattern::String(_) | NirLiteralPattern::Null => {
-                // String/null patterns: use ref.eq or ref.is_null
-                if matches!(lit, NirLiteralPattern::Null) {
-                    WirInstr::RefIsNull(Box::new(scrut_get))
-                } else {
-                    panic!("string literal patterns should be lowered before WIR translation")
-                }
+            NirLiteralPattern::I128(val) => cmp.eq(*val),
+            NirLiteralPattern::U128(val) => cmp.eq(*val as i128),
+            NirLiteralPattern::Bool(val) => cmp.eq(i128::from(*val)),
+            NirLiteralPattern::Char(val) => cmp.eq(i128::from(u32::from(*val))),
+            NirLiteralPattern::Null => WirInstr::RefIsNull(Box::new(cmp.scrut)),
+            NirLiteralPattern::String(_) => {
+                panic!("string literal patterns should be lowered before WIR translation")
             }
         }
     }

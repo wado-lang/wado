@@ -1539,8 +1539,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_H; }
             },
             'A' => {
-                end = try_G(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_G; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '\u{0}'..='`' | 'b'..='\u{10ffff}' => {
+                        end = try_G(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_G; }
+                    },
+                    _ => {
+                    },
+                }
                 end = try_H(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_H; }
             },

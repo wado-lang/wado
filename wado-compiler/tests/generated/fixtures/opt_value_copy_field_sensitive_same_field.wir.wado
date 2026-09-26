@@ -56,14 +56,14 @@ fn "opt_value_copy_field_sensitive_same_field.wado/$cm_binding__Stdout_write_via
 fn "opt_value_copy_field_sensitive_same_field.wado/$cm_export__run"() {
     let handle: i32;
     let packed: i64;
-    let rx_21: i32;
-    let tx_22: i32;
-    rx_21 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_22 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_value_copy_field_sensitive_same_field.wado/$cm_binding__Stdout_write_via_stream"(rx_21);
+    let rx_20: i32;
+    let tx_21: i32;
+    rx_20 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_21 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_value_copy_field_sensitive_same_field.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(54);
-    "core:rt/write_string_to_stream"(tx_22, $mv_field_2, 1);
+    "core:rt/write_string_to_stream"(tx_21, $mv_field_2, 1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     "wasi/task-return"(0);
 }

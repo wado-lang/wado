@@ -33,6 +33,10 @@ use std::cell::RefCell;
 /// Per-function set of reference-parameter positions the function may retain.
 pub type RetainedParams = FuncKeyMap<IndexSet<u32>>;
 
+/// The destination of a position the callee hands back with its result. The
+/// caller resolves it against the local it binds the result to.
+pub const RESULT: u32 = u32::MAX;
+
 /// The three ways a reference parameter outlives its call. See the module doc.
 #[derive(Clone, Default)]
 struct RetentionFacts {
@@ -87,16 +91,21 @@ impl RetentionFacts {
         grew
     }
 
-    /// Where each position the caller can resolve lands. A position the callee
-    /// also keeps out of sight is left out: naming one of its destinations would
-    /// say the reference goes no further than there, and it does.
+    /// Where each position the caller can resolve lands: a parameter, or
+    /// [`RESULT`]. A position the callee also keeps out of sight is left out:
+    /// naming one of its destinations would say the reference goes no further
+    /// than there, and it does.
     fn bounded(&self) -> IndexMap<u32, IndexSet<u32>> {
-        self.into_param
-            .iter()
-            .filter(|(source, _)| {
-                !self.escapes.contains(*source) && !self.into_result.contains(*source)
+        self.union()
+            .into_iter()
+            .filter(|source| !self.escapes.contains(source))
+            .map(|source| {
+                let mut destinations = self.into_param.get(&source).cloned().unwrap_or_default();
+                if self.into_result.contains(&source) {
+                    destinations.insert(RESULT);
+                }
+                (source, destinations)
             })
-            .map(|(source, destinations)| (*source, destinations.clone()))
             .collect()
     }
 
@@ -413,8 +422,8 @@ impl Retained {
         self.kept.contains(&position)
     }
 
-    /// The parameter positions the call puts `position` in, or `None` where it
-    /// also keeps it somewhere the caller cannot name.
+    /// The parameter positions (or [`RESULT`]) the call puts `position` in, or
+    /// `None` where it also keeps it somewhere the caller cannot name.
     #[must_use]
     pub fn destinations(&self, position: u32) -> Option<&IndexSet<u32>> {
         self.bounded.get(&position)
@@ -628,17 +637,18 @@ impl StoresOracle<'_> {
 
 /// Where a retained position lands, for the positions a caller can resolve.
 ///
-/// A position is here only when every channel claiming it names a parameter, so
-/// the reference goes nowhere the caller cannot see. One that also escapes or
-/// reaches the result is absent, and a reader takes the union as before.
+/// A position is here only when every channel claiming it names a parameter or
+/// the result, so the reference goes nowhere the caller cannot see. One that
+/// also escapes is absent, and a reader takes the union as before.
 #[derive(Default)]
 pub struct BoundedRetention {
     at: FuncKeyMap<IndexMap<u32, IndexSet<u32>>>,
 }
 
 impl BoundedRetention {
-    /// The parameter positions the callee puts position `source` in, or `None`
-    /// where it also keeps it somewhere the caller cannot name.
+    /// The parameter positions (or [`RESULT`]) the callee puts position
+    /// `source` in, or `None` where it also keeps it somewhere the caller
+    /// cannot name.
     #[must_use]
     pub fn destinations(&self, func: &FunctionRef, source: usize) -> Option<&IndexSet<u32>> {
         self.at

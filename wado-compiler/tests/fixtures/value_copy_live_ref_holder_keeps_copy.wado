@@ -1,0 +1,118 @@
+// A borrow bound to a local pins its referent wherever something holding that
+// borrow is still readable: the local itself, a copy of it, a call result or a
+// branch it flowed into, an iterator over it, or a value it was handed away in.
+// Each function moves `a` into `b` and writes `b` while a holder is still live,
+// so value semantics say the holder sees `a` unchanged.
+//
+// `opt_value_copy_dead_ref_holder_moves` is the counterpart, with every holder
+// dead at the move.
+
+use { println, Stdout } from "core:cli";
+
+fn id(x: &List<i32>) -> &List<i32> {
+    return x;
+}
+
+fn ref_local() -> i32 {
+    let a: List<i32> = [1];
+    let mut b: List<i32> = [];
+    let r = &a;
+    let s = a;
+    b = s;
+    b.push(9);
+    return r.len();
+}
+
+fn copied_ref() -> i32 {
+    let a: List<i32> = [1];
+    let mut b: List<i32> = [];
+    let r = &a;
+    let r2 = r;
+    let s = a;
+    b = s;
+    b.push(9);
+    return r2.len();
+}
+
+fn call_result() -> i32 {
+    let a: List<i32> = [1];
+    let mut b: List<i32> = [];
+    let r = &a;
+    let q = id(r);
+    let s = a;
+    b = s;
+    b.push(9);
+    return q.len();
+}
+
+fn branch_result(flag: bool) -> i32 {
+    let a: List<i32> = [1];
+    let other: List<i32> = [];
+    let mut b: List<i32> = [];
+    let r = &a;
+    let q = if flag { r } else { &other };
+    let s = a;
+    b = s;
+    b.push(9);
+    return q.len();
+}
+
+fn match_binding() -> i32 {
+    let o: Option<List<i32>> = Option::Some([1]);
+    let other: List<i32> = [];
+    let mut keep = &other;
+    if let Some(v) = &o {
+        keep = v;
+    }
+    let s = o;
+    let mut t = s;
+    if let Some(xs) = &mut t {
+        xs.push(9);
+    }
+    return keep.len();
+}
+
+fn live_iterator() -> i32 {
+    let a: List<i32> = [1, 2];
+    let mut b: List<i32> = [];
+    let mut it = (&a).into_iter();
+    let s = a;
+    b = s;
+    b[0] = 7;
+    return *it.next().unwrap();
+}
+
+fn iterator_handed_away() -> i32 {
+    let a: List<i32> = [1, 2];
+    let mut b: List<i32> = [];
+    let held = Option::Some((&a).into_iter());
+    let s = a;
+    b = s;
+    b[0] = 7;
+    if let Some(mut it) = held {
+        return *it.next().unwrap();
+    }
+    return -1;
+}
+
+fn swap_under_live_ref() -> i32 {
+    let mut a: List<i32> = [1];
+    let mut b: List<i32> = [5];
+    let r = &a;
+    let spent = a;
+    a = b;
+    b = spent;
+    b.push(9);
+    return r.len() * 10 + a.len();
+}
+
+export fn run() with Stdout {
+    println(`${ref_local()} ${copied_ref()} ${call_result()} ${branch_result(true)}`);
+    println(`${match_binding()} ${live_iterator()} ${iterator_handed_away()}`);
+    println(`${swap_under_live_ref()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1 1 1\n1 1 1\n11\n"
+}

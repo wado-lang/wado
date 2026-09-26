@@ -180,6 +180,7 @@ use {
 } from "./action_gen.wado";
 use {
     compute_fragment_entries,
+    emit_atn_claim_return,
     emit_atn_enter,
     gen_parse_entry,
     gen_parser_struct,
@@ -2890,6 +2891,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = wado`"${*rule_display}"`;
+    if needs_atn {
+        emit_atn_claim_return(w);
+    }
     // Already unwinding from a deeper failure: no-op so the descent collapses
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
@@ -8398,25 +8402,17 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(`if ${var} == ${idx}`);
-        emit_leaf_pick(w, side, &fn_name, idx, 0, ctx);
+        emit_leaf_pick(w, side, &fn_name, idx, ctx);
         w.end();
     }
-    emit_leaf_pick(w, side, &fn_name, sorted_indices[sorted_indices.len() - 1], 0, ctx);
+    emit_leaf_pick(w, side, &fn_name, sorted_indices[sorted_indices.len() - 1], ctx);
 }
 
-/// Run alternative `idx` from the rule's start, `skip` tokens behind the cursor,
-/// as the rule's whole match.
-fn emit_leaf_pick<S: AsStrSlice>(w: &mut CodeWriter, side: PickSide, fn_name: S, idx: i32, skip: i32, ctx: &GenContext) {
+/// Run alternative `idx` from the rule's start as the rule's whole match.
+fn emit_leaf_pick<S: AsStrSlice>(w: &mut CodeWriter, side: PickSide, fn_name: S, idx: i32, ctx: &GenContext) {
     match side {
-        Parse => {
-            if skip > 0 {
-                w.line(`p.pos -= ${skip};`);
-            }
-            emit_alt_helper_exit(w, fn_name, idx, ctx);
-        },
-        Scan => {
-            w.line(`return ${alt_scan_call(idx, ctx)};`);
-        },
+        Parse => emit_alt_helper_exit(w, fn_name, idx, ctx),
+        Scan => w.line(`return ${alt_scan_call(idx, ctx)};`),
     }
 }
 
@@ -8489,7 +8485,7 @@ fn emit_gated_leaf<S: AsStrSlice, S1: AsStrSlice>(
     rule_display: S1,
 ) {
     emit_trace_pick(w, side, rule_display, `${idx}`, ctx);
-    emit_leaf_pick(w, side, fn_name, idx, 0, ctx);
+    emit_leaf_pick(w, side, fn_name, idx, ctx);
 }
 
 /// The scan's `emit_scan_tournament`, where a gate the scan cannot evaluate
@@ -8518,10 +8514,10 @@ fn emit_scan_side_tournament(w: &mut CodeWriter, indices: &List<i32>, ctx: &GenC
 
 
 /// Whether a `Consume` node's terminal really is every reachable alt's element
-/// at `skip`, and so whether emit advances the cursor past it. Read by both
-/// the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
+/// at `skip`, and so whether the dispatch below reads one token further. Read by
+/// both the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
 /// has to match it.
-fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
+fn consume_reads_past(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
     let mut node_alts: List<i32> = [];
     prediction_collect_all_indices(&c.child, &mut node_alts);
     if node_alts.is_empty() {
@@ -8739,18 +8735,15 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 ) {
     match node {
         Leaf(idx) => {
-            emit_leaf_pick(w, side, &fn_name, *idx, skip, ctx);
+            emit_leaf_pick(w, side, &fn_name, *idx, ctx);
         },
         Consume(c) => {
-            // Shared-prefix terminal: advance past it (the chosen `_alt_<idx>`
-            // re-parses it) and descend to the disambiguating dispatch. It must
-            // match every alt below (the group need not contain alt 0; regression:
-            // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
-            // rewinds exactly what was advanced.
-            let advances = consume_advances_cursor(c, alts, skip);
-            if advances && side matches { Parse } {
-                w.line("p.pos += 1;");
-            }
+            // Shared-prefix terminal: the dispatch below reads past it, and the
+            // chosen `_alt_<idx>` parses it. It must match every alt below (the
+            // group need not contain alt 0; regression: ll_consume_group.g4). The
+            // cursor stays put, so every exit — a pick or no viable alternative —
+            // leaves from the decision's start.
+            let reads_past = consume_reads_past(c, alts, skip);
             gen_prediction_code_inner(
                 w,
                 side,
@@ -8760,7 +8753,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 lowered_rule,
                 type_name,
                 ctx,
-                if advances { skip + 1 } else { skip },
+                if reads_past { skip + 1 } else { skip },
                 rule_display,
                 &EMPTY_SYNC,
                 read,
@@ -8864,24 +8857,14 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             if !fallback.is_empty() {
                 w.else_begin("else");
                 match side {
-                    Parse => {
-                        // The tournament scans each alt from its first element, as
-                        // `Leaf` does; the rule's error path expects the cursor back.
-                        if skip > 0 {
-                            w.line(`p.pos -= ${skip};`);
-                        }
-                        emit_scan_tournament(
-                            w,
-                            &fallback,
-                            fn_name,
-                            rule_display,
-                            ctx,
-                            /*fall_through_on_no_match=*/ true,
-                        );
-                        if skip > 0 {
-                            w.line(`p.pos += ${skip};`);
-                        }
-                    },
+                    Parse => emit_scan_tournament(
+                        w,
+                        &fallback,
+                        fn_name,
+                        rule_display,
+                        ctx,
+                        /*fall_through_on_no_match=*/ true,
+                    ),
                     Scan => emit_scan_side_tournament(w, &fallback, ctx, true),
                 }
             }
@@ -8907,8 +8890,7 @@ fn dispatch_check_var(w: &mut CodeWriter, side: PickSide, skip: i32, depth: i32,
         return DISPATCH_KIND_LOCAL;
     }
     return match side {
-        // `Consume` moved the parse's cursor past the skipped tokens.
-        Parse => if depth == 0 { `${PARSER_HANDLE}.peek_kind()` } else { `${PARSER_HANDLE}.peek_at(${depth})` },
+        Parse => `${PARSER_HANDLE}.peek_at(${at})`,
         Scan => {
             let local = `la_${at}`;
             if !read.contains(&at) {
@@ -8936,7 +8918,7 @@ fn collect_referenced_scan_alts(
         Leaf(_) => {
         },
         Consume(c) => {
-            let next_skip = if consume_advances_cursor(&c, alts, skip) { skip + 1 } else { skip };
+            let next_skip = if consume_reads_past(&c, alts, skip) { skip + 1 } else { skip };
             collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
         },
         Dispatch(d) => {

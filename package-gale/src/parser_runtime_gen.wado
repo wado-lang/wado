@@ -1185,10 +1185,15 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.blank();
 }
 
-/// Emit a rule entry's push of the return state its call site stamped onto
-/// `stack`, the `GenContext::atn_stack_place`.
-pub fn emit_atn_enter<S: AsStrSlice>(w: &mut CodeWriter, stack: S) {
+/// Emit a rule entry's claim on the return state its call site stamped, which
+/// leaves none behind for a call site that stamps nothing.
+pub fn emit_atn_claim_return(w: &mut CodeWriter) {
     w.line("let _atn_ret = p.atn_ret_pending;");
     w.line("p.atn_ret_pending = -1;");
+}
+
+/// Emit a rule entry's push of its claimed return state onto `stack`, the
+/// `GenContext::atn_stack_place`.
+pub fn emit_atn_enter<S: AsStrSlice>(w: &mut CodeWriter, stack: S) {
     w.line(`${stack}.push(_atn_ret);`);
 }
