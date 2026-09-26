@@ -722,6 +722,15 @@ test "max_output holds stored, literal and match output alike" {
     assert inflate_raw(&literals_then_match, 7) matches { Ok(out) && out.len() == 7 };
 }
 
+// Even an empty output passes a negative limit, whether or not a byte is written.
+test "a negative max_output admits no output" {
+    let literals: ByteList = [0x73, 0x74, 0x02, 0x43, 0x00];
+    let empty_fixed: ByteList = [0x03, 0x00];
+    assert inflate_raw(&literals, -1) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_raw(&empty_fixed, -1) matches { Err(ZlibError::OutputExceedsMax) };
+    assert inflate_raw(&empty_fixed, 0) matches { Ok(out) && out.len() == 0 };
+}
+
 test "max_output bounds all gzip members together" {
     let data = make_pattern_data(100);
     let mut members = gzip_compress(&data);

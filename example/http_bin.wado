@@ -205,7 +205,7 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
 }
 
 /// `body` with each coding a `Content-Encoding` value lists undone, last applied first,
-/// no layer of it longer than `max_size`.
+/// no decoded layer of it longer than `max_size`.
 fn decode_content(
     content_encoding: &String,
     body: ByteList,
@@ -215,7 +215,7 @@ fn decode_content(
         |c| !c.is_empty(),
     ).collect();
     codings.reverse();
-    if body.len() > max_size {
+    if codings.is_empty() && body.len() > max_size {
         return Result::Err(BodyError::TooLarge);
     }
     let mut decoded = body;
@@ -490,4 +490,10 @@ test "a request body decoding past the limit is refused, however it is coded" {
     assert decode_content(&"gzip", gzip_compress(&data), 99) matches { Err(TooLarge) };
     assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data)), 99) matches { Err(TooLarge) };
     assert decode_content(&"", data, 99) matches { Err(TooLarge) };
+}
+
+test "the limit is on the decoded body, not on its coded form" {
+    let data: ByteList = b"wado";
+    assert gzip_compress(&data).len() > data.len();
+    assert decode_content(&"gzip", gzip_compress(&data), 4) matches { Ok(d) && d == data };
 }

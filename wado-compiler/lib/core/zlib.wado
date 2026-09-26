@@ -809,6 +809,9 @@ fn inflate_raw_ex(
     input_length: i32,
     max_output: i32,
 ) -> Result<[ByteList, i32], ZlibError> {
+    if max_output < 0 {
+        return Result::Err(ZlibError::OutputExceedsMax);
+    }
     let mut state = InflateState::new(true);
     let mut output: ByteList = [];
     let mut exceeded = false;
