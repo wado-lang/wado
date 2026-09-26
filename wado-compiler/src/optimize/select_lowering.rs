@@ -8,7 +8,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
-use crate::optimize::arena_query::{binary_op_may_trap, cast_truncates_a_float};
+use crate::optimize::arena_query::binary_op_may_trap;
 use crate::optimize::mod_ref::ModRef;
 use crate::tir::{TypeId, TypeTable};
 
@@ -178,9 +178,8 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *rhs, type_table)
         }
         // `value_fully_reemittable_locally` refuses a value nesting a `Cast`,
-        // for want of the operand's source type — the type a trap test would
-        // need here too. Asserted, not refused: were the freeze to admit one,
-        // a `false` would hide the missing trap test as a lost lowering.
+        // for want of the operand's source type. Asserted, not refused: were
+        // the freeze to admit one, a `false` would hide it as a lost lowering.
         ValueKind::Cast { .. } => unreachable!(
             "select-arm eligibility reached a promoted `Cast`; the freeze decision refuses one"
         ),
@@ -224,13 +223,7 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
                 && is_select_eligible_operand(body, *left, type_table)
                 && is_select_eligible_operand(body, *right, type_table)
         }
-        ExprKind::Cast {
-            expr: inner,
-            target_type,
-        } => {
-            !cast_truncates_a_float(body, Some(type_table), *inner, *target_type)
-                && is_select_eligible_operand(body, *inner, type_table)
-        }
+        ExprKind::Cast { expr: inner, .. } => is_select_eligible_operand(body, *inner, type_table),
         _ => false,
     }
 }

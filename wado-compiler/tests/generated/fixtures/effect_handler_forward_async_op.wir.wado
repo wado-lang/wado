@@ -2642,29 +2642,31 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let status_78: i32;
     let $licm_used_85: i32;
     let $licm_repr_86: ref Array<u8>;
-    let i_92: i32;
-    let a_107: i32;
-    let a_117: i32;
-    let i_127: i32;
-    let $licm_arith_136: bool;
+    let i_93: i32;
+    let a_108: i32;
+    let a_118: i32;
+    let i_128: i32;
+    let $licm_arith_136: i64;
+    let $licm_arith_138: bool;
     if local.tee $load_0(data.used) == 0 {
         return;
     }
     offset = 0;
     $licm_used_85 = $load_0;
     $licm_repr_86 = data.repr;
-    $licm_arith_136 = 0 > $licm_used_85;
+    $licm_arith_136 = builtin::i64_extend_i32_s($licm_used_85) << 32_i64;
+    $licm_arith_138 = 0 > $licm_used_85;
     block {
         l342: loop {
             written_4 = (if offset == 0 -> ref "core:prelude/types.wado//StreamWrite" {
-                ptr_9 = builtin::i32_wrap_i64(local.tee packed_8(ptr_20 = "mem/realloc"(0, 0, 1, $licm_used_85); i_92 = 0; b344: block {
+                ptr_9 = builtin::i32_wrap_i64(local.tee packed_8(ptr_20 = "mem/realloc"(0, 0, 1, $licm_used_85); i_93 = 0; b344: block {
                     l345: loop {
-                        break_if b344 i_92 >= $licm_used_85;
-                        builtin::store_u8(ptr_20 + i_92, builtin::array_get_value_u8($licm_repr_86, i_92));
-                        i_92 = i_92 + 1;
+                        break_if b344 i_93 >= $licm_used_85;
+                        builtin::store_u8(ptr_20 + i_93, builtin::array_get_value_u8($licm_repr_86, i_93));
+                        i_93 = i_93 + 1;
                         continue l345;
                     };
-                }; builtin::i64_extend_i32_u(ptr_20) | (builtin::i64_extend_i32_s($licm_used_85) << 32_i64)));
+                }; builtin::i64_extend_i32_u(ptr_20) | $licm_arith_136));
                 len_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
                 result_24 = "wasi/stream-write"(self, ptr_9, select i32(len_10 < 268435455, len_10, 268435455));
                 if result_24 == -1 {
@@ -2693,29 +2695,29 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 written_11;
             } else {
                 end_3 = offset + b_37 = $licm_used_85 - offset; select i32(4096 < b_37, 4096, b_37);
-                if @unlikely($licm_arith_136) {
+                if @unlikely($licm_arith_138) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(0, $licm_used_85);
                     unreachable;
                 }
-                a_107 = select i32(offset > 0, offset, 0);
-                s = select i32(a_107 < $licm_used_85, a_107, $licm_used_85);
+                a_108 = select i32(offset > 0, offset, 0);
+                s = select i32(a_108 < $licm_used_85, a_108, $licm_used_85);
                 a_54 = local.tee e(if @unlikely(s > $licm_used_85) {
                     cold_path;
                     "core:prelude/primitive.wado/i32::clamp$cold0"(s, $licm_used_85);
                     unreachable;
-                }; a_117 = select i32(end_3 > s, end_3, s); select i32(a_117 < $licm_used_85, a_117, $licm_used_85)) - s;
+                }; a_118 = select i32(end_3 > s, end_3, s); select i32(a_118 < $licm_used_85, a_118, $licm_used_85)) - s;
                 len_46 = select i32(a_54 > 0, a_54, 0);
                 len_57 = e - s;
                 out = builtin::array_new<u8>(select i32(len_57 > 0, len_57, 0));
                 if len_57 > 0 {
                     builtin::array_copy<u8>(out, 0, $licm_repr_86, s, len_57);
                 }
-                ptr_41 = builtin::i32_wrap_i64(local.tee packed_40(ptr_68 = "mem/realloc"(0, 0, 1, len_46); i_127 = 0; b352: block {
+                ptr_41 = builtin::i32_wrap_i64(local.tee packed_40(ptr_68 = "mem/realloc"(0, 0, 1, len_46); i_128 = 0; b352: block {
                     l353: loop {
-                        break_if b352 i_127 >= len_46;
-                        builtin::store_u8(ptr_68 + i_127, builtin::array_get_value_u8(out, i_127));
-                        i_127 = i_127 + 1;
+                        break_if b352 i_128 >= len_46;
+                        builtin::store_u8(ptr_68 + i_128, builtin::array_get_value_u8(out, i_128));
+                        i_128 = i_128 + 1;
                         continue l353;
                     };
                 }; builtin::i64_extend_i32_u(ptr_68) | (builtin::i64_extend_i32_s(len_46) << 32_i64)));

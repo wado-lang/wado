@@ -1114,14 +1114,16 @@ fn "core:prelude/fpfmt.wado/big_mul_add"(n, factor, addend) {
     let used: i32;
     let $licm_used_32: i32;
     let $licm_repr_33: ref Array<u32>;
+    let $licm_arith_34: u64;
     carry = builtin::i64_extend_i32_u(addend);
     k = 0;
     $licm_used_32 = local.tee $load_0(n.used);
     $licm_repr_33 = local.tee $load_1(n.repr);
+    $licm_arith_34 = builtin::i64_extend_i32_u(factor);
     b85: block {
         l86: loop {
             break_if b85 k >= $licm_used_32;
-            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * builtin::i64_extend_i32_u(factor)) + carry;
+            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * $licm_arith_34) + carry;
             builtin::array_set<u32>($licm_repr_33, k, builtin::i32_wrap_i64(v));
             carry = v >>u 32_i64;
             k = k + 1;
