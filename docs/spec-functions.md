@@ -20,8 +20,8 @@ let compute = |x: i32| {
 };
 ```
 
-An optional `-> Type` declares the return type, and is what a `?` in the body
-resolves against:
+An optional `-> Type` declares the return type. A `?` in the body needs a known
+return type: this one, or the `R` of an expected `fn(..) -> R`.
 
 ```wado
 let parse = |s: String| -> Result<i32, String> {
@@ -47,9 +47,6 @@ argument then supplies it, whichever side of the closure it is written on. A
 numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
 takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
 is reported at the call, not inside the closure.
-
-A `?` in the body needs the return type known — via `-> Type` or an expected
-`fn(..) -> R`.
 
 A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
@@ -229,7 +226,8 @@ Key points:
 A function type crosses the Component Model boundary in one place: as a
 parameter of a `#[cm]` import, where it is a callback. Anywhere else it is a
 compile error: in an `export fn`'s parameters or result, in an import's result,
-and inside a type that crosses, as a field or a payload.
+and inside a type that crosses, as a field or a payload (`Option<fn(..)>`
+included).
 
 ```wado
 #[cm("example:demo/target", linearity = "unrestricted")]
@@ -243,8 +241,7 @@ target.listen(|v| seen.push(v));
 ```
 
 - A callback's parameters are scalars and handles, and it returns nothing. Any
-  other function type on a `#[cm]` declaration is a compile error. An
-  `Option<fn(..)>` does not cross either.
+  other function type on a `#[cm]` declaration is a compile error.
 - The closure stays in the guest. The call registers it and passes a `u32` key
   in its place. One closure value has one key.
 - The host calls the closure back through the `wado:callback/callback`
@@ -362,19 +359,15 @@ fn start() {
 }
 ```
 
-Two literals are exceptions:
-
-- `#file`, `#line` and `#function` evaluate at the call site. Where a default's
-  own call fills a default in turn, every one of them reports the outermost
-  call.
-- `#include_str`, `#include_bytes` and `#data` read the file that wrote the
-  default.
+`#file`, `#line` and `#function` are the exception: they evaluate at the call
+site (see
+[Call-site evaluation in default arguments](./spec-literals.md#call-site-evaluation-in-default-arguments)).
 
 ### Restrictions
 
 - Function types do not carry default information; assigning a function with defaults to a `fn(...)` type erases them, and every call site of that variable must supply every argument.
 - Closures cannot declare defaults: a closure value's arity must match its `fn(...)` type, so `= expr` on a closure parameter is a compile error.
-- `export fn` cannot declare defaults — exported functions appear in the component's WIT signature where every parameter is required by the CM ABI. Split into a private helper plus a thin `export fn` wrapper if defaults are needed.
+- `export fn` cannot declare defaults, since the component's WIT signature requires every parameter. A private helper can declare them behind a thin `export fn` wrapper.
 - An import may declare defaults: a `#[cm]` resource method, or an `interface` operation (see [Default Implementations](./spec-effects.md#default-implementations)). The call fills the default in, and the import receives every argument.
 - Trait methods may declare defaults only in the trait definition; implementations receive every parameter and cannot add, remove, or change defaults. An implementation that writes a default is a compile error. Every spelling of a call fills the trait's defaults: `x.m()`, `Type::m(..)`, and `T::m(..)` through a bound. A default-bodied method in the trait is the declaration, so it may write defaults. Direct `impl Type { ... }` methods (not part of any trait) may declare defaults freely.
 
@@ -391,7 +384,7 @@ info::<Fields>("started", f);
 
 Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
 
-A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
+A default resolves in the declaring module's scope, as a [value default does](#where-a-default-resolves). It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
 
 ```wado
 struct Zero {}
@@ -476,8 +469,9 @@ are filled as in any call (see [Default Arguments](#default-arguments)). A first
 parameter of any other type, `&T` included, is reported as a tag error. Nothing
 on the declaration marks a function as a tag.
 
-The compiler synthesizes one anonymous type per template shape — its segments,
-specifiers, hole types and hole source texts — holding one field per hole. So
+Each template shape has an anonymous type of its own, holding one field per
+hole. The shape is the template's segments, specifiers, hole types and hole
+source texts. So
 `` tag`${a}` `` and `` tag`${b}` `` are two types, each instantiating the tag,
 even where `a` and `b` share a type. The type is unnameable and reached only
 through the bound; a diagnostic and `Reflect::type_name()` show it as its text
@@ -674,17 +668,16 @@ let t = [..make_pair(), 30];
 - Every callback shape a declared `#[cm]` import takes gets its export, whether
   the program passes such a closure or not.
 - A callback that runs while `run` is suspended inside a `with … do` body
-  dispatches to that body's handlers, since handlers are installed per instance
-  rather than per task.
+  dispatches to that body's handlers.
 
 ### Default Arguments
 
 - A call that pins none of the type parameters a default names reports the
   uninferred parameter together with an `unknown function` error for the
   default's own call, such as `T::default`. The second error is noise.
-- A closure in a default that names a `&mut` parameter holds the borrow in a
-  local. A call borrowing a field that holds a `variant` there is refused,
-  where writing the same closure at the call is accepted.
+- A call is refused where it passes a borrow of a field holding a `variant` to
+  a `&mut` parameter that a closure in a later default names. Writing the same
+  closure at the call is accepted.
 
 ### Tagged Template Literals
 
