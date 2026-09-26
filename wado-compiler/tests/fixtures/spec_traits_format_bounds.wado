@@ -1,0 +1,11 @@
+// `${v:?}` needs no bound; `${v}` needs `Display`.
+
+struct Point { x: i32, y: i32 }
+
+fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
+fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
+
+test {
+    assert describe(&Point { x: 1, y: 2 }) == "Point { x: 1, y: 2 }";
+    assert label(&42) == "42";
+}

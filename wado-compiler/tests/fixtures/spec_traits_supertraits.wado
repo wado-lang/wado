@@ -1,0 +1,53 @@
+// A supertrait: `T: Ord` alone reaches `Eq`'s `==`.
+
+trait Shape {
+    fn area(&self) -> i32;
+}
+
+struct Coin { r: i32 }
+
+impl Shape for Coin {
+    fn area(&self) -> i32 { return 3 * self.r * self.r; }
+}
+
+impl Display for Coin {
+    fn fmt(&self, f: &mut Formatter) { f.write_str("coin"); }
+}
+
+trait Ord: Eq {
+    fn cmp(&self, other: &Self) -> Ordering;
+}
+
+trait Circle: Shape + Display {
+    fn radius(&self) -> i32;
+}
+
+// `T: Ord` implies `T: Eq`
+fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> {
+    let mut out: List<T> = [];
+    for let x of items {
+        if out.is_empty() || out[out.len() - 1] != x { out.push(x); }
+    }
+    return out;
+}
+
+test {
+    assert dedup_sorted([Id { n: 1 }, Id { n: 1 }, Id { n: 2 }]).len() == 2;
+}
+
+impl Circle for Coin {
+    fn radius(&self) -> i32 { return self.r; }
+}
+
+struct Id { n: i32 }
+
+impl Ord for Id {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return if self.n < other.n { Ordering::Less } else if self.n > other.n { Ordering::Greater } else { Ordering::Equal };
+    }
+}
+
+test "a supertrait's methods reach through the subtrait" {
+    let c = Coin { r: 2 };
+    assert c.radius() == 2 && c.area() == 12 && `${c}` == "coin";
+}

@@ -1,0 +1,18 @@
+// The prelude's `Add`, declared here under its own name. A trait spelled
+// `Add` does not answer `+`, so the method is called by name.
+
+struct Cm { v: i32 }
+
+impl Add for Cm {
+    type Output = Cm;
+    fn add(&self, rhs: &Cm) -> Cm { return Cm { v: self.v + rhs.v }; }
+}
+
+trait Add<Rhs = Self> with () {
+    type Output;
+    fn add(&self, rhs: &Rhs) -> Self::Output;
+}
+
+test {
+    assert Cm { v: 1 }.add(&Cm { v: 2 }).v == 3;
+}

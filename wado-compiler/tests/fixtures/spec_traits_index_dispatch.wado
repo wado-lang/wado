@@ -1,0 +1,9 @@
+// A bare subscript reads through `IndexValue`, an assignment writes through
+// `IndexAssign`.
+
+test {
+    let mut arr: List<i32> = [1, 2, 3];
+    let x = arr[0];    // IndexValue::index_value
+    arr[1] = 100;      // IndexAssign::index_assign
+    assert x == 1 && arr == [1, 100, 3];
+}

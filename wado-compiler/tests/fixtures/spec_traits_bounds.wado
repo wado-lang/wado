@@ -1,0 +1,52 @@
+// Trait bounds on struct, function and impl type parameters.
+
+trait Printable {
+    fn print(&self) -> String;
+}
+
+impl Printable for i32 {
+    fn print(&self) -> String { return `${self}`; }
+}
+
+struct Pair<T> { first: T, second: T }
+
+// Struct with trait bound
+struct SortedPair<T: Ord> {
+    first: T,
+    second: T,
+}
+
+// Multiple bounds with + syntax
+struct PrintableOrd<T: Ord + Printable> {
+    value: T,
+}
+
+// Bounds on function type parameters
+fn max<T: Ord>(a: T, b: T) -> T {
+    if a > b { return a; }
+    return b;
+}
+
+// Bounded impl blocks - methods only available when T: Ord
+impl<T: Ord> Pair<T> {
+    pub fn sort(&mut self) { *self = self.sorted(); }
+    pub fn sorted(&self) -> Pair<T> {
+        return if self.first > self.second { Pair { first: self.second, second: self.first } } else { *self };
+    }
+}
+
+// Bounded trait implementations - Pair<T> implements Eq only when T: Eq
+impl<T: Eq> Eq for Pair<T> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.first == other.first && self.second == other.second;
+    }
+}
+
+test {
+    assert max(3, 7) == 7;
+    assert SortedPair { first: 1, second: 2 }.second == 2;
+    assert PrintableOrd { value: 5 }.value.print() == "5";
+    let mut p = Pair { first: 2, second: 1 };
+    p.sort();
+    assert p == Pair { first: 1, second: 2 };
+}

@@ -6,6 +6,8 @@ Traits define shared behavior that types can implement. Trait methods use static
 
 A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
+<!-- {"fixture":"spec_traits_greet.wado"} -->
+
 ```wado
 // Trait declaration
 trait Greet {
@@ -24,8 +26,10 @@ impl Greet for Person {
 }
 
 // Usage
-let p = Person { name: "Alice" };
-println(p.greet());  // "Hello, Alice!"
+test {
+    let p = Person { name: "Alice" };
+    assert p.greet() == "Hello, Alice!";
+}
 ```
 
 ### Supertraits
@@ -33,6 +37,8 @@ println(p.greet());  // "Hello, Alice!"
 A trait can require its implementors to implement other traits. `impl Ord for T`
 then fails unless `T` also implements `Eq`, and `T: Ord` alone is enough to use
 `Eq`'s methods:
+
+<!-- {"fixture":"spec_traits_supertraits.wado"} -->
 
 ```wado
 trait Ord: Eq {
@@ -44,7 +50,17 @@ trait Circle: Shape + Display {
 }
 
 // `T: Ord` implies `T: Eq`
-fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
+fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> {
+    let mut out: List<T> = [];
+    for let x of items {
+        if out.is_empty() || out[out.len() - 1] != x { out.push(x); }
+    }
+    return out;
+}
+
+test {
+    assert dedup_sorted([Id { n: 1 }, Id { n: 1 }, Id { n: 2 }]).len() == 2;
+}
 ```
 
 A trait that reaches itself through supertraits is an error. A method name
@@ -56,6 +72,8 @@ the implied ones, so `Eq::eq(&a, &b)` resolves under `T: Ord`.
 ### Multiple Traits
 
 A struct can implement multiple traits:
+
+<!-- {"fixture":"spec_traits_multiple.wado"} -->
 
 ```wado
 trait Named {
@@ -73,6 +91,11 @@ impl Named for Person {
 impl Aged for Person {
     fn age(&self) -> i32 { return self.age; }
 }
+
+test {
+    let p = Person { name: "Alice", age: 30 };
+    assert p.name() == "Alice" && p.age() == 30;
+}
 ```
 
 ### Method Resolution
@@ -87,6 +110,8 @@ answers:
 4. A receiver whose type is a type parameter answers from its bounds instead.
    A method that two or more of them declare is an error.
 
+<!-- {"fixture":"spec_traits_inherent_wins.wado"} -->
+
 ```wado
 struct Robot { id: i32 }
 
@@ -100,8 +125,10 @@ impl Greet for Robot {
     fn greet(&self) -> String { return "Hello from trait"; }
 }
 
-let r = Robot { id: 1 };
-r.greet();  // Returns "Beep boop" (inherent method wins)
+test {
+    let r = Robot { id: 1 };
+    assert r.greet() == "Beep boop";  // inherent method wins
+}
 ```
 
 A call in a generic body is selected again at each instance. The body is checked
@@ -250,10 +277,24 @@ Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
 `<` in expression position begins JSX. A call names its trait with the
 trait-qualified form `Trait::method(recv, args…)` instead:
 
+<!-- {"fixture":"spec_traits_qualified_calls.wado"} -->
+
 ```wado
-Display::fmt(&p, f);          // p implements two traits declaring `fmt`
-Base::name(&x);               // supertrait diamond inside a generic body
-Take::<A>::take(&f, B { … }); // one trait's argument list, pinned
+fn show(p: P, f: &mut Formatter) {
+    Display::fmt(&p, f);          // p implements two traits declaring `fmt`
+}
+
+fn name_of<T: Left + Right>(x: T) -> String {
+    return Base::name(&x);        // supertrait diamond inside a generic body
+}
+
+test {
+    let f = true;
+    assert Take::<B>::take(&f, B { v: 1 }) == 10; // one trait's argument list, pinned
+    let mut buf = "";
+    show(P { v: 1 }, &mut Formatter::new(&mut buf));
+    assert buf == "display" && name_of(P { v: 2 }) == "base";
+}
 ```
 
 The receiver is the first argument, spelled to match the method's `self` mode:
@@ -290,6 +331,8 @@ Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-
 
 Trait methods can have default implementations. Implementors can override them or use the defaults:
 
+<!-- {"fixture":"spec_traits_default_methods.wado"} -->
+
 ```wado
 trait Summary {
     fn title(&self) -> String;  // required - must be provided
@@ -314,6 +357,11 @@ impl Summary for Report {
     fn title(&self) -> String { return self.headline; }
     fn summary(&self) -> String { return `${self.headline}: ${self.body}`; }
 }
+
+test {
+    assert Article { headline: "Rain" }.summary() == "Title: Rain";
+    assert Report { headline: "Rain", body: "wet" }.summary() == "Rain: wet";
+}
 ```
 
 Default methods can call other trait methods (both required and default), and the calls are resolved against the implementing type.
@@ -321,6 +369,8 @@ Default methods can call other trait methods (both required and default), and th
 ### Associated Types
 
 Traits can declare associated types: placeholder types that implementors specify:
+
+<!-- {"fixture":"spec_traits_assoc_types.wado"} -->
 
 ```wado
 trait Container {
@@ -345,6 +395,12 @@ impl Container for IntBox {
         self.value = value;
     }
 }
+
+test {
+    let mut b = IntBox { value: 1 };
+    b.set(42);
+    assert b.get() == 42;
+}
 ```
 
 Within trait methods and implementations, `Self::TypeName` refers to the associated type. The type is resolved at compile time based on the implementing type.
@@ -353,10 +409,23 @@ Within trait methods and implementations, `Self::TypeName` refers to the associa
 
 Associated types can have trait bounds that constrain what types can be used as the associated type:
 
+<!-- {"fixture":"spec_traits_bounded_assoc.wado"} -->
+
 ```wado
 trait Collection {
     type Element;
     type Builder: CollectionBuilder<Element = Self::Element, Output = Self>;
+}
+
+// A generic body relies on the bound: the builder builds a `C`
+fn build_one<C: Collection>(b: C::Builder, e: C::Element) -> C {
+    let mut b = b;
+    b.add(e);
+    return b.build();
+}
+
+test {
+    assert build_one::<Bag>(Bag { items: [] }, 7).items == [7];
 }
 ```
 
@@ -366,11 +435,19 @@ Here `Builder` must implement `CollectionBuilder` with matching `Element` and `O
 
 A blanket impl provides a trait implementation for all types that satisfy a given bound:
 
+<!-- {"fixture":"spec_traits_blanket_impl.wado"} -->
+
 ```wado
 // Any type that builds itself satisfies Collection automatically
 impl<T: CollectionBuilder<Output = T>> Collection for T {
     type Element = T::Element;
     type Builder = T;
+}
+
+fn element<C: Collection>(e: C::Element) -> C::Element { return e; }
+
+test {
+    assert element::<Bag>(7) == 7;  // `Bag`'s `Element`, through the blanket
 }
 ```
 
@@ -380,29 +457,66 @@ This avoids the need for explicit `impl Collection for ...` on every self-buildi
 
 An `impl` declares its type parameters in `impl<...>`, and that list is the only way to introduce one. A name in the target or the trait reference that the list does not hold is a type, and the module must declare it:
 
+<!-- {"fixture":"spec_traits_impl_params.wado"} -->
+
 ```wado
-impl<T> List<T> { ... }                 // inherent
-impl<T: Ord> List<T> { ... }            // with a bound
-impl<K: Ord, V> TreeMap<K, V> { ... }   // every parameter listed
-impl<T> Default for List<T> { ... }     // trait implementation
-impl Display for List<i32> { ... }      // one instantiation declares none
+impl<T> Stack<T> {                    // inherent
+    fn size(&self) -> i32 { return self.items.len(); }
+}
+impl<T: Ord> Stack<T> {               // with a bound
+    fn is_sorted(&self) -> bool { return self.items == self.items.sorted(); }
+}
+impl<K: Ord, V> Table<K, V> {         // every parameter listed
+    fn len(&self) -> i32 { return self.keys.len(); }
+}
+impl<T> Default for Stack<T> {        // trait implementation
+    fn default() -> Stack<T> { return Stack { items: [] }; }
+}
+impl Display for Stack<i32> {         // one instantiation declares none
+    fn fmt(&self, f: &mut Formatter) { f.write_str(`${self.items.len()} ints`); }
+}
+
+test {
+    let s = Stack { items: [1, 2] };
+    assert s.size() == 2 && s.is_sorted() && `${s}` == "2 ints";
+    assert Stack::<String>::default().size() == 0;
+    assert Table { keys: [1], values: ["one"] }.len() == 1;
+}
 ```
 
 ### Impl Type Parameters Must Be Determined
 
 An `impl`'s target and trait reference between them must name every type parameter it declares. A use site determines them from the receiver and the trait arguments and from nothing else, so one neither mentions has no value to be given:
 
+<!-- {"fixture":"spec_traits_impl_param_undetermined.wado"} -->
+
 ```wado
-impl<A: Eq, T: Eq> Dup for T { ... }  // ERROR: the type parameter `A` is not
-                                      //        constrained by the impl target
-                                      //        or the trait reference
+impl<A: Eq, T: Eq> Dup for T {  // ERROR: the type parameter `A` is not
+                                //        constrained by the impl target
+                                //        or the trait reference
+    fn dup(&self) -> bool { return true; }
+}
 ```
 
 A bound determines one too, through the types it writes:
 
+<!-- {"fixture":"spec_traits_impl_param_by_bound.wado"} -->
+
 ```wado
 // `S` fixes `FieldTypes`, which fixes `..F`
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S { ... }
+impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Show for S {
+    fn show(&self) -> String {
+        let mut out = "";
+        for let f of ReflectStruct::<S>::members() {
+            out.push_str(`${f.get(self):?};`);
+        }
+        return out;
+    }
+}
+
+test {
+    assert Point { x: 1, y: 2 }.show() == "1;2;";
+}
 ```
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
@@ -410,6 +524,8 @@ The bound's subject is not itself determined this way: `A: Eq` says what `A` mus
 ### Trait Bounds
 
 Type parameters can have trait bounds that constrain what types can be used:
+
+<!-- {"fixture":"spec_traits_bounds.wado"} -->
 
 ```wado
 // Struct with trait bound
@@ -430,9 +546,11 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 // Bounded impl blocks - methods only available when T: Ord
-impl<T: Ord> List<T> {
-    pub fn sort(&mut self) { ... }
-    pub fn sorted(&self) -> List<T> { ... }
+impl<T: Ord> Pair<T> {
+    pub fn sort(&mut self) { *self = self.sorted(); }
+    pub fn sorted(&self) -> Pair<T> {
+        return if self.first > self.second { Pair { first: self.second, second: self.first } } else { *self };
+    }
 }
 
 // Bounded trait implementations - Pair<T> implements Eq only when T: Eq
@@ -440,6 +558,15 @@ impl<T: Eq> Eq for Pair<T> {
     fn eq(&self, other: &Self) -> bool {
         return self.first == other.first && self.second == other.second;
     }
+}
+
+test {
+    assert max(3, 7) == 7;
+    assert SortedPair { first: 1, second: 2 }.second == 2;
+    assert PrintableOrd { value: 5 }.value.print() == "5";
+    let mut p = Pair { first: 2, second: 1 };
+    p.sort();
+    assert p == Pair { first: 1, second: 2 };
 }
 ```
 
@@ -591,12 +718,19 @@ modules, as `core` does for `String`, `Array<T>` and `List<T>`.
 Two impls of one trait may cover a type when one is written for a single
 instantiation and the other is generic over the head:
 
-```wado
-impl<T> Tag for Box_<T> { … }         // general
-impl Tag for Box_<i32> { … }          // specific — wins for Box_<i32>
+<!-- {"fixture":"spec_traits_specific_wins.wado"} -->
 
-impl<..T> Tag for [..T] { … }         // general
-impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
+```wado
+impl<T> Tag for Box_<T> { fn tag(&self) -> String { return "general"; } }         // general
+impl Tag for Box_<i32> { fn tag(&self) -> String { return "specific"; } }         // specific — wins for Box_<i32>
+
+impl<..T> Tag for [..T] { fn tag(&self) -> String { return "general"; } }         // general
+impl Tag for [i32, i32] { fn tag(&self) -> String { return "specific"; } }        // specific — wins for [i32, i32]
+
+test {
+    assert Box_ { v: 1 }.tag() == "specific" && Box_ { v: "s" }.tag() == "general";
+    assert [1, 2].tag() == "specific" && [1, "s"].tag() == "general";
+}
 ```
 
 The specific impl applies to the instantiation it names; every other
@@ -608,9 +742,11 @@ This holds only for a trait impl, where the trait gives both methods one
 signature. An inherent impl carries no such contract, so two inherent blocks
 that reach a common receiver may not both define one method name:
 
+<!-- {"fixture":"spec_traits_inherent_duplicate.wado"} -->
+
 ```wado
-impl<T> Box_<T> { fn a(&self) -> String { … } }
-impl Box_<i32> { fn a(&self) -> i32 { … } }   // ERROR: duplicate definition of `a`
+impl<T> Box_<T> { fn a(&self) -> String { return "any"; } }
+impl Box_<i32> { fn a(&self) -> i32 { return self.v; } }   // ERROR: duplicate definition of `a`
 ```
 
 Inherent blocks that reach no receiver in common may share a name.
@@ -618,17 +754,25 @@ Inherent blocks that reach no receiver in common may share a name.
 Two impls that are general in the same way cannot be ordered at all, so a second
 variadic impl of one trait is rejected where it is written:
 
+<!-- {"fixture":"spec_traits_variadic_overlap.wado"} -->
+
 ```wado
-impl<..T: Inspect> Tag for [..T] { … }
-impl<..T: Eq> Tag for [..T] { … }     // ERROR: overlapping variadic impls
+impl<..T: Inspect> Tag for [..T] { fn tag(&self) -> String { return "inspect"; } }
+impl<..T: Eq> Tag for [..T] { fn tag(&self) -> String { return "eq"; } }     // ERROR: overlapping variadic impls
 ```
 
 Bounds do not separate them. A trait's own arguments do, since they make the
 two impls of different traits:
 
+<!-- {"fixture":"spec_traits_variadic_args.wado"} -->
+
 ```wado
-impl<..T> Conv<i32> for [..T] { … }    // OK
-impl<..T> Conv<String> for [..T] { … } // OK — a different trait
+impl<..T> Conv<i32> for [..T] { fn conv(&self, x: i32) -> String { return "i32"; } }          // OK
+impl<..T> Conv<String> for [..T] { fn conv(&self, x: String) -> String { return "String"; } } // OK — a different trait
+
+test {
+    assert [1, true].conv(7 as i32) == "i32" && [1, true].conv("s") == "String";
+}
 ```
 
 ### One Trait at Two Argument Lists
@@ -642,12 +786,18 @@ parameters.
 The one overload set is one trait implemented for one type at several argument
 lists. Each impl is legal, and the call's arguments choose between them:
 
-```wado
-impl Take<A> for bool { … }
-impl Take<B> for bool { … }
+<!-- {"fixture":"spec_traits_overload_select.wado"} -->
 
-f.take(B { v: 1 })          // OK: a named struct literal selects Take<B>
-f.take(a)                    // OK: the local's declared type selects Take<A>
+```wado
+impl Take<A> for bool { fn take(&self, x: A) -> String { return "A"; } }
+impl Take<B> for bool { fn take(&self, x: B) -> String { return "B"; } }
+
+test {
+    let f = true;
+    let a: A = A { v: 1 };
+    assert f.take(B { v: 1 }) == "B";   // OK: a named struct literal selects Take<B>
+    assert f.take(a) == "A";            // OK: the local's declared type selects Take<A>
+}
 ```
 
 A trait is identified by its declaration, never by its spelling: an alias names
@@ -678,13 +828,28 @@ site does not pin admits every candidate it could coerce to and never selects
 one. A bare literal is the main case, since it could coerce to several widths,
 so a literal-only distinction stays ambiguous:
 
-```wado
-impl Take<i32> for bool { … }
-impl Take<i64> for bool { … }
+<!-- {"fixture":"spec_traits_overload_literal.wado"} -->
 
-f.take(42)                   // ERROR: the arguments do not select
-f.take(42 as i64)            // OK: the cast selects Take<i64>
-Take::<i64>::take(&f, 42)    // OK: the trait turbofish pins the list
+```wado
+impl Take<i32> for bool { fn take(&self, x: i32) -> i32 { return 32; } }
+impl Take<i64> for bool { fn take(&self, x: i64) -> i32 { return 64; } }
+
+test {
+    let f = true;
+    f.take(42);                  // ERROR: the arguments do not select
+}
+```
+
+A cast or the trait turbofish selects instead:
+
+<!-- {"fixture":"spec_traits_overload_pinned.wado"} -->
+
+```wado
+test {
+    let f = true;
+    assert f.take(42 as i64) == 64;           // OK: the cast selects Take<i64>
+    assert Take::<i64>::take(&f, 42) == 64;   // OK: the trait turbofish pins the list
+}
 ```
 
 This is deliberate: letting the literal's default type decide would make
@@ -722,12 +887,16 @@ A trait's associated function obeys the same rule. It has no receiver to fix
 that declare the function, each read against the parameter written for it. Rust
 needs `<M as Enc<A>>::make` here:
 
-```wado
-impl Enc<A> for M { fn make(v: A) -> i32 { … } }
-impl Enc<B> for M { fn make(v: B) -> i32 { … } }
+<!-- {"fixture":"spec_traits_overload_static.wado"} -->
 
-M::make(A { })               // selects Enc<A>
-M::make(B { })               // selects Enc<B>
+```wado
+impl Enc<A> for M { fn make(v: A) -> i32 { return 1; } }
+impl Enc<B> for M { fn make(v: B) -> i32 { return 2; } }
+
+test {
+    assert M::make(A { }) == 1;  // selects Enc<A>
+    assert M::make(B { }) == 2;  // selects Enc<B>
+}
 ```
 
 `Type::from(x)` and `Type::try_from(x)` select this way among the type's `From`
@@ -736,12 +905,25 @@ argument's expected type, so `Wrapper::from(42)` beside `From<String>` and
 `From<i64>` takes `From<i64>` and types `42` as `i64`. Several admitted impls
 are ambiguous, and since `from` has no `self` the fix is a cast on the argument:
 
-```wado
-impl From<i32> for Wrapper { … }
-impl From<i64> for Wrapper { … }
+<!-- {"fixture":"spec_traits_from_literal.wado"} -->
 
-Wrapper::from(42)            // ERROR: a literal argument admits 'i32' and 'i64'
-Wrapper::from(42 as i64)     // OK
+```wado
+impl From<i32> for Wrapper { fn from(v: i32) -> Wrapper { return Wrapper { v: v as i64 }; } }
+impl From<i64> for Wrapper { fn from(v: i64) -> Wrapper { return Wrapper { v }; } }
+
+test {
+    let w = Wrapper::from(42);   // ERROR: a literal argument admits 'i32' and 'i64'
+}
+```
+
+The cast selects:
+
+<!-- {"fixture":"spec_traits_from_cast.wado"} -->
+
+```wado
+test {
+    assert Wrapper::from(42 as i64).v == 42;    // OK
+}
 ```
 
 An integer literal coerces to an integer newtype, so `From<i64>` beside
@@ -763,37 +945,57 @@ The prelude defines iterator traits for generic iteration over collections.
 
 ### Iterator - Core Iteration Trait
 
+<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+
 ```wado
 /// Types that can yield a sequence of values
-pub trait Iterator {
+pub trait Iterator with () {
     type Item;
 
     /// Advances the iterator and returns the next value.
     /// Returns None when iteration is complete.
     fn next(&mut self) -> Option<Self::Item>;
 }
+
+test {
+    let mut c = Countdown { n: 1 };
+    assert c.next() == Option::Some(1) && c.next() == null;
+}
 ```
 
 ### IntoIterator - Conversion Trait
 
+<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+
 ```wado
 /// Types that can be converted into an iterator
-pub trait IntoIterator {
+pub trait IntoIterator with () {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
     /// Creates an iterator from a value
     fn into_iter(&self) -> Self::Iter;
 }
+
+test {
+    let mut it = Count { n: 2 }.into_iter();
+    assert it.next() == Option::Some(2);
+}
 ```
 
 ### FromIterator - Collection Construction
 
+<!-- {"fixture":"spec_traits_iterator_decls.wado"} -->
+
 ```wado
 /// Types that can be constructed from an iterator of `Elem`
-pub trait FromIterator {
+pub trait FromIterator with () {
     type Elem;
     fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
+}
+
+test {
+    assert Total::from_iter(&mut Countdown { n: 3 }).sum == 6;
 }
 ```
 
@@ -848,6 +1050,8 @@ Everything `Iterator` declares is available on every implementor, adapters inclu
 
 ### Usage
 
+<!-- {"fixture":"spec_traits_iterator_usage.wado"} -->
+
 ```wado
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
@@ -865,10 +1069,12 @@ while let Some(x) = iter.next() {
 // Collect remaining elements
 let mut rest_iter = arr.iter_value();
 rest_iter.next();  // skip first
-let rest = rest_iter.collect();  // [2, 3, 4, 5]
+let rest = rest_iter.collect();
+assert rest == [2, 3, 4, 5];
 
 // Terminals compose with the adapters
-let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
+let total = arr.iter_value().filter(|x| x % 2 == 1).sum();
+assert total == Option::Some(9);
 ```
 
 ### Value Semantics
@@ -877,18 +1083,26 @@ By-value iteration (`into_iter()`, `iter_value()`, `for let x of list`) returns 
 
 `&mut` iteration mutates elements in place. It needs an element type that is `RefMut` (see [Dispatch](#dispatch)), such as a `struct`, `List`, `String`, or `i128`/`u128`. A write through the `&mut T` lands on the element:
 
+<!-- {"fixture":"spec_traits_iter_mut.wado"} -->
+
 ```wado
+let mut points: List<Point> = [Point { x: 1, y: 0 }, Point { x: 2, y: 0 }];
 for let p of &mut points {
     p.x += 1;  // mutates the element in place
 }
+assert points[0].x == 2 && points[1].x == 3;
 ```
 
 An element type that is replaced on assignment (a primitive, `enum`, `flags`, `variant`, or `fn`) is not `RefMut`, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
 
+<!-- {"fixture":"spec_traits_iter_mut.wado"} -->
+
 ```wado
+let mut arr: List<i32> = [1, 2, 3];
 for let mut i = 0; i < arr.len(); i += 1 {
     arr[i] = arr[i] * 2;
 }
+assert arr == [2, 4, 6];
 ```
 
 For `primitive`, `enum`, `flags`, and `fn`, nothing survives the copy, so taking `&mut` of a field or element is a compile error outright. That holds whether it is written `&mut x.f` / `&mut xs[i]` or taken implicitly by a `&mut self` receiver. A `&mut` of a _local_ is fine, since it writes to the variable itself.
@@ -899,50 +1113,64 @@ A `variant` place admits `&mut`. Its payload is shared, so a mutation _through_ 
 
 Any type can be made iterable by implementing `IntoIterator`:
 
+<!-- {"fixture":"spec_traits_custom_iterable.wado"} -->
+
 ```wado
 struct Stack<T> { items: List<T> }
 struct StackIter<T> { items: List<T>, index: i32 }
 
 impl<T> Iterator for StackIter<T> {
     type Item = T;
-    fn next(&mut self) -> Option<Self::Item> { ... }
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index == 0 { return null; }
+        self.index -= 1;
+        return Option::Some(self.items[self.index]);
+    }
 }
 
 impl<T> IntoIterator for Stack<T> {
     type Item = T;
     type Iter = StackIter<T>;
-    fn into_iter(&self) -> StackIter<T> { ... }
+    fn into_iter(&self) -> StackIter<T> { return StackIter { items: self.items, index: self.items.len() }; }
 }
 
-// Now for-of works
-for let x of stack { ... }
+test {
+    let stack = Stack { items: [1, 2, 3] };
+    let mut seen: List<i32> = [];
+
+    // Now for-of works
+    for let x of stack { seen.push(x); }
+    assert seen == [3, 2, 1];
+}
 ```
 
 ### Iterator Combinators
 
 Iterators support `map`, `filter`, and `fold` for functional-style data processing:
 
+<!-- {"fixture":"spec_traits_combinators.wado"} -->
+
 ```wado
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
 let doubled = arr.into_iter().map(|x| x * 2).collect();
-// [2, 4, 6, 8, 10]
+assert doubled == [2, 4, 6, 8, 10];
 
 // filter - keep elements matching predicate
 let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();
-// [2, 4]
+assert evens == [2, 4];
 
 // fold - reduce to single value
 let sum = arr.into_iter().fold(0, |acc, x| acc + x);
-// 15
+assert sum == 15;
 
 // Chaining combinators
 let result = arr.into_iter()
     .filter(|x| x > 2)
     .map(|x| x * 10)
     .collect();
-// [30, 40, 50]
+assert result == [30, 40, 50];
 ```
 
 ## The Sequence Family
@@ -975,30 +1203,45 @@ Indexing by a range (`xs[1..<3]`, `xs[1..=2]`) yields a `Slice<T>`, as
 Two prelude traits carry the family's shared methods, split by whether the
 implementor has a contiguous backing. All three types implement both.
 
+<!-- {"fixture":"spec_traits_sequence_decls.wado"} -->
+
 ```wado
-pub trait Sequence {
+pub trait Sequence with () {
     type Elem;
 
     fn len(&self) -> i32;
     fn get_unchecked(&self, index: i32) -> Self::Elem;
 
     // default bodies, written against `len` and `get_unchecked`
-    fn is_empty(&self) -> bool;
-    fn get(&self, index: i32) -> Option<Self::Elem>;
-    fn first(&self) -> Option<Self::Elem>;
-    fn last(&self) -> Option<Self::Elem>;
-    fn position(&self, pred: fn mut(Self::Elem) -> bool) -> Option<i32>;
+    fn is_empty(&self) -> bool { return self.len() == 0; }
+    fn get(&self, index: i32) -> Option<Self::Elem> {
+        return if index < 0 || index >= self.len() { null } else { Option::Some(self.get_unchecked(index)) };
+    }
+    fn first(&self) -> Option<Self::Elem> { return self.get(0); }
+    fn last(&self) -> Option<Self::Elem> { return self.get(self.len() - 1); }
+    fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32> {
+        for let mut i = 0; i < self.len(); i += 1 {
+            if pred(self.get_unchecked(i)) { return Option::Some(i); }
+        }
+        return null;
+    }
 }
 
-pub trait AsSlice: Sequence {
+pub trait AsSlice: Sequence with () {
     fn as_slice(&self) -> Slice<Self::Elem>;
 
     // default bodies, through `as_slice`
-    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>;
-    fn iter_value(&self) -> SliceValueIter<Self::Elem>;
-    fn iter_ref(&self) -> SliceRefIter<Self::Elem>;
-    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>;
-    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>;
+    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> { return self.as_slice().slice(start, end); }
+    fn iter_value(&self) -> SliceValueIter<Self::Elem> { return self.as_slice().iter_value(); }
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem> { return self.as_slice().iter_ref(); }
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> { return self.as_slice().windows(size); }
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> { return self.as_slice().chunks(size); }
+}
+
+test {
+    let d = Digits { items: [0, 1, 2] };
+    assert d.last() == Option::Some(2) && d.position(|x| x == 1) == Option::Some(1);
+    assert d.slice(1, 3).len() == 2;
 }
 ```
 
@@ -1012,9 +1255,16 @@ neither; its bytes are viewed through `AsByteSlice`, and its text through
 
 A function that reads any of the three takes the trait by value:
 
+<!-- {"fixture":"spec_traits_as_slice_bound.wado"} -->
+
 ```wado
 fn total<S: AsSlice<Elem = i32>>(xs: S) -> i32 {
     return xs.iter_value().fold(0, |acc, x| acc + x);
+}
+
+test {
+    let list: List<i32> = [1, 2, 3];
+    assert total(list) == 6 && total(list.to_array()) == 6 && total(list.as_slice()) == 6;
 }
 ```
 
@@ -1056,11 +1306,17 @@ The prelude defines traits for comparison operators:
 
 ### Eq - Equality
 
+<!-- {"fixture":"spec_traits_comparison_decls.wado"} -->
+
 ```wado
 /// Types that can be compared for equality
-pub trait Eq<Rhs = Self> {
+pub trait Eq<Rhs = Self> with () {
     /// Returns true if self equals other
     fn eq(&self, other: &Rhs) -> bool;
+}
+
+test {
+    assert Coin { cents: 5 }.eq(&Coin { cents: 5 });
 }
 ```
 
@@ -1087,6 +1343,8 @@ references point to one place, call `ref_eq` (see
 
 ### Ordering Enum
 
+<!-- {"fixture":"spec_traits_ordering_decl.wado"} -->
+
 ```wado
 /// Result of a three-way comparison
 pub enum Ordering {
@@ -1094,15 +1352,25 @@ pub enum Ordering {
     Equal,   // values are equal
     Greater, // first value is greater than second
 }
+
+test {
+    assert Ordering::Less != Ordering::Greater;
+}
 ```
 
 ### Ord - Ordering
 
+<!-- {"fixture":"spec_traits_comparison_decls.wado"} -->
+
 ```wado
 /// A total order over the type
-pub trait Ord: Eq {
+pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
+}
+
+test {
+    assert Coin { cents: 1 }.cmp(&Coin { cents: 2 }) == Ordering::Less;
 }
 ```
 
@@ -1135,23 +1403,31 @@ Rationale: [WEP: The Operator Order and the Total Order](./wep-2026-09-23-compar
 
 `String` and `List<T>` implement `Eq` and `Ord` with lexicographic comparison:
 
-```wado
-impl Eq for String { ... }  // byte-by-byte equality
-impl Ord for String { ... } // lexicographic ordering
+<!-- {"fixture":"spec_traits_string_ord.wado"} -->
 
-// Usage
+```wado
 let a = "apple";
 let b = "banana";
-if a < b { ... }  // true
+assert a < b;                    // lexicographic ordering
+assert a == "apple" && a != b;   // byte-by-byte equality
+
+let xs: List<i32> = [1, 2];
+assert xs < [1, 3] && xs < [1, 2, 0];
 ```
 
 ## Default Trait
 
 The prelude defines a `Default` trait providing a uniform "zero value" / "empty value" interface:
 
+<!-- {"fixture":"spec_traits_default_decl.wado"} -->
+
 ```wado
-pub trait Default {
+pub trait Default with () {
     fn default() -> Self;
+}
+
+test {
+    assert Origin::default().x == 0;
 }
 ```
 
@@ -1173,19 +1449,25 @@ pub trait Default {
 
 ### Usage
 
-```wado
-let n = i32::default();           // 0
-let s = String::default();        // ""
+<!-- {"fixture":"spec_traits_default_usage.wado"} -->
 
+```wado
 fn make_default<T: Default>() -> T { return T::default(); }
 
-let x = make_default::<i32>();              // 0
-let arr = make_default::<List<String>>();  // []
+test {
+    assert i32::default() == 0;
+    assert String::default() == "";
+
+    assert make_default::<i32>() == 0;
+    assert make_default::<List<String>>() == [];
+}
 ```
 
 ### Auto-Derivation
 
 `Default` is derived for a non-generic struct whose every field declares a default expression (`f: T = expr`; see [Struct Field Defaults](./spec-types.md#struct-field-defaults)). A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. A generic struct derives no `Default`, since a default expression is checked against the declaration and not against an instantiation, so it needs a written impl. [Derivation Policy](#derivation-policy) says where the impl is derived, and that a written one wins.
+
+<!-- {"fixture":"spec_traits_default_derive.wado"} -->
 
 ```wado
 struct Config {
@@ -1193,10 +1475,15 @@ struct Config {
     port: i32 = 8080,
 }
 
-let c = Config::default();  // Config { host: "localhost", port: 8080 }
+test "derived" {
+    let c = Config::default();
+    assert c.host == "localhost" && c.port == 8080;
+}
 ```
 
 For other types, the user writes the impl manually:
+
+<!-- {"fixture":"spec_traits_default_derive.wado"} -->
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -1204,34 +1491,47 @@ struct Point { x: i32, y: i32 }
 impl Default for Point {
     fn default() -> Point { return Point { x: 0, y: 0 }; }
 }
+
+test "written" {
+    assert Point::default().x == 0;
+}
 ```
 
 ## String Parsing Traits
 
 Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. `char`, `bool`, the integer types (`i128`/`u128` included), and the float types implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
-```wado
-i32::from_str("42")              // Ok(42)
-i32::from_str("0x2A")            // Err — strict rejects the prefix
+<!-- {"fixture":"spec_traits_parse.wado"} -->
 
-i32::from_str_lenient("0x2A")    // Ok(42)  — radix prefixes 0x/0o/0b
-i32::from_str_lenient("1_000")   // Ok(1000) — `_` digit separators
-bool::from_str_lenient("TRUE")   // Ok(true) — casing, plus 1/0
-f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
-i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
+```wado
+assert i32::from_str("42").unwrap() == 42;
+assert i32::from_str("0x2A").is_err();                  // strict rejects the prefix
+
+assert i32::from_str_lenient("0x2A").unwrap() == 42;    // radix prefixes 0x/0o/0b
+assert i32::from_str_lenient("1_000").unwrap() == 1000; // `_` digit separators
+assert bool::from_str_lenient("TRUE").unwrap();         // casing, plus 1/0
+assert f64::from_str_lenient("inf").unwrap() == f64::INFINITY;
+assert i32::from_str_lenient(" 1 ").is_err();           // never trims whitespace
 ```
 
 A `StrSlice` is an `AsStrSlice`, so a field is parsed out of a larger buffer with no substring allocation (see [String Views](#string-views)).
 
+<!-- {"fixture":"spec_traits_parse_decls.wado"} -->
+
 ```wado
-pub trait FromStr {
+pub trait FromStr with () {
     type Err: Error;
     fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
-pub trait LenientFromStr {
+pub trait LenientFromStr with () {
     type Err: Error;
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+
+test {
+    assert Flag::from_str("on").unwrap().on && Flag::from_str("ON").is_err();
+    assert Flag::from_str_lenient("ON").unwrap().on;
 }
 ```
 
@@ -1278,11 +1578,14 @@ character boundaries. Creating one copies nothing, and `to_string()` is where a
 copy is made. It is an ordinary library type; nothing in the language treats
 the name specially.
 
+<!-- {"fixture":"spec_traits_str_slice.wado"} -->
+
 ```wado
 let v = "banana".as_str_slice();
-let part = v.slice(1, 4);        // "ana"; panics off a character boundary
-part.len();                      // 3, in bytes
-part.to_string();                // copies out, here and only here
+let part = v.slice(1, 4);            // panics off a character boundary
+assert part == "ana";
+assert part.len() == 3;              // in bytes
+assert part.to_string() == "ana";    // copies out, here and only here
 ```
 
 `slice(start, end)` takes byte offsets from the view's start. It traps when the
@@ -1294,10 +1597,16 @@ aliasing behavior.
 `AsStrSlice` is the conversion that lets one signature take an owned `String`, a
 reference to one, or a view of one:
 
+<!-- {"fixture":"spec_traits_as_str_slice_decl.wado"} -->
+
 ```wado
-pub trait AsStrSlice: Eq<String> {
+pub trait AsStrSlice: Eq<String> with () {
     fn as_str_slice(&self) -> StrSlice;
     // default bodies over the view: len, slice, chars, starts_with, find, …
+}
+
+test {
+    assert Word { text: "hi" }.as_str_slice() == "hi";
 }
 ```
 
@@ -1325,10 +1634,16 @@ The prelude's binary operator traits (`Add`, `Sub`, `Mul`, `Div`, `Rem`,
 `BitAnd`, `BitOr`, `BitXor`) carry a right-hand type parameter defaulting to
 `Self`:
 
+<!-- {"fixture":"spec_traits_add_decl.wado"} -->
+
 ```wado
-trait Add<Rhs = Self> {
+trait Add<Rhs = Self> with () {
     type Output;
     fn add(&self, rhs: &Rhs) -> Self::Output;
+}
+
+test {
+    assert Cm { v: 1 }.add(&Cm { v: 2 }).v == 3;
 }
 ```
 
@@ -1336,11 +1651,24 @@ Omitting the argument is the ordinary case: `impl Add for Meters` adds two
 `Meters`. Writing it lets one type be added to another, and the right operand
 selects between the impls:
 
-```wado
-impl Add for Meters { … }          // Meters + Meters
-impl Add<Feet> for Meters { … }    // Meters + Feet
+<!-- {"fixture":"spec_traits_add_rhs.wado"} -->
 
-let total = m + f;                 // selects Add<Feet>
+```wado
+impl Add for Meters {              // Meters + Meters
+    type Output = Meters;
+    fn add(&self, rhs: &Meters) -> Meters { return Meters { v: self.v + rhs.v }; }
+}
+impl Add<Feet> for Meters {        // Meters + Feet
+    type Output = Meters;
+    fn add(&self, rhs: &Feet) -> Meters { return Meters { v: self.v + rhs.v * 0.3048 }; }
+}
+
+test {
+    let m = Meters { v: 1.0 };
+    let f = Feet { v: 10.0 };
+    let total = m + f;                 // selects Add<Feet>
+    assert total.v == 4.048 && (m + m).v == 2.0;
+}
 ```
 
 Selection follows the same unique-or-error rule as a method call's argument
@@ -1356,9 +1684,15 @@ impl knows it.
 An operator yields `Output`, which a widening impl may make another type, so a
 generic body folding back into its own parameter pins it:
 
+<!-- {"fixture":"spec_traits_output_pin.wado"} -->
+
 ```wado
 fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
 fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
+
+test {
+    assert sum2(2, 3) == 5 && scale(2.0, 4.0) == 8.0;
+}
 ```
 
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
@@ -1373,41 +1707,69 @@ The prelude defines traits for index-based access:
 
 ### IndexValue - Value Read
 
+<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+
 ```wado
 /// Returns element by value (copy)
-pub trait IndexValue<IndexType> {
+pub trait IndexValue<IndexType> with () {
     type Output;
     fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+test {
+    assert Cells { v: [Cell { n: 7 }] }.index_value(0).n == 7;
 }
 ```
 
 ### IndexAssign - Value Write
 
+<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+
 ```wado
 /// Assigns value to element at index
-pub trait IndexAssign<IndexType> {
+pub trait IndexAssign<IndexType> with () {
     type Output;
     fn index_assign(&mut self, index: IndexType, value: Self::Output);
+}
+
+test {
+    let mut c = Cells { v: [Cell { n: 7 }] };
+    c.index_assign(0, Cell { n: 8 });
+    assert c.v[0].n == 8;
 }
 ```
 
 ### IndexRef - Reference Read
 
+<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+
 ```wado
 /// Returns element by shared reference
-pub trait IndexRef<IndexType> {
+pub trait IndexRef<IndexType> with () {
     type Output: Ref;
     fn index_ref(&self, index: IndexType) -> &Self::Output;
+}
+
+test {
+    assert Cells { v: [Cell { n: 7 }] }.index_ref(0).n == 7;
 }
 ```
 
 ### IndexRefMut - Mutable Reference
 
+<!-- {"fixture":"spec_traits_index_decls.wado"} -->
+
 ```wado
 /// Returns element by mutable reference
-pub trait IndexRefMut<IndexType> {
+pub trait IndexRefMut<IndexType> with () {
     type Output: RefMut;
     fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+test {
+    let mut c = Cells { v: [Cell { n: 7 }] };
+    c.index_ref_mut(0).n = 9;
+    assert c.v[0].n == 9;
 }
 ```
 
@@ -1468,10 +1830,13 @@ The standard containers implement:
 `Slice<T>` (see [The Sequence Family](#the-sequence-family)); `TreeMap` by `K`.
 A slice is a shared view, so it has nothing to write through.
 
+<!-- {"fixture":"spec_traits_index_dispatch.wado"} -->
+
 ```wado
 let mut arr: List<i32> = [1, 2, 3];
 let x = arr[0];    // IndexValue::index_value
 arr[1] = 100;      // IndexAssign::index_assign
+assert x == 1 && arr == [1, 100, 3];
 ```
 
 Rationale: [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
@@ -1528,6 +1893,8 @@ compiler to write the impl's methods. It is accepted for `From`, `Serialize`,
 `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`, on a struct, enum,
 variant, or flags type.
 
+<!-- {"fixture":"spec_traits_marker_impl.wado"} -->
+
 ```wado
 use { Serialize, Deserialize } from "core:serde";
 
@@ -1538,11 +1905,19 @@ struct User {
 
 impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
+
+test {
+    let json = to_string(&User { name: "Ann", age: 30 }).unwrap();
+    assert json == `{"name":"Ann","age":30}`;
+    assert from_string::<User>(json).unwrap().age == 30;
+}
 ```
 
 For `Eq`, `Ord`, `Default`, and serde, a marker is also a conformance check. A
 type that is not eligible is a compile error at the marker's own span, with a
 reason chain:
+
+<!-- {"fixture":"spec_traits_marker_ineligible.wado"} -->
 
 ```wado
 struct Handler { cb: fn(i32) -> i32 }
@@ -1565,9 +1940,16 @@ need no bound.
 
 `${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` is its [alternate form](./spec-literals.md#alternate-form).
 
+<!-- {"fixture":"spec_traits_format_bounds.wado"} -->
+
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
 fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
+
+test {
+    assert describe(&Point { x: 1, y: 2 }) == "Point { x: 1, y: 2 }";
+    assert label(&42) == "42";
+}
 ```
 
 Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).

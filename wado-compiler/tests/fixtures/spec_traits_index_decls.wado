@@ -1,0 +1,69 @@
+// The prelude's indexing traits, declared here under their own names. A trait
+// spelled like one does not answer `c[i]`, so the methods are called by name.
+
+struct Cell { n: i32 }
+struct Cells { v: List<Cell> }
+
+impl IndexValue<i32> for Cells {
+    type Output = Cell;
+    fn index_value(&self, index: i32) -> Cell { return self.v[index]; }
+}
+
+impl IndexAssign<i32> for Cells {
+    type Output = Cell;
+    fn index_assign(&mut self, index: i32, value: Cell) { self.v[index] = value; }
+}
+
+impl IndexRef<i32> for Cells {
+    type Output = Cell;
+    fn index_ref(&self, index: i32) -> &Cell { return &self.v[index]; }
+}
+
+impl IndexRefMut<i32> for Cells {
+    type Output = Cell;
+    fn index_ref_mut(&mut self, index: i32) -> &mut Cell { return &mut self.v[index]; }
+}
+
+/// Returns element by value (copy)
+pub trait IndexValue<IndexType> with () {
+    type Output;
+    fn index_value(&self, index: IndexType) -> Self::Output;
+}
+
+test {
+    assert Cells { v: [Cell { n: 7 }] }.index_value(0).n == 7;
+}
+
+/// Assigns value to element at index
+pub trait IndexAssign<IndexType> with () {
+    type Output;
+    fn index_assign(&mut self, index: IndexType, value: Self::Output);
+}
+
+test {
+    let mut c = Cells { v: [Cell { n: 7 }] };
+    c.index_assign(0, Cell { n: 8 });
+    assert c.v[0].n == 8;
+}
+
+/// Returns element by shared reference
+pub trait IndexRef<IndexType> with () {
+    type Output: Ref;
+    fn index_ref(&self, index: IndexType) -> &Self::Output;
+}
+
+test {
+    assert Cells { v: [Cell { n: 7 }] }.index_ref(0).n == 7;
+}
+
+/// Returns element by mutable reference
+pub trait IndexRefMut<IndexType> with () {
+    type Output: RefMut;
+    fn index_ref_mut(&mut self, index: IndexType) -> &mut Self::Output;
+}
+
+test {
+    let mut c = Cells { v: [Cell { n: 7 }] };
+    c.index_ref_mut(0).n = 9;
+    assert c.v[0].n == 9;
+}

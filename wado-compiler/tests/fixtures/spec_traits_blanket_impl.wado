@@ -1,0 +1,34 @@
+// A blanket impl: every self-building type is a `Collection`.
+
+trait CollectionBuilder with () {
+    type Element;
+    type Output;
+
+    fn add(&mut self, e: Self::Element);
+}
+
+trait Collection {
+    type Element;
+    type Builder: CollectionBuilder<Element = Self::Element, Output = Self>;
+}
+
+struct Bag { items: List<i32> }
+
+impl CollectionBuilder for Bag {
+    type Element = i32;
+    type Output = Bag;
+
+    fn add(&mut self, e: i32) { self.items.push(e); }
+}
+
+// Any type that builds itself satisfies Collection automatically
+impl<T: CollectionBuilder<Output = T>> Collection for T {
+    type Element = T::Element;
+    type Builder = T;
+}
+
+fn element<C: Collection>(e: C::Element) -> C::Element { return e; }
+
+test {
+    assert element::<Bag>(7) == 7;  // `Bag`'s `Element`, through the blanket
+}
