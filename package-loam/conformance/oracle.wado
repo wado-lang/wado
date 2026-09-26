@@ -1,9 +1,8 @@
 //! Reading the tensors the ONNX backend test data ships beside each model.
 //! One `.pb` file is one bare `TensorProto`.
 
-use { from_bytes } from "core:protobuf";
 use { Known } from "../src/graph.wado";
-use { TensorProto, known_tensor } from "../src/onnx_proto.wado";
+use { known_tensor, read_tensor } from "../src/onnx_proto.wado";
 
 /// A `.pb` file's elements and extents.
 pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
@@ -22,7 +21,7 @@ pub fn ints_of(bytes: ByteList) -> [List<i64>, List<i32>] {
 }
 
 fn known_of(bytes: ByteList) -> Known {
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
+    let Ok(t) = read_tensor(bytes) else {
         panic("the tensor did not decode");
     };
     let Ok(Some(k)) = known_tensor(&t) else {

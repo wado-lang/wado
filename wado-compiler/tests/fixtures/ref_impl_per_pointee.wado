@@ -1,0 +1,66 @@
+// Two impls of one trait for references to different types are two functions,
+// each answering for its own pointee.
+struct Tag {
+    id: i32,
+}
+
+struct Item {
+    id: i32,
+}
+
+struct Other {
+    id: i32,
+}
+
+impl Eq<Tag> for &Item {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.id == other.id;
+    }
+}
+
+impl Eq<Tag> for &Other {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.id + 1 == other.id;
+    }
+}
+
+test "a method call reaches the impl for its pointee" {
+    let item = Item { id: 3 };
+    let other = Other { id: 3 };
+    let ri = &item;
+    let ro = &other;
+    assert ri.eq(&Tag { id: 3 });
+    assert !ri.eq(&Tag { id: 4 });
+    assert ro.eq(&Tag { id: 4 });
+    assert !ro.eq(&Tag { id: 3 });
+}
+
+test "an operator reaches the impl for its pointee" {
+    let item = Item { id: 3 };
+    let other = Other { id: 3 };
+    let ri = &item;
+    let ro = &other;
+    assert ri == Tag { id: 3 };
+    assert ri != Tag { id: 4 };
+    assert ro == Tag { id: 4 };
+    assert ro != Tag { id: 3 };
+}
+
+fn matches_op<S: Eq<Tag>>(s: S, t: Tag) -> bool {
+    return s == t;
+}
+
+fn matches_call<S: Eq<Tag>>(s: S, t: Tag) -> bool {
+    return s.eq(&t);
+}
+
+test "a generic body reaches the impl for its pointee" {
+    let item = Item { id: 3 };
+    let other = Other { id: 3 };
+    assert matches_op(&item, Tag { id: 3 });
+    assert !matches_op(&other, Tag { id: 3 });
+    assert matches_op(&other, Tag { id: 4 });
+    assert matches_call(&item, Tag { id: 3 });
+    assert !matches_call(&other, Tag { id: 3 });
+    assert matches_call(&other, Tag { id: 4 });
+}

@@ -1,0 +1,16 @@
+// A user struct imported as `Array` is that struct; the prelude `Array` a
+// method returns stays the builtin one.
+use { Box2 as Array } from "./sub/alias_named_prelude_generic_dep.wado";
+
+fn unwrap(b: Array<i32>) -> i32 {
+    return b.a;
+}
+
+test "an alias named Array leaves the builtin array alone" {
+    let l: List<i32> = [1, 2, 3];
+    assert l.to_array().len() == 3;
+    assert unwrap(Array::<i32> { a: 4 }) == 4;
+}
+
+__DATA__
+{"test": {}}

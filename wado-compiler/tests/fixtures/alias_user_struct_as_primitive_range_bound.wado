@@ -1,0 +1,10 @@
+// `u8::MAX` under an alias is the struct's constant, which a range bound
+// cannot take, rather than the primitive's bound.
+use { Foo as u8 } from "./sub/alias_user_struct_as_primitive_dep.wado";
+
+test "an aliased bound is the struct's constant" {
+    assert !(builtin::black_box(b'z') matches { 0..=u8::MAX });
+}
+
+__DATA__
+{"test": {}, "compile_error": ":6:49: analysis error: invalid pattern: range pattern bounds must be integer or char literals"}

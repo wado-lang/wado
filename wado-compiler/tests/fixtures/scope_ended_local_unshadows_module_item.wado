@@ -1,0 +1,23 @@
+// A local whose scope has ended names nothing, so its name reaches again the
+// module item it shadowed while it lived.
+
+global LIMIT: i32 = 10;
+
+fn bump(x: i32) -> i32 {
+    return x + 1;
+}
+
+export fn run() {
+    if builtin::black_box(true) {
+        #[allow(shadowed_name)]
+        let bump = 5;
+        #[allow(shadowed_name)]
+        let LIMIT = 3;
+        assert bump + LIMIT == 8;
+    }
+    assert bump(1) == 2;
+    assert LIMIT == 10;
+}
+
+__DATA__
+{}

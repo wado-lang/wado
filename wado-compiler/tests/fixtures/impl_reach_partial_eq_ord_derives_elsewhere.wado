@@ -1,0 +1,36 @@
+// A written `Eq` / `Ord` impl for some instantiations of a head leaves the rest
+// to derivation: no manual impl exists for them (finding 3).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Eq for Pair<T, i32> {
+    fn eq(&self, other: &Self) -> bool {
+        return self.b == other.b;
+    }
+}
+
+impl<T> Ord for Pair<T, i32> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return self.b.cmp(&other.b);
+    }
+}
+
+test "the written impls answer where they reach" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 1 };
+    let q: Pair<String, i32> = Pair { a: "y", b: 1 };
+    assert p == q;
+    assert !(p > q);
+}
+
+test "derivation answers everywhere else" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let q: Pair<i32, i64> = Pair { a: 2, b: 2 };
+    assert p != q;
+    assert q > p;
+}
+
+__DATA__
+{"test": {}}

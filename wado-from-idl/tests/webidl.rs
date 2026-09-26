@@ -17,7 +17,8 @@ impl Definitions {
         let json = format!(
             r#"{{
   "webref": "3.83.1",
-  "package": "dom",
+  "package": "wado-lang:web",
+  "module": "dom",
   "slice": ["EventTarget", "Node", "Element", "Window"],
   "interfaces": [{}],
   "mixins": [{}],
@@ -194,13 +195,13 @@ fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"web:dom/event-target\", linearity = \"unrestricted\", classes = \"0..=3\")]\npub resource EventTarget {"
+            "#[cm(\"wado-lang:web/event-target\", linearity = \"unrestricted\", classes = \"0..=3\")]\npub resource EventTarget {"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "#[cm(\"web:dom/node\", linearity = \"unrestricted\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
+            "#[cm(\"wado-lang:web/node\", linearity = \"unrestricted\", classes = \"1..=2\")]\npub resource Node extends EventTarget {"
         ),
         "{code}"
     );
@@ -223,7 +224,7 @@ fn classes_number_the_inheritance_forest_in_pre_order() {
     ] {
         assert!(
             code.contains(&format!(
-                "#[cm(\"web:dom/{resource}\", linearity = \"unrestricted\", classes = \"{classes}\")]"
+                "#[cm(\"wado-lang:web/{resource}\", linearity = \"unrestricted\", classes = \"{classes}\")]"
             )),
             "{resource} should carry {classes}: {code}"
         );
@@ -235,13 +236,13 @@ fn an_attribute_is_a_getter_and_a_setter_and_readonly_drops_the_setter() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "    #[cm(\"web:dom/node#text-content\")]\n    #[cm_params(\"self\")]\n    fn text_content(&self) -> Option<String>;"
+            "    #[cm(\"wado-lang:web/node#text-content\")]\n    #[cm_params(\"self\")]\n    fn text_content(&self) -> Option<String>;"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "    #[cm(\"web:dom/node#set-text-content\")]\n    #[cm_params(\"self\", \"value\")]\n    fn set_text_content(&self, value: Option<String>);"
+            "    #[cm(\"wado-lang:web/node#set-text-content\")]\n    #[cm_params(\"self\", \"value\")]\n    fn set_text_content(&self, value: Option<String>);"
         ),
         "{code}"
     );
@@ -253,12 +254,14 @@ fn an_attribute_is_a_getter_and_a_setter_and_readonly_drops_the_setter() {
 fn a_constructor_is_new_and_a_method_names_its_arguments_in_kebab_case() {
     let (code, _) = chain().generate();
     assert!(
-        code.contains("    #[cm(\"web:dom/event-target#new\")]\n    fn new() -> EventTarget;"),
+        code.contains(
+            "    #[cm(\"wado-lang:web/event-target#new\")]\n    fn new() -> EventTarget;"
+        ),
         "{code}"
     );
     assert!(
         code.contains(
-            "    #[cm(\"web:dom/element#set-attribute\")]\n    #[cm_params(\"self\", \"qualified-name\", \"value\")]\n    fn set_attribute(&self, qualified_name: String, value: String);"
+            "    #[cm(\"wado-lang:web/element#set-attribute\")]\n    #[cm_params(\"self\", \"qualified-name\", \"value\")]\n    fn set_attribute(&self, qualified_name: String, value: String);"
         ),
         "{code}"
     );
@@ -300,7 +303,7 @@ fn the_global_yields_the_dom_effect_with_its_resource_typed_attributes() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"web:dom/global\")]\npub interface Dom {\n    #[cm(\"web:dom/global#window\")]\n    fn window() -> Window;\n    #[cm(\"web:dom/global#document\")]\n    fn document() -> Node;\n}"
+            "#[cm(\"wado-lang:web/global\")]\npub interface Dom {\n    #[cm(\"wado-lang:web/global#window\")]\n    fn window() -> Window;\n    #[cm(\"wado-lang:web/global#document\")]\n    fn document() -> Node;\n}"
         ),
         "{code}"
     );
@@ -570,7 +573,7 @@ fn a_mixin_folds_into_each_including_interface() {
     let (code, skipped) = defs.generate();
     assert!(
         code.contains(
-            "    #[cm(\"web:dom/element#query-selector\")]\n    #[cm_params(\"self\", \"selectors\")]\n    fn query_selector(&self, selectors: String) -> Option<Element>;"
+            "    #[cm(\"wado-lang:web/element#query-selector\")]\n    #[cm_params(\"self\", \"selectors\")]\n    fn query_selector(&self, selectors: String) -> Option<Element>;"
         ),
         "{code}"
     );

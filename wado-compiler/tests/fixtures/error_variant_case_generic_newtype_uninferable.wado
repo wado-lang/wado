@@ -1,0 +1,14 @@
+// A case reached through a generic newtype with nothing to settle a parameter
+// reports it once: the variant's where the base reaches it, else the newtype's.
+
+variant G<T> { J(T), N }
+type Wrap<T> = G<T>;
+type Tag<T> = G<i32>;
+
+export fn run() {
+    let w = Wrap::N;
+    let t = Tag::N;
+}
+
+__DATA__
+{"compile_error": ":9:13: analysis error: cannot infer type parameter of variant `Wrap`; add a turbofish (`Wrap::<...>::…`) or a type annotation; 10:13: cannot infer type parameter of newtype `Tag`; add a turbofish (`Tag::<...>::…`) or a type annotation"}

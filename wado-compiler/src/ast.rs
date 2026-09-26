@@ -2,12 +2,13 @@
 
 use crate::attribute::{
     ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
-    WASM_MODULE, WIRE,
+    WASM_MODULE,
 };
 use std::borrow::Cow;
 
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::UNIT_TYPE_NAME;
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -407,9 +408,9 @@ pub trait AstVisitor: Sized {
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
     /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
-    /// because `effect_check` answers for it and the name resolver does not.
-    fn visit_effect_id(&mut self, id: AstId, span: Span) {
-        self.visit_id(id, span);
+    /// because it carries the effect name the site spells.
+    fn visit_effect_name(&mut self, effect: &EffectName) {
+        self.visit_id(effect.id, effect.span);
     }
 
     fn visit_item(&mut self, item: &Item) {
@@ -670,6 +671,9 @@ pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
             v.visit_id(t.id, t.span);
             v.visit_generic_params(&t.type_params);
             v.visit_trait_bounds(&t.supertraits);
+            if let TraitHead::Fixed { effects, .. } = &t.head {
+                walk_effect_names(v, effects);
+            }
             for assoc in &t.associated_types {
                 v.visit_id(assoc.id, assoc.span);
                 v.visit_trait_bounds(&assoc.bounds);
@@ -734,9 +738,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
     if let Some(ret) = &func.return_type {
         v.visit_type(ret);
     }
-    for (id, span) in &func.effect_ids {
-        v.visit_effect_id(*id, *span);
-    }
+    walk_effect_names(v, &func.effects);
     if let Some(body) = &func.body {
         v.visit_block(body);
     }
@@ -1060,7 +1062,11 @@ pub fn walk_pattern<V: AstVisitor>(v: &mut V, pat: &Pattern) {
             v.visit_pattern(pattern);
             v.visit_type(ty);
         }
-        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {}
+        Pattern::Range { start, end, .. } => {
+            v.visit_pattern(start);
+            v.visit_pattern(end);
+        }
+        Pattern::Literal(_) | Pattern::Wildcard | Pattern::Error(_) => {}
     }
 }
 
@@ -1133,8 +1139,12 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
         v.visit_type(p);
     }
     v.visit_type(&ft.return_type);
-    for (id, span) in &ft.effect_ids {
-        v.visit_effect_id(*id, *span);
+    walk_effect_names(v, &ft.effects);
+}
+
+fn walk_effect_names<V: AstVisitor>(v: &mut V, effects: &[EffectName]) {
+    for effect in effects {
+        v.visit_effect_name(effect);
     }
 }
 
@@ -1492,8 +1502,7 @@ pub enum AttrArg {
     /// A `key = ident` pair, whose value names something in the source rather
     /// than carrying text, e.g. `part_of = arr`.
     KeyIdent(String, String),
-    /// A `key = 3` pair, whose value is a number rather than text, e.g.
-    /// `#[wire(number = 3)]`.
+    /// A `key = 3` pair, whose value is a number rather than text.
     KeyNumber(String, String),
 }
 
@@ -1520,52 +1529,6 @@ impl AttrArg {
             | Self::KeyNumber(k, _) => k,
         }
     }
-}
-
-/// The field numbers the wire format admits, from the protobuf specification's
-/// "Assigning Field Numbers".
-pub const WIRE_NUMBER_MIN: u32 = 1;
-pub const WIRE_NUMBER_MAX: u32 = 536_870_911;
-pub const WIRE_NUMBER_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
-
-/// The `#[wire(number = …)]` text these attributes carry, as written. Every
-/// `#[wire]` is read, since a field may spell one adjustment per attribute.
-#[must_use]
-pub fn wire_number_written(attrs: &[Attribute]) -> Option<&str> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_number("number")
-        } else {
-            None
-        }
-    })
-}
-
-/// The `#[wire(number = N)]` these attributes carry, where it is a number the
-/// wire format admits. The diagnostics for one it does not are the
-/// elaborator's, which is where a declaration is checked.
-#[must_use]
-pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
-    wire_number_written(attrs)
-        .and_then(|written| written.parse::<u32>().ok())
-        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
-        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
-}
-
-/// An enum case's `#[wire(number = N)]`, where it fits the `int32` a protobuf
-/// enum value is.
-#[must_use]
-pub fn wire_case_number_of(attrs: &[Attribute]) -> Option<i32> {
-    wire_number_written(attrs).and_then(|written| written.parse::<i32>().ok())
-}
-
-/// `#[wire(encoding = "…")]`: how a numbered format writes an integer field,
-/// which protobuf's `sint*`, `fixed*` and `sfixed*` each need.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WireEncoding {
-    Plain,
-    ZigZag,
-    Fixed,
 }
 
 /// `#[wire(name_policy = "…")]`: the casing a name-keyed format spells a
@@ -1597,24 +1560,6 @@ impl NamePolicy {
             .find(|(name, _)| *name == written)
             .map(|&(_, policy)| policy)
     }
-}
-
-/// The `#[wire(encoding = "…")]` text these attributes carry, as written.
-#[must_use]
-pub fn wire_encoding_written(attrs: &[Attribute]) -> Option<&str> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_value("encoding")
-        } else {
-            None
-        }
-    })
-}
-
-/// One entry per field, in declaration order, as `StructInfo` holds them.
-#[must_use]
-pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
-    fields.iter().map(|f| wire_number_of(&f.attrs)).collect()
 }
 
 /// Attribute like #[cm("...")]
@@ -1682,19 +1627,6 @@ impl Attribute {
         })
     }
 
-    /// The literal text of a `key = <number>` argument, as written.
-    ///
-    /// For `#[wire(number = 3)]`, `attr.kv_number("number")` returns `Some("3")`.
-    pub fn kv_number(&self, key: &str) -> Option<&str> {
-        self.args.iter().find_map(|arg| {
-            if let AttrArg::KeyNumber(k, v) = arg {
-                if k == key { Some(v.as_str()) } else { None }
-            } else {
-                None
-            }
-        })
-    }
-
     /// Return true if any arg matches the given name as an identifier, string, or key in a key-value pair.
     ///
     /// For `#[wire(default)]`, `attr.has_arg("default")` returns `true`.
@@ -1743,6 +1675,21 @@ impl Attribute {
 #[must_use]
 pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
     attrs.iter().find_map(Attribute::as_cm_import)
+}
+
+/// The world-level function import among `attrs`, wherever it sits: the bare
+/// function name the dependency's world exports.
+#[must_use]
+pub fn world_import_of(attrs: &[Attribute]) -> Option<&str> {
+    attrs
+        .iter()
+        .find_map(|a| a.cm_boundary.as_ref()?.as_world_import())
+}
+
+/// The CM identifier of `function` in the interface at `interface_path`.
+#[must_use]
+pub fn cm_function_path(interface_path: &str, function: &str) -> String {
+    format!("{interface_path}#{function}")
 }
 
 /// Which Component Model boundary a `#[cm(…)]` / `#[canonical(…)]` declaration
@@ -1954,12 +1901,11 @@ impl CmImport {
     /// (e.g., "wasi:cli/stdout@0.3.0-rc-2025-09-16#write-via-stream").
     /// Reconstructs the canonical form parsed by `CmImport::parse`.
     pub fn full_path(&self) -> String {
-        let mut path = self.interface_path();
-        if let Some(ref f) = self.function {
-            path.push('#');
-            path.push_str(f);
+        let path = self.interface_path();
+        match &self.function {
+            Some(f) => cm_function_path(&path, f),
+            None => path,
         }
-        path
     }
 }
 
@@ -2363,11 +2309,7 @@ pub struct Function {
     /// delimiters, not just the parameters, to know what a comment sits inside.
     pub params_span: Span,
     pub return_type: Option<Type>,
-    pub effects: Vec<String>,
-    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in the `with` clause. Used by the elaborator to record
-    /// use->def references for LSP jump-to-def.
-    pub effect_ids: Vec<(AstId, Span)>,
+    pub effects: Vec<EffectName>,
     /// Whether `effects` came from the enclosing trait's head rather than from
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
@@ -2379,7 +2321,7 @@ pub struct Function {
 impl Function {
     /// The effects the source wrote here. Empty when the enclosing trait's
     /// head supplied them.
-    pub fn written_effects(&self) -> &[String] {
+    pub fn written_effects(&self) -> &[EffectName] {
         if self.effects_inherited {
             return &[];
         }
@@ -3245,10 +3187,8 @@ pub struct IdentExpr {
     /// Call-site turbofish (`identity::<i32>(x)`) is recorded on `CallExpr.type_args`
     /// instead, so this is empty for identifiers used directly as a call callee.
     pub type_args: Vec<Type>,
-    /// Whether `type_args` were written on the path's *prefix* rather than on
-    /// the identifier itself — `Maybe::<i32>::Nothing` (a turbofish-qualified
-    /// case) as against `ns::f::<i32>` (a generic function reference). Only the
-    /// former admits a `_` slot, which the expected type fills.
+    /// Whether `type_args` were written on the path's prefix
+    /// (`Maybe::<i32>::Nothing`) rather than after its last segment.
     pub type_args_on_prefix: bool,
 }
 
@@ -3265,6 +3205,11 @@ impl IdentExpr {
     /// qualifies it — the `ns` of `ns::Color::Red`.
     pub fn owner_index(&self) -> Option<usize> {
         self.segments.len().checked_sub(2)
+    }
+
+    /// The path's last segment, or the bare name: `Red` in `Color::Red` and in `Red`.
+    pub fn case_name(&self) -> &str {
+        self.segments.last().map_or(&self.name, |seg| &seg.name)
     }
 }
 
@@ -3683,42 +3628,27 @@ impl Type {
     /// type determines — a name that is really a concrete type simply matches
     /// no parameter.
     pub fn mentioned_names(&self, out: &mut Vec<String>) {
-        match self {
+        self.for_each(&mut |ty| match ty {
             Type::Named(n) => out.push(n.name.clone()),
-            Type::Generic(g) => {
-                out.push(g.name.clone());
-                for a in &g.args {
-                    a.mentioned_names(out);
-                }
-            }
+            Type::Generic(g) => out.push(g.name.clone()),
             Type::NamespacedGeneric(g) => {
                 out.push(g.namespace.clone());
                 out.push(g.name.clone());
-                for a in &g.args {
-                    a.mentioned_names(out);
-                }
             }
-            Type::Function(f) => {
-                for p in &f.params {
-                    p.mentioned_names(out);
-                }
-                f.return_type.mentioned_names(out);
-            }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    e.mentioned_names(out);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => inner.mentioned_names(out),
             Type::TypePackSpread(name, _) => out.push(name.clone()),
-            Type::Infer(_) | Type::Error(_) => {}
-        }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Infer(_)
+            | Type::Error(_) => {}
+        });
     }
 
     /// Whether `pred` holds of this type or of any within it, outermost first.
     /// The one recursion a type predicate takes; a hand-spelled walk forgets arms.
     #[must_use]
-    pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
+    pub fn any<'a>(&'a self, pred: &mut impl FnMut(&'a Type) -> bool) -> bool {
         if pred(self) {
             return true;
         }
@@ -3730,6 +3660,14 @@ impl Type {
             Type::Reference(inner) | Type::MutReference(inner) => inner.any(pred),
             Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
         }
+    }
+
+    /// Calls `f` on this type and on every type within it, outermost first.
+    pub fn for_each<'a>(&'a self, f: &mut impl FnMut(&'a Type)) {
+        let _ = self.any(&mut |ty| {
+            f(ty);
+            false
+        });
     }
 
     /// Whether `name` is spelled anywhere in this type.
@@ -3754,43 +3692,27 @@ impl Type {
     #[must_use]
     pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
         let mut out = Vec::new();
-        self.collect_pack_spreads(&mut out);
+        self.for_each(&mut |ty| {
+            if let Type::TypePackSpread(name, span) = ty {
+                out.push((name.as_str(), *span));
+            }
+        });
         out
     }
 
-    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
-        match self {
-            Type::Generic(g) => {
-                for a in &g.args {
-                    a.collect_pack_spreads(out);
-                }
-            }
-            Type::NamespacedGeneric(g) => {
-                for a in &g.args {
-                    a.collect_pack_spreads(out);
-                }
-            }
-            Type::Function(f) => {
-                for p in &f.params {
-                    p.collect_pack_spreads(out);
-                }
-                f.return_type.collect_pack_spreads(out);
-            }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    e.collect_pack_spreads(out);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
-            Type::TypePackSpread(name, span) => out.push((name, *span)),
-            Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
-        }
+    /// The unit type, written at `span`.
+    pub fn unit(id: AstId, span: Span) -> Self {
+        Type::Named(NamedType {
+            id,
+            name: UNIT_TYPE_NAME.to_string(),
+            span,
+        })
     }
 
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {
-        matches!(self, Type::Named(n) if n.name == "()")
+        matches!(self, Type::Named(n) if n.name == UNIT_TYPE_NAME)
     }
 
     /// Returns the [`AstId`] for types that carry one (named types and
@@ -3823,6 +3745,15 @@ impl Type {
             _ => return None,
         };
         Some(name.split('<').next().unwrap_or(name))
+    }
+
+    /// What one outer `&` / `&mut` refers to; the type itself where none.
+    #[must_use]
+    pub fn referent(&self) -> &Type {
+        match self {
+            Type::Reference(inner) | Type::MutReference(inner) => inner,
+            other => other,
+        }
     }
 
     /// Returns the source [`Span`] covering this type expression.
@@ -3896,12 +3827,21 @@ pub struct FunctionType {
     pub is_mut: bool,
     pub params: Vec<Type>,
     pub return_type: Type,
-    pub effects: Vec<String>,
-    /// Parallel to `effects`: `(AstId, Span)` of each effect-name identifier as
-    /// it appeared in source. Used by the elaborator to record use->def
-    /// references for LSP jump-to-def. Empty when constructed by the compiler
-    /// (synthesized function types from monomorphization, etc.).
-    pub effect_ids: Vec<(AstId, Span)>,
+    pub effects: Vec<EffectName>,
+}
+
+/// One effect name in a `with` clause, at the site that writes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectName {
+    pub name: String,
+    pub id: AstId,
+    pub span: Span,
+}
+
+impl AsRef<str> for EffectName {
+    fn as_ref(&self) -> &str {
+        &self.name
+    }
 }
 
 /// An effect declaration: an interface whose operations handlers implement.
@@ -4272,9 +4212,7 @@ pub enum TraitHead {
     Pure { span: Span },
     /// `with A` / `with (A, B)`: every impl gets exactly these.
     Fixed {
-        effects: Vec<String>,
-        /// Parallel to `effects`, for use->def references.
-        effect_ids: Vec<(AstId, Span)>,
+        effects: Vec<EffectName>,
         span: Span,
     },
     /// `with _`: the impl brings its own effects.
@@ -4287,12 +4225,17 @@ impl TraitHead {
         matches!(self, TraitHead::Open { .. } | TraitHead::Undecided)
     }
 
-    /// The effects a method inherits when it declares none of its own.
-    pub fn inherited_effects(&self) -> Vec<String> {
+    /// The effects a method inherits when it declares none of its own, each
+    /// where the head writes it. `unwritten` stands in for a head left out.
+    pub fn inherited_effects(&self, unwritten: Span) -> Vec<(String, Span)> {
         match self {
             TraitHead::Pure { .. } => Vec::new(),
-            TraitHead::Fixed { effects, .. } => effects.clone(),
-            TraitHead::Open { .. } | TraitHead::Undecided => vec![EFFECT_HOLE.to_string()],
+            TraitHead::Fixed { effects, .. } => effects
+                .iter()
+                .map(|effect| (effect.name.clone(), effect.span))
+                .collect(),
+            TraitHead::Open { span } => vec![(EFFECT_HOLE.to_string(), *span)],
+            TraitHead::Undecided => vec![(EFFECT_HOLE.to_string(), unwritten)],
         }
     }
 

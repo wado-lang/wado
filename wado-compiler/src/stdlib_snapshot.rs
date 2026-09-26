@@ -224,12 +224,6 @@ pub(crate) fn rehydrate_tir_module(
         .filter(|rc| reachable(rc))
         .map(|rc| clone_fn_rc(rc, fn_remap))
         .collect();
-    new_module.generic_functions = snap_module
-        .generic_functions
-        .iter()
-        .filter(|(_, v)| reachable(v))
-        .map(|(k, v)| (k.clone(), clone_fn_rc(v, fn_remap)))
-        .collect();
     new_module
 }
 

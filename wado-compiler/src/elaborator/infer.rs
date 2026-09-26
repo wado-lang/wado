@@ -6,7 +6,6 @@
 
 use std::cell::RefCell;
 
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -32,7 +31,7 @@ pub(super) fn unify(
                 mapped_elem: None, ..
             },
             ResolvedType::GenericInstance { def, .. },
-        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*def)) => {
+        ) if type_table.borrow().is_tuple_def(*def) => {
             bindings.entry(expected).or_insert(actual);
         }
         // Direct type parameter mapping.
@@ -58,8 +57,8 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*expected_def))
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
+        ) if type_table.borrow().is_tuple_def(*expected_def)
+            && type_table.borrow().is_tuple_def(*actual_def)
             && expected_elems
                 .iter()
                 .any(|e| type_table.borrow().is_type_pack(*e)) =>
@@ -126,6 +125,18 @@ pub(super) fn unify(
                 def: actual_def,
                 type_args: actual_args,
             },
+        )
+        | (
+            ResolvedType::Newtype {
+                def: expected_def,
+                type_args: expected_args,
+                ..
+            },
+            ResolvedType::Newtype {
+                def: actual_def,
+                type_args: actual_args,
+                ..
+            },
         ) if expected_def == actual_def && expected_args.len() == actual_args.len() => {
             for (&exp_arg, &act_arg) in expected_args.iter().zip(actual_args.iter()) {
                 unify(type_table, exp_arg, act_arg, bindings);
@@ -135,17 +146,15 @@ pub(super) fn unify(
         // tuple literal: infer `K` from the tuple element type.
         (
             ResolvedType::GenericInstance {
-                def,
                 type_args: expected_args,
+                ..
             },
             ResolvedType::GenericInstance {
                 def: actual_def,
                 type_args: actual_elems,
             },
-        ) if type_table
-            .borrow()
-            .is_compiler_item(*def, CompilerItem::List)
-            && TypeTable::is_tuple_type(type_table.borrow().def_name(*actual_def))
+        ) if type_table.borrow().is_list(expected)
+            && type_table.borrow().is_tuple_def(*actual_def)
             && expected_args.len() == 1
             && !actual_elems.is_empty() =>
         {

@@ -1,0 +1,40 @@
+// An interface whose only mention of a resource is a record field. The walk
+// that finds the resources an interface needs reads through the record, so the
+// instance declares the resource before the record reaches for it.
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#slot")]
+struct Slot {
+    #[cm("device")]
+    device: Device,
+}
+
+interface Maker {
+    #[cm("wasi:demo/maker@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#fill")]
+    #[cm_params("s")]
+    fn fill(s: Slot) -> u32;
+}
+
+export fn run() with (Maker, Gfx, Device) {
+    let _ = Gfx::fill(Slot { device: Maker::get_device() });
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 },
+    { "contains": ["(field \"device\" 1)"], "count": 1 }
+  ]
+}

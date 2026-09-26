@@ -1,0 +1,27 @@
+// A `with` clause name reaching no effect is an error where it is written.
+// `Stdout` reaches only a module that imports it.
+struct NotAnEffect { v: i32 }
+
+fn f() with NoSuchFn { }
+fn g(h: fn() with NoSuchFnType) { }
+trait Head with NoSuchHead { fn m(&self) -> i32; }
+trait Method with () { fn m(&self) -> i32 with NoSuchMethod; }
+fn n() with NotAnEffect { }
+fn o() with Stdout { }
+fn ok<effect E>(h: fn() with E) with E { h(); }
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":7:17: analysis error: no effect named 'NoSuchHead' is in scope",
+    "compile_errors_contains": [
+        "no effect named 'NoSuchFn' is in scope",
+        "no effect named 'NoSuchFnType' is in scope",
+        "no effect named 'NoSuchMethod' is in scope",
+        "no effect named 'NotAnEffect' is in scope",
+        "no effect named 'Stdout' is in scope"
+    ],
+    "compile_error_codes": ["UNKNOWN_TYPE"]
+}

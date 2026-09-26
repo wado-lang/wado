@@ -446,30 +446,6 @@ fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
         && project.used_wasi_functions.contains(&func.used_key())
 }
 
-fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
-    match ty {
-        Type::Named(named) => match wado_primitive_name_to_cm(&named.name) {
-            Some(prim) => ComponentValType::Primitive(prim),
-            None => panic!("unsupported Wado primitive type for CM: {}", named.name),
-        },
-        _ => panic!("unsupported Wado type for CM primitive: {ty:?}"),
-    }
-}
-
-/// Like `wado_type_to_cm_primitive` but also resolves resource types using the
-/// `own_resource_indices` map (resource Wado name → `own<resource>` type index).
-fn type_to_cm_primitive_with_resources(
-    ty: &Type,
-    own_resource_indices: &IndexMap<String, u32>,
-) -> ComponentValType {
-    if let Type::Named(named) = ty
-        && let Some(&own_idx) = own_resource_indices.get(&named.name)
-    {
-        return ComponentValType::Type(own_idx);
-    }
-    wado_type_to_cm_primitive(ty)
-}
-
 /// The unified entry point for converting a Wado type into a `ComponentValType`,
 /// defining any complex CM type — stream, future, result, list, option, tuple —
 /// recursively inline in `instance_type`. A primitive or own resource is returned
@@ -478,228 +454,150 @@ fn emit_cm_val_type(
     ty: &Type,
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
-    error_code_idx: Option<u32>,
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
-    own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmTypeGen>,
+    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    type_gen: &mut CmTypeGen,
     project: &NirPackage,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
+    let emit = |ty: &Type,
+                instance_type: &mut InstanceType,
+                local_type_idx: &mut u32,
+                type_gen: &mut CmTypeGen,
+                ctx: &mut ComponentModelContext| {
+        emit_cm_val_type(
+            ty,
+            instance_type,
+            local_type_idx,
+            has_local_error_code,
+            enum_export_indices,
+            resource_handles,
+            type_gen,
+            project,
+            ctx,
+        )
+    };
     match ty {
         Type::Generic(g) if g.name == "Stream" => {
-            let element = g.args.first().map(|inner| {
-                emit_cm_val_type(
-                    inner,
-                    instance_type,
-                    local_type_idx,
-                    error_code_idx,
-                    has_local_error_code,
-                    enum_export_indices,
-                    own_resource_type_indices,
-                    shared_type_gen.as_deref_mut(),
-                    project,
-                    ctx,
-                )
-            });
+            let element = g
+                .args
+                .first()
+                .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().stream(element);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Future" => {
-            let payload = g.args.first().map(|inner| {
-                emit_cm_val_type(
-                    inner,
-                    instance_type,
-                    local_type_idx,
-                    error_code_idx,
-                    has_local_error_code,
-                    enum_export_indices,
-                    own_resource_type_indices,
-                    shared_type_gen.as_deref_mut(),
-                    project,
-                    ctx,
-                )
-            });
+            let payload = g
+                .args
+                .first()
+                .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().future(payload);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
         }
         Type::Generic(g) if g.name == "Result" => {
-            // E parameter: if it names a WASI resource that the enclosing
-            // interface already brought in (via own_resource_type_indices),
-            // use that own<R> handle directly. Otherwise fall back to the
-            // canonical wasi:cli/types#error-code (covers the common case
-            // where wasi WIT writes `result<_, error-code>`).
-            let err_idx = if g.args.len() >= 2
-                && let Type::Named(named_err) = &g.args[1]
-                && let Some(&idx) = own_resource_type_indices.get(&named_err.name)
+            let [ok, err] = g.args.as_slice() else {
+                panic!("`Result` takes two type arguments, not {}", g.args.len())
+            };
+            // A WASI package spells `error-code` once and the others alias it,
+            // so it is the one error this walk does not define in place.
+            let err_type = if err.is_unit() {
+                None
+            } else if let Type::Named(named) = err
+                && named.name == ERROR_CODE_WADO_NAME
             {
-                idx
-            } else {
-                resolve_error_code_idx(
+                Some(ComponentValType::Type(resolve_error_code_idx(
                     instance_type,
                     local_type_idx,
-                    error_code_idx,
                     has_local_error_code,
                     enum_export_indices,
                     project,
                     ctx,
-                )
-            };
-            let ok_type = if g.args.is_empty() {
-                None
+                )))
             } else {
-                let ok = &g.args[0];
-                if ok.is_unit() {
-                    None
-                } else if let Type::Named(named) = ok
-                    && own_resource_type_indices.contains_key(&named.name)
-                {
-                    Some(ComponentValType::Type(
-                        own_resource_type_indices[&named.name],
-                    ))
-                } else if let Some(type_gen) = shared_type_gen {
-                    // Complex ok types (records, options, variants, etc.) use shared type gen
-                    let resource_exports = cm_keyed_resource_exports(
-                        own_resource_type_indices,
-                        &project.cm_interface_registry,
-                        type_gen.interface_hint(),
-                    );
-                    let mut sink = InstanceSink {
-                        it: instance_type,
-                        next_idx: local_type_idx,
-                    };
-                    let ok_val = type_gen.ast_type_to_cm(
-                        &mut sink,
-                        ok,
-                        &project.cm_interface_registry,
-                        &resource_exports,
-                    );
-                    Some(ok_val)
-                } else {
-                    Some(type_to_cm_primitive_with_resources(
-                        ok,
-                        own_resource_type_indices,
-                    ))
-                }
+                Some(emit(err, instance_type, local_type_idx, type_gen, ctx))
             };
-            instance_type
-                .ty()
-                .defined_type()
-                .result(ok_type, Some(ComponentValType::Type(err_idx)));
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
+            let ok_type = if ok.is_unit() {
+                None
+            } else if let Type::Named(named) = ok
+                && let Some(handles) = resource_handles.get(&named.name)
+            {
+                Some(ComponentValType::Type(handles.own))
+            } else {
+                Some(shared_cm_val_type(
+                    ok,
+                    instance_type,
+                    local_type_idx,
+                    resource_handles,
+                    type_gen,
+                    project,
+                ))
+            };
+            instance_type.ty().defined_type().result(ok_type, err_type);
         }
         Type::Generic(g) if g.name == "List" && !g.args.is_empty() => {
-            let element_val_type = emit_cm_val_type(
-                &g.args[0],
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen,
-                project,
-                ctx,
-            );
-            instance_type.ty().defined_type().list(element_val_type);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
+            let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
+            instance_type.ty().defined_type().list(element);
         }
         Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
-            let element_val_type = emit_cm_val_type(
-                &g.args[0],
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen,
-                project,
-                ctx,
-            );
-            instance_type.ty().defined_type().option(element_val_type);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
+            let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
+            instance_type.ty().defined_type().option(element);
         }
         Type::Tuple(elems) if !elems.is_empty() => {
-            let tuple_types = build_cm_tuple_types(
-                elems,
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen.as_deref_mut(),
-                project,
-                ctx,
-            );
-            instance_type.ty().defined_type().tuple(tuple_types);
-            let idx = *local_type_idx;
-            *local_type_idx += 1;
-            ComponentValType::Type(idx)
+            let elements: Vec<ComponentValType> = elems
+                .iter()
+                .map(|elem| emit(elem, instance_type, local_type_idx, type_gen, ctx))
+                .collect();
+            instance_type.ty().defined_type().tuple(elements);
+        }
+        Type::Named(named) if enum_export_indices.contains_key(&named.name) => {
+            return ComponentValType::Type(enum_export_indices[&named.name]);
+        }
+        Type::Named(named) if resource_handles.contains_key(&named.name) => {
+            return ComponentValType::Type(resource_handles[&named.name].own);
         }
         _ => {
-            // Check enum/variant export indices first (e.g. DescriptorType)
-            if let Type::Named(named) = ty
-                && let Some(&idx) = enum_export_indices.get(&named.name)
-            {
-                return ComponentValType::Type(idx);
-            }
-            // Bare resource return types (e.g. `fn new() -> Connector`).
-            // The Result/Option/etc. branches above already short-circuit
-            // own resources by Wado-name; this path catches the case where
-            // the resource is returned directly without a wrapper.
-            if let Type::Named(named) = ty
-                && let Some(&idx) = own_resource_type_indices.get(&named.name)
-            {
-                return ComponentValType::Type(idx);
-            }
-            // Complex types (e.g. WASI records like Instant) use shared type gen
-            if let Some(type_gen) = shared_type_gen {
-                let resource_exports = cm_keyed_resource_exports(
-                    own_resource_type_indices,
-                    &project.cm_interface_registry,
-                    type_gen.interface_hint(),
-                );
-                let mut sink = InstanceSink {
-                    it: instance_type,
-                    next_idx: local_type_idx,
-                };
-                return type_gen.ast_type_to_cm(
-                    &mut sink,
-                    ty,
-                    &project.cm_interface_registry,
-                    &resource_exports,
-                );
-            }
-            type_to_cm_primitive_with_resources(ty, own_resource_type_indices)
+            return shared_cm_val_type(
+                ty,
+                instance_type,
+                local_type_idx,
+                resource_handles,
+                type_gen,
+                project,
+            );
         }
     }
+    let idx = *local_type_idx;
+    *local_type_idx += 1;
+    ComponentValType::Type(idx)
+}
+
+/// `ty` spelled by the shared generator, over this instance's resources.
+fn shared_cm_val_type(
+    ty: &Type,
+    instance_type: &mut InstanceType,
+    local_type_idx: &mut u32,
+    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    type_gen: &mut CmTypeGen,
+    project: &NirPackage,
+) -> ComponentValType {
+    let registry = &project.cm_interface_registry;
+    let resource_exports = resource_exports_for(type_gen, resource_handles, registry);
+    let mut sink = InstanceSink {
+        it: instance_type,
+        next_idx: local_type_idx,
+    };
+    type_gen.ast_type_to_cm(&mut sink, ty, registry, &resource_exports)
 }
 
 /// Resolve or create the error-code type index within an instance type.
 fn resolve_error_code_idx(
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
-    error_code_idx: Option<u32>,
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
     project: &NirPackage,
     ctx: &mut ComponentModelContext,
 ) -> u32 {
-    if let Some(idx) = error_code_idx {
-        idx
-    } else if has_local_error_code && enum_export_indices.contains_key(ERROR_CODE_WADO_NAME) {
+    if has_local_error_code && enum_export_indices.contains_key(ERROR_CODE_WADO_NAME) {
         enum_export_indices[ERROR_CODE_WADO_NAME]
     } else {
         let outer_ec = cm_decl_type_idx(
@@ -719,51 +617,47 @@ fn resolve_error_code_idx(
     }
 }
 
-fn build_cm_tuple_types(
-    elems: &[Type],
-    instance_type: &mut InstanceType,
-    local_type_idx: &mut u32,
-    error_code_idx: Option<u32>,
-    has_local_error_code: bool,
-    enum_export_indices: &IndexMap<String, u32>,
-    own_resource_type_indices: &IndexMap<String, u32>,
-    mut shared_type_gen: Option<&mut CmTypeGen>,
-    project: &NirPackage,
-    ctx: &mut ComponentModelContext,
-) -> Vec<ComponentValType> {
-    elems
-        .iter()
-        .map(|t| {
-            emit_cm_val_type(
-                t,
-                instance_type,
-                local_type_idx,
-                error_code_idx,
-                has_local_error_code,
-                enum_export_indices,
-                own_resource_type_indices,
-                shared_type_gen.as_deref_mut(),
-                project,
-                ctx,
-            )
-        })
-        .collect()
+/// The type indices one resource holds in an instance type: the resource and
+/// the `own` and `borrow` handles over it.
+#[derive(Clone, Copy)]
+struct ResourceTypeIndices {
+    resource: u32,
+    own: u32,
+    borrow: u32,
 }
 
-/// Per-resource type indices under the CM resource names, which is how
-/// [`CmTypeGen`] asks for them; the instance-type builders key theirs by Wado
-/// name instead. `emitting` is the interface being described.
-fn cm_keyed_resource_exports<'a>(
-    resource_type_indices: &IndexMap<String, u32>,
+impl ResourceTypeIndices {
+    /// Define the `own` and `borrow` handles over `resource`.
+    fn define(instance_type: &mut InstanceType, local_type_idx: &mut u32, resource: u32) -> Self {
+        instance_type.ty().defined_type().own(resource);
+        let own = *local_type_idx;
+        *local_type_idx += 1;
+        instance_type.ty().defined_type().borrow(resource);
+        let borrow = *local_type_idx;
+        *local_type_idx += 1;
+        Self {
+            resource,
+            own,
+            borrow,
+        }
+    }
+}
+
+/// The resources under their CM names, as [`CmTypeGen`] asks for them, with
+/// the handles the instance already defines registered in `type_gen`.
+fn resource_exports_for<'a>(
+    type_gen: &mut CmTypeGen,
+    resource_handles: &IndexMap<String, ResourceTypeIndices>,
     registry: &'a CmInterfaceRegistry,
-    emitting: Option<&str>,
 ) -> IndexMap<&'a str, u32> {
-    resource_type_indices
+    let emitting = type_gen.interface_hint().map(str::to_string);
+    resource_handles
         .iter()
-        .filter_map(|(wado_name, &idx)| {
-            let source = registry.resource_source_in(emitting, wado_name)?;
+        .filter_map(|(wado_name, handles)| {
+            let source = registry.resource_source_in(emitting.as_deref(), wado_name)?;
             let cm_name = registry.get_resource_cm_name_by_source(source, wado_name)?;
-            Some((cm_name, idx))
+            type_gen.register_resource_handles(cm_name, handles.own, handles.borrow);
+            Some((cm_name, handles.resource))
         })
         .collect()
 }
@@ -789,7 +683,7 @@ fn wado_type_to_cm_val_type(
     stream_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
-    borrow_resource_type_indices: &IndexMap<String, u32>,
+    resource_handles: &IndexMap<String, ResourceTypeIndices>,
 ) -> ComponentValType {
     match ty {
         Type::Named(named) => {
@@ -799,29 +693,16 @@ fn wado_type_to_cm_val_type(
             if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
                 return ComponentValType::Type(flags_idx);
             }
-            match named.name.as_str() {
-                "i8" => ComponentValType::Primitive(PrimitiveValType::S8),
-                "i16" => ComponentValType::Primitive(PrimitiveValType::S16),
-                "i32" => ComponentValType::Primitive(PrimitiveValType::S32),
-                "i64" => ComponentValType::Primitive(PrimitiveValType::S64),
-                "u8" => ComponentValType::Primitive(PrimitiveValType::U8),
-                "u16" => ComponentValType::Primitive(PrimitiveValType::U16),
-                "u32" => ComponentValType::Primitive(PrimitiveValType::U32),
-                "u64" => ComponentValType::Primitive(PrimitiveValType::U64),
-                "f32" => ComponentValType::Primitive(PrimitiveValType::F32),
-                "f64" => ComponentValType::Primitive(PrimitiveValType::F64),
-                "bool" => ComponentValType::Primitive(PrimitiveValType::Bool),
-                "char" => ComponentValType::Primitive(PrimitiveValType::Char),
-                "String" => ComponentValType::Primitive(PrimitiveValType::String),
-                _ => panic!("unsupported Wado param type for CM: {}", named.name),
-            }
+            let prim = wado_primitive_name_to_cm(&named.name)
+                .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
+            ComponentValType::Primitive(prim)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - WASI resource methods take self as &Resource
             if let Type::Named(named) = inner.as_ref()
-                && let Some(&borrow_idx) = borrow_resource_type_indices.get(&named.name)
+                && let Some(handles) = resource_handles.get(&named.name)
             {
-                return ComponentValType::Type(borrow_idx);
+                return ComponentValType::Type(handles.borrow);
             }
             panic!("unsupported reference param type for CM: {ty:?}")
         }
@@ -2366,9 +2247,7 @@ fn generate_cm_imports(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            let mut resource_type_indices: IndexMap<String, u32> = IndexMap::default();
-            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
-            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut resource_handles: IndexMap<String, ResourceTypeIndices> = IndexMap::default();
             for (source, resource_name) in &needed_resources {
                 if let Some(cm_name) = project
                     .cm_interface_registry
@@ -2378,17 +2257,16 @@ fn generate_cm_imports(
                         cm_name,
                         wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
                     );
-                    resource_type_indices.insert(resource_name.clone(), local_type_idx);
+                    let resource_idx = local_type_idx;
                     local_type_idx += 1;
-
-                    let resource_idx = resource_type_indices[resource_name];
-                    instance_type.ty().defined_type().own(resource_idx);
-                    own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
-                    local_type_idx += 1;
-
-                    instance_type.ty().defined_type().borrow(resource_idx);
-                    borrow_resource_type_indices.insert(resource_name.clone(), local_type_idx);
-                    local_type_idx += 1;
+                    resource_handles.insert(
+                        resource_name.clone(),
+                        ResourceTypeIndices::define(
+                            &mut instance_type,
+                            &mut local_type_idx,
+                            resource_idx,
+                        ),
+                    );
                 }
             }
 
@@ -2399,37 +2277,22 @@ fn generate_cm_imports(
                 .cm_interface_registry
                 .declares_own_error_code(&interface_info.path);
 
-            /// Recursively collect Named types from a type tree.
-            fn collect_named_types(ty: &Type, out: &mut Vec<String>) {
-                match ty {
-                    Type::Named(named) if named.name != "()" => {
-                        if !out.contains(&named.name) {
-                            out.push(named.name.clone());
-                        }
-                    }
-                    Type::Generic(g) => {
-                        for arg in &g.args {
-                            collect_named_types(arg, out);
-                        }
-                    }
-                    Type::Tuple(elems) => {
-                        for elem in elems {
-                            collect_named_types(elem, out);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Collect all named types referenced in function signatures
+            let signature_types = cm_functions.iter().flat_map(|func| {
+                func.params
+                    .iter()
+                    .map(|(_, _, ty)| ty)
+                    .chain(&func.return_type)
+            });
             let mut referenced_types: Vec<String> = Vec::new();
-            for func in &cm_functions {
-                for (_, _, ty) in &func.params {
-                    collect_named_types(ty, &mut referenced_types);
-                }
-                if let Some(ret_ty) = &func.return_type {
-                    collect_named_types(ret_ty, &mut referenced_types);
-                }
+            for ty in signature_types {
+                ty.for_each(&mut |ty| {
+                    if let Type::Named(named) = ty
+                        && !ty.is_unit()
+                        && !referenced_types.contains(&named.name)
+                    {
+                        referenced_types.push(named.name.clone());
+                    }
+                });
             }
 
             // Partition into enums, variants, and flags by querying this
@@ -2536,11 +2399,10 @@ fn generate_cm_imports(
                                     ty,
                                     &mut instance_type,
                                     &mut local_type_idx,
-                                    None,
                                     has_local_error_code,
                                     &enum_export_indices,
-                                    &own_resource_type_indices,
-                                    Some(&mut shared_type_gen),
+                                    &resource_handles,
+                                    &mut shared_type_gen,
                                     project,
                                     ctx,
                                 )
@@ -2617,23 +2479,11 @@ fn generate_cm_imports(
                 }
             }
 
-            // Every own-resource index is registered by here, so the borrowed
-            // view each signature hands `ast_type_to_cm` is built once.
-            let resource_exports = cm_keyed_resource_exports(
-                &own_resource_type_indices,
+            let resource_exports = resource_exports_for(
+                &mut shared_type_gen,
+                &resource_handles,
                 &project.cm_interface_registry,
-                Some(interface_info.path.as_str()),
             );
-            // `resource_exports` carries the `own` index, so a borrow minted
-            // from it would wrap that handle rather than the resource.
-            let borrow_exports = cm_keyed_resource_exports(
-                &borrow_resource_type_indices,
-                &project.cm_interface_registry,
-                Some(interface_info.path.as_str()),
-            );
-            for (cm_name, borrow_idx) in borrow_exports {
-                shared_type_gen.register_existing(&format!("borrow:{cm_name}"), borrow_idx);
-            }
 
             for func in &cm_functions {
                 let needs_stream_u8 = func
@@ -2694,7 +2544,7 @@ fn generate_cm_imports(
                                 stream_type_idx,
                                 &enum_export_indices,
                                 &flags_export_indices,
-                                &borrow_resource_type_indices,
+                                &resource_handles,
                             )
                         };
                         (cm_name.clone(), val_type)
@@ -2729,11 +2579,10 @@ fn generate_cm_imports(
                             &resolved_ty,
                             &mut instance_type,
                             &mut local_type_idx,
-                            None,
                             has_local_error_code,
                             &enum_export_indices,
-                            &own_resource_type_indices,
-                            Some(&mut shared_type_gen),
+                            &resource_handles,
+                            &mut shared_type_gen,
                             project,
                             ctx,
                         )
@@ -3824,65 +3673,48 @@ fn import_resource_using_interfaces(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            // Maps: resource_name -> (alias_local_idx, own_local_idx, borrow_local_idx)
-            let mut resource_alias_indices: IndexMap<String, u32> = IndexMap::default();
-            let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
-            let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
+            let mut resource_handles: IndexMap<String, ResourceTypeIndices> = IndexMap::default();
 
             for (source, resource_name) in &needed_resources {
-                if let Some(cm_name) = project
+                let Some(cm_name) = project
                     .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
+                else {
+                    continue;
+                };
+                if source == &interface_info.path {
+                    // Declare the resource inline so [constructor]X /
+                    // [method]X.foo / [static]X.foo are valid in this
+                    // instance.
+                    instance_type.export(
+                        cm_name,
+                        wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
+                    );
+                } else if let Some(outer_idx) =
+                    aliased_type_idx(ctx, project, source, resource_name, cm_name)
                 {
-                    let outer_resource_idx =
-                        aliased_type_idx(ctx, project, source, resource_name, cm_name);
-                    if source == &interface_info.path {
-                        // Declare the resource inline so [constructor]X /
-                        // [method]X.foo / [static]X.foo are valid in this
-                        // instance.
-                        instance_type.export(
-                            cm_name,
-                            wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-                        );
-                        resource_alias_indices.insert(resource_name.clone(), local_type_idx);
-                        local_type_idx += 1;
-
-                        let resource_local_idx = resource_alias_indices[resource_name];
-                        instance_type.ty().defined_type().own(resource_local_idx);
-                        own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
-                        local_type_idx += 1;
-
-                        instance_type.ty().defined_type().borrow(resource_local_idx);
-                        borrow_resource_type_indices.insert(resource_name.clone(), local_type_idx);
-                        local_type_idx += 1;
-                    } else if let Some(outer_idx) = outer_resource_idx {
-                        {
-                            // Alias the resource from the outer component scope
-                            instance_type.alias(Alias::Outer {
-                                kind: ComponentOuterAliasKind::Type,
-                                count: 1,
-                                index: outer_idx,
-                            });
-                            resource_alias_indices.insert(resource_name.clone(), local_type_idx);
-                            local_type_idx += 1;
-
-                            let resource_local_idx = resource_alias_indices[resource_name];
-                            instance_type.ty().defined_type().own(resource_local_idx);
-                            own_resource_type_indices.insert(resource_name.clone(), local_type_idx);
-                            local_type_idx += 1;
-
-                            instance_type.ty().defined_type().borrow(resource_local_idx);
-                            borrow_resource_type_indices
-                                .insert(resource_name.clone(), local_type_idx);
-                            local_type_idx += 1;
-                        }
-                    } else {
-                        // Resource not yet imported — skip this interface
-                    }
+                    instance_type.alias(Alias::Outer {
+                        kind: ComponentOuterAliasKind::Type,
+                        count: 1,
+                        index: outer_idx,
+                    });
+                } else {
+                    // Resource not yet imported — skip this interface
+                    continue;
                 }
+                let resource_idx = local_type_idx;
+                local_type_idx += 1;
+                resource_handles.insert(
+                    resource_name.clone(),
+                    ResourceTypeIndices::define(
+                        &mut instance_type,
+                        &mut local_type_idx,
+                        resource_idx,
+                    ),
+                );
             }
 
-            // Build function types using the aliased resource indices
+            let mut type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
             for func in &cm_functions {
@@ -3901,25 +3733,24 @@ fn import_resource_using_interfaces(
                             _ => ty,
                         };
                         let val = if let Type::Named(named) = borrow_check_ty
-                            && let Some(&idx) = borrow_resource_type_indices.get(&named.name)
+                            && let Some(handles) = resource_handles.get(&named.name)
                             && cm_name == "self"
                         {
-                            ComponentValType::Type(idx)
+                            ComponentValType::Type(handles.borrow)
                         } else if let Type::Named(named) = ty
-                            && let Some(&idx) = own_resource_type_indices.get(&named.name)
+                            && let Some(handles) = resource_handles.get(&named.name)
                         {
-                            ComponentValType::Type(idx)
+                            ComponentValType::Type(handles.own)
                         } else {
                             let resolved = project.cm_interface_registry.resolve_type(ty);
                             emit_cm_val_type(
                                 &resolved,
                                 &mut instance_type,
                                 &mut local_type_idx,
-                                None,
                                 false,
                                 &IndexMap::default(),
-                                &own_resource_type_indices,
-                                None,
+                                &resource_handles,
+                                &mut type_gen,
                                 project,
                                 ctx,
                             )
@@ -3934,11 +3765,10 @@ fn import_resource_using_interfaces(
                         &resolved_ty,
                         &mut instance_type,
                         &mut local_type_idx,
-                        None,
                         false,
                         &IndexMap::default(),
-                        &own_resource_type_indices,
-                        None,
+                        &resource_handles,
+                        &mut type_gen,
                         project,
                         ctx,
                     )
@@ -4000,10 +3830,9 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
         .interfaces()
         .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
         .flat_map(|interface| {
-            let path = interface.path.clone();
-            interface.functions.into_iter().filter_map(move |func| {
+            interface.functions.into_iter().filter_map(|func| {
                 let used = project.used_wasi_functions.contains(&func.used_key());
-                (!used).then(|| format!("{path}#{}", func.wasi_func_name))
+                (!used).then(|| func.cm_identifier())
             })
         })
         .collect();

@@ -232,9 +232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !is_bare_decl {
             return type_id;
         }
-        let message = format!(
-            "cannot infer type parameter of variant `{variant_name}`; add a turbofish (`{variant_name}::<...>::…`) or a type annotation"
-        );
+        let message = uninferable_type_param("variant", variant_name);
         let holes: Vec<TypeId> = (0..arity)
             .map(|_| {
                 self.mint_infer_hole(span, message.clone(), variant_name.to_string(), Vec::new())
@@ -245,8 +243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .resolutions
                 .defs()
-                .of_ast_id(variant_info.defined_at)
-                .expect("the declaration this type names exists");
+                .def_at(variant_info.defined_at);
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -580,6 +577,13 @@ impl TypeSystem {
             && answer != TypeTable::ERROR
             && !self.type_table.borrow().contains_infer_var(answer)
     }
+}
+
+/// What an unsolved parameter of the `kind` spelled `name` reports.
+pub(super) fn uninferable_type_param(kind: &str, name: &str) -> String {
+    format!(
+        "cannot infer type parameter of {kind} `{name}`; add a turbofish (`{name}::<...>::…`) or a type annotation"
+    )
 }
 
 /// One substitution per fact kind that can hold a `TypeId`, shared by the

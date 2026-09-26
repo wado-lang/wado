@@ -1,0 +1,14 @@
+// `Pair`, `Tag`, and a function bounded by `Tag`. The one impl lives in the
+// importing module.
+pub struct Pair<A, B> {
+    pub a: A,
+    pub b: B,
+}
+
+pub trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+pub fn tag_here<X: Tag>(x: &X) -> i32 {
+    return x.tag();
+}

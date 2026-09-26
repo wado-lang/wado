@@ -1,13 +1,6 @@
-// Regression: power-assert must NOT cap float operands.
-//
-// Operand dumps use Inspect (`:?`) with no explicit precision. Only sequence
-// types (String/List) fall back to DEFAULT_SEQ_LIMIT; floats keep their
-// natural shortest rendering. A bug that fed the default into the precision
-// field made `Inspect for f64` render the operand with 256 decimal places.
-//
-// The `\n` after the value pins the exact rendering: if the float were dumped
-// as `3.14000...` the substring `x: 3.14\n` would not appear.
-export fn run() with Stdout {
+// Power-assert dumps a float operand in its shortest rendering: only a
+// sequence takes the default length cap. The `\n` in `x: 3.14\n` pins it.
+export fn run() {
     let x = 3.14;
     assert x == 0.0;
 }

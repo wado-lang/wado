@@ -3186,11 +3186,6 @@ _Fields are private._
 
 The case's discriminant.
 
-#### `pub fn wire_discriminant(&self) -> i32`
-
-The discriminant a format writes: the case's `#[wire(number = N)]`, or
-its discriminant where it carries none.
-
 #### `pub fn holds(&self, v: &T) -> bool`
 
 Whether `v` is this case.
@@ -3297,15 +3292,6 @@ Whether the field declares a default value.
 #### `pub fn is_secret(&self) -> bool`
 
 Whether the field is marked `#[secret]`.
-
-#### `pub fn wire_number(&self) -> i32`
-
-The field's `#[wire(number = N)]`, or `0` where it carries none: a
-field number starts at 1, so zero is the format's own non-number.
-
-#### `pub fn wire_encoding(&self) -> WireEncoding`
-
-The field's `#[wire(encoding = …)]`.
 
 #### `pub fn get(&self, v: &T) -> F`
 
@@ -3561,6 +3547,8 @@ precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
 Create a Formatter with the default spec, writing into the given buffer.
 
 #### `pub fn write_str<S: AsStrSlice>(&mut self, s: S)`
+
+`#[compiler_item("formatter_write_str")]`
 
 Write any `AsStrSlice` text to the output buffer.
 
@@ -5140,6 +5128,8 @@ _Fields are private._
 
 #### `pub fn with_capacity(capacity: i32) -> List<T>`
 
+`#[compiler_item("list_with_capacity")]`
+
 #### `pub fn grow(&mut self)`
 
 #### `pub fn filled(n: i32, element: T) -> List<T>`
@@ -5151,6 +5141,8 @@ _Fields are private._
 Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 #### `pub fn len(&self) -> i32`
+
+`#[compiler_item("list_len")]`
 
 #### `pub fn capacity(&self) -> i32`
 
@@ -5274,6 +5266,8 @@ Joins elements into a string with the given separator.
 #### `impl IndexValue<i32> for List<T>`
 
 ##### `fn index_value(&self, index: i32) -> Self::Output`
+
+`#[compiler_item("list_index_value")]`
 
 #### `impl IndexAssign<i32> for List<T>`
 

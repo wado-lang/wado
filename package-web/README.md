@@ -13,13 +13,15 @@ export fn run() with Dom {
 }
 ```
 
-The imports are the `web:dom/*` Component Model interfaces. In a browser,
-`glue/dom.js` provides them from the page's own DOM: the released-jco transpile
-(`scripts/jco/transpile-released.mjs`) maps each `web:<package>/*` import to
-its glue. `example/web-browser` runs one program that way.
+The imports are Component Model interfaces of the package itself, one per
+WebIDL interface: `wado-lang:web/node`, `wado-lang:web/element`, and so on. In a
+browser, `glue/dom.js` provides them from the page's own DOM: the released-jco
+transpile (`scripts/jco/transpile-released.mjs`) maps each import to its glue.
+`example/web-browser` runs one program that way.
 
-`wado run`, `wado test` and `wado serve` define each import as a trap, so the
-program instantiates anywhere, and `SurfaceDom` answers the calls instead:
+`wado run`, `wado test` and `wado serve` define every import no host provides
+as a trap, so the program instantiates anywhere, and `SurfaceDom` answers the
+calls instead:
 
 ```wado
 use { Dom, SurfaceDom } from "wado-lang:web";
@@ -60,4 +62,4 @@ follow the HTML standard's serialization. `example/web-ssr` prints a page with
 - `src/lib.wado` — the facade `wado-lang:web` names. A name a wider slice
   generates must be added here; a test fails until it is.
 
-See [WEP: WebIDL Binding Generator](../docs/wep-2026-04-01-tide.md).
+See [WEP: The Web Interface for Wado](../docs/wep-2026-04-01-web.md).

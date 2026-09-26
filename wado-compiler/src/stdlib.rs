@@ -147,7 +147,6 @@ stdlib_table! {
     "core:serde" => "core/serde.wado",
     "core:json" => "core/json.wado",
     "core:json_nsd" => "core/json_nsd.wado",
-    "core:protobuf" => "core/protobuf.wado",
     "core:args" => "core/args.wado",
     "core:value" => "core/value.wado",
     "core:cbor" => "core/cbor.wado",

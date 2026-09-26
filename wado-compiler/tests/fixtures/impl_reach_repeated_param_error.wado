@@ -1,0 +1,21 @@
+// A parameter written at two positions takes one type, so `impl<T> Pair<T, T>`
+// does not reach `Pair<i32, i64>` (finding 2).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Pair<T, T> {
+    fn second(&self) -> T {
+        return self.b;
+    }
+}
+
+export fn run() {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let _ = p.second();
+}
+
+__DATA__
+{"compile_error": ":17:13: analysis error: no method 'second' found on type 'Pair<i32, i64>'", "compile_error_codes": ["METHOD_NOT_FOUND"]}

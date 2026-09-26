@@ -1,0 +1,18 @@
+// A case pattern cannot fail when every other case has no value, so it binds
+// in a `for` as a one-case type's does.
+
+test {
+    let xs: List<Result<i32, !>> = [Ok(2), Ok(3)];
+    let mut sum = 0;
+    for let Ok(v) of xs {
+        sum += v;
+    }
+    let ys: List<Result<i32, [bool, !]>> = [Ok(4)];
+    for let Ok(v) of ys {
+        sum += v;
+    }
+    assert sum == 9;
+}
+
+__DATA__
+{"test": {}}

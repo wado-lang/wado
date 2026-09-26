@@ -172,6 +172,9 @@ pub enum Resolution {
     /// scoped to the item that wrote it and named only from inside — so it gets
     /// no `DefId`.
     Binder(AstId),
+    /// `T::Assoc`, named by `T`'s binder: it reaches a declaration only once
+    /// `T` is a type.
+    Projection(AstId),
     Unresolved,
 }
 
@@ -193,11 +196,11 @@ whose local names are unambiguous within one module by construction), plus
 module-scoped name.
 
 `get` is total. A site the walk missed is a bug in the walk, not an absent answer a
-consumer improvises around, so it panics rather than returning `None`. The three
-cases stay distinct on purpose: reading `Unresolved` as `Binder` loses the
-diagnostic a name that reaches nothing deserves. `walked` keeps a fourth case
-apart from all three — a node no walk saw, which synthesis mints — because that
-is the only one for which some other source of truth is honest.
+consumer improvises around, so it panics rather than returning `None`. The cases
+stay distinct on purpose: reading `Unresolved` as `Binder` loses the diagnostic a
+name that reaches nothing deserves. `walked` keeps one more case apart: a node
+no walk saw, which synthesis minted. Only for that node is some other source of
+truth honest.
 
 Type resolution carries the site with it: the head's `AstId` reaches
 `resolve_named_type` / `resolve_generic_type`, which read the declaration off
@@ -209,6 +212,22 @@ declarations with no vantage supplied.
 is: implementing a trait is naming it. A header's own reference site answers that
 position and only it, so every header carries a declaration and dispatch has no
 spelling to fall back to.
+
+A `with` clause is the same: each effect it names is a reference site, a trait
+head's and a function type's included. A method that inherits its trait head's
+clause gets sites of its own, resolved in the trait's module, so the impl's
+module cannot capture the name. Fixture:
+`trait_head_effect_reaches_impl_module.wado`.
+
+An effect parameter (`<effect E>`) names that parameter. A type parameter names
+no effect. A name reaching no `interface` or resource is rejected where it is
+written, even when another module declares an effect of that name. So
+`with Stdout` needs `Stdout` in scope like any other name. `#[benign(E)]` is
+held to the same rule, and so is a bare operation call: `use { E::{op} }` brings
+`op` into scope but not `E`, and the call still requires `E`. Fixtures:
+`error_with_unknown_effect.wado`, `error_with_type_param_effect.wado`,
+`error_benign_unknown_effect.wado`,
+`error_with_bare_operation_import_missing_effect.wado`.
 
 ### 4. Queries take identities, never a name beside one
 
@@ -341,7 +360,7 @@ none.
 
 ### 7. Synthesis records referents, it does not spell names
 
-A pass that synthesises a reference knows what it refers to, so it records that
+A pass that synthesizes a reference knows what it refers to, so it records that
 rather than spelling a name for someone else to resolve.
 
 Where the referent is a declaration the walk already visited, the cheapest form
@@ -350,10 +369,12 @@ own body carries is minted with the trait declaration's own `AstId`, and the wal
 answers for that node with the trait itself. No new id, no new table, and the
 bound resolves like any written one.
 
-Where no such node exists, the reference carries its referent directly:
-`ast::Type` gains a `Resolved(DefId)` variant, absent from parsed syntax and
-produced only by synthesis. Type resolution returns the declaration — no name to
-look up, no vantage to get wrong.
+Where no such node exists, the reference carries its referent directly. A
+rebuilt bound records it in `TraitBound::resolved`, which the parser leaves
+empty. Every reader takes it ahead of the site, so there is no name to look up
+and no vantage to get wrong. A rebuilt bound whose original reached no
+declaration is dropped, since the error was already reported where it was
+written. Fixture: `error_assoc_type_unknown_bound_method_call.wado`.
 
 ### 8. Mangled names are rendered once, never parsed
 
@@ -492,30 +513,26 @@ always to give the caller the reference site.
 The one scope, which every other entry exists by not being:
 
 - `Scopes::resolve`, `resolve_value`
+- `Resolutions::resolve_in` — the same scope, for a spelling no walk visits,
+  such as the attribute argument in `#[benign(E)]`
 
-The three recorded facts the frame derivation is built from. Each is one tier,
-none is a scope, and none takes a vantage a caller could get wrong:
+Two single tiers of that scope, each for a caller asking about that tier alone:
 
-- `imported_as` — the import tier alone, for a caller asking about the aliasing
+- `imported_as` — the import tier, for a caller asking about the aliasing
 - `prelude_decl` — the prelude tier, which has no vantage to be given
-- `decls_named` — every declaration under the name and no choice between them
 
-The derivation itself: those tiers in order, over the walk's own frame. Each has
-a sited entry point a caller with a reference site reaches instead.
+The frame derivation: the scope over the walk's own frame. Each entry has a
+sited counterpart a caller with a reference site reaches instead.
 
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
-- `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
-- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
-  One algorithm on `TraitEnv`, reading each bound through the reference site its
-  caller supplies, so a frame and a declaration-level resolver share it.
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 
 - `symbol_named`, `imported`, `lookup_in_module`, `lookup_in_module_with_visited`
 - `decl_in_module` — `lookup_in_module` read back as an identity, for the
   positions no reference site answers: `builtin::f`, a namespace member,
-  `core:rt`'s `panic` at a synthesised call, and a default expression's own
+  `core:rt`'s `panic` at a synthesized call, and a default expression's own
   module. Each names its module rather than searching for one, so no vantage
   is supplied.
 
@@ -534,51 +551,39 @@ The Component Model boundary, permanent for the reason §9 gives:
 - `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
 - `cm_decl_in_interface`, the same step taking the interface rather than the
   module: it asks the registry which module declares that interface, so a caller
-  holding an interface FQ supplies no vantage of its own.
-- `find_named_type_by_source` and `find_named_type_by_module_name`, the
-  `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
-  named module.
-- `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
-  `TypeId` those two return.
+  holding an interface FQ supplies no vantage of its own. A bundled `wasi:` /
+  `core:` interface records no module in the registry, so it is addressed by its
+  module path through `cm_decl_in_module_named`.
+- `find_named_type_by_source`, which answers the `TypeId` that `cm_decl_in`'s
+  declaration was interned under.
+- `find_named_type_by_module_name`, which scans the interned types for a head of
+  that name in that module.
+- `cm_decl_def`, codegen's entry to `cm_decl_in_interface`.
 
 ## The frame derivation
 
-A name whose reference site is not at hand still has to reach a declaration — a
-synthesis target, a mangled name's head. Nothing walks a module's scope for it.
-Three recorded facts answer instead, in order:
+A name whose reference site is not at hand still has to reach a declaration: a
+synthesis target, a mangled name's head. It is resolved in the one scope,
+`Resolutions::resolve_in`, standing in the walk's frame. That scope reads the
+module's imports, then what it declares or re-exports, then the prelude.
 
-1. `Resolutions::imported_as` — what this module `use`d under that local name.
-   The one import fact that is not a scope lookup: it cannot reach another
-   module's imports, and it answers with what an alias aliases.
-2. `TraitEnv::decls_named`, filtered to the module in hand — every declaration
-   written under the name, whichever module declares it. It holds what modules
-   _declare_, never what they import, so no alias can steer it.
-3. `Resolutions::prelude_decl` — what the prelude puts in scope under the name.
-   The prelude tier alone, and it takes no vantage because it cannot be given
-   one: the prelude is in scope in every module.
+This is a module's own reach, so a declaration it cannot see stays unseen here.
+The derivation never widens to the whole program, and a name no module brought
+into scope is unresolved, the same answer the walk gives.
 
-The three are a module's own reach, so a declaration it cannot see stays unseen
-here — the derivation never widens to the whole program, and a name no module
-brought into scope is unresolved, the same answer the walk gives.
+The frame is the module that wrote the name. The walk is not always standing
+there: a parameter or field default is read at the call site but written in the
+declaring module. There the frame is the declaring module. Otherwise a caller
+declaring its own same-named type would take the answer away from the module
+that wrote the name. The walk supplies the frame and the derivation takes no
+module, so no caller can supply a vantage.
 
-Which module is "this" one is the walk's position, and the walk is not always
-standing where the name was written: a parameter or field default is read at the
-call site and written in the declaring module. The writing module answers first,
-or a caller declaring its own same-named type takes the answer away from the
-module that wrote the name — this WEP's defect class by the back door. Both
-frames come from the walk's position; the derivation takes no module, so no
-caller can supply a vantage.
-
-There is no fourth tier, and a caller that can avoid the derivation does.
+A type parameter and a function-local item shadow the scope, so they are checked
+before it. A caller that can avoid the derivation does.
 `Type::method` names its receiver at its own path segment, which the resolve pass
 answered for like any other reference, so the site is read and the spelling is
 never split back into an identity. The derivation answers only where a caller
 holds a mangled spelling and has no site to give.
-
-No tier takes a vantage it could get wrong: `decls_named` takes no module at all,
-and the derivation filters it by a frame of the walk's own. That is why it cannot
-be mistaken for a scope, and why it is sanctioned rather than scheduled for
-removal.
 
 ### A bound means what its writer wrote
 
@@ -642,6 +647,11 @@ see, so what a name means comes to depend on the rest of the program.
   segment's own site, the middle segment of `ns::Type::method`, or the receiver
   type's declaration. A head naming none falls to the frame derivation.
 
+An impl module looked up for an instantiated receiver (`Foo<i32>`) before the
+receiver's declaration (`Foo`) is not a second key. It is the coherence rule
+that a concrete impl wins over a generic one, so the order is the rule, not a
+tiebreak.
+
 Where a position reaches nothing the answer is a diagnostic, not a wider search.
 An `impl` header's trait position is §3's case: implementing a trait is naming
 it, so reaching nothing is "trait not in scope", and the key it gets carries a
@@ -671,7 +681,13 @@ to — a concrete impl records a resolution, a generic one a definition to
 substitute. Reading one of the two is what let a widening
 `impl<T> Mul for W<T>` satisfy `Mul<Output = T>`.
 
+The key names a nominal receiver by its declaration and arguments, and keeps
+any reference layer. It does not use that receiver's `TypeId` slot, because a
+generic instance and the struct it monomorphizes to are two slots for one type.
+An impl on the reference itself answers before the reference is looked through.
+
 Fixtures: `assoc_type_per_trait_args.wado`,
+`reference_impl_assoc_type_projects.wado`,
 `impl_writes_default_trait_arg.wado`,
 `error_bound_needs_default_instantiation.wado`,
 `error_blanket_pinned_assoc_generic_impl.wado`.
@@ -690,32 +706,57 @@ A type that merely erases to a scalar — a newtype, `flags`, an `enum` — is i
 own declaration, so an impl it writes outranks the erased form's instruction.
 Only a primitive _is_ the instruction.
 
+A type the compiler builds or lowers itself — `Option`, `Stream`, `Future`,
+`Array`, `List`, `String`, `Result`, `Box`, `AsyncCall` — is recognised the
+same way, through the declaration its head resolves to. A user struct named
+`List` is that struct, and an import aliased `Option` is what it aliases, in a
+signature, a field type and a lowering alike.
+
+A builtin shape is recognised by its declaration too: a primitive, `()`, `!`,
+`Array` and the tuple family are the prelude's `BuiltinType` declarations. A
+user struct imported as `u8` or `Array` is that struct. A WASI resource is its
+declaration, so a user struct named `Fields` keeps its own methods.
+
 Fixtures: `error_user_trait_does_not_capture_add.wado`,
 `error_user_trait_does_not_capture_index.wado`,
 `user_trait_method_survives_relowering.wado`,
-`eq_ord_manual_impl_wins.wado`.
+`eq_ord_manual_impl_wins.wado`, `alias_named_prelude_generic.wado`,
+`alias_named_prelude_generic_field.wado`, `no_prelude_user_list_struct.wado`,
+`no_prelude_user_array_struct.wado`, `alias_user_struct_as_array.wado`,
+`alias_user_struct_as_primitive.wado`,
+`namespaced_prelude_array_impl_bound.wado`,
+`concrete_impl_on_builtin_array.wado`,
+`resource_named_like_aliased_struct.wado`,
+`user_struct_named_like_wasi_resource.wado`,
+`from_impl_on_namespaced_error_type.wado`,
+`alias_generic_concrete_impl.wado`.
 
 ## Impl target arguments
 
-An `impl` header's type arguments are asked the same question twice — which
-positions the header pins decides both how its methods are _named_ and which
-receivers reach that name — so one predicate answers it,
-`TypeSystem::impl_arg_pins_a_position`.
+An `impl` header's type arguments decide two things: how its methods are
+_named_, and which receivers reach that name. Naming asks whether every head
+inside each argument names a declaration (`TypeSystem::arg_pins`). Reach asks
+what the target binds at a receiver (`TypeTable::impl_target_binding`). Both
+read a binder at its reference site, so neither pins a position the other leaves
+free. Every path that asks whether an impl reaches a receiver asks that one
+matcher: method lookup, the operator lookups, a bound, and associated-type
+registration.
 
 Reading the target is the same hazard one step earlier, and "the target's
 arguments" is three questions. Consumers asking different ones shared a reading
 because the questions sound alike; each now has its own.
 
-- **Does this receiver reach this impl, and does this argument pin its
-  position?** `impl_target_args` — a shape comparison, reading through a
-  reference and counting a tuple's elements.
+- **Which positions does the target write?** `impl_target_args` — reading
+  through a reference, and taking a tuple's elements as its positions.
 - **What does the header bind and the block record?** `impl_target_head_args` —
   the head's own argument list, narrower by the tuple target, which binds as a
   variadic pack through its own path.
 - **What name does the definition mint?** The whole target, references peeled,
-  rendered. The only one that must agree outside the elaborator: monomorphization
-  asserts the minted `(module, name)` is unique, so a duplicate-definition check
-  asks exactly that and nothing else.
+  rendered.
+
+Whether two inherent blocks define one method twice is none of the three. It is
+asked of the targets: two blocks whose targets reach a common receiver and
+define one method name are a duplicate definition, whatever names they mint.
 
 Sharing a reading fails quietly, as an answer narrower or wider than the
 question wanted — reading _arguments_ where the minted _name_ was asked makes
@@ -730,17 +771,20 @@ spelling:
   still wants a two-element tuple starting `i32`. Asking the site is what keeps
   an alias spelled like a parameter, or a qualified `ns::Tag`, from reading as
   a binder.
-- A binder the header cannot bind — one nested in a shape — matches nothing,
-  since a receiver matching it would have nothing to instantiate.
+- A binder binds at any depth: `impl<T> Kind for Pair<List<T>, i32>` reaches
+  `Pair<List<String>, i32>` with `T` as `String`.
+- A binder written twice takes one type: `impl<T> Kind for Pair<T, T>` does not
+  reach `Pair<i32, String>`.
 - Naming no declaration is not matching anything: a tuple, a reference and a
   function type are shapes, and a receiver either has the shape or has not.
 
-The comparison is structural. Rendering both sides is §8's hazard from the
-inside — an AST against a `TypeId` needs two renderers agreeing at every depth,
-which cannot be arranged. Declarations compare through `TypeHead` (`DefId` where
-one is named, the rendering where nothing declares the shape, so `i32` and `()`
-compare without being nominal types); every other shape compares as itself, a
-reference by kind, a tuple by arity, a function type by parameters and return.
+The comparison is structural, between the target's resolved arguments and the
+receiver's. Rendering both sides is §8's hazard from the inside: two renderers
+must agree at every depth, which cannot be arranged. Declarations compare
+through `TypeHead`: the `DefId` where one is named, and the rendering where
+nothing declares the shape, so `i32` and `()` compare without being nominal
+types. Every other shape compares as itself: a reference by kind, a tuple by
+arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
 ### A parameter's number is where the target names it
@@ -748,8 +792,10 @@ Nothing is spelled, so nothing can be spelled two ways.
 A parameter of an `impl` block is substituted against the instance's type
 arguments, so its number is the position the target writes it at.
 `impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1. Numbering by
-declaration order would put it at 0, where the instance carries `Option<i32>`. A parameter the target does not name
-takes a slot past the ones it assigned, which no instantiation reaches.
+declaration order would put it at 0, where the instance carries `Option<i32>`.
+A parameter the target does not write as a whole argument, such as `T` in
+`Pair<List<T>, i32>`, takes a slot past the target's positions. The receiver
+fills that slot by matching, not by position.
 
 One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the
 associated types it registers. Where each site computes its own, they read the
@@ -769,7 +815,7 @@ asking for one cannot land on the other.
 
 An impl is filed under its target's head, so every impl on `List<_>` answers a
 lookup for `List<String>`. The written arguments decide which of them applies.
-That decision is `inherent_impl_type_args_match`, wherever the answer is used.
+That decision is `TypeSystem::impl_reaches`, wherever the answer is used.
 Registering a block's associated types without it files
 `impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
 build order then decides both, which is the pick this WEP forbids.
@@ -790,7 +836,12 @@ caller filled.
 Fixtures: `assoc_type_per_receiver_args.wado`,
 `assoc_type_binder_at_target_position.wado`,
 `impl_on_reference_to_generic_head.wado`,
-`bound_arg_behind_fn_bound_param.wado`.
+`bound_arg_behind_fn_bound_param.wado`,
+`impl_target_nested_param_inherent.wado`,
+`impl_target_nested_param_operator.wado`,
+`impl_target_nested_param_trait.wado`,
+`impl_reach_repeated_param_error.wado`,
+`impl_inherent_overlap_duplicate_error.wado`.
 
 ## Keys past the Component Model boundary
 
@@ -831,6 +882,10 @@ spellings is §4's defect one level out.
 
 Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 `pattern_qualifier_type_param_arg.wado`.
+
+## Roadmap
+
+None. Every open item is a known gap below.
 
 ## Known gap: a CM type can reach outer scope with no identity
 
@@ -887,41 +942,13 @@ What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
 
-## Known gap: a reference impl's associated type is not projected
+## Known gap: a synthesized type carries only a spelling
 
-An impl on a reference target (`impl Kind for &Wrap<i32>`) answers a trait
-bound, and its methods dispatch. Its associated types do not project: `T::Out`
-where `T` is that reference stays unresolved, so the binding the impl wrote is
-out of reach. What it admits is a reference impl that can carry methods but not
-an associated type, so a trait declaring one cannot be implemented on a
-reference to a generic head.
-
-## Known gap: the operator paths compare an impl target by spelling
-
-`inherent_impl_type_args_match` decides whether a receiver reaches an impl, and
-it compares structurally. The arithmetic and indexing lookups do not ask it.
-They ask `verify_impl_type_compatibility`, which compares a written argument's
-head against the receiver's rendered type name and reads a free parameter off a
-set of parameter names rather than off its reference site.
-
-What it admits is §8's hazard on those two paths: an alias spelled like a
-parameter, a qualified `ns::Tag`, and two declarations rendering alike are each
-decided by the rendering.
-
-## Known gap: a reference impl target has no name of its own
-
-`name::Receiver::Ref` spells the reference kind and nothing else. The pointee
-rides in the type-argument list, which is the blanket `impl<T> Trait for &T`
-written out, and it is the only reference target the naming layer can say. A
-target that is a reference to a named head has no spelling of its own, so its
-definition and its call sites mint two different names for one method.
-
-What it admits is a reference impl on a named head that is unreachable wherever
-the two names differ. `impl Show for &Wrap<i32>` called directly on a
-`&Wrap<i32>` reports that `&i32` does not implement `Show`;
-`impl<T> Show for &Wrap<T>` reached inside a frame monomorphized for
-`&Wrap<i32>` reports that `Wrap<i32>` does not. The same generic impl called
-directly works, because both sides mint the same name.
+A synthesized bound carries its referent (§7); a synthesized type carries only
+its spelling. The Component Model binding synthesis builds types such as
+`Fields`, `Response` and `WaitableSet` at nodes no walk visited, so the frame
+derivation resolves them. What it admits is a synthesized type whose spelling
+the frame resolves to a declaration other than the one synthesis meant.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 
@@ -930,4 +957,14 @@ off. A `struct` or `variant` declaration does not, so
 `struct Wrap<O: Uses<Self::Item>>` is rejected where the same bound on
 `impl ... for Wrap<O>` is read. What it admits is a bound that can only be
 written on the impl, so a constraint the data declaration means to carry has to
-be restated at each impl that needs it.
+be restated at each impl that needs it. The pending fixture is
+`data_decl_bound_projects_off_self.wado`.
+
+## Known gap: `EffectRef::Concrete` is a module and a name
+
+A concrete effect is carried as its declaring module and its name, not as its
+`DefId`. The effect check, the handler facts and the effect-dispatch synthesis
+all key by that pair, and so does every per-instantiation key built from it. A
+module declares one item per name, so the pair names one declaration. What it
+admits is a second identity beside the `DefId`: a pass holding a `DefId` has to
+render it into that pair, and nothing checks that the two agree.

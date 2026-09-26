@@ -914,21 +914,18 @@ impl RefCarrying<'_> {
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
-                let payloads = self
-                    .type_table
-                    .variant_template_cases(def)
-                    .map(|cases| cases.iter().map(|(_, _, payload)| *payload).collect());
-                match payloads {
-                    Some(payloads) => {
-                        let (from_cases, cyclic) = self.any(payloads, open);
-                        if from_cases {
-                            return (true, cyclic);
-                        }
-                        let (from_args, more) = self.any(type_args, open);
-                        (from_args, cyclic | more)
-                    }
-                    None => self.any(type_args, open),
-                }
+                // A payload that is one of the template's parameters is the
+                // argument there; any other still reads its parameters as unknown.
+                let payloads = self.type_table.variant_template_cases(def).map(|cases| {
+                    cases
+                        .iter()
+                        .map(|&(_, _, payload)| match self.type_table.get(payload) {
+                            ResolvedType::TypeParam { index, .. } => type_args[*index as usize],
+                            _ => payload,
+                        })
+                        .collect()
+                });
+                self.any(payloads.unwrap_or(type_args), open)
             }
             ResolvedType::Variant { def } => {
                 let def = *def;
@@ -1704,16 +1701,17 @@ impl StoresWalker<'_> {
         }
     }
 
+    /// Each binding names a part of `source`, so it carries what that part
+    /// can at its own type, as a projection does.
     fn bind_pattern(&mut self, pattern: &TirPattern, source: &TirExpr) {
-        let carried = self.carried(source);
+        let carried = self.carried(source).all();
         if carried.is_empty() {
             return;
         }
-        let mut binds: IndexSet<u32> = IndexSet::default();
-        analyze::collect_pattern_bindings(pattern, &mut binds);
-        for b in binds {
-            self.rebind(b, &carried);
-        }
+        analyze::for_each_pattern_binding(pattern, &mut |local_index, type_id| {
+            let placed = self.placed(type_id, carried.clone());
+            self.rebind(local_index, &placed);
+        });
     }
 
     /// A pattern names a part of its scrutinee, which this walk does not follow
@@ -1857,6 +1855,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let referenced = FunctionRef {
                     module_source: module_source.clone(),
                     name: name.clone(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 };

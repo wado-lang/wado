@@ -3,6 +3,7 @@
 use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -12,8 +13,11 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
+use crate::name::{LocalMethodName, MethodName, TUPLE_TYPE_NAME};
+use crate::tir::{
+    FunctionRef, ResolvedType, SubstitutionContext, TemplateId, TypeId, TypeTable,
+    positional_substitution,
+};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -21,13 +25,13 @@ use super::call::{
     DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, omits_a_default,
     slot_type_bindings, turbofish_leaves_slot,
 };
-use super::coercion::is_numeric_literal_arg;
+use super::coercion::answers_last;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::sig::{InstantiatedImplSig, InstantiatedSig, MethodSig, Param};
 use super::static_call::{StaticLookup, StaticQuery};
 use super::synth::{ArgClass, ArgProbe};
-use super::trait_env::{ImplHeader, TraitEnv};
+use super::trait_env::{ImplHeader, TraitEnv, receiver_as_written, written_type_source};
 use super::types::{
     ArithmeticTraitInfo, FromArrayInfo, FunctionContext, IndexingTraitInfo, MethodInfo,
     MethodOwner, TypeError, TypeLookup,
@@ -38,13 +42,11 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
-use crate::elaborator::sig::ImplSig;
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::trait_env::written_type_arg;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
-use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, TypeHead};
-use crate::resolve::{Resolution, head_site};
+use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, UNIT_TYPE_NAME};
+use crate::resolve::Resolution;
 use crate::unparse::binary_op_str;
 
 /// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
@@ -65,26 +67,41 @@ pub(super) fn replace_on_assign_place() -> String {
 /// the impl AST at all.
 struct ImplBlockRef(DefId);
 
-/// The digested header of the impl block `r` points at. Borrowed from the
-/// caller's `TraitEnv` handle rather than from `&self`, so the header stays
-/// readable across the `&mut self` calls a lookup makes.
-///
-/// Every `ImplBlockRef` originates from a `TraitEnv` impl index, and
-/// `TraitEnv::build` writes `impl_headers` from the same walk that fills
-/// those indices, so a miss means the two diverged.
+/// The header of the impl block `r` points at, borrowed from the caller's
+/// `TraitEnv` handle so it outlives the `&mut self` calls a lookup makes.
 fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader {
-    trait_env
-        .impl_headers
-        .get(&r.0)
-        .expect("every indexed impl block has an ImplHeader")
+    &trait_env.impl_headers[&r.0]
 }
 
-impl TypeSystem {
-    /// The declaration facts the decl pass recorded for an indexed impl block.
-    fn impl_sig(&self, r: &ImplBlockRef) -> &ImplSig {
-        self.signatures
-            .impl_sig(r.0)
-            .expect("the decl pass records every impl block's declaration facts")
+impl<H: CompilerHost> Elaborator<'_, H> {
+    /// How `header`'s methods spell a `type_id` receiver in their names.
+    pub(super) fn impl_receiver(&self, header: &ImplHeader, type_id: TypeId) -> FqTypeName {
+        self.tysys.fq_receiver_of_impl(
+            type_id,
+            self.tysys.impl_is_concrete_instantiation(&header.ty),
+        )
+    }
+
+    /// Whether the impl block `def` is written at another instantiation than
+    /// `receiver_args` settle; `false` while inference still owes one of them.
+    pub(super) fn impl_at_other_instantiation(&self, def: DefId, receiver_args: &[TypeId]) -> bool {
+        let open = {
+            let table = self.tysys.type_table.borrow();
+            receiver_args
+                .iter()
+                .any(|&arg| table.contains_infer_var(arg))
+        };
+        !open && !self.tysys.impl_reaches(def, Some(receiver_args))
+    }
+
+    /// Whether the block declaring `method`, if a block does, reaches a
+    /// receiver with `receiver_args`.
+    pub(super) fn declaration_reaches(&self, method: DefId, receiver_args: &[TypeId]) -> bool {
+        self.tysys
+            .signatures
+            .method_sig(method)
+            .and_then(|sig| sig.declaring_impl)
+            .is_none_or(|block| !self.impl_at_other_instantiation(block, receiver_args))
     }
 }
 
@@ -95,6 +112,7 @@ impl MethodInfo {
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
         Self {
             method_def: Some(sig.def),
+            impl_block: None,
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
             param_types: instantiated.param_types[first_value..].to_vec(),
@@ -194,19 +212,14 @@ pub(super) struct ImplParamSlots {
 }
 
 impl ImplParamSlots {
-    /// The target says where it writes a name. A parameter it does not write,
-    /// such as a blanket's projection, takes a slot past every position the
-    /// target has, which no instantiation reaches.
+    /// A parameter the target writes outright sits at its position; one nested
+    /// in an argument or projected takes a slot past them, filled by matching.
     pub(super) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
         let args = impl_target_args(target).unwrap_or_default();
-        // An argument spelling the name outright claims it over one merely
-        // mentioning it, so `Holder<Wrap<T>, T>` puts `T` at 1 and not 0.
         let written = |param: &ast::GenericParam| {
-            let name = &param.name;
             let at = args
                 .iter()
-                .position(|arg| target_arg_names(arg, name))
-                .or_else(|| args.iter().position(|arg| arg.mentions(name)))?;
+                .position(|arg| target_arg_names(arg, &param.name))?;
             Some(at as u32)
         };
         let mut slots: IndexMap<String, u32> = params
@@ -252,10 +265,15 @@ impl TypeSystem {
         }
     }
 
+    /// `id` read through one reference, if it is one.
+    pub(crate) fn through_ref(&self, id: TypeId) -> TypeId {
+        self.pointee_of(id).unwrap_or(id)
+    }
+
     /// What a receiver fills the positions [`impl_target_args`] reads, a
     /// reference read through to its pointee's (WEP 2026-08-12).
     pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
-        let pointee = self.pointee_of(receiver).unwrap_or(receiver);
+        let pointee = self.through_ref(receiver);
         let tt = self.type_table.borrow();
         tt.nominal_type_args(tt.representation_head(pointee))
             .filter(|args| !args.is_empty())
@@ -273,160 +291,21 @@ impl TypeSystem {
         ) && table.is_boxed_reference_target(table.representation_head(type_id))
     }
 
-    /// Whether a receiver reaches this `impl`: every position the target pins
-    /// must be what the receiver supplies there (WEP 2026-08-12).
-    pub(crate) fn inherent_impl_type_args_match(
-        &self,
-        impl_ty: &Type,
-        receiver_type_args: Option<&[TypeId]>,
-    ) -> bool {
-        let Some(written) = impl_target_args(impl_ty) else {
+    /// Whether the impl block `def` reaches a receiver with these type arguments,
+    /// the one reach decision every lookup reads; bringing none constrains none.
+    pub(crate) fn impl_reaches(&self, def: DefId, receiver_args: Option<&[TypeId]>) -> bool {
+        let Some(receiver_args) = receiver_args else {
             return true;
         };
-        // No receiver type args supplied (an existence/bounds check that did not
-        // thread them) — nothing to constrain against, so don't reject.
-        let Some(args) = receiver_type_args else {
-            return true;
-        };
-        for (i, arg) in written.iter().enumerate() {
-            let Some(&recv) = args.get(i) else {
-                return false;
-            };
-            // `bind_target_param` reaches only a bare argument, so a nested
-            // binder gets no slot and a receiver matching it would have
-            // nothing to instantiate. Declining makes that a diagnostic.
-            if self.nests_a_binder(arg) {
-                return false;
-            }
-            if !self.arg_matches(arg, recv) {
-                return false;
-            }
-        }
-        true
+        let table = self.type_table.borrow();
+        table
+            .impl_target_binding(table.impl_target_args(def), receiver_args)
+            .is_some()
     }
 
-    /// Whether `recv` is what the header wrote at this position, the header's
-    /// own type parameters standing for anything. Structural, never rendered
-    /// (WEP 2026-08-12 §4); a binder is free only where it stands, so
-    /// `impl<T> Slot<[i32, T]>` still wants a pair.
-    fn arg_matches(&self, written: &Type, recv: TypeId) -> bool {
-        let tt = self.type_table.borrow();
-        let resolved = tt.get(recv).clone();
-        drop(tt);
-        match written {
-            Type::Reference(inner) => match resolved {
-                ResolvedType::Ref(target) => self.arg_matches(inner, target),
-                _ => false,
-            },
-            Type::MutReference(inner) => match resolved {
-                ResolvedType::MutRef(target) => self.arg_matches(inner, target),
-                _ => false,
-            },
-            Type::Tuple(elems) => {
-                let tt = self.type_table.borrow();
-                let is_tuple = matches!(tt.fq_base_type_name(recv).head(), TypeHead::Tuple);
-                let recv_elems = tt.generic_type_args(recv).unwrap_or_default();
-                drop(tt);
-                is_tuple
-                    && recv_elems.len() == elems.len()
-                    && elems
-                        .iter()
-                        .zip(recv_elems)
-                        .all(|(e, r)| self.arg_matches(e, r))
-            }
-            // The impl is registered under the written spelling and the call
-            // site looks one up under the receiver's, so it applies exactly
-            // where the two agree. Looser, and the call has no impl to name.
-            Type::Function(_) => {
-                let written_name = written_type_arg(written, &self.resolutions).to_mangled();
-                let recv_name = self.type_table.borrow().mangle_type_arg_for_generic(recv);
-                written_name == recv_name
-            }
-            // A pack, an `_`, a parse error: nothing written to match against.
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => true,
-            // The arms below read the receiver through readers that see past a
-            // reference, so reference-ness is settled here instead: a reference
-            // receiver is reached only by an argument pinning nothing.
-            _ if matches!(resolved, ResolvedType::Ref(_) | ResolvedType::MutRef(_)) => {
-                !self.arg_pins(written)
-            }
-            // A written head: a binder matches anything, a declaration matches
-            // its own, and the arguments recurse.
-            _ => {
-                let Some(def) =
-                    head_site(written).and_then(|site| self.resolutions.declared_if_walked(site))
-                else {
-                    // A binder, or a name reaching nothing: no one type to
-                    // require, so it accepts whatever the receiver supplies.
-                    return true;
-                };
-                let tt = self.type_table.borrow();
-                // `TypeHead` compares a declaration by `DefId` and an
-                // undeclared shape by its rendering, which is all it has.
-                // `nominal_def` answers `None` for `i32` and `()`.
-                let written_head = FqTypeName::of_head(self.resolutions.defs(), def);
-                if *written_head.head() != *tt.fq_base_type_name(recv).head() {
-                    return false;
-                }
-                let recv_args = tt.generic_type_args(recv).unwrap_or_default();
-                drop(tt);
-                let written_args = match written {
-                    Type::Generic(g) => g.args.as_slice(),
-                    Type::NamespacedGeneric(ns) => ns.args.as_slice(),
-                    _ => &[],
-                };
-                // A head written bare (`impl Slot<Box>`) constrains the head
-                // alone; the receiver's own arguments are not its business.
-                written_args.is_empty()
-                    || (written_args.len() == recv_args.len()
-                        && written_args
-                            .iter()
-                            .zip(recv_args)
-                            .all(|(w, r)| self.arg_matches(w, r)))
-            }
-        }
-    }
-
-    /// [`Self::arg_pins`] under the name the naming side asks it by — one
-    /// predicate, so a position pinned for naming is pinned for matching.
-    pub(crate) fn impl_arg_pins_a_position(&self, arg: &Type) -> bool {
-        self.arg_pins(arg)
-    }
-
-    /// Whether a binder appears *inside* `arg` rather than as `arg` itself,
-    /// the only position the header can bind. Asked of each head's reference
-    /// site, so `ns::Tag` beside an `impl<Tag>` binder stays a declaration.
-    fn nests_a_binder(&self, arg: &Type) -> bool {
-        fn walk(this: &TypeSystem, ty: &Type, inside: bool) -> bool {
-            let is_binder = head_site(ty).is_some_and(|site| {
-                matches!(this.resolutions.walked(site), Some(Resolution::Binder(_)))
-            });
-            if inside && is_binder {
-                return true;
-            }
-            let nested = |args: &[Type]| args.iter().any(|a| walk(this, a, true));
-            match ty {
-                Type::Reference(inner) | Type::MutReference(inner) => walk(this, inner, true),
-                // `[..T]` is the variadic form, bound by its own path.
-                Type::Tuple(elems)
-                    if elems.iter().any(|e| matches!(e, Type::TypePackSpread(..))) =>
-                {
-                    false
-                }
-                Type::Tuple(elems) => nested(elems),
-                Type::Function(ft) => nested(&ft.params) || walk(this, &ft.return_type, true),
-                Type::Generic(g) => nested(&g.args),
-                Type::NamespacedGeneric(ns) => nested(&ns.args),
-                _ => false,
-            }
-        }
-        walk(self, arg, false)
-    }
-
-    /// Whether every head inside `arg` names a declaration, so the argument
-    /// stands for one type rather than for whatever the receiver supplies.
-    /// The site decides: a mangle spells an unresolved head as `Builtin`.
-    fn arg_pins(&self, arg: &Type) -> bool {
+    /// Whether every head inside the impl target argument `arg` names a
+    /// declaration, so it stands for one type rather than whatever the receiver supplies.
+    pub(crate) fn arg_pins(&self, arg: &Type) -> bool {
         let nested_pin = |args: &[Type]| args.iter().all(|a| self.arg_pins(a));
         match arg {
             // A reference pins what it refers to; the kind is structural.
@@ -447,9 +326,7 @@ impl TypeSystem {
     /// Whether this type's head reaches a declaration. A binder and a name that
     /// reaches nothing both answer `false` — neither is one type.
     fn head_is_declared(&self, ty: &Type) -> bool {
-        head_site(ty)
-            .and_then(|site| self.resolutions.declared_if_walked(site))
-            .is_some()
+        self.resolutions.head_decl_if_walked(ty).is_some()
     }
 }
 
@@ -466,29 +343,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
-        mut project: impl FnMut(
-            &mut Self,
-            &ImplBlockRef,
-            &InstantiatedImplSig,
-            &IndexSet<String>,
-        ) -> Option<R>,
+        trait_: DefId,
+        mut project: impl FnMut(&mut Self, &ImplBlockRef, &InstantiatedImplSig) -> Option<R>,
     ) -> Option<R> {
         let trait_env = Arc::clone(&self.tysys.trait_env);
         let impl_refs = self.tysys.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
-            let header = impl_header(&trait_env, impl_ref);
-            let trait_name = self.get_type_name(header.trait_ty().unwrap());
-            if !trait_matches(&trait_name, header.trait_def()) {
+            if impl_header(&trait_env, impl_ref).trait_def() != Some(trait_)
+                || !self
+                    .tysys
+                    .impl_reaches(impl_ref.0, Some(concrete_type_args))
+            {
                 continue;
             }
             let impl_sig = self
                 .tysys
-                .impl_sig(impl_ref)
+                .signatures
+                .impl_sig(impl_ref.0)
                 .instantiate(&self.tysys.type_table, concrete_type_args);
-            let declared: IndexSet<String> =
-                header.type_params.iter().map(|p| p.name.clone()).collect();
-            if let Some(result) = project(self, impl_ref, &impl_sig, &declared) {
+            if let Some(result) = project(self, impl_ref, &impl_sig) {
                 return Some(result);
             }
         }
@@ -502,17 +375,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
-        mut project: impl FnMut(
-            &mut Self,
-            &ImplBlockRef,
-            &InstantiatedImplSig,
-            &IndexSet<String>,
-        ) -> Option<R>,
+        trait_: DefId,
+        mut project: impl FnMut(&mut Self, &ImplBlockRef, &InstantiatedImplSig) -> Option<R>,
     ) -> Vec<R> {
         let mut found = Vec::new();
-        self.probe_trait_impls::<()>(target, concrete_type_args, trait_matches, |s, r, sig, d| {
-            if let Some(projected) = project(s, r, sig, d) {
+        self.probe_trait_impls::<()>(target, concrete_type_args, trait_, |s, r, sig| {
+            if let Some(projected) = project(s, r, sig) {
                 found.push(projected);
             }
             None
@@ -582,7 +450,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(param_name)?
             .clone();
         let (bound, declared) = bounds.iter().find_map(|bound| {
-            let decl = self.trait_decl_at(bound.id, &bound.name)?;
+            let decl = self.trait_decl_of(bound)?;
             if decl != trait_ {
                 return None;
             }
@@ -669,20 +537,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// The trait impl blocks indexed under `type_key`.
+    /// The trait impl blocks written on `type_key`.
     fn collect_trait_impl_refs(&self, type_key: &ImplTargetKey) -> Vec<ImplBlockRef> {
         self.trait_env
             .impl_index
             .get(type_key)
             .into_iter()
             .flatten()
-            .filter(|entry| {
-                self.trait_env
-                    .impl_headers
-                    .get(*entry)
-                    .is_some_and(ImplHeader::is_trait_impl)
-            })
-            .map(|entry| ImplBlockRef(*entry))
+            .map(|&def| ImplBlockRef(def))
             .collect()
     }
 
@@ -726,18 +588,14 @@ impl TypeSystem {
         self.compiler_trait_def(operator_compiler_item(op)?)
     }
 
-    /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
-    /// fields all declare a default, making it eligible for auto-derived
-    /// `Default::default()` — a fieldless one vacuously. `None` for an unknown
-    /// name, a required field, or a generic struct. Does not check for a user-written
-    /// `impl Default`, so consult it only as a fallback after the regular
-    /// impl-lookup paths.
+    /// `Some(struct_type)` when `def` is a struct that derives `Default` from its
+    /// field defaults. Blind to a written `impl Default`, so it is a fallback.
     pub(super) fn auto_derive_default_struct_type(
         &self,
         scope: &TypeLookup,
-        struct_name: &str,
+        def: DefId,
     ) -> Option<TypeId> {
-        let info = scope.struct_fields(struct_name)?;
+        let info = scope.struct_fields_of(def)?;
         if !info.auto_derives_default() {
             return None;
         }
@@ -761,31 +619,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Option<AstId>,
         struct_name: &str,
     ) -> ModuleSource {
-        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, so
-        // this answers `None` for them and they take the walk below.
-        if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
-            return module;
+        let Some(def) = self.decl_key_at(site, struct_name) else {
+            return self.current_module_source.clone();
+        };
+        let defs = self.tysys.resolutions.defs();
+        // A primitive's methods live apart from its declaration.
+        match defs.primitive(def) {
+            Some(primitive) => ModuleSource::of_primitive(primitive),
+            None => defs.module(def).clone(),
         }
-        if let Some(def) = site.map_or_else(
-            || self.decl_key_or_local(struct_name),
-            |site| self.decl_key_at(site, struct_name),
-        ) {
-            return self.tysys.resolutions.defs().module(def).clone();
-        }
-        // A newtype or `flags` type this walk interned: its `ResolvedType`
-        // carries the declaration, so the module comes off that.
-        if let Some(type_id) = self.lookup_newtype(struct_name) {
-            let declared = match self.tysys.type_table.borrow().get(type_id).clone() {
-                ResolvedType::Newtype { def, .. } | ResolvedType::Flags { def } => {
-                    Some(self.tysys.type_table.borrow().def_module(def).clone())
-                }
-                _ => None,
-            };
-            if let Some(module_source) = declared {
-                return module_source;
-            }
-        }
-        self.current_module_source.clone()
     }
 
     /// Look up method info based on receiver type and method name.
@@ -824,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = &self.tysys.type_table.borrow().def_name(*def).to_string();
                 let module_source = &self.tysys.type_table.borrow().def_module(*def).clone();
-                if TypeTable::is_tuple_type(name) {
+                if self.tysys.type_table.borrow().is_tuple_def(*def) {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo::undeclared(TypeTable::I32));
@@ -854,12 +696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .unwrap_or(TypeTable::ERROR);
                         return Some(MethodInfo::undeclared(return_type));
                     }
-                    (
-                        TypeTable::TUPLE_TYPE_NAME.to_string(),
-                        None,
-                        Some(elems.clone()),
-                        None,
-                    )
+                    (TUPLE_TYPE_NAME.to_string(), None, Some(elems.clone()), None)
                 } else {
                     (
                         name.clone(),
@@ -933,7 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None,
             ),
             // Unit type () - search for impl blocks in loaded modules
-            ResolvedType::Unit => (TypeTable::UNIT_TYPE_NAME.to_string(), None, None, None),
+            ResolvedType::Unit => (UNIT_TYPE_NAME.to_string(), None, None, None),
             // An enum or a non-generic variant: the declaration is the whole
             // receiver, so its head names the impl blocks to search. A generic
             // variant arrives as `GenericInstance`, handled above.
@@ -977,8 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // receiver" is one comparison of declarations rather than a
                 // spelling match plus a second lookup asking that module what
                 // the spelling means there.
-                let header_decl =
-                    head_site(&header.ty).and_then(|site| self.tysys.resolutions.declared(site));
+                let header_decl = self.tysys.resolutions.head_decl(&header.ty);
                 let targets_receiver = match (header_decl, receiver_decl) {
                     (Some(header), Some(receiver)) => header == receiver,
                     // A target that names no declaration — a tuple, a function
@@ -988,8 +824,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !targets_receiver {
                     continue;
                 }
-                if !self.inherent_impl_applies(header, base_type_id, receiver_type_args.as_deref())
-                {
+                if !self.inherent_impl_applies(
+                    *entry,
+                    header,
+                    base_type_id,
+                    receiver_type_args.as_deref(),
+                ) {
                     continue;
                 }
                 if let Some(info) = self.tysys.inherent_method_info(
@@ -1012,6 +852,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let header = impl_header(&trait_env, &impl_ref);
                 if self.get_type_name(&header.ty) != struct_name
                     || !self.inherent_impl_applies(
+                        *entry,
                         header,
                         base_type_id,
                         receiver_type_args.as_deref(),
@@ -1072,12 +913,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// parameters' bounds must hold.
     fn inherent_impl_applies(
         &mut self,
+        def: DefId,
         header: &ImplHeader,
         receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        self.tysys
-            .inherent_impl_type_args_match(&header.ty, receiver_type_args)
+        self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
                 &self.type_lookup(),
@@ -1192,7 +1033,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve against. Number them from the index the declaration gave the
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = self.tysys.slot_base(slots);
+        let base = slots.first().map_or(0, |&slot| self.declared_slot(slot));
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
@@ -1443,7 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut infer = InferCtx::new(&self.tysys.type_table, inst.vars.clone());
         for (i, (&param_type, arg)) in param_types.iter().zip(args.iter()).enumerate() {
-            if is_numeric_literal_arg(raw_args.get(i)) {
+            if answers_last(raw_args.get(i)) {
                 infer.add_deferred(param_type, *arg);
             } else {
                 infer.add(param_type, *arg);
@@ -1705,13 +1546,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(Ordered::Nothing) | None => &[],
         };
-        let mut found_traits: Vec<TraitMethodMatch> = self.materialize_matches(
-            named,
-            type_key,
-            method_name,
-            receiver_type_args,
-            receiver_type_id,
-        );
+        let mut found_traits: Vec<TraitMethodMatch> =
+            self.materialize_matches(named, method_name, receiver_type_args, receiver_type_id);
         // A named block declares the method, or its trait does, so it yields a
         // match; none means the block and the lowering disagree on the name.
         assert!(
@@ -1725,8 +1561,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         // Rank 3, which the order decided: the report only names what it found.
         match &order {
-            Some(Ordered::AmbiguousBlankets(_)) => {
-                self.report_ambiguous_value_blankets(&found_traits, &receiver_display, span);
+            Some(Ordered::AmbiguousBlankets(defs)) => {
+                let receiver = receiver_type_id.expect("the order answers a receiver it can say");
+                self.report_tied_impls(defs, receiver, span);
             }
             Some(Ordered::AmbiguousTraits(_)) => {
                 self.report_cross_trait_ambiguity(&found_traits, method_name, span);
@@ -1749,7 +1586,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn materialize_matches(
         &mut self,
         named: &[Option<DefId>],
-        type_key: &ImplTargetKey,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
@@ -1765,20 +1601,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     receiver_type_args,
                     receiver_type_id,
                 )),
-                // A template is registered under its mangled head, so the
-                // probe is in that namespace, not the declaration one.
                 None => {
                     if let Some(recv_id) = receiver_type_id {
-                        found.extend(
-                            self.try_auto_derived_method_match(
-                                type_key
-                                    .receiver(self.tysys.resolutions.defs())
-                                    .head_key()
-                                    .as_mangled_str(),
-                                method_name,
-                                recv_id,
-                            ),
-                        );
+                        found.extend(self.try_auto_derived_method_match(method_name, recv_id));
                     }
                 }
             }
@@ -1810,7 +1635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         // Qualified in the impl's own frame by the decl pass: the call site's
         // imports may name the same declaration differently, or not at all.
-        let impl_struct_fq = self.tysys.impl_sig(impl_ref).target_fq.clone();
+        let impl_struct_fq = self.tysys.signatures.impl_sig(impl_ref.0).target_fq.clone();
         // Track variadic type pack spreads: (pack_name, param_index)
         let mut variadic_pack_entry: Option<(String, u32)> = None;
         let impl_home = self.tysys.impl_block_module_source(impl_ref);
@@ -1994,9 +1819,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
         // perspective can see (issue #1416) — which is why the decl pass, not
         // this query, resolved it.
-        let impl_sig = scope
-            .tysys
-            .impl_sig(impl_ref)
+        let signatures = Rc::clone(&scope.tysys.signatures);
+        let impl_sig = signatures
+            .impl_sig(impl_ref.0)
             .instantiate_slots(&scope.tysys.type_table, &impl_slots);
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.extend(
             impl_sig
@@ -2006,21 +1831,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         let blanket_type_param = is_blanket_type_param.then(|| impl_struct_name.clone());
-        // The receiver as the impl writes it: `T: Limit + Mark`, or bare `T`.
-        let blanket_bounds = is_blanket_type_param.then(|| {
-            let bounds: Vec<&str> = header
-                .type_params
-                .iter()
-                .find(|p| p.name == impl_struct_name)
-                .into_iter()
-                .flat_map(|p| p.bounds.iter().map(|b| b.name.as_str()))
-                .collect();
-            if bounds.is_empty() {
-                impl_struct_name.clone()
-            } else {
-                format!("{impl_struct_name}: {}", bounds.join(" + "))
-            }
-        });
         // The block names the receiver — not the letter, which another blanket
         // of the same trait may also spell.
         let blanket_binder = is_blanket_type_param.then(|| {
@@ -2067,7 +1877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A header whose trait reaches no declaration implements none, so it
         // contributes no trait method. The index still holds it under the
         // spelling it wrote, which is how an erroneous block reaches a lookup.
-        let Some(trait_decl) = scope.tysys.impl_sig(impl_ref).trait_decl else {
+        let Some(trait_decl) = signatures.impl_sig(impl_ref.0).trait_decl else {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
@@ -2105,11 +1915,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             for (type_param, &type_param_id) in
                 method_slot_params.iter().zip(method_type_param_ids.iter())
             {
-                let index = match scope.tysys.type_table.borrow().get(type_param_id) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => *index,
-                    other => panic!("method slot is not a type parameter: {other:?}"),
-                };
+                let index = scope.declared_slot(type_param_id);
                 scope.bind_param(
                     &type_param.name,
                     BinderInScope::declared(index, type_param_id, type_param.id),
@@ -2143,6 +1949,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
                     impl_type_bindings: impl_type_bindings.clone(),
+                    method_def: Some(method_sig.def),
+                    impl_block: Some(impl_ref.0),
                     impl_module: Some(impl_module_source.clone()),
                     from_concrete_impl: impl_is_concrete,
                     ..MethodInfo::of_sig(&method_sig, instantiated)
@@ -2150,8 +1958,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_module_source: impl_module_source.clone(),
                 blanket_type_param: blanket_type_param.clone(),
                 blanket_binder: blanket_binder.clone(),
-                blanket_bounds: blanket_bounds.clone(),
-                impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
                 ref_impl_target,
@@ -2184,6 +1990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
                         impl_type_bindings,
+                        impl_block: Some(impl_ref.0),
                         impl_module: Some(impl_module_source.clone()),
                         from_concrete_impl: impl_is_concrete,
                         // The body and its defaults are the trait's, so both
@@ -2194,8 +2001,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_module_source,
                     blanket_type_param,
                     blanket_binder,
-                    blanket_bounds,
-                    impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
                     ref_impl_target,
@@ -2209,33 +2014,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         found_traits
     }
 
-    /// Name the value blankets among what the order tied at rank 3
-    /// (`docs/wep-2026-09-01-trait-resolution.md`). Only a value blanket has a
-    /// binder to name it by: a tie among impls with none — two variadic impls
-    /// of one trait — is coherence's, rejected where the second is written
-    /// (WEP 2026-03-14 §5 Rule 2).
-    fn report_ambiguous_value_blankets(
+    /// Report a tie the order left among one trait's impls
+    /// (`docs/wep-2026-09-01-trait-resolution.md`), naming value blankets by
+    /// their bounds and impls generic over the receiver's head by their targets.
+    /// A tie among impls with neither — two variadic impls of one trait — is
+    /// coherence's, rejected where the second is written (WEP 2026-03-14 §5 Rule 2).
+    pub(super) fn report_tied_impls(
         &mut self,
-        tied: &[TraitMethodMatch],
-        receiver_display: &str,
+        tied: &[Option<DefId>],
+        receiver: TypeId,
         span: Span,
     ) {
-        let binders: IndexSet<&FqTypeName> = tied
+        let env = Arc::clone(&self.tysys.trait_env);
+        let (blankets, heads): (Vec<&ImplHeader>, Vec<&ImplHeader>) = tied
             .iter()
-            .filter_map(|m| m.blanket_binder.as_ref())
-            .collect();
-        if binders.len() < 2 {
-            return;
+            .flatten()
+            .collect::<IndexSet<_>>()
+            .into_iter()
+            .map(|def| &env.impl_headers[def])
+            .partition(|header| matches!(header.ty, Type::Named(_)));
+        let receiver = self.tysys.type_id_to_string(receiver);
+        if let [first, _, ..] = blankets.as_slice() {
+            let _ = self.emit(TypeError::AmbiguousValueBlankets {
+                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                receiver: receiver.clone(),
+                bounds: blankets.iter().map(|h| receiver_as_written(h)).collect(),
+                span,
+            });
         }
-        let _ = self.emit(TypeError::AmbiguousValueBlankets {
-            trait_name: tied[0].trait_name.to_display(),
-            receiver: receiver_display.to_string(),
-            bounds: tied
-                .iter()
-                .filter_map(|m| m.blanket_bounds.clone())
-                .collect(),
-            span,
-        });
+        if let [first, _, ..] = heads.as_slice() {
+            let _ = self.emit(TypeError::AmbiguousHeadImpls {
+                trait_name: first.trait_head_name().unwrap_or_default().to_string(),
+                receiver,
+                targets: heads.iter().map(|h| written_type_source(&h.ty)).collect(),
+                span,
+            });
+        }
     }
 
     /// What the order says about this call (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -2260,13 +2074,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A reference receiver arrives peeled, its `&` carried by `type_key`.
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
-        let through_ref = match type_key {
-            ImplTargetKey::Ref(kind) => Some(*kind == RefKind::Mut),
-            ImplTargetKey::Decl(_)
-            | ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
-        };
+        let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
         bridge.select(
             &self.tysys,
             &self.annotate_ctx,
@@ -2647,8 +2455,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        let mut found =
-            self.find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs);
+        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        self.find_operator_impl_on(&target, base_type_id, trait_, method_name, rhs)
+    }
+
+    /// The one impl of `trait_` indexed under `target` whose right-hand
+    /// parameter admits `rhs`.
+    pub(super) fn find_operator_impl_on(
+        &mut self,
+        target: &ImplTargetKey,
+        receiver: TypeId,
+        trait_: DefId,
+        method_name: &str,
+        rhs: Option<&ArgClass>,
+    ) -> Option<ArithmeticTraitInfo> {
+        let mut found = self.find_operator_impls_on(target, receiver, trait_, method_name, rhs);
         self.tysys.retain_most_specific_rhs(&mut found);
         match found.as_slice() {
             [only] => Some(only.clone()),
@@ -2671,45 +2492,61 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
-        // Get concrete type arguments from the base type (for generic instances)
-        let concrete_type_args: Vec<TypeId> =
-            if let ResolvedType::GenericInstance { type_args, .. } =
-                self.tysys.type_table.borrow().get(base_type_id).clone()
-            {
-                type_args
-            } else {
-                Vec::new()
-            };
+        let target = self.impl_target_of(base_type_id, &DeclName::new(struct_name));
+        self.find_operator_impls_on(&target, base_type_id, trait_, method_name, rhs)
+    }
+
+    /// [`Self::find_arithmetic_trait_impls`] under an explicit key. A
+    /// [`ImplTargetKey::Ref`] key asks the blocks written for the reference
+    /// `receiver` itself, which answer only for the pointee they name.
+    fn find_operator_impls_on(
+        &mut self,
+        target: &ImplTargetKey,
+        receiver: TypeId,
+        trait_: DefId,
+        method_name: &str,
+        rhs: Option<&ArgClass>,
+    ) -> Vec<ArithmeticTraitInfo> {
+        let pointee = target.ref_kind().map(|_| {
+            self.tysys
+                .pointee_of(receiver)
+                .expect("a reference key is asked of a reference receiver")
+        });
+        let concrete_type_args: Vec<TypeId> = match pointee {
+            Some(pointee) => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(pointee)
+                .unwrap_or_default(),
+            None => {
+                if let ResolvedType::GenericInstance { type_args, .. } =
+                    self.tysys.type_table.borrow().get(receiver).clone()
+                {
+                    type_args
+                } else {
+                    Vec::new()
+                }
+            }
+        };
 
         self.collect_trait_impls(
-            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
+            target,
             &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
+            trait_,
+            |s, impl_ref, impl_sig| {
                 // Check trait bounds on type parameters (e.g., impl<T: Eq> Eq for List<T>).
                 // Shared with `lookup_method_info_uncached` and
                 // `find_trait_impl_for_type_with_args`, so a bound-checking
                 // fix for any AST shape applies to every caller.
                 let trait_env = Arc::clone(&s.tysys.trait_env);
                 let header = impl_header(&trait_env, impl_ref);
-                // A concrete type argument in the impl target is a constraint,
-                // not a free parameter: `impl … for TreeMap<String, V>` does
-                // not answer for a `TreeMap<i32, String>` receiver. Without
-                // this the method signature instantiates against the wrong
-                // arguments and the mismatch only surfaces at WIR build.
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
                     &s.type_lookup(),
                     &header.type_params,
                     &header.ty,
-                    Some(base_type_id),
+                    Some(receiver),
                     Some(&concrete_type_args),
                 ) {
                     return None;
@@ -2719,13 +2556,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // in the impl's frame; instantiating it with the receiver's
                 // type arguments is what the by-name re-resolution below used
                 // to approximate.
+                let mut slots = positional_substitution(&concrete_type_args);
+                if let Some(pointee) = pointee {
+                    if !s
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .impl_reaches_instance(impl_ref.0, receiver)
+                    {
+                        return None;
+                    }
+                    if let ImplTargetKey::TypeParam(_, binder) =
+                        header.referent_key(&s.tysys.resolutions)?
+                    {
+                        let slot = header
+                            .type_params
+                            .iter()
+                            .filter(|p| p.is_real_type_param())
+                            .position(|p| p.name == binder)?;
+                        slots = [(slot as u32, pointee)].into_iter().collect();
+                    }
+                }
+
                 let method_header = header.methods.iter().find(|m| m.name == method_name)?;
                 let method_sig = s.tysys.signatures.method_sig(method_header.def)?;
                 let self_kind = method_sig.self_kind;
                 let rhs_index = usize::from(self_kind != ast::SelfKind::None);
                 let rhs_type = method_sig
                     .decl
-                    .instantiate(&s.tysys.type_table, &concrete_type_args)
+                    .instantiate_slots(&s.tysys.type_table, &slots)
                     .param_types
                     .get(rhs_index)
                     .copied();
@@ -2733,10 +2592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The declared parameter is `&Rhs`; the operand is the
                 // referent, so admissibility compares against that.
                 if let Some(class) = rhs {
-                    let declared = rhs_type.map(|t| match s.tysys.type_table.borrow().get(t) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                        _ => t,
-                    });
+                    let declared = rhs_type.map(|t| s.tysys.through_ref(t));
                     if let Some(declared) = declared
                         && !s.class_admits(declared, class)
                     {
@@ -2744,17 +2600,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
 
-                let output_type = impl_sig
+                // A `&T` block's slots are not its target's arguments, which
+                // `impl_sig` was filled from.
+                let ref_sig = pointee.map(|_| {
+                    s.tysys
+                        .signatures
+                        .impl_sig(impl_ref.0)
+                        .instantiate_slots(&s.tysys.type_table, &slots)
+                });
+                let output_type = ref_sig
+                    .as_ref()
+                    .unwrap_or(impl_sig)
                     .associated_types
                     .get("Output")
                     .copied()
-                    .unwrap_or(base_type_id);
+                    .unwrap_or(receiver);
 
                 Some(ArithmeticTraitInfo {
                     impl_def: impl_ref.0,
                     output_type,
                     self_kind,
                     impl_module_source: header.module.clone(),
+                    receiver: s.impl_receiver(header, receiver),
                     // The *full* spelling (`Add<Feet>`), not the operator's
                     // base name: it is what the mangled method name
                     // discriminates instantiations on, exactly as the indexing
@@ -2823,8 +2690,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.probe_trait_impls(
             &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
-            |_, found| found == Some(trait_),
-            |s, impl_ref, impl_sig, declared| {
+            trait_,
+            |s, impl_ref, impl_sig| {
                 // The trait's index-type argument (`List<i32>` in `impl
                 // Index<List<i32>>`), returned for subscript coercion and used
                 // to disambiguate overlapping impls when `expected_index_type`
@@ -2838,16 +2705,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return None;
                 }
-
-                if !s.tysys.verify_impl_type_compatibility(
-                    &header.ty,
-                    &concrete_type_args,
-                    declared,
-                ) {
-                    return None;
-                }
                 let impl_type_params = header.type_params.clone();
                 let impl_ty = header.ty.clone();
+                let receiver = s.impl_receiver(header, base_type_id);
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
@@ -2878,11 +2738,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                let receiver = s.tysys.fq_receiver_of_impl(
-                    base_type_id,
-                    s.tysys.impl_is_concrete_instantiation(&impl_ty),
-                );
-
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
                     output_type: assoc_type,
@@ -2906,10 +2761,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<(String, TypeId)> {
         let container_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(container_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => container_type,
-        };
+        let base_type_id = self.tysys.through_ref(container_type);
         let head = match self.tysys.type_table.borrow().get(base_type_id).clone() {
             ResolvedType::Struct { .. }
             | ResolvedType::GenericInstance { .. }
@@ -2988,10 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // First, look up method info on the OUTPUT type (what IndexMut returns)
         let output_type = index_mut_info.output_type;
-        let output_base_type_id = match self.tysys.type_table.borrow().get(output_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => output_type,
-        };
+        let output_base_type_id = self.tysys.through_ref(output_type);
 
         let (output_struct_name, output_module_source, output_type_args) = match self
             .tysys
@@ -3065,6 +2914,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
+            impl_block,
             mut return_type,
             self_kind,
             param_types,
@@ -3137,6 +2987,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 function_ref: FunctionRef {
                     module_source: index_mut_info.impl_module_source.clone(),
                     name: mangled_index_mut_name,
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(index_mut_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         container_fq,
@@ -3201,7 +3056,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
         if !subst.is_empty() {
-            return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+            return_type = self.substitute_ctx_in_frame(&subst, return_type);
         }
 
         let defaults: Vec<(String, Option<ast::Expr>)> = method_param_names
@@ -3236,8 +3091,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let output_fq = self
             .tysys
             .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
-        let mangled_method_name =
-            MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
+        let method_info =
+            LocalMethodName::new(output_fq, method_trait_name, method_call.method.clone());
 
         // `module_source` is the body's home module: trait-impl block for
         // trait methods, otherwise the output type's defining module
@@ -3247,13 +3102,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let func = FunctionRef {
             module_source: method_call_module_source,
-            name: mangled_method_name,
+            name: method_info.to_mangled_name(),
+            template: method_def
+                .zip(impl_block)
+                .map(|(def, block)| TemplateId::in_block(def, block)),
             monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                output_fq,
-                method_trait_name,
-                method_call.method.clone(),
-            )),
+            method_info: Some(method_info),
         };
 
         // The IndexMut rewrite is the only path building user-visible method-call
@@ -3313,16 +3167,18 @@ impl TypeSystem {
         let header = impl_header(&self.trait_env, impl_ref);
         let method_header = header.methods.iter().find(|m| m.name == method_name)?;
         let sig = self.signatures.method_sig(method_header.def)?;
-        let impl_sig = self.impl_sig(impl_ref);
+        let impl_sig = self.signatures.impl_sig(impl_ref.0);
         let receiver_type_args = receiver_type_args.unwrap_or(&[]);
         let slots = impl_sig.slots(&self.type_table, receiver_type_args);
         let instantiated = sig.decl.instantiate_slots(&self.type_table, &slots);
+        let table = &self.type_table;
         Some(MethodInfo {
             impl_type_bindings: slot_type_bindings(
-                &self.type_table,
-                &impl_sig.target_type_args,
+                table,
+                table.borrow().impl_target_args(impl_ref.0),
                 receiver_type_args,
             ),
+            impl_block: Some(impl_ref.0),
             impl_module: Some(self.impl_block_module_source(impl_ref)),
             from_concrete_impl: self.impl_is_concrete_instantiation(&header.ty),
             inherent_visibility: Some(method_header.visibility),
@@ -3409,21 +3265,6 @@ impl TypeSystem {
     /// lookups can borrow the type table again.
     fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
         self.type_table.borrow().resource_chain(def).collect()
-    }
-
-    /// The index the declaration gave the first of `slots`, or 0 when there
-    /// are none. A slot carries its own index; nothing else knows it.
-    fn slot_base(&self, slots: &[TypeId]) -> u32 {
-        let table = self.type_table.borrow();
-        slots
-            .first()
-            .and_then(|&slot| match table.get(slot) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    Some(*index)
-                }
-                _ => None,
-            })
-            .unwrap_or(0)
     }
 
     /// Whether mutation through a `&mut` copy of `type_id` is lost: a primitive, enum, flags

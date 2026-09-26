@@ -1,0 +1,24 @@
+// A `#[cm]` record's field is held to what a parameter is: a plain struct
+// imported under a primitive's name is the struct, and belongs to no interface.
+use { Foo as u32 } from "./sub/alias_user_struct_as_primitive_dep.wado";
+
+#[cm("wasi:demo/gfx@0.1.0#options")]
+struct Options {
+    #[cm("n")]
+    n: u32,
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(o: Options) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(Options { n: u32 { v: 1 } });
+}
+
+__DATA__
+{
+  "compile_error": "`u32` (`Foo`) crosses the Component Model boundary in `Options` but declares no interface; bind it with `#[cm(\"<interface>#<name>\")]`",
+  "compile_error_codes": ["CM_BOUNDARY_TYPE"]
+}

@@ -1,6 +1,6 @@
 # web-ssr — One Page, Rendered on the Server
 
-`src/app.wado` builds a page through the `web:dom` API. On the server,
+`src/app.wado` builds a page through the `wado-lang:web` DOM API. On the server,
 `SurfaceDom` from `wado-lang:web` answers those calls, and `to_html()`
 serializes the result.
 

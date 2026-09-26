@@ -1,0 +1,32 @@
+// A case path's prefix may name the variant through a newtype of it, or as
+// `Self` in an impl of that newtype. The value keeps the newtype's identity.
+
+variant V { J(i32), N }
+type W = V;
+
+variant G<T> { J(T), N }
+type Loc = G<i32>;
+
+impl Loc {
+    fn mk(v: i32) -> Loc { return Self::J(v); }
+    fn none() -> Loc { return Self::N; }
+}
+
+test "a newtype names its base's cases" {
+    let a: W = W::J(1);
+    let b: W = W::N;
+    assert a as V matches { J(1) };
+    assert b as V matches { N };
+    let c: Loc = Loc::J(2);
+    let d: Loc = Loc::N;
+    assert c as G<i32> matches { J(2) };
+    assert d as G<i32> matches { N };
+}
+
+test "Self in an impl of a newtype over a generic variant" {
+    assert Loc::mk(3) as G<i32> matches { J(3) };
+    assert Loc::none() as G<i32> matches { N };
+}
+
+__DATA__
+{"test": {}}

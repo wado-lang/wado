@@ -19,13 +19,20 @@ const name = basename(wasmPath).replace(/\.wasm$/, "");
 const outDir = process.argv[3] ?? wasmPath.replace(/\.wasm$/, "-jco-released");
 
 // jco's own WASI shim (`preview3-shim`) serves the `wasi:*` imports, and
-// `package-web`'s glue each `web:<package>/*` import, copied beside an output
-// that imports it.
+// `package-web`'s glue each `wado-lang:web/*` import, copied beside an output
+// that imports it. A glue module exports one object per interface, named as
+// jco names it: the interface in lower camel case.
+const WEB_PACKAGE = "wado-lang:web";
 const glueDir = join(here, "../../package-web/glue");
 const glue = (await readdir(glueDir)).filter((file) => file.endsWith(".js"));
-const map = Object.fromEntries(
-  glue.map((file) => [`web:${basename(file, ".js")}/*`, `./web-${file}#*`]),
-);
+const kebab = (camel) => camel.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+const map = {};
+for (const file of glue) {
+  const exports = Object.keys(await import(join(glueDir, file)));
+  for (const iface of exports.filter((name) => !name.startsWith("$"))) {
+    map[`${WEB_PACKAGE}/${kebab(iface)}`] = `./web-${file}#${iface}`;
+  }
+}
 const { files } = await transpile(await readFile(wasmPath), { name, map });
 
 for (const [file, bytes] of Object.entries(files)) {

@@ -71,17 +71,17 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(19)
+type "functype//wasi/example:demo/Dom::touch" = fn(i32, f64) -> i32;  // TypeId(19)
 
-type "functype//wasi/web:demo/Dom::touch" = fn(i32, f64) -> i32;  // TypeId(20)
+type "functype//wasi/example:demo/Dom::touch_pair" = fn(f64, i32, f64) -> i32;  // TypeId(20)
 
-type "functype//wasi/web:demo/Dom::touch_pair" = fn(f64, i32, f64) -> i32;  // TypeId(21)
+type "functype//wasi/example:demo/Dom::make_pair" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/web:demo/Dom::make_pair" = fn(i32);  // TypeId(22)
+type "functype//wasi/example:demo/Dom::maybe" = fn(i32);  // TypeId(22)
 
-type "functype//wasi/web:demo/Dom::maybe" = fn(i32);  // TypeId(23)
+type "functype//wasi/example:demo/Dom::root" = fn() -> f64;  // TypeId(23)
 
-type "functype//wasi/web:demo/Dom::root" = fn() -> f64;  // TypeId(24)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(24)
 
 type "functype//cm_unrestricted_handle_nested_reference.wado/run" = fn();  // TypeId(25)
 
@@ -185,12 +185,12 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/example:demo/Dom::touch from "wasi/example:demo/Dom::touch";
+import fn wasi/example:demo/Dom::touch_pair from "wasi/example:demo/Dom::touch_pair";
+import fn wasi/example:demo/Dom::make_pair from "wasi/example:demo/Dom::make_pair";
+import fn wasi/example:demo/Dom::maybe from "wasi/example:demo/Dom::maybe";
+import fn wasi/example:demo/Dom::root from "wasi/example:demo/Dom::root";
 import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::write_via_stream";
-import fn wasi/web:demo/Dom::touch from "wasi/web:demo/Dom::touch";
-import fn wasi/web:demo/Dom::touch_pair from "wasi/web:demo/Dom::touch_pair";
-import fn wasi/web:demo/Dom::make_pair from "wasi/web:demo/Dom::make_pair";
-import fn wasi/web:demo/Dom::maybe from "wasi/web:demo/Dom::maybe";
-import fn wasi/web:demo/Dom::root from "wasi/web:demo/Dom::root";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
@@ -316,7 +316,7 @@ condition: *p.a == *Dom::maybe().unwrap()
 }
 
 fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_root"() with Dom {
-    return builtin::i64_reinterpret_f64("wasi/web:demo/Dom::root"());
+    return builtin::i64_reinterpret_f64("wasi/example:demo/Dom::root"());
 }
 
 fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(n) with Dom {
@@ -329,7 +329,7 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch"(n) with
         $n_inner0 = builtin::f64_reinterpret_i64(local.tee $local_4(ref.cast "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"(n).payload_0));
     } else {
     }
-    return "wasi/web:demo/Dom::touch"($n_disc, $n_inner0);
+    return "wasi/example:demo/Dom::touch"($n_disc, $n_inner0);
 }
 
 fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(p) with Dom {
@@ -344,7 +344,7 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_touch_pair"(p)
         $p_f1_inner0 = builtin::f64_reinterpret_i64(local.tee $local_5(ref.cast "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>::Some"($p_f1_optval).payload_0));
     } else {
     }
-    return "wasi/web:demo/Dom::touch_pair"(builtin::f64_reinterpret_i64(p.a), $p_f1_disc, $p_f1_inner0);
+    return "wasi/example:demo/Dom::touch_pair"(builtin::f64_reinterpret_i64(p.a), $p_f1_disc, $p_f1_inner0);
 }
 
 fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"() with Dom {
@@ -353,7 +353,7 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_make_pair"() w
     let $disc: i32;
     let $option_result: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
     let $struct_result: ref "cm_unrestricted_handle_nested_reference.wado//Pair";
-    "wasi/web:demo/Dom::make_pair"(local.tee $outptr("mem/realloc"(0, 0, 8, 24)));
+    "wasi/example:demo/Dom::make_pair"(local.tee $outptr("mem/realloc"(0, 0, 8, 24)));
     $lifted_result_1 = builtin::load_i64($outptr);
     $disc = builtin::load_u8($outptr + 4);
     $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 1 };
@@ -369,7 +369,7 @@ fn "cm_unrestricted_handle_nested_reference.wado/$cm_binding__Dom_maybe"() with 
     let $outptr: i32;
     let $disc: i32;
     let $option_result: ref "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>";
-    "wasi/web:demo/Dom::maybe"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
+    "wasi/example:demo/Dom::maybe"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
     $disc = builtin::load_u8($outptr);
     $option_result = struct.new "core:prelude/types.wado//Option<&cm_unrestricted_handle_nested_reference.wado/Node>" { 1 };
     if $disc != 0 {
@@ -1809,7 +1809,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:prelude/list.wado::$const_obj_52, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -1904,7 +1904,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:prelude/list.wado::$const_obj_52, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;

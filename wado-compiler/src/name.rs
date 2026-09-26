@@ -5,7 +5,7 @@
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
 use crate::ast::{AstId, TestMetadata};
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{is_cwd_relative, normalize, relative_path};
@@ -738,26 +738,11 @@ impl MethodName {
         }
     }
 
-    /// Format a base name with type arguments and optional trait.
-    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`.
-    ///
-    /// `ref_kind` carries the receiver's reference shape so a `&T` / `&mut T`
-    /// receiver mangles with a prefix; it comes from the typed receiver, never
-    /// from inspecting `base`.
-    pub fn format_struct_with_args(
-        base: &str,
-        ref_kind: Option<RefKind>,
-        type_args: &[String],
-        trait_name: Option<&FqTraitName>,
-    ) -> String {
-        let struct_part = if type_args.is_empty() {
-            base.to_string()
-        } else {
-            Receiver::mangle_with_ref(base, ref_kind, type_args)
-        };
+    /// A mangled receiver with its optional trait: `Struct<TypeArgs>^Trait`.
+    pub fn format_struct_with_trait(struct_part: &str, trait_name: Option<&FqTraitName>) -> String {
         match trait_name {
             Some(trait_n) => format!("{struct_part}^{trait_n}"),
-            None => struct_part,
+            None => struct_part.to_string(),
         }
     }
 
@@ -894,9 +879,30 @@ pub enum Receiver {
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
+    /// A reference to a named head (`&Item`, `&List`), which an `impl` for
+    /// `&X` registers under; its arguments ride in the type-arg list.
+    RefTo(RefKind, FqTypeName),
 }
 
 impl Receiver {
+    /// The receiver an `impl` written for the reference `target` registers
+    /// under: the referent's head, or the bare kind where a parameter stands.
+    #[must_use]
+    pub fn of_ref_impl(kind: RefKind, target: &FqTypeName) -> Self {
+        Self::ref_to(target).unwrap_or(Receiver::Ref(kind))
+    }
+
+    /// [`Receiver::RefTo`] the head `target` refers to; `None` unless `target`
+    /// is a reference to a named type.
+    #[must_use]
+    pub fn ref_to(target: &FqTypeName) -> Option<Self> {
+        let (kind, referent) = target.split_reference()?;
+        referent
+            .binder_name()
+            .is_none()
+            .then(|| Receiver::RefTo(kind, referent.head_only()))
+    }
+
     /// The canonical head string — identity key and mangle base. Module
     /// qualified, because that is what a mangled name embeds.
     #[must_use]
@@ -904,6 +910,17 @@ impl Receiver {
         match self {
             Receiver::Type(n) => MangledName::new(n.to_mangled()),
             Receiver::Ref(k) => MangledName::new(k.prefix()),
+            Receiver::RefTo(..) => MangledName::new(self.mangle(&[])),
+        }
+    }
+
+    /// The declaration this receiver names, or `None` for a reference or a head
+    /// no module declares.
+    #[must_use]
+    pub fn def(&self) -> Option<DefId> {
+        match self {
+            Receiver::Type(fq) => fq.head().def(),
+            Receiver::Ref(_) | Receiver::RefTo(..) => None,
         }
     }
 
@@ -912,7 +929,10 @@ impl Receiver {
     /// its parts over that list instead.
     #[must_use]
     pub fn is_declared_type(&self) -> bool {
-        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_)))
+        matches!(
+            self,
+            Receiver::Type(fq) | Receiver::RefTo(_, fq) if matches!(fq.head(), TypeHead::Declared(_))
+        )
     }
 
     /// Whether this receiver is one of the binders `names` declares — how a
@@ -936,7 +956,7 @@ impl Receiver {
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
-            Receiver::Ref(_) => None,
+            Receiver::Ref(_) | Receiver::RefTo(..) => None,
         }
     }
 
@@ -949,17 +969,10 @@ impl Receiver {
         matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Binder { .. }))
     }
 
-    /// Whether [`Self::head_key`] carries the receiver's module, so the mangled
-    /// namespace alone separates it from another module's same-named type.
+    /// Whether this receiver is the built-in tuple.
     #[must_use]
-    pub fn is_module_qualified(&self) -> bool {
-        matches!(
-            self,
-            Receiver::Type(fq) if matches!(
-                fq.head(),
-                TypeHead::Declared(_) | TypeHead::Shape { .. } | TypeHead::ParamBucket { .. }
-            )
-        )
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Tuple))
     }
 
     /// The name an `impl` header writes its target as — no module, no type
@@ -973,7 +986,8 @@ impl Receiver {
     pub fn decl_key(&self) -> DeclName {
         match self {
             Receiver::Type(n) => n.decl_name(),
-            Receiver::Ref(k) => DeclName::new(k.prefix()),
+            // Header scans bucket every reference target by its kind.
+            Receiver::Ref(k) | Receiver::RefTo(k, _) => DeclName::new(k.prefix()),
         }
     }
 
@@ -981,34 +995,42 @@ impl Receiver {
     /// `S::SeqSerializer`).
     #[must_use]
     pub fn mangle(&self, type_args: &[String]) -> String {
-        Self::mangle_with_ref(self.head_key().as_mangled_str(), self.ref_kind(), type_args)
-    }
-
-    /// Mangle a base name, applying a `&` / `&mut` prefix when `ref_kind` marks
-    /// a single-pointee reference receiver. The sole place a receiver becomes a
-    /// `&`-prefixed string; `ref_kind` is typed metadata, never parsed from
-    /// `base`.
-    #[must_use]
-    pub fn mangle_with_ref(base: &str, ref_kind: Option<RefKind>, type_args: &[String]) -> String {
-        match ref_kind {
-            Some(RefKind::Shared) if type_args.len() == 1 => format!("&{}", type_args[0]),
-            Some(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
-            _ => mangle_generic_name(base, type_args),
+        let mut out = String::new();
+        match self {
+            Receiver::Type(_) => {
+                out.push_str(&mangle_generic_name(
+                    self.head_key().as_mangled_str(),
+                    type_args,
+                ));
+            }
+            // The single pointee is the argument a universal `&T` carries.
+            Receiver::Ref(k) => match type_args {
+                [pointee] => {
+                    push_ref_prefix(&mut out, *k);
+                    out.push_str(pointee);
+                }
+                _ => out.push_str(&mangle_generic_name(k.prefix(), type_args)),
+            },
+            Receiver::RefTo(k, referent) => {
+                push_ref_prefix(&mut out, *k);
+                out.push_str(&mangle_generic_name(&referent.to_mangled(), type_args));
+            }
         }
+        out
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
     #[must_use]
     pub fn ref_kind(&self) -> Option<RefKind> {
         match self {
-            Receiver::Ref(k) => Some(*k),
-            _ => None,
+            Receiver::Ref(k) | Receiver::RefTo(k, _) => Some(*k),
+            Receiver::Type(_) => None,
         }
     }
 }
 
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
-/// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
+/// `&mut` is a word and needs the separator. [`Receiver::mangle`] and
 /// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
 /// definition's name is built by one while its call sites go through the other.
 fn push_ref_prefix(out: &mut String, kind: RefKind) {
@@ -1019,12 +1041,11 @@ fn push_ref_prefix(out: &mut String, kind: RefKind) {
 }
 
 impl LocalMethodName {
-    /// The declaration of the trait this method implements, for the indices
-    /// keyed by identity. `None` for an inherent method, or where the
-    /// reference reached no declaration.
+    /// The declaration of the trait this method implements; `None` for an
+    /// inherent method.
     #[must_use]
     pub fn trait_decl(&self) -> Option<DefId> {
-        self.trait_name.as_ref().and_then(FqTraitName::canonical)
+        self.trait_name.as_ref().map(FqTraitName::called_decl)
     }
 
     /// The typed receiver shape — the query consumers use to reason about the
@@ -1075,6 +1096,7 @@ impl LocalMethodName {
             Receiver::Type(fq) => fq.clone(),
             // A `&` / `&mut` head names no declaration, so no module qualifies it.
             Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
+            Receiver::RefTo(kind, referent) => referent.clone().with_reference(*kind),
         }
     }
 
@@ -1092,7 +1114,7 @@ impl LocalMethodName {
     pub fn fq_struct_name(&self) -> FqTypeName {
         // A single-pointee reference receiver spells as the pointee carrying a
         // `&` / `&mut`, not as a `&` head applied to arguments — the same rule
-        // `Receiver::mangle_with_ref` follows, so this and [`Self::struct_name`]
+        // `Receiver::mangle` follows, so this and [`Self::struct_name`]
         // render one spelling.
         if let Receiver::Ref(kind) = self.receiver
             && let [pointee] = self.struct_type_args.as_slice()
@@ -1276,6 +1298,21 @@ impl LocalMethodName {
         }
     }
 
+    /// This method named at the receiver one concrete `impl` block writes. A
+    /// `&X` owner is the reference to `X`'s head, carrying `X`'s arguments.
+    #[must_use]
+    pub fn at_owner(&self, owner: &FqTypeName) -> Self {
+        match owner.split_reference() {
+            Some((kind, pointee)) => Self {
+                receiver: Receiver::RefTo(kind, pointee.head_only()),
+                struct_type_args: pointee.args().to_vec(),
+                is_type_param_receiver: false,
+                ..self.clone()
+            },
+            None => self.with_substituted_struct_name(owner),
+        }
+    }
+
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
@@ -1321,24 +1358,6 @@ impl LocalMethodName {
                 self.method_name
             ),
             None => format!("{receiver}::{}", self.method_name),
-        }
-    }
-
-    /// Replace the type `old` with `new` throughout this method's identity — the
-    /// receiver and its type arguments, not the rendered `name`, which a
-    /// monomorphized call overwrites from its own key.
-    ///
-    /// The trait is left alone: a CM type swap changes the receiver, not the
-    /// trait it implements.
-    pub fn substitute_type(&mut self, old: &FqTypeName, new: &FqTypeName) {
-        if let Receiver::Type(fq) = &self.receiver {
-            self.receiver = Receiver::Type(fq.substitute(old, new));
-        }
-        for arg in &mut self.struct_type_args {
-            *arg = arg.substitute(old, new);
-        }
-        for arg in &mut self.method_type_args {
-            *arg = arg.substitute(old, new);
         }
     }
 
@@ -1526,7 +1545,7 @@ pub fn wado_identifier(idl_name: &str) -> String {
 }
 
 /// `true` for an opaque module identifier that is not a filesystem path and
-/// must never be normalized: a reserved namespace (`core:`, `wasi:`, `web:`) or
+/// must never be normalized: a reserved namespace (`core:`, `wasi:`) or
 /// a remote URI (`http://` / `https://`).
 fn has_special_prefix(path: &str) -> bool {
     path.starts_with("core:")
@@ -1854,7 +1873,7 @@ pub enum TypeNameInfo {
 pub fn format_type_name(info: TypeNameInfo) -> String {
     match info {
         TypeNameInfo::Primitive(name) => name,
-        TypeNameInfo::Unit => "()".to_string(),
+        TypeNameInfo::Unit => UNIT_TYPE_NAME.to_string(),
         TypeNameInfo::Named(name) => name,
         TypeNameInfo::Generic { name, args } => mangle_generic_name(&name, &args),
         TypeNameInfo::Tuple(elems) => mangle_tuple_type(&elems),
@@ -1898,16 +1917,18 @@ pub fn mangle_tuple_type(elems: &[String]) -> String {
     format!("[{}]", elems.join(","))
 }
 
-/// The head name of a tuple type. Name formats live here, so
-/// [`crate::tir::TypeTable::TUPLE_TYPE_NAME`] reads it from this one place.
+/// The head name of a tuple type, which no Wado identifier can spell.
 pub const TUPLE_TYPE_NAME: &str = "[]";
 
-/// A name in the *declaration* namespace: what source writes, what an `impl`
-/// header spells, what every by-name declaration lookup keys on — as opposed to
-/// a mangled name, which carries the declaring module and which no such lookup
-/// stores. Deliberately no `Deref`, `AsRef<str>` or `From<String>`: substituting
-/// one namespace for the other is the defect this type exists to stop compiling.
+/// The name of the unit type: its source spelling.
+pub const UNIT_TYPE_NAME: &str = "()";
 
+/// The name of the never type: its source spelling.
+pub const NEVER_TYPE_NAME: &str = "!";
+
+/// A name as source and an `impl` header spell it, which by-name declaration
+/// lookups key on; unlike a mangled name, it carries no module.
+// No `Deref`, `AsRef<str>` or `From<String>`: mixing the two namespaces must not compile.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DeclName(String);
 
@@ -2093,6 +2114,19 @@ pub fn mangle_fn_type(
         out.push(')');
     }
     out
+}
+
+/// An effect as a [`mangle_fn_type`] `with` member. A concrete one carries its
+/// declaring module, since two modules may declare one name.
+#[must_use]
+pub fn mangle_effect_ref(effect: &tir::EffectRef) -> String {
+    match effect {
+        tir::EffectRef::Concrete {
+            name,
+            module_source,
+        } => format!("{module_source}/{name}"),
+        tir::EffectRef::Param { name } => name.clone(),
+    }
 }
 
 /// Whether `name` is a `fn(..)` type's spelling, as [`mangle_fn_type`] writes
@@ -2682,15 +2716,51 @@ mod tests {
             Receiver::Type(FqTypeName::builtin("List")).mangle(&["i32".into()]),
             "List<i32>"
         );
+        // A reference to a named head keeps the head, its arguments applied.
+        let list = FqTypeName::builtin("List");
+        let shared_list = Receiver::RefTo(RefKind::Shared, list.clone());
+        assert_eq!(shared_list.mangle(&["i32".into()]), "&List<i32>");
+        assert_eq!(shared_list.head_key().as_mangled_str(), "&List");
+        let mut_list = Receiver::RefTo(RefKind::Mut, list);
+        assert_eq!(mut_list.mangle(&["i32".into()]), "&mut List<i32>");
+        assert_eq!(mut_list.mangle(&[]), "&mut List");
+    }
+
+    #[test]
+    fn test_ref_impl_receiver_names_its_referent() {
+        let item = FqTypeName::builtin("Item");
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(
+                RefKind::Shared,
+                &item.clone().with_reference(RefKind::Shared),
+            ),
+            None,
+            "eq".into(),
+        );
+        assert_eq!(template.to_mangled_name(), "&Item::eq");
+        let instance = template.with_struct_type_args(&[FqTypeName::builtin("i32")]);
+        assert_eq!(instance.to_mangled_name(), "&Item<i32>::eq");
+        assert_eq!(instance.fq_struct_name().to_mangled(), "&Item<i32>");
+        // A type parameter behind the reference leaves the bare kind.
+        let blanket = Receiver::of_ref_impl(
+            RefKind::Mut,
+            &FqTypeName::binder("T").with_reference(RefKind::Mut),
+        );
+        assert_eq!(blanket, Receiver::Ref(RefKind::Mut));
+        let at_owner = template.at_owner(
+            &item
+                .with_args(vec![FqTypeName::builtin("bool")])
+                .with_reference(RefKind::Shared),
+        );
+        assert_eq!(
+            at_owner,
+            instance.with_struct_type_args(&[FqTypeName::builtin("bool")])
+        );
     }
 }
 
-/// Whether `name` names a builtin shape — one no module declares, so every
-/// mangler spells it the same way wherever it appears. See
-/// [`FqTypeName::builtin`].
-///
-/// An instantiated shape is its head: `Array<u8>` and `[]<A,B>` are as
-/// module-less as the heads they instantiate.
+/// Whether `name` spells a builtin shape, instantiated or not (`Array<u8>`).
+/// See [`FqTypeName::builtin`].
 #[must_use]
 pub fn is_builtin_shape_name(name: &str) -> bool {
     fn head_of(name: &str) -> &str {
@@ -2702,7 +2772,17 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
     let head = head_of(name);
     name.starts_with('&')
         || PrimitiveType::is_primitive_name(head)
-        || matches!(head, "()" | "!" | "Array" | "[]" | "Fn")
+        || matches!(
+            head,
+            UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Array" | TUPLE_TYPE_NAME | "Fn"
+        )
+}
+
+/// Whether `def` declares a builtin shape: a primitive, `Array` or the tuple
+/// family, which every mangler spells bare.
+#[must_use]
+pub fn is_builtin_shape_decl(defs: &DefTable, def: DefId) -> bool {
+    defs.kind(def) == DefKind::BuiltinType
 }
 
 /// A receiver name in the form a mangled name may embed, carrying the declaring
@@ -2916,15 +2996,8 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::Tuple).with_args(elems)
     }
 
-    /// A builtin shape — a primitive, `()`, `!`, the raw GC `Array`, a
-    /// reference, a function type. No module declares one, and every mangler
-    /// spells it bare.
-    ///
-    /// The tuple head is spelled `[a,b]`, never `[]<a,b>`, so it becomes
-    /// [`TypeHead::Tuple`] here rather than depending on every caller to reach
-    /// for [`Self::tuple`]. `of_head` routes a written `[]` through this, and
-    /// so does `ImplTargetKey::of_decl` for the tuple family's declaration:
-    /// one spelling, whichever side asks.
+    /// A builtin shape, spelled bare by every mangler: a primitive, `()`, `!`,
+    /// `Array`, a reference, a function type. The tuple head becomes [`TypeHead::Tuple`].
     #[must_use]
     pub fn builtin(name: &str) -> Self {
         if name == TUPLE_TYPE_NAME {
@@ -2937,7 +3010,7 @@ impl FqTypeName {
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
     pub fn of_head(defs: &DefTable, def: DefId) -> Self {
-        if is_builtin_shape_name(defs.name(def)) {
+        if is_builtin_shape_decl(defs, def) {
             Self::builtin(defs.name(def))
         } else {
             Self::declared(defs, def)
@@ -3008,6 +3081,33 @@ impl FqTypeName {
             _ => false,
         };
         head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
+    /// Whether some substitution for either side's binders and projections
+    /// makes the two names one type. A binder stands for the rest of a type
+    /// after the references written before it.
+    #[must_use]
+    pub fn unifies_with(&self, other: &FqTypeName) -> bool {
+        let open = |name: &FqTypeName| {
+            matches!(
+                name.head,
+                TypeHead::Binder { .. } | TypeHead::Projection { .. }
+            )
+        };
+        if open(self) {
+            return other.reference.starts_with(&self.reference);
+        }
+        if open(other) {
+            return self.reference.starts_with(&other.reference);
+        }
+        self.reference == other.reference
+            && self.head == other.head
+            && self.args.len() == other.args.len()
+            && self
+                .args
+                .iter()
+                .zip(&other.args)
+                .all(|(a, b)| a.unifies_with(b))
     }
 
     /// The base, associated-type name, and declaring trait this projects off,
@@ -3118,7 +3218,8 @@ impl FqTypeName {
 
     /// The outermost `&` prefix and what it points at, `None` for a name
     /// carrying no prefix.
-    fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
+    #[must_use]
+    pub fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
         let (outer, inner) = self.reference.split_first()?;
         Some((
             *outer,
@@ -3384,6 +3485,14 @@ impl FqTraitName {
             TraitHead::Declared(head) => Some(head.def()),
             TraitHead::Binder(_) => None,
         }
+    }
+
+    /// The trait a method call names. Elaboration rejects one reaching no
+    /// declaration, so only a bound's binder is `None` for [`Self::canonical`].
+    #[must_use]
+    pub fn called_decl(&self) -> DefId {
+        self.canonical()
+            .expect("elaboration rejects a trait reaching no declaration")
     }
 
     #[must_use]

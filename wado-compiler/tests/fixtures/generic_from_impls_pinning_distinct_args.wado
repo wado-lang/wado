@@ -1,0 +1,37 @@
+// Two partly generic `From` impls on one head, differing only in the argument
+// each pins. A static call spelling its receiver reaches the one that
+// receiver's arguments pin.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<B: Default> From<i32> for Pair<i32, B> {
+    fn from(value: i32) -> Self {
+        return Pair { a: value + 100, b: B::default() };
+    }
+}
+
+impl<B: Default> From<i32> for Pair<i64, B> {
+    fn from(value: i32) -> Self {
+        return Pair { a: (value + 200) as i64, b: B::default() };
+    }
+}
+
+test "a turbofish receiver reaches its own impl" {
+    let p = Pair::<i32, i64>::from(1);
+    let q = Pair::<i64, i64>::from(1);
+    assert p.a == 101;
+    assert q.a == 201;
+}
+
+test "the free slot instantiates per argument" {
+    let p = Pair::<i32, String>::from(3);
+    let q = Pair::<i32, bool>::from(3);
+    assert p.a == 103 && p.b == "";
+    assert q.a == 103 && !q.b;
+}
+
+__DATA__
+{"test": {}}

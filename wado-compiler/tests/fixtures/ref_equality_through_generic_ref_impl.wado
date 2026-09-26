@@ -1,0 +1,25 @@
+// An `Eq` impl for a reference to a generic type answers `==` on that
+// reference, its parameter read off the pointee's arguments.
+struct Holder<T> {
+    v: T,
+}
+
+impl<T: Eq> Eq<T> for &Holder<T> {
+    fn eq(&self, other: &T) -> bool {
+        return self.v == *other;
+    }
+}
+
+test "the impl's parameter is the pointee's argument" {
+    let text = Holder::<String> { v: "x" };
+    let r = &text;
+    let x: String = "x";
+    let y: String = "y";
+    assert r == x;
+    assert r != y;
+
+    let num = Holder::<i32> { v: 7 };
+    let n = &num;
+    assert n == 7;
+    assert n != 8;
+}

@@ -4,28 +4,26 @@
 
 enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 };  // TypeId(0)
 
-enum core:prelude/traits.wado//enum:WireEncoding { Plain = 0, ZigZag = 1, Fixed = 2 };  // TypeId(1)
+enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
-
-struct core:prelude/types.wado//Box<i32> {  // TypeId(3)
+struct core:prelude/types.wado//Box<i32> {  // TypeId(2)
     mut value: i32,
 }
 
-struct core:prelude/string.wado//StrSlice {  // TypeId(4)
+struct core:prelude/string.wado//StrSlice {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(5)
+array Array<u8> (mut u8);  // TypeId(4)
 
-struct core:prelude/string.wado//String {  // TypeId(6)
+struct core:prelude/string.wado//String {  // TypeId(5)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(7)
+struct core:prelude/format.wado//Formatter {  // TypeId(6)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -37,7 +35,7 @@ struct core:prelude/format.wado//Formatter {  // TypeId(7)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>] {  // TypeId(8)
+struct tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>] {  // TypeId(7)
     mut 0: ref "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>",
     mut 1: ref "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>",
     mut 2: ref "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>",
@@ -56,7 +54,7 @@ struct tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.w
     mut 15: ref "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>",
 }
 
-struct opt_copy_prop_mutref_alias.wado//Big {  // TypeId(9)
+struct opt_copy_prop_mutref_alias.wado//Big {  // TypeId(8)
     mut a: i32,
     mut b: i32,
     mut c: i32,
@@ -75,91 +73,89 @@ struct opt_copy_prop_mutref_alias.wado//Big {  // TypeId(9)
     mut p: i32,
 }
 
-struct core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32> {  // TypeId(10)
+struct core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32> {  // TypeId(9)
     mut index: i32,
     mut field_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut has_default: bool,
     mut is_secret: bool,
-    mut wire_number: i32,
-    mut wire_encoding: "core:prelude/traits.wado//enum:WireEncoding",
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(11)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(13)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(12)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(14)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(15)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(14)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(16)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(15)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(17)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(16)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value" = fn();  // TypeId(18)
+type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value" = fn();  // TypeId(17)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$field_get$opt_copy_prop_mutref_alias.wado/Big$i32" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", i32) -> i32;  // TypeId(19)
+type "functype//opt_copy_prop_mutref_alias.wado/$field_get$opt_copy_prop_mutref_alias.wado/Big$i32" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", i32) -> i32;  // TypeId(18)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$cm_export__$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value" = fn();  // TypeId(20)
+type "functype//opt_copy_prop_mutref_alias.wado/$cm_export__$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value" = fn();  // TypeId(19)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$cm_export__$test_1_straight_line_alias_write_after_the_copy" = fn();  // TypeId(21)
+type "functype//opt_copy_prop_mutref_alias.wado/$cm_export__$test_1_straight_line_alias_write_after_the_copy" = fn();  // TypeId(20)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$value_copy$opt_copy_prop_mutref_alias.wado/Big" = fn(ref "opt_copy_prop_mutref_alias.wado//Big") -> ref "opt_copy_prop_mutref_alias.wado//Big";  // TypeId(22)
+type "functype//opt_copy_prop_mutref_alias.wado/$value_copy$opt_copy_prop_mutref_alias.wado/Big" = fn(ref "opt_copy_prop_mutref_alias.wado//Big") -> ref "opt_copy_prop_mutref_alias.wado//Big";  // TypeId(21)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value$cold0" = fn(i32);  // TypeId(23)
+type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value$cold0" = fn(i32);  // TypeId(22)
 
-type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value$cold1" = fn(i32);  // TypeId(24)
+type "functype//opt_copy_prop_mutref_alias.wado/$test_0_copy_of_an_aliased_struct_captures_the_pre_write_value$cold1" = fn(i32);  // TypeId(23)
 
-type "functype//opt_copy_prop_mutref_alias.wado/geta$scalar" = fn(i32) -> i32;  // TypeId(25)
+type "functype//opt_copy_prop_mutref_alias.wado/geta$scalar" = fn(i32) -> i32;  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(25)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(27)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(26)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<opt_copy_prop_mutref_alias.wado/Big,[i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32]>" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", ref "core:prelude/format.wado//Formatter");  // TypeId(28)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<opt_copy_prop_mutref_alias.wado/Big,[i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32,i32]>" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", ref "core:prelude/format.wado//Formatter");  // TypeId(27)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(29)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(28)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(30)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(29)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(31)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect" = fn(ref "core:prelude/types.wado//Box<i32>", ref "core:prelude/format.wado//Formatter");  // TypeId(30)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::with_capacity" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(31)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(34)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit" = fn(ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(34)
 
-type "functype//opt_copy_prop_mutref_alias.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>]";  // TypeId(36)
+type "functype//opt_copy_prop_mutref_alias.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>]";  // TypeId(35)
 
-type "functype//core:prelude/traits.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/Inspect::inspect" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", ref "core:prelude/format.wado//Formatter");  // TypeId(37)
+type "functype//core:prelude/traits.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/Inspect::inspect" = fn(ref "opt_copy_prop_mutref_alias.wado//Big", ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(38)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(37)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(39)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref Array<u8>, i32, i32) -> i32;  // TypeId(38)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(39)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(41)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(42)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(41)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(42)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(44)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(43)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(45)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(47)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(46)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(48)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(47)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -2084,7 +2080,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "opt_copy_prop_mutref_alias.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 2: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 3: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 3, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 4: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 4, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 5: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 5, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 6: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 6, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 7: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 7, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 8: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 8, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 9: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 9, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(106), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 10: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 10, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 11: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 11, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 12: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 12, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 13: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 13, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 14: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 14, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 }, 15: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 15, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0, wire_encoding: 0 } };
+    return struct.new "tuple//[core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>, core:prelude/traits.wado/StructField<opt_copy_prop_mutref_alias.wado/Big,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 1: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 2: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 3: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 3, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 4: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 4, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 5: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 5, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 6: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 6, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(103), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 7: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 7, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 8: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 8, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 9: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 9, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(106), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 10: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 10, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 11: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 11, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 12: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 12, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 13: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 13, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 14: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 14, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, 15: struct.new "core:prelude/traits.wado//StructField<opt_copy_prop_mutref_alias.wado/Big,i32>" { index: 15, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(112), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
 }
 
 fn "core:prelude/traits.wado/opt_copy_prop_mutref_alias.wado/Big^core:prelude/traits.wado/Inspect::inspect"(self, f) {

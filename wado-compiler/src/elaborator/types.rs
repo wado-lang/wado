@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
+use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -44,9 +44,6 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
-    /// every field or none, which `WireNumbered` is the bound for.
-    pub(super) field_wire_numbers: Vec<Option<u32>>,
     /// The declaration's real type parameters. Bounds, defaults and arity are
     /// all read from here, never from a projection of it.
     pub(super) type_params: RealTypeParams,
@@ -146,7 +143,6 @@ impl StructFieldInfo {
             fields,
             field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
             field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
-            field_wire_numbers: wire_numbers_of(&decl.fields),
             type_params: RealTypeParams::of(&decl.type_params),
             type_param_type_ids,
         }
@@ -352,14 +348,11 @@ impl FlagsInfo {
     }
 }
 
-/// Resource info: module source and method names
-/// Note: This infrastructure was added for resource static methods but isn't fully used yet.
-/// Keep it for when wasi:sockets registration is re-enabled.
+/// A declared `resource`, by its declaration.
 #[derive(Clone)]
 pub(crate) struct ResourceInfo {
     /// Canonical type name (original declaration name, not import alias).
     pub(super) name: String,
-    pub(super) module_source: ModuleSource,
     /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
     pub(super) defined_at: AstId,
 }
@@ -450,6 +443,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A `with` clause names what is not an effect in scope.
+    UnknownEffect {
+        name: String,
+        span: Span,
+    },
+
     /// A bound writing `Self` where no declaration binds one.
     SelfInUnboundedBound {
         param: String,
@@ -518,11 +517,26 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A type application writing more arguments than the head declares.
-    SurplusTypeArguments {
+    /// A type application or turbofish writing other than the head's arity.
+    TypeArgumentCount {
         name: String,
         expected: usize,
         found: usize,
+        span: Span,
+    },
+
+    /// A variant's type arguments written on both its type and its case.
+    CaseTurbofishOnBoth {
+        type_name: String,
+        case: String,
+        span: Span,
+    },
+
+    /// A turbofish on a case whose prefix names a type (`Self`, a newtype),
+    /// which already carries its arguments.
+    PrefixCarriesTypeArgs {
+        prefix: String,
+        case: String,
         span: Span,
     },
 
@@ -541,6 +555,12 @@ pub enum TypeError {
 
     /// Unknown variable
     UnknownIdentifier {
+        name: String,
+        span: Span,
+    },
+    /// A name resolving to nothing that a source binding of the frame took,
+    /// read outside the scope it had.
+    OutOfScope {
         name: String,
         span: Span,
     },
@@ -698,6 +718,16 @@ pub enum TypeError {
         receiver: String,
         /// The receiver-parameter bounds of each blanket, in declaration order.
         bounds: Vec<String>,
+        span: Span,
+    },
+
+    /// Two of one trait's impls, each generic over the receiver's head, both
+    /// reaching it: rank 2 cannot order them.
+    AmbiguousHeadImpls {
+        trait_name: String,
+        receiver: String,
+        /// Each impl's target as written, in declaration order.
+        targets: Vec<String>,
         span: Span,
     },
 
@@ -1318,15 +1348,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// `with E => h do` clause where `E` is not a known effect or resource
-    /// declaration (it might be a regular trait, an unrelated type, or an
-    /// unknown name). Both kinds are installable as handlers; see WEP
-    /// 2026-04-11.
-    NotAnEffect {
-        name: String,
-        span: Span,
-    },
-
     /// `with E => h do` where `E` is a generic effect parameter
     /// (`<effect E>`). Generic effect parameters are propagation-only:
     /// the compiler does not know `E`'s operation list at effect-check
@@ -1334,6 +1355,32 @@ pub enum TypeError {
     /// 2026-01-27 § Generic Effect Parameters Are Propagation-Only.
     GenericEffectParamNotInstallable {
         name: String,
+        span: Span,
+    },
+
+    /// A second `<effect E>` on one declaration, which takes at most one.
+    SecondEffectParam {
+        span: Span,
+    },
+
+    /// `return expr` in an `export async fn`, which delivers with `task return`.
+    ReturnValueInAsync {
+        span: Span,
+    },
+
+    /// `task return` outside an `export async fn`.
+    TaskReturnOutsideAsync {
+        span: Span,
+    },
+
+    /// A template tag that names neither a function nor a static method.
+    TemplateTagNotCallable {
+        span: Span,
+    },
+
+    /// A tagged template hole whose type mentions a type parameter.
+    TemplateHoleGeneric {
+        type_name: String,
         span: Span,
     },
 
@@ -1378,16 +1425,6 @@ pub enum TypeError {
     /// inference context.
     BareGenericFunctionRef {
         name: String,
-        span: Span,
-    },
-
-    /// Turbofish (`name::<T, ...>`) supplied the wrong number of type
-    /// arguments for a generic function reference. The function declares
-    /// `expected` type parameters; the user supplied `found`.
-    GenericFunctionRefArgCountMismatch {
-        name: String,
-        expected: usize,
-        found: usize,
         span: Span,
     },
 
@@ -1479,6 +1516,14 @@ impl TypeError {
                 format!("unknown type '{}'", unalias_namespace_member(name)),
                 *span,
             ),
+            TypeError::UnknownEffect { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "no effect named '{}' is in scope",
+                    unalias_namespace_member(name)
+                ),
+                *span,
+            ),
             TypeError::SelfInUnboundedBound { param, span } => (
                 Code::UnknownType,
                 format!(
@@ -1566,30 +1611,44 @@ impl TypeError {
                 },
                 *span,
             ),
-            TypeError::SurplusTypeArguments {
+            TypeError::CaseTurbofishOnBoth {
+                type_name,
+                case,
+                span,
+            } => (
+                // The parser's code for the same spelling with no call.
+                Code::InvalidSyntax,
+                format!(
+                    "type arguments are written on both `{}` and `{case}`; write them on one",
+                    unalias_namespace_member(type_name)
+                ),
+                *span,
+            ),
+            TypeError::PrefixCarriesTypeArgs { prefix, case, span } => (
+                Code::InvalidSyntax,
+                format!(
+                    "`{}` already names its type arguments; remove the turbofish from `{case}`",
+                    unalias_namespace_member(prefix)
+                ),
+                *span,
+            ),
+            TypeError::TypeArgumentCount {
                 name,
                 expected,
                 found,
                 span,
             } => (
                 Code::ArityMismatch,
-                {
-                    // Surplus, so a declared parameter puts `found` at two or
-                    // more and only the `expected == 0` wording needs "was".
-                    debug_assert!(found > expected);
-                    let name = unalias_namespace_member(name);
-                    if *expected == 0 {
-                        format!(
-                            "`{name}` takes no type arguments, but {found} {} supplied",
-                            if *found == 1 { "was" } else { "were" },
-                        )
-                    } else {
-                        format!(
-                            "`{name}` takes {expected} type argument{}, but {found} were supplied",
-                            if *expected == 1 { "" } else { "s" },
-                        )
-                    }
-                },
+                format!(
+                    "`{}` takes {}, but {found} {} supplied",
+                    unalias_namespace_member(name),
+                    match expected {
+                        0 => "no type arguments".to_string(),
+                        1 => "1 type argument".to_string(),
+                        n => format!("{n} type arguments"),
+                    },
+                    if *found == 1 { "was" } else { "were" },
+                ),
                 *span,
             ),
             TypeError::UnknownFunction { name, span } => (
@@ -1600,6 +1659,11 @@ impl TypeError {
             TypeError::Unavailable { message, span } => {
                 (Code::Unavailable, message.clone(), *span)
             }
+            TypeError::OutOfScope { name, span } => (
+                Code::UndefinedVariable,
+                format!("'{name}' is not in scope"),
+                *span,
+            ),
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{}'", unalias_namespace_member(name)),
@@ -1678,6 +1742,37 @@ impl TypeError {
             TypeError::InvalidLiteral { message, span } => {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
+            TypeError::SecondEffectParam { span } => (
+                Code::InvalidSyntax,
+                "multiple effect parameters are not allowed; use a single effect parameter instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::ReturnValueInAsync { span } => (
+                Code::InvalidSyntax,
+                "cannot use `return expr` in `export async fn`; use `task return expr` instead"
+                    .to_string(),
+                *span,
+            ),
+            TypeError::TaskReturnOutsideAsync { span } => (
+                Code::InvalidSyntax,
+                "`task return` is only valid inside `export async fn`".to_string(),
+                *span,
+            ),
+            TypeError::TemplateTagNotCallable { span } => (
+                Code::InvalidSyntax,
+                "a template tag must name a function or a static method".to_string(),
+                *span,
+            ),
+            TypeError::TemplateHoleGeneric { type_name, span } => (
+                Code::InvalidSyntax,
+                format!(
+                    "a tagged template hole of type `{type_name}` mentions a type parameter; \
+                     a template's type is minted per shape and cannot be generic over the \
+                     enclosing item"
+                ),
+                *span,
+            ),
             TypeError::CannotInferType { message, span } => {
                 (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
@@ -1832,6 +1927,23 @@ impl TypeError {
                     bounds
                         .iter()
                         .map(|b| format!("'{b}'"))
+                        .collect::<Vec<_>>()
+                        .join(" and "),
+                ),
+                *span,
+            ),
+            TypeError::AmbiguousHeadImpls {
+                trait_name,
+                receiver,
+                targets,
+                span,
+            } => (
+                Code::AmbiguousCandidate,
+                format!(
+                    "ambiguous impls of '{trait_name}' for '{receiver}': the ones for {} both reach it, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
+                    targets
+                        .iter()
+                        .map(|t| format!("'{t}'"))
                         .collect::<Vec<_>>()
                         .join(" and "),
                 ),
@@ -2580,14 +2692,6 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::NotAnEffect { name, span } => (
-                Code::UnknownType,
-                format!(
-                    "'{}' is not an effect; only effect names are valid in `with E => h do` clauses",
-                    unalias_namespace_member(name)
-                ),
-                *span,
-            ),
             TypeError::GenericEffectParamNotInstallable { name, span } => (
                 Code::UnsupportedFeature,
                 format!(
@@ -2624,19 +2728,6 @@ impl TypeError {
                         "cannot reference generic function '{name}' bare; supply type arguments via turbofish (e.g., `{name}::<…>`) or wrap in a closure (e.g., `|x| {name}(x)`)"
                     )
                 },
-                *span,
-            ),
-            TypeError::GenericFunctionRefArgCountMismatch {
-                name,
-                expected,
-                found,
-                span,
-            } => (
-                Code::GenericFunctionRef,
-                format!(
-                    "wrong number of type arguments for generic function '{}': expected {expected}, found {found}",
-                    unalias_namespace_member(name)
-                ),
                 *span,
             ),
             TypeError::GenericFunctionRefArityMismatch {
@@ -2772,6 +2863,9 @@ pub(super) struct MethodInfo {
     /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
     /// error-recovery placeholder.
     pub(super) method_def: Option<DefId>,
+    /// The `impl` block whose body answers: with [`Self::method_def`], the
+    /// template the call instantiates. `None` where no block backs the body.
+    pub(super) impl_block: Option<DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)
@@ -2839,6 +2933,7 @@ impl MethodInfo {
     pub(super) fn undeclared(return_type: TypeId) -> Self {
         Self {
             method_def: None,
+            impl_block: None,
             return_type,
             self_kind: ast::SelfKind::Ref,
             param_types: vec![],
@@ -2903,6 +2998,9 @@ pub(super) struct FunctionContext {
     /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
     /// at the point of emission.
     pub(super) locals: Vec<TirLocal>,
+    /// Every name a binding written in source has taken in this frame, an
+    /// enclosing one, or a closure it built, in scope or not.
+    pub(super) source_bindings: IndexSet<String>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
@@ -3187,6 +3285,7 @@ impl FunctionContext {
             is_async: false,
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: IndexSet::default(),
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
@@ -3269,6 +3368,7 @@ impl FunctionContext {
             is_async: false, // Closures are never async
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: outer_ctx.source_bindings.clone(),
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
@@ -3343,6 +3443,9 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
+        if defining_ast_id.is_some() {
+            self.source_bindings.insert(name.clone());
+        }
         self.locals.push(TirLocal {
             name: name.clone(),
             type_id,
@@ -3379,6 +3482,12 @@ impl FunctionContext {
                 defining_ast_id: None,
             },
         );
+    }
+
+    /// Whether a binding written in source took `name`, so a lookup of it that
+    /// fails reads it outside the scope it had.
+    pub(super) fn declared(&self, name: &str) -> bool {
+        self.source_bindings.contains(name)
     }
 
     /// Look up a variable by name (searches from innermost to outermost scope)
@@ -3418,7 +3527,8 @@ impl FunctionContext {
         let mut outer = scopes.replacing(|ctx| &mut ctx.outer_locals, IndexMap::default());
         let mut derefs = outer.replacing(|ctx| &mut ctx.deref_overrides, IndexMap::default());
         let mut boxes = derefs.replacing(|ctx| &mut ctx.outer_box_types, IndexMap::default());
-        body(&mut boxes)
+        let mut sources = boxes.replacing(|ctx| &mut ctx.source_bindings, IndexSet::default());
+        body(&mut sources)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.
@@ -3625,16 +3735,8 @@ pub(super) struct TraitMethodMatch {
     /// [`Self::blanket_type_param`] as a binder named by its block, so two
     /// blankets of one trait are two templates whatever letter each spells.
     pub(super) blanket_binder: Option<FqTypeName>,
-    /// The receiver parameter's bounds as source writes them (`T: Limit`) —
-    /// what an ambiguity names two blankets by, neither having a name.
-    pub(super) blanket_bounds: Option<String>,
-    /// The struct name that actually has the trait impl (may differ from the
-    /// receiver's struct name when the impl was found through the newtype chain).
-    /// Written form — the impl-index key.
-    pub(super) impl_struct_name: String,
-    /// [`Self::impl_struct_name`] as the receiver form a mangled name embeds,
-    /// resolved from the impl's own module so it matches the name the impl's
-    /// methods were defined under.
+    /// The type that has the impl, as the receiver form its methods were
+    /// defined under. Not the receiver's when found through the newtype chain.
     pub(super) impl_struct_fq: FqTypeName,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
@@ -3827,10 +3929,6 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.struct_fields_of(self.declaration(name)?)
-    }
-
     /// Field info for a struct type's own head — the form with nothing left to
     /// resolve, since the head is already an identity or a shape.
     pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {
@@ -4030,56 +4128,25 @@ impl<'a> TypeLookup<'a> {
         assoc_name: &str,
     ) -> Option<DefId> {
         self.decls
-            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
-                self.declaration_at(Some(bound.id), &bound.name)
-            })
+            .bound_declaring_assoc_type(bounds, assoc_name, self.resolutions)
     }
 
     /// The declaration a type reference names.
-    ///
-    /// The site decides: the walk answered for it once, in the module that
-    /// wrote it, so an alias, a namespace prefix and a function-local `struct`
-    /// all reach their own declaration with no vantage supplied here. A binder
-    /// is not a declaration and gets none. The spelling answers only where the
-    /// walk left nothing — `None` for a node the elaborator minted, and
-    /// `Unresolved` for a name it could not place, where this module's scope
-    /// is the same scope and so the same answer.
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        match site.and_then(|site| self.resolutions.walked(site)) {
-            Some(Resolution::Def(def)) => Some(def),
-            // Neither is a declaration, and a projection's bare member name
-            // would reach whatever else this module calls that.
-            Some(Resolution::Binder(_) | Resolution::Projection(_)) => None,
-            Some(Resolution::Unresolved) | None => self.declaration(name),
-        }
+        self.resolutions
+            .declared_or(site, || self.declaration(name))
     }
 
-    /// Which declaration `name` names in the frame this view stands in — for a
-    /// caller holding a rendering. Not a scope: a name with a site goes through
-    /// [`Self::declaration_at`], which reads what the resolve pass recorded.
-    ///
-    /// The function-local items tried ahead of the indexes are the walk's own
-    /// position; a local item is visible only after its declaration statement.
+    /// Which declaration `name` names in the frame this view stands in, for a
+    /// caller holding a rendering; one with a site calls [`Self::declaration_at`].
     pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
         let canon = canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.walk.fn_local_items.get(name) {
             return Some(*def);
         }
-        // The frame derivation. A *written* reference reaches this view through
-        // `declaration_at`, which asks the site the walk answered for; what is
-        // left here arrived holding a rendered head, for which only the
-        // declaration index can answer. The three tiers are the module's own
-        // reach — what it imported, what it declares, what the prelude gives
-        // it — so a declaration this module cannot see stays unseen here.
         self.resolutions
-            .imported_as(self.current_module_source, name)
-            .or_else(|| {
-                self.decls
-                    .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
-            })
-            .or_else(|| self.resolutions.prelude_decl(name))
+            .resolve_in(self.current_module_source, name)
     }
 }
 
@@ -4123,6 +4190,9 @@ pub(super) struct ArithmeticTraitInfo {
     pub(super) rhs_type: Option<TypeId>,
     /// Module that wrote the impl block — where the method body is registered.
     pub(super) impl_module_source: ModuleSource,
+    /// How to spell the receiver in the dispatched method's name, as
+    /// [`IndexingTraitInfo::receiver`] does.
+    pub(super) receiver: FqTypeName,
 }
 
 /// A trait method an operator dispatches to, Self-substituted;
@@ -4144,10 +4214,11 @@ pub(super) struct ResolvedTraitMethod {
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.
     pub(super) impl_name: String,
-    /// That type's `TypeId`, from which the receiver's fq name is read.
-    /// `None` when the receiver is a type parameter, which names no
-    /// declaration.
+    /// That type's `TypeId`. `None` when the receiver is a type parameter.
     pub(super) impl_type_id: Option<TypeId>,
+    /// How the dispatched method's name spells its receiver: the matched
+    /// block's, or the binder where the receiver is a type parameter.
+    pub(super) receiver: FqTypeName,
     /// `self_kind` from the method signature (almost always `Ref`).
     pub(super) self_kind: ast::SelfKind,
     /// Return type of the method, with `Self` and impl type params
@@ -4180,6 +4251,7 @@ impl ResolvedTraitMethod {
             impl_def: None,
             impl_name: param.to_string(),
             impl_type_id: None,
+            receiver: FqTypeName::binder(param),
             self_kind: info.self_kind,
             return_type: info.return_type,
             param_types: info.param_types,
@@ -4205,6 +4277,7 @@ impl ResolvedTraitMethod {
             impl_def: Some(info.impl_def),
             impl_name,
             impl_type_id: Some(impl_type_id),
+            receiver: info.receiver,
             self_kind: info.self_kind,
             return_type: info.output_type,
             param_types: info.rhs_type.into_iter().collect(),

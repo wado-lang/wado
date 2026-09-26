@@ -5,7 +5,7 @@
 //! out what is there happens here, inside the host a browser never runs.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use wado_manifest::dependency::{
     RegistryComponentNeed, best_matching_version, git_pins, registry_component_needs_locked,
@@ -47,6 +47,50 @@ pub fn absolutize(p: &Path) -> PathBuf {
     }
 }
 
+/// Fold `.` and `..` out of `path` without touching the filesystem. A `..` at
+/// the root, or leading a relative path, has nothing to pop and is kept.
+#[must_use]
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // `PathBuf::pop` would remove a `..` this loop just pushed,
+                // turning `../../pkg` into `pkg`. Above the root, `/..` is `/`.
+                match out.components().next_back() {
+                    Some(Component::Normal(_)) => {
+                        out.pop();
+                    }
+                    Some(Component::RootDir | Component::Prefix(_)) => {}
+                    Some(Component::CurDir | Component::ParentDir) | None => {
+                        out.push(component);
+                    }
+                }
+            }
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                out.push(component);
+            }
+        }
+    }
+    out
+}
+
+/// `path` made absolute, each `..` taken as the filesystem takes it: past a
+/// symlink, not lexically. What follows the last `..` stays as written.
+fn resolve_parent_dirs(path: &Path) -> PathBuf {
+    let path = absolutize(path);
+    let components: Vec<Component> = path.components().collect();
+    let Some(last) = components.iter().rposition(|c| *c == Component::ParentDir) else {
+        return normalize_path(&path);
+    };
+    let head: PathBuf = components[..=last].iter().collect();
+    let tail: PathBuf = components[last + 1..].iter().collect();
+    // A path that does not exist has no filesystem answer, only the lexical one.
+    let base = std::fs::canonicalize(&head).unwrap_or_else(|_| normalize_path(&head));
+    normalize_path(&base.join(tail))
+}
+
 /// Parse a member's `wado.toml`, applying `[workspace.package]` inheritance when
 /// `member_dir` belongs to a workspace; otherwise parse it standalone.
 ///
@@ -72,7 +116,8 @@ pub fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(P
     if read_workspace_members(member_content).is_some() {
         return None;
     }
-    let mut dir = member_dir.to_path_buf();
+    let member_dir = resolve_parent_dirs(member_dir);
+    let mut dir = member_dir.clone();
     while dir.pop() {
         let candidate = dir.join(MANIFEST_FILENAME);
         if !candidate.is_file() {
@@ -82,7 +127,7 @@ pub fn governing_workspace(member_dir: &Path, member_content: &str) -> Option<(P
             continue;
         };
         if let Some(members) = read_workspace_members(&content)
-            && workspace_governs(&dir, &members, member_dir)
+            && workspace_governs(&dir, &members, &member_dir)
         {
             return Some((dir, content));
         }
@@ -348,6 +393,52 @@ mod tests {
 
         let manifest = resolve_member_manifest(&member_dir, member_toml).unwrap();
         assert_eq!(manifest.package.unwrap().version, "0.4.0");
+    }
+
+    #[test]
+    fn a_member_reached_through_parent_dirs_still_inherits() {
+        // `path = "../.."` from a nested package names the member lexically.
+        let (_tmp, member_dir) = workspace_with_member("member");
+        let member_toml = "[package]\nname = \"member\"\n";
+        std::fs::write(member_dir.join(MANIFEST_FILENAME), member_toml).unwrap();
+        std::fs::create_dir_all(member_dir.join("tests/nested")).unwrap();
+
+        let via_parents = member_dir.join("tests/nested/../..");
+        let manifest = resolve_member_manifest(&via_parents, member_toml).unwrap();
+        assert_eq!(manifest.package.unwrap().version, "0.4.0");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_parent_dir_past_a_symlink_is_the_one_the_filesystem_reaches() {
+        let (tmp, member_dir) = workspace_with_member("member");
+        let member_toml = "[package]\nname = \"member\"\n";
+        std::fs::write(member_dir.join(MANIFEST_FILENAME), member_toml).unwrap();
+        std::fs::create_dir(member_dir.join("sub")).unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let link = outside.path().join("link");
+        std::os::unix::fs::symlink(member_dir.join("sub"), &link).unwrap();
+
+        let manifest = resolve_member_manifest(&link.join(".."), member_toml).unwrap();
+        assert_eq!(manifest.package.unwrap().version, "0.4.0");
+        drop(tmp);
+    }
+
+    #[test]
+    fn normalize_path_keeps_a_parent_chain_it_cannot_pop() {
+        for (input, expected) in [
+            ("./../../pkg/gen.wado", "../../pkg/gen.wado"),
+            ("a/b/../c", "a/c"),
+            ("../a/..", ".."),
+            ("/a/b/../c", "/a/c"),
+            ("/../a", "/a"),
+        ] {
+            assert_eq!(
+                normalize_path(Path::new(input)),
+                Path::new(expected),
+                "{input:?}"
+            );
+        }
     }
 
     #[test]

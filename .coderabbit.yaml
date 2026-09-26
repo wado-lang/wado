@@ -5,6 +5,21 @@
 # `scripts/check-review-filters.sh` holds the two lists to each other.
 language: en-US
 reviews:
+  high_level_summary: false
+  high_level_summary_in_walkthrough: true
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_issues: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+  auto_review:
+    ignore_usernames:
+      - "wado-bot[bot]"
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
   path_filters:
     - "!wado-compiler/tests/generated/**"
     - "!wado-compiler/lib/core/*.wat"
@@ -20,6 +35,7 @@ reviews:
     - "!package-loam/tests/models/tiny-gpt2/vocab.json"
     - "!package-loam/tests/models/tiny-gpt2/merges.txt"
     - "!package-grog/tests/proto/**/*.proto"
+    - "!package-loam/src/onnx.proto"
     - "!package-web/src/dom.wado"
     - "!package-web/glue/dom.js"
     - "!package-web/idl/*.webidl.json"

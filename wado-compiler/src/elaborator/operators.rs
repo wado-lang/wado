@@ -5,9 +5,9 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::primitive::PrimitiveType;
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TemplateId, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::binary_op_str;
 
@@ -21,7 +21,7 @@ use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::trait_env::ImplHeader;
+use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
@@ -149,14 +149,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 |expr, hint| self.resolve_expr(expr, ctx, hint),
                 |&ty| ty,
             )
-        } else if self.tysys.is_null_literal(right_ast) && !self.tysys.is_null_literal(left_ast) {
+        } else if TypeSystem::is_null_literal(right_ast) && !TypeSystem::is_null_literal(left_ast) {
             // `expr == null`: resolve the non-null side first and feed its
             // type to the bare `null` so it resolves to a concrete
             // `Option<T>` instead of `Option<!>`.
             let left = self.resolve_expr(left_ast, ctx, expected_type);
             let right = self.resolve_expr(right_ast, ctx, Some(left));
             (left, right)
-        } else if self.tysys.is_null_literal(left_ast) && !self.tysys.is_null_literal(right_ast) {
+        } else if TypeSystem::is_null_literal(left_ast) && !TypeSystem::is_null_literal(right_ast) {
             // `null == expr`: symmetric to the above.
             let right = self.resolve_expr(right_ast, ctx, expected_type);
             let left = self.resolve_expr(left_ast, ctx, Some(right));
@@ -375,6 +375,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if is_comparison {
+            if let Some(resolved) = self.resolve_ref_comparison(left, op, right) {
+                let call = self.dispatch_trait_op_method(
+                    left,
+                    vec![(right, right_span)],
+                    &resolved,
+                    origin,
+                );
+                // Reify rebuilds `!=` and an ordering from `eq` / `cmp`.
+                return if call == TypeTable::ERROR {
+                    TypeTable::ERROR
+                } else {
+                    TypeTable::BOOL
+                };
+            }
+
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
@@ -930,13 +945,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let inner_expected = if matches!(unary.op, UnaryOp::Ref | UnaryOp::MutRef) {
-            expected_type.and_then(|expected| {
-                let table = self.tysys.type_table.borrow();
-                match table.get(expected) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                    _ => None,
-                }
-            })
+            expected_type.and_then(|expected| self.tysys.pointee_of(expected))
         } else {
             None
         };
@@ -1016,20 +1025,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .trait_impl_base_lookup(&struct_name, expr_type, trait_);
                 let resolved = self
-                    .resolve_trait_method_for_op(
-                        &struct_name,
-                        expr_type,
-                        trait_,
-                        &trait_name,
-                        method_name,
-                        None,
-                    )
+                    .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
                     .or_else(|| {
                         self.resolve_trait_method_for_op(
                             &lookup_name,
                             lookup_type_id,
                             trait_,
-                            &trait_name,
                             method_name,
                             None,
                         )
@@ -1184,18 +1185,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        let table = self.tysys.type_table.borrow();
-        // Mirror `resolve_index`'s one-level reference peel before the tuple
-        // check.
-        let base = match table.get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
-        matches!(
-            table.get(base),
-            ResolvedType::GenericInstance { def, .. }
-                if TypeTable::is_tuple_type(table.def_name(*def))
-        )
+        let base = self.tysys.through_ref(recv_type);
+        self.tysys.type_table.borrow().is_tuple(base)
     }
 
     /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
@@ -1272,10 +1263,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Get base type (unwrap reference if needed)
-            let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                _ => indexed_type,
-            };
+            let base_type_id = self.tysys.through_ref(indexed_type);
 
             // Check for IndexAssign trait implementation
             // Arrays now use IndexAssign trait like other types
@@ -1303,11 +1291,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let index_type = self.resolve_expr(&index_expr.index, ctx, None);
 
                     // Reject &T/&mut T used as index expression (would ICE in codegen)
-                    let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                        _ => None,
-                    };
-                    if let Some(expected) = derefed_index_type {
+                    if let Some(expected) = self.tysys.pointee_of(index_type) {
                         self.typecheck(index_type, expected, index_expr.index.span());
                     }
 
@@ -1348,6 +1332,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let func = FunctionRef {
                             module_source: trait_info.impl_module_source.clone(),
                             name: mangled_method_name,
+                            template: Some(
+                                self.tysys
+                                    .signatures
+                                    .declared_template(trait_info.method_def),
+                            ),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 receiver,
@@ -1684,20 +1673,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         let trait_ = self.tysys.compiler_trait_def(item)?;
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(item)
-            .to_string();
-        self.resolve_trait_method_for_op(
-            struct_name,
-            lookup_type_id,
-            trait_,
-            &trait_name,
-            method,
-            rhs,
-        )
+        self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, rhs)
+    }
+
+    /// A comparison of a reference with a value, answered by an impl written
+    /// for the reference itself and chosen by the right operand, as a generic
+    /// body instantiated at `&T` dispatches. `None` leaves the pair to the
+    /// rules for values: nothing here dereferences the left operand.
+    fn resolve_ref_comparison(
+        &mut self,
+        left: TypeId,
+        op: BinaryOp,
+        right: TypeId,
+    ) -> Option<ResolvedTraitMethod> {
+        let kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(left))?;
+        // A pair of references is identity's question, never an impl's.
+        if self.tysys.pointee_of(right).is_some() {
+            return None;
+        }
+        let item = match op {
+            BinaryOp::Eq | BinaryOp::NotEq => CompilerItem::Eq,
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => CompilerItem::Ord,
+            _ => unreachable!("resolve_ref_comparison takes a comparison operator"),
+        };
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        let method = self.tysys.operator_method_name(item);
+        // `&mut X` coerces to `&X`, so a block for `&X` answers where none
+        // for `&mut X` does.
+        let shared = (kind == RefKind::Mut).then_some(RefKind::Shared);
+        let (kind, info) = std::iter::once(kind).chain(shared).find_map(|kind| {
+            let info = self.find_operator_impl_on(
+                &ImplTargetKey::Ref(kind),
+                left,
+                trait_,
+                &method,
+                Some(&ArgClass::Exact(right)),
+            )?;
+            Some((kind, info))
+        })?;
+        let found = OperatorImpl {
+            info,
+            impl_name: kind.prefix().to_string(),
+            impl_type_id: left,
+        };
+        let mut resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, &method);
+        resolved.return_type = self.tysys.auto_derive_return_type(item);
+        Some(resolved)
     }
 
     /// An operator on a type parameter, dispatched through its bounds. `None`
@@ -1830,9 +1851,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        // A block written for a reference has that reference as its `Self`.
+        let receiver_head = match self.ref_impl_of(resolved) {
+            Some(_) => receiver,
+            None => self.tysys.get_base_type(receiver),
+        };
         // An impl read on a link below the receiver answers in the receiver's
         // type, as a method call does (WEP 2026-01-29).
-        let receiver_head = self.tysys.get_base_type(receiver);
         let return_type = match resolved.impl_type_id {
             Some(link) if link != receiver_head => {
                 self.tysys
@@ -1860,10 +1885,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
             // the expected type is the parameter type itself.
             let expected = if wrap {
-                let referent = match self.tysys.type_table.borrow().get(param_ty) {
-                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-                    _ => param_ty,
-                };
+                let referent = self.tysys.through_ref(param_ty);
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -1871,7 +1893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let declares_rhs = (resolved.is_type_param_receiver
                     || !resolved.trait_name.args().is_empty())
                     && referent != receiver
-                    && referent != self.tysys.get_base_type(receiver);
+                    && referent != receiver_head;
                 if declares_rhs { referent } else { receiver }
             } else {
                 param_ty
@@ -1880,54 +1902,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
-        // The receiver is named by the type whose impl matched; a type-param
-        // receiver names no declaration, so it stays a binder.
-        let receiver_fq = resolved.impl_type_id.map_or_else(
-            || FqTypeName::binder(&resolved.impl_name),
-            |id| self.tysys.fq_receiver_head(id),
-        );
-        let mangled_method_name = MethodName::format_local(
-            &receiver_fq,
-            Some(&resolved.trait_name),
-            &resolved.method_name,
-        );
-
-        let mut method_info = LocalMethodName::new(
-            receiver_fq,
-            Some(resolved.trait_name.clone()),
-            resolved.method_name.clone(),
-        );
-        method_info.is_type_param_receiver = resolved.is_type_param_receiver;
-
-        // Only a *concrete* block's function lives in the block's module: a
-        // generic block's instance is materialised in the receiver type's,
-        // the convention `TraitEnv::concrete_impl_module_for` encodes.
-        //
-        // Everything else answers from the receiver's newtype chain, keyed on
-        // the link the lookup was made on — peeling to the base would send an
-        // impl written on the newtype to the base's module.
-        let defs = self.tysys.resolutions.defs();
-        let concrete_impl = resolved.impl_def.filter(|def| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(def)
-                .is_some_and(ImplHeader::is_concrete)
-        });
-        let module_source = match concrete_impl {
-            Some(def) => defs.module(def).clone(),
-            None => self
-                .impl_target_decl_key(receiver, &resolved.impl_name)
-                .map_or_else(
-                    || self.declaring_module_of(&resolved.impl_name),
-                    |def| defs.module(def).clone(),
-                ),
-        };
-        let function_ref = FunctionRef {
-            module_source,
-            name: mangled_method_name,
-            monomorph_info: None,
-            method_info: Some(method_info),
+        let function_ref = match self.ref_impl_of(resolved) {
+            Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
+            None => self.operator_impl_function(resolved, receiver),
         };
 
         // When the operator-dispatch request carries a source AST id in
@@ -1954,6 +1931,133 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
         // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
         return_type
+    }
+
+    /// The block `resolved` dispatches to, where it is written for a `&X` /
+    /// `&mut X` target, with that reference's kind.
+    fn ref_impl_of(&self, resolved: &ResolvedTraitMethod) -> Option<(RefKind, &ImplHeader)> {
+        let header = self.tysys.trait_env.impl_headers.get(&resolved.impl_def?)?;
+        Some((header.target.ref_kind()?, header))
+    }
+
+    /// The function a `&X` / `&mut X` block's method is at `receiver`: the
+    /// block's own for a concrete one, else the instance of its template.
+    fn ref_impl_function(
+        &self,
+        kind: RefKind,
+        header: &ImplHeader,
+        resolved: &ResolvedTraitMethod,
+        receiver: TypeId,
+    ) -> FunctionRef {
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(kind, &header.target_id),
+            Some(resolved.trait_name.clone()),
+            resolved.method_name.clone(),
+        );
+        let template_id = resolved
+            .method_def
+            .zip(resolved.impl_def)
+            .map(|(def, block)| TemplateId::in_block(def, block));
+        if header.is_concrete() {
+            let function = template.at_owner(&header.target_id);
+            return FunctionRef {
+                module_source: header.module.clone(),
+                name: function.to_mangled_name(),
+                template: template_id,
+                monomorph_info: None,
+                method_info: Some(function),
+            };
+        }
+        let pointee = self
+            .tysys
+            .pointee_of(receiver)
+            .expect("a reference block answers a reference receiver");
+        // `&T` binds `T` to the pointee; `&Holder<T>` to the pointee's arguments.
+        let is_blanket = matches!(template.receiver(), Receiver::Ref(_));
+        let impl_type_args = if is_blanket {
+            vec![pointee]
+        } else {
+            self.tysys
+                .type_table
+                .borrow()
+                .nominal_type_args(pointee)
+                .unwrap_or_default()
+        };
+        let arg_names: Vec<FqTypeName> = impl_type_args
+            .iter()
+            .map(|&arg| self.tysys.type_table.borrow().fq_type_name(arg))
+            .collect();
+        let instance = template.with_struct_type_args(&arg_names);
+        FunctionRef {
+            module_source: header.module.clone(),
+            name: instance.to_mangled_name(),
+            template: template_id,
+            monomorph_info: Some(MonomorphInfo {
+                generic_name: template.to_mangled_name(),
+                impl_type_args,
+                method_type_args: vec![],
+                is_blanket,
+            }),
+            method_info: Some(instance),
+        }
+    }
+
+    /// The function an operator method is when a value type's impl, or a type
+    /// parameter's bound, answers it.
+    fn operator_impl_function(
+        &self,
+        resolved: &ResolvedTraitMethod,
+        receiver: TypeId,
+    ) -> FunctionRef {
+        let receiver_fq = resolved.receiver.clone();
+        let mangled_method_name = MethodName::format_local(
+            &receiver_fq,
+            Some(&resolved.trait_name),
+            &resolved.method_name,
+        );
+
+        let mut method_info = LocalMethodName::new(
+            receiver_fq,
+            Some(resolved.trait_name.clone()),
+            resolved.method_name.clone(),
+        );
+        method_info.is_type_param_receiver = resolved.is_type_param_receiver;
+
+        // Only a *concrete* block's function lives in the block's module: a
+        // generic block's instance is materialised in the receiver type's,
+        // the convention `TraitEnv::concrete_impl_module_for` encodes.
+        //
+        // Everything else answers from the receiver's newtype chain, keyed on
+        // the link the lookup was made on — peeling to the base would send an
+        // impl written on the newtype to the base's module.
+        let defs = self.tysys.resolutions.defs();
+        let concrete_impl = resolved
+            .impl_def
+            .filter(|def| self.tysys.trait_env.impl_headers[def].is_concrete());
+        let module_source = match concrete_impl {
+            Some(def) => defs.module(def).clone(),
+            None => self
+                .impl_target_decl_key(receiver, &resolved.impl_name)
+                .map_or_else(
+                    || self.declaring_module_of(&resolved.impl_name),
+                    |def| defs.module(def).clone(),
+                ),
+        };
+        let template = match resolved.method_def {
+            _ if resolved.is_type_param_receiver => None,
+            Some(def) => Some(match resolved.impl_def {
+                Some(block) => TemplateId::in_block(def, block),
+                None => self.tysys.signatures.declared_template(def),
+            }),
+            None => Some(TemplateId::derived(module_source.clone(), &method_info)),
+        };
+        FunctionRef {
+            module_source,
+            name: mangled_method_name,
+            template,
+            monomorph_info: None,
+            method_info: Some(method_info),
+        }
     }
 }
 

@@ -1,0 +1,33 @@
+// A `&mut List` iteration inside a generic function stays on the `&mut List`
+// impl when the function is instantiated, beside a `&List` one.
+
+use { println, Stdout } from "core:cli";
+
+fn count<S: AsStrSlice>(name: S, names: &List<String>) -> i32 {
+    let mut n = 0;
+    for let s of names {
+        if *s == name.as_str_slice() {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+fn mark<S: AsStrSlice>(name: S, names: &mut List<String>) {
+    for let s of names {
+        if *s == name.as_str_slice() {
+            s.push_str("!");
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut names: List<String> = ["a", "b", "a"];
+    let a: String = "a";
+    println(`${count(&a, &names)}`);
+    mark(&a, &mut names);
+    println(`${names:?}`);
+}
+
+__DATA__
+{"stdout": "2\n[\"a!\", \"b\", \"a!\"]\n"}

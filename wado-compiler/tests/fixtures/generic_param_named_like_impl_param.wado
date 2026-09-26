@@ -1,0 +1,21 @@
+// A generic caller whose parameter shares a name with the impl's (`K` in
+// `impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V>`) reaches the same impl.
+
+use { TreeMap } from "core:collections";
+
+fn filled<K: Ord, V>(key: K, value: V) -> TreeMap<K, V> {
+    let mut map = TreeMap::<K, V>::new();
+    map[key] = value;
+    return map;
+}
+
+fn put<K: Ord, V>(map: &mut TreeMap<K, V>, key: K, value: V) {
+    map[key] = value;
+}
+
+test "an index assignment in a generic body names the impl's own parameter" {
+    let mut map = filled("a", 1);
+    put(&mut map, "b", 2);
+    assert map["a"] == 1;
+    assert map["b"] == 2;
+}

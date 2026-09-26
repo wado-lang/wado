@@ -281,7 +281,7 @@ Escape analysis drives the choice. From the user's perspective both paths satisf
 
 ## Component Model Boundary
 
-The Component Model has no closure type. A closure crosses only as a `#[cm]` import's parameter: its `u32` key crosses, and the host calls it back through a synthesized export ([Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks)). Such a callback takes scalars and handles and returns nothing. A closure type anywhere else in an imported or exported signature is a compile error, a return type or a container included.
+The Component Model has no closure type. A closure crosses only as a `#[cm]` import's parameter: its `u32` key crosses, and the host calls it back through a synthesized export ([Web § Callbacks](./wep-2026-04-01-web.md#callbacks)). Such a callback takes scalars and handles and returns nothing. A closure type anywhere else in an imported or exported signature is a compile error, a return type or a container included.
 
 ## Comparison with Rust
 

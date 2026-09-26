@@ -1,0 +1,16 @@
+// `#[benign(E)]` names an effect in its module's scope, as a `with` clause
+// does. `Stdout` is not imported here, so the attribute names nothing.
+
+use { println } from "core:cli";
+
+#[benign(Stdout)]
+fn emit() {
+    println("x");
+}
+
+export fn run() {
+    emit();
+}
+
+__DATA__
+{"compile_error": "`#[benign(Stdout)]` on 'emit' names no effect in scope"}

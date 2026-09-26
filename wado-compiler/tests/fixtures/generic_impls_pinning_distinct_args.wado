@@ -1,0 +1,49 @@
+// Two generic inherent impls on one head, differing only in the argument each
+// pins. Each is its own template: sharing the name `Pair::f` built both
+// instances from one of them, and the module failed Wasm validation.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Pair<T, i32> {
+    fn f(&self) -> i32 {
+        return 100;
+    }
+
+    fn second(&self) -> i32 {
+        return self.b;
+    }
+}
+
+impl<T> Pair<T, i64> {
+    fn f(&self) -> i32 {
+        return 200;
+    }
+
+    fn second(&self) -> i64 {
+        return self.b * 2;
+    }
+}
+
+test "each receiver reaches its own impl" {
+    let p = Pair { a: 0, b: 1 };
+    let q: Pair<i32, i64> = Pair { a: 0, b: 2 };
+    assert p.f() == 100;
+    assert q.f() == 200;
+    assert p.second() == 1;
+    assert q.second() == 4;
+}
+
+test "the free slot still instantiates per argument" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 3 };
+    let q: Pair<bool, i64> = Pair { a: true, b: 5 };
+    assert p.f() == 100;
+    assert q.f() == 200;
+    assert p.second() == 3;
+    assert q.second() == 10;
+}
+
+__DATA__
+{"test": {}}

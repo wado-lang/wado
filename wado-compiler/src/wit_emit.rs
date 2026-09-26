@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::ast::NamedType;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, one_per_cm_name,
     parse_resource_func,
@@ -943,23 +944,30 @@ impl<'a> Emitter<'a> {
                     self.classify_resolved(*inner)
                 }
             }
-            ResolvedType::GenericInstance { def, type_args } => match self.types.def_name(*def) {
-                "Option" if type_args.len() == 1 => CmShape::Option(type_args[0]),
-                "List" if type_args.len() == 1 => CmShape::List(type_args[0]),
-                "TreeMap" if type_args.len() == 2 => CmShape::Map(type_args[0], type_args[1]),
-                n if TypeTable::is_tuple_type(n) => CmShape::Tuple(type_args.clone()),
-                "Result" if type_args.len() == 2 => CmShape::Result {
-                    ok: self.non_unit(type_args[0]),
-                    err: self.non_unit(type_args[1]),
-                },
-                "AsyncCall" if type_args.len() == 1 => self.classify_resolved(type_args[0]),
-                _ => CmShape::Leaf,
-            },
-            ResolvedType::GenericResource { def, type_args } => match self.types.def_name(*def) {
-                "Future" => CmShape::Future(type_args.first().copied()),
-                "Stream" => CmShape::Stream(type_args.first().copied()),
-                _ => CmShape::Leaf,
-            },
+            ResolvedType::GenericInstance { type_args, .. } if self.types.is_tuple(id) => {
+                CmShape::Tuple(type_args.clone())
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                match (self.types.compiler_type_item(*def), type_args.as_slice()) {
+                    (Some(CompilerItem::Option), [arg]) => CmShape::Option(*arg),
+                    (Some(CompilerItem::List), [arg]) => CmShape::List(*arg),
+                    (Some(CompilerItem::TreeMap), [key, value]) => CmShape::Map(*key, *value),
+                    (Some(CompilerItem::Result), [ok, err]) => CmShape::Result {
+                        ok: self.non_unit(*ok),
+                        err: self.non_unit(*err),
+                    },
+                    (Some(CompilerItem::AsyncCall), [arg]) => self.classify_resolved(*arg),
+                    _ => CmShape::Leaf,
+                }
+            }
+            ResolvedType::GenericResource { def, type_args } => {
+                let elem = type_args.first().copied();
+                match self.types.compiler_type_item(*def) {
+                    Some(CompilerItem::Future) => CmShape::Future(elem),
+                    Some(CompilerItem::Stream) => CmShape::Stream(elem),
+                    _ => CmShape::Leaf,
+                }
+            }
             _ => CmShape::Leaf,
         }
     }
@@ -1159,7 +1167,7 @@ struct FqParts {
     namespace: String,
     package: String,
     interface: String,
-    /// Empty for a package that carries no version, as a `web:*` one does.
+    /// Empty for a package that carries no version.
     version: String,
 }
 

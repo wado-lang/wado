@@ -2,12 +2,12 @@
 // since only one of the two could be read.
 
 struct Sample {
-    #[wire(number = 1, encoding = "zigzag")]
-    #[wire(encoding = "fixed")]
+    #[wire(name = "d", positional)]
+    #[wire(name = "delta")]
     delta: i64,
 }
 
 export fn run() {}
 
 __DATA__
-{"compile_error": "`wire(encoding)` is written twice on one declaration", "compile_error_codes": ["ATTR_MISUSE"]}
+{"compile_error": "`wire(name)` is written twice on one declaration", "compile_error_codes": ["ATTR_MISUSE"]}

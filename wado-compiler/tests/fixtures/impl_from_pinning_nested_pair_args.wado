@@ -1,0 +1,30 @@
+// Two `From` impls whose targets nest two parameters, differing only in the
+// pinned position. The binder count equals the head's arity, so no count tells
+// the receiver's arguments from the block's (finding 8).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<A: Default, B: Default> From<i32> for Pair<[A, B], i32> {
+    fn from(value: i32) -> Self {
+        return Pair { a: [A::default(), B::default()], b: value + 1 };
+    }
+}
+
+impl<A: Default, B: Default> From<i32> for Pair<[A, B], i64> {
+    fn from(value: i32) -> Self {
+        return Pair { a: [A::default(), B::default()], b: (value + 2) as i64 };
+    }
+}
+
+test "each receiver reaches its own impl" {
+    let p = Pair::<[String, bool], i32>::from(1);
+    let q = Pair::<[bool, String], i64>::from(1);
+    assert p.b == 2 && p.a.0 == "" && !p.a.1;
+    assert q.b == 3 && !q.a.0 && q.a.1 == "";
+}
+
+__DATA__
+{"test": {}}

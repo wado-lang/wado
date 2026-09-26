@@ -10,6 +10,7 @@
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
 use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
+use crate::name::UNIT_TYPE_NAME;
 #[cfg(test)]
 use crate::token::Span;
 
@@ -122,7 +123,7 @@ fn cm_size_named(name: &str) -> u32 {
         "i32" | "u32" | "f32" | "char" => 4,
         "i64" | "u64" | "f64" => 8,
         "String" => 8, // (ptr: i32, len: i32)
-        "()" => 0,     // unit
+        UNIT_TYPE_NAME => 0,
         // Unknown named types (enums, resources) are i32 handles
         _ => 4,
     }
@@ -136,7 +137,7 @@ fn cm_align_named(name: &str) -> u32 {
         "i32" | "u32" | "f32" | "char" => 4,
         "i64" | "u64" | "f64" => 8,
         "String" => 4, // (ptr: i32, len: i32) — aligned to i32
-        "()" => 1,     // unit
+        UNIT_TYPE_NAME => 1,
         // Unknown named types (enums, resources) are i32 handles
         _ => 4,
     }
@@ -354,6 +355,11 @@ pub(crate) fn named_type(name: &str) -> Type {
     })
 }
 
+#[cfg(test)]
+pub(crate) fn unit_type() -> Type {
+    Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1))
+}
+
 /// Helper: create a `Type::Generic` with a dummy span. Useful for tests.
 #[cfg(test)]
 pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
@@ -423,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_unit_size() {
-        assert_eq!(cm_size(&named_type("()")), 0);
+        assert_eq!(cm_size(&unit_type()), 0);
         assert_eq!(cm_size(&Type::Tuple(vec![])), 0);
     }
 
@@ -537,11 +543,11 @@ mod tests {
     #[test]
     fn test_result_unit_unit() {
         // result<(), ()>: disc(u8, 1 byte) + max(0, 0) = 1 byte, align 1
-        let result = generic_type("Result", vec![named_type("()"), named_type("()")]);
+        let result = generic_type("Result", vec![unit_type(), unit_type()]);
         assert_eq!(cm_size(&result), 1);
         assert_eq!(cm_align(&result), 1);
 
-        let layout = layout_result(&named_type("()"), &named_type("()"));
+        let layout = layout_result(&unit_type(), &unit_type());
         assert_eq!(layout.size, 1);
         assert_eq!(layout.align, 1);
         assert_eq!(layout.offsets, vec![0, 1]); // disc at 0, payload at 1

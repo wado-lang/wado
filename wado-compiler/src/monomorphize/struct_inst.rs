@@ -33,8 +33,7 @@ impl Monomorphizer {
         // apiece, and a spelling claims all of them.
         let head_def = key
             .def
-            .or_else(|| generic.def.decl())
-            .expect("a generic struct template is a declaration");
+            .expect("a struct instantiation names its declaration");
         let mut instance_ids = Vec::new();
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id)
@@ -100,8 +99,6 @@ impl Monomorphizer {
                     wire_name_override: field.wire_name_override.clone(),
                     serde_default: field.serde_default,
                     serde_positional: field.serde_positional,
-                    serde_number: field.serde_number,
-                    serde_encoding: field.serde_encoding,
                     default_expr: None,
                 }
             })

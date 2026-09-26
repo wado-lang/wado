@@ -49,10 +49,23 @@ message M {
     assert file.messages[0].fields[0].features.field_presence matches { Some(p) && p == "LEGACY_REQUIRED" };
 }
 
-test "a group keeps its type name and lowercases its field name" {
+test "a group keeps its type name, lowercases its field name, and declares its body" {
     let file = read("syntax = \"proto2\"; message M { optional group Data = 1 { optional int32 x = 2; } }").unwrap();
     assert file.messages[0].fields[0].name == "data";
     assert file.messages[0].fields[0].type_ matches { Group(n) && n == "Data" };
+    assert file.messages[1].path == ["M", "Data"];
+    assert file.messages[1].fields[0].name == "x";
+}
+
+test "packing and enum openness, where the file writes them" {
+    let file = read("edition = \"2023\";
+option features.repeated_field_encoding = EXPANDED;
+enum E { option features.enum_type = CLOSED; A = 0; }
+message M { repeated int32 a = 1 [packed = true]; }
+").unwrap();
+    assert file.features.repeated_field_encoding matches { Some(e) && e == "EXPANDED" };
+    assert file.enums[0].features.enum_type matches { Some(t) && t == "CLOSED" };
+    assert file.messages[0].fields[0].packed matches { Some(true) };
 }
 
 test "no syntax statement is proto2" {

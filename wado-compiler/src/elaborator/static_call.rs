@@ -148,6 +148,8 @@ pub(super) struct StaticTraitRef {
     /// `None` where no trait supplies the name, which an inherent declaration
     /// answers with a trait-less one.
     pub(super) selected: Option<StaticMethodRef>,
+    /// The declaration the resolution named, inherent or supplied by a trait.
+    pub(super) declaration: Option<DefId>,
     pub(super) return_type: TypeId,
     /// The lists this same resolution read, so a site that mangles from
     /// `selected` and records from these cannot describe two declarations.
@@ -276,9 +278,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         //
         // A qualified spelling names a trait, so the receiver's own declaration
         // is not what it asks for and no case of the name shadows the answer.
-        let mut candidates = match required_trait {
-            Some(_) => Vec::new(),
-            None => self.own_candidates(&key, method_name),
+        let declaring_args = self
+            .tysys
+            .receiver_declaring_args(receiver_type, receiver_args)
+            .unwrap_or_default();
+        let mut candidates = if required_trait.is_some() {
+            Vec::new()
+        } else {
+            self.own_candidates(&key, method_name, &declaring_args)
         };
 
         // A case or member the receiver declares is written on the type, and
@@ -298,6 +305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             receiver_key,
             receiver_type,
+            &declaring_args,
         ));
         candidates.extend(self.blanket_candidates(method_name, receiver_type));
         if let Some(required) = required_trait {
@@ -328,14 +336,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The auto-derived `Default`: synthesis emits the body, so no
         // declaration backs it. It takes no arguments and answers with the
         // receiver's own type.
-        if let Some(method_ref) = self.auto_derived_default_ref(receiver_name, method_name) {
+        if let Some((method_ref, return_type)) = self.auto_derived_default_ref(&key, method_name) {
             return StaticLookup::Found(Box::new(StaticCallee {
                 params: CalleeParams::default(),
                 own_params: Vec::new(),
-                return_type: self
-                    .tysys
-                    .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
-                    .unwrap_or(TypeTable::UNKNOWN),
+                return_type,
                 method_ref,
             }));
         }
@@ -358,14 +363,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declarations the receiver makes itself: its inherent impl, the
-    /// statics a `resource` declares, and one it inherits along its chain —
-    /// the index holds only a resource's own, so the chain is walked.
-    fn own_candidates(&self, key: &ImplTargetKey, method_name: &str) -> Vec<Candidate> {
+    /// The receiver's own declarations: inherent impls reaching `receiver_args`,
+    /// a `resource`'s statics, and one it inherits along its chain.
+    fn own_candidates(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+        receiver_args: &[TypeId],
+    ) -> Vec<Candidate> {
         let inherent = self
             .impl_method_entries(key, method_name)
             .filter(|entry| entry.is_inherent())
             .map(|entry| entry.method_id)
+            .filter(|&method| self.declaration_reaches(method, receiver_args))
             .collect::<Vec<_>>();
         let resource_static = self
             .tysys
@@ -423,6 +433,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // where its signature is read from — in the trait's frame, which
             // the block's arguments fill.
             (CandidateOrigin::Inherited, Some(supply)) => {
+                let method_ref = method_ref.supplied_by(supply.impl_def);
                 // Resolved here rather than asked of every caller: the name
                 // costs a scope to resolve, and this is the one rung that needs
                 // it.
@@ -505,11 +516,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let recv = StaticReceiver {
             key: receiver_key,
             ty: query.receiver_type,
+            args: query.receiver_args,
             required_trait: query.required_trait,
             ..StaticReceiver::of(receiver_name)
         };
         let lookup = self.resolve_static_callee(query);
         let return_type = lookup.return_type();
+        let declaration = lookup
+            .found()
+            .and_then(|callee| callee.method_ref.method_id);
         let selected = lookup
             .found()
             .map(|callee| callee.method_ref.clone())
@@ -524,6 +539,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (params, _) = lookup.params();
         Ok(StaticTraitRef {
             selected,
+            declaration,
             return_type,
             params,
         })
@@ -649,8 +665,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         target_hint: Option<&ImplTargetKey>,
         receiver_type: Option<TypeId>,
+        receiver_args: &[TypeId],
     ) -> Vec<Candidate> {
-        self.trait_impls_for_receiver(receiver_name, target_hint)
+        self.trait_impls_for_receiver(receiver_name, target_hint, receiver_args)
             .into_iter()
             .filter_map(|impl_def| {
                 let header = &self.tysys.trait_env.impl_headers[&impl_def];
@@ -707,7 +724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.applicable_blanket_statics(receiver_type, method_name)
             .into_iter()
             .filter_map(|blanket| {
-                let header = self.tysys.trait_env.impl_headers.get(&blanket.def)?;
+                let header = &self.tysys.trait_env.impl_headers[&blanket.def];
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
                 let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
                 Some(Candidate {
@@ -766,9 +783,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let declaring = sig
                 .declaring_impl
-                .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def).cloned());
+                .map(|impl_def| self.tysys.signatures.impl_sig(impl_def));
             let instantiated =
-                sig.instantiate_call_with(&self.tysys.type_table, declaring.as_ref(), &args, &[]);
+                sig.instantiate_call_with(&self.tysys.type_table, declaring, &args, &[]);
             params.param_types = instantiated.param_types;
             return_type = instantiated.return_type;
         }
@@ -889,10 +906,7 @@ impl TypeSystem {
     /// The block's trait-reference arguments, which fill the trait's frame past
     /// `Self`.
     fn trait_args_of_impl(&self, impl_def: DefId) -> Vec<TypeId> {
-        self.signatures
-            .impl_sig(impl_def)
-            .map(|impl_sig| impl_sig.trait_type_args.clone())
-            .unwrap_or_default()
+        self.signatures.impl_sig(impl_def).trait_type_args.clone()
     }
 
     /// The receiver's type arguments: the ones a call carries, else the ones its type holds.

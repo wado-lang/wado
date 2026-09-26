@@ -4,17 +4,15 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
-use crate::compiler_item::CompilerItem;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::defs::DefId;
+use crate::hashmap::IndexMap;
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    InstantiationKey, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirMutVisitor;
 
 use super::state::Monomorphizer;
-use crate::tir;
-use crate::tir::TirFunction;
 
 impl Monomorphizer {
     /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
@@ -108,10 +106,9 @@ impl Monomorphizer {
             // This can happen when function substitution creates new GenericInstance types
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
-                let is_tuple = TypeTable::is_tuple_type(type_table.def_name(def));
-                // Skip List and Tuple - they have special codegen handling and should remain
-                // as GenericInstance, not be rewritten to Struct
-                if is_tuple || type_table.is_compiler_item(def, CompilerItem::List) {
+                let is_tuple = type_table.is_tuple_def(def);
+                // Lowered by codegen as they are, never as a monomorphized struct.
+                if is_tuple || type_table.is_list(type_id) {
                     let new_args: Vec<TypeId> = type_args
                         .iter()
                         .map(|&id| self.rewrite_type_id(id, type_table))
@@ -133,33 +130,22 @@ impl Monomorphizer {
         }
     }
 
-    /// Collect all `GenericInstance` types from the type table
-    /// Only collects types whose base struct is in `valid_struct_names`
+    /// Queue every concrete `GenericInstance` of a struct in `generic_structs`.
     pub fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
-        valid_struct_names: &IndexSet<String>,
+        generic_structs: &IndexMap<DefId, TirStruct>,
     ) {
         for id in type_table.iter_type_ids() {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
+                if type_args.is_empty()
+                    || type_table.is_list(id)
+                    || !generic_structs.contains_key(def)
+                {
+                    continue;
+                }
                 let name = &type_table.def_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
-                // Skip empty type_args (invalid generic instances)
-                if type_args.is_empty() {
-                    continue;
-                }
-
-                // Skip List - it has special codegen handling and should not be
-                // monomorphized as a regular struct
-                if type_table.is_compiler_item(*def, CompilerItem::List) {
-                    continue;
-                }
-
-                // Only collect if the struct is in our valid set
-                // This prevents library modules from trying to instantiate entry module's structs
-                if !valid_struct_names.contains(name) {
-                    continue;
-                }
 
                 // Only process if all type args are concrete (no TypeParams)
                 let all_concrete = type_args
@@ -167,13 +153,14 @@ impl Monomorphizer {
                     .all(|&arg| !type_table.contains_type_param(arg));
 
                 if all_concrete {
-                    let key = tir::InstantiationKey {
+                    let key = InstantiationKey {
                         def: Some(*def),
                         name: name.clone(),
                         module_source: module_source.clone(),
                         impl_type_args: type_args.clone(),
                         method_type_args: vec![],
                         method_info: None, // Struct instantiation,
+                        template: None,
                     };
 
                     let mangled = self.instantiation_name(&key, type_table);
@@ -272,7 +259,7 @@ impl Monomorphizer {
                 // recursively through `self.substitute_type` so that
                 // nested `GenericInstance`s inside the tuple still get
                 // their monomorphized-struct rewrite.
-                if TypeTable::is_tuple_type(&name) {
+                if type_table.is_tuple_def(def) {
                     let mut new_elems: Vec<TypeId> = Vec::new();
                     for &e in &type_args {
                         match type_table.get(e).clone() {
@@ -302,9 +289,7 @@ impl Monomorphizer {
                                     // `[..Case<T, P>]` yields `Case<T, P_k>`, a
                                     // pack-independent `..F::method()` repeats `R`.
                                     Some(elem) => {
-                                        let pack_elems = type_table
-                                            .as_tuple(pack_type)
-                                            .unwrap_or_else(|| vec![pack_type]);
+                                        let pack_elems = type_table.elem_types_or_self(pack_type);
                                         // The element binding must not reach a
                                         // splice position nested in `elem`: one
                                         // still spells the whole pack, so it
@@ -322,11 +307,7 @@ impl Monomorphizer {
                                         self.restore_pack_splice(index, displaced);
                                     }
                                     None => {
-                                        if let Some(pack_elems) = type_table.as_tuple(pack_type) {
-                                            new_elems.extend_from_slice(&pack_elems);
-                                        } else {
-                                            new_elems.push(pack_type);
-                                        }
+                                        new_elems.extend(type_table.elem_types_or_self(pack_type));
                                     }
                                 }
                             }
@@ -366,7 +347,6 @@ impl Monomorphizer {
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {
-        use crate::tir::TirPattern;
         match pattern {
             TirPattern::Wildcard | TirPattern::Literal(_) | TirPattern::Range { .. } => {}
             TirPattern::Binding { type_id, .. } | TirPattern::Narrow { type_id, .. } => {

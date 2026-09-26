@@ -1,0 +1,32 @@
+// An imported operation called bare returns what the operation declares, as
+// the qualified call does.
+
+use { Greeting, Greeting::{hello} } from "./sub/effect_operation_import_iface.wado";
+
+struct Fixed {}
+
+impl Greeting for Fixed {
+    fn hello(&mut self) -> String {
+        resume "hi"
+    }
+}
+
+fn bare() -> String with Greeting {
+    let s = hello();
+    return s;
+}
+
+fn qualified() -> String with Greeting {
+    return Greeting::hello();
+}
+
+test "an imported operation returns its declared type" {
+    let mut h = Fixed {};
+    with Greeting => &mut h do {
+        assert bare() == "hi";
+        assert qualified() == "hi";
+    }
+}
+
+__DATA__
+{"test": {}}

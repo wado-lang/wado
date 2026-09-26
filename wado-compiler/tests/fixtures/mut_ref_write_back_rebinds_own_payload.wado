@@ -1,0 +1,40 @@
+// A callee that reads a variant field's payload by pattern and stores it back
+// retains nothing: the binding is plain data, so the write-back applies.
+
+struct Inner {
+    x: i32 = 0,
+}
+
+struct Outer {
+    inner: Option<Inner> = null,
+}
+
+#[inline("never")]
+fn bump_by_match(slot: &mut Option<Inner>) {
+    let mut m = match *slot {
+        Some(m) => m,
+        None => Inner {},
+    };
+    m.x += 1;
+    *slot = Option::Some(m);
+}
+
+#[inline("never")]
+fn rewrap_by_if_let(slot: &mut Option<Inner>) {
+    if let Some(m) = *slot {
+        *slot = Option::Some(Inner { x: m.x * 10 });
+    }
+}
+
+test "a payload read by pattern is stored back through a field borrow" {
+    let mut o = Outer {};
+    bump_by_match(&mut o.inner);
+    bump_by_match(&mut o.inner);
+    rewrap_by_if_let(&mut o.inner);
+    assert o.inner.unwrap().x == 20;
+}
+
+__DATA__
+{
+    "test": {}
+}

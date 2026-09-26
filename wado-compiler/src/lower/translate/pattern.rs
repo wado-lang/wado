@@ -173,8 +173,7 @@ impl TextEq {
             let implements_eq = func
                 .method_info
                 .as_ref()
-                .and_then(|m| m.trait_name.as_ref())
-                .and_then(FqTraitName::canonical)
+                .and_then(LocalMethodName::trait_decl)
                 == Some(eq_trait);
             if implements_eq {
                 eq_modules.insert(func.name.clone(), func.module_source.clone());
@@ -739,22 +738,17 @@ impl<'a> PatternLowerer<'a> {
 
                     match binding {
                         TirPattern::Binding {
-                            name,
-                            local_index,
-                            type_id,
+                            name, local_index, ..
                         } => {
-                            body_prefix_stmts.push(TirStmt::new(
-                                TirStmtKind::Let {
-                                    name: name.clone(),
-                                    local_index: *local_index,
-                                    is_mut: false,
-                                    is_reactive: false,
-                                    type_id: *type_id,
-                                    value: payload_expr,
-                                    skip_value_copy: false,
-                                },
+                            self.emit_binding_let(
+                                name,
+                                *local_index,
+                                false,
+                                payload_expr,
                                 span,
-                            ));
+                                type_table,
+                                body_prefix_stmts,
+                            );
                         }
                         _ => {
                             self.lower_pattern_to_lets(
@@ -917,24 +911,20 @@ impl<'a> PatternLowerer<'a> {
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Binding {
-                name,
-                local_index,
-                type_id,
+                name, local_index, ..
             } => {
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: *local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: *type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
+                let mut stmts = Vec::new();
+                self.emit_binding_let(
+                    name,
+                    *local_index,
+                    false,
+                    value,
                     span,
+                    type_table,
+                    &mut stmts,
                 );
-                let cont_stmt = TirStmt::new(TirStmtKind::Expr(continuation), span);
-                let block = TirBlock::new(vec![let_stmt, cont_stmt], span);
+                stmts.push(TirStmt::new(TirStmtKind::Expr(continuation), span));
+                let block = TirBlock::new(stmts, span);
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Literal(lit) => {
@@ -1567,6 +1557,7 @@ impl<'a> PatternLowerer<'a> {
                 FunctionRef {
                     module_source,
                     name: mangled_name,
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },

@@ -31,10 +31,21 @@ across four WEPs, with one recorded in none of them:
 | A `Reflect*` bound needs visible members    | WEP 2026-06-13 |
 | Locality — a local impl beats a foreign one | nowhere        |
 
-This WEP drops locality from the order. The sort still has it: see Known gaps.
+This WEP drops locality from the order.
 
 Issue #1932 was a missing rank, found by reading the sort because no document
 stated the order.
+
+The WEPs that keep a rule, and where each lands in the order:
+
+- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md): rank 0
+- [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md): rank 1
+- [Overload Resolution](./wep-2026-07-31-overload-resolution.md): arguments,
+  and the two-trait ambiguity
+- [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md):
+  the `Reflect*` eligibility gate
+- [Super Traits](./wep-2026-07-27-super-traits.md): what a specificity rank
+  would read
 
 ## Decision
 
@@ -58,6 +69,17 @@ dispatch paths select without it:
 | Operators and indexing                        | The operand's type, unique-or-error (WEP 2026-07-31)                        |
 
 These paths do not yet follow this order: see Known gaps.
+
+Two inherent blocks that reach a common receiver may not both define one method
+name. An inherent method carries no trait contract that could rank the two, so
+the second is a duplicate definition, reported where it is written
+(`impl_inherent_overlap_duplicate_error.wado`). Blocks that reach no receiver in
+common may share a name (`impl_inherent_disjoint_same_method.wado`).
+
+A call in a generic body is selected again at each instance. The body is checked
+against the impl its own frame selects, and an instance with an impl written for
+it takes that impl instead. This holds for a method call and a static call alike
+(`impl_concrete_instantiation_wins_in_generic_body.wado`).
 
 ### A bound's trait arguments
 
@@ -85,9 +107,18 @@ type is the exception, and Known gaps says what it costs.
 
 A call's candidates come from three places.
 
-First, the impls whose target matches the receiver anywhere along its newtype
+First, the impls whose target reaches the receiver anywhere along its newtype
 chain: an impl written for the receiver's own type, for one instantiation of it
-(`impl Tag for Box_<i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+(`impl Tag for Box_<i32>`), for some of its instantiations
+(`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+
+A target reaches a receiver when every position it pins holds the receiver's
+argument there. A type parameter takes one type wherever the target writes it,
+at any depth. So `impl<T> Tag for Pair<List<T>, i32>` reaches
+`Pair<List<u8>, i32>`, and `impl<T> Tag for Pair<T, T>` does not reach
+`Pair<i32, i64>` (`impl_target_nested_param_trait.wado`,
+`impl_reach_repeated_param_error.wado`). Every dispatch path asks this one
+question, so a block written for other arguments is never a candidate.
 
 Second, every _value blanket_ whose receiver-parameter bounds the receiver
 satisfies. A value blanket is `impl<T: Bound> Tr for T`, and its receiver
@@ -208,11 +239,11 @@ answers yes.
 Within one level, the impl that names the most of the receiver answers. A target
 is one of three, least general first:
 
-| Generality | Target                       | Example                                               |
-| ---------- | ---------------------------- | ----------------------------------------------------- |
-| exact      | mentions no type parameter   | `impl Tr for Point`, `impl Tag for Box_<i32>`         |
-| head       | mentions one, but is not one | `impl<T> Tag for Box_<T>`, `impl<T: Bound> Tr for &T` |
-| any        | is a bare type parameter     | `impl<T: Bound> Tr for T`                             |
+| Generality | Target                       | Example                                                                               |
+| ---------- | ---------------------------- | ------------------------------------------------------------------------------------- |
+| exact      | mentions no type parameter   | `impl Tr for Point`, `impl Tag for Box_<i32>`                                         |
+| head       | mentions one, but is not one | `impl<T> Tag for Box_<T>`, `impl<T> Tag for Pair<T, i32>`, `impl<T: Bound> Tr for &T` |
+| any        | is a bare type parameter     | `impl<T: Bound> Tr for T`                                                             |
 
 An impl written for the receiver defines the exact function the call names, so a
 foreign `impl Tr for Point` beats a blanket written here. One written for the
@@ -221,18 +252,21 @@ blanket names only a condition the receiver happens to meet.
 
 Both steps carry weight. Exact over head is `spec-traits.md`'s "Specific Impls Win":
 `impl Tag for Box_<i32>` beside `impl<T> Tag for Box_<T>` answers for `Box_<i32>`
-and the head impl answers for the rest. Head over any is what the prelude turns
+and the head impl answers for the rest (`impl_trait_exact_over_partial_head.wado`).
+Head over any is what the prelude turns
 on: `RangeExclusive<T>` implements `Iterator`, so
 `impl<I: Iterator> IntoIterator for I` applies to every range beside the
 `impl<T: Step + Ord> IntoIterator for RangeExclusive<T>` written for it, and
 without this step every `for x of 0..n` is the blanket ambiguity below.
 
 Generality reads the target and nothing else. Which bounds an impl carries is
-not part of it — see specificity, below.
+not part of it — see specificity, below. How many positions a head impl pins is
+not part of it either, so `impl<T> Tr for Pair<T, i32>` and
+`impl<A, B> Tr for Pair<A, B>` tie at `Pair<String, i32>`.
 
 #### Rank 3: anything left is ambiguous
 
-Two shapes are reported, described below.
+Three shapes are reported, described below.
 
 Every rank reads only how a candidate relates to the receiver. Where the impl
 was written is not read at all: two candidates that tie at rank 2 are ambiguous
@@ -262,9 +296,10 @@ Scope above settles them: each module's `s.shout()` dispatches to the `Loud`
 imported there (`cross_module_same_name_foreign_impl.wado`), and a module
 importing both gets the two-trait ambiguity below.
 
-### The two ambiguities
+### The three ambiguities
 
-The two are separate diagnostics because the programmer fixes them differently.
+The three are separate diagnostics because the programmer fixes them
+differently.
 
 #### Two traits, one method name
 
@@ -297,6 +332,22 @@ rejected at definition time.
 
 The report covers one trait declaration at one argument list. Two blankets of
 _different_ traits are the two-trait ambiguity above.
+
+#### Two head impls of one trait
+
+Two impls generic over the receiver's head both reach it, and rank 2 puts them
+at one level. Like a blanket, neither can be named at the call, so the answer is
+again an impl written for the receiver:
+
+```text
+ambiguous impls of 'Name' for 'Pair<String, i32>': the ones for 'Pair<T, i32>'
+and 'Pair<A, B>' both reach it, and nothing ranks them;
+write 'impl Name for Pair<String, i32>'
+```
+
+This too is reported at the use site. The two impls conflict only at a receiver
+both reach, and a call is where one appears
+(`impl_trait_overlapping_heads_ambiguous_error.wado`).
 
 ### Eligibility gates
 
@@ -424,10 +475,11 @@ trait solving is one uniform search over impls:
   `holds` with every declaration's tentative impl in place; a declaration that
   fails is removed, until none does. Assuming and then refuting is what makes a
   recursive type derive, which is the answer the compiler gives today.
-- A written impl for the pair blocks derivation, and a marker
-  (`impl Eq for D;`) demands it: the marker answers the bound, and the
-  compiler's conformance check reports one on a declaration that cannot
-  derive (WEP 2026-06-25).
+- A written impl reaching every instance of `D` blocks derivation. One reaching
+  only some (`impl<T> Eq for Pair<T, i32>`) answers where it reaches, and the
+  derived impl answers the rest. A marker (`impl Eq for D;`) demands
+  derivation: the marker answers the bound, and the compiler's conformance
+  check reports one on a declaration that cannot derive (WEP 2026-06-25).
 - A `Reflect*`-bounded blanket of a structural trait
   (`impl<S: ReflectStruct<…>, ..F: Serialize> Serialize for S`) is the derived
   body's source, not a candidate. The lowering leaves it out, and `derive`
@@ -488,7 +540,7 @@ bound on that parameter (`..C: Arbitrary`) waits for monomorphization
 | `derive(program, trait_, declarations)`             | which declarations derive `trait_`, and the impls that says                            |
 | `holds(program, env, ty, trait_, scope)`            | bound satisfaction, supertraits, the cycle rule                                        |
 | `candidates(program, env, receiver, method, scope)` | the three candidate lists, the scope gate, each candidate's depth                      |
-| `rank(candidates)`                                  | ranks 0-3 and both ambiguities                                                         |
+| `rank(candidates)`                                  | ranks 0-3 and the ties the ambiguities report                                          |
 
 Two disciplines keep them functions rather than passes:
 
@@ -516,12 +568,11 @@ profile. A receiver the lowering cannot say has no trait method, since no impl
 can be written for such a shape: one still carrying an inference variable, or an
 error.
 
-## Consequences
+### Method lookup asks the order
 
-Selection is one ordered list. A new rule becomes a rank in that list, and a
-missing rank is visible. Two calls that used to differ only by declaration order
-now either agree or report, and the report names an impl the programmer can
-write.
+Selection is one ordered list, so a new rule becomes a rank in it. Two calls
+that differ only by declaration order either agree or report, and the report
+names an impl the programmer can write.
 
 This document states the order, and `candidates` with `rank` implement it.
 Method lookup decides nothing of its own: it asks the order, materializes a
@@ -580,10 +631,10 @@ unbounded value blanket. The other two still run over the AST:
 the first that declares the method, with value blankets on a separate fallback
 behind it; operators and indexing filter by operand type and report
 unique-or-error; a bound in a generic body takes the first bound declaring the
-name. Ranks 0-3 exist on none of them; they agree with the order only by
-coincidence of scan order. One selection function serving every path is the
-fix; what stands in the way is that each path holds a different amount of the
-call (a receiver type, an operand class, a bound list).
+name. They share which impls reach the receiver, and nothing after that. Ranks
+0-3 exist on none of them; they agree with the order only by coincidence of scan
+order. Each path holds a different amount of the call: a receiver type, an
+operand class, a bound list.
 
 ### Derivation is still a query in the compiler
 
@@ -631,13 +682,3 @@ reflection. Reopening it takes both of:
       `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
       narrower nor wider, so a specificity rank leaves that pair at rank 3 and
       the ambiguity report has to keep naming it.
-
-## Related WEPs
-
-What each contributes to the order above.
-
-- [Variadic Type Parameters](./wep-2026-03-14-variadic-type-parameters.md) — rank 0
-- [Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md) — rank 1
-- [Overload Resolution](./wep-2026-07-31-overload-resolution.md) — arguments, and the two-trait ambiguity
-- [Library-Defined Derivation over `Reflect*`](./wep-2026-06-13-reflect-derivation.md) — the `Reflect*` eligibility gate
-- [Super Traits](./wep-2026-07-27-super-traits.md) — what a specificity rank would read

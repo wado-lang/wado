@@ -48,6 +48,18 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 };
 ```
 
+Code a generator writes may call a runtime library. Grog's does, so a package
+lists `wado-lang:grog` under `[dependencies]` as well. See
+[WEP: Grog](./wep-2026-09-22-grog.md).
+
+```wado
+use grog from "lib:grog";
+use { Account } from "./account.proto" with { generator: { module: "lib:grog" } };
+
+let bytes = grog::encode(&Account { id: 150 });       // [0x08, 0x96, 0x01]
+let back = grog::decode::<Account, ByteList>(bytes)?;
+```
+
 ### Wasm Imports
 
 A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
@@ -119,7 +131,7 @@ true
 false
 
 // Null
-null // coerce to Option::None
+null // the None of the Option its context expects; Option<!> with none
 
 // Unit
 ()
@@ -508,11 +520,16 @@ let none_val: Option<i32> = null;                        // Option::None
 let ok_val: Result<i32, String> = Ok(42);                // bare: the annotation supplies the type
 let err_val: Result<i32, String> = Result::Err("fail");
 
-// Explicit turbofish (required when inference is insufficient). It sits on the
-// path's prefix, and a payload-less case takes it the same way.
+// Explicit turbofish (required when inference is insufficient), on the type or
+// on the case as in Rust, but not on both. A payload-less case takes it too.
 let opt = Option::<i32>::Some(42);
-let res = Result::<i32, String>::Ok(42);
+let res = Result::Ok::<i32, String>(42);
 let none = Option::<i32>::None;
+
+// Inside an impl, `Self::Case` names a case of the impl's own type, as in Rust.
+impl<T> Maybe<T> {
+    fn wrap(v: T) -> Maybe<T> { return Self::Just(v); }
+}
 ```
 
 `Option` and `Result` carry a deliberately small method set. `unwrap` and
@@ -1748,12 +1765,8 @@ Format-agnostic `Serialize` / `Deserialize` framework.
 A plain struct derives with no marker; `impl Serialize for T;` attaches
 `#[wire(...)]` customization. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
-(per field). A format keyed by numbers rather than names reads
-`#[wire(number = N)]`, which a struct carries on every field or on none; such a
-type satisfies `WireNumbered`, the bound those formats require. See
-[`core:serde`](./stdlib-core-serde.md),
-[WEP: Serde](./wep-2026-02-28-serde.md) and
-[WEP: Grog](./wep-2026-09-22-grog.md).
+(per field). See [`core:serde`](./stdlib-core-serde.md) and
+[WEP: Serde](./wep-2026-02-28-serde.md).
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed
@@ -1800,40 +1813,6 @@ use { to_bytes, from_bytes, to_bytes_canonical } from "core:cbor";
 let enc = to_bytes(&Point { x: 1, y: 2 });   // preferred (shortest) encoding
 let dec = from_bytes::<Point>(enc);          // variation-tolerant decode
 let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
-```
-
-### core:protobuf
-
-The Protocol Buffers wire format, keyed by `#[wire(number = N)]`. A field whose
-default is its type's zero has implicit presence: it is left off the wire while
-it holds that zero. Any other default is always written. Grog generates these
-declarations from a `.proto`. See [`core:protobuf`](./stdlib-core-protobuf.md) and
-[WEP: Grog](./wep-2026-09-22-grog.md).
-
-```wado
-use { to_bytes, from_bytes } from "core:protobuf";
-
-enum Status {
-    #[wire(number = 0)] Unknown,
-    #[wire(number = 5)] Active,         // an enum numbers every case or none
-}
-
-struct Account {
-    #[wire(number = 1)] id: i32 = 0,               // omitted while 0
-    #[wire(number = 2)] #[wire(encoding = "zigzag")] delta: i64 = 0,   // sint64
-    #[wire(number = 3)] #[wire(encoding = "fixed")] hash: u32 = 0,     // fixed32
-    #[wire(number = 4)] balance: Option<i64> = null,  // explicit: Some(0) is written
-    #[wire(number = 5)] status: Status = Status::Unknown,
-}
-
-let bytes = to_bytes(&Account { id: 150 })?;       // [0x08, 0x96, 0x01]
-let back = from_bytes::<Account>(&bytes)?;
-```
-
-Grog, as a Kiln generator, writes `Account` from a `.proto` instead:
-
-```wado
-use { Account } from "./account.proto" with { generator: { module: "wado-lang:grog" } };
 ```
 
 ### Other core modules

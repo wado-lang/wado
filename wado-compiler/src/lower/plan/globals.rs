@@ -200,6 +200,7 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
     FunctionRef {
         module_source: module_source.clone(),
         name: name.to_string(),
+        template: None,
         monomorph_info: None,
         method_info: None,
     }
@@ -545,6 +546,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
                 func: Box::new(FunctionRef {
                     module_source: module_source.clone(),
                     name: MODULE_INIT_FUNCTION.to_string(),
+                    template: None,
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -594,6 +596,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
                 name: MODULES_INIT_FUNCTION.to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),

@@ -82,8 +82,7 @@ type StructFieldReg = hashmap::IndexMap<(String, ModuleSource), Vec<(u32, String
 fn build_struct_field_reg(project: &Package) -> StructFieldReg {
     let mut reg: StructFieldReg = hashmap::IndexMap::default();
     for module in project.tir_modules.values() {
-        let structs = module.structs.iter().chain(module.generic_structs.values());
-        for s in structs {
+        for s in &module.structs {
             reg.entry((s.name.clone(), s.module_source.clone()))
                 .or_insert_with(|| {
                     s.fields

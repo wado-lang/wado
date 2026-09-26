@@ -481,6 +481,26 @@ let t = Tagged::<String> { tag: 7 };    // T names no field
 let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
 ```
 
+On a variant, the turbofish may follow the case name instead, as in Rust. It
+means the same thing and names every parameter. Writing one on both the type
+and the case is an error.
+
+```wado
+let a = Option::Some::<i64>(1);         // Option::<i64>::Some(1)
+let e = Result::Err::<i32, String>("x");
+let n: Option<i32> = None::<i32>;       // a bare case, where its type is known
+```
+
+A newtype over a variant names its base's cases, and the value takes the
+newtype. A generic newtype's arguments are inferred as the variant's would be:
+
+```wado
+type Opt<T> = Option<T>;
+let a = Opt::Some(1);                   // Opt<i32>
+let b: Opt<i64> = Opt::None;            // the annotation settles T
+let c = Opt::<i64>::Some(1);
+```
+
 ### Scope of inference
 
 | Site                   | Forward (from values) | Backward (from expected type) |
@@ -602,8 +622,15 @@ let none: Option<i32> = Option::None;    // T=i32 from annotation
 let ok: Result<i32, String> = Result::Ok(42);      // T from payload, E from annotation
 let err: Result<i32, String> = Result::Err("fail"); // E from payload, T from annotation
 
-// Explicit turbofish syntax (always available)
+// Explicit turbofish syntax (always available), on the type or on the case
 let opt2 = Option::<i32>::Some(42);
+let opt3 = Option::Some::<i32>(42);
+
+// Inside an impl, `Self::Case` names a case of the impl's own type. `Self`
+// already carries its type arguments, so the case takes no turbofish.
+impl<T> Maybe<T> {
+    fn wrap(v: T) -> Maybe<T> { return Self::Just(v); }
+}
 
 if let Some(x) = opt {
     println(`Got: ${x}`);

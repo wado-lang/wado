@@ -116,9 +116,25 @@ for ;; {
 }
 ```
 
-### Note
+### Semantics
 
-`continue` in a for loop executes the update expression before the next iteration, matching C semantics.
+`for init; cond; update { body }` runs `init` once. Each iteration then checks
+`cond`, runs `body` if it holds, and runs `update`. `continue` ends the body and
+still runs `update`, as in C.
+
+Each iteration has its own copy of the bindings `init` declares, as ECMA-262's
+`for (let …)` does. Before `update` runs, the next iteration's bindings are
+created holding the current values, and `update` and the next `cond` act on
+them. So a closure or a reference taken in one iteration keeps that iteration's
+binding, and later iterations do not change it:
+
+```wado
+let mut fs: List<fn() -> i32> = [];
+for let mut i = 0; i < 3; i += 1 {
+    fs.push(|| i);
+}
+// the closures return 0, 1 and 2, not 3, 3 and 3
+```
 
 ### For with Pattern Condition
 
@@ -171,7 +187,8 @@ binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
 The binding is a copy of each element (value semantics), so modifying it does
-not affect the original collection.
+not affect the original collection. Each iteration binds it anew, so a closure
+or a reference taken in one iteration keeps that iteration's element.
 
 The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
 
@@ -410,6 +427,18 @@ take every value it matches.
 match opt {
     _ => 0,
     Some(x) => x,   // Error: unreachable arm
+}
+```
+
+A case whose payload type has no value needs no arm, since nothing constructs
+it. An arm naming one is unreachable, and is the same error. A type has no value
+when it is `!`, when a tuple element or struct field of it has none, or when
+every case of a variant has a payload with none:
+
+```wado
+let r: Result<i32, !> = Ok(1);
+match r {
+    Ok(v) => v,     // exhaustive: no `Result<i32, !>` is an `Err`
 }
 ```
 

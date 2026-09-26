@@ -1,0 +1,9 @@
+// A variant's arguments are written on the type or on the case, never both.
+
+test "unreachable: both segments carry a turbofish" {
+    let o = Option::<i32>::Some::<i64>(1);
+    assert o matches { Some(_) };
+}
+
+__DATA__
+{"compile_error": "type arguments are written on both `Option` and `Some`; write them on one", "compile_error_count": 1}

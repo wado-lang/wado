@@ -1,0 +1,13 @@
+// A closure reading a local of its parent whose scope has ended says so, as
+// the parent itself would.
+
+export fn run() {
+    if builtin::black_box(true) {
+        let x = 1;
+        assert x == 1;
+    }
+    let g = || x;
+}
+
+__DATA__
+{"compile_error": "scope_ended_local_read_in_closure.wado:9:16: analysis error: 'x' is not in scope"}

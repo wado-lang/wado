@@ -130,7 +130,11 @@ impl Query<'_> {
             return Some(Holds::default());
         }
         let on_ref = trait_def.map_or(RefRule::default(), |def| def.on_ref);
-        if matches!(ty, SolverType::Ref { .. }) && on_ref == RefRule::Always {
+        // Identity answers the trait at `Self` alone; another argument asks an impl.
+        if matches!(ty, SolverType::Ref { .. })
+            && on_ref == RefRule::Always
+            && args.iter().all(|arg| arg == ty)
+        {
             return Some(Holds::default());
         }
         // A pack's bound holds of each element, so an element in a variadic
@@ -240,6 +244,9 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings) {
             return None;
         }
+        if def.origin == ImplOrigin::Derived && declared_for(program, implemented, ty) {
+            return None;
+        }
         let bound_to = |ty: &SolverType| {
             ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))
         };
@@ -311,6 +318,17 @@ impl Query<'_> {
                 .collect(),
         })
     }
+}
+
+/// Whether the program declares `trait_` for `ty`'s own head, by an impl or a
+/// marker whose target reaches it. A declared impl always wins over a derived one.
+fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program.impls.values().any(|def| {
+        def.trait_ == Some(trait_)
+            && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
+            && matches!(def.target, SolverType::Decl(..))
+            && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+    })
 }
 
 /// One impl applying to one type. `holds` reads the bound it answers; selection
@@ -397,7 +415,7 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
 
 /// Whether the impl answers a bound writing `args`: at every position each side
 /// says its written argument, or the trait's default at `ty` where it wrote none.
-fn answers_args(
+pub(super) fn answers_args(
     program: &Program,
     def: &ImplDef,
     ty: &SolverType,
@@ -762,6 +780,29 @@ mod tests {
         assert_eq!(ask(ref_to(decl(I32)), EQ), Some(Holds::default()));
         assert_eq!(ask(ref_to(decl(I32)), SUB), Some(Holds::default()));
         assert_eq!(ask(decl(I32), SUB), None);
+    }
+
+    /// Identity is `Eq<Self>`: `&Point: Eq<i32>` asks an impl, and only the
+    /// one written for `&Point` answers.
+    #[test]
+    fn a_reference_s_identity_answers_no_other_argument() {
+        let mut p = Builder::default().build();
+        p.traits.insert(
+            EQ,
+            TraitDef {
+                on_ref: RefRule::Always,
+                ..TraitDef::default()
+            },
+        );
+        let ask = |ty: &SolverType, args: &[SolverType]| {
+            holds_with_args(&p, &Env::default(), ty, EQ, HERE, args)
+        };
+        let point = ref_to(decl(POINT));
+        assert_eq!(
+            ask(&point, std::slice::from_ref(&point)),
+            Some(Holds::default())
+        );
+        assert_eq!(ask(&point, &[decl(I32)]), None);
     }
 
     /// `impl<T: Alpha> Beta for T` answers `Point: Beta` exactly when

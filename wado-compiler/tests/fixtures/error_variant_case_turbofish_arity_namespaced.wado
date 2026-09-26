@@ -1,0 +1,11 @@
+// A namespaced case's arity diagnostic names the variant as the source does.
+
+use lib from "./sub/turbofish_namespaced_path_lib.wado";
+
+test "unreachable: `Maybe` takes one type argument" {
+    let m = lib::Maybe::Nothing::<i32, i64>;
+    assert m matches { Nothing };
+}
+
+__DATA__
+{"compile_error": "`lib::Maybe` takes 1 type argument, but 2 were supplied", "compile_error_count": 1}
