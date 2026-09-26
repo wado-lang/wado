@@ -77,6 +77,21 @@ export fn run() {
         aliased.push(|| i);
     }
     assert called(aliased) == [100];
+
+    let mut copied: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        let p = &mut i;
+        let q = p;
+        copied.push(|| *q);
+    }
+    assert called(copied) == [0, 1];
+
+    let mut fielded: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        let h = Held { r: &mut i };
+        fielded.push(|| *h.r);
+    }
+    assert called(fielded) == [0, 1];
 }
 
 struct Held {

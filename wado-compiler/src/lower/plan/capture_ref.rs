@@ -7,7 +7,7 @@ use crate::lower::plan::value_copy::place::place_root;
 use crate::name::{capture_ref_name, is_for_body_label};
 use crate::tir::{
     CaptureSource, TirBlock, TirExpr, TirExprKind, TirLocal, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable, capture_source_locals,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -73,19 +73,20 @@ impl FrameLocals<'_> {
         }
     }
 
-    /// The declared local; `None` for a closure parameter, which no loop of the
-    /// body it heads can declare.
-    fn declared(&self, index: u32) -> Option<&TirLocal> {
-        let index = index as usize;
-        match self {
-            Self::Function { locals, .. } => locals.get(index),
+    /// The locals the frame declares, by index; a closure's parameters, which no
+    /// loop of the body they head can declare, are left out.
+    fn declarations(&self) -> impl Iterator<Item = (u32, &TirLocal)> {
+        let (first, declared) = match self {
+            Self::Function { locals, .. } => (0, locals.as_slice()),
             Self::Closure {
                 params,
                 body_locals,
-            } => index
-                .checked_sub(params.len())
-                .and_then(|index| body_locals.get(index)),
-        }
+            } => (params.len(), body_locals.as_slice()),
+        };
+        declared
+            .iter()
+            .enumerate()
+            .map(move |(at, local)| (u32::try_from(first + at).unwrap(), local))
     }
 
     fn alloc(&mut self, name: String, type_id: TypeId) -> u32 {
@@ -189,7 +190,7 @@ fn rewrite_frame(
 }
 
 /// Finds, by `for` body label, the mutable bindings a C-style `for` header
-/// declares that a closure built in its body captures, itself or through a borrow.
+/// declares, where its body builds a closure that may reach them.
 struct ForHeaders<'a, 'l> {
     locals: &'a FrameLocals<'l>,
     loop_spans: Vec<Span>,
@@ -209,23 +210,22 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                 let Some(&loop_span) = self.loop_spans.last() else {
                     unreachable!("a `for` body is minted inside the loop it runs in");
                 };
-                let mut body = BodyCaptures::default();
-                body.visit_block(block);
-                let headers = body
-                    .captured
-                    .iter()
-                    .map(|local| body.borrows.get(local).copied().unwrap_or(*local))
-                    .filter(|&local| {
-                        self.locals.declared(local).is_some_and(|declared| {
+                let mut closures = BuildsClosure::default();
+                closures.visit_block(block);
+                if closures.found {
+                    let headers = self
+                        .locals
+                        .declarations()
+                        .filter(|(_, declared)| {
                             declared.is_mut
                                 && encloses(&loop_span, &declared.span)
                                 && !encloses(&stmt.span, &declared.span)
                         })
-                    })
-                    .collect::<IndexSet<_>>();
-                if !headers.is_empty() {
-                    self.for_headers
-                        .insert(label.clone(), headers.into_iter().collect());
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>();
+                    if !headers.is_empty() {
+                        self.for_headers.insert(label.clone(), headers);
+                    }
                 }
             }
             TirStmtKind::Expr(_)
@@ -247,35 +247,20 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
     }
 }
 
-/// The frame locals the closures built in a body capture, and the locals the
-/// body binds to a borrow of another, by the borrowed one.
+/// Whether a body builds a closure. What one captures may be a borrow of a
+/// header reached by any path, so the capture list alone cannot rule it out.
 #[derive(Default)]
-struct BodyCaptures {
-    captured: IndexSet<u32>,
-    borrows: IndexMap<u32, u32>,
+struct BuildsClosure {
+    found: bool,
 }
 
-impl TirRefVisitor for BodyCaptures {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        if let TirStmtKind::Let {
-            local_index, value, ..
-        } = &stmt.kind
-            && let TirExprKind::Unary {
-                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-                expr,
-            } = &value.kind
-            && let TirExprKind::Local { index, .. } = &expr.kind
-        {
-            self.borrows.insert(*local_index, *index);
-        }
-        self.walk_stmt(stmt);
-    }
-
+impl TirRefVisitor for BuildsClosure {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Closure { captures, .. } = &expr.kind {
-            self.captured.extend(capture_source_locals(captures));
+        if let TirExprKind::Closure { .. } = &expr.kind {
+            self.found = true;
+            return;
         }
-        self.walk_expr_in_frame(expr);
+        self.walk_expr(expr);
     }
 }
 
