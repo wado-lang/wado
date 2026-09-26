@@ -8,12 +8,17 @@
 //! fold materializes only at owner-entry sites, leaving a mutable-place accessor
 //! like `arr[i].field.push(x)` aliased, which copy-on-extract cannot do.
 
+use std::borrow::Cow;
+
 use super::callgraph::CallGraph;
+use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{carries_storage, is_reference, may_carry_storage, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
+use crate::lower::plan::value_copy::analyze::{
+    SELECT_OPERANDS, is_owned_value, is_select, returned_value,
+};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
@@ -61,7 +66,7 @@ fn declares_owned(func: &TirFunction) -> bool {
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
-    returns_self_projection: &'a FuncKeyMap<usize>,
+    returns_self_projection: &'a FuncKeyMap<Vec<usize>>,
     builtins: &'a BuiltinDeclarations,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
@@ -69,7 +74,7 @@ pub struct OwnedCalls<'a> {
 impl<'a> OwnedCalls<'a> {
     pub fn new(
         returns_owned: &'a FuncKeySet,
-        returns_self_projection: &'a FuncKeyMap<usize>,
+        returns_self_projection: &'a FuncKeyMap<Vec<usize>>,
         builtins: &'a BuiltinDeclarations,
     ) -> Self {
         Self {
@@ -103,36 +108,40 @@ impl<'a> OwnedCalls<'a> {
     /// extern / opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return self.builtins.part_of(func).is_none();
+            return !is_select(func) && self.builtins.part_of(func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
 
-    /// The parameter `func` returns a projection of, by position, so a call to
-    /// it is fresh exactly when *that* argument is. A body function answers from
-    /// the fixpoint; a `core:builtin` from `#[result(part_of = p)]`, which says
-    /// the result is a component of `p` — and a component of a place nothing
-    /// else reaches is one nothing else reaches. A wasm asset declares neither.
-    pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
+    /// The parameters `func` returns a projection of, by position, so a call to
+    /// it is fresh exactly when *those* arguments are. A body function answers
+    /// from the fixpoint; a `core:builtin` from `#[result(part_of = p)]`, which
+    /// says the result is a component of `p` — and a component of a place
+    /// nothing else reaches is one nothing else reaches. `builtin::select`
+    /// hands back either operand. A wasm asset declares none.
+    pub fn projected_params(&self, func: &FunctionRef) -> Option<Cow<'a, [usize]>> {
+        if is_select(func) {
+            return Some(Cow::Borrowed(&SELECT_OPERANDS));
+        }
         if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return self.builtins.part_of(func);
+            return self.builtins.part_of(func).map(|p| Cow::Owned(vec![p]));
         }
         if func.module_source.is_wasm_asset() {
             return None;
         }
         self.returns_self_projection
             .get(&func.module_source, &func.name)
-            .copied()
+            .map(|ps| Cow::Borrowed(ps.as_slice()))
     }
 }
 
 /// Per-function return conventions the fold consults: `returns_owned` (every
 /// returned value is freshly materialized) and `returns_self_projection` (the
-/// parameter every returned value that is not owned projects, so the call is
-/// fresh exactly when that argument is).
+/// parameters the returned values that are not owned project, so the call is
+/// fresh exactly when those arguments are).
 pub struct ReturnConventions {
     pub returns_owned: FuncKeySet,
-    pub returns_self_projection: FuncKeyMap<usize>,
+    pub returns_self_projection: FuncKeyMap<Vec<usize>>,
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
@@ -256,8 +265,9 @@ fn is_receiver_projection(
 /// `#[result(owned)]`, and a builtin that cannot hand storage out allocates —
 /// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
-/// every value it returns is owned, and self-projecting on parameter `p` when
-/// every value it returns that is not owned is a projection of `p`.
+/// every value it returns is owned, and self-projecting on parameters `P` when
+/// every value it returns that is not owned is a projection of some of `P`.
+/// A parameter its callers pass uncopied (`confined`) is not owned.
 ///
 /// Inside a component `owned` is assumed and then disproved, not built up: a
 /// cycle whose members return each other's result has no base to build from,
@@ -267,6 +277,7 @@ pub fn compute_return_conventions(
     call_graph: &CallGraph,
     return_paths: &ReturnPaths,
     builtins: &BuiltinDeclarations,
+    confined: &ConfinedParams,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
 
@@ -292,6 +303,7 @@ pub fn compute_return_conventions(
             return_paths,
             &type_table,
             builtins,
+            confined,
             &mut owned,
             &mut self_proj,
         );
@@ -314,8 +326,9 @@ fn settle_component(
     return_paths: &ReturnPaths,
     type_table: &TypeTable,
     builtins: &BuiltinDeclarations,
+    confined: &ConfinedParams,
     owned: &mut FuncKeySet,
-    self_proj: &mut FuncKeyMap<usize>,
+    self_proj: &mut FuncKeyMap<Vec<usize>>,
 ) {
     let members: Vec<u32> = component
         .iter()
@@ -340,25 +353,30 @@ fn settle_component(
         queued.swap_remove(&id);
         let func = project.functions[id as usize].borrow();
         let held_owned = owned.contains(&func.module_source, &func.name);
-        let held_self_proj = self_proj.get(&func.module_source, &func.name).copied();
+        let held_self_proj = self_proj.get(&func.module_source, &func.name).cloned();
         if !held_owned && held_self_proj.is_none() {
             continue;
         }
-        let body = func.body.as_ref().expect("members have bodies");
         let (ret_owned, ret_self_proj) = {
             let oracle = OwnedCalls::new(owned, self_proj, builtins);
             let hands_out_payload = hands_out_payload(&func, return_paths);
-            function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
+            function_return_convention(
+                &func,
+                &confined.borrowed_locals(&func),
+                &oracle,
+                type_table,
+                hands_out_payload,
+            )
         };
         let mut dropped = false;
         if held_owned && !ret_owned {
             owned.remove(&func.module_source, &func.name);
             dropped = true;
         }
-        // A walk that names a different parameter than the one held refutes
-        // both, the same as naming none: the verdict is one argument to test.
+        // A walk that names other parameters than the ones held refutes both,
+        // the same as naming none: the verdict is which arguments to test.
         match (held_self_proj, ret_self_proj) {
-            (Some(held), found) if found != Some(held) => {
+            (Some(held), found) if found.as_ref() != Some(&held) => {
                 self_proj.remove(&func.module_source, &func.name);
                 owned.remove(&func.module_source, &func.name);
                 dropped = true;
@@ -405,39 +423,45 @@ pub fn compute_indirect_owned_returns(
     owned_returns
 }
 
-/// Whether every returned value is owned, and which single parameter the ones
-/// that are not all project (`return *self`, `return builtin::hole_get(t, i)`).
-/// Judged against the callee convention `oracle` and the fresh-local set (Let
-/// bindings and match-arm bindings that destructure an owned source).
+/// Whether every returned value is owned, and which parameters the ones that
+/// are not project (`return *self`, `return builtin::hole_get(t, i)`, the
+/// payload `unwrap` binds out of `self`). Judged against the callee convention
+/// `oracle` and the fresh-local set (Let bindings and match-arm bindings that
+/// destructure an owned source). `borrowed` are the by-value parameters the
+/// callers pass uncopied.
 fn function_return_convention(
-    body: &TirBlock,
-    params: &[TirParam],
+    func: &TirFunction,
+    borrowed: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     hands_out_payload: bool,
-) -> (bool, Option<usize>) {
-    let fresh = compute_fresh_locals(body, params, oracle, type_table);
+) -> (bool, Option<Vec<usize>>) {
+    let body = func.body.as_ref().expect("members have bodies");
+    let bindings = BindingCollector::collect(body, func.params.len());
+    let fresh = compute_fresh_locals(&bindings, &func.params, borrowed, oracle, type_table);
     let mut walker = ReturnWalker {
-        fresh: &fresh,
-        oracle,
-        type_table,
-        params,
+        projector: Projector {
+            bindings: &bindings,
+            fresh: &fresh,
+            oracle,
+            type_table,
+            params: &func.params,
+        },
         hands_out_payload,
         all_owned: true,
-        self_proj: None,
-        self_proj_broken: false,
+        projected: Some(IndexSet::default()),
     };
     walker.visit_block(body);
-    let self_proj = if walker.self_proj_broken {
-        None
-    } else {
-        walker.self_proj
-    };
-    (walker.all_owned, self_proj)
+    let projected = walker.projected.filter(|ps| !ps.is_empty()).map(|ps| {
+        let mut ps: Vec<usize> = ps.into_iter().collect();
+        ps.sort_unstable();
+        ps
+    });
+    (walker.all_owned, projected)
 }
 
 /// Walk every `return value` and classify its operand: owned, or a projection of
-/// the first parameter (`return *self`). Only `return` delivers a function's
+/// parameters (`return *self`). Only `return` delivers a function's
 /// result — Wado value-returning functions always use an explicit `return`. A
 /// `break value` is internal to a loop or a labeled-block expression (e.g. the
 /// `break: $b` inside a `[1,2,3]` sequence literal that is itself the payload of
@@ -445,67 +469,118 @@ fn function_return_convention(
 /// enclosing return expression, not here — checking it against the
 /// function-level fresh set would spuriously poison the return.
 struct ReturnWalker<'a> {
-    fresh: &'a IndexSet<u32>,
-    oracle: &'a OwnedCalls<'a>,
-    type_table: &'a TypeTable,
-    params: &'a [TirParam],
+    projector: Projector<'a>,
     hands_out_payload: bool,
     all_owned: bool,
-    /// The parameter every not-owned return projects, while they agree on one.
-    self_proj: Option<usize>,
-    /// A not-owned return projected no parameter, or a second one.
-    self_proj_broken: bool,
+    /// The parameters the not-owned returns project, or `None` once one of
+    /// them projects none.
+    projected: Option<IndexSet<usize>>,
 }
 
 impl TirRefVisitor for ReturnWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-            let v = returned_value(v, self.hands_out_payload, self.type_table);
-            if !is_owned_value(v, self.fresh, self.oracle, self.type_table) {
+            let p = &self.projector;
+            let v = returned_value(v, self.hands_out_payload, p.type_table);
+            if !is_owned_value(v, p.fresh, p.oracle, p.type_table) {
                 self.all_owned = false;
-                match projection_param(v, self.params) {
-                    Some(p) if self.self_proj.is_none_or(|held| held == p) => {
-                        self.self_proj = Some(p);
+                let found = p
+                    .projected(v, &mut IndexSet::default())
+                    .filter(|ps| !ps.is_empty());
+                self.projected = match (self.projected.take(), found) {
+                    (Some(mut held), Some(found)) => {
+                        held.extend(found);
+                        Some(held)
                     }
-                    // A second parameter is no better than none: the caller
-                    // has one argument to test, so two answers is no answer.
-                    Some(_) | None => self.self_proj_broken = true,
-                }
+                    _ => None,
+                };
             }
         }
         self.walk_stmt(stmt);
     }
 }
 
-/// Which parameter `expr` is a projection of — a field / index / payload / cast
-/// chain rooted at one — by position, so the result is fresh exactly when that
-/// argument is.
-///
-/// Only the parameter's own reference may be peeled (`*self`): a deref deeper in
-/// the chain reads a reference *stored in* that storage, and its referent is
-/// somebody else's — a template shape holds each hole as a `&V` field, so
-/// `*v.h0` leaves `v` entirely however fresh `v` is.
-pub(super) fn projection_param(expr: &TirExpr, params: &[TirParam]) -> Option<usize> {
-    param_position(params, projection_root(expr)?)
+/// Which parameters a value is a projection of, so it is fresh exactly when
+/// those arguments are.
+struct Projector<'a> {
+    bindings: &'a BindingCollector,
+    fresh: &'a IndexSet<u32>,
+    oracle: &'a OwnedCalls<'a>,
+    type_table: &'a TypeTable,
+    params: &'a [TirParam],
 }
 
-/// The local a projection chain bottoms out at, following the rule
-/// [`projection_param`] states.
-fn projection_root(expr: &TirExpr) -> Option<u32> {
-    match &expr.kind {
-        TirExprKind::Local { index, .. } => Some(*index),
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: inner,
-        } => match inner.kind {
-            TirExprKind::Local { index, .. } => Some(index),
+impl Projector<'_> {
+    /// The parameters `expr` projects, by position: a field / index / payload /
+    /// cast chain rooted at one, a binding of such a chain, a call handing
+    /// such a chain back, or a match whose arms yield one. An owned value
+    /// projects none. `None` is a value that names storage other than a
+    /// parameter's. `visiting` holds the bindings being resolved, which a
+    /// cycle through them adds nothing to.
+    ///
+    /// Only the parameter's own reference may be peeled (`*self`): a deref
+    /// deeper in the chain reads a reference *stored in* that storage, and its
+    /// referent is somebody else's — a template shape holds each hole as a `&V`
+    /// field, so `*v.h0` leaves `v` entirely however fresh `v` is.
+    fn projected(&self, expr: &TirExpr, visiting: &mut IndexSet<u32>) -> Option<IndexSet<usize>> {
+        if is_owned_value(expr, self.fresh, self.oracle, self.type_table) {
+            return Some(IndexSet::default());
+        }
+        let param =
+            |index: u32| param_position(self.params, index).map(|p| std::iter::once(p).collect());
+        match &expr.kind {
+            TirExprKind::Local { index, .. } => {
+                if let Some(p) = param(*index) {
+                    return Some(p);
+                }
+                if !visiting.insert(*index) {
+                    return Some(IndexSet::default());
+                }
+                let sources = self.bindings.sources_of(*index);
+                let projected = if sources.is_empty() {
+                    None
+                } else {
+                    self.union(sources, visiting)
+                };
+                visiting.swap_remove(index);
+                projected
+            }
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: inner,
+            } => match inner.kind {
+                TirExprKind::Local { index, .. } => param(index),
+                _ => None,
+            },
+            TirExprKind::FieldAccess { expr: inner, .. }
+            | TirExprKind::VariantPayload { expr: inner, .. }
+            | TirExprKind::Cast { expr: inner, .. }
+            | TirExprKind::Index { expr: inner, .. } => self.projected(inner, visiting),
+            TirExprKind::Call { func, args, .. } => {
+                let handed_back = self.oracle.projected_params(func)?;
+                let args: Option<Vec<&TirExpr>> = handed_back
+                    .iter()
+                    .map(|&p| args.get(p).map(|a| &a.expr))
+                    .collect();
+                self.union(args?, visiting)
+            }
+            TirExprKind::Match { arms, .. } => self.union(
+                arms.iter()
+                    .filter(|arm| !self.type_table.is_never(arm.body.type_id))
+                    .map(|arm| &arm.body)
+                    .collect(),
+                visiting,
+            ),
             _ => None,
-        },
-        TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::Index { expr: inner, .. } => projection_root(inner),
-        _ => None,
+        }
+    }
+
+    fn union(&self, exprs: Vec<&TirExpr>, visiting: &mut IndexSet<u32>) -> Option<IndexSet<usize>> {
+        let mut all = IndexSet::default();
+        for e in exprs {
+            all.extend(self.projected(e, visiting)?);
+        }
+        Some(all)
     }
 }
 
@@ -515,31 +590,24 @@ fn projection_root(expr: &TirExpr) -> Option<u32> {
 /// borrowed (a source may reference another local whose ownership is still
 /// shrinking).
 fn compute_fresh_locals(
-    body: &TirBlock,
+    collector: &BindingCollector,
     params: &[TirParam],
+    borrowed: &IndexSet<u32>,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
-    let n_params = u32::try_from(params.len()).unwrap_or(u32::MAX);
-    let mut collector = BindingCollector {
-        n_params,
-        let_sources: IndexMap::default(),
-        match_sources: Vec::new(),
-    };
-    collector.visit_block(body);
-
     let mut fresh: IndexSet<u32> = collector.let_sources.keys().copied().collect();
     for (local, _) in &collector.match_sources {
         fresh.insert(*local);
     }
-    // A by-value parameter is owned: returning it is owned because a returned
-    // parameter is never confined, so the caller always copies it in.
+    // A by-value parameter is owned, the caller having copied or moved it in,
+    // unless the caller passes it uncopied.
     //
     // `is_reference`, not a `ResolvedType` match: `boxing` has already rewritten
     // some `&T` onto `Box<T>` in place, and one it reached would read here as a
     // parameter the caller handed a copy of.
     for p in params {
-        if !is_reference(p.type_id, type_table) {
+        if !is_reference(p.type_id, type_table) && !borrowed.contains(&p.local_index) {
             fresh.insert(p.local_index);
         }
     }
@@ -576,6 +644,29 @@ struct BindingCollector {
     n_params: u32,
     let_sources: IndexMap<u32, Vec<TirExpr>>,
     match_sources: Vec<(u32, TirExpr)>,
+}
+
+impl BindingCollector {
+    fn collect(body: &TirBlock, n_params: usize) -> Self {
+        let mut collector = Self {
+            n_params: u32::try_from(n_params).expect("a parameter count fits in u32"),
+            let_sources: IndexMap::default(),
+            match_sources: Vec::new(),
+        };
+        collector.visit_block(body);
+        collector
+    }
+
+    /// Every value `local` is bound from.
+    fn sources_of(&self, local: u32) -> Vec<&TirExpr> {
+        let lets = self.let_sources.get(&local).into_iter().flatten();
+        let scrutinees = self
+            .match_sources
+            .iter()
+            .filter(move |(l, _)| *l == local)
+            .map(|(_, scrut)| scrut);
+        lets.chain(scrutinees).collect()
+    }
 }
 
 impl TirRefVisitor for BindingCollector {

@@ -751,7 +751,13 @@ impl FunctionTranslator<'_, '_> {
             &self.base.value_copy.builtins,
         )
         .with_indirect(&self.base.value_copy.indirect_owned_returns);
-        value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
+        let type_table = self.base.type_table.borrow();
+        let wrap = |fresh: &IndexSet<u32>| {
+            value_copy::analyze::should_wrap(value, fresh, &type_table, &oracle)
+        };
+        // `dead.unwrap()` is as fresh as `dead`: a call handing its argument
+        // back hands over whatever the argument's read hands over.
+        wrap(&IndexSet::default()) && wrap(&self.moves.sole_moved_reads(value, &type_table))
     }
 
     /// Whether an immutable binding may alias `value`'s storage instead of
@@ -1903,7 +1909,11 @@ impl FunctionTranslator<'_, '_> {
                     // keep.
                     if has_receiver && i == 0 && *is_mut {
                         self.convert_mut_receiver_arg(e)
-                    } else if self.passes_through(func, i) {
+                    } else if value_copy::analyze::passes_through(
+                        &self.base.value_copy.builtins,
+                        func,
+                        i,
+                    ) {
                         ArenaCallArg {
                             expr: self.convert_operand(e),
                             is_mut: *is_mut,
@@ -2434,31 +2444,6 @@ impl FunctionTranslator<'_, '_> {
             _ => copied,
         };
         ArenaCallArg { expr, is_mut: true }
-    }
-
-    /// Whether the callee hands parameter `pos` straight back instead of keeping
-    /// it, so the copy that makes the result independent belongs at the result —
-    /// where the freshness analysis puts one only if the caller can still reach
-    /// the argument. Copying here would pay unconditionally, and for `select`
-    /// would pay for both operands where the equivalent `if` pays for one.
-    ///
-    /// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
-    /// merges two, which that clause cannot name.
-    fn passes_through(&self, func: &FunctionRef, pos: usize) -> bool {
-        let declared = if value_copy::analyze::is_select(func) {
-            value_copy::analyze::SELECT_OPERANDS.contains(&pos)
-        } else {
-            self.base.value_copy.builtins.part_of(func) == Some(pos)
-        };
-        // A retained position outlives the call, so the caller's storage would be
-        // the callee's to keep and the result's copy comes too late to defend it.
-        declared
-            && !self
-                .base
-                .value_copy
-                .builtins
-                .retain_specs(func)
-                .any(|r| r.source == pos)
     }
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless

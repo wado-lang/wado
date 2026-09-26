@@ -4,9 +4,9 @@
 
 use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
-use super::is_reference_type;
 use super::ownership::OwnedCalls;
 use super::retention::{BoundedRetention, FunctorRows, Retained, RetainedParams};
+use super::{is_reference_type, needs_value_copy};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -2183,6 +2183,57 @@ impl<'a> Moves<'a> {
                 && self
                     .source_spans
                     .is_some_and(|spans| spans.contains(&value.span)))
+    }
+
+    /// The value locals `value` reads once, where that read is a move: no other
+    /// read in `value` reaches their storage, and nothing after it does. A
+    /// reference moved hands over the reference, not what it names.
+    pub fn sole_moved_reads(&self, value: &TirExpr, type_table: &TypeTable) -> IndexSet<u32> {
+        struct Reads<'a, 'b> {
+            moves: &'b Moves<'a>,
+            type_table: &'b TypeTable,
+            /// Per local read, whether its only read so far is a move.
+            reads: IndexMap<u32, bool>,
+        }
+        impl TirRefVisitor for Reads<'_, '_> {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                match &expr.kind {
+                    // Its body indexes locals of its own, and a capture reads
+                    // the one it names without moving it.
+                    TirExprKind::Closure { captures, .. } => {
+                        for index in capture_source_locals(captures) {
+                            self.read(index, false);
+                        }
+                    }
+                    TirExprKind::Local { index, .. } => {
+                        let moved = needs_value_copy(expr.type_id, self.type_table)
+                            && !place::is_reference(expr.type_id, self.type_table)
+                            && self.moves.is_move(expr);
+                        self.read(*index, moved);
+                    }
+                    _ => self.walk_expr(expr),
+                }
+            }
+        }
+        impl Reads<'_, '_> {
+            fn read(&mut self, local: u32, moved: bool) {
+                self.reads
+                    .entry(local)
+                    .and_modify(|sole| *sole = false)
+                    .or_insert(moved);
+            }
+        }
+        let mut reads = Reads {
+            moves: self,
+            type_table,
+            reads: IndexMap::default(),
+        };
+        reads.visit_expr(value);
+        reads
+            .reads
+            .into_iter()
+            .filter_map(|(local, sole)| sole.then_some(local))
+            .collect()
     }
 
     /// Locals whose storage a move hands to a new owner. An immutable-source

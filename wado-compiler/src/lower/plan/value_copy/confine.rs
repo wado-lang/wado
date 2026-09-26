@@ -1,15 +1,21 @@
 //! Interprocedural confinement analysis over pre-boxing TIR (WEP 2026-05-21).
 //!
-//! A by-value parameter is *confined* when the callee neither returns it nor
-//! leaks it to storage outliving the call, so a caller passing a still-live
-//! value into it needs no defensive copy. The callee then holds it borrowed, not
-//! owned, and copies before any write. Two escape channels per parameter —
-//! `ret` (flows into a returned value) and `side` (written to lasting storage) —
-//! reach a least fixpoint; a parameter is confined iff neither is raised. The
-//! analysis over-approximates escape: unmodelled constructs, a closure's
-//! captures, and a handler / `resume` body mark the parameters they reach.
+//! A by-value parameter is *confined* when the callee keeps nothing of it past
+//! the call, so a caller passing a still-live value into it needs no defensive
+//! copy. The callee then holds it borrowed, not owned, and copies before any
+//! write. One it returns is confined too where the callee never takes it over:
+//! the result is then a projection of the argument, and the caller copies it
+//! only where it takes the result over itself, as it would any borrowed value.
+//!
+//! Three channels per parameter reach a least fixpoint: `ret` (flows into a
+//! returned value), `side` (written to lasting storage) and `taken` (bound to
+//! an owner the body holds, where borrowing it would move the copy into the
+//! callee rather than save it). A parameter is confined iff `side` is not
+//! raised, and `ret` and `taken` are not both. The analysis over-approximates
+//! escape: unmodelled constructs, a closure's captures, and a handler /
+//! `resume` body mark the parameters they reach.
 
-use super::analyze::collect_pattern_bindings;
+use super::analyze::{collect_pattern_bindings, passes_through};
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
@@ -54,6 +60,25 @@ impl ConfinedParams {
 struct ParamEscape {
     ret: Vec<bool>,
     side: Vec<bool>,
+    taken: Vec<bool>,
+}
+
+impl ParamEscape {
+    fn new(n: usize) -> Self {
+        Self {
+            ret: vec![false; n],
+            side: vec![false; n],
+            taken: vec![false; n],
+        }
+    }
+
+    fn confined_at(&self, i: usize) -> bool {
+        !self.side[i] && !(self.ret[i] && self.taken[i])
+    }
+
+    fn confined(&self) -> Vec<bool> {
+        (0..self.side.len()).map(|i| self.confined_at(i)).collect()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -76,14 +101,10 @@ pub fn compute_confined_params(
     for func in &project.functions {
         let func = func.borrow();
         if func.body.is_some() {
-            let n = func.params.len();
             funcs.insert(
                 func.module_source.clone(),
                 func.name.clone(),
-                ParamEscape {
-                    ret: vec![false; n],
-                    side: vec![false; n],
-                },
+                ParamEscape::new(func.params.len()),
             );
         }
     }
@@ -102,7 +123,7 @@ pub fn compute_confined_params(
         let current = funcs.get(&func.module_source, &func.name).unwrap();
         let mut pe = current.clone();
         if body_defies_model(body) {
-            for b in pe.ret.iter_mut().chain(pe.side.iter_mut()) {
+            for b in pe.ret.iter_mut().chain(&mut pe.side).chain(&mut pe.taken) {
                 *b = true;
             }
         } else {
@@ -116,14 +137,9 @@ pub fn compute_confined_params(
         }
     });
 
-    let map = funcs.map_values(|pe| {
-        pe.ret
-            .iter()
-            .zip(&pe.side)
-            .map(|(r, s)| !*r && !*s)
-            .collect()
-    });
-    ConfinedParams { map }
+    ConfinedParams {
+        map: funcs.map_values(|pe| pe.confined()),
+    }
 }
 
 fn classify_functions(project: &FlatPackage) -> FuncKeyMap<Kind> {
@@ -197,6 +213,20 @@ impl Ctx<'_> {
             Kind::Opaque => true,
         }
     }
+
+    /// Whether the argument at `param_index` reaches the callee uncopied, so
+    /// passing a parameter there does not take it over.
+    fn callee_borrows(&self, func: &FunctionRef, param_index: usize) -> bool {
+        match self.kind(func) {
+            Kind::ValueCopy => true,
+            Kind::Builtin => passes_through(self.builtins, func, param_index),
+            Kind::HasBody => self
+                .funcs
+                .get(&func.module_source, &func.name)
+                .is_some_and(|pe| pe.confined_at(param_index)),
+            Kind::Opaque => false,
+        }
+    }
 }
 
 /// Parameter indices whose identity a value may carry.
@@ -233,6 +263,15 @@ impl SinkWalker<'_> {
         let t = taint_of(self.ctx, self.taint, op);
         raise(&t, &mut self.pe.side);
     }
+
+    /// `op` lands in an owner the body holds. A reference or a plain value
+    /// takes nothing over.
+    fn raise_taken(&mut self, op: &TirExpr) {
+        if needs_value_copy(op.type_id, self.ctx.type_table) {
+            let t = taint_of(self.ctx, self.taint, op);
+            raise(&t, &mut self.pe.taken);
+        }
+    }
 }
 
 impl TirRefVisitor for SinkWalker<'_> {
@@ -242,6 +281,9 @@ impl TirRefVisitor for SinkWalker<'_> {
             | TirStmtKind::Break {
                 value: Some(op), ..
             } => self.raise_ret(op),
+            TirStmtKind::Let { value, .. } | TirStmtKind::LetDestructure { value, .. } => {
+                self.raise_taken(value);
+            }
             _ => {}
         }
         self.walk_stmt(stmt);
@@ -251,18 +293,43 @@ impl TirRefVisitor for SinkWalker<'_> {
         match &expr.kind {
             TirExprKind::GlobalVarSet { value, .. } => self.raise_side(value),
             TirExprKind::Assign { target, value } => {
-                if !matches!(target.kind, TirExprKind::Local { .. }) {
+                if matches!(target.kind, TirExprKind::Local { .. }) {
+                    self.raise_taken(value);
+                } else {
                     self.raise_side(value);
                 }
             }
             TirExprKind::CmRawCall { args, .. } | TirExprKind::IndirectCall { args, .. } => {
                 for a in args {
                     self.raise_side(a);
+                    self.raise_taken(a);
                 }
             }
+            TirExprKind::StructLiteral { fields, .. } => {
+                for f in fields {
+                    self.raise_taken(&f.value);
+                }
+            }
+            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
+                for el in elements {
+                    self.raise_taken(el);
+                }
+            }
+            TirExprKind::VariantConstruct {
+                payload: Some(p), ..
+            } => self.raise_taken(p),
             TirExprKind::Call { func, args, .. } => {
                 let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.raise_call_sides(func, &operands);
+                // A call that never returns is a failure path, where a copy
+                // costs nothing that matters.
+                if !self.ctx.type_table.is_never(expr.type_id) {
+                    for (i, op) in operands.iter().enumerate() {
+                        if !self.ctx.callee_borrows(func, i) {
+                            self.raise_taken(op);
+                        }
+                    }
+                }
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {

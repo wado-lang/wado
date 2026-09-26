@@ -107,10 +107,10 @@ pub struct ValueCopyPlan {
     /// taken from one resolves to the storage it stands for.
     pub return_paths: place::ReturnPaths,
     pub returns_owned: FuncKeySet,
-    /// The parameter every returned value that is not owned projects, so a call
-    /// is fresh when *that* argument is: a `[1, 2, 3]` builder finalized by
-    /// `.build()` is not defensively copied.
-    pub returns_self_projection: FuncKeyMap<usize>,
+    /// The parameters the returned values that are not owned project, so a
+    /// call is fresh when *those* arguments are: a `[1, 2, 3]` builder
+    /// finalized by `.build()` is not defensively copied.
+    pub returns_self_projection: FuncKeyMap<Vec<usize>>,
     /// What each builtin declared about storage: where its result comes from,
     /// and which arguments it keeps beyond the call.
     pub builtins: BuiltinDeclarations,
@@ -136,7 +136,8 @@ pub struct ValueCopyPlan {
     /// argument aliasing it keeps its copy.
     pub mut_receiver_methods: FuncKeySet,
     /// Per-parameter confinement: a still-live value into a confined parameter
-    /// needs no defensive copy (caller-side replacement for `param_escapes`).
+    /// needs no defensive copy (caller-side replacement for `param_escapes`),
+    /// and one the callee hands back is a projection of the argument.
     pub confined_params: confine::ConfinedParams,
     /// Per-callee, which parameters are `&mut` — the only siblings that can
     /// mutate a shared by-value argument during the call. A confined by-value
@@ -176,6 +177,7 @@ pub fn plan(
         &call_graph,
         &place::ReturnPaths::default(),
         &builtins,
+        &confined_params,
     );
     let return_paths = place::compute_return_paths(
         flat,
@@ -184,8 +186,13 @@ pub fn plan(
         &seed_conventions.returns_owned,
         &builtins,
     );
-    let conventions =
-        ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtins);
+    let conventions = ownership::compute_return_conventions(
+        flat,
+        &call_graph,
+        &return_paths,
+        &builtins,
+        &confined_params,
+    );
     let retained = retention::compute_retention(flat, &call_graph, &builtins);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
