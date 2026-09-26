@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790391224721,
+  "lastUpdate": 1790395297957,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60073,6 +60073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1b98ea12f1cdf70e157b14fcc190139a4d5c99ed"
         },
         "date": 1790391224072,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19683,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c8b5409d1302410c6c4b980150c20ae467912312",
+          "message": "Merge pull request #2172 from wado-lang/claude/modest-mendel-ltq1vd\n\nfix(compiler)!: resolve every declaration by its reference site, never by its spelling",
+          "timestamp": "2026-09-26T12:34:57+09:00",
+          "tree_id": "3bb694aad3bee42c852577a2bcb8ec78fe2f237d",
+          "url": "https://github.com/wado-lang/wado/commit/c8b5409d1302410c6c4b980150c20ae467912312"
+        },
+        "date": 1790395297413,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
