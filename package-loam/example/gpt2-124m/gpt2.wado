@@ -1,13 +1,5 @@
 //! Text in, text out: GPT-2 (124M) continues a prompt one greedy token at a
-//! time, picking the tokens onnxruntime picks. `fetch.sh` downloads the model
-//! and splits it; the weights load from the checkpoint at run time.
-//!
-//!     package-loam/example/gpt2-124m/fetch.sh
-//!     cd package-loam/example/gpt2-124m
-//!     wado run gpt2.wado -- "Hello, my name is"
-//!
-//! The graph is compiled for a fixed context. A shorter sequence is padded on
-//! the right: attention is causal, so no real position reads the padding.
+//! time, picking the tokens onnxruntime picks. `README.md` says how to run it.
 
 use { args, eprintln, println, Environment, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
@@ -136,7 +128,8 @@ use gpt2 from "./gpt2.onnxtext"
 global CONTEXT: i32 = 32;
 global STEPS: i32 = 8;
 
-/// The token the model ranks first after `ids`.
+/// The token the model ranks first after `ids`, padded on the right to the
+/// fixed context: attention is causal, so no real position reads the padding.
 fn next_token(ids: &List<i32>, weights: &gpt2::Weights) -> i32 {
     let mut input: List<i64> = [];
     let mut mask: List<i64> = [];

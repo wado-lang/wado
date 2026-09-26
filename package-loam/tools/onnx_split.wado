@@ -1,9 +1,5 @@
 //! Split an `.onnx` into the two files Loam reads: a textual graph whose
 //! weights carry no values, and a safetensors checkpoint holding them.
-//!
-//!     wado run package-loam/tools/onnx_split.wado -- model.onnx model
-//!
-//! writes `model.onnxtext` and `model.safetensors` beside the stem it is given.
 
 use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
@@ -15,7 +11,7 @@ use { split_weights, write_safetensors } from "../src/safetensors.wado";
 export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
     let given = args();
     if given.len() != 2 {
-        eprintln("usage: onnx_split <model.onnx> <output stem>");
+        eprintln("usage: onnx_split <model.onnx> <stem>, writing <stem>.onnxtext and <stem>.safetensors");
         exit(2);
     }
     let [source, stem] = [given[0], given[1]];

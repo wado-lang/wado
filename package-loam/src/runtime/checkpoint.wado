@@ -32,12 +32,24 @@ pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
     if view.len() < 8 {
         return Result::Err(LoadError { reason: `the header is 8 bytes, past the ${view.len()} given` });
     }
+    let end = declared_header_end(view)?;
+    if end > view.len() {
+        return Result::Err(LoadError { reason: `the header is ${end - 8} bytes, past the ${view.len() - 8} given` });
+    }
+    return Result::Ok(end);
+}
+
+/// Where the header the leading 8 bytes declare ends, whether or not the bytes
+/// reach it.
+pub fn declared_header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
+    let view = bytes.as_byte_slice();
+    assert view.len() >= 8;
     let mut length: u64 = 0;
     for let at of 0..<8 {
         length |= view[at] as u64 << (8 * at) as u64;
     }
-    if length > (i32::MAX - 8) as u64 || 8 + length as i32 > view.len() {
-        return Result::Err(LoadError { reason: `the header is ${length} bytes, past the ${view.len() - 8} given` });
+    if length > (i32::MAX - 8) as u64 {
+        return Result::Err(LoadError { reason: `the header is ${length} bytes, past what a module can address` });
     }
     return Result::Ok(8 + length as i32);
 }

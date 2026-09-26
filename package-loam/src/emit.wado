@@ -275,15 +275,15 @@ global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
-        if let Some(clause) = line.strip_prefix("use ") {
-            names.extend(&imported_names(&clause.to_string()));
-            continue;
-        }
         let mut declaration = line.as_str_slice();
         for let prefix of VISIBILITY_PREFIXES {
             if let Some(rest) = declaration.strip_prefix(prefix) {
                 declaration = rest;
             }
+        }
+        if let Some(clause) = declaration.strip_prefix("use ") {
+            names.extend(&imported_names(&clause.to_string()));
+            continue;
         }
         for let keyword of DECLARATION_KEYWORDS {
             let Some(rest) = declaration.strip_prefix(keyword) else {
@@ -302,9 +302,16 @@ fn declared_in(source: &String) -> List<String> {
     return names;
 }
 
+test "a use line binds its names, whatever its visibility" {
+    let source = "use ns from \"a\";\npub use { A, B as C } from \"b\";\ninternal use { D } from \"c\";\n";
+    assert declared_in(&source) == ["ns", "A", "C", "D"] as List<String>;
+}
+
 /// The names a `use` clause binds: its namespace, or each item under its alias.
 fn imported_names(clause: &String) -> List<String> {
-    let [bound, _] = clause.split_once(" from ").unwrap();
+    let Some([bound, _]) = clause.split_once(" from ") else {
+        panic(`an inlined runtime's import is one line: use ${clause}`);
+    };
     let mut names: List<String> = [];
     let mut aliased = false;
     for let token of bound.to_string().replace("{", " ").replace("}", " ").replace(",", " ").split_whitespace() {
@@ -365,7 +372,6 @@ fn loads_weights(graph: &Graph) -> bool {
 
 /// `Weights::embedded()` where the graph carries every initializer's data, and
 /// `Weights::load` reading the rest from a safetensors checkpoint otherwise.
-/// The compiler folds each carried payload's byte literal into a data segment.
 fn emit_constructor(
     w: &mut CodeWriter,
     graph: &Graph,

@@ -774,13 +774,15 @@ fn test_test_failing() {
 
 #[test]
 fn test_test_trap_names_its_reason() {
-    // The reason is the cause under wasmtime's backtrace context, which a
-    // plain `Display` of the error leaves out.
+    // The reason is the cause under wasmtime's backtrace context: a plain
+    // `Display` leaves it out, and `Debug` adds the host's own backtrace.
     wado()
         .args(["test", "wado-cli/tests/fixtures/test_trap.wado"])
+        .env("RUST_BACKTRACE", "1")
         .assert()
         .failure()
-        .stdout(predicate::str::contains("integer divide by zero"));
+        .stdout(predicate::str::contains("integer divide by zero"))
+        .stdout(predicate::str::contains("Stack backtrace").not());
 }
 
 #[test]

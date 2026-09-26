@@ -334,10 +334,8 @@ pub resource StreamWritable<T> {
     #[cm("stream-write")]
     fn write(&self, data: List<T>) -> StreamWrite;
 
-    /// `write_all` for a view (`list.as_slice()`, `array.slice(start, end)`,
-    /// `string.as_bytes()`), without the deep copy value-semantics `write` makes.
-    /// The view is lowered once however many copies the reader takes it in.
-    /// `T` must be a byte: any other element type is a compile error.
+    /// `write_all` for a byte view, lowered once with no value-semantics copy.
+    /// Any element type but a byte is a compile error.
     #[cm("stream-write-raw-all")]
     fn write_raw_all(&self, data: Slice<T>) -> CopyResult;
 
@@ -367,7 +365,7 @@ impl<T> StreamWritable<T> {
         }
         let mut offset = 0;
         loop {
-            let written = if offset == 0 && data.len() <= STREAM_CHUNK_ELEMENTS {
+            let written = if offset == 0 {
                 self.write(data);
             } else {
                 let end = i32::min(offset + STREAM_CHUNK_ELEMENTS, data.len());

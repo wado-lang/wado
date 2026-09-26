@@ -28,8 +28,7 @@ test "bytes round-trip" {
 }
 
 // One Component Model copy moves at most 2^28 - 1 elements, and the host takes
-// a prefix of each, so a long buffer is many copies, neither a trap nor a
-// quadratic re-lowering of the rest.
+// 8 KiB of each.
 #[timeout_ms(30000)]
 test "a file longer than one stream copy is written whole" {
     let dir = scratch("long");

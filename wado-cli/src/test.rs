@@ -1677,7 +1677,7 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
                 } else if job.expect_trap {
                     (TestOutcome::Pass, None) // expect_trap test trapped as expected
                 } else {
-                    (TestOutcome::Fail, Some(format!("{e:?}")))
+                    (TestOutcome::Fail, Some(format!("{e:#}")))
                 }
             }
         },

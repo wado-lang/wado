@@ -122,9 +122,9 @@ These are ordinary Wado, generic over the element type, and are what most call
 sites use. A call site that streams — bounded memory, incremental work — writes
 the loop over `read` itself.
 
-`write_all` offers at most `STREAM_CHUNK_ELEMENTS` per copy. Each copy lowers
-what it offers, and a reader may take a short prefix, so offering the whole rest
-would make the loop quadratic.
+`write_all` offers the whole buffer once, then at most `STREAM_CHUNK_ELEMENTS`
+per copy. Each copy lowers what it offers, and a reader may take a short
+prefix, so offering the whole rest every time would make the loop quadratic.
 
 `write_raw_all` is the same loop for elements already in one array, without the
 value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A

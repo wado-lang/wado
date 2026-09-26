@@ -1,7 +1,7 @@
 //! A safetensors checkpoint as the loader reads it, and every way one can
 //! disagree with the graph a module was compiled for.
 
-use { Expected, LoadError, header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { Expected, LoadError, declared_header_end, header_end, read_checkpoint } from "./runtime/checkpoint.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 
 fn is_error<E: Error>() {
@@ -131,6 +131,12 @@ test "a header longer than the bytes given is refused" {
     let bytes = two_tensors();
     let e = read_checkpoint(bytes.as_byte_slice().slice(0, 12)).unwrap_err();
     assert `${e}`.starts_with("the header is ");
+}
+
+test "a header no module can address is refused from its length alone" {
+    let bytes: ByteList = b"\xff\xff\xff\xff\x00\x00\x00\x00";
+    let e = declared_header_end(&bytes).unwrap_err();
+    assert `${e}` == "the header is 4294967295 bytes, past what a module can address";
 }
 
 test "a header that is not JSON is refused" {
