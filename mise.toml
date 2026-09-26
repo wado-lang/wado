@@ -591,17 +591,19 @@ cargo run -p wado-from-idl -- \
     --glue-dir package-web/glue
 """
 
-[tasks.update-stdlib-kiln]
-description = "Regenerate core:kiln stdlib submodules from WIT file (facade is hand-written)"
+[tasks.update-stdlib-core-wit]
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# Submodules only — the facade `lib/core/kiln.wado` is hand-written.
-rm -f wado-compiler/lib/core/kiln/*.wado
-cargo run -p wado-from-idl -- \
-    --wit-dir wado-compiler/lib/core/kiln \
-    --output-dir wado-compiler/lib/core \
-    --skip-flat-reexport
+# Submodules only — each facade `lib/core/<package>.wado` is hand-written.
+for package in kiln eval; do
+    rm -f "wado-compiler/lib/core/$package/"*.wado
+    cargo run -p wado-from-idl -- \
+        --wit-dir "wado-compiler/lib/core/$package" \
+        --output-dir wado-compiler/lib/core \
+        --skip-flat-reexport
+done
 """
 
 [tasks.update-bundled]

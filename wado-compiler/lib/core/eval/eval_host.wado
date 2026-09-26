@@ -1,0 +1,95 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/eval/eval.wit"])]
+#![stdlib("core:eval/eval_host.wado")]
+
+/// Why a run stopped with a trap.
+#[cm("core:eval/eval-host@0.1.0#trap-kind")]
+pub enum TrapKind {
+    #[cm("unreachable")]
+    Unreachable,
+    #[cm("stack-overflow")]
+    StackOverflow,
+    #[cm("memory-out-of-bounds")]
+    MemoryOutOfBounds,
+    #[cm("table-out-of-bounds")]
+    TableOutOfBounds,
+    #[cm("indirect-call-to-null")]
+    IndirectCallToNull,
+    #[cm("bad-signature")]
+    BadSignature,
+    #[cm("integer-overflow")]
+    IntegerOverflow,
+    #[cm("integer-division-by-zero")]
+    IntegerDivisionByZero,
+    #[cm("bad-conversion-to-integer")]
+    BadConversionToInteger,
+    #[cm("null-reference")]
+    NullReference,
+    #[cm("array-out-of-bounds")]
+    ArrayOutOfBounds,
+    #[cm("allocation-too-large")]
+    AllocationTooLarge,
+    #[cm("cast-failure")]
+    CastFailure,
+    #[cm("other")]
+    Other,
+}
+
+/// How a program that ran came to stop.
+#[cm("core:eval/eval-host@0.1.0#status")]
+pub variant Status {
+    #[cm("exited")]
+    Exited(i32),
+    #[cm("trapped")]
+    Trapped(TrapKind),
+    #[cm("out-of-fuel")]
+    OutOfFuel,
+    #[cm("out-of-memory")]
+    OutOfMemory,
+}
+
+/// A program that ran, with everything it wrote before it stopped.
+#[cm("core:eval/eval-host@0.1.0#ran")]
+pub struct Ran {
+    #[cm("stdout")]
+    pub stdout: List<u8>,
+    #[cm("stderr")]
+    pub stderr: List<u8>,
+    #[cm("status")]
+    pub status: Status,
+}
+
+/// A source that did not compile.
+#[cm("core:eval/eval-host@0.1.0#compile-failure")]
+pub struct CompileFailure {
+    /// The report `wado compile` would print.
+    #[cm("rendered")]
+    pub rendered: String,
+    /// The `Code` of each error, in report order.
+    #[cm("codes")]
+    pub codes: List<String>,
+}
+
+#[cm("core:eval/eval-host@0.1.0#outcome")]
+pub variant Outcome {
+    #[cm("ran")]
+    Ran(Ran),
+    #[cm("compile-failed")]
+    CompileFailed(CompileFailure),
+    #[cm("compile-timed-out")]
+    CompileTimedOut,
+    /// The import the host refused to link.
+    #[cm("unavailable")]
+    Unavailable(String),
+}
+
+/// Host interface behind `core:eval`. It compiles and runs one Wado source
+/// and returns the outcome as raw data; `core:eval` decodes it. Only
+/// `wado test` supplies it. See WEP 2026-09-26 (Eval).
+#[cm("core:eval/eval-host@0.1.0")]
+pub interface EvalHost {
+    /// Compile `source` as a single-module `wasi:cli/command` program and run
+    /// it under `fuel`, linking only stdout, stderr and exit.
+    #[cm("core:eval/eval-host@0.1.0#run")]
+    #[cm_params("source", "fuel")]
+    fn run(source: String, fuel: u64) -> Outcome;
+}

@@ -595,6 +595,10 @@ pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnosti
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
+/// The FQ prefix of every `core:eval` interface. Only the `wado test` host links
+/// them, so a program for any other world that imports one is rejected.
+const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
+
 struct LibSurface {
     submodule_exports: Vec<world_registry::WorldExportInfo>,
     submodule_type_decls: Vec<(ModuleSource, ast::Item)>,
@@ -1811,6 +1815,26 @@ fn compile_after_load<H: CompilerHost>(
     // codegen, so a generator that cannot instantiate never reaches bytes.
     if kiln::import_check::check_cm_imports(is_kiln_generator, &wir_package.import_plan, logger) > 0
     {
+        return Err(Bail);
+    }
+
+    // Only `wado test` supplies `core:eval`, so a component of any other world
+    // reaching it would build and then fail to instantiate wherever it runs.
+    if !nir.is_test_world()
+        && let Some(entry) = wir_package
+            .import_plan
+            .iter()
+            .find(|entry| entry.fq.starts_with(EVAL_PACKAGE_PREFIX))
+    {
+        report_without_span(
+            logger,
+            compiler_host::Code::EvalOutsideTestWorld,
+            format!(
+                "this program imports `{}`, but `core:eval` runs only under `wado test`; \
+                 a program for the `{}` world cannot reach it",
+                entry.fq, nir.target_world,
+            ),
+        );
         return Err(Bail);
     }
 

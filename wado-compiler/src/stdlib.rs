@@ -165,6 +165,42 @@ stdlib_table! {
     "core:kiln/kiln_host.wado" => "core/kiln/kiln_host.wado",
     "core:kiln/types.wado" => "core/kiln/types.wado",
     "core:kiln/worlds.wado" => "core/kiln/worlds.wado",
+    "core:eval" => "core/eval.wado",
+    "core:eval/eval_host.wado" => "core/eval/eval_host.wado",
+}
+
+/// The `core:*` packages whose submodules are generated from WIT, so their
+/// declarations carry `#[cm]` bindings the CM registry owns. Each facade
+/// (`core:<package>`) is hand-written; its submodules live under
+/// `core:<package>/`.
+pub const WIT_CORE_PACKAGES: &[&str] = &["kiln", "eval"];
+
+/// Whether `name` (a `ModuleSource::Core` name such as `"kiln/types.wado"`)
+/// is a [`WIT_CORE_PACKAGES`] facade or one of its submodules.
+#[must_use]
+pub fn is_wit_core_module(name: &str) -> bool {
+    WIT_CORE_PACKAGES.iter().any(|package| {
+        name.strip_prefix(package)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    })
+}
+
+/// Whether `source` (a CM interface FQ such as `"core:kiln/types@0.1.0"`)
+/// belongs to a [`WIT_CORE_PACKAGES`] package.
+#[must_use]
+pub fn is_wit_core_interface(source: &str) -> bool {
+    source
+        .strip_prefix("core:")
+        .is_some_and(|rest| rest.contains('/') && is_wit_core_module(rest))
+}
+
+/// The WIT-generated submodules of every [`WIT_CORE_PACKAGES`] package, the
+/// facades left out.
+pub fn wit_core_submodules() -> impl Iterator<Item = (&'static str, &'static str)> {
+    all_core_modules().iter().copied().filter(|(path, _)| {
+        path.strip_prefix("core:")
+            .is_some_and(|name| name.contains('/') && is_wit_core_module(name))
+    })
 }
 
 stdlib_table! {

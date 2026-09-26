@@ -1,0 +1,116 @@
+#![stdlib("core:eval")]
+//! Compile and run a Wado program from a test.
+//!
+//! [`eval`] takes a whole program as one source string, compiles it as a
+//! `wasi:cli/command`, runs it, and returns what it wrote and how it stopped.
+//! It is for testing code generators: generate a program, evaluate it, and
+//! assert on its output.
+//!
+//! Only `wado test` supports it, and a program for any other world that
+//! reaches this module does not compile. The evaluated program gets nothing
+//! but stdout, stderr and exit: no arguments, stdin, environment, files,
+//! clock, randomness or network. Its `use` items may name `core:*` and nothing
+//! else. Every outcome is cached, keyed by the compiler, the knobs, the budget
+//! and the source. See WEP 2026-09-26 (Eval).
+
+use { Error as CoreError } from "core:prelude/traits.wado";
+use { EvalHost, Outcome } from "core:eval/eval_host.wado";
+
+pub use { Status, TrapKind, CompileFailure } from "core:eval/eval_host.wado";
+
+#[synopsis]
+test {
+    let out = eval(`use { println, Stdout } from "core:cli";
+export fn run() with Stdout { println("hello"); }`).unwrap();
+    assert out.status matches { Exited(0) };
+    assert out.stdout == "hello\n";
+}
+
+/// The fuel an evaluated program runs on unless the caller names another
+/// budget. Running out stops it with [`Status::OutOfFuel`].
+pub global DEFAULT_FUEL: u64 = 1_000_000_000;
+
+/// What a program that ran wrote, and how it stopped. Output written before a
+/// trap is kept.
+pub struct Output {
+    pub stdout: String,
+    pub stderr: String,
+    pub status: Status,
+}
+
+/// Why a program never ran.
+pub variant EvalError {
+    CompileFailed(CompileFailure),
+    /// The compile ran past the host's time limit.
+    CompileTimedOut,
+    /// The program imports an interface the host does not link; the payload
+    /// names it.
+    Unavailable(String),
+}
+
+/// Compiles `source` as a `wasi:cli/command` program and runs it under `fuel`.
+///
+/// `Err` means the program never ran. `Ok` means it ran, however it stopped;
+/// `Output.status` says how. stdout and stderr are decoded as UTF-8, with
+/// U+FFFD where the bytes are not.
+#[benign(EvalHost)]
+pub fn eval(source: String, fuel: u64 = DEFAULT_FUEL) -> Result<Output, EvalError> {
+    return match EvalHost::run(source, fuel) {
+        Ran(ran) => Result::Ok(Output {
+            stdout: String::from_utf8_lossy(ran.stdout),
+            stderr: String::from_utf8_lossy(ran.stderr),
+            status: ran.status,
+        }),
+        CompileFailed(failure) => Result::Err(EvalError::CompileFailed(failure)),
+        CompileTimedOut => Result::Err(EvalError::CompileTimedOut),
+        Unavailable(name) => Result::Err(EvalError::Unavailable(name)),
+    };
+}
+
+impl Display for EvalError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            CompileFailed(failure) => failure.rendered,
+            CompileTimedOut => "the compile ran past its time limit",
+            Unavailable(name) => `the program imports \`${name}\`, which eval does not link`,
+        };
+        f.write_str(&message);
+    }
+}
+
+impl CoreError for EvalError {
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            Exited(code) => `exited with ${code}`,
+            Trapped(kind) => `trapped: ${kind}`,
+            OutOfFuel => "ran out of fuel",
+            OutOfMemory => "ran out of memory",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Display for TrapKind {
+    fn fmt(&self, f: &mut Formatter) {
+        let message = match *self {
+            Unreachable => "unreachable",
+            StackOverflow => "stack overflow",
+            MemoryOutOfBounds => "memory access out of bounds",
+            TableOutOfBounds => "table access out of bounds",
+            IndirectCallToNull => "indirect call to null",
+            BadSignature => "indirect call signature mismatch",
+            IntegerOverflow => "integer overflow",
+            IntegerDivisionByZero => "integer division by zero",
+            BadConversionToInteger => "invalid conversion to integer",
+            NullReference => "null reference",
+            ArrayOutOfBounds => "array access out of bounds",
+            AllocationTooLarge => "allocation too large",
+            CastFailure => "cast failure",
+            Other => "other trap",
+        };
+        f.write_str(message);
+    }
+}

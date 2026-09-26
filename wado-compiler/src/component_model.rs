@@ -29,6 +29,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, UNIT_TYPE_NAME, to_kebab};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
+use crate::stdlib;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -327,16 +328,12 @@ pub fn cm_payload_type_from_type_id(
 }
 
 /// Whether a type's module source already owns a CM lowering path: `wasi:*`
-/// interfaces and the `core:kiln/*` generator surface. User, local, and
+/// interfaces and the WIT-generated `core:*` packages. User, local, and
 /// dependency declarations do not, so they route through `Named`.
 fn is_cm_owned_source(ms: &ModuleSource) -> bool {
     match ms {
         ModuleSource::Binding { .. } => true,
-        // The `core:kiln` facade itself (`name == "kiln"`) plus its WIT-generated
-        // submodules (`kiln/...`). `kilnfoo` is unrelated, so match exactly.
-        ModuleSource::Core { name } => {
-            name.as_str() == "kiln" || name.as_str().starts_with("kiln/")
-        }
+        ModuleSource::Core { name } => stdlib::is_wit_core_module(name),
         _ => false,
     }
 }
@@ -388,7 +385,7 @@ pub fn cm_payload_type_from_ast(
             {
                 return Some(CmPayloadType::Resource(declared(&cm)?));
             }
-            if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
+            if src.starts_with("wasi:") || stdlib::is_wit_core_interface(&src) {
                 return None;
             }
             let cm = registry
@@ -2059,7 +2056,6 @@ impl CmInterfaceRegistry {
         use crate::ast::Module as AstModule;
         use crate::lexer::lex;
         use crate::parser::Parser;
-        use crate::stdlib;
         use crate::world_registry::WorldRegistry;
 
         fn parse_module(source: &str) -> AstModule {
@@ -2077,18 +2073,11 @@ impl CmInterfaceRegistry {
         let mut modules: Vec<(&'static str, ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
-        let kiln = [
-            "core:kiln/kiln_host.wado",
-            "core:kiln/types.wado",
-            "core:kiln/worlds.wado",
-        ]
-        .map(|path| {
-            (
-                path,
-                stdlib::get_stdlib_module(path).expect("core:kiln is bundled"),
-            )
-        });
-        for (path, source) in stdlib::all_binding_modules().iter().copied().chain(kiln) {
+        for (path, source) in stdlib::all_binding_modules()
+            .iter()
+            .copied()
+            .chain(stdlib::wit_core_submodules())
+        {
             let module = parse_module(source);
             defs_by_module.insert(path, collect_cm_definitions(&module));
             modules.push((path, module));
@@ -3050,13 +3039,13 @@ impl CmInterfaceRegistry {
         find_unique_source_in_binding(self.kind_keys(kind), name)
     }
 
-    /// The source interface of a `kind` declaration in `core:kiln/*`, when
-    /// exactly one kiln interface registers the name. Kept apart from
-    /// [`Self::find_binding_source`], whose bare-name WASI lookups stay scoped
-    /// to `wasi:*` so `wasi:http/types::Response` and
+    /// The source interface of a `kind` declaration in a WIT-generated `core:*`
+    /// package, when exactly one such interface registers the name. Kept apart
+    /// from [`Self::find_binding_source`], whose bare-name WASI lookups stay
+    /// scoped to `wasi:*` so `wasi:http/types::Response` and
     /// `core:kiln/types::Response` remain distinct.
-    pub fn find_kiln_source(&self, kind: CmTypeKind, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(self.kind_keys(kind), "core:kiln/", name)
+    pub fn find_wit_core_source(&self, kind: CmTypeKind, name: &str) -> Option<&str> {
+        find_unique_source_in_set(self.kind_keys(kind), name, &stdlib::is_wit_core_interface)
     }
 
     /// The interface declaring the resource `wado_name`, asking `emitting`
@@ -3224,9 +3213,9 @@ impl CmInterfaceRegistry {
         if let Some(s) = self.source_interface(named) {
             return Some(s);
         }
-        self.find_kiln_source(CmTypeKind::Struct, &named.name)
-            .or_else(|| self.find_kiln_source(CmTypeKind::Variant, &named.name))
-            .or_else(|| self.find_kiln_source(CmTypeKind::Enum, &named.name))
+        self.find_wit_core_source(CmTypeKind::Struct, &named.name)
+            .or_else(|| self.find_wit_core_source(CmTypeKind::Variant, &named.name))
+            .or_else(|| self.find_wit_core_source(CmTypeKind::Enum, &named.name))
             // Lib-local types (`wado compile --lib`) are registered by name
             // under the package's default-interface FQ (neither `wasi:` nor
             // `core:`), so the prefix-scoped lookups above miss them. A bare
@@ -3774,12 +3763,12 @@ impl CmInterfaceRegistry {
     }
 
     /// Whether `source` names an interface whose values follow the CM canonical
-    /// ABI: a bundled CM namespace (`wasi:`, `core:kiln/`) or a
-    /// component import (whose package namespace is arbitrary, so tracked
+    /// ABI: a bundled CM namespace (`wasi:`, a WIT-generated `core:*` package)
+    /// or a component import (whose package namespace is arbitrary, so tracked
     /// explicitly).
     pub fn is_cm_source(&self, source: &str) -> bool {
         CmNamespace::split_specifier(source).is_some()
-            || source.starts_with("core:kiln/")
+            || stdlib::is_wit_core_interface(source)
             || self.component_interfaces.contains(source)
     }
 
