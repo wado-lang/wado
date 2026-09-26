@@ -244,7 +244,7 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
 }
 
 /// `let mut header = header;`: the next iteration's binding, so what this one
-/// captured or borrowed keeps its own box (ECMA-262 CreatePerIterationEnvironment).
+/// captured or borrowed keeps its own box (ECMA-262 `CreatePerIterationEnvironment`).
 fn redeclaration(locals: &FrameLocals, header: u32) -> TirStmt {
     let Some((name, type_id)) = locals.local(header) else {
         unreachable!("`ForHeaders` takes only locals the frame declares");
