@@ -30,7 +30,7 @@ All compression entry points share the same shape: the input buffer is
 required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 `Z_DEFAULT_STRATEGY` respectively.
 
-All decompression entry points take `max_output`, default `i32::MAX`. Output
+All decompression entry points take a non-negative `max_output`, default `i32::MAX`. Output
 that would pass it fails with `ZlibError::OutputExceedsMax` before it is
 written, so untrusted input cannot expand without bound.
 

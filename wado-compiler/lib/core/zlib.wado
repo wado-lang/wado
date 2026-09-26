@@ -26,7 +26,7 @@
 //! required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 //! `Z_DEFAULT_STRATEGY` respectively.
 //!
-//! All decompression entry points take `max_output`, default `i32::MAX`. Output
+//! All decompression entry points take a non-negative `max_output`, default `i32::MAX`. Output
 //! that would pass it fails with `ZlibError::OutputExceedsMax` before it is
 //! written, so untrusted input cannot expand without bound.
 //!
@@ -809,9 +809,7 @@ fn inflate_raw_ex(
     input_length: i32,
     max_output: i32,
 ) -> Result<[ByteList, i32], ZlibError> {
-    if max_output < 0 {
-        return Result::Err(ZlibError::OutputExceedsMax);
-    }
+    assert max_output >= 0, "max_output must not be negative";
     let mut state = InflateState::new(true);
     let mut output: ByteList = [];
     let mut exceeded = false;
@@ -909,6 +907,7 @@ fn inflate_raw_ex(
                     copy = have;
                 }
                 if copy > max_output - output.len() {
+                    builtin::cold_path();
                     exceeded = true;
                     break;
                 }
@@ -1224,6 +1223,7 @@ fn inflate_raw_ex(
                     // Literal: write it here rather than through a Lit mode, so
                     // the common symbol costs no extra dispatch round trip.
                     if output.len() == max_output {
+                        builtin::cold_path();
                         exceeded = true;
                         break;
                     }
@@ -1362,6 +1362,7 @@ fn inflate_raw_ex(
                 if state.offset > out_pos {
                     state.mode = InflateMode::Bad;
                 } else if state.length > max_output - out_pos {
+                    builtin::cold_path();
                     exceeded = true;
                     break;
                 } else {
