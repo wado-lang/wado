@@ -51,6 +51,7 @@ use {
     compute_overlap_groups,
     compute_overlap_groups_of,
     DecisionBranch,
+    decision_partition,
     dispatch_branches,
     identity_slots,
     scan_decision_branches,
@@ -2366,8 +2367,8 @@ fn group_atn_site(
     let Some(e) = admits else {
         return -1;
     };
-    for let branch of &compute_overlap_groups_of(classes) {
-        if branch.len() > 1 && branch.contains(&e.alt_index) {
+    for let branch of &decision_partition(classes) {
+        if branch.alts.len() > 1 && branch.alts.contains(&e.alt_index) {
             ctx.mark_needs_scan_atn();
             return g.atn_decision;
         }

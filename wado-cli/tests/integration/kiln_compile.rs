@@ -39,7 +39,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 /// Ergonomic form: the author writes `fn generate(req: Request<Options>)`
 /// and the compiler's `kiln::import_check::inject_kiln_request_adapter`
 /// phase rewrites it into the flat typed parameters
-/// `(primary, inputs, options)` of the generator's synthesized world before
+/// `(primary, inputs, module, options)` of the generator's synthesized world before
 /// analyze runs.
 const ADAPTER_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
@@ -56,13 +56,14 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
 /// No-options ergonomic form: the author declares no `Options` struct and
 /// writes the bare `fn generate(req: Request)`. `Request`'s default type
-/// argument is `NoOptions`, so the adapter binds an empty options blob.
+/// argument is `NoOptions`, so the adapter binds an empty options blob. It
+/// echoes `req.module`, so a test sees how the generator was invoked.
 const NO_OPTIONS_GENERATOR: &str = r#"
-use { Request, Response, Error } from "core:kiln";
+use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
     let _ = req.primary.path;
-    return Result::Ok(Response { files: [] });
+    return Result::Ok(Response { files: [OutputFile { path: "out.wado", content: req.module, is_entry: true }] });
 }
 "#;
 
@@ -262,11 +263,13 @@ fn no_options_generator_compiles_and_runs() {
             content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
+        module: "wado-lang:proto/gen".to_string(),
         options: wado_compiler::kiln::CanonicalOptions::default(),
     };
-    runtime()
+    let response = runtime()
         .block_on(async { host.run_generator(&resolved.wasm, request).await })
         .expect("no-options generator must run");
+    assert_eq!(response.files[0].content, "wado-lang:proto/gen");
 
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -790,6 +793,7 @@ fn host_caches_compiled_component_across_run_generator_calls() {
             content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
+        module: "../gen".to_string(),
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![(
@@ -948,6 +952,7 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
             content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
+        module: "../gen".to_string(),
         options: wado_compiler::kiln::CanonicalOptions {
             descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
             values: vec![(
@@ -1019,6 +1024,7 @@ fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
                         content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
+                    module: "../gen".to_string(),
                     options: wado_compiler::kiln::CanonicalOptions {
                         descriptor: wado_compiler::kiln::OptionsDescriptor::default(),
                         values: vec![(

@@ -1,0 +1,55 @@
+// Two generic impls of one trait for references to different types are two
+// templates, each answering for its own pointee, directly and through a bound.
+struct Holder<T> {
+    v: T,
+}
+
+struct Boxed<T> {
+    v: T,
+}
+
+impl<T: Eq> Eq<T> for &Holder<T> {
+    fn eq(&self, other: &T) -> bool {
+        return self.v == *other;
+    }
+}
+
+impl<T: Eq> Eq<T> for &Boxed<T> {
+    fn eq(&self, other: &T) -> bool {
+        return self.v != *other;
+    }
+}
+
+fn matches_op<S: Eq<i32>>(s: S, t: i32) -> bool {
+    return s == t;
+}
+
+fn matches_call<S: Eq<i32>>(s: S, t: i32) -> bool {
+    return s.eq(&t);
+}
+
+test "an operator reaches the template for its pointee" {
+    let h = Holder { v: 7 };
+    let b = Boxed { v: 7 };
+    assert &h == 7;
+    assert &b != 7;
+    assert &b == 8;
+}
+
+test "a method call reaches the template for its pointee" {
+    let h = Holder { v: 7 };
+    let b = Boxed { v: 7 };
+    let seven: i32 = 7;
+    let r = &h;
+    assert r.eq(&seven);
+    assert !(&b).eq(&seven);
+}
+
+test "a generic body reaches the template for its pointee" {
+    let h = Holder { v: 7 };
+    let b = Boxed { v: 7 };
+    assert matches_op(&h, 7);
+    assert !matches_op(&b, 7);
+    assert matches_call(&h, 7);
+    assert matches_call(&b, 8);
+}

@@ -371,7 +371,7 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
         for let c of children_of_kind(s, list, onnx::RK_SINGLE_ATTR_VALUE) {
             values.push(single_attr_text(s, toks, c, &name)?);
         }
-        return Result::Ok(Attr { name, values, is_list: true });
+        return Result::Ok(Attr { name, values });
     }
     let Some(single) = first_child_of_kind(s, value, onnx::RK_SINGLE_ATTR_VALUE) else {
         return Result::Err(`${name}: an attribute without a value`);
@@ -380,7 +380,6 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     return Result::Ok(Attr {
         name,
         values: [text],
-        is_list: false,
     });
 }
 

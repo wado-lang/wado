@@ -47,8 +47,10 @@ Codegen reads NIR and WIR only, and knows nothing of the phases before them.
 ## Frontend
 
 The parser builds a faithful AST: compound assignments, comparison chains,
-struct shorthand and comments survive as written. Bind resolves local names and
-checks scopes, mutability and use-before-define.
+struct shorthand and comments survive as written. Bind checks local bindings:
+duplicates in one scope, reads before initialization, and assignments to
+immutable locals. Whether a name is in scope is answered where it is resolved,
+in the elaborator.
 
 The loader reads the entry module and everything it imports: the embedded
 standard library, WASI and Web bindings, local files, package dependencies,
@@ -159,9 +161,10 @@ import. See [WEP: WIT and Wado Mapping](./wep-2026-01-29-wit-wado-mapping.md).
 Kiln turns an input file (a schema, a grammar, a Wado dialect) into `.wado`
 source. A generator is an ordinary Wado package targeting the
 `core:kiln/generator` world. `wado-cli` builds and runs it, and caches the
-output by its inputs, options, and the generator's source. The compiler holds
-only the pure-data half: the invocations, their order, cache keys, and option
-checks. It redirects an import to the generated source. See
+output by its inputs, options, the name it was invoked by, and the generator's
+source. The compiler holds only the pure-data half: the invocations, their
+order, cache keys, and option checks. It redirects an import to the generated
+source. See
 [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## LSP

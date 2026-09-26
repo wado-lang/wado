@@ -424,8 +424,8 @@ pub enum EventTag {
 
 pub struct CstStore {
     pub tag: List<EventTag>,
-    pub a: List<i32>,
-    pub b: List<i32>,
+    pub id: List<i32>,
+    pub offset: List<i32>,
     alt: List<i32>,
     end: List<i32>,
     flags: List<NodeFlags>,
@@ -445,15 +445,11 @@ impl CstStore {
     }
 
     pub fn kind(&self, i: i32) -> NodeKind {
-        return self.a[i] as NodeKind;
-    }
-
-    pub fn close_kind(&self, i: i32) -> NodeKind {
-        return self.b[i] as NodeKind;
+        return self.id[i] as NodeKind;
     }
 
     pub fn span(&self, i: i32) -> Span {
-        return Span::new(self.b[i], self.end[i]);
+        return Span::new(self.offset[i], self.end[i]);
     }
 
     pub fn alt(&self, i: i32) -> i32 {
@@ -487,7 +483,7 @@ impl CstStore {
     }
 
     pub fn token_index(&self, i: i32) -> i32 {
-        return self.a[i];
+        return self.id[i];
     }
 
     pub fn first_child(&self, i: i32) -> i32 {
@@ -524,7 +520,7 @@ impl CstStore {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(256);
-        let _ = render_node(&mut out, &self.tag, &self.a, i, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.id, i, toks, rule_names, token_names);
         return out;
     }
 }
@@ -558,8 +554,8 @@ fn bubble_to_parent(stack: &List<i32>, end: &mut List<i32>, flags: &mut List<Nod
 
 pub struct TreeBuilder {
     tag: List<EventTag>,
-    a: List<i32>,
-    b: List<i32>,
+    id: List<i32>,
+    offset: List<i32>,
     alt: List<i32>,
     open: List<i32>,
     last_finished: i32,
@@ -570,8 +566,8 @@ impl TreeBuilder {
     pub fn with_capacity(rows: i32) -> TreeBuilder {
         return TreeBuilder {
             tag: List::with_capacity(rows),
-            a: List::with_capacity(rows),
-            b: List::with_capacity(rows),
+            id: List::with_capacity(rows),
+            offset: List::with_capacity(rows),
             alt: List::with_capacity(rows),
             open: [],
             last_finished: -1,
@@ -579,20 +575,20 @@ impl TreeBuilder {
         };
     }
 
-    fn push_row(&mut self, tag: EventTag, a: i32, b: i32) {
+    fn push_row(&mut self, tag: EventTag, id: i32, offset: i32) {
         if self.tag.len() >= self.tag.capacity() {
             builtin::cold_path();
             self.tag.grow();
-            self.a.grow();
-            self.b.grow();
+            self.id.grow();
+            self.offset.grow();
             self.alt.grow();
-            assert self.a.capacity() == self.tag.capacity()
-                && self.b.capacity() == self.tag.capacity()
+            assert self.id.capacity() == self.tag.capacity()
+                && self.offset.capacity() == self.tag.capacity()
                 && self.alt.capacity() == self.tag.capacity(), "TreeBuilder event columns must grow in lockstep";
         }
         self.tag.push_within_capacity(tag);
-        self.a.push_within_capacity(a);
-        self.b.push_within_capacity(b);
+        self.id.push_within_capacity(id);
+        self.offset.push_within_capacity(offset);
         self.alt.push_within_capacity(-1);
     }
 
@@ -617,9 +613,10 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
-        self.a.insert(checkpoint, kind as i32);
-        self.b.insert(checkpoint, start);
+        self.id.insert(checkpoint, kind as i32);
+        self.offset.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
         if self.last_finished >= checkpoint {
@@ -632,8 +629,8 @@ impl TreeBuilder {
 
     pub fn truncate(&mut self, checkpoint: i32) {
         self.tag.truncate(checkpoint);
-        self.a.truncate(checkpoint);
-        self.b.truncate(checkpoint);
+        self.id.truncate(checkpoint);
+        self.offset.truncate(checkpoint);
         self.alt.truncate(checkpoint);
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
@@ -647,8 +644,9 @@ impl TreeBuilder {
     }
 
     pub fn finish_node(&mut self, end: i32) {
-        self.push_row(EventTag::Close, end, 0);
-        self.last_finished = self.open[self.open.len() - 1];
+        let row = self.open[self.open.len() - 1];
+        self.push_row(EventTag::Close, self.id[row], end);
+        self.last_finished = row;
         let _ = self.open.pop();
     }
 
@@ -660,7 +658,7 @@ impl TreeBuilder {
     }
 
     pub fn node_kind(&self, row: i32) -> NodeKind {
-        return self.a[row] as NodeKind;
+        return self.id[row] as NodeKind;
     }
 
     pub fn resume_node(&mut self, row: i32, end: i32) {
@@ -693,7 +691,7 @@ impl TreeBuilder {
 
     pub fn push_open_rule_names(&self, rule_names: &List<String>, out: &mut List<String>) {
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
-            let kind = self.a[self.open[i]];
+            let kind = self.id[self.open[i]];
             if kind != K_ERROR as i32 {
                 out.push(rule_names[kind]);
             }
@@ -714,7 +712,6 @@ impl TreeBuilder {
 
     pub fn finish(&self) -> CstStore {
         let n = self.tag.len();
-        let mut b = self.b;
         let mut end = List::filled(n, 0);
         let mut flags = List::filled(n, NodeFlags::none());
         let mut next = List::filled(n, 0);
@@ -722,12 +719,10 @@ impl TreeBuilder {
         for let mut r = 0; r < n; r += 1 {
             match self.tag[r] {
                 Open => {
-                    let node_kind = self.a[r];
-                    let start_offset = self.b[r];
-                    if node_kind == K_ERROR as i32 {
+                    if self.id[r] == K_ERROR as i32 {
                         flags[r] = NodeFlags::Error;
                     }
-                    end[r] = start_offset;
+                    end[r] = self.offset[r];
                     stack.push(r);
                 },
                 Miss => {
@@ -741,12 +736,9 @@ impl TreeBuilder {
                 Close => {
                     let oi = stack[stack.len() - 1];
                     let _ = stack.pop();
-                    let close_offset = self.a[r];
-                    let open_kind = self.a[oi];
-                    if close_offset > end[oi] {
-                        end[oi] = close_offset;
+                    if self.offset[r] > end[oi] {
+                        end[oi] = self.offset[r];
                     }
-                    b[r] = open_kind;
                     next[oi] = r + 1;
                     bubble_to_parent(&stack, &mut end, &mut flags, oi);
                 },
@@ -760,7 +752,7 @@ impl TreeBuilder {
             next[oi] = n;
             bubble_to_parent(&stack, &mut end, &mut flags, oi);
         }
-        return CstStore { tag: self.tag, a: self.a, b, alt: self.alt, end, flags, next };
+        return CstStore { tag: self.tag, id: self.id, offset: self.offset, alt: self.alt, end, flags, next };
     }
 
     pub fn render_open(&self, toks: &TokenStream, rule_names: &List<String>, token_names: &List<String>) -> String {
@@ -789,7 +781,7 @@ impl TreeBuilder {
             if i < self.open.len() - 1 {
                 out.push_str(", ");
             }
-            let kind = self.a[self.open[i]];
+            let kind = self.id[self.open[i]];
             let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
             out.push_str(&name);
         }
@@ -817,7 +809,7 @@ impl TreeBuilder {
         token_names: &List<String>,
     ) -> String {
         let mut out = String::with_capacity(128);
-        let _ = render_node(&mut out, &self.tag, &self.a, root, toks, rule_names, token_names);
+        let _ = render_node(&mut out, &self.tag, &self.id, root, toks, rule_names, token_names);
         return out;
     }
 }
@@ -825,13 +817,13 @@ impl TreeBuilder {
 fn render_node(
     out: &mut String,
     tag: &List<EventTag>,
-    a: &List<i32>,
+    id: &List<i32>,
     i: i32,
     toks: &TokenStream,
     rule_names: &List<String>,
     token_names: &List<String>,
 ) -> i32 {
-    let name = if a[i] == K_ERROR as i32 { "<error>" } else { rule_names[a[i]] };
+    let name = if id[i] == K_ERROR as i32 { "<error>" } else { rule_names[id[i]] };
     if i + 1 >= tag.len() || tag[i + 1] matches { Close } {
         out.push_str(&name);
         if i + 1 < tag.len() {
@@ -846,26 +838,26 @@ fn render_node(
         match tag[c] {
             Open => {
                 out.push_str(" ");
-                c = render_node(out, tag, a, c, toks, rule_names, token_names);
+                c = render_node(out, tag, id, c, toks, rule_names, token_names);
             },
             Close => {
                 out.push_str(")");
                 return c + 1;
             },
             Tok => {
-                if !toks.is_empty_text(a[c]) {
+                if !toks.is_empty_text(id[c]) {
                     out.push_str(" ");
-                    toks.push_token_text_escaped(out, a[c]);
+                    toks.push_token_text_escaped(out, id[c]);
                 }
                 c += 1;
             },
             Miss => {
-                out.push_str(` <missing ${token_names[toks.kind_at(a[c])]}>`);
+                out.push_str(` <missing ${token_names[toks.kind_at(id[c])]}>`);
                 c += 1;
             },
             Skip => {
                 out.push_str(" <skip ");
-                toks.push_token_text_escaped(out, a[c]);
+                toks.push_token_text_escaped(out, id[c]);
                 out.push_str(">");
                 c += 1;
             },
@@ -1550,140 +1542,284 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '1' => {
                 end = try_lit_1(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_1; }
-                end = try_lit_10(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_10; }
-                end = try_lit_11(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_11; }
-                end = try_lit_12(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_12; }
-                end = try_lit_13(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_13; }
-                end = try_lit_14(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_14; }
-                end = try_lit_15(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_15; }
-                end = try_lit_16(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_16; }
-                end = try_lit_17(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_17; }
-                end = try_lit_18(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_18; }
-                end = try_lit_19(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_19; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_10(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_10; }
+                    },
+                    '1' => {
+                        end = try_lit_11(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_11; }
+                    },
+                    '2' => {
+                        end = try_lit_12(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_12; }
+                    },
+                    '3' => {
+                        end = try_lit_13(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_13; }
+                    },
+                    '4' => {
+                        end = try_lit_14(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_14; }
+                    },
+                    '5' => {
+                        end = try_lit_15(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_15; }
+                    },
+                    '6' => {
+                        end = try_lit_16(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_16; }
+                    },
+                    '7' => {
+                        end = try_lit_17(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_17; }
+                    },
+                    '8' => {
+                        end = try_lit_18(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_18; }
+                    },
+                    '9' => {
+                        end = try_lit_19(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_19; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '2' => {
                 end = try_lit_2(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_2; }
-                end = try_lit_20(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_20; }
-                end = try_lit_21(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_21; }
-                end = try_lit_22(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_22; }
-                end = try_lit_23(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_23; }
-                end = try_lit_24(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_24; }
-                end = try_lit_25(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_25; }
-                end = try_lit_26(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_26; }
-                end = try_lit_27(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_27; }
-                end = try_lit_28(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_28; }
-                end = try_lit_29(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_29; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_20(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_20; }
+                    },
+                    '1' => {
+                        end = try_lit_21(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_21; }
+                    },
+                    '2' => {
+                        end = try_lit_22(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_22; }
+                    },
+                    '3' => {
+                        end = try_lit_23(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_23; }
+                    },
+                    '4' => {
+                        end = try_lit_24(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_24; }
+                    },
+                    '5' => {
+                        end = try_lit_25(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_25; }
+                    },
+                    '6' => {
+                        end = try_lit_26(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_26; }
+                    },
+                    '7' => {
+                        end = try_lit_27(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_27; }
+                    },
+                    '8' => {
+                        end = try_lit_28(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_28; }
+                    },
+                    '9' => {
+                        end = try_lit_29(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_29; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '3' => {
                 end = try_lit_3(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_3; }
-                end = try_lit_30(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_30; }
-                end = try_lit_31(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_31; }
-                end = try_lit_32(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_32; }
-                end = try_lit_33(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_33; }
-                end = try_lit_34(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_34; }
-                end = try_lit_35(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_35; }
-                end = try_lit_36(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_36; }
-                end = try_lit_37(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_37; }
-                end = try_lit_38(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_38; }
-                end = try_lit_39(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_39; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_30(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_30; }
+                    },
+                    '1' => {
+                        end = try_lit_31(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_31; }
+                    },
+                    '2' => {
+                        end = try_lit_32(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_32; }
+                    },
+                    '3' => {
+                        end = try_lit_33(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_33; }
+                    },
+                    '4' => {
+                        end = try_lit_34(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_34; }
+                    },
+                    '5' => {
+                        end = try_lit_35(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_35; }
+                    },
+                    '6' => {
+                        end = try_lit_36(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_36; }
+                    },
+                    '7' => {
+                        end = try_lit_37(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_37; }
+                    },
+                    '8' => {
+                        end = try_lit_38(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_38; }
+                    },
+                    '9' => {
+                        end = try_lit_39(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_39; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '4' => {
                 end = try_lit_4(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_4; }
-                end = try_lit_40(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_40; }
-                end = try_lit_41(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_41; }
-                end = try_lit_42(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_42; }
-                end = try_lit_43(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_43; }
-                end = try_lit_44(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_44; }
-                end = try_lit_45(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_45; }
-                end = try_lit_46(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_46; }
-                end = try_lit_47(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_47; }
-                end = try_lit_48(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_48; }
-                end = try_lit_49(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_49; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_40(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_40; }
+                    },
+                    '1' => {
+                        end = try_lit_41(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_41; }
+                    },
+                    '2' => {
+                        end = try_lit_42(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_42; }
+                    },
+                    '3' => {
+                        end = try_lit_43(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_43; }
+                    },
+                    '4' => {
+                        end = try_lit_44(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_44; }
+                    },
+                    '5' => {
+                        end = try_lit_45(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_45; }
+                    },
+                    '6' => {
+                        end = try_lit_46(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_46; }
+                    },
+                    '7' => {
+                        end = try_lit_47(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_47; }
+                    },
+                    '8' => {
+                        end = try_lit_48(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_48; }
+                    },
+                    '9' => {
+                        end = try_lit_49(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_49; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '5' => {
                 end = try_lit_5(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_5; }
-                end = try_lit_50(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_50; }
-                end = try_lit_51(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_51; }
-                end = try_lit_52(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_52; }
-                end = try_lit_53(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_53; }
-                end = try_lit_54(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_54; }
-                end = try_lit_55(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_55; }
-                end = try_lit_56(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_56; }
-                end = try_lit_57(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_57; }
-                end = try_lit_58(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_58; }
-                end = try_lit_59(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_59; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_50(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_50; }
+                    },
+                    '1' => {
+                        end = try_lit_51(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_51; }
+                    },
+                    '2' => {
+                        end = try_lit_52(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_52; }
+                    },
+                    '3' => {
+                        end = try_lit_53(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_53; }
+                    },
+                    '4' => {
+                        end = try_lit_54(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_54; }
+                    },
+                    '5' => {
+                        end = try_lit_55(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_55; }
+                    },
+                    '6' => {
+                        end = try_lit_56(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_56; }
+                    },
+                    '7' => {
+                        end = try_lit_57(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_57; }
+                    },
+                    '8' => {
+                        end = try_lit_58(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_58; }
+                    },
+                    '9' => {
+                        end = try_lit_59(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_59; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '6' => {
                 end = try_lit_6(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_6; }
-                end = try_lit_60(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_60; }
-                end = try_lit_61(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_61; }
-                end = try_lit_62(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_62; }
-                end = try_lit_63(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_63; }
-                end = try_lit_64(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_64; }
-                end = try_lit_65(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_65; }
-                end = try_lit_66(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_66; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    '0' => {
+                        end = try_lit_60(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_60; }
+                    },
+                    '1' => {
+                        end = try_lit_61(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_61; }
+                    },
+                    '2' => {
+                        end = try_lit_62(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_62; }
+                    },
+                    '3' => {
+                        end = try_lit_63(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_63; }
+                    },
+                    '4' => {
+                        end = try_lit_64(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_64; }
+                    },
+                    '5' => {
+                        end = try_lit_65(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_65; }
+                    },
+                    '6' => {
+                        end = try_lit_66(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_LIT_66; }
+                    },
+                    _ => {
+                    },
+                }
             },
             '7' => {
                 end = try_lit_7(&lexer.chars, start);
@@ -1916,11 +2052,11 @@ impl Parser {
     }
 
     fn rule_string_tree(&self) -> String {
-        return self.b.render_open(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_open(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn rule_tree_at(&self, row: i32) -> String {
-        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_at(row, &self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn rule_stack(&self) -> String {
@@ -1928,7 +2064,7 @@ impl Parser {
     }
 
     fn rule_string_tree_final(&self) -> String {
-        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return self.b.render_last_finished(&self.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
 
     fn supersedes_pending(&self, start: i32) -> bool {
@@ -2030,45 +2166,45 @@ impl Parser {
         self.b.skip(_sk);
     }
 
-    fn sync_delete(&mut self, expected: &List<i32>, names: &List<i32>) -> bool {
-        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(expected, self.peek_at(1)) {
+    fn sync_delete(&mut self, sync: &List<i32>, expected: &List<i32>) -> bool {
+        if self.speculating || self.kinds[self.pos] == TK_EOF || !kind_set_has(sync, self.peek_at(1)) {
             return false;
         }
-        self.report_extraneous(names, RecoveryAction::Deleted);
+        self.report_extraneous(expected, RecoveryAction::Deleted);
         self.skip_one();
         return true;
     }
 
-    fn sync_enter(&mut self, expected: &List<i32>, names: &List<i32>) {
-        if !self.recovering && !self.sync_delete(expected, names) {
-            self.fail_expecting(names);
+    fn sync_enter(&mut self, sync: &List<i32>, expected: &List<i32>) {
+        if !self.recovering && !self.sync_delete(sync, expected) {
+            self.fail_expecting(expected);
         }
     }
 
-    fn sync_alts(&mut self, expected: &List<i32>, names: &List<i32>) {
-        if !self.recovering && !self.sync_delete(expected, names) {
-            self.no_viable("no viable alternative", self.peek_span(), names);
+    fn sync_alts(&mut self, sync: &List<i32>, expected: &List<i32>) {
+        if !self.recovering && !self.sync_delete(sync, expected) {
+            self.no_viable("no viable alternative", self.peek_span(), expected);
         }
     }
 
-    fn sync_back(&mut self, expected: &List<i32>, names: &List<i32>) {
+    fn sync_back(&mut self, sync: &List<i32>, expected: &List<i32>) {
         if self.recovering || self.kinds[self.pos] == TK_EOF { return; }
         if self.speculating {
-            self.fail_expecting(names);
+            self.fail_expecting(expected);
             return;
         }
-        self.report_extraneous(names, RecoveryAction::SkippedTo);
-        self.skip_until(&self.resync_set(expected));
+        self.report_extraneous(expected, RecoveryAction::SkippedTo);
+        self.skip_until(&self.resync_set(sync));
     }
 
-    fn fail_expecting(&mut self, names: &List<i32>) {
+    fn fail_expecting(&mut self, expected: &List<i32>) {
         let code = if self.kinds[self.pos] == TK_EOF { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::UnexpectedToken };
-        self.fail_on_token("got", names, code);
+        self.fail_on_token("got", expected, code);
     }
 
-    fn report_extraneous(&mut self, names: &List<i32>, recovery: RecoveryAction) {
+    fn report_extraneous(&mut self, expected: &List<i32>, recovery: RecoveryAction) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
-        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *names, self.kinds[self.pos], recovery));
+        self.report(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), *expected, self.kinds[self.pos], recovery));
     }
 
     fn report_missing(&mut self, kind: i32) {
@@ -2077,7 +2213,7 @@ impl Parser {
         let at_eof = found == TK_EOF;
         let code = if at_eof { DiagnosticCode::UnterminatedConstruct } else { DiagnosticCode::MissingToken };
         let recovery = if at_eof { RecoveryAction::FilledMissing } else { RecoveryAction::Inserted };
-        self.report(Diagnostic::error(code, `missing ${token_display_name(kind)}`, self.tokens.span_at(self.pos), [kind], found, recovery));
+        self.report(Diagnostic::error(code, `missing ${TOKEN_NAMES[kind]}`, self.tokens.span_at(self.pos), [kind], found, recovery));
     }
 
     fn report_unexpected(&mut self, kind: i32) {
@@ -2234,20 +2370,9 @@ fn _parse_a__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let _rule_start_tok = p.pos;
     if !kind_set_has(&SYNC_0, p.kinds[p.pos]) { builtin::cold_path(); p.sync_enter(&SYNC_0, &EXPECTED_0); }
     let mut _plus_first = true;
-    loop {
-        if p.recovering { break; }
+    while !p.recovering && (_plus_first || _kind_set_0(p.peek_kind())) {
         if !_plus_first {
             if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
-            let mut rep_scan_pos: i32 = -1;
-            rep_scan: {
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
-                pos += 1;
-                if pos <= p.pos { break rep_scan; }
-                rep_scan_pos = pos;
-            }
-            if rep_scan_pos < 0 { break; }
         }
         if _plus_first && !((p.peek_kind() == TK_LIT_1) || (p.peek_kind() == TK_LIT_2) || (p.peek_kind() == TK_LIT_3) || (p.peek_kind() == TK_LIT_4) || (p.peek_kind() == TK_LIT_5) || (p.peek_kind() == TK_LIT_6) || (p.peek_kind() == TK_LIT_7) || (p.peek_kind() == TK_LIT_8) || (p.peek_kind() == TK_LIT_9) || (p.peek_kind() == TK_LIT_10) || (p.peek_kind() == TK_LIT_11) || (p.peek_kind() == TK_LIT_12) || (p.peek_kind() == TK_LIT_13) || (p.peek_kind() == TK_LIT_14) || (p.peek_kind() == TK_LIT_15) || (p.peek_kind() == TK_LIT_16) || (p.peek_kind() == TK_LIT_17) || (p.peek_kind() == TK_LIT_18) || (p.peek_kind() == TK_LIT_19) || (p.peek_kind() == TK_LIT_20) || (p.peek_kind() == TK_LIT_21) || (p.peek_kind() == TK_LIT_22) || (p.peek_kind() == TK_LIT_23) || (p.peek_kind() == TK_LIT_24) || (p.peek_kind() == TK_LIT_25) || (p.peek_kind() == TK_LIT_26) || (p.peek_kind() == TK_LIT_27) || (p.peek_kind() == TK_LIT_28) || (p.peek_kind() == TK_LIT_29) || (p.peek_kind() == TK_LIT_30) || (p.peek_kind() == TK_LIT_31) || (p.peek_kind() == TK_LIT_32) || (p.peek_kind() == TK_LIT_33) || (p.peek_kind() == TK_LIT_34) || (p.peek_kind() == TK_LIT_35) || (p.peek_kind() == TK_LIT_36) || (p.peek_kind() == TK_LIT_37) || (p.peek_kind() == TK_LIT_38) || (p.peek_kind() == TK_LIT_39) || (p.peek_kind() == TK_LIT_40) || (p.peek_kind() == TK_LIT_41) || (p.peek_kind() == TK_LIT_42) || (p.peek_kind() == TK_LIT_43) || (p.peek_kind() == TK_LIT_44) || (p.peek_kind() == TK_LIT_45) || (p.peek_kind() == TK_LIT_46) || (p.peek_kind() == TK_LIT_47) || (p.peek_kind() == TK_LIT_48) || (p.peek_kind() == TK_LIT_49) || (p.peek_kind() == TK_LIT_50) || (p.peek_kind() == TK_LIT_51) || (p.peek_kind() == TK_LIT_52) || (p.peek_kind() == TK_LIT_53) || (p.peek_kind() == TK_LIT_54) || (p.peek_kind() == TK_LIT_55) || (p.peek_kind() == TK_LIT_56) || (p.peek_kind() == TK_LIT_57) || (p.peek_kind() == TK_LIT_58) || (p.peek_kind() == TK_LIT_59) || (p.peek_kind() == TK_LIT_60) || (p.peek_kind() == TK_LIT_61) || (p.peek_kind() == TK_LIT_62) || (p.peek_kind() == TK_LIT_63) || (p.peek_kind() == TK_LIT_64) || (p.peek_kind() == TK_LIT_65) || (p.peek_kind() == TK_LIT_66)) {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
@@ -2299,22 +2424,10 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [];
 global CALL_FOLLOW: List<i32> = [];
 global CALL_FOLLOW_ENDS: List<bool> = [];
 
-fn token_display_name(kind: i32) -> String {
-    return token_kind_name(kind);
-}
-
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(69);
-    for let mut k = 0; k < 69; k += 1 {
-        v.push(token_display_name(k));
-    }
-    return v;
-}
-
-global CTX_TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["WS", "Eof", "Error", "'1'", "'2'", "'3'", "'4'", "'5'", "'6'", "'7'", "'8'", "'9'", "'10'", "'11'", "'12'", "'13'", "'14'", "'15'", "'16'", "'17'", "'18'", "'19'", "'20'", "'21'", "'22'", "'23'", "'24'", "'25'", "'26'", "'27'", "'28'", "'29'", "'30'", "'31'", "'32'", "'33'", "'34'", "'35'", "'36'", "'37'", "'38'", "'39'", "'40'", "'41'", "'42'", "'43'", "'44'", "'45'", "'46'", "'47'", "'48'", "'49'", "'50'", "'51'", "'52'", "'53'", "'54'", "'55'", "'56'", "'57'", "'58'", "'59'", "'60'", "'61'", "'62'", "'63'", "'64'", "'65'", "'66'"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
-    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+    return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
 }
 
 pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String {
@@ -2328,7 +2441,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
     if _kind < 0 { return String::new(); }
     let _sub = result.cst.find_child(0, _kind as NodeKind);
     if _sub >= 0 {
-        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &CTX_TOKEN_NAMES);
+        return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
     }
     return String::new();
 }

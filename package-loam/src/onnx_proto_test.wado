@@ -1,17 +1,10 @@
-use { from_bytes, to_bytes } from "core:protobuf";
-use { Dim, Elements, Graph, Known, Rank, ReadError } from "./graph.wado";
-use {
-    GraphProto,
-    ModelProto,
-    NodeProto,
-    TensorProto,
-    TensorShapeProto,
-    TensorShapeProtoDimension,
-    TypeProto,
-    TypeProtoTensor,
-    ValueInfoProto,
-    read,
-} from "./onnx_proto.wado";
+use grog from "lib:grog";
+use onnx from "./onnx.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use { Elements, Graph, Known, ReadError } from "./graph.wado";
+use { read, read_tensor } from "./onnx_proto.wado";
 
 fn graph_of(bytes: ByteList) -> Graph {
     return match read(bytes) {
@@ -89,47 +82,49 @@ test "a bare TensorProto is the shape the backend test data stores" {
     // The oracle format: one `TensorProto` per file, holding its bytes in
     // `raw_data` rather than in the typed `float_data`.
     let raw = #include_bytes("../tests/onnx/light/light_bvlc_alexnet_output_0.pb");
-    let Ok(t) = from_bytes::<TensorProto, ByteList>(raw) else {
+    let Ok(t) = read_tensor(raw) else {
         panic("the tensor did not decode");
     };
 
     assert t.dims.len() == 2;
     assert t.dims[1] == 1000;
-    assert t.data_type == 1;
-    assert t.raw_data.len() == 4000;
+    assert t.data_type == Option::Some(1);
+    assert t.raw_data.unwrap().len() == 4000;
     assert t.float_data.is_empty();
 }
 
 test "a model round-trips through the declarations" {
-    let weight = TensorProto {
+    let weight = onnx::TensorProto {
         dims: [4, 2],
-        data_type: 1,
-        name: "W",
+        data_type: Option::Some(1),
+        name: Option::Some("W"),
         float_data: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
     };
-    let x = ValueInfoProto {
-        name: "X",
-        type_: Option::Some(TypeProto {
-            tensor_type: Option::Some(TypeProtoTensor {
-                elem_type: 1,
-                shape: Option::Some(TensorShapeProto {
-                    dim: [
-                        TensorShapeProtoDimension { dim_param: Option::Some("N") },
-                        TensorShapeProtoDimension { dim_value: Option::Some(4) },
-                        TensorShapeProtoDimension { dim_value: Option::Some(0) },
-                        TensorShapeProtoDimension {},
-                    ],
-                }),
-            }),
+    let x = onnx::ValueInfoProto {
+        name: Option::Some("X"),
+        type: Option::Some(onnx::TypeProto {
+            value: Option::Some(onnx::TypeProtoValue::TensorType(onnx::TypeProtoTensor {
+                elem_type: Option::Some(1),
+                shape: Option::Some(
+                    onnx::TensorShapeProto {
+                        dim: [
+                            dimension(onnx::TensorShapeProtoDimensionValue::DimParam("N")),
+                            dimension(onnx::TensorShapeProtoDimensionValue::DimValue(4)),
+                            dimension(onnx::TensorShapeProtoDimensionValue::DimValue(0)),
+                            onnx::TensorShapeProtoDimension {},
+                        ],
+                    },
+                ),
+            })),
         }),
     };
-    let model = ModelProto {
-        ir_version: 7,
-        graph: Option::Some(GraphProto {
-            name: "round",
+    let model = onnx::ModelProto {
+        ir_version: Option::Some(7),
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("round"),
             node: [
-                NodeProto {
-                    op_type: "MatMul",
+                onnx::NodeProto {
+                    op_type: Option::Some("MatMul"),
                     input: ["X", "W"],
                     output: ["Y"],
                 },
@@ -137,15 +132,12 @@ test "a model round-trips through the declarations" {
             initializer: [weight],
             input: [x],
             output: [
-                ValueInfoProto { ..x, name: "Y" },
+                onnx::ValueInfoProto { ..x, name: Option::Some("Y") },
             ],
         }),
     };
 
-    let Ok(bytes) = to_bytes(&model) else {
-        panic("the model did not encode");
-    };
-    let g = graph_of(bytes);
+    let g = graph_of(grog::encode(&model));
 
     assert g.name == "round";
     assert g.inputs[0].name == "X";
@@ -160,24 +152,25 @@ test "a model round-trips through the declarations" {
     assert g.nodes[0].inputs[1] == "W";
 }
 
-fn read_initializer_of(weight: TensorProto) -> Result<Graph, ReadError> {
-    let model = ModelProto {
-        graph: Option::Some(GraphProto {
-            name: "weights",
+fn dimension(value: onnx::TensorShapeProtoDimensionValue) -> onnx::TensorShapeProtoDimension {
+    return onnx::TensorShapeProtoDimension { value: Option::Some(value) };
+}
+
+fn read_initializer_of(weight: onnx::TensorProto) -> Result<Graph, ReadError> {
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("weights"),
             initializer: [weight],
         }),
     };
-    let Ok(bytes) = to_bytes(&model) else {
-        panic("the model did not encode");
-    };
-    return read(bytes);
+    return read(grog::encode(&model));
 }
 
 test "a half initializer's elements come out of the low half of int32_data" {
-    let g = read_initializer_of(TensorProto {
+    let g = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: 10,
-        name: "H",
+        data_type: Option::Some(10),
+        name: Option::Some("H"),
         int32_data: [0x3c00, 0xc100],
     }).unwrap();
 
@@ -185,10 +178,10 @@ test "a half initializer's elements come out of the low half of int32_data" {
 }
 
 test "a half's int32_data entry past sixteen bits names itself" {
-    let e = read_initializer_of(TensorProto {
+    let e = read_initializer_of(onnx::TensorProto {
         dims: [1],
-        data_type: 16,
-        name: "H",
+        data_type: Option::Some(16),
+        name: Option::Some("H"),
         int32_data: [70000],
     }).unwrap_err().reason;
 
@@ -196,20 +189,20 @@ test "a half's int32_data entry past sixteen bits names itself" {
 }
 
 test "an initializer carrying no data is left to the checkpoint" {
-    let g = read_initializer_of(TensorProto {
+    let g = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: 1,
-        name: "W",
+        data_type: Option::Some(1),
+        name: Option::Some("W"),
     }).unwrap();
 
     assert g.initializers[0].data matches { None };
 }
 
 test "an initializer whose data disagrees with its shape names itself" {
-    let e = read_initializer_of(TensorProto {
+    let e = read_initializer_of(onnx::TensorProto {
         dims: [2],
-        data_type: 1,
-        name: "W",
+        data_type: Option::Some(1),
+        name: Option::Some("W"),
         float_data: [1.0, 2.0, 3.0],
     }).unwrap_err().reason;
 
@@ -217,38 +210,34 @@ test "an initializer whose data disagrees with its shape names itself" {
 }
 
 test "a value the subset cannot type names itself" {
-    let model = ModelProto {
-        graph: Option::Some(GraphProto {
-            name: "untyped",
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("untyped"),
             input: [
-                ValueInfoProto { name: "X" },
+                onnx::ValueInfoProto { name: Option::Some("X") },
             ],
         }),
     };
-    let Ok(bytes) = to_bytes(&model) else {
-        panic("the model did not encode");
-    };
 
-    assert read(bytes) matches { Err(e) && e.reason == "X: a value with no type" };
+    assert read(grog::encode(&model)) matches { Err(e) && e.reason == "X: a value with no type" };
 }
 
 test "an element type outside the mapping names itself" {
-    let model = ModelProto {
-        graph: Option::Some(GraphProto {
-            name: "exotic",
+    let model = onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("exotic"),
             input: [
-                ValueInfoProto {
-                    name: "X",
-                    type_: Option::Some(TypeProto {
-                        tensor_type: Option::Some(TypeProtoTensor { elem_type: 21 }),
+                onnx::ValueInfoProto {
+                    name: Option::Some("X"),
+                    type: Option::Some(onnx::TypeProto {
+                        value: Option::Some(onnx::TypeProtoValue::TensorType(onnx::TypeProtoTensor {
+                            elem_type: Option::Some(21),
+                        })),
                     }),
                 },
             ],
         }),
     };
-    let Ok(bytes) = to_bytes(&model) else {
-        panic("the model did not encode");
-    };
 
-    assert read(bytes) matches { Err(e) && e.reason == "X: element type 21" };
+    assert read(grog::encode(&model)) matches { Err(e) && e.reason == "X: element type 21" };
 }

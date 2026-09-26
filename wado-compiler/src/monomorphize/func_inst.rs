@@ -1320,14 +1320,7 @@ impl Monomorphizer {
                     && !substitution.is_empty()
                     && let Some(info) = call_func.method_info.clone()
                 {
-                    // Only a receiver the substitution answers carries its
-                    // trait's arguments with it; every other instance keeps the
-                    // template's spelling, which is what defines it.
-                    let info = if info.is_type_param_receiver {
-                        self.trait_named_at_instance(info, substitution, type_table)
-                    } else {
-                        info
-                    };
+                    let info = self.trait_named_at_instance(info, substitution, type_table);
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
@@ -2354,12 +2347,19 @@ impl Monomorphizer {
     /// The name with the template's type parameters replaced in the trait's
     /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, and
     /// `T^Make<T::Base>::make` under `T = UserName` names `Make<String>`.
+    ///
+    /// Only a receiver the substitution answers carries its trait's arguments
+    /// with it. An impl's own spelling is what defines it, whatever the caller's
+    /// parameters are named.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
         substitution: &IndexMap<u32, TypeId>,
         type_table: &TypeTable,
     ) -> LocalMethodName {
+        if !info.is_type_param_receiver {
+            return info;
+        }
         let Some(trait_name) = info.trait_name.as_ref() else {
             return info;
         };
@@ -2417,20 +2417,40 @@ impl Monomorphizer {
     /// writes. An instance minted under a longer name defines nothing.
     fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
         let shorter = || {
-            let trait_fq = info.trait_name.as_ref()?;
-            if trait_fq.args().is_empty() {
-                return None;
-            }
-            let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
-            let kept = self.functions.trait_env.impl_written_arg_count(
-                info.receiver(),
-                trait_,
-                trait_fq.args(),
-            )?;
-            (kept < trait_fq.args().len())
-                .then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
+            let args = info.trait_name.as_ref()?.args();
+            let kept = self.impl_written_trait_args(&info)?.len();
+            (kept < args.len()).then(|| info.with_trait_type_args(&args[..kept]))
         };
         shorter().unwrap_or(info)
+    }
+
+    /// The trait arguments the impl on `info`'s receiver answering its trait
+    /// writes, its own parameters left standing.
+    fn impl_written_trait_args(&self, info: &LocalMethodName) -> Option<&[FqTypeName]> {
+        let trait_fq = info.trait_name.as_ref()?;
+        let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
+        self.functions
+            .trait_env
+            .impl_written_trait_args(info.receiver(), trait_, trait_fq.args())
+    }
+
+    /// The impl written on the reference a type-param receiver binds
+    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one.
+    fn ref_impl_at_instance(
+        &self,
+        info: &LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<LocalMethodName> {
+        let binder = info.fq_struct_name();
+        let key = self
+            .current_param_substitution_key
+            .get(binder.binder_name()?)?;
+        let bound = *substitution.get(key)?;
+        RefKind::from_resolved(type_table.get(bound))?;
+        let at_bound = info.at_owner(&type_table.fq_type_name(bound));
+        let written = self.impl_written_trait_args(&at_bound)?;
+        Some(at_bound.with_trait_type_args(written))
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
@@ -2466,7 +2486,14 @@ impl Monomorphizer {
         };
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
-        if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
+        // An impl written for the reference itself outranks the `&T` blanket.
+        let ref_impl = info
+            .is_type_param_receiver
+            .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
+            .flatten();
+        if ref_impl.is_none()
+            && self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table)
+        {
             return;
         }
         if self.is_universal_ref_blanket_call(method_func) {
@@ -2533,7 +2560,9 @@ impl Monomorphizer {
         // Compute the new method info with concrete type names.
         // If the struct is a type param (e.g., T^Ord::cmp), substitute the struct
         // name directly instead of adding type args.
-        let mut new_info = if info.is_type_param_receiver && !type_names.is_empty() {
+        let mut new_info = if let Some(ref_impl) = ref_impl {
+            ref_impl
+        } else if info.is_type_param_receiver && !type_names.is_empty() {
             // Use the (already-substituted) receiver type to find the concrete name.
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
@@ -2570,7 +2599,7 @@ impl Monomorphizer {
                 info.with_substituted_struct_name(&type_table.fq_type_name(resolved_recv));
             // For ref-type impls (e.g., impl IntoIterator for &List<T>), preserve
             // the ref receiver (`&` / `&mut`) so that the monomorphizer selects the
-            // correct generic function template ("&^IntoIterator::into_iter" instead
+            // correct generic function template ("&List^IntoIterator::into_iter" instead
             // of "List^IntoIterator::into_iter").
             if info.is_ref_impl {
                 new_info.receiver = info.receiver.clone();

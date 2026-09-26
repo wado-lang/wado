@@ -85,9 +85,6 @@
 
 // Not `core:log`: it imports `core:serde`, so the dependency runs one way.
 use { log_stderr } from "core:rt";
-// Beside `StructField`, which answers it, but kept out of the prelude: only a
-// format names it.
-pub use { WireEncoding } from "core:prelude/traits.wado";
 
 #[compiler_item("serialize_error_kind")]
 pub enum SerializeErrorKind {
@@ -268,39 +265,12 @@ pub trait SerializeMap with () {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-/// A struct whose every field carries `#[wire(number = N)]`. A format keyed by
-/// numbers requires it, so a type without them is refused where the call is
-/// written rather than where the bytes are produced. See
-/// `docs/wep-2026-09-22-grog.md`.
-#[compiler_item("wire_numbered")]
-pub trait WireNumbered with () {
-}
-
 #[compiler_item("serialize_struct")]
 pub trait SerializeStruct with () {
 
 
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
-
-    /// Whether writing `value` needs the field's declared default, which is then
-    /// evaluated and passed to `field_numbered`. A format keyed by name never does.
-    fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError> {
-        return Result::Ok(false);
-    }
-
-    /// The same field with its `#[wire(...)]` number and encoding, and its
-    /// declared default where `reads_default` asked for it.
-    fn field_numbered<T: Serialize, S: AsStrSlice>(
-        &mut self,
-        number: i32,
-        encoding: WireEncoding,
-        default: &Option<T>,
-        name: S,
-        value: &T,
-    ) -> Result<(), SerializeError> {
-        return self.field(name, value);
-    }
 
     #[compiler_item("serialize_struct_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -363,11 +333,6 @@ pub trait Serializer with () {
         return seq.end();
     }
     fn serialize_null(&mut self) -> Result<(), SerializeError>;
-    /// The value an `Option::Some` holds, which a format with explicit
-    /// presence on the wire writes even when it is the zero.
-    fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return value.serialize(self);
-    }
 
 
     #[compiler_item("serializer_begin_seq")]
@@ -453,11 +418,6 @@ pub trait FieldSchema with () {
     /// declaration order), or `null` when `rank` is out of range. Returns
     /// `null` for every `rank` when the type has no positional fields.
     fn positional_at(rank: i32) -> Option<i32>;
-
-    /// Field index of the field `#[wire(number = N)]` gave `number` to.
-    /// Returns `null` for every number when the type carries none, which a
-    /// format keyed by numbers rules out through `WireNumbered`.
-    fn by_number(number: i32) -> Option<i32>;
 }
 
 #[compiler_item("deserialize_struct")]
@@ -470,12 +430,6 @@ pub trait DeserializeStruct with () {
 
     #[compiler_item("deserialize_struct_value")]
     fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>;
-
-    /// The same value, read as the field's `#[wire(encoding = …)]` says. A
-    /// format that spells an integer one way only drops it.
-    fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError> {
-        return self.value();
-    }
 
 
     #[compiler_item("deserialize_struct_skip")]
@@ -749,7 +703,7 @@ impl Serialize for () {
 impl<T: Serialize> Serialize for Option<T> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         if let Some(v) = self {
-            return s.serialize_some(v);
+            return v.serialize(s);
         }
         return s.serialize_null();
     }
@@ -1071,11 +1025,9 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
         let mut st = s.begin_struct(&Reflect::<T>::type_name(), members.len())?;
-        for let [i, f] of members.enumerate() {
+        for let f of members {
             let name = wire_name(&f, policy);
-            let value = f.get(self);
-            let default = if st.reads_default(&value)? { ReflectStruct::<T>::default_slot(i)[i] } else { null };
-            st.field_numbered(f.wire_number(), f.wire_encoding(), &default, &name, &value)?;
+            st.field(&name, &f.get(self))?;
         }
         return st.end();
     }
@@ -1116,7 +1068,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Serialize for E {
                 return s.serialize_unit_variant(
                     &Reflect::<E>::type_name(),
                     &name,
-                    case.wire_discriminant(),
+                    case.discriminant(),
                 );
             }
         }
@@ -1211,7 +1163,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                             &wire_name(&members[i], policy),
                         )?;
                     }
-                    let value: F = sd.value_encoded(members[i].wire_encoding())?;
+                    let value: F = sd.value()?;
                     slots[i] = Option::Some(value);
                     taken = true;
                 }
@@ -1279,7 +1231,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Deserialize for E {
             // policy are both compile-time facts and it folds to a literal.
             // Behind a helper taking the run-time key it would not.
             let matched = match &key {
-                CaseKey::Disc(d) => *d == case.wire_discriminant(),
+                CaseKey::Disc(d) => *d == case.discriminant(),
                 CaseKey::Name(n) => wire_name(&case, policy) == *n,
             };
             if matched {

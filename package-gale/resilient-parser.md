@@ -30,7 +30,7 @@ single source of truth, not a node object tree. A node is addressed by the row
 index of its `Open` event (row 0 is the root):
 
 ```
-CstStore { tag, a, b, alt, end, flags, next }   // parallel columns
+CstStore { tag, id, offset, alt, end, flags, next }   // parallel columns
 EventTag: Open | Close | Tok | Miss | Skip
 ```
 
@@ -155,9 +155,10 @@ terminal recovers in place via a `recovering` flag rather than unwinding a
   mismatch fails the rule, which recovers at its entry as above.
 - After a reported error, the next one is reported only once a token has
   matched, as in ANTLR4's error recovery mode.
-- Scan-gated `*`/`+` loops over a RuleRef body enter a malformed element when
-  its FIRST token is present, so the broken element lands in the tree with its
-  repair edits.
+- A `*`/`+` loop whose entering token cannot also exit it commits on that
+  token, as ANTLR4's LL(1) loop does. A scan-gated loop over a RuleRef body
+  still enters a malformed element when its FIRST token is present. Either way
+  the broken element lands in the tree with its repair edits.
 - The no-viable-alt fallback records a `NoViableAlternative` diagnostic, and
   the rule's resync keeps the tokens it skips as `<skip>` children.
 - Decision sync and rule-level resync match the jar's trees

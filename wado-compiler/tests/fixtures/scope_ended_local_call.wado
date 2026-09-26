@@ -1,0 +1,12 @@
+// Calling a local closure after its scope has ended names nothing, and says so.
+
+export fn run() {
+    if builtin::black_box(true) {
+        let f = || 1;
+        assert f() == 1;
+    }
+    f();
+}
+
+__DATA__
+{"compile_error": "scope_ended_local_call.wado:8:5: analysis error: 'f' is not in scope"}

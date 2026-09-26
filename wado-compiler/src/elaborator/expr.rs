@@ -1135,10 +1135,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Unknown variable - report error
-        let _ = self.emit(TypeError::UnknownIdentifier {
-            name: ident.name.clone(),
-            span: ident.span,
+        let name = ident.name.clone();
+        let span = ident.span;
+        let _ = self.emit(if ctx.declared(&name) {
+            TypeError::OutOfScope { name, span }
+        } else {
+            TypeError::UnknownIdentifier { name, span }
         });
         TypeTable::ERROR
     }
@@ -1696,8 +1698,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     for (index, (fname, ftype, _)) in struct_info.fields.iter().enumerate() {
                         if fname == field_name {
                             // Substitute type parameters with concrete types
-                            let concrete_type =
-                                self.tysys.substitute_type_params(*ftype, &type_args);
+                            let concrete_type = self.substitute_in_frame(*ftype, &type_args);
                             return (index as u32, concrete_type);
                         }
                     }
@@ -4042,7 +4043,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if type_args.is_empty() {
                             *type_id
                         } else {
-                            self.tysys.substitute_type_params(*type_id, &type_args)
+                            self.substitute_in_frame(*type_id, &type_args)
                         }
                     })
                 else {
@@ -4426,7 +4427,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            field_wire_numbers: vec![None; fields.len()],
             type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };
@@ -4702,7 +4702,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
     /// once the binding is in scope. `None` when the form is not an enumerate
-    /// or the index position is a wildcard.
+    /// or the index position is a wildcard, and when the index is `mut`: a
+    /// subscript must stay the element's own position.
     pub(super) fn enumerate_index_local(
         is_enumerate: bool,
         binding: &ast::Pattern,
@@ -4712,7 +4713,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let name = Self::enumerate_index_binding_name(binding)?;
-        ctx.lookup(&name).map(|local| local.index)
+        ctx.lookup(name)
+            .filter(|local| !local.is_mut)
+            .map(|local| local.index)
     }
 
     /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
@@ -4762,7 +4765,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let mut scope = ctx.enter_scope();
-        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, &mut scope);
+        self.check_pack_binding(&comp.binding, binding_type, comp.span);
+        self.bind_pack_binding(&comp.binding, binding_type, false, &mut scope);
         let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, &scope);
         let body_type = self.resolve_expr(
             &comp.body,
@@ -4778,43 +4782,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut type_table = self.tysys.type_table.borrow_mut();
         let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
         type_table.make_tuple(vec![mapped])
-    }
-
-    /// Bind a comprehension's element pattern: an ident, or the sub-idents of a
-    /// tuple pattern (`[i, v]`).
-    fn bind_comprehension_pattern(
-        &mut self,
-        binding: &ast::Pattern,
-        binding_type: TypeId,
-        fallback_span: Span,
-        ctx: &mut FunctionContext,
-    ) {
-        match binding {
-            ast::Pattern::Ident { id, name, span } => {
-                ctx.add_local_at(name.clone(), binding_type, false, Some(*id), *span);
-                self.record_local_symbol(*id, name, *span, false, binding_type);
-            }
-            ast::Pattern::Tuple(elems, _) => {
-                let inner = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .elem_types_or_self(binding_type);
-                for (i, elem) in elems.iter().enumerate() {
-                    if let ast::Pattern::Ident { id, name, span } = elem {
-                        let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
-                        self.record_local_symbol(*id, name, *span, false, elem_type);
-                    }
-                }
-            }
-            _ => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
-                    span: fallback_span,
-                });
-            }
-        }
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`

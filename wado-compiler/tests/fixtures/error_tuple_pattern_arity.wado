@@ -1,0 +1,13 @@
+// A tuple pattern names every element, or ends in `..`, wherever it sits.
+
+test {
+    let pair = [1, 2];
+    let triple = [1, 2, 3];
+    let r = match pair { [a, b, c] => a };
+    if let [a, b] = triple {}
+    if let [a, b, c, ..] = pair {}
+    let [d, e] = triple;
+}
+
+__DATA__
+{"compile_error": ":6:26: analysis error: pattern mismatch: expected 'tuple with 2 elements', found 'pattern with 3 elements'; 7:12: pattern mismatch: expected 'tuple with 3 elements', found 'pattern with 2 elements'; 8:12: pattern mismatch: expected 'tuple with at least 3 elements', found 'tuple with 2 elements'; 9:5: pattern mismatch: expected 'tuple with 3 elements', found 'pattern with 2 elements'"}

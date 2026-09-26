@@ -806,7 +806,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
-            | OnBoundTrait::WireNumbered
             | OnBoundTrait::Default
             | OnBoundTrait::Ref
             | OnBoundTrait::RefMut
@@ -1514,7 +1513,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
-            | OnBoundTrait::WireNumbered
             | OnBoundTrait::Default
             | OnBoundTrait::Reflect
             | OnBoundTrait::ReflectNewtype

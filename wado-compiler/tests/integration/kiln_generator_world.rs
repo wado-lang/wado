@@ -19,9 +19,9 @@ use wado_compiler::{
 };
 
 fn kiln_options() -> CompilerOptions {
-    // The revision-3 typed-request adapter produces a valid component, so no
-    // `skip_validation` is needed — the `generate(primary, inputs, options)`
-    // lift/lower round-trips through the CM ABI cleanly.
+    // The typed-request adapter produces a valid component, so no
+    // `skip_validation` is needed: `generate(primary, inputs, module, options)`
+    // lifts and lowers through the CM ABI cleanly.
     CompilerOptions {
         log_level: Some(LogLevel::Warn),
         target_world: Some("core:kiln/generator".to_string()),
@@ -122,9 +122,8 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
 #[test]
 fn typed_options_generator_compiles_to_valid_component() {
-    // No `skip_validation`: the revision-3 typed-options `generate(primary, inputs,
-    // options)` shape must produce a valid component (unlike the old
-    // `raw-request` GC-reference mismatch).
+    // No `skip_validation`: the typed-options
+    // `generate(primary, inputs, module, options)` must produce a valid component.
     let result = compile_generator(TYPED_OPTIONS_GENERATOR, "typed-options generator");
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }

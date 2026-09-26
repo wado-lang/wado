@@ -253,10 +253,9 @@ fn find_struct<'a>(module: &'a TirModule, name: &str) -> Option<&'a TirStruct> {
 }
 
 /// Generate the `FieldSchema` impl a struct's `Deserialize` derivation reads:
-/// `lookup` maps a wire key's bytes to a field index, `positional_at` maps an
-/// ordinal rank to one, and `by_number` maps a `#[wire(number = N)]`. The
-/// deserialize body itself is derived in Wado, by the `ReflectStruct` blanket
-/// in `core:serde` (WEP 2026-06-13).
+/// `lookup` maps a wire key's bytes to a field index, and `positional_at` maps
+/// an ordinal rank to one. The deserialize body itself is derived in Wado, by
+/// the `ReflectStruct` blanket in `core:serde` (WEP 2026-06-13).
 fn generate_field_schema(
     module: &TirModule,
     req: &tir::SynthesisRequest,
@@ -322,18 +321,10 @@ fn generate_field_schema(
         span,
         &compiler_items,
     );
-    let by_number_func = generate_by_number_function(
-        &target_fq,
-        &names.field_schema,
-        &struct_def.fields,
-        option_i32,
-        span,
-        &compiler_items,
-    );
     // A generic struct's schema is one impl over `S<T, …>`, like its reflect
     // impls: the derivation calls `next_field::<T>()` with the instance, so the
     // methods must instantiate alongside it. No body reads the parameters.
-    let mut schema = vec![lookup_func, positional_at_func, by_number_func];
+    let mut schema = vec![lookup_func, positional_at_func];
     for method in &mut schema {
         method.impl_type_params.clone_from(&struct_def.type_params);
     }
@@ -793,57 +784,6 @@ fn generate_positional_at_function(
         field_schema_trait,
         "positional_at",
         "$rank",
-        TypeTable::I32,
-        option_i32,
-        locals,
-        next_local,
-        stmts,
-        span,
-    )
-}
-
-/// Generate `impl FieldSchema for <Type> { fn by_number(number: i32) }` — the
-/// static, per-type numeric-key matcher. Maps a `#[wire(number = N)]` to its
-/// field index, and answers `null` for every number where the type carries
-/// none, which the `WireNumbered` bound rules out.
-fn generate_by_number_function(
-    type_name: &FqTypeName,
-    field_schema_trait: &FqTraitName,
-    fields: &[TirField],
-    option_i32: TypeId,
-    span: Span,
-    compiler_items: &CompilerItems,
-) -> TirFunction {
-    let locals = vec![param_local("$number", TypeTable::I32, false)];
-    let next_local: u32 = 1;
-
-    let mut stmts = Vec::new();
-    for field in fields {
-        let Some(number) = field.serde_number else {
-            continue;
-        };
-        let condition = i32_eq(
-            local_ref(0, "$number", TypeTable::I32),
-            i32_const(number as i32),
-            span,
-        );
-        stmts.push(if_stmt(
-            condition,
-            block(vec![return_stmt(Some(option_some(
-                i32_const(field.index as i32),
-                option_i32,
-                compiler_items,
-            )))]),
-            None,
-        ));
-    }
-    stmts.push(return_stmt(Some(option_none(option_i32, compiler_items))));
-
-    field_schema_method_fn(
-        type_name,
-        field_schema_trait,
-        "by_number",
-        "$number",
         TypeTable::I32,
         option_i32,
         locals,

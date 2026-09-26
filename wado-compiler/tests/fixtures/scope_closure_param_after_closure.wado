@@ -1,0 +1,10 @@
+// A closure's parameter is in scope only in its body.
+
+export fn run() {
+    let g = |y: i32| y;
+    assert g(1) == 1;
+    let z = y;
+}
+
+__DATA__
+{"compile_error": "scope_closure_param_after_closure.wado:6:13: analysis error: 'y' is not in scope"}

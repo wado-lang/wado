@@ -6,24 +6,11 @@
 //! grammar-specific tables that path needs: the per-rule `NodeKind` constants
 //! + name table, and the `to_string_tree` convenience.
 
-use { Grammar, LexerRule, ParserRule } from "./ir.wado";
-use { LitToken, gen_token_display_name_fn } from "./lexer_gen.wado";
+use { Grammar, ParserRule } from "./ir.wado";
+use { LitToken, gen_token_names_global } from "./lexer_gen.wado";
 use { Rule } from "./gir.wado";
 use { CodeWriter } from "lib:wadopoet";
 use { to_pascal_case, escape_case, rule_alts_labeled, rule_kind_const } from "./gen_util.wado";
-
-/// Number of distinct token kinds: one per non-fragment lexer rule, the two
-/// synthetic kinds (`Eof`, `Error`), and one per collected literal — matching
-/// the contiguous `0..n` numbering `gen_token_constants` assigns.
-fn num_token_kinds(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> i32 {
-    let mut n = 0;
-    for let r of lexer_rules {
-        if !r.is_fragment {
-            n += 1;
-        }
-    }
-    return n + 2 + lit_tokens.len();
-}
 
 fn rule_name(rule: &Rule) -> String {
     return match *rule {
@@ -141,29 +128,12 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
     w.blank();
 }
 
-/// Emit a `to_string_tree(result)` convenience that supplies the grammar's name
-/// tables (rules from `RULE_NAMES`, tokens via the generated
-/// `token_kind_name`). Used by driver tests; never called by the parser.
-pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, emit_actions: bool) {
-    let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
-    gen_token_display_name_fn(w, &grammar.lexer_rules);
-    // `$ctx.toStringTree()` runs inside a parse, so an action grammar caches the
-    // table and the renderers share it; elsewhere they build it on demand.
-    w.begin("fn _token_names() -> List<String>");
-    w.line(`let mut v: List<String> = List::with_capacity(${n});`);
-    w.begin(`for let mut k = 0; k < ${n}; k += 1`);
-    w.line("v.push(token_display_name(k));");
-    w.end();
-    w.line("return v;");
-    w.end();
-    w.blank();
-    if emit_actions {
-        w.line("global CTX_TOKEN_NAMES: List<String> = _token_names();");
-        w.blank();
-    }
-    let names = if emit_actions { "&CTX_TOKEN_NAMES" } else { "&_token_names()" };
+/// Emit `TOKEN_NAMES` and the `to_string_tree(result)` convenience that renders
+/// with it and `RULE_NAMES`.
+pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>) {
+    gen_token_names_global(w, &grammar.lexer_rules, lit_tokens);
     w.begin("pub fn to_string_tree(result: &ParseResult) -> String");
-    w.line(`return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, ${names});`);
+    w.line("return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
     w.end();
     w.blank();
 
@@ -182,7 +152,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.line("if _kind < 0 { return String::new(); }");
     w.line("let _sub = result.cst.find_child(0, _kind as NodeKind);");
     w.begin("if _sub >= 0");
-    w.line(`return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, ${names});`);
+    w.line("return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);");
     w.end();
     w.line("return String::new();");
     w.end();

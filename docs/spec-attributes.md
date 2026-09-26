@@ -235,10 +235,16 @@ test {
 }
 ```
 
+<<<<<<< HEAD
 A synopsis documents the module that holds it, not one item. `wado test` counts
 it in the ordinary pass/fail total, and it combines with `#[expect_trap]`,
 `#[TODO]` and `#[timeout_ms]`. It is conventionally unnamed, since it is the
 example rather than one case among several.
+||||||| c8b5409d1
+### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(encoding = "...")]` / `#[wire(positional)]`
+=======
+### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(positional)]`
+>>>>>>> origin/main
 
 `wado doc` places the `## Synopsis` section after the module's `//!` doc and
 before its items. The code is the test body exactly as written between the
@@ -246,7 +252,19 @@ outer braces, with its indentation removed, so nothing hidden sets it up. Each
 `#[synopsis]` test in the module is one code block, in source order. A module
 with none has no section. `wado doc` runs nothing.
 
+<<<<<<< HEAD
 Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
+||||||| c8b5409d1
+- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
+- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. On an enum case, `N` is an `i32` and is the case's discriminant on every wire, in place of its position; an enum numbers every case or none. See [WEP: Grog](./wep-2026-09-22-grog.md).
+- `#[wire(encoding = "zigzag")]` and `#[wire(encoding = "fixed")]` choose how a number-keyed format writes an integer field: `"zigzag"` on `i32` / `i64`, `"fixed"` on any 32- or 64-bit integer, and on an `Option` or `List` of one.
+- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
+=======
+- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
+- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
+- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
+>>>>>>> origin/main
 
 ### `#[wire(...)]`
 

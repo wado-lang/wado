@@ -942,22 +942,6 @@ What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
 
-## Known gap: a reference impl target has no name of its own
-
-`name::Receiver::Ref` spells the reference kind and nothing else. The pointee
-rides in the type-argument list, which is the blanket `impl<T> Trait for &T`
-written out, and it is the only reference target the naming layer can say. A
-target that is a reference to a named head has no spelling of its own, so its
-definition and its call sites mint two different names for one method.
-
-What it admits is a reference impl on a named head that is unreachable wherever
-the two names differ. `impl Show for &Wrap<i32>` called directly on a
-`&Wrap<i32>` reports that `&i32` does not implement `Show`;
-`impl<T> Show for &Wrap<T>` reached inside a frame monomorphized for
-`&Wrap<i32>` reports that `Wrap<i32>` does not. The same generic impl called
-directly works, because both sides mint the same name. The pending fixture is
-`reference_impl_named_head_dispatch.wado`.
-
 ## Known gap: a synthesized type carries only a spelling
 
 A synthesized bound carries its referent (§7); a synthesized type carries only

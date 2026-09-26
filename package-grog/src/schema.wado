@@ -14,6 +14,8 @@ pub variant Syntax {
 pub struct Features {
     pub field_presence: Option<String> = null,
     pub message_encoding: Option<String> = null,
+    pub repeated_field_encoding: Option<String> = null,
+    pub enum_type: Option<String> = null,
 }
 
 pub enum Label {
@@ -30,7 +32,7 @@ pub variant FieldType {
     Named(String),
     /// `map<K, V>`: the key's scalar name and the value's type.
     Map([String, FieldType]),
-    /// A proto2 `group`, whose body is the message named here.
+    /// A `group`, whose body is the nested message named here.
     Group(String),
 }
 
@@ -41,6 +43,8 @@ pub struct Field {
     pub type_: FieldType,
     /// The `oneof` the field belongs to, if any.
     pub oneof: Option<String> = null,
+    /// The `packed` option, where the field writes one.
+    pub packed: Option<bool> = null,
     pub features: Features = Features {},
     pub line: i32,
 }
@@ -54,6 +58,7 @@ pub struct EnumDecl {
     /// The names from the file's top level down to this enum.
     pub path: List<String>,
     pub values: List<EnumValue>,
+    pub features: Features = Features {},
     pub line: i32,
 }
 
