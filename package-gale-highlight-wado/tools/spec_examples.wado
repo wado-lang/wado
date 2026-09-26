@@ -13,12 +13,12 @@ use wado from "../grammar/Wado.g4"
         },
     };
 use { fenced_code_blocks, FencedCode } from "../../package-marl/src/lib.wado";
-use { collect_paths } from "lib:gale";
+use { collect_paths, ratchet } from "lib:gale";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { TreeMap } from "core:collections";
-use { from_string, to_string_pretty } from "core:json";
+use { from_string } from "core:json";
 
 global FIXTURE_DIR: String = "wado-compiler/tests/fixtures";
 global BASELINE_PATH: String = "scripts/spec-examples.json";
@@ -153,17 +153,14 @@ fn check_block(block: &FencedCode, name: &String, fixtures: &TreeMap<String, Str
     if !quotes(&code, &block.code) {
         return Option::Some(`\`${name}\` does not contain the block`);
     }
-    match expects_rejection(&data) {
-        Ok(true) => {
-        },
-        Ok(false) => {
-            if assert_count(&block.code) == 0 {
-                return Option::Some(`the block holds no \`assert\`, and \`${name}\` expects no compile error`);
-            }
-        },
+    let rejected = match expects_rejection(&data) {
+        Ok(r) => r,
         Err(why) => {
             return Option::Some(`\`${name}\`: ${why}`);
         },
+    };
+    if !rejected && assert_count(&block.code) == 0 {
+        return Option::Some(`the block holds no \`assert\`, and \`${name}\` expects no compile error`);
     }
     if is_todo(&code) && !weps.contains(name) {
         return Option::Some(`\`${name}\` is marked TODO, and no WEP names it as a known gap`);
@@ -223,6 +220,8 @@ fn survey(paths: &List<String>, failed: &mut i32) -> TreeMap<String, List<Findin
             return TreeMap::new();
         },
     };
+    // A map iterates in insertion order, and the baseline is serialized from
+    // one built off this walk.
     let mut sorted = *paths;
     sorted.sort();
     let mut fixtures = TreeMap::<String, String>::new();
@@ -257,7 +256,7 @@ fn broken_count(survey: &TreeMap<String, List<Finding>>) -> i32 with Stderr {
 }
 
 /// File path to the number of blocks it holds that name no fixture, omitting
-/// the files with none. The baseline is serialized straight from this.
+/// the files with none.
 fn unreferenced_counts(survey: &TreeMap<String, List<Finding>>) -> TreeMap<String, i32> {
     let mut counts = TreeMap::<String, i32>::new();
     for let [path, findings] of survey.entries() {
@@ -269,50 +268,11 @@ fn unreferenced_counts(survey: &TreeMap<String, List<Finding>>) -> TreeMap<Strin
     return counts;
 }
 
-fn read_baseline() -> Option<TreeMap<String, i32>> with (Stderr, Preopens) {
-    let text = match fs::read_to_string(&BASELINE_PATH) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: ${e}`);
-            return null;
-        },
-    };
-    return match from_string::<TreeMap<String, i32>>(text) {
-        Ok(map) => Option::Some(map),
-        Err(e) => {
-            eprintln(`error: ${BASELINE_PATH}: ${e:?}`);
-            return null;
-        },
-    };
-}
-
-fn write_baseline(counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
-    let text = match to_string_pretty(counts, Option::Some('\n')) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln(`error: cannot serialize the baseline: ${e:?}`);
-            return false;
-        },
-    };
-    if let Err(e) = fs::write(&BASELINE_PATH, &text) {
-        eprintln(`error: ${e}`);
-        return false;
-    }
-    return true;
-}
-
-fn total(counts: &TreeMap<String, i32>) -> i32 {
-    let mut sum = 0;
-    for let [_path, n] of counts.entries() {
-        sum += *n;
-    }
-    return sum;
-}
-
 fn list_mode(paths: &List<String>) -> i32 with (Stdout, Stderr, Preopens) {
     let mut failed = 0;
     let found = survey(paths, &mut failed);
     let mut unreferenced = 0;
+    let mut broken = 0;
     for let [path, findings] of found.entries() {
         for let f of findings {
             match f.verdict {
@@ -320,11 +280,13 @@ fn list_mode(paths: &List<String>) -> i32 with (Stdout, Stderr, Preopens) {
                     println(`${*path}:${f.line}: names no fixture`);
                     unreferenced += 1;
                 },
-                Broken(why) => println(`${*path}:${f.line}: ${why}`),
+                Broken(why) => {
+                    println(`${*path}:${f.line}: ${why}`);
+                    broken += 1;
+                },
             }
         }
     }
-    let broken = found.entries().into_iter().fold(0, |n, e| n + e.1.len()) - unreferenced;
     println(`${unreferenced} blocks name no fixture, ${broken} break a rule`);
     return if failed > 0 || broken > 0 { 1 } else { 0 };
 }
@@ -339,36 +301,13 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
     if broken_count(&found) > 0 {
         return 1;
     }
-    let counts = unreferenced_counts(&found);
-    let Some(baseline) = read_baseline() else {
-        return 1;
-    };
-    // The baseline only ever ratchets down. Recording a file that grew would
-    // license the unquoted blocks `--check` is there to refuse.
-    let mut grew = false;
-    for let [path, now] of counts.entries() {
-        let was = baseline.get(*path).unwrap_or(0);
-        if *now > was {
-            eprintln(`error: ${*path}: ${was} -> ${*now} blocks name no fixture`);
-            grew = true;
-        }
-    }
-    if grew {
-        eprintln("A `wado` block in the specification quotes an e2e fixture; see docs/wep-2026-09-26-spec-examples.md.");
-        return 1;
-    }
-    if update {
-        if !write_baseline(&counts) {
-            return 1;
-        }
-        println(`baseline: ${total(&counts)} blocks in ${counts.len()} files`);
-        return 0;
-    }
-    let left = total(&counts);
-    let shrunk = total(&baseline) - left;
-    let ratchet = if shrunk > 0 { `, ${shrunk} fewer than the baseline — run --update` } else { "" };
-    println(`ok: no file gained an unquoted block (${left} left${ratchet})`);
-    return 0;
+    return ratchet(
+        BASELINE_PATH,
+        &unreferenced_counts(&found),
+        update,
+        "blocks naming no fixture",
+        "A `wado` block in the specification quotes an e2e fixture; see docs/wep-2026-09-26-spec-examples.md.",
+    );
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
@@ -429,11 +368,13 @@ fn verdict_of(markdown: String, fixtures: &TreeMap<String, String>, weps: String
     return findings.into_iter().map(|f| f.verdict).next();
 }
 
-global QUOTING: String = "<!-- fixture: a.wado -->\n\n```wado\nassert f() == 1;\n```\n";
+fn quoting() -> String {
+    return "<!-- fixture: a.wado -->\n\n```wado\nassert f() == 1;\n```\n";
+}
 
 test "a block quoting its fixture complies" {
     let fixtures = fixture_map("a.wado", "test {\n    assert f() == 1;\n}\n\n__DATA__\n{\"test\": {}}\n");
-    assert verdict_of(QUOTING, &fixtures, "") == null;
+    assert verdict_of(quoting(), &fixtures, "") == null;
 }
 
 test "a block without a reference is unreferenced" {
@@ -441,17 +382,17 @@ test "a block without a reference is unreferenced" {
 }
 
 test "a missing fixture breaks the rule" {
-    assert verdict_of(QUOTING, &TreeMap::new(), "") matches { Some(Broken(_)) };
+    assert verdict_of(quoting(), &TreeMap::new(), "") matches { Some(Broken(_)) };
 }
 
 test "a fixture that does not contain the block breaks the rule" {
     let fixtures = fixture_map("a.wado", "test {\n    assert f() == 2;\n}\n");
-    assert verdict_of(QUOTING, &fixtures, "") matches { Some(Broken(_)) };
+    assert verdict_of(quoting(), &fixtures, "") matches { Some(Broken(_)) };
 }
 
 test "the quotation is read from the code, not the data" {
     let fixtures = fixture_map("a.wado", "fn f() -> i32 { return 1; }\n__DATA__\nassert f() == 1;\n");
-    assert verdict_of(QUOTING, &fixtures, "") matches { Some(Broken(_)) };
+    assert verdict_of(quoting(), &fixtures, "") matches { Some(Broken(_)) };
 }
 
 test "a block with no assert breaks the rule unless its fixture is rejected" {
@@ -467,6 +408,6 @@ test "a block with no assert breaks the rule unless its fixture is rejected" {
 
 test "a TODO fixture needs a WEP to name it" {
     let fixtures = fixture_map("a.wado", "#[TODO]\ntest {\n    assert f() == 1;\n}\n");
-    assert verdict_of(QUOTING, &fixtures, "") matches { Some(Broken(_)) };
-    assert verdict_of(QUOTING, &fixtures, "- `a.wado` fails.") == null;
+    assert verdict_of(quoting(), &fixtures, "") matches { Some(Broken(_)) };
+    assert verdict_of(quoting(), &fixtures, "- `a.wado` fails.") == null;
 }

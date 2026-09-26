@@ -291,13 +291,10 @@ fn is_html_block_start(chars: &List<char>) -> bool {
 }
 
 /// Whether an HTML block starting on this line may interrupt an open
-/// paragraph. Only a comment, processing instruction, or declaration
-/// (`<!--`, `<?`, `<!`) does; a bare tag is a CommonMark type-7 block, which
-/// cannot interrupt a paragraph and so continues it as inline content.
+/// paragraph. CommonMark types 1–5 do; any other tag is read as type 7, which
+/// cannot, and so continues the paragraph as inline content.
 fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
-    let len = chars.len();
-    let p = skip_indent(chars, len);
-    return p + 1 < len && chars[p] == '<' && chars[p + 1] matches { '!' | '?' };
+    return html_block_end_marker(chars) matches { Some(_) };
 }
 
 /// Where a raw HTML block starting at `lines[start]` (whose `chars` these are)

@@ -378,6 +378,12 @@ test "parse_document keeps a blank line inside a pre block" {
     }
 }
 
+test "parse_document lets a pre block interrupt a paragraph" {
+    let children = doc_children("text\n<pre>\na\n</pre>\n");
+    assert children.len() == 2;
+    assert children[1] matches { Html(_) };
+}
+
 test "parse_document records the source line of a code block" {
     let source = "# T\n\n```wado\nx\n```\n\n    indented\n";
     let children = doc_children(&source);
