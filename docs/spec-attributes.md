@@ -359,7 +359,7 @@ Module-level inner attribute. Prevents the automatic import of `core:prelude`. U
 
 ### `#![generated]`
 
-Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it: Kiln stamps it on every file it generates, and deletes a stamped file that the current run did not produce.
+Module-level inner attribute. Indicates that the module contains machine-generated code (e.g. from `wado-from-idl` or `gale`). It does not change how the module compiles. Tools read it; Kiln's use is in [Authoring a generator](./spec-modules.md#authoring-a-generator).
 
 The attribute accepts optional metadata so that generators can attach provenance information directly to the attribute instead of as free-form comments. Two argument shapes are supported inside the parentheses:
 
