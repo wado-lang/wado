@@ -1999,10 +1999,9 @@ impl<'a> PatternLowerer<'a> {
                 panic!("a narrowing pattern is extracted into a guard before its lets")
             }
             TirPattern::Or(alternatives) => {
-                // Or patterns in lets: use first alternative's bindings
-                if let Some(first) = alternatives.first() {
-                    self.lower_pattern_to_lets(first, value, span, out, type_table);
-                }
+                // What reaches here is irrefutable, so the first alternative
+                // matches and binds what every alternative binds.
+                self.lower_pattern_to_lets(&alternatives[0], value, span, out, type_table);
             }
         }
     }

@@ -885,7 +885,9 @@ test "an output declared static where the nodes left a symbol owes the two equal
         Y = Relu(X)
     }`;
     let graph = read(&source).unwrap();
-    let checked = infer(&graph, &Schema { layout: [rule("*", ["Seq"])] }).unwrap();
+    let checked = infer(&graph, &Schema {
+        layout: [rule("*", ["Seq"])],
+    }).unwrap();
     assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
     let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
     assert owed == [

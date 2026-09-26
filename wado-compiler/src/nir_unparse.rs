@@ -50,7 +50,9 @@ impl<'a> NirUnparser<'a> {
     /// Whether a pattern binds `local_index` mutably. Outside a function no
     /// local is.
     fn binds_mut(&self, local_index: u32) -> bool {
-        self.locals.get(local_index as usize).is_some_and(|l| l.is_mut)
+        self.locals
+            .get(local_index as usize)
+            .is_some_and(|l| l.is_mut)
     }
 
     /// Resolve a call's stamped `func_id` to its callee descriptor.

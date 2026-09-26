@@ -114,7 +114,14 @@ export fn run() {
         .find(|text| text.contains("fn run"))
         .expect("entry module declares run");
 
-    for expected in ["let [mut a, mut b] = ", "let [mut c, d] = ", "let { x: mut x, y } = "] {
-        assert!(entry.contains(expected), "expected `{expected}`, got:\n{entry}");
+    for expected in [
+        "let [mut a, mut b] = ",
+        "let [mut c, d] = ",
+        "let { x: mut x, y } = ",
+    ] {
+        assert!(
+            entry.contains(expected),
+            "expected `{expected}`, got:\n{entry}"
+        );
     }
 }

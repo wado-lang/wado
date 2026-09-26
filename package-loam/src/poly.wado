@@ -185,10 +185,7 @@ fn narrowed(value: i128) -> Option<i64> {
 }
 
 fn within_i64(p: Option<Poly>) -> Poly {
-    let Some(q) = p else {
-        panic("a polynomial over extents left i64");
-    };
-    return q;
+    return p.expect("a polynomial over extents left i64");
 }
 
 /// Higher degree first, then by the symbols' names, so the constant is last.

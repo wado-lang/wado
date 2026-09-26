@@ -4511,7 +4511,9 @@ impl<'a> TirUnparser<'a> {
     /// Whether a pattern binds `local_index` mutably. Outside a function, as a
     /// closure rendered on its own, no local is.
     fn binds_mut(&self, local_index: u32) -> bool {
-        self.mut_locals.get(local_index as usize).is_some_and(|m| *m)
+        self.mut_locals
+            .get(local_index as usize)
+            .is_some_and(|m| *m)
     }
 
     /// Enable source-form rendering: suppresses internal annotations

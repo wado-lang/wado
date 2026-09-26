@@ -547,7 +547,7 @@ fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
         "Mul" => l.try_mul(r).ok_or(overflow),
         "Div" => {
             if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
-                if b == 0 || a < 0 || b < 0 {
+                if a < 0 || b <= 0 {
                     return Result::Err(`${a} / ${b} has no rounding every implementation shares`);
                 }
                 return Result::Ok(Poly::constant(a / b));

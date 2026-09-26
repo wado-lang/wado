@@ -358,7 +358,7 @@ struct FunctionTranslator<'a, 'p> {
     /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
     /// Locals a last-use move can hand to a new owner
-    /// ([`value_copy::last_use::compute_moved_roots`]).
+    /// ([`value_copy::last_use::Moves::roots`]).
     moved_roots: IndexSet<u32>,
     /// May-alias components for this function, so a confined by-value argument
     /// keeps its copy exactly when it aliases a mutated sibling (WEP 2026-05-21).

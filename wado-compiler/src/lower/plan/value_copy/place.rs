@@ -610,8 +610,9 @@ pub fn is_reference(type_id: TypeId, type_table: &TypeTable) -> bool {
     ) || type_table.is_reference_shaped(type_id)
 }
 
-/// Whether this parameter names storage the caller still reaches. A by-value
-/// one was deep-copied at the call, so the body owns what it holds.
+/// Whether this parameter hands the body storage the caller still reaches, to
+/// return or to write. A by-value one was deep-copied at the call, or is
+/// confined: passed uncopied, but never returned and copied before a write.
 pub fn lends_storage(param: &TirParam, type_table: &TypeTable) -> bool {
     param.is_mut_ref || is_reference(param.type_id, type_table)
 }
