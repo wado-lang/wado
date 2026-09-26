@@ -1846,13 +1846,8 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
     w.line(`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) { pos += 1; }`);
 }
 
-/// Scan mirror of `gen_optional_probe_entry`: try the body, then the
-/// continuation from where it ended, then the caller's FOLLOW. The body is
-/// kept only when all three hold, so the scan advances by exactly what the
-/// parse will consume.
-///
-/// With `cont_done` named, the continuation is what the sequence scans next,
-/// so a probe that holds has scanned it already: it sets the flag and stays.
+/// Scan mirror of `gen_optional_probe_entry`. With `cont_done` named, a probe
+/// that holds has scanned the rest of the sequence, so it sets the flag and stays.
 fn gen_scan_optional_probe<S: AsStrSlice>(
     w: &mut CodeWriter,
     re: &ScanRepeatElement,
@@ -2559,18 +2554,13 @@ fn probe_scans_rest(se: &ScanElement, scan_elems: &List<ScanElement>, from: i32,
     let Repeat(re) = se else {
         return false;
     };
-    if !re.kind matches { Optional } || admits_is_untestable(&re.inner_admits) || !scan_optional_probe_decides(re, ctx) {
+    if !re.kind matches { Optional }
+        || admits_is_untestable(&re.inner_admits)
+        || !scan_optional_probe_decides(re, ctx) {
         return false;
     }
-    if re.continuation_scan.len() != end - from {
-        return false;
-    }
-    for let mut j = 0; j < re.continuation_scan.len(); j += 1 {
-        if re.continuation_scan[j] != scan_elems[from + j] {
-            return false;
-        }
-    }
-    return true;
+    let rest: List<ScanElement> = scan_elems.iter_value().skip(from).take(end - from).collect();
+    return re.continuation_scan == rest;
 }
 
 /// Step over tokens the scan already proved, as one move.
@@ -4569,19 +4559,16 @@ fn emit_probe_verdict<S: AsStrSlice>(
 }
 
 /// Whether each iteration of a greedy `*` / `+` scans its whole body and commits
-/// only on a match. Only where the body's first set overlaps what may follow the
-/// loop, so a trailing token a following `,?` wants is yielded rather than
-/// consumed (`(',' arm)* ','?`), or where the iteration owes a duty the scan
-/// discharges. Elsewhere the first token decides, as ANTLR4's LL(1) loop does —
-/// unless the body's own alternatives are decided by scanning, which the guard
-/// then reuses, and whose failure is the iteration's to report.
+/// only on a match; elsewhere the first token decides, as ANTLR4's LL(1) loop does.
 fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut GenContext) -> bool {
     let body_first = admits_kinds(&r.body_admits);
     let overlaps_follow = body_first.is_empty()
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
     let body_scans_to_decide = match &r.body {
-        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(|b| b.alts.len() > 1) },
+        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(
+            |b| b.alts.len() > 1,
+        ) },
         _ => false,
     };
     return r.body_scannable && (overlaps_follow || body_scans_to_decide || !r.duties.is_empty());

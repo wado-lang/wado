@@ -562,9 +562,10 @@ spelling, so the two emit walkers partition the same group differently
 - `Nullable(first)` — can also match nothing, so the follow set joins `first`,
   which may itself be empty (`( A | | B )`) or not (`( A? | B )`).
 
-`alt_grouping` owns the whole decision —
-`compute_overlap_groups_of` partitions, `group_branch_admits` says what a
-branch admits, `fallback_last` orders — and the surface walker, the op-only
+`alt_grouping` owns the whole decision. `decision_partition` splits the
+alternatives into branches and says what each admits, and `fallback_last`
+orders them. A token that only one alternative starts gets a branch of its own,
+so only a contested token scans. The surface walker, the op-only
 walker, the scan and lower's kind-set interning are four readers of that one
 answer rather than four derivations of it. Lower bakes the classification into
 `DispatchBranch.alt_class` and `ScanGroupElement.alt_classes`, and `GroupOp`

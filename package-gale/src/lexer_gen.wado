@@ -702,22 +702,19 @@ fn gen_lexer_fragment_fn<S: AsStrSlice>(
     let Some(rule) = find_fragment(all_rules, &frag.key.name) else {
         panic("a fragment matcher names no fragment");
     };
-    let mut f = lexer_matcher_spec(&frag.key.fn_name(), hm);
-    if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
-        f.add_effect(sc_name);
-    }
-    f.emit_begin(w);
-    if hm {
-        w.line("let chars = &lx.chars;");
-    }
-    w.line("let mut pos = start;");
-    gen_lexer_body(w, &rule.body, &frag.plan, all_rules, "return -1", frag.key.ci, ea, hm, false);
-    w.line("return pos;");
-    w.end();
-    w.blank();
+    begin_lexer_matcher(w, &frag.key.fn_name(), rule, all_rules, hm, sc_name);
+    end_lexer_matcher(w, rule, &frag.plan, all_rules, frag.key.ci, ea, hm);
 }
 
-fn lexer_matcher_spec<S: AsStrSlice>(fn_name: S, hm: bool) -> FnSpec {
+/// Open a matcher `fn_name(chars, start) -> i32` over `rule`'s text.
+fn begin_lexer_matcher<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    fn_name: S,
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    hm: bool,
+    sc_name: S1,
+) {
     let mut f = FnSpec::new(fn_name);
     if hm {
         f.add_param("lx", "&Lexer");
@@ -726,7 +723,32 @@ fn lexer_matcher_spec<S: AsStrSlice>(fn_name: S, hm: bool) -> FnSpec {
     }
     f.add_param("start", "i32");
     f.set_return_type("i32");
-    return f;
+    // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
+    // generated function carry `with Foo`.
+    if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
+        f.add_effect(sc_name);
+    }
+    f.emit_begin(w);
+    if hm {
+        w.line("let chars = &lx.chars;");
+    }
+}
+
+/// Emit `rule`'s body under `plan` and close the matcher, returning the end.
+fn end_lexer_matcher(
+    w: &mut CodeWriter,
+    rule: &LexerRule,
+    plan: &LexerBodyPlan,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    ea: bool,
+    hm: bool,
+) {
+    w.line("let mut pos = start;");
+    gen_lexer_body(w, &rule.body, plan, all_rules, "return -1", ci, ea, hm, false);
+    w.line("return pos;");
+    w.end();
+    w.blank();
 }
 
 /// Which matcher covers a lexer rule's text.
@@ -832,7 +854,7 @@ fn statically_called_rules(
     let mut emitted: List<String> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let name = &lexer_rules[i].name;
-        if routes[i].is_dispatched() && atn_class.get(*name) matches { None } {
+        if routes[i].is_dispatched() && !atn_class.contains_key_str(name) {
             emitted.push(*name);
         }
     }
@@ -846,7 +868,7 @@ fn statically_called_rules(
                 continue;
             }
             called.push(*name);
-            if atn_class.get(*name) matches { None } && !emitted.contains(name) {
+            if !atn_class.contains_key_str(name) && !emitted.contains(name) {
                 emitted.push(*name);
             }
         }
@@ -1000,7 +1022,7 @@ fn check_lexer_calls_resolve(
 ) {
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let caller = &lexer_rules[i];
-        if !routes[i].has_match_fn() || atn_class.get(caller.name) matches { Some(_) } {
+        if !emits_static_matcher(&routes[i], caller, atn_class) {
             continue;
         }
         for let name of &lexer_rule_calls(caller, lexer_rules) {
@@ -1012,6 +1034,12 @@ fn check_lexer_calls_resolve(
             }
         }
     }
+}
+
+/// Whether `rule` gets a `try_` matcher whose body is emitted here rather than
+/// delegated to `latn_match`.
+fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &TreeMap<String, i32>) -> bool {
+    return route.has_match_fn() && !atn_class.contains_key_str(&rule.name);
 }
 
 /// The rules `rule`'s emitted body calls by their `try_` matcher, reading
@@ -1230,11 +1258,8 @@ pub fn lexer_try_fn_name<S: AsStrSlice>(name: S) -> String {
     return `try_${name}`;
 }
 
-/// Whether some lexer rule reaches `rule` through a generated `try_` call rather
-/// than inlining it — a non-fragment rule or a recursive fragment. Such a fn is
-/// entered with the caller's suffix still to consume, so its body alternation
-/// must not take the maximal-munch emit. An inlined fragment is safe: the inline
-/// path carries the caller's tail position with it.
+/// Whether some lexer rule reaches `rule` through its `try_` matcher, which is
+/// then never in tail position: the caller's suffix is still to consume.
 pub fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     if rule.is_fragment && !fragment_is_recursive(rule, all_rules) {
         return false;
@@ -1280,19 +1305,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     hm: bool,
     sc_name: S,
 ) {
-    let fn_name = lexer_try_fn_name(&rule.name);
-    let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
-    let mut f = lexer_matcher_spec(&fn_name, hm);
-    // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
-    // generated function carry `with Foo`.
-    if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
-        f.add_effect(sc_name);
-    }
-    f.emit_begin(w);
-    if hm {
-        w.line("let chars = &lx.chars;");
-    }
+    begin_lexer_matcher(w, &lexer_try_fn_name(&rule.name), rule, all_rules, hm, sc_name);
     // ATN-class rule: the static single-pass emitter cannot decide it, so
     // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
@@ -1302,14 +1316,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
         w.blank();
         return;
     }
-    w.line("let mut pos = start;");
-    // gen_lexer_alt_seq places the alt's predicates; a false one returns -1 so
-    // the tokenizer tries the next rule.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
-    gen_lexer_body(w, &rule.body, &plan, all_rules, "return -1", ci, ea, hm, false);
-    w.line("return pos;");
-    w.end();
-    w.blank();
+    end_lexer_matcher(w, rule, &plan, all_rules, resolve_ci(grammar_opts, &rule.options), ea, hm);
 }
 
 /// Emit each semantic predicate at position `before` as a guard
@@ -2439,7 +2447,7 @@ pub fn lexer_fragment_fns(
     let mut keys: List<LexerFragmentKey> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let rule = &lexer_rules[i];
-        if routes[i].has_match_fn() && atn_class.get(rule.name) matches { None } {
+        if emits_static_matcher(&routes[i], rule, atn_class) {
             collect_body_calls(&lexer_rule_plan(rule, lexer_rules, grammar_opts), &mut keys);
         }
     }
@@ -3187,7 +3195,7 @@ fn add_second_chars(
     if *budget < 0 || elements.is_empty() {
         return false;
     }
-    let rest = lexer_seq_from(elements, 1);
+    let rest: List<LexerElement> = elements.iter_value().skip(1).collect();
     return match elements[0] {
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
@@ -3197,9 +3205,7 @@ fn add_second_chars(
             if chars.len() == 1 {
                 return add_following_chars(&rest, all_rules, ci, acc);
             }
-            for let r of &folded_ranges(chars[1], chars[1], ci) {
-                acc.ranges.push(*r);
-            }
+            acc.ranges.extend(&folded_ranges(chars[1], chars[1], ci));
             true;
         },
         CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, ci, acc),
@@ -3213,9 +3219,7 @@ fn add_second_chars(
             if !rep.kind matches { Optional } {
                 taken.push(LexerElement::Repeat(LexerRepeatElement { ..rep, kind: RepeatKind::Star }));
             }
-            for let e of &rest {
-                taken.push(*e);
-            }
+            taken.extend(&rest);
             let skipped = rep.kind matches { Plus } || add_second_chars(&rest, all_rules, ci, budget, acc);
             skipped && add_second_chars(&taken, all_rules, ci, budget, acc);
         },
@@ -3232,9 +3236,7 @@ fn add_alts_second_chars(
 ) -> bool {
     for let alt of alts {
         let mut seq = alt.elements;
-        for let e of rest {
-            seq.push(*e);
-        }
+        seq.extend(rest);
         if !add_second_chars(&seq, all_rules, ci, budget, acc) {
             return false;
         }
@@ -3243,12 +3245,7 @@ fn add_alts_second_chars(
 }
 
 /// Adds to `acc` the chars `rest` can begin with, once one char is consumed.
-fn add_following_chars(
-    rest: &List<LexerElement>,
-    all_rules: &List<LexerRule>,
-    ci: bool,
-    acc: &mut SecondChars,
-) -> bool {
+fn add_following_chars(rest: &List<LexerElement>, all_rules: &List<LexerRule>, ci: bool, acc: &mut SecondChars) -> bool {
     let mut visiting: List<String> = [];
     let Some(lead) = lexer_seq_leading_chars(rest, all_rules, ci, /*follow_refs=*/ true, &mut visiting) else {
         return false;
@@ -3256,19 +3253,14 @@ fn add_following_chars(
     if lead.nullable {
         acc.may_end = true;
     }
-    let ranges = if lead.negated { ranges_minus(&[[0, 0x10FFFF]], &lead.ranges) } else { lead.ranges };
-    for let r of &ranges {
-        acc.ranges.push(*r);
-    }
+    acc.ranges.extend(&if lead.negated {
+        ranges_minus(&[
+            [0, 0x10FFFF],
+        ], &lead.ranges);
+    } else {
+        lead.ranges;
+    });
     return true;
-}
-
-fn lexer_seq_from(elements: &List<LexerElement>, from: i32) -> List<LexerElement> {
-    let mut out: List<LexerElement> = [];
-    for let mut i = from; i < elements.len(); i += 1 {
-        out.push(elements[i]);
-    }
-    return out;
 }
 
 fn ranges_intersect(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i32]> {
@@ -5404,7 +5396,8 @@ fn gen_second_char_dispatch(
     w.line("let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
-        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect();
+        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect(
+        );
         w.begin(`${arm.pattern} =>`);
         gen_group_calls(w, calls, &middle, needs_extras, has_actions, has_members);
         w.end_with(",");

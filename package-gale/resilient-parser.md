@@ -30,7 +30,7 @@ single source of truth, not a node object tree. A node is addressed by the row
 index of its `Open` event (row 0 is the root):
 
 ```
-CstStore { tag, a, b, alt, end, flags, next }   // parallel columns
+CstStore { tag, id, offset, alt, end, flags, next }   // parallel columns
 EventTag: Open | Close | Tok | Miss | Skip
 ```
 
