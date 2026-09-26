@@ -195,8 +195,8 @@ fn rewrite_frame(
 struct ForHeaders<'a, 'l> {
     locals: &'a FrameLocals<'l>,
     loop_spans: Vec<Span>,
-    /// The locals bound so far in walk order: an update's own, walked after the
-    /// body, are not yet among them.
+    /// The locals bound so far in walk order: the body's own and the update's,
+    /// both walked after the body label, are not yet among them.
     bound: IndexSet<u32>,
     for_headers: IndexMap<String, Vec<u32>>,
 }
@@ -215,7 +215,7 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                 self.bound.insert(*local_index);
                 return;
             }
-            TirStmtKind::LabeledBlock { label, block } if is_for_body_label(label) => {
+            TirStmtKind::LabeledBlock { label, .. } if is_for_body_label(label) => {
                 let Some(&loop_span) = self.loop_spans.last() else {
                     unreachable!("a `for` body is minted inside the loop it runs in");
                 };
@@ -226,7 +226,6 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                         declared.is_mut
                             && self.bound.contains(index)
                             && encloses(&loop_span, &declared.span)
-                            && !encloses(&stmt.span, &declared.span)
                     })
                     .map(|(index, _)| index)
                     .collect::<Vec<_>>();
