@@ -24,18 +24,25 @@ so a closure-typed parameter of an `export fn` is a compile error.
 `internal` combines with neither `pub` nor `export`; writing both is a compile
 error. `pub export` is accepted and means `export`.
 
+<!-- {"fixture":"spec_modules_visibility.wado"} -->
+
 ```wado
 // Private to this file (default)
-fn helper() { ... }
+fn helper() -> i32 { return 1; }
 
 // Package-internal - accessible from other files in this package
-internal fn build_ast() -> Doc { ... }
+internal fn build_ast() -> List<String> { return ["doc"]; }
 
 // Library API - accessible from other Wado packages (Wado-native)
-pub fn map<T, U>(f: fn(T) -> U, xs: List<T>) -> List<U> { ... }
+pub fn map<T, U>(f: fn(T) -> U, xs: List<T>) -> List<U> { return xs.into_iter().map(f).collect(); }
 
 // Library API + CM boundary export
-export fn run() { ... }
+export fn run() { }
+
+test {
+    assert helper() == 1 && build_ast().len() == 1;
+    assert map(|x: i32| x * 2, [1, 2]) == [2, 4];
+}
 ```
 
 | Declaration         | Same file | Same package | Other Wado packages | CM boundary |
@@ -58,11 +65,17 @@ error. `export` on a member is an error, because a method has no CM boundary. On
 _inherent_ member has a ladder; a trait impl's members reach as far as the
 trait.
 
+<!-- {"fixture":"spec_modules_visibility.wado"} -->
+
 ```wado
 impl Config {
-    fn parse_raw() { }         // this file only
-    internal fn reload() { }   // other files in this package
-    pub fn get() { }           // other packages
+    fn parse_raw() -> i32 { return 1; }         // this file only
+    internal fn reload() -> i32 { return 2; }   // other files in this package
+    pub fn get() -> i32 { return 3; }           // other packages
+}
+
+test {
+    assert Config::parse_raw() + Config::reload() + Config::get() == 6;
 }
 ```
 
@@ -86,10 +99,12 @@ reaches the item has to be able to write the types it names, and a `pub fn`
 returning a file-private struct hands back a value whose type no caller can
 write.
 
+<!-- {"fixture":"spec_modules_signature_reach.wado"} -->
+
 ```wado
 struct Hidden { n: i32 }
 
-pub fn make() -> Hidden { ... }   // ERROR: widen `Hidden`, or narrow `make`
+pub fn make() -> Hidden { return Hidden { n: 0 }; }   // ERROR: widen `Hidden`, or narrow `make`
 ```
 
 The rule holds at every rung: an `internal` item may not name a file-private
@@ -221,6 +236,8 @@ Rationale: [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
 
 ## Import Syntax
 
+<!-- {"fixture":"spec_modules_import_syntax.wado"} -->
+
 ```wado
 // ============================================
 // WIT Package = Wado Module
@@ -239,24 +256,44 @@ use {println, eprintln} from "core:cli";
 use {to_string, from_string} from "core:json";
 
 // 3. Local files (relative path, extension required)
-use {Helper} from "./utils.wado";
-use {Config} from "../config.wado";
+use {Helper} from "./sub/spec_modules_utils.wado";
+use {Config} from "../fixtures/sub/spec_modules_config.wado";
 
 // 4. CM coordinate (declared in wado.toml, or given an inline `with` source)
 use {Regexp} from "docs:regex";
 
 // 5. Library alias (rename / private / coordinate-less dependency)
 use {Router} from "lib:router";
+
+test {
+    assert to_string(&Config { port: 80 }) == Result::Ok("{\"port\":80}");
+    assert Helper { name: "h" }.name == "h";
+    assert Regexp { pattern: "a+" }.pattern == "a+" && Router { routes: 2 }.routes == 2;
+}
 ```
 
 Implementing a trait requires naming it: `impl Trait for Type` and the bodiless
 derive form `impl Trait for Type;` both need `Trait` in scope, whether declared
 in the module, imported, or auto-imported from the prelude.
 
+<!-- {"fixture":"spec_modules_impl_needs_trait.wado"} -->
+
 ```wado
 use {Deserialize} from "core:serde";
+use {from_string} from "core:json";
+
+struct Config { port: i32 }
+
 impl Deserialize for Config;          // OK
 
+test {
+    assert from_string::<Config>("{\"port\":80}").unwrap().port == 80;
+}
+```
+
+<!-- {"fixture":"spec_modules_impl_trait_not_imported.wado"} -->
+
+```wado
 impl Deserialize for Config;          // error without the import
 ```
 
@@ -264,12 +301,22 @@ An import's local name must not collide with a declaration in the importing
 module. The name would mean two declarations at once and nothing could say
 which, so the program is rejected; an alias says which one was meant.
 
-```wado
-use {Widget} from "./other.wado";
-pub struct Widget { … }               // error: collides with the import
+<!-- {"fixture":"spec_modules_import_collision.wado"} -->
 
-use {Widget as Theirs} from "./other.wado";
-pub struct Widget { … }               // OK
+```wado
+use {Widget} from "./sub/spec_modules_other.wado";
+pub struct Widget { mine: bool }               // error: collides with the import
+```
+
+<!-- {"fixture":"spec_modules_import_alias.wado"} -->
+
+```wado
+use {Widget as Theirs} from "./sub/spec_modules_other.wado";
+pub struct Widget { mine: bool }               // OK
+
+test {
+    assert Widget { mine: true }.mine && Theirs { theirs: true }.theirs;
+}
 ```
 
 ## Import Attributes (`with`)
@@ -282,9 +329,17 @@ Use `with { ... }` to specify import metadata:
 use {Regexp} from "docs:regex@1.0.0" with { registry: "oci://ghcr.io/acme" };  // exact pin via the specifier
 use {Router} from "lib:router" with { git: "https://github.com/user/router.git", ref: "v1.0" };
 use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "docs:regex", version: "1.0.0" };
+```
 
+<!-- {"fixture":"spec_modules_type_attribute.wado"} -->
+
+```wado
 // Type attribute (REQUIRED for non-.wado imports)
-use {sin, cos} from "./libm.wasm" with { type: "wasm" };
+use {add_one, twice} from "./sub/wasm_import_user.wasm" with { type: "wasm" };
+
+test {
+    assert add_one(1) == 2 && twice(2.0) == 4.0;
+}
 ```
 
 An inline source takes the same keys as a `[dependencies]` value: `git`, `ref`,
@@ -439,6 +494,8 @@ A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/gener
 
 That module exports the world's `generate` function:
 
+<!-- {"fixture":"spec_modules_kiln_generator.wado"} -->
+
 ```wado
 use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
@@ -455,6 +512,11 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
     });
+}
+
+test {
+    let options = Options { namespace: "calc" };
+    assert options.emit_comments && emit(&"x", &options) == "// calc\nx";
 }
 ```
 
@@ -509,18 +571,20 @@ A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" 
 | Core module   | One free `pub fn` per function export          | `helper(x)` — plain function          |
 | CM component  | One Wado `interface` per exported CM interface | `Iface::method(x)` — called like WASI |
 
+<!-- {"fixture":"spec_modules_wasm_imports.wado"} -->
+
 ```wado
 // Core wasm / wat — exports become free functions.
-use { sin, cos } from "./libm.wat" with { type: "wat" };
-use { helper }   from "./mod.wasm" with { type: "wasm" };
+use { add_one } from "./sub/wasm_import_user.wat" with { type: "wat" };
+use { twice }   from "./sub/wasm_import_user.wasm" with { type: "wasm" };
 
 // CM component — each exported interface becomes a Wado `interface`,
 // and its functions are called like WASI methods.
-use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
-export fn run() {
-    let packed = Compress::compress(bytes);
-    let back = Decompress::decompress(packed);  // Result<List<u8>, String>
+test {
+    assert add_one(41) == 42 && twice(1.5) == 3.0;
+    assert CmCatalog::id_string("round trip") == "round trip";
 }
 ```
 
@@ -577,8 +641,14 @@ named Wado file is compiled into a component that exports the interface, bound
 by operation name, and composed in, so the caller needs no handler. A `provider`
 on a component that imports no guest effect is an error.
 
+<!-- {"fixture":"spec_modules_provider.wado"} -->
+
 ```wado
-use { Hlc } from "./hlc.wasm" with { type: "wasm", provider: "./highlight.wado" };
+use { Hlc } from "./sub/hlc.wasm" with { type: "wasm", provider: "./sub/hl_ext.wado" };
+
+test {
+    assert Hlc::wrap("x", "wado").text == "[wado:x]";
+}
 ```
 
 Rationale: [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md),
@@ -589,28 +659,50 @@ Rationale: [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md),
 
 Use `use name from "..."` (without curly braces) to import an entire module as a namespace:
 
+<!-- {"fixture":"spec_modules_namespace_import.wado"} -->
+
 ```wado
 // Import a module as a namespace
-use utils from "./utils.wado";
-utils::helper_function();      // not utils["helper_function"], as it's analyzed at compile time
+use utils from "./sub/spec_modules_utils.wado";
+
+test {
+    assert utils::helper_function() == 42;   // not utils["helper_function"], as it's analyzed at compile time
+}
 ```
 
 A namespace import binds one name, the namespace. The source module's pub symbols are reached through the `ns::` prefix and are not imported under their bare names, so `distance(p1, p2)` below is an unknown function:
 
+<!-- {"fixture":"spec_modules_namespace_members.wado"} -->
+
 ```wado
-use geo from "./geo.wado";
+use geo from "./sub/spec_modules_geo.wado";
 
-// Functions
-geo::distance(p1, p2);
+trait Show {
+    fn show(&self) -> String;
+}
 
-// Types (structs, enums, variants)
-let p: geo::Point = geo::Point::origin();
-let c = geo::Color::Red;
-let s = geo::Shape::Circle(3.14);
+struct Local {}
+
+test {
+    let [p1, p2] = [geo::Point { x: 0.0, y: 0.0 }, geo::Point { x: 3.0, y: 4.0 }];
+
+    // Functions
+    assert geo::distance(p1, p2) == 5.0;
+
+    // Types (structs, enums, variants)
+    let p: geo::Point = geo::Point::origin();
+    let c = geo::Color::Red;
+    let s = geo::Shape::Circle(3.14);
+    assert p.x == 0.0 && c == geo::Color::Red && s matches { Circle(_) };
+}
 
 // Traits and types in an `impl` header, on either side
-impl geo::Show for Local { ... }
-impl Show for geo::Tag { ... }
+impl geo::Show for Local { fn show(&self) -> String { return "local"; } }
+impl Show for geo::Tag { fn show(&self) -> String { return self.name; } }
+
+test {
+    assert Local {}.show() == "local" && geo::Tag { name: "tag" }.show() == "tag";
+}
 ```
 
 Only the members visible at the import site are reachable through a namespace:
@@ -633,14 +725,30 @@ by name instead.
 - All imports must be explicit (except the prelude)
 - `Effect::{op1, op2}` imports an effect's operations
 
+<!-- {"fixture":"spec_modules_import_rules.wado"} -->
+
 ```wado
 // Valid patterns
 use {println, eprintln} from "core:cli";        // Named import
 use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
-use utils from "./utils.wado";                   // Namespace import
+use utils from "./sub/spec_modules_utils.wado";  // Namespace import
 
-// Prohibited patterns
+test {
+    assert utils::helper_function() == 42;
+}
+```
+
+A wildcard is prohibited, with or without braces:
+
+<!-- {"fixture":"spec_modules_import_wildcard.wado"} -->
+
+```wado
 use * from "core:cli";           // Wildcard not allowed
+```
+
+<!-- {"fixture":"spec_modules_import_wildcard_braces.wado"} -->
+
+```wado
 use {*} from "core:cli";         // Wildcard not allowed
 ```
 
@@ -661,9 +769,15 @@ holds the rules.
 `as` binds an imported name under a local one, for an item and an effect
 operation alike:
 
+<!-- {"fixture":"spec_modules_import_rename.wado"} -->
+
 ```wado
 use {to_string as json_string} from "core:json";
 use {Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
+
+test {
+    assert json_string(&42) == Result::Ok("42");
+}
 ```
 
 ## Re-exports (`pub use`)
@@ -672,17 +786,39 @@ A re-export makes an imported name a member of the importing module. A facade
 uses this to publish a package's API under its entry module's own names, so
 consumers never name the files behind it:
 
+<!-- {"fixture":"sub/spec_modules_trig.wado"} -->
+
 ```wado
 // math/internal/trig.wado
-pub fn sin(x: f64) -> f64 { ... }
-pub fn cos(x: f64) -> f64 { ... }
+pub fn sin(x: f64) -> f64 { return f64::sin(x); }
+pub fn cos(x: f64) -> f64 { return f64::cos(x); }
 
+test {
+    assert sin(0.0) == 0.0 && cos(0.0) == 1.0;
+}
+```
+
+<!-- {"fixture":"sub/spec_modules_math.wado"} -->
+
+```wado
 // math/mod.wado - re-export from internal modules
-pub use {sin, cos} from "./internal/trig.wado";
-pub use {sin as sine} from "./internal/trig.wado";  // with rename
+pub use {sin, cos} from "./spec_modules_trig.wado";
+pub use {sin as sine} from "./spec_modules_trig.wado";  // with rename
 
+test {
+    assert sine(0.5) == sin(0.5);
+}
+```
+
+<!-- {"fixture":"spec_modules_reexport.wado"} -->
+
+```wado
 // user code - import from the facade (a "math" dependency declared in wado.toml)
 use {sin, cos, sine} from "lib:math";
+
+test {
+    assert sine(1.0) == sin(1.0) && cos(0.0) == 1.0;
+}
 ```
 
 Re-export rules:
@@ -734,7 +870,16 @@ The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) li
 
 ## Global Functions defined in `core:prelude`
 
+<!-- {"fixture":"spec_modules_prelude_functions.wado"} -->
+
 ```wado
-panic("error"); // traps with a message
-unreachable(); // traps with no message
+fn half(n: i32) -> i32 {
+    if n % 2 != 0 { panic("odd"); } // traps with a message
+    if n < 0 { unreachable(); }     // traps with no message
+    return n / 2;
+}
+
+test {
+    assert half(4) == 2;
+}
 ```

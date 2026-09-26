@@ -1,0 +1,8 @@
+// A signature may not name a declaration that reaches less far than the item.
+
+struct Hidden { n: i32 }
+
+pub fn make() -> Hidden { return Hidden { n: 0 }; }   // ERROR: widen `Hidden`, or narrow `make`
+
+__DATA__
+{"compile_error": "`make` is `pub` but its signature names `Hidden`, which is private to its defining file; widen `Hidden`, or narrow `make`"}
