@@ -176,7 +176,7 @@ test "weights the graph lacks are read from a checkpoint by Weights::load" {
     assert out.contains("pub fn load(checkpoint: &ByteList) -> Result<Weights, LoadError> {");
     assert out.contains("let header = read_checkpoint(checkpoint)?;");
     assert out.contains(
-        "data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], width: 4 })?),",
+        "data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?),",
     );
     assert out.contains("extents: [4, 3],");
     assert out.contains("pub fn read_checkpoint");
@@ -197,7 +197,7 @@ bias (float[N, 2] X) => (float[N, 2] Y)
         rule("B", ["In"]),
     ]).unwrap();
 
-    assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"In\", \"In\"], extents: [2, 2], width: 4");
+    assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"In\", \"In\"], extents: [2, 2], elements: 4, width: 4");
     assert out.contains("data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"),");
 }
 

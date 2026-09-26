@@ -5,18 +5,21 @@ use { to_string } from "core:json";
 use { TreeMap } from "core:collections";
 use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
 use { Checkpoint, Expected, HeaderEntry, LoadError } from "./runtime/checkpoint.wado";
+use { element_count } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
 /// The initializer `vi`, whose axes stage 0 gave as `shape`, as a checkpoint
 /// must hold it.
 pub fn expected(vi: &ValueInfo, shape: &Shape) -> Expected {
     let element = element_of(&vi.dtype).unwrap();
+    // ONNX states an initializer's extents as integers, and both readers hold to it.
+    let extents = static_extents(&vi.rank).unwrap();
     return Expected {
         tensor: vi.name,
         dtype: element.stored,
         axes: shape.axes.into_iter().map(|axis| axis.name).collect(),
-        // ONNX states an initializer's extents as integers, and both readers hold to it.
-        extents: static_extents(&vi.rank).unwrap(),
+        elements: element_count(&extents),
+        extents,
         width: element.width,
     };
 }

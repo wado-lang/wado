@@ -426,38 +426,44 @@ impl<T> List<T> {
             return;
         }
         let mut buf: Array<T> = builtin::array_new(n);
+        // Each bound is a distance left to `n`, so a list past 2^30 elements
+        // cannot wrap one.
         let mut width = 1;
-        for ; width < n; width = width * 2 {
-            for let mut start = 0; start < n; start += width * 2 {
+        loop {
+            let mut start = 0;
+            while width < n - start {
                 let mid = start + width;
-                if mid < n {
-                    let end = i32::min(start + width * 2, n);
-                    let mut i = start;
-                    let mut j = mid;
-                    for let mut k = start; k < end; k += 1 {
-                        if i < mid {
-                            if j < end {
-                                let a = self.repr[i];
-                                let b = self.repr[j];
-                                if let Greater = cmp(&a, &b) {
-                                    buf[k] = b;
-                                    j += 1;
-                                } else {
-                                    buf[k] = a;
-                                    i += 1;
-                                }
+                let end = mid + i32::min(width, n - mid);
+                let mut i = start;
+                let mut j = mid;
+                for let mut k = start; k < end; k += 1 {
+                    if i < mid {
+                        if j < end {
+                            let a = self.repr[i];
+                            let b = self.repr[j];
+                            if let Greater = cmp(&a, &b) {
+                                buf[k] = b;
+                                j += 1;
                             } else {
-                                buf[k] = self.repr[i];
+                                buf[k] = a;
                                 i += 1;
                             }
                         } else {
-                            buf[k] = self.repr[j];
-                            j += 1;
+                            buf[k] = self.repr[i];
+                            i += 1;
                         }
+                    } else {
+                        buf[k] = self.repr[j];
+                        j += 1;
                     }
-                    builtin::array_copy(&mut self.repr, start, &buf, start, end - start);
                 }
+                builtin::array_copy(&mut self.repr, start, &buf, start, end - start);
+                start = end;
             }
+            if width >= n - width {
+                break;
+            }
+            width *= 2;
         }
     }
 

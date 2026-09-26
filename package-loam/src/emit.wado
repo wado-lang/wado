@@ -448,7 +448,7 @@ fn checkpoint_payload(e: &Expected) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
     return wado`header.payload(checkpoint, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
         ", ",
-    )}], extents: ${e.extents}, width: ${e.width} })?`;
+    )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }
 
 /// What each tensor is called inside `forward`. A graph input arrives as a

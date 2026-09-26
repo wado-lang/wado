@@ -368,7 +368,7 @@ impl<T> StreamWritable<T> {
             let written = if offset == 0 {
                 self.write(data);
             } else {
-                let end = i32::min(offset + STREAM_CHUNK_ELEMENTS, data.len());
+                let end = offset + i32::min(STREAM_CHUNK_ELEMENTS, data.len() - offset);
                 self.write(data.as_slice().slice(offset, end).to_list());
             };
             offset += written.count;

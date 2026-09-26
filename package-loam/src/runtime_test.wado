@@ -3,6 +3,7 @@ use {
     Tensor,
     Window,
     axis_mismatch,
+    checked_element_count,
     conv,
     conv_bias,
     gather_rows,
@@ -70,6 +71,20 @@ test "an input whose data its extents do not hold says both" {
 test "a negative extent names the axis" {
     let t = tensor::<[Batch, Row]>([-1, 3], []);
     assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some("X: axis Batch is -1 in the tensor");
+}
+
+test "an input whose extents hold more elements than a list can says so" {
+    let t = tensor::<[Batch, Row]>([65536, 65536], []);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, -1]) == Option::Some(
+        "X: extents [65536, 65536] hold more elements than a list can",
+    );
+}
+
+test "an element count is checked against what a list holds, and an empty axis holds none" {
+    assert checked_element_count(&[46341, 46341]) matches { None };
+    assert checked_element_count(&[65536, 65536, 0]) == Option::Some(0);
+    assert checked_element_count(&[2, 3]) == Option::Some(6);
+    assert checked_element_count(&[]) == Option::Some(1);
 }
 
 test "two inputs that disagree on one symbol name both" {

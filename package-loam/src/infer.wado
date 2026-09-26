@@ -18,7 +18,7 @@ use {
     element_of,
     is_binary_elementwise,
 } from "./graph.wado";
-use { element_count, spatial_extents } from "./runtime/tensor.wado";
+use { checked_element_count, element_count, spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, ints, window_over } from "./window.wado";
 
@@ -120,6 +120,7 @@ pub variant InferError {
     AxisCount(AxisCountConflict),
     UnknownOperator(String),
     UnrankedTensor(String),
+    Oversized(String),
     Undefined(String),
     ScalarOperand(String),
     OperandCount(OperandCountConflict),
@@ -216,6 +217,7 @@ impl Display for InferError {
             AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
+            Oversized(name) => f.write_str(`${name}: its extents hold more elements than a list can`),
             Undefined(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
             ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
@@ -322,7 +324,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         };
         let primitive = produced_primitive(node, &primitives)?;
         for let [i, shape] of produced.into_iter().enumerate() {
-            shapes[node.outputs[i]] = shape;
+            shapes[node.outputs[i]] = held(&node.outputs[i], shape)?;
             if let Some(p) = primitive {
                 primitives[node.outputs[i]] = p;
             }
@@ -334,7 +336,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
-        shapes[vi.name] = merge_declared(vi, &produced)?;
+        shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced)?)?;
         if let Some(element) = element_of(&vi.dtype) && let Some(computed) = primitives.get(vi.name) && element.computed != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
@@ -527,7 +529,23 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     for let mut i = 0; i < dims.len(); i += 1 {
         axes.push(Axis::named(&names[i], extent_of(&dims[i], &names[i])));
     }
-    return Result::Ok(Shape { axes });
+    return held(&vi.name, Shape { axes });
+}
+
+/// `shape`, which a list must be able to hold. A symbolic extent is at least 1,
+/// so the stated extents alone already bound the count from below.
+fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
+    let mut stated: List<i32> = [];
+    for let axis of &shape.axes {
+        if let Static(e) = axis.extent {
+            stated.push(e);
+        }
+    }
+    if checked_element_count(&stated) matches { None } {
+        builtin::cold_path();
+        return Result::Err(InferError::Oversized(*tensor));
+    }
+    return Result::Ok(shape);
 }
 
 /// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one. A

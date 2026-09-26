@@ -3,12 +3,30 @@ pub struct Tensor<E, Axes> {
     pub extents: List<i32>,
 }
 
-pub fn element_count(extents: &List<i32>) -> i32 {
-    let mut count = 1;
+/// The elements `extents` hold, or `None` past `i32::MAX`, which no list holds.
+pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {
     for let e of *extents {
         assert e >= 0;
+    }
+    // An empty axis empties the tensor, however large the product before it.
+    if extents.contains(&0) {
+        return Option::Some(0);
+    }
+    let mut count = 1;
+    for let e of *extents {
+        if count > i32::MAX / e {
+            return null;
+        }
         count *= e;
     }
+    return Option::Some(count);
+}
+
+/// The elements a tensor of `extents` holds, which a list must be able to hold.
+pub fn element_count(extents: &List<i32>) -> i32 {
+    let Some(count) = checked_element_count(extents) else {
+        panic(`extents ${*extents} hold more elements than a list can`);
+    };
     return count;
 }
 
@@ -32,7 +50,9 @@ pub fn input_mismatch<E, Axes>(
             return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${stated[i]} in the graph`);
         }
     }
-    let count = element_count(&t.extents);
+    let Some(count) = checked_element_count(&t.extents) else {
+        return Option::Some(`${tensor}: extents ${t.extents} hold more elements than a list can`);
+    };
     if count != t.data.len() {
         return Option::Some(`${tensor}: extents ${t.extents} hold ${count} elements, and the data ${t.data.len()}`);
     }

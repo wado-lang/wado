@@ -3,7 +3,7 @@
 
 use { TreeMap } from "core:collections";
 use { Elements, Known, Node } from "./graph.wado";
-use { broadcast_extents, element_count, stretched_strides } from "./runtime/tensor.wado";
+use { broadcast_extents, checked_element_count, element_count, stretched_strides } from "./runtime/tensor.wado";
 use { Shape } from "./shape.wado";
 
 /// The tensor `node` produces when every operand it reads is known, or `None`
@@ -75,7 +75,6 @@ fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> 
     let total = element_count(input) as i64;
     let mut extents: List<i32> = [];
     let mut inferred = -1;
-    let mut known: i64 = 1;
     for let [i, w] of written.into_iter().enumerate() {
         if *w == -1 && inferred < 0 {
             inferred = i;
@@ -87,8 +86,11 @@ fn reshape_extents(written: &List<i64>, input: &List<i32>, allow_zero: bool) -> 
             return Result::Err(`the target shape holds ${*w}`);
         }
         extents.push(e as i32);
-        known *= e;
     }
+    let Some(stated) = checked_element_count(&extents) else {
+        return Result::Err(`the target shape ${*written} holds more elements than a list can`);
+    };
+    let mut known = stated as i64;
     if inferred >= 0 && known != 0 && total % known == 0 {
         extents[inferred] = (total / known) as i32;
         known = total;

@@ -96,11 +96,13 @@ pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError
 }
 
 /// What the build compiled a checkpoint tensor as, which its header must state.
+/// `elements` is the extents' product, which the build has shown a list holds.
 pub struct Expected {
     pub tensor: String,
     pub dtype: String,
     pub axes: List<String>,
     pub extents: List<i32>,
+    pub elements: i32,
     pub width: i32,
 }
 
@@ -119,21 +121,20 @@ impl Checkpoint {
                 `the checkpoint gives ${entry.shape.len()} axes, and the graph [${e.axes.join(", ")}]`,
             ));
         }
-        let mut count: i64 = 1;
         for let [i, axis] of e.axes.into_iter().enumerate() {
             if entry.shape[i] != e.extents[i] as i64 {
                 return Result::Err(fail(
                     `axis ${axis} is ${entry.shape[i]} in the checkpoint and ${e.extents[i]} in the graph`,
                 ));
             }
-            count *= e.extents[i] as i64;
         }
         let offsets = &entry.data_offsets;
         let held = if offsets.len() == 2 { offsets[1] - offsets[0] } else { -1 };
-        if held != count * e.width as i64 {
+        let needed = e.elements as i64 * e.width as i64;
+        if held != needed {
             return Result::Err(
                 fail(
-                    `the checkpoint's offsets hold ${held} bytes, and ${count} ${e.dtype} elements need ${count * e.width as i64}`,
+                    `the checkpoint's offsets hold ${held} bytes, and ${e.elements} ${e.dtype} elements need ${needed}`,
                 ),
             );
         }

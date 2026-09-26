@@ -51,6 +51,7 @@ fn w() -> Expected {
         dtype: "F32",
         axes: ["Out", "In"],
         extents: [2, 3],
+        elements: 6,
         width: 4,
     };
 }
@@ -61,6 +62,7 @@ fn b() -> Expected {
         dtype: "F32",
         axes: ["In"],
         extents: [3],
+        elements: 3,
         width: 4,
     };
 }
@@ -100,6 +102,7 @@ test "a rank that disagrees names the graph's axes" {
         ..w(),
         axes: ["Out", "In", "Extra"],
         extents: [2, 3, 1],
+        elements: 6,
     }).unwrap_err();
     assert `${e}` == "w: the checkpoint gives 2 axes, and the graph [Out, In, Extra]";
 }
@@ -109,6 +112,7 @@ test "an extent that disagrees names the axis" {
     let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected {
         ..w(),
         extents: [2, 4],
+        elements: 8,
     }).unwrap_err();
     assert `${e}` == "w: axis In is 3 in the checkpoint and 4 in the graph";
 }

@@ -888,3 +888,20 @@ test "a node reading an undefined tensor stops the build" {
     let e = infer(&graph, &schema).unwrap_err();
     assert `${e}` == "Missing: no graph input, initializer or node defines this";
 }
+
+test "a tensor more elements than a list holds stops the build, however it arises" {
+    let declared = `g (float[N, 65536, 65536] X) => (float[N, 65536, 65536] Y) {
+        Y = Relu(X)
+    }`;
+    assert y_axes(declared, [rule("*", ["B", "R", "C"])]).unwrap_err() == "X: its extents hold more elements than a list can";
+
+    let produced = `g (float[65536, 1] A, float[1, 65536] B) => (float[65536, 65536] Y) {
+        Y = MatMul(A, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("A", ["R", "K"]),
+        rule("B", ["K", "C"]),
+        rule("Y", ["R", "C"]),
+    ];
+    assert y_axes(produced, layout).unwrap_err() == "Y: its extents hold more elements than a list can";
+}
