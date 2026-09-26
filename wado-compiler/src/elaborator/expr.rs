@@ -288,6 +288,100 @@ fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
     })
 }
 
+/// The reason a cast naming a function type is refused, or `None` where it
+/// names none or is a newtype step: every parameter and the return type share
+/// a representation, `fn` may widen to `fn mut`, and effects may only grow.
+fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let function = |id| match tt.get(tt.representation_head(id)) {
+        ResolvedType::Function {
+            is_mut,
+            params,
+            return_type,
+            effects,
+        } => Some((*is_mut, params.clone(), *return_type, effects.clone())),
+        _ => None,
+    };
+    // A reference reads through, and a parameter settles later.
+    let unsettled = |id| {
+        matches!(
+            tt.get(tt.representation_head(id)),
+            ResolvedType::Ref(_)
+                | ResolvedType::MutRef(_)
+                | ResolvedType::TypeParam { .. }
+                | ResolvedType::InferVar(_)
+                | ResolvedType::TypePack { .. }
+                | ResolvedType::AssocTypeProjection { .. }
+        )
+    };
+    let (from, to) = match (function(source), function(target)) {
+        (None, None) => return None,
+        (Some(from), Some(to)) => (from, to),
+        (Some(_), None) if unsettled(target) => return None,
+        (None, Some(_)) if unsettled(source) => return None,
+        _ => return Some("a function converts only to a function type".to_string()),
+    };
+    let (from_mut, from_params, from_return, from_effects) = from;
+    let (to_mut, to_params, to_return, to_effects) = to;
+    if from_params.len() != to_params.len() {
+        return Some("the function types take different numbers of parameters".to_string());
+    }
+    if from_mut && !to_mut {
+        return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
+    }
+    if let Some(dropped) = from_effects.iter().find(|e| !to_effects.contains(e)) {
+        return Some(format!("`as` cannot drop the effect `{}`", dropped.name()));
+    }
+    let unrelated = "no representation; `as` reinterprets only across a newtype boundary";
+    if let Some(index) = from_params
+        .iter()
+        .zip(&to_params)
+        .position(|(&a, &b)| !same_representation(tt, a, b))
+    {
+        return Some(format!("parameter {} shares {unrelated}", index + 1));
+    }
+    (!same_representation(tt, from_return, to_return))
+        .then(|| format!("the return types share {unrelated}"))
+}
+
+/// Whether a value of `a` is a value of `b` as it stands: the two differ only
+/// by newtype steps, at the top, under a reference, or inside a function type
+/// that is otherwise identical.
+fn same_representation(tt: &TypeTable, a: TypeId, b: TypeId) -> bool {
+    let (a, b) = (tt.representation_head(a), tt.representation_head(b));
+    if tt.type_key(a) == tt.type_key(b) {
+        return true;
+    }
+    match (tt.get(a), tt.get(b)) {
+        (ResolvedType::Ref(x), ResolvedType::Ref(y))
+        | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => same_representation(tt, *x, *y),
+        (
+            ResolvedType::Function {
+                is_mut: a_mut,
+                params: a_params,
+                return_type: a_return,
+                effects: a_effects,
+            },
+            ResolvedType::Function {
+                is_mut: b_mut,
+                params: b_params,
+                return_type: b_return,
+                effects: b_effects,
+            },
+        ) => {
+            a_mut == b_mut
+                && a_params.len() == b_params.len()
+                && a_effects.iter().all(|e| b_effects.contains(e))
+                && b_effects.iter().all(|e| a_effects.contains(e))
+                && a_params
+                    .iter()
+                    .zip(b_params)
+                    .all(|(&x, &y)| same_representation(tt, x, y))
+                && same_representation(tt, *a_return, *b_return)
+        }
+        _ => false,
+    }
+}
+
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
@@ -3312,12 +3406,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return target_type;
         }
 
-        let half_cast = {
+        let refused_cast = {
             let tt = self.tysys.type_table.borrow();
             half_cast_hint(&tt, source_type, target_type)
+                .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
         };
-        if let Some((from, to, hint)) = half_cast {
+        if let Some((from, to, hint)) = refused_cast {
             let _ = self.emit(TypeError::InvalidCast {
                 from,
                 to,

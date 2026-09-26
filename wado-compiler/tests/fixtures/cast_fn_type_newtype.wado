@@ -1,0 +1,48 @@
+// `as` between function types is a newtype step when every parameter and the
+// return type are: each pair shares a representation, so the function value
+// is reused unchanged.
+
+use { println, Stdout } from "core:cli";
+
+type Meters = f64;
+
+fn double(x: f64) -> f64 {
+    return x * 2.0;
+}
+
+fn apply(f: fn(f64) -> f64, x: f64) -> f64 {
+    return f(x);
+}
+
+fn quiet() {}
+
+test "a parameter and the return type step to a newtype" {
+    let h = double as fn(Meters) -> Meters;
+    let m: Meters = 1.5;
+    assert h(m) as f64 == 3.0;
+}
+
+test "a function-typed parameter steps as a whole" {
+    let h = apply as fn(fn(Meters) -> Meters, Meters) -> Meters;
+    let twice = |x: Meters| x + x;
+    let m: Meters = 2.0;
+    assert h(twice, m) as f64 == 4.0;
+}
+
+test "a reference parameter steps through the reference" {
+    let r = |x: &f64| *x;
+    let s = r as fn(&Meters) -> f64;
+    let m: Meters = 7.0;
+    assert s(&m) == 7.0;
+}
+
+test "fn widens to fn mut" {
+    let mut f = double as fn mut(f64) -> f64;
+    assert f(1.0) == 2.0;
+}
+
+test "a function may gain an effect it does not perform" {
+    let g = quiet as fn() with Stdout;
+    g();
+    println("called");
+}

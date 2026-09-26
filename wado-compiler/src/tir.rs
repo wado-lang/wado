@@ -4438,12 +4438,18 @@ impl TypeTable {
                 is_mut,
                 params,
                 return_type,
-                ..
+                effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
                 let keyword = if *is_mut { "fn mut" } else { "fn" };
+                let effect_names: Vec<&str> = effects.iter().map(EffectRef::name).collect();
+                let clause = match effect_names.as_slice() {
+                    [] => String::new(),
+                    [one] => format!(" with {one}"),
+                    many => format!(" with ({})", many.join(", ")),
+                };
                 format!(
-                    "{}({}) -> {}",
+                    "{}({}) -> {}{clause}",
                     keyword,
                     param_names.join(", "),
                     type_name(*return_type)

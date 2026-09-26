@@ -1,0 +1,10 @@
+// A `fn mut` may mutate what it captures, so it never becomes a `fn`.
+
+test "fn mut to fn" {
+    let mut count = 0;
+    let mut inc = || count += 1;
+    let f = inc as fn();
+}
+
+__DATA__
+{"compile_error": "`as` widens `fn` to `fn mut`, never the reverse"}

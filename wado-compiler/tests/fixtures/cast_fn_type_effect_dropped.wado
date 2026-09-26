@@ -1,0 +1,15 @@
+// `as` must not launder an effect away: the cast value would perform `Stdout`
+// where the type says it performs nothing.
+
+use { println, Stdout } from "core:cli";
+
+fn loud() with Stdout {
+    println("x");
+}
+
+test "effect dropped" {
+    let f = loud as fn();
+}
+
+__DATA__
+{"compile_error": "cannot cast 'fn() -> () with Stdout' to 'fn() -> ()': `as` cannot drop the effect `Stdout`"}
