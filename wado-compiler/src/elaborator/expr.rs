@@ -2931,27 +2931,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let payload = match payload.filter(|_| cases[index].has_payload) {
-<<<<<<< HEAD
-            Some(p) => {
-                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                let payload_type = self.substitute_in_frame(case.payload, &type_args);
-                Some(Box::new(self.exh_pattern(p, payload_type)?))
-            }
-||||||| 71580bd9659
-            Some(p) => {
-                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
-                Some(Box::new(self.exh_pattern(p, payload_type)?))
-            }
-=======
             Some(p) => Some(Box::new(self.exh_pattern(p, payload_types[index])?)),
->>>>>>> origin/main
             None => None,
         };
         Some(Pat::Case {

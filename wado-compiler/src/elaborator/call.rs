@@ -626,40 +626,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         CalleeRef::local_namespace(&mut self.interner.borrow_mut(), &declared, operation)
     }
 
-<<<<<<< HEAD
-    /// The variant and case a constructor callee names: `Variant::Case`, a
-    /// bare case the walk answered for, or `ns::Variant::Case`.
-    fn constructed_case(
-        &self,
-        ident: &ast::IdentExpr,
-        callee_kind: &CalleeIdentKind<'_>,
-        receiver_site: Option<ast::AstId>,
-        effective_name: &str,
-    ) -> Option<(VariantInfo, VariantCaseData)> {
-        let (prefix, suffix) = effective_name.split_once("::")?;
-        let (variant, case) =
-            if let Some(variant) = self.variant_of_callee(callee_kind, receiver_site, prefix) {
-                (variant, suffix)
-            } else {
-                let def = self.tysys.qualified_owner_decl(ident)?;
-                (
-                    self.tysys.data.variant_cases.get(&def)?,
-                    suffix.rsplit_once("::")?.1,
-                )
-            };
-        let (_, case_data) = variant.case_named(case)?;
-        Some((variant.clone(), case_data.clone()))
-    }
-
-    /// The variant a `Variant::Case(...)` callee constructs: the one the walk
-    /// answered for a bare case, else the one `prefix` names at its site.
-||||||| 71580bd9659
-    /// The variant a `Variant::Case(...)` callee constructs: the one the walk
-    /// answered for a bare case, else the one `prefix` names at its site.
-=======
     /// The variant a `Variant::name(...)` callee's prefix names: the one the
     /// walk answered for a bare case, else the one `prefix` names at its site.
->>>>>>> origin/main
     fn variant_of_callee(
         &self,
         callee_kind: &CalleeIdentKind<'_>,
@@ -1257,93 +1225,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-<<<<<<< HEAD
-        // Whether `param_types` holds a variant payload rather than declared
-        // function params (see the hole-pin loop below).
-        let mut is_variant_payload = false;
-
-        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty()
-            && let Some((variant_info, case_data)) =
-                self.constructed_case(ident, &callee_kind, receiver_site, effective_name)
-            && case_data.has_payload(&self.tysys.type_table.borrow())
-        {
-            let mut payload_type = case_data.payload;
-            if !type_args.is_empty() {
-                payload_type = self.substitute_in_frame(payload_type, &type_args);
-            } else if let Some(expected) = expected_type {
-                // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                if let ResolvedType::GenericInstance {
-                    def: expected_def,
-                    type_args: expected_args,
-                } = expected_resolved
-                    && Some(expected_def)
-                        == self
-                            .tysys
-                            .resolutions
-                            .defs()
-                            .of_ast_id(variant_info.defined_at)
-                    && expected_args.len() == variant_info.type_param_type_ids.len()
-                {
-                    payload_type = self
-                        .tysys
-                        .substitute_type_params(payload_type, &expected_args);
-                }
-            }
-            param_types.push(payload_type);
-            is_variant_payload = true;
-        }
-
-||||||| 71580bd9659
-        // Whether `param_types` holds a variant payload rather than declared
-        // function params (see the hole-pin loop below).
-        let mut is_variant_payload = false;
-
-        // For variant constructors with type args (e.g., Option::<List<u8>>::Some([])),
-        // compute substituted payload type so literal coercion works on first resolve.
-        if param_types.is_empty()
-            && let Some(pos) = effective_name.find("::")
-        {
-            let prefix = &effective_name[..pos];
-            let suffix = &effective_name[pos + 2..];
-            if let Some(variant_info) = self
-                .variant_of_callee(&callee_kind, receiver_site, prefix)
-                .cloned()
-                && let Some((_, case_data)) = variant_info.case_named(suffix)
-                && case_data.has_payload(&self.tysys.type_table.borrow())
-            {
-                let mut payload_type = case_data.payload;
-                if !type_args.is_empty() {
-                    payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
-                } else if let Some(expected) = expected_type {
-                    // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
-                    let expected_resolved = self.tysys.type_table.borrow().get(expected).clone();
-                    if let ResolvedType::GenericInstance {
-                        def: expected_def,
-                        type_args: expected_args,
-                    } = expected_resolved
-                        && Some(expected_def)
-                            == self
-                                .tysys
-                                .resolutions
-                                .defs()
-                                .of_ast_id(variant_info.defined_at)
-                        && expected_args.len() == variant_info.type_param_type_ids.len()
-                    {
-                        payload_type = self
-                            .tysys
-                            .substitute_type_params(payload_type, &expected_args);
-                    }
-                }
-                param_types.push(payload_type);
-                is_variant_payload = true;
-            }
-        }
-
-=======
->>>>>>> origin/main
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
@@ -3916,9 +3797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .nominal_type_args(variant_type)
             .unwrap_or_default();
         if let Some(payload) = payload {
-            let declared = self
-                .tysys
-                .substitute_type_params(case_data.payload, &type_args);
+            let declared = self.substitute_in_frame(case_data.payload, &type_args);
             self.typecheck(payload, declared, raw_args.first().map_or(span, Expr::span));
         }
         self.record_generic_instantiation(site, type_args, variant_type);
