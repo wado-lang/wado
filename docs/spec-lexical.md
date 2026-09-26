@@ -402,24 +402,24 @@ reaches it through a call. A cycle among them is an error.
 
 From the tightest binding to the loosest:
 
-| Operators                                  | Kind           | Associativity                                  |
-| ------------------------------------------ | -------------- | ---------------------------------------------- |
-| `.`, `::`, `()`, `[]`, `?`                 | Postfix        | Left                                           |
-| `-`, `~`, `*`, `&`, `&mut`                 | Prefix unary   | Right                                          |
-| `as Type`                                  | Type cast      | Left                                           |
-| `*`, `/`, `%`                              | Multiplicative | Left                                           |
-| `+`, `-`                                   | Additive       | Left                                           |
-| `<<`, `>>`                                 | Bitwise shift  | Left                                           |
-| `&`                                        | Bitwise AND    | Left                                           |
-| `^`                                        | Bitwise XOR    | Left                                           |
-| `\|`                                       | Bitwise OR     | Left                                           |
-| `matches { pattern }`                      | Pattern test   | Left                                           |
-| `!`                                        | Logical NOT    | Right                                          |
-| `==`, `!=`, `<`, `<=`, `>`, `>=`           | Comparison     | [Chained](#comparison-chaining)                |
-| `&&`                                       | Logical AND    | Left                                           |
-| `\|\|`                                     | Logical OR     | Left                                           |
-| `..<`, `..=`                               | Range          | None: `a..<b..<c` is an error                  |
-| `=`, `+=`, `-=`, `*=`, `/=`, `%=`, and the rest | Assignment | Right                                     |
+| Operators                                       | Kind           | Associativity                   |
+| ----------------------------------------------- | -------------- | ------------------------------- |
+| `.`, `::`, `()`, `[]`, `?`                      | Postfix        | Left                            |
+| `-`, `~`, `*`, `&`, `&mut`                      | Prefix unary   | Right                           |
+| `as Type`                                       | Type cast      | Left                            |
+| `*`, `/`, `%`                                   | Multiplicative | Left                            |
+| `+`, `-`                                        | Additive       | Left                            |
+| `<<`, `>>`                                      | Bitwise shift  | Left                            |
+| `&`                                             | Bitwise AND    | Left                            |
+| `^`                                             | Bitwise XOR    | Left                            |
+| `\|`                                            | Bitwise OR     | Left                            |
+| `matches { pattern }`                           | Pattern test   | Left                            |
+| `!`                                             | Logical NOT    | Right                           |
+| `==`, `!=`, `<`, `<=`, `>`, `>=`                | Comparison     | [Chained](#comparison-chaining) |
+| `&&`                                            | Logical AND    | Left                            |
+| `\|\|`                                          | Logical OR     | Left                            |
+| `..<`, `..=`                                    | Range          | None: `a..<b..<c` is an error   |
+| `=`, `+=`, `-=`, `*=`, `/=`, `%=`, and the rest | Assignment     | Right                           |
 
 The bitwise operators bind tighter than comparison, so `flags & MASK ==
 EXPECTED` is `(flags & MASK) == EXPECTED`. A postfix operator binds tighter than

@@ -24,6 +24,7 @@
 - [Literals](./spec-literals.md)
 - [Memory Model](./spec-memory.md)
 - [Module System](./spec-modules.md)
+- [Serialization](./spec-serialization.md)
 - [Assertions and Testing](./spec-testing.md)
 - [Traits](./spec-traits.md)
 - [Types](./spec-types.md)

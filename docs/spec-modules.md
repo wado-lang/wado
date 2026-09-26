@@ -160,15 +160,15 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 
 ## Module Source Types
 
-| Source Type   | Syntax                             | Example                                      |
-| ------------- | ---------------------------------- | -------------------------------------------- |
-| WASI standard | `"wasi:<package>"`                 | `"wasi:cli"`, `"wasi:filesystem"`            |
-| Core library  | `"core:<module>"`                  | `"core:cli"`, `"core:json"`                  |
-| CM coordinate | `"<ns>:<pkg>[@<ver>]"`             | `"docs:regex"`, `"docs:regex@1.0.0"`         |
-| Library alias | `"lib:<nick>"`                     | `"lib:router"`, `"lib:shared"`               |
-| Exported file | `"<coordinate or alias>/<path>"`   | `"lib:gale-highlight-wado/grammar/Wado.g4"`  |
-| Local file    | `"./<path>"` or `"../<path>"`      | `"./utils.wado"`, `"../config.wado"`         |
-| Remote        | `"http://<url>"`, `"https://<url>"` | `"https://example.com/lib.wado"`             |
+| Source Type   | Syntax                              | Example                                     |
+| ------------- | ----------------------------------- | ------------------------------------------- |
+| WASI standard | `"wasi:<package>"`                  | `"wasi:cli"`, `"wasi:filesystem"`           |
+| Core library  | `"core:<module>"`                   | `"core:cli"`, `"core:json"`                 |
+| CM coordinate | `"<ns>:<pkg>[@<ver>]"`              | `"docs:regex"`, `"docs:regex@1.0.0"`        |
+| Library alias | `"lib:<nick>"`                      | `"lib:router"`, `"lib:shared"`              |
+| Exported file | `"<coordinate or alias>/<path>"`    | `"lib:gale-highlight-wado/grammar/Wado.g4"` |
+| Local file    | `"./<path>"` or `"../<path>"`       | `"./utils.wado"`, `"../config.wado"`        |
+| Remote        | `"http://<url>"`, `"https://<url>"` | `"https://example.com/lib.wado"`            |
 
 A specifier names a package, optionally followed by one file that package
 exports. It never carries an interface segment: interfaces and their members
@@ -240,12 +240,12 @@ Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-m
 
 A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim, so any module the loader accepts can be named. `SYMBOL` uses Wado's own operators, so its kind is visible from the separator:
 
-| Symbol kind                                    | Written          |
-| ---------------------------------------------- | ---------------- |
-| Free function or global                        | `name`           |
-| Associated constant, static function, nested item | `Type::name`  |
-| Instance method                                | `Type.name`      |
-| Trait-impl member                              | `Type^Trait::name` |
+| Symbol kind                                       | Written            |
+| ------------------------------------------------- | ------------------ |
+| Free function or global                           | `name`             |
+| Associated constant, static function, nested item | `Type::name`       |
+| Instance method                                   | `Type.name`        |
+| Trait-impl member                                 | `Type^Trait::name` |
 
 ```
 core:json#to_string                        # free function / global
@@ -388,14 +388,14 @@ resolved against the declaring file, like a local module import.
 
 Each field has one type, and any other key or type is an error at the use site.
 
-| Field        | Required | Meaning                                                                                                                                                                                                          |
-| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                      |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                            |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                           |
-| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                                      |
-| `inputs`     | no       | Supplementary input paths (`./` / `../`) the generator cannot discover from the primary alone, such as a sibling lexer grammar. A schema that refers to other files lists every one of them here.                |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                |
+| Field        | Required | Meaning                                                                                                                                                                                           |
+| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.        |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                             |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                            |
+| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                        |
+| `inputs`     | no       | Supplementary input paths (`./` / `../`) the generator cannot discover from the primary alone, such as a sibling lexer grammar. A schema that refers to other files lists every one of them here. |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                  |
 
 Every file a generator sees is named literally at the use site. There is no
 glob and no directory listing, so the whole input set is known before any
@@ -539,10 +539,10 @@ Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler detects from the binary whether the file is a core module or a Component Model component, and either shape may be written as `.wasm` or `.wat`; the distinction is detected, not declared. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file  | Exposes as                                     | Call style                               |
-| -------------- | ---------------------------------------------- | ---------------------------------------- |
-| Core module    | One free `pub fn` per function export          | `helper(x)` — plain function             |
-| CM component   | One Wado `interface` per exported CM interface | `Iface::method(x)` — called like WASI    |
+| Imported file | Exposes as                                     | Call style                            |
+| ------------- | ---------------------------------------------- | ------------------------------------- |
+| Core module   | One free `pub fn` per function export          | `helper(x)` — plain function          |
+| CM component  | One Wado `interface` per exported CM interface | `Iface::method(x)` — called like WASI |
 
 ```wado
 // Core wasm / wat — exports become free functions.

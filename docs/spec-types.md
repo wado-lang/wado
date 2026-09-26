@@ -495,6 +495,52 @@ repeat the value `base` already holds.
 
 Rationale: [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
 
+### Anonymous Structs
+
+A `{ … }` literal where no struct or map type is expected builds an anonymous
+struct. It names no declaration: its type is its shape, the field names and
+each field's type. Two literals of one shape have one type, so
+`if c { { x: 1, y: 2 } } else { { x: 3, y: 4 } }` type-checks. Its fields are
+read, destructured and nested as a named struct's are.
+
+```wado
+let p = { x: 1, y: 2 };
+let line = { start: p, end: { x: 10, y: 20 } };
+let { start: { x, y }, end } = line;
+```
+
+No `impl` can name an anonymous struct, so it takes derived traits
+([Derivation Policy](./spec-traits.md#derivation-policy)) and blanket impls
+([Candidates](./spec-traits.md#candidates)) only.
+
+#### Composition
+
+An anonymous literal may compose spread bases: `{ ..a, ..b, field: v }`
+builds an anonymous struct whose fields are the union of the bases' and explicit
+fields. Members apply in source order, and the last contributor of a name wins,
+its type included. Every member is evaluated once, in source order. Each base is
+a struct value, and a spread of anything else is an error.
+
+Unlike a named struct's leading-single `..base`, composition allows spreads in
+any position and more than one. One rule limits them: a member every one of
+whose fields is overwritten by a later member is a dead-write error, so
+`{ ..a, ..b }` with `a` and `b` of one struct type is rejected. A lone `{ ..a }`
+is rejected too, since under value semantics it only copies `a`. A spread reads
+only the fields reachable at the use site, as `a.f` would.
+
+```wado
+let base = { user_id: 1, ip: "10.0.0.1" };
+let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
+```
+
+Composition applies where no nominal type is expected. An expected struct type
+makes the literal a named one, with the named struct's rule
+([Struct Construction](./spec-types.md#struct-construction)), and an expected map
+type makes it a key-value literal ([`..base` Spread](./spec-literals.md#base-spread)).
+A key-value spread with no map type expected is an error.
+
+Rationale: [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
+
 ### Struct Destructuring
 
 ```wado

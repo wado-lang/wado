@@ -360,11 +360,11 @@ A panic does not unwind, so it runs no drops.
 
 #### Handles at the Boundary
 
-| Wado position                                      | CM handle                                |
-| -------------------------------------------------- | ---------------------------------------- |
-| By-value `R` parameter or result                   | `own<R>`                                 |
-| `&R` or `&mut R` parameter, `&self` or `&mut self` | `borrow<R>`                              |
-| Bare `self` receiver                               | `own<R>`, transferring the receiver      |
+| Wado position                                      | CM handle                           |
+| -------------------------------------------------- | ----------------------------------- |
+| By-value `R` parameter or result                   | `own<R>`                            |
+| `&R` or `&mut R` parameter, `&self` or `&mut self` | `borrow<R>`                         |
+| Bare `self` receiver                               | `own<R>`, transferring the receiver |
 
 A reference crosses a Component Model import only as a borrowed resource handle. An import taking any other reference, such as `&String`, is a compile error.
 

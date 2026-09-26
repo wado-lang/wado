@@ -273,17 +273,17 @@ Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 ### `#[wire(...)]`
 
 Controls how a declaration is serialized and deserialized. The framework it
-customizes is in [Serialization and Deserialization](./spec-traits.md#serialization-and-deserialization),
+customizes is in [Serialization](./spec-serialization.md),
 and the library API in [`core:serde`](./stdlib-core-serde.md).
 
 Each declaration reads its own keys:
 
-| Declaration                                    | Keys                                             |
-| ---------------------------------------------- | ------------------------------------------------ |
-| `struct`, `enum`, `variant`, `flags`, newtype  | `name_policy`                                    |
-| Struct field                                   | `name`, `number`, `encoding`, `positional`       |
-| Enum case                                      | `name`, `number`                                 |
-| Variant case                                   | `name`                                           |
+| Declaration                                   | Keys                                       |
+| --------------------------------------------- | ------------------------------------------ |
+| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`                              |
+| Struct field                                  | `name`, `number`, `encoding`, `positional` |
+| Enum case                                     | `name`, `number`                           |
+| Variant case                                  | `name`                                     |
 
 A key the declaration does not read is an error, and so is `#[wire]` anywhere
 else, a flags member included. The keys may be split across several `#[wire]`
@@ -355,7 +355,7 @@ filled by position and never matched by name. A format that resolves fields by
 name, such as `core:json`, therefore never fills it, so it takes its default or
 is reported missing. A sequence-only format such as `core:json_nsd` reads it in
 order like any other field. Serializing is unaffected. `core:args` fills
-positional fields from bare tokens (see [Command-Line Arguments](./spec-traits.md#command-line-arguments-coreargs)).
+positional fields from bare tokens (see [Command-Line Arguments](./spec-serialization.md#command-line-arguments-coreargs)).
 
 #### Optional Fields
 

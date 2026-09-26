@@ -372,30 +372,30 @@ so `${42:-<4}` is `-` as the fill and renders `42--`.
 The grammar is closed. Anything it does not accept is a compile error, so a
 printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
 
-| Input              | Error                                                 |
-| ------------------ | ----------------------------------------------------- |
-| `${x:}`            | empty format specifier                                |
-| `${x:d}`           | unknown format specifier `d`                          |
-| `${x:5x1}`         | unexpected `1` after the format specifier             |
-| `${x:.}`           | expected digits after `.` in format specifier         |
-| `${x:99999999999}` | format specifier width `99999999999` is too large     |
+| Input              | Error                                             |
+| ------------------ | ------------------------------------------------- |
+| `${x:}`            | empty format specifier                            |
+| `${x:d}`           | unknown format specifier `d`                      |
+| `${x:5x1}`         | unexpected `1` after the format specifier         |
+| `${x:.}`           | expected digits after `.` in format specifier     |
+| `${x:99999999999}` | format specifier width `99999999999` is too large |
 
 #### Format Types
 
 The type character selects the trait the value renders through. A value whose
 type does not implement that trait is a compile error.
 
-| Type   | Trait      | Applies to                      | Example                   |
-| ------ | ---------- | ------------------------------- | ------------------------- |
-| (none) | `Display`  | types with an impl              | `${42}` → `42`            |
-| `f`    | `Display`  | types with an impl              | `${3.14159:.2f}` → `3.14` |
-| `?`    | `Inspect`  | every type                      | `${"a":?}` → `"a"`        |
-| `b`    | `Binary`   | integers                        | `${42:b}` → `101010`      |
-| `o`    | `Octal`    | integers                        | `${42:o}` → `52`          |
-| `x`    | `LowerHex` | integers                        | `${42:x}` → `2a`          |
-| `X`    | `UpperHex` | integers                        | `${42:X}` → `2A`          |
-| `e`    | `LowerExp` | integers, `f32`, `f64`          | `${1200:e}` → `1.2e3`     |
-| `E`    | `UpperExp` | integers, `f32`, `f64`          | `${1200:E}` → `1.2E3`     |
+| Type   | Trait      | Applies to             | Example                   |
+| ------ | ---------- | ---------------------- | ------------------------- |
+| (none) | `Display`  | types with an impl     | `${42}` → `42`            |
+| `f`    | `Display`  | types with an impl     | `${3.14159:.2f}` → `3.14` |
+| `?`    | `Inspect`  | every type             | `${"a":?}` → `"a"`        |
+| `b`    | `Binary`   | integers               | `${42:b}` → `101010`      |
+| `o`    | `Octal`    | integers               | `${42:o}` → `52`          |
+| `x`    | `LowerHex` | integers               | `${42:x}` → `2a`          |
+| `X`    | `UpperHex` | integers               | `${42:X}` → `2A`          |
+| `e`    | `LowerExp` | integers, `f32`, `f64` | `${1200:e}` → `1.2e3`     |
+| `E`    | `UpperExp` | integers, `f32`, `f64` | `${1200:E}` → `1.2E3`     |
 
 `f` selects no trait of its own. `Display` already honours precision, so
 `${x:.2f}` and `${x:.2}` render the same, and `f` only makes a float format read
@@ -453,14 +453,14 @@ over an explicit fill and alignment:
 `#` asks for the alternate form. It selects no trait: it sets a flag the
 implementation reads, or ignores.
 
-| Type     | Effect of `#`          | Example    | Output     |
-| -------- | ---------------------- | ---------- | ---------- |
-| `x`, `X` | `0x` prefix            | `${42:#x}` | `0x2a`     |
-| `b`      | `0b` prefix            | `${42:#b}` | `0b101010` |
-| `o`      | `0o` prefix            | `${42:#o}` | `0o52`     |
-| `?`      | indented, multi-line   | `${p:#?}`  | multi-line |
-| (none)   | up to the `Display`    | `${42:#}`  | `42`       |
-| `e`, `E` | none                   | `${42:#e}` | `4.2e1`    |
+| Type     | Effect of `#`        | Example    | Output     |
+| -------- | -------------------- | ---------- | ---------- |
+| `x`, `X` | `0x` prefix          | `${42:#x}` | `0x2a`     |
+| `b`      | `0b` prefix          | `${42:#b}` | `0b101010` |
+| `o`      | `0o` prefix          | `${42:#o}` | `0o52`     |
+| `?`      | indented, multi-line | `${p:#?}`  | multi-line |
+| (none)   | up to the `Display`  | `${42:#}`  | `42`       |
+| `e`, `E` | none                 | `${42:#e}` | `4.2e1`    |
 
 `${x:#X}` prefixes `0x`, not `0X`. The flag chooses the prefix, and the type
 character chooses the case of the digits.
@@ -473,13 +473,13 @@ ignores it.
 
 `precision` means something different for each kind of value:
 
-| Value                         | Meaning                          | Example                               |
-| ----------------------------- | -------------------------------- | ------------------------------------- |
-| Float                         | decimal places                   | `${3.14159:.2}` → `3.14`              |
-| Integer or float under `e`/`E` | mantissa decimal places         | `${12345:.2e}` → `1.23e4`             |
-| Integer otherwise             | ignored                          | `${42:.2}` → `42`                     |
-| `String`, `StrSlice`          | maximum length in characters     | `${"hello world":.5}` → `hello`       |
-| `List`, `Array`, `Slice`      | maximum number of elements       | `${[1, 2, 3, 4, 5]:.3}` → `[1, 2, 3]` |
+| Value                          | Meaning                      | Example                               |
+| ------------------------------ | ---------------------------- | ------------------------------------- |
+| Float                          | decimal places               | `${3.14159:.2}` → `3.14`              |
+| Integer or float under `e`/`E` | mantissa decimal places      | `${12345:.2e}` → `1.23e4`             |
+| Integer otherwise              | ignored                      | `${42:.2}` → `42`                     |
+| `String`, `StrSlice`           | maximum length in characters | `${"hello world":.5}` → `hello`       |
+| `List`, `Array`, `Slice`       | maximum number of elements   | `${[1, 2, 3, 4, 5]:.3}` → `[1, 2, 3]` |
 
 `Display` truncates silently. `Inspect` marks the cut: a string gets `...` after
 its closing quote, and a sequence gets `, ...` in place of the dropped elements.
@@ -560,11 +560,11 @@ place. The full method set is in [`core:prelude`](./stdlib-core-prelude.md).
 
 `precision` holds three kinds of value:
 
-| Value                     | Meaning                                                                           |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| `>= 0`                    | the precision the spec wrote                                                      |
-| `PRECISION_DEFAULT` (-2)  | none written; an `Inspect` of a string or sequence caps at `DEFAULT_SEQ_LIMIT`    |
-| `PRECISION_INFINITE` (-1) | uncapped; an `Inspect` of a string or sequence renders all of it                  |
+| Value                     | Meaning                                                                        |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `>= 0`                    | the precision the spec wrote                                                   |
+| `PRECISION_DEFAULT` (-2)  | none written; an `Inspect` of a string or sequence caps at `DEFAULT_SEQ_LIMIT` |
+| `PRECISION_INFINITE` (-1) | uncapped; an `Inspect` of a string or sequence renders all of it               |
 
 `.N` cannot write a negative number, so `PRECISION_INFINITE` is reachable only
 by building a `Formatter` directly.
@@ -600,30 +600,30 @@ and a resource and a closure get one from the compiler. A hand-written
 
 The output follows Wado's literal syntax where it has one:
 
-| Type                       | Output                                   | Example                               |
-| -------------------------- | ---------------------------------------- | ------------------------------------- |
-| Integer                    | decimal                                  | `42`, `-7`                            |
-| `f32`, `f64`               | shortest round-trip digits, see below    | `3.14`, `5.0`, `inf`, `-0.0`          |
-| `f16`, `bf16`              | exponent form of the `f32` value         | `1e0`                                 |
-| `bool`                     | `true` / `false`                         | `true`                                |
-| `char`                     | quoted, escaped                          | `'A'`, `'\n'`                         |
-| `String`, `StrSlice`       | quoted, escaped                          | `"say \"hi\""`                        |
-| `()`                       | `()`                                     | `()`                                  |
-| `v128`                     | its 16 bytes in hex, byte lane 0 first   | `v128(0x000102030405060708090a0b0c0d0e0f)` |
-| Struct                     | `Name { field: value, ... }`             | `Point { x: 10, y: 20 }`              |
-| Struct, no fields          | `Name {}`                                | `Empty {}`                            |
-| Tuple                      | `[elem, ...]`                            | `[1, "a", true]`                      |
-| `List`, `Array`, `Slice`   | `[elem, ...]`                            | `[1, 2, 3]`                           |
-| `TreeMap<K, V>`            | `{key: value, ...}`                      | `{"a": 1, "b": 2}`                    |
-| `TreeSet<T>`               | `{elem, ...}`                            | `{10, 20, 30}`                        |
-| Enum                       | `Type::Case`                             | `Color::Red`                          |
-| Variant                    | `Type::Case(payload)`, a unit case bare  | `Shape::Circle(5.0)`, `Option::None`  |
-| Flags                      | set members joined by ` \| `             | `Perms::Read \| Perms::Write`         |
-| Flags, none set            | `Type::none()`                           | `Perms::none()`                       |
-| Newtype                    | base value, then `as Name`               | `1.5 as Meters`                       |
-| `&T`, `&mut T`             | `&` or `&mut `, then the referent        | `&42`, `&mut Point { x: 1, y: 2 }`    |
-| Closure                    | its signature                            | `\|i32, i32\| -> i32`                 |
-| Affine resource            | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                        |
+| Type                     | Output                                    | Example                                    |
+| ------------------------ | ----------------------------------------- | ------------------------------------------ |
+| Integer                  | decimal                                   | `42`, `-7`                                 |
+| `f32`, `f64`             | shortest round-trip digits, see below     | `3.14`, `5.0`, `inf`, `-0.0`               |
+| `f16`, `bf16`            | exponent form of the `f32` value          | `1e0`                                      |
+| `bool`                   | `true` / `false`                          | `true`                                     |
+| `char`                   | quoted, escaped                           | `'A'`, `'\n'`                              |
+| `String`, `StrSlice`     | quoted, escaped                           | `"say \"hi\""`                             |
+| `()`                     | `()`                                      | `()`                                       |
+| `v128`                   | its 16 bytes in hex, byte lane 0 first    | `v128(0x000102030405060708090a0b0c0d0e0f)` |
+| Struct                   | `Name { field: value, ... }`              | `Point { x: 10, y: 20 }`                   |
+| Struct, no fields        | `Name {}`                                 | `Empty {}`                                 |
+| Tuple                    | `[elem, ...]`                             | `[1, "a", true]`                           |
+| `List`, `Array`, `Slice` | `[elem, ...]`                             | `[1, 2, 3]`                                |
+| `TreeMap<K, V>`          | `{key: value, ...}`                       | `{"a": 1, "b": 2}`                         |
+| `TreeSet<T>`             | `{elem, ...}`                             | `{10, 20, 30}`                             |
+| Enum                     | `Type::Case`                              | `Color::Red`                               |
+| Variant                  | `Type::Case(payload)`, a unit case bare   | `Shape::Circle(5.0)`, `Option::None`       |
+| Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`              |
+| Flags, none set          | `Type::none()`                            | `Perms::none()`                            |
+| Newtype                  | base value, then `as Name`                | `1.5 as Meters`                            |
+| `&T`, `&mut T`           | `&` or `&mut`, then the referent          | `&42`, `&mut Point { x: 1, y: 2 }`         |
+| Closure                  | its signature                             | `\|i32, i32\| -> i32`                      |
+| Affine resource          | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                              |
 
 Rules the table does not carry:
 
@@ -638,7 +638,7 @@ Rules the table does not carry:
   return and tab the same way.
 - A struct writes its fields in declaration order and never its type arguments,
   so `Box<i32>` renders `Box { value: 42 }`. A
-  [`#[secret]`](./spec-attributes.md) field is left out and `..` appended:
+  [`#[secret]`](./spec-attributes.md#secret) field is left out and `..` appended:
   `User { name: "Alice", .. }`, or `Name { .. }` when every field is secret.
 - An enum, variant or flags case is always qualified by its type, as its
   construction is spelled. `Option` and `Result` are ordinary variants and get
@@ -904,11 +904,11 @@ The target's `From<Array<X>>` impls decide which literal form it accepts:
 
 `core:value::Value` accepts both forms, and each literal reads as JSON reads it:
 
-| Literal      | `List<i32>`     | `TreeMap<String, i32>` | `Value`                        |
-| ------------ | --------------- | ---------------------- | ------------------------------ |
-| `[1, 2]`     | accepted        | error: not pairs       | `Value::List`                  |
-| `{a: 1}`     | error: no impl  | accepted               | `Value::Object`                |
-| `[["a", 1]]` | error           | accepted, as a map     | `Value::List` of `Value::List` |
+| Literal      | `List<i32>`    | `TreeMap<String, i32>` | `Value`                        |
+| ------------ | -------------- | ---------------------- | ------------------------------ |
+| `[1, 2]`     | accepted       | error: not pairs       | `Value::List`                  |
+| `{a: 1}`     | error: no impl | accepted               | `Value::Object`                |
+| `[["a", 1]]` | error          | accepted, as a map     | `Value::List` of `Value::List` |
 
 The selected impl's `X` types every element, and every key and value. Where the
 target's type arguments are still open, as in a generic callee's parameter, the
@@ -976,7 +976,7 @@ These are compile errors:
 A sequence literal cannot carry a spread: `[..xs, 4]` is a
 [tuple spread](./spec-functions.md#value-spread). The struct forms of `..base`
 are in [Struct Construction](./spec-types.md#struct-construction) and
-[Serialization and Deserialization](./spec-traits.md#bound-driven-serialize--deserialize).
+[Anonymous Structs](./spec-types.md#composition).
 
 Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md),
 [WEP: Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md).
