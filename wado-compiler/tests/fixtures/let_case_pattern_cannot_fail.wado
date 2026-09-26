@@ -1,0 +1,51 @@
+// A case pattern binds in `let` when no other case of its type holds a value,
+// as it does in `for let`. A bare case name, at the root or below it, is the
+// case, not a binding that shadows it.
+
+variant W { A(i32) }
+enum One { Only }
+struct Holder { w: W }
+
+fn ok_of(r: Result<i32, [bool, !]>) -> i32 {
+    let Ok(v) = r;
+    return v;
+}
+
+test "a one-case variant" {
+    let w = W::A(3);
+    let A(x) = w;
+    assert x == 3;
+}
+
+test "a variant whose other cases hold no value" {
+    assert ok_of(Ok(4)) == 4;
+}
+
+test "nested in a tuple and a struct" {
+    let [A(x), y] = [W::A(5), 1];
+    let Holder { w: A(z) } = Holder { w: W::A(6) };
+    let [Only, n] = [One::Only, 7];
+    assert x + y + z + n == 19;
+}
+
+test "a case name at the root is the case" {
+    let Only = One::Only;
+    for let Only of [One::Only] {}
+}
+
+test "mut binds every name mutably" {
+    let mut A(x) = W::A(3);
+    x += 1;
+    assert x == 4;
+}
+
+test "a for over a tuple binds through a case pattern" {
+    let mut total = 0;
+    for let A(x) of [W::A(1), W::A(2)] {
+        total += x;
+    }
+    assert total == 3;
+}
+
+__DATA__
+{"test": {}, "warnings_not_contains": ["shadows"]}
