@@ -1,0 +1,9 @@
+// `&mut T` narrows to `&T`, never the reverse.
+
+test "shared to mut" {
+    let x = 5;
+    let r = &x as &mut i32;
+}
+
+__DATA__
+{"compile_error": "`as` narrows `&mut` to `&`, never the reverse"}

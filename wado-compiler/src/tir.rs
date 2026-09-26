@@ -66,6 +66,18 @@ impl EffectRef {
         }
     }
 
+    /// The name a message prints: in `MODULE#SYMBOL` notation when `qualified`,
+    /// for a concrete effect that another of its name would otherwise print as.
+    pub fn display_name(&self, qualified: bool) -> String {
+        match self {
+            EffectRef::Concrete {
+                name,
+                module_source,
+            } if qualified => render(&module_source.to_string(), name),
+            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name.clone(),
+        }
+    }
+
     pub fn is_param(&self) -> bool {
         matches!(self, EffectRef::Param { .. })
     }
@@ -2887,6 +2899,35 @@ impl TypeTable {
         matches!(self.get(head), ResolvedType::Unit | ResolvedType::Never)
     }
 
+    /// The referents a cast of `source` to `target` reads through, outermost
+    /// first: a cast to anything but a reference converts what its operand's
+    /// references point at, and the last of these is the type it converts.
+    #[must_use]
+    pub fn cast_read_through(&self, source: TypeId, target: TypeId) -> Vec<TypeId> {
+        let mut referents = Vec::new();
+        if RefKind::from_resolved(self.get(self.representation_head(target))).is_some() {
+            return referents;
+        }
+        let mut operand = source;
+        while let ResolvedType::Ref(referent) | ResolvedType::MutRef(referent) =
+            self.get(self.representation_head(operand))
+        {
+            operand = *referent;
+            referents.push(operand);
+        }
+        referents
+    }
+
+    /// The type a cast of `source` to `target` converts: the last referent it
+    /// reads through, or `source` itself.
+    #[must_use]
+    pub fn cast_operand_type(&self, source: TypeId, target: TypeId) -> TypeId {
+        self.cast_read_through(source, target)
+            .last()
+            .copied()
+            .unwrap_or(source)
+    }
+
     /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {
@@ -4061,7 +4102,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.representation_head(a) == self.representation_head(b)
+        self.type_key(self.representation_head(a)) == self.type_key(self.representation_head(b))
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what
@@ -4455,15 +4496,28 @@ impl TypeTable {
                 is_mut,
                 params,
                 return_type,
-                ..
+                effects,
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
                 let keyword = if *is_mut { "fn mut" } else { "fn" };
+                let effect_names: Vec<String> =
+                    effects.iter().map(|e| e.display_name(qualified)).collect();
+                let clause = match effect_names.as_slice() {
+                    [] => String::new(),
+                    [one] => format!(" with {one}"),
+                    many => format!(" with ({})", many.join(", ")),
+                };
+                // A function-typed return is parenthesized, or a `with` after it
+                // would not say which of the two function types carries it.
+                let return_name = type_name(*return_type);
+                let return_name = match self.get(*return_type) {
+                    ResolvedType::Function { .. } => format!("({return_name})"),
+                    _ => return_name,
+                };
                 format!(
-                    "{}({}) -> {}",
+                    "{}({}) -> {return_name}{clause}",
                     keyword,
-                    param_names.join(", "),
-                    type_name(*return_type)
+                    param_names.join(", ")
                 )
             }
             ResolvedType::Ref(inner) => format!("&{}", type_name(*inner)),

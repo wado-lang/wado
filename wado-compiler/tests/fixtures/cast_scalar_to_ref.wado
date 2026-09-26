@@ -1,0 +1,8 @@
+// A value never becomes a reference by `as`; this crashed at WIR.
+
+test "scalar to ref fn" {
+    let r = 5 as &fn(f64) -> f64;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'i32' to '&fn(f64) -> f64': only a reference converts to a reference"}

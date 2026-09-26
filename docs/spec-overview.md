@@ -9,13 +9,18 @@ normative: it says what the language is meant to be, and you read a program's
 meaning from here. It is not a record of what the compiler happens to
 do today. The [index](./README.md) lists the files.
 
+The specification states what a program can observe. How the compiler produces
+it, such as which copies it makes or what it inlines or folds, is not part of
+the language, so the specification does not say.
+
 So if the specification and the implementation disagree, something is wrong.
 Which of the two is wrong is not decided in advance: the specification can be
 the mistaken one. That gets settled when the disagreement is found.
 
 What is not allowed is leaving the disagreement in place as an accepted
-difference. If it is not resolved, it becomes a Known gap in the `spec-*.md`
-file that owns the area, saying what the disagreement is and what it admits.
+difference. If it is not resolved, it becomes a Known gap in the WEP that
+proposed the rule, saying what the disagreement is and what it admits. The
+specification itself records no bugs.
 
 ## Overview
 

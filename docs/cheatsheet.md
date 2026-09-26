@@ -38,7 +38,7 @@ impl geo::Show for Local { ... }    // and on either side of an impl head
 
 ### Generated Imports
 
-Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [WEP: Kiln](./wep-2026-04-12-kiln.md) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
+Any file that is neither `.wado` nor a Wasm asset (`.wasm` / `.wat`) is imported via a generator: `.g4`, `.proto`, a Wado dialect, and so on. Name the generator as a `[build-dependencies]` entry or as a relative path. See [the spec](./spec-modules.md#generated-imports-kiln) for the mechanism, [WEP: Gale](./wep-2026-03-02-gale.md) for the real-world usage.
 
 ```wado
 use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
@@ -50,7 +50,7 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 
 Code a generator writes may call a runtime library. Grog's does, so a package
 lists `wado-lang:grog` under `[dependencies]` as well. See
-[WEP: Grog](./wep-2026-09-22-grog.md).
+[the spec](./spec-modules.md#manifest).
 
 ```wado
 use grog from "lib:grog";
@@ -64,7 +64,7 @@ let back = grog::decode::<Account, ByteList>(bytes)?;
 
 A `.wasm` / `.wat` asset is imported with `with { type: "wasm" | "wat" }`. The
 compiler detects from the binary whether the file is a core module or a
-Component Model component — both use `type: "wasm"`. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md).
+Component Model component — both use `type: "wasm"`. See [the spec](./spec-modules.md#wasm-module-and-component-imports).
 
 ```wado
 // Core wasm / wat: each export becomes a free function.
@@ -82,7 +82,7 @@ Wado↔CM type correspondence at the boundary is in [the spec](./spec-components
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+See [the spec](./spec-memory.md#value-semantics).
 
 Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
@@ -131,7 +131,7 @@ true
 false
 
 // Null
-null // the None of the Option its context expects; Option<!> with none
+null // the None of the Option (or newtype over one) its context expects; Option<!> with none
 
 // Unit
 ()
@@ -176,7 +176,7 @@ match x { Some(x) => ... }                        // warns: x means two things h
 
 ## Global Variables
 
-See [WEP: Global Variables](./wep-2026-01-27-global-variables.md).
+See [the spec](./spec-lexical.md#global-variables).
 
 ```wado
 global PI: f64 = 3.14159;           // immutable
@@ -244,7 +244,7 @@ free, so it admits exactly what its base admits. An invariant the base lacks
 (UTF-8 bytes, non-empty, normalized) needs a `struct` with a private field and
 a checked constructor.
 
-See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
+See [the spec](./spec-types.md#newtype).
 
 ```wado
 type Meters = f64;
@@ -266,7 +266,7 @@ impl Location {
 
 ### Tuples and Arrays
 
-See [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
+See the spec on [tuple literals](./spec-literals.md#tuple-literals) and [list literals](./spec-literals.md#list-literals).
 
 ```wado
 // Tuples
@@ -317,7 +317,7 @@ let greeting = `Hello, ${name}!`;         // "Hello, Alice!"
 let s = `${5.0}`;                         // "5"
 let s = `${3.14}`;                        // "3.14"
 
-// Format specifiers (see docs/wep-2026-01-17-template-format-specifiers.md)
+// Format specifiers (see docs/spec-literals.md#format-specifiers)
 // ${expr:[[fill]align][sign][#][0][width][.precision]type}
 let formatted = `${3.14159:.2}`;          // "3.14"   precision = decimal places
 let hex = `${255:x}`;                     // "ff"     b / o / x / X on integers
@@ -328,7 +328,7 @@ let signed = `${42:+}`;                   // "+42"
 let zeroed = `${-42:08}`;                 // "-0000042" zeros go after the sign
 let capped = `${"hello world":.5}`;       // "hello"  precision = max characters
 
-// Inspect (:?) — auto-derived debug outputs (see docs/wep-2026-02-21-inspect-debug-output.md)
+// Inspect (:?) — auto-derived debug outputs (see docs/spec-literals.md#inspect-output)
 println(`${point:?}`);                    // "Point { x: 10, y: 20 }"
 println(`${point:#?}`);                   // pretty-print with indentation (Inspect, alternate)
 // `${point}` (Display) needs an `impl Display for Point`; use `${point:?}` for debug.
@@ -357,7 +357,7 @@ A `StrSlice` views part of a string without copying it. Its ends are always on
 character boundaries, which is why it is a `struct` and not a newtype over
 `ByteSlice`. `AsStrSlice` lets one signature take an owned `String`, a
 reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
-[WEP: String Views](./wep-2026-09-13-string-slice.md).
+[the spec](./spec-traits.md#string-views).
 
 ```wado
 let v = "banana".as_str_slice();
@@ -375,7 +375,7 @@ fn byte_len<S: AsStrSlice>(s: S) -> i32 {
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
 
-Tagged templates (see [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
+Tagged templates (see [the spec](./spec-functions.md#tagged-template-literals)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
 
 ```wado
 fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
@@ -495,7 +495,7 @@ let name = match c {
 
 ### Variants
 
-Variants are sum types with payloads (unlike enums which have no payloads). See [WEP: Variant Payload Design](./wep-2026-01-25-variant-payload-design.md).
+Variants are sum types with payloads (unlike enums which have no payloads). See [the spec](./spec-types.md#enums-variants-and-flags).
 
 ```wado
 variant Shape {
@@ -602,7 +602,7 @@ Key differences from Rust:
 
 ## Operators
 
-See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-precedence.md) and [WEP: Operator Overloading](./wep-2026-01-18-operator-overloading.md).
+See the spec on [precedence](./spec-lexical.md#precedence) and [overloading](./spec-traits.md#arithmetic-operator-traits).
 
 ```wado
 // Arithmetic
@@ -889,7 +889,7 @@ A function must have `return` if it returns a value. Default expressions must be
 
 A name Wado deliberately does not offer is declared, not simply missing, so a
 call to it reports why instead of "no method named". See
-[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+[the spec](./spec-attributes.md#unavailablereason).
 
 ```wado
 impl File {
@@ -910,7 +910,7 @@ one. It goes on a module function, an `impl` method, or a trait method.
 ### Local Items
 
 `struct` and `type` (newtype) may be declared inside a function body, scoped to
-the declaring block. See [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+the declaring block. See [the spec](./spec-lexical.md#local-item-definitions).
 
 ```wado
 fn area(width: i32, height: i32) -> i32 {
@@ -951,7 +951,7 @@ let origin = Point::origin();
 
 ### Closures
 
-See [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md).
+See [the spec](./spec-functions.md#closures).
 
 ```wado
 // Expression body
@@ -1203,7 +1203,7 @@ pub trait TryFrom<T> {
 
 ### Trait Bounds
 
-See [WEP: Trait Bounds Enforcement](./wep-2026-02-07-trait-bounds.md).
+See [the spec](./spec-traits.md#trait-bounds).
 
 ```wado
 struct SortedPair<T: Ord> { first: T, second: T }
@@ -1243,7 +1243,7 @@ Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq derived here
 to_string(&Point { x: 1, y: 2 });              // Serialize derived here
 ```
 
-An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[wire(...)]` customization.
+An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent.
 
 ```wado
 struct Broken { retries: i32 = 3, name: String }
@@ -1261,7 +1261,7 @@ impl From<NetworkError> for ServiceError;   // -> ServiceError::Network(e)
 
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` runs the same `Display` with `Formatter.alternate` set.
 
-A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+A hand-written `impl Trait for T { … }` always wins. See [the spec](./spec-traits.md#derivation-policy).
 
 Every standard library error type implements `Display` and `Error`, so
 `` `${e}` `` renders the reason. A wider error that carries a narrower one
@@ -1327,7 +1327,7 @@ let d = char::from_u32_unchecked(65); // if you have already validated the u32 v
 
 ## Iterators
 
-See [WEP: Iterator Traits Design](./wep-2026-01-24-iterator-traits.md).
+See [the spec](./spec-traits.md#iterator-traits).
 
 `Iterator` provides `next()`. `IntoIterator` converts a collection into an iterator. Every `Iterator` automatically implements `IntoIterator` via a blanket impl, so all iterators work with `for-of`.
 
@@ -1364,7 +1364,7 @@ Implement `IntoIterator` to make custom types work with `for-of`. See [`core:pre
 
 ## Ranges
 
-See [WEP: Range Object](./wep-2026-03-03-range-object.md).
+See [the spec](./spec-lexical.md#ranges).
 
 Two range types: `RangeExclusive<T>` and `RangeInclusive<T>`. Both are generic structs in `core:prelude`.
 
@@ -1382,7 +1382,7 @@ for let i of (0..<10).step_by(3) { ... }   // 0, 3, 6, 9 (any iterator takes ste
 
 ## Effects
 
-See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+See [the spec](./spec-effects.md#effect-declaration-in-functions).
 
 ```wado
 fn write_file(path: String, data: String) with FileSystem { ... }
@@ -1423,7 +1423,7 @@ fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
 }
 
-// Generic effects — polymorphic over effects (one effect param per function)
+// Generic effects — polymorphic over effects
 fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
@@ -1456,7 +1456,7 @@ run_both(
 
 ### Effect Handlers
 
-See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
+See [the spec](./spec-effects.md#handlers).
 
 An effect handler is an `impl Effect for Type` where the methods may call `resume value` to continue the suspended computation. The `with` block installs handlers for the duration of its `do` body. The `=>` arrow reads as "calls to E dispatch to h".
 
@@ -1621,13 +1621,13 @@ See [the spec](./spec-control-flow.md#embedded-data).
 let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
 ```
 
-Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
+Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [the spec](./spec-literals.md#include_str-and-include_bytes).
 
 ## Compile-Time Parameters
 
 `#[param]` on a `global` makes it a build input fed by the `wado` invocation: the type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.
 
-See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+See [the spec](./spec-attributes.md#param--paramfrom_env----paramname--).
 
 ```wado
 #[param]
@@ -1686,8 +1686,7 @@ current one), and the path text that reaches it. `""` and `"."` name that
 directory. Every call that reaches the filesystem resolves its path when it
 runs, so ask-then-act (`exists` and then `read`) races; act and read the
 error. The path functions resolve nothing. See
-[`core:fs`](./stdlib-core-fs.md) and
-[WEP: core:fs](./wep-2026-09-12-core-fs.md).
+[`core:fs`](./stdlib-core-fs.md).
 
 ```wado
 use fs from "core:fs";
@@ -1769,11 +1768,12 @@ set.contains("foo");          // -> bool; set.insert(x) -> bool
 ### core:serde
 
 Format-agnostic `Serialize` / `Deserialize` framework.
-A plain struct derives with no marker; `impl Serialize for T;` attaches
-`#[wire(...)]` customization. Wire keys default to the field name; override
+A plain struct derives with no marker, and `#[wire(...)]` applies with or
+without one. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
-(per field). See [`core:serde`](./stdlib-core-serde.md) and
-[WEP: Serde](./wep-2026-02-28-serde.md).
+(per field). See [`core:serde`](./stdlib-core-serde.md),
+[Serialization](./spec-serialization.md#bound-driven-serialize--deserialize) and
+[`#[wire(...)]`](./spec-attributes.md#wire).
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed

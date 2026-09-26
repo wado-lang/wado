@@ -256,6 +256,11 @@ wrapper function and the signature and source strings per literal.
 - [ ] Depth limit: a recursive type inspects until it runs out of stack.
       Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length.
 
+## Known gaps
+
+- Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length, so
+  inspecting a deeply recursive value runs until the stack is exhausted.
+
 ## References
 
 - [WEP: Type Stringification](./wep-2026-01-16-type-stringification.md)

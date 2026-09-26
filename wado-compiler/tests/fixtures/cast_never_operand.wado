@@ -1,0 +1,24 @@
+// A diverging operand traps before the cast runs, so it casts to any type. A
+// target represented as a reference once crashed WIR, which checked the operand
+// as though it held a value.
+
+test "never to a function type" {
+    if builtin::black_box(false) {
+        let f = unreachable() as fn();
+        f();
+    }
+}
+
+test "never to a struct" {
+    if builtin::black_box(false) {
+        let s = unreachable() as String;
+        assert s.len() == 0;
+    }
+}
+
+test "never to a scalar" {
+    if builtin::black_box(false) {
+        let n = unreachable() as i32;
+        assert n == 0;
+    }
+}

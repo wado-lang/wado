@@ -1,0 +1,10 @@
+// A turbofish says what the annotation says, so the two must agree.
+
+struct Box<T> { value: T }
+
+test {
+    let n: Box<i32> = Box::<i64> { value: 1 };
+}
+
+__DATA__
+{"compile_error":"type mismatch: expected 'Box<i32>', found 'Box<i64>'"}

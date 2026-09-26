@@ -1,0 +1,57 @@
+// `String` access, iteration, building and concatenation.
+
+test "access" {
+    let s = "Hello世界";
+
+    // byte-level access
+    let bytes: List<u8> = s.bytes().collect();
+    assert bytes[0] == b'H';
+
+    // character-level access
+    let chars: List<char> = s.chars().collect();
+    assert chars[5] == '世';
+
+    assert s.len() == 11;       // in bytes
+    assert !s.is_empty();
+}
+
+test "iteration" {
+    let mut out = "";
+    for let c of "hello".chars() {
+        out.push(c);
+    }
+    assert out == "hello";
+
+    let mut sum = 0;
+    for let b of "hello".bytes() {
+        sum += b as i32;         // 104, 101, 108, 108, 111
+    }
+    assert sum == 532;
+}
+
+test "building" {
+    let mut builder = String::with_capacity(20);
+    builder.push_str("Hello");
+    builder.push_str(", ");
+    builder.push_str("World!");
+    assert builder == "Hello, World!";
+
+    // `join` concatenates a list with a separator
+    let parts: List<String> = ["a", "b", "c"];
+    assert parts.join(",") == "a,b,c";
+}
+
+test "concatenation" {
+    let s1 = "hello";
+    let s2 = " world";
+    let s3 = s1 + s2;           // a new String
+    assert s3 == "hello world";
+    assert s1 == "hello";
+}
+
+test "reassignment" {
+    let mut s = "hello";
+    s += " world";              // s = s + " world"
+    s += "!";
+    assert s == "hello world!";
+}

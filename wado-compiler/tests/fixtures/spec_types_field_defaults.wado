@@ -1,0 +1,25 @@
+// A field with a default may be omitted from a literal.
+
+struct ServerConfig {
+    host: String,            // required
+    port: i32 = 8080,        // optional
+    timeout: i32 = 30,       // optional
+    debug: bool = false,     // optional
+}
+
+test "omitted fields take their defaults" {
+    let c = ServerConfig { host: "localhost" };
+    assert c.port == 8080 && c.timeout == 30 && !c.debug;
+
+    let d = ServerConfig { host: "localhost", port: 3000 };
+    assert d.port == 3000 && d.timeout == 30;
+}
+
+struct Holder<T: Default> { a: T, b: T = T::default() }
+
+test "a default at the literal's type arguments" {
+    let h: Holder<String> = { a: "x" };
+    assert h.b == "";
+    let s = Holder { a: 5 };              // T = i32 from `a`
+    assert s.b == 0;
+}

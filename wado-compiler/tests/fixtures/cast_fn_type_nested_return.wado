@@ -1,0 +1,16 @@
+// A function-typed return is parenthesized in a message: unparenthesized,
+// `fn() -> fn() -> () with Stdout` would not say whether the effect belongs to
+// the inner type or the outer one.
+
+use { Stdout } from "core:cli";
+
+fn make() -> fn() with Stdout {
+    return || {};
+}
+
+test "effect on the inner type" {
+    let f = make as fn() -> fn();
+}
+
+__DATA__
+{"compile_error": "cannot cast 'fn() -> (fn() -> () with Stdout)' to 'fn() -> (fn() -> ())': the return type: only one function type has the effect `Stdout`"}

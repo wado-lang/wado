@@ -597,3 +597,10 @@ through the diagnostics path.
   `liveness` only consults edges recorded during `annotate`; adding
   new edge kinds is part of the language feature that introduces
   them.
+
+## Known gaps
+
+- The `dead_code` lint sees only the `test` blocks of the modules the
+  compilation loads. A function whose only user is a test in a file the
+  compilation does not load, such as a test file that imports it, is reported
+  "never used" rather than "only used by tests".

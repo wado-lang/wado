@@ -18,6 +18,15 @@ normative, and `spec-overview.md` says what that means. Each rule is stated in
 exactly one place. The specification says what a rule is. How the rule came to
 be belongs to the WEP that proposed it.
 
+The specification states exactly how the language should behave. It is not the
+place for implementation details or bugs. Where the compiler falls short of a
+rule, the shortfall is a known gap in the WEP that proposed the rule.
+
+A `wado` code block quotes an e2e fixture, named in an HTML comment before it
+(`<!-- {"fixture": "name.wado"} -->`). `mise run check-spec-examples` holds this, and
+[WEP: Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md) says
+what it asks of the block and the fixture.
+
 A change that settles a rule writes it into the specification in the same
 change. A file stays readable in one sitting; an area that outgrows that splits
 into two files.

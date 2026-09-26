@@ -481,6 +481,12 @@ Nothing in the design turns on the restriction. Inference has to move from union
 
 Note that `with _` mints a parameter, so a function cannot write `with _` and declare its own `<effect E>` until this is lifted.
 
+### A closure performs an effect its expected type does not declare
+
+A closure whose body performs an effect is accepted where the expected type
+declares none: `let f: fn() = || println("x");` compiles, and a call through `f`
+performs `Stdout` where no `with` admits it.
+
 ## Consequences
 
 - All function effects are explicit and checked at compile time

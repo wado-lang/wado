@@ -139,3 +139,8 @@ Bare names (`from "router"`) are rejected everywhere.
 - Requiring a namespace on every external coordinate is more typing than a bare
   name, but it is the transparent, unambiguous form and follows from the
   bare-name ban.
+
+## Known gaps
+
+- A remote `http://` / `https://` specifier is not implemented. It passes
+  validation, and the import fails as a missing file.

@@ -8,9 +8,7 @@
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
-
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource linearity](./spec-components.md#resource-linearity)).
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -33,6 +31,20 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 These semantics are as-if. A program may rely on the value each expression
 denotes; it may not rely on the number of copies performed to produce it.
 
+A program never chooses where a value lives. There is no stack or heap to pick
+between. A value needs no annotation to outlive its scope, because the garbage
+collector keeps alive every value a reference can reach.
+
+A closure that outlives the scope that declared it needs no rule of its own:
+the collector keeps what it captured alive. How a closure copies is in
+[Closures Are Values](./spec-functions.md#closures-are-values).
+
+A call across a component boundary copies its arguments and its result, so the
+two components never share a value's storage. A resource crosses as a handle
+([Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries)).
+
+Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+
 ## Reference Types
 
 References in Wado provide indirect access to values. Unlike Rust, Wado uses a GC-based memory model with no borrow checker, enabling simpler semantics at the cost of runtime overhead.
@@ -48,6 +60,9 @@ let mut y = 0;
 let mr = &mut y;      // Mutable reference
 *mr = 10;             // Assign through reference
 ```
+
+A reference is never null, and there is no arithmetic on it. A reference that
+may be absent is written `Option<&T>`.
 
 ### Reference to Reference
 
@@ -113,6 +128,24 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 *r2 = 30;
 ```
 
+### Reference Retention
+
+A function may keep a reference parameter past its return: it may store it in a
+global, or write it through a `&mut` parameter the caller still holds. It may
+also return a reference into a parameter's storage. Each is safe, because the
+referent is GC-managed and cannot dangle.
+
+A function with a body declares nothing about what it keeps: that is inferred
+from the body. A function type carries no such declaration, and neither does a
+closure, so a function value is called the same way whatever the function
+keeps. Retention is not an effect either. It grants no authority and no handler
+intercepts it, so it has no place in a `with` clause.
+
+A declaration with no body has nothing to infer from, so it states what it keeps with
+[`#[retain(...)]` / `#[result(...)]`](./spec-attributes.md#retain--result).
+
+Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+
 ### Reference Identity
 
 `==` and `!=` on two references compare the values they point to, as in Rust
@@ -130,12 +163,14 @@ does can change with the optimization level and with the Wado version, so a
 `ref_eq` that is true only by such sharing is unpredictable. Java's `==` on
 strings behaves the same way.
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let mut xs: List<i32> = [1, 2, 3];
 let ys: List<i32> = [1, 2, 3];
 let zs = xs;
-&xs == &ys;                     // true: equal values
-ref_eq(&xs, &xs);               // always true
+assert &xs == &ys;              // equal values
+assert ref_eq(&xs, &xs);        // always
 ref_eq(&xs, &ys);               // false or true: the two may be stored once
 ref_eq(&xs, &zs);               // false or true: the copy may be elided
 ```
@@ -145,43 +180,42 @@ A `&` to a `List` element or a struct field of a type that assignment replaces
 taken where the `&` is written. It does not see a later assignment to the
 element or field, and two such references are two places:
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let r = &xs[0];
 xs[0] = 9;
-*r;                             // 1
+assert *r == 1;
 ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 ```
 
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
 reference to a closure points to the place holding it, not to the closure:
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let f = || 1;
 let g = f;
-ref_eq(&f, &f);                 // always true
+assert ref_eq(&f, &f);          // always
 ref_eq(&f, &g);                 // false or true: two places holding one closure
 ```
 
-### Design Trade-offs
-
-- Simplicity: No lifetime annotations or borrow checker errors
-- Flexibility: Can freely share and modify references
-- Cost: Runtime overhead from garbage collection
-- Safety: Memory safety guaranteed by GC, not compile-time checks
+## Parameters
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, or on an aggregate that holds one:
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
 
 ```wado
 impl Point {
     fn sum(&self) -> i32 { ... }          // OK: immutable reference
     fn reset(&mut self) { ... }           // OK: mutable reference
-    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is only allowed on a resource
+    // fn consume(self) -> i32 { ... }    // ERROR: `Point` holds no resource
 }
 ```
 
-A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](./spec-components.md#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error. See [WEP: Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable. A type that can never hold a resource has nothing to consume, so `self` by value on one is a compile error.
 
 ### `mut` Parameters
 
@@ -199,7 +233,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. This applies uniformly to primitives, structs, `String`, and `List<T>`. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation of that copy reaches the caller. A parameter of type `&mut T` holds a copy of the reference, so a write through it (`*p = v`) reaches the referent, as through any reference.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {

@@ -49,10 +49,9 @@ fn dedup_sorted<T: Ord>(items: List<T>) -> List<T> { ... }
 
 A trait that reaches itself through supertraits is an error. A method name
 reachable through more than one of a receiver's bounds is ambiguous at the call
-site; name the trait that declares it to resolve it (`Left::name(&x)` — see
-[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). The bounds
-a body may name that way include the implied ones, so `Eq::eq(&a, &b)` resolves
-under `T: Ord`.
+site; name the trait that declares it to resolve it (`Left::name(&x)`, a
+[qualified call](#qualified-calls)). The bounds a body may name that way include
+the implied ones, so `Eq::eq(&a, &b)` resolves under `T: Ord`.
 
 ### Multiple Traits
 
@@ -78,17 +77,15 @@ impl Aged for Person {
 
 ### Method Resolution
 
-A call `recv.m(args)` resolves in one order, stated in full by
-[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md). The receiver
-decides which step answers:
+A call `recv.m(args)` resolves in one order. The receiver decides which step
+answers:
 
 1. An inherent method (`impl Type { … }`) shadows every trait method of that
    name, along the whole newtype chain.
-2. A reference receiver's `&T` impls come before the base type's.
+2. A reference receiver's concrete `&T` impls come before its pointee's.
 3. The trait impls that apply to the receiver are ranked, below.
-4. A receiver whose type is a type parameter answers from its bounds instead:
-   the first bound declaring the method, and two or more declaring it is an
-   error.
+4. A receiver whose type is a type parameter answers from its bounds instead.
+   A method that two or more of them declare is an error.
 
 ```wado
 struct Robot { id: i32 }
@@ -107,17 +104,61 @@ let r = Robot { id: 1 };
 r.greet();  // Returns "Beep boop" (inherent method wins)
 ```
 
+A call in a generic body is selected again at each instance. The body is checked
+against the impl selected in the generic body itself, and an instance with an
+impl written for it takes that impl instead. This holds for a method call and a static call
+alike.
+
 #### Scope
 
 A trait contributes candidates only where its declaration is in scope: declared
-in this module, imported by name or alias, re-exported to it through `pub use`,
-or one of the prelude's. Importing a type brings none of the traits its impls
-mention. A bound is a name like any other, so calling a supertrait's method
-through `T: Sub` needs `Base` imported too. This is what keeps a library's new
-blanket impl from changing what a call means in a module that never named it.
+in this module, imported by name or alias, or re-exported to it through
+`pub use`. The prelude's traits are the only ones in scope everywhere. Importing
+a type brings none of the traits its impls mention. A bound is a name like any
+other, so calling a supertrait's method through `T: Sub` needs `Base` imported
+too. This is what keeps a library's new blanket impl from changing what a call
+means in a module that never named it.
 
-Not yet enforced for a supertrait's method called through a bound. See
-[WEP: Trait Resolution](./wep-2026-09-01-trait-resolution.md#scope-gates-method-calls-not-the-bounds-path).
+An impl is visible everywhere, so one in a module the caller never named still
+answers once its trait is in scope. Two same-named traits declared in different
+modules are distinct traits: each module's call reaches the one it imported, and
+a module importing both has the two-trait ambiguity below.
+
+A call whose only candidates come from traits out of scope is an error that
+names the trait and the import that would enable it:
+
+```text
+no method 'shout' on 'String' in scope: 'Loud' declares it and is not
+imported here; add `use { Loud } from "./lib_a.wado"`
+```
+
+A supertrait's method called through a bound is gated the same way: `T: Sub`
+reaches `Base`'s methods only where `Base` is imported.
+
+#### Candidates
+
+A call's candidates come from two places:
+
+- The impls whose target reaches the receiver anywhere along its newtype chain:
+  one written for the receiver's own type, for one instantiation of it
+  (`impl Tag for Box_<i32>`), for some of its instantiations
+  (`impl<T> Tag for Pair<T, i32>`), or for its head (`impl<T> Tag for Box_<T>`).
+- Every value blanket (`impl<T: Bound> Tr for T`) whose bounds the receiver
+  satisfies.
+
+A target reaches a receiver when every position it pins holds the receiver's
+argument there. A type parameter stands for one type wherever the target writes
+it, at any depth. So `impl<T> Tag for Pair<List<T>, i32>` reaches
+`Pair<List<u8>, i32>`, and `impl<T> Tag for Pair<T, T>` does not reach
+`Pair<i32, i64>`.
+
+A value blanket must bound its receiver parameter. An unbounded
+`impl<T> Tr for T` names no condition that could select it, so it is rejected
+where it is written.
+
+`()` is the unit type, not the empty tuple `[]`, so an impl for `[..T]` never
+reaches it. An anonymous struct is a shape no impl can name, so only a value
+blanket reaches it.
 
 #### The Order
 
@@ -134,33 +175,116 @@ blanket impls. They are ranked:
    (`impl<T: Bound> Tr for T`). A blanket names no type at all, only a condition
    the receiver meets. See [Specific Impls Win](#specific-impls-win).
 
+A candidate's level is the level it is selected at. An impl whose target is the
+newtype sits at the newtype's level and one targeting the base at the base's. A
+blanket sits at the level where its bounds hold. A newtype inherits its base's
+impls, so a blanket whose bound only the base satisfies is still a candidate for
+the newtype, at the base's level. This holds when the bound is met through
+another blanket too: if that blanket's own bound holds only at the base, both
+sit at the base's level.
+
+A reference does not interrupt the chain. A call on `&W`, where `W` is a newtype
+over `Inner`, visits `&W`, then `W`, then `&Inner`, then `Inner`. Within one
+level the reference precedes its pointee.
+
+How many positions a head impl pins is not part of its generality, so
+`impl<T> Tr for Pair<T, i32>` and `impl<A, B> Tr for Pair<A, B>` tie at
+`Pair<String, i32>`.
+
 Where an impl was written is read at no rank, so a call means the same thing to
 every reader. Specificity is not a rank either: generality reads an impl's
-target, never its bounds, so `impl<T: A + B>` beside `impl<T: A>` reports rather
-than preferring the narrower one.
+target, never its bounds, so `impl<T: A + B>` beside `impl<T: A>`, or
+`impl<T: Ord>` beside `impl<T: Eq>`, reports rather than preferring the narrower
+one.
 
 #### Ambiguity
 
-Candidates the ranks cannot separate are an error. There are two of them,
-because the fix differs:
+Candidates the ranks cannot separate are an error, reported at the call. There
+are three shapes, because the fix differs:
 
 - Two traits declaring the method name. They share no contract, so the call
-  names one: `Alpha::describe(&x)`.
-- Two impls of one trait, neither written for the receiver. A blanket has no
-  name to call it by, so the fix is an `impl Tr for TheType`, which generality
-  puts above both.
+  names one: `Alpha::describe(&x)`. Blankets of two traits join this collision
+  like any other candidate.
+- Two blankets of one trait, the receiver satisfying both bounds. A blanket has
+  no name to call it by, so the fix is an `impl Tr for TheType`, which
+  generality puts above both.
+- Two head impls of one trait that both reach the receiver. Neither can be named
+  at the call either, and the fix is the same.
 
-Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
-`<` in expression position begins JSX. A call names its trait with the
-trait-qualified form `Trait::method(recv, …)` instead (see
-[WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)). An
-associated function with no `self` has no receiver argument to bind `Self`
-from, so that form cannot name it.
+```text
+ambiguous blanket impls of 'Describe' for 'Point': 'T: Limit' and
+'T: ReflectStruct' apply, and nothing ranks them;
+write 'impl Describe for Point'
+```
+
+Overlapping blankets are not rejected where they are written. Whether two bounds
+can both hold is not decidable there, since another module may implement either
+bound for a new type at any time. So overriding a library's blanket with a
+second blanket of your own reports at every type satisfying both bounds. Write
+`impl Tr for YourType` instead.
 
 Arguments filter candidates before the ranks run: one trait at several argument
 lists is an overload set the call's arguments choose from (see
-[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)). Operators
-and indexing select by operand type instead.
+[One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
+
+#### Eligibility
+
+A bound that does not hold produces no candidate. An impl's bound on its own
+parameter is read the same way wherever the impl puts that parameter: in a type
+argument (`impl<T: B> Tr for List<T>`), in a pointee (`impl<T: B> Tr for &T`),
+or in a pack's elements (`impl<..T: B> Tr for [..T]`).
+
+A rigid type parameter satisfies a bound from the bounds in force on it and from
+nothing else. So `[..T]: Ord` does not hold of `[A, B]` under
+`A: Inspect, B: Inspect`, and the body that wants it writes `A: Ord, B: Ord`.
+
+A `Reflect*` bound holds only where every member of the receiver is visible at
+the use site.
+
+A blanket's receiver parameter is matched by position, not by spelling: a method
+parameter named `T` inside the method is the method's own `T`.
+
+#### Qualified Calls
+
+Wado has no fully qualified `<Type as Trait>::method()` form, because a leading
+`<` in expression position begins JSX. A call names its trait with the
+trait-qualified form `Trait::method(recv, args…)` instead:
+
+```wado
+Display::fmt(&p, f);          // p implements two traits declaring `fmt`
+Base::name(&x);               // supertrait diamond inside a generic body
+Take::<A>::take(&f, B { … }); // one trait's argument list, pinned
+```
+
+The receiver is the first argument, spelled to match the method's `self` mode:
+`&x` for `&self`, `&mut x` for `&mut self`, the value for `self`. A mismatched
+mode is an error, not a coercion, since a value passed to a `&mut self` method
+would mutate a copy and drop the change. The one exception is the language's one
+reference coercion: `&mut x` also answers a `&self` method. Trailing default
+arguments may be omitted, as in the method form.
+
+The receiver supplies `Self`, so a turbofish on the trait carries only the
+trait's own arguments. It pins one argument list of an overload set. Without
+one, the call's arguments select within the named trait as a method call's do.
+
+Only the named declaration answers. An auto-derived `Eq` answers `Eq::eq`, never
+a user trait that happens to declare `eq`. In a generic body the named trait must
+be among the receiver's bounds, implied ones included, and a same-named trait of
+another module does not answer for it.
+
+A qualified call selects the impl the method form would:
+`IntoIterator::into_iter(&list)` takes `impl IntoIterator for &List<T>`, as
+`(&list).into_iter()` does.
+
+`Type::method(recv, args…)` names the type's own method instead. There, as in
+the method form, an inherent declaration shadows a trait impl's declaration of
+the same name when both take `self` or both do not. The trait's is reached as
+`Trait::method(recv, …)`.
+
+An associated function with no `self` has no receiver argument to bind `Self`
+from, so the trait-qualified form cannot name it.
+
+Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).
 
 ### Default Method Implementations
 
@@ -196,7 +320,7 @@ Default methods can call other trait methods (both required and default), and th
 
 ### Associated Types
 
-Traits can declare associated types - placeholder types that are specified by implementors:
+Traits can declare associated types: placeholder types that implementors specify:
 
 ```wado
 trait Container {
@@ -283,10 +407,6 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S { ... }
 
 The bound's subject is not itself determined this way: `A: Eq` says what `A` must satisfy, not what `A` is.
 
-### Standard Library Traits
-
-The prelude defines the indexing traits `IndexValue`, `IndexAssign`, `IndexRef`, and `IndexRefMut`, each with an associated `Output` type. See [Indexing Traits](#indexing-traits) for full definitions.
-
 ### Trait Bounds
 
 Type parameters can have trait bounds that constrain what types can be used:
@@ -323,6 +443,69 @@ impl<T: Eq> Eq for Pair<T> {
 }
 ```
 
+### Bounds on Generic Traits
+
+A bound that writes no argument names the declared default. `T: Add` is
+`Add<Self>` (see [Arithmetic Operator Traits](#arithmetic-operator-traits)),
+which `impl Add for Cm` answers and `impl Add<Inch> for Cm` does not. A
+parameter with no default is left open by a bound that writes nothing there:
+`T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
+`T: Pick<String>` names it, and holds only for `impl Pick<String>`.
+
+A bound that writes an argument asks for that argument. `T: Eq<String>` reaches
+`impl Eq<String> for StrSlice`. On a `String` receiver it reaches
+`impl Eq for String`, whose `Rhs` is the restated `Self`.
+
+Two bounds on one trait are two obligations, each asking for what it writes.
+Under `trait Pick<K = i32>`, `T: Pick + Pick<String>` asks for `impl Pick<i32>`
+as well as `impl Pick<String>`. A method call on such a parameter reads the
+bound that writes arguments. The trait is one either way, so naming it selects
+nothing.
+
+An impl and a bound already in scope read a written argument differently.
+
+An impl answers a bound only where every position agrees, each side counting the
+trait's declared default where it wrote nothing. `impl Conv<i32> for Holder` does
+not answer `U: Conv` when `Conv` declares `X = String`.
+
+A bound already in scope supplies a bare request whatever it writes, and a
+supertrait does the same. `T: Conv<i32>` supplies `Conv`, and
+`AsStrSlice: Eq<String>` supplies `Eq`. Nothing is chosen at such a request. The
+bound is already fixed, and the question is only whether the trait is among what
+the parameter carries.
+
+An impl writing `Self` as a trait argument says its own target, so
+`impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
+
+`Self` in a bound names the type the surrounding declaration implements. A
+`trait` binds one and an `impl` binds one. A free function binds none, so `Self`
+anywhere in a free function's bounds is an error, and the error names the type
+parameter to write instead. A `struct` or `variant` declaration binds none
+either, so a bound on its own parameter is the same error. The position in the
+bound makes no difference: a trait argument (`T: Uses<Self::Item>`) and an
+associated-type constraint nested under one
+(`T: Sink<Cb = fn(Self::Item) -> i32>`) are both rejected. Rust rejects the same
+spelling.
+
+These rules hold wherever a bound is written: on a type parameter, on a
+supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
+(`type Item: Eq<String>`). A bound's arguments are spelled where it is written.
+So the supertrait clause of `trait Gauge<X>: Measure<X>` names the trait's own
+parameter, and supplies `Measure<i32>` under `T: Gauge<i32>`. A position the
+clause leaves out takes the declared default there too, so `trait A<T>: B<T>`
+over `trait B<X, Y = i32>: C<Y>` supplies `C<i32>`.
+
+A bound's arguments are written in the body's own parameter space, so what they
+name is settled at each instantiation. `T: Make<U>` reaches
+`impl Make<String>` once the call settles `U` to `String`, and
+`T: Make<T::Base>` reaches it once `T` is a type whose `Base` is `String`. A
+projection nested inside an argument is answered the same way:
+`Make<List<T::Base>>` reaches `impl Make<List<String>>`. A call through the
+bound reaches the impl that satisfied the bound.
+
+A bound may pin an associated type (`T: Mul<Output = T>`). The impl that answers
+it must bind that type as the pin says.
+
 ## Coherence and Orphan Rules
 
 Wado enforces coherence: a `(Trait, Type)` pair is implemented once. A second impl of one pair is rejected where it is written, and the orphan rules below keep two packages from each writing one.
@@ -331,7 +514,7 @@ That is a rule about where impls may be written, not about how many apply to a c
 
 ### Package Boundary
 
-The unit of coherence is a package — all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
+The unit of coherence is a package: all source files compiled together from the same `wado.toml` project. Types and traits are classified relative to that boundary:
 
 | Module source                                       | Classification |
 | --------------------------------------------------- | -------------- |
@@ -357,7 +540,7 @@ A type parameter `Pk` is _uncovered_ at position `i` if the type at position `i`
 
 #### Fundamental types
 
-`&T` and `&mut T` are _fundamental_ — they are looked through when checking positions. `impl Trait for &LocalType` counts as having `LocalType` at position `T0`.
+`&T` and `&mut T` are _fundamental_: they are looked through when checking positions. `impl Trait for &LocalType` counts as having `LocalType` at position `T0`.
 
 ### Examples
 
@@ -379,7 +562,7 @@ A type parameter `Pk` is _uncovered_ at position `i` if the type at position `i`
 
 The orphan rule prevents two packages from independently providing `impl Trait for Type` for the same `(Trait, Type)` pair, which would make method resolution ambiguous when both packages are used together. By requiring something local, either the trait or a type the sequence rule reaches, every valid implementation is "owned" by exactly one package.
 
-The sequence rule (RFC 2451 style) allows `impl From<LocalError> for String` — even though `String` is foreign — because `LocalError` appears in the trait's type argument at position A1 with no uncovered type parameter before it. This makes it unnecessary to define a mirror `Into` trait just to work around stricter rules.
+The sequence rule, in the style of RFC 2451, allows `impl From<LocalError> for String` although `String` is foreign. `LocalError` appears in the trait's type argument at position A1, with no uncovered type parameter before it. This makes it unnecessary to define a mirror `Into` trait just to work around stricter rules.
 
 ### Inherent Impls
 
@@ -387,22 +570,21 @@ An inherent impl (`impl Type { … }`, with no trait) is subject to a simpler
 coherence rule: it may only be written in the package that owns the type.
 The self type's head constructor must be local.
 
-| Implementation           | Verdict   | Reason                                              |
-| ------------------------ | --------- | --------------------------------------------------- |
-| `impl MyStruct { … }`    | Allowed   | `MyStruct` is local                                 |
-| `impl<T> MyBox<T> { … }` | Allowed   | `MyBox` (head) is local                             |
-| `impl i32 { … }`         | Forbidden | `i32` is foreign                                    |
-| `impl String { … }`      | Forbidden | `String` is foreign                                 |
-| `impl<T> Array<T> { … }` | Forbidden | `Array` is foreign                                  |
-| `impl List<u8> { … }`    | Forbidden | `List` (head) is foreign — even when fully concrete |
+| Implementation           | Verdict   | Reason                                             |
+| ------------------------ | --------- | -------------------------------------------------- |
+| `impl MyStruct { … }`    | Allowed   | `MyStruct` is local                                |
+| `impl<T> MyBox<T> { … }` | Allowed   | `MyBox` (head) is local                            |
+| `impl i32 { … }`         | Forbidden | `i32` is foreign                                   |
+| `impl String { … }`      | Forbidden | `String` is foreign                                |
+| `impl<T> Array<T> { … }` | Forbidden | `Array` is foreign                                 |
+| `impl List<u8> { … }`    | Forbidden | `List` (head) is foreign, even when fully concrete |
 
 This mirrors the trait-impl rationale: if two packages could each add inherent
 methods to the same foreign type, their methods would collide. To extend a
 foreign type from another package, define a local trait and implement it for
-that type (`impl MyExt for String`) — the orphan rule above permits this because
-the trait is local. The owning package itself (e.g. `core` for `String` /
-`Array<T>` / `List<T>`) is of course free to spread inherent impls across its own
-modules.
+that type (`impl MyExt for String`). The orphan rule above permits this because
+the trait is local. The owning package may spread inherent impls across its own
+modules, as `core` does for `String`, `Array<T>` and `List<T>`.
 
 ### Specific Impls Win
 
@@ -419,16 +601,19 @@ impl Tag for [i32, i32] { … }         // specific — wins for [i32, i32]
 
 The specific impl applies to the instantiation it names; every other
 instantiation takes the general one. Declaration order does not matter. This is
-the generality rank of [Method Resolution](#the-order) — the same rank that puts
-either of these above a value blanket (`impl<T: Bound> Tag for T`).
+the generality rank of [The Order](#the-order), which also puts either of these
+above a value blanket (`impl<T: Bound> Tag for T`).
 
-This holds only for a **trait** impl, where the trait gives both methods one
-signature. An inherent impl carries no such contract, so the pair is rejected:
+This holds only for a trait impl, where the trait gives both methods one
+signature. An inherent impl carries no such contract, so two inherent blocks
+that reach a common receiver may not both define one method name:
 
 ```wado
 impl<T> Box_<T> { fn a(&self) -> String { … } }
 impl Box_<i32> { fn a(&self) -> i32 { … } }   // ERROR: duplicate definition of `a`
 ```
+
+Inherent blocks that reach no receiver in common may share a name.
 
 Two impls that are general in the same way cannot be ordered at all, so a second
 variadic impl of one trait is rejected where it is written:
@@ -448,9 +633,14 @@ impl<..T> Conv<String> for [..T] { … } // OK — a different trait
 
 ### One Trait at Two Argument Lists
 
-A trait may be implemented for one type at several argument lists — each impl
-is legal, and the arguments choose between them
-([WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)):
+Wado has no function overloading. Declaring a second one of these under one name
+is an error: a free function, an inherent method of one receiver (see
+[Specific Impls Win](#specific-impls-win)), a method within one trait
+declaration. Arity never tells two apart; default arguments cover optional
+parameters.
+
+The one overload set is one trait implemented for one type at several argument
+lists. Each impl is legal, and the call's arguments choose between them:
 
 ```wado
 impl Take<A> for bool { … }
@@ -460,14 +650,33 @@ f.take(B { v: 1 })          // OK: a named struct literal selects Take<B>
 f.take(a)                    // OK: the local's declared type selects Take<A>
 ```
 
-Any argument whose type the call site fixes selects: a local, a field read, a
-call's return type, an operator's result, a cast, an associated constant, an
-enum case, a range.
+A trait is identified by its declaration, never by its spelling: an alias names
+the trait it aliases, and two modules' same-named traits stay two traits. An
+argument list is identified by its resolved types, so `Take<Alias>` and
+`Take<A>` name one list. Every member of the set shares one declaration, so all
+take the same number of arguments.
 
-Selection is unique-or-error, with no ranking. An argument whose type the
-call site does not pin — above all a bare literal, which could coerce to
-several widths — admits every candidate it could coerce to and never selects
-one, so a literal-only distinction stays ambiguous:
+Any argument whose type the call site fixes selects: a local, a field read, a
+call's return type, a method call's return type, an operator's result, a cast,
+an associated constant, an enum case. `if` and `match` select by what their
+branches agree on, and a block by its trailing statement.
+
+A range, or a named literal of a generic struct, selects by its head type alone.
+`0..<n` is a `RangeExclusive` whatever its endpoints are, which is enough to tell
+`IndexValue<i32>` from `IndexValue<RangeExclusive<i32>>`. Two impls sharing that
+head, such as `Take<RangeExclusive<i32>>` beside `Take<RangeExclusive<i64>>`,
+stay ambiguous for such an argument.
+
+These carry nothing to select on and admit every candidate: a closure, a
+compound literal (a tuple, an anonymous struct, a list, a spread), `?`,
+`resume`, a tuple comprehension, a labeled block, a tagged template, a static
+call `Type::f(…)`, and a function named as a value. A name the argument binds
+for itself (a block's `let`, a match arm's pattern) is read the same way.
+
+Selection is unique-or-error, with no ranking. An argument whose type the call
+site does not pin admits every candidate it could coerce to and never selects
+one. A bare literal is the main case, since it could coerce to several widths,
+so a literal-only distinction stays ambiguous:
 
 ```wado
 impl Take<i32> for bool { … }
@@ -480,19 +689,38 @@ Take::<i64>::take(&f, 42)    // OK: the trait turbofish pins the list
 
 This is deliberate: letting the literal's default type decide would make
 adding an `impl Take<i32>` silently retarget every existing call that meant
-`Take<i64>`. A closure or a compound literal is typed by the parameter it is
-passed to, so it carries nothing to select on either, and the error names the
-argument that came up empty.
+`Take<i64>`. The error names each argument that came up empty and why, so it
+says whether an annotation would fix the call.
 
-Operators resolve their impl by operand type on the same principle, which is
-why `List<T>` implements `IndexValue<i32>`, `IndexValue<RangeExclusive<i32>>`,
-and `IndexValue<RangeInclusive<i32>>` at once — and why the same impls answer
-the method spelling, `l.index_value(i)`.
+Survivors naming one trait instantiation are ranked as any candidates are, which
+is where [Specific Impls Win](#specific-impls-win) applies. Survivors naming
+several instantiations are ambiguous; there is no best match, only a unique one.
+Once one impl is selected, the arguments are typed against its signature as for
+any call, so a literal coerces to the chosen parameter type and its range is
+checked there. Selection never reads a literal's value, and never reads effects:
+the chosen method's `with` clause is checked afterwards.
 
-A trait's associated function obeys the same rule, selected on its first
-argument. It has no receiver to fix `Self`, so the type is written out and the
-argument chooses among the impls that declare the function. Rust needs
-`<M as Enc<A>>::make` here:
+No survivor is a different error from ambiguity. Every argument was admitted by
+what it could be, so no candidate admitting it means no impl accepts the
+arguments, and the error lists what the overload set does take:
+
+```text
+no overload of 'take' accepts these arguments: the candidates are 'Take<i32>'
+and 'Take<String>'
+```
+
+A newtype receiver inherits its base's impls as candidates, and the same
+selection applies to them.
+
+Operators and indexing resolve their impl by operand type on the same principle.
+That is why `List<T>` implements `IndexValue<i32>`,
+`IndexValue<RangeExclusive<i32>>`, and `IndexValue<RangeInclusive<i32>>` at
+once, and why the same impls answer the method spelling, `l.index_value(i)`.
+
+A trait's associated function obeys the same rule. It has no receiver to fix
+`Self`, so the type is written out, and the arguments choose among the impls
+that declare the function, each read against the parameter written for it. Rust
+needs `<M as Enc<A>>::make` here:
 
 ```wado
 impl Enc<A> for M { fn make(v: A) -> i32 { … } }
@@ -502,10 +730,32 @@ M::make(A { })               // selects Enc<A>
 M::make(B { })               // selects Enc<B>
 ```
 
-Two _different_ traits declaring one method name for one receiver is a
-separate case and is always reported: name the trait
-(`Alpha::describe(&x)`). Argument selection never crosses trait lines —
-impls of different traits share no contract.
+`Type::from(x)` and `Type::try_from(x)` select this way among the type's `From`
+and `TryFrom` impls, before `x` is typed. One admitted impl supplies the
+argument's expected type, so `Wrapper::from(42)` beside `From<String>` and
+`From<i64>` takes `From<i64>` and types `42` as `i64`. Several admitted impls
+are ambiguous, and since `from` has no `self` the fix is a cast on the argument:
+
+```wado
+impl From<i32> for Wrapper { … }
+impl From<i64> for Wrapper { … }
+
+Wrapper::from(42)            // ERROR: a literal argument admits 'i32' and 'i64'
+Wrapper::from(42 as i64)     // OK
+```
+
+An integer literal coerces to an integer newtype, so `From<i64>` beside
+`From<Meters>` (`type Meters = i64`) is ambiguous for it rather than silently
+primitive. An argument known only by its head does not preselect: several
+same-head impls answering it is the expected reading, and typing the argument
+settles it. An inherent static `from` beside `From` impls is the type's own
+function and answers without selection.
+
+Argument selection never crosses trait lines, since impls of different traits
+share no contract. Two traits declaring one method name for one receiver are
+the two-trait [ambiguity](#ambiguity), whatever the arguments.
+
+Rationale: [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md).
 
 ## Iterator Traits
 
@@ -547,13 +797,54 @@ pub trait FromIterator {
 }
 ```
 
-### SliceValueIter
+### Iterator Naming
 
-`SliceValueIter<T>` is the by-value iterator for the whole sequence family: `Array<T>`, `List<T>`, and `Slice<T>` all reach it through `iter_value()`. [The Sequence Family](./wep-2026-06-02-sequence-family.md) owns the `Value` / `Ref` / `RefMut` axis and the rest of the family's iterators.
+Every standard library iterator that has a choice between yielding values and
+yielding references names it, in the type and in the method:
+
+| Axis    | Token    | Yields   | Method           |
+| ------- | -------- | -------- | ---------------- |
+| value   | `Value`  | `T`      | `iter_value()`   |
+| shared  | `Ref`    | `&T`     | `iter_ref()`     |
+| mutable | `RefMut` | `&mut T` | `iter_ref_mut()` |
+
+No name leaves the axis unmarked, except `IntoIterator` / `into_iter`. They are
+what `for-of` calls, and `for-of` marks the axis in its syntax (`of xs`,
+`of &xs`, `of &mut xs`). A reference iterator's `iter_value()` turns it into the
+value iterator over the same elements, where Rust says `copied()`.
+
+The sequence family's iterators:
+
+| Type                 | Item       | Reached by                                    |
+| -------------------- | ---------- | --------------------------------------------- |
+| `SliceValueIter<T>`  | `T`        | `iter_value()` on `Array`, `List`, or `Slice` |
+| `SliceRefIter<T>`    | `&T`       | `iter_ref()`                                  |
+| `SliceRefMutIter<T>` | `&mut T`   | `iter_ref_mut()` on `Array` or `List`         |
+| `SliceWindows<T>`    | `Slice<T>` | `windows(size)`                               |
+| `SliceChunks<T>`     | `Slice<T>` | `chunks(size)`                                |
+
+`TreeMap` and `TreeSet` carry the same axis. A map projection needs no suffix,
+since `keys()` already names what it yields, and it yields references:
+
+| Type                            | Item       | Reached by               |
+| ------------------------------- | ---------- | ------------------------ |
+| `TreeSetRefIter<T>`             | `&T`       | `iter_ref()`             |
+| `TreeSetValueIter<T>`           | `T`        | `iter_value()`           |
+| `TreeMapKeysRefIter<K, V>`      | `&K`       | `keys()`                 |
+| `TreeMapKeysValueIter<K, V>`    | `K`        | `keys().iter_value()`    |
+| `TreeMapValuesRefIter<K, V>`    | `&V`       | `values()`               |
+| `TreeMapValuesValueIter<K, V>`  | `V`        | `values().iter_value()`  |
+| `TreeMapEntriesRefIter<K, V>`   | `[&K, &V]` | `entries()`              |
+| `TreeMapEntriesValueIter<K, V>` | `[K, V]`   | `entries().iter_value()` |
+
+A map offers no `&mut` traversal: a `&mut` key would break the ordering, and a
+`&mut` value buys nothing over `m[k] = v`. The map and set iterators refer to
+the collection rather than copying it, so inserting or removing mid-traversal
+can skip or repeat an entry. `iter_value().collect()` takes a snapshot.
 
 ### Terminals
 
-Everything `Iterator` declares is available on every implementor, adapters included — the terminals bounded by their element type among them (`sum` / `product` need `Item: Add<Output = Item>` / `Mul<Output = Item>`, `min` / `max` need `Item: Ord`). See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
+Everything `Iterator` declares is available on every implementor, adapters included. That covers the terminals bounded by their element type: `sum` / `product` need `Item: Add<Output = Item>` / `Mul<Output = Item>`, and `min` / `max` need `Item: Ord`. See [`core:prelude`](./stdlib-core-prelude.md) for the full list and each one's behaviour.
 
 ### Usage
 
@@ -584,7 +875,7 @@ let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 
 By-value iteration (`into_iter()`, `iter_value()`, `for let x of list`) returns copies of elements. Reference iteration yields references instead: `iter_ref()` and `for let x of &list` yield `&T`, and `iter_ref_mut()` and `for let x of &mut list` yield `&mut T`.
 
-`&mut` iteration mutates elements in place when the element type has an addressable interior: `struct`, `List`, `String`, `i128`/`u128`. A write through the `&mut T` lands on the element:
+`&mut` iteration mutates elements in place. It needs an element type that is `RefMut` (see [Dispatch](#dispatch)), such as a `struct`, `List`, `String`, or `i128`/`u128`. A write through the `&mut T` lands on the element:
 
 ```wado
 for let p of &mut points {
@@ -592,7 +883,7 @@ for let p of &mut points {
 }
 ```
 
-A replace-on-assign element type (`primitive`, `enum`, `flags`, `variant`, `fn`) has no addressable interior, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
+An element type that is replaced on assignment (a primitive, `enum`, `flags`, `variant`, or `fn`) is not `RefMut`, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
 
 ```wado
 for let mut i = 0; i < arr.len(); i += 1 {
@@ -653,6 +944,111 @@ let result = arr.into_iter()
     .collect();
 // [30, 40, 50]
 ```
+
+## The Sequence Family
+
+Three prelude types hold contiguous sequences:
+
+|                | Fixed length | Growable  |
+| -------------- | ------------ | --------- |
+| Owned          | `Array<T>`   | `List<T>` |
+| Reference view | `Slice<T>`   | —         |
+
+`Slice<T>` is the read-only vocabulary type. An algorithm that only reads is
+written once against a slice, and the owned types reach it through
+`as_slice()`.
+
+A conversion's name says what it costs: `as_*` returns a view of the same
+elements, and `to_*` copies them.
+
+| From → To                  | Method       | Elements copied       |
+| -------------------------- | ------------ | --------------------- |
+| `Array` / `List` → `Slice` | `as_slice()` | none                  |
+| `Slice` → `Array` / `List` | `to_*()`     | all                   |
+| `List` → `Array`           | `to_array()` | all, sized to `len()` |
+
+Indexing by a range (`xs[1..<3]`, `xs[1..=2]`) yields a `Slice<T>`, as
+`slice(start, end)` does. Both clamp the range to the sequence.
+
+### Sequence and AsSlice
+
+Two prelude traits carry the family's shared methods, split by whether the
+implementor has a contiguous backing. All three types implement both.
+
+```wado
+pub trait Sequence {
+    type Elem;
+
+    fn len(&self) -> i32;
+    fn get_unchecked(&self, index: i32) -> Self::Elem;
+
+    // default bodies, written against `len` and `get_unchecked`
+    fn is_empty(&self) -> bool;
+    fn get(&self, index: i32) -> Option<Self::Elem>;
+    fn first(&self) -> Option<Self::Elem>;
+    fn last(&self) -> Option<Self::Elem>;
+    fn position(&self, pred: fn mut(Self::Elem) -> bool) -> Option<i32>;
+}
+
+pub trait AsSlice: Sequence {
+    fn as_slice(&self) -> Slice<Self::Elem>;
+
+    // default bodies, through `as_slice`
+    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>;
+    fn iter_value(&self) -> SliceValueIter<Self::Elem>;
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem>;
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem>;
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>;
+}
+```
+
+The element type is an associated type, so a bound reads
+`S: Sequence<Elem = i32>`. A method that needs a bound on the element, such as
+`contains` (`Elem: Eq`), is not a trait method: each type carries it as a
+bounded inherent method. Mutation is in neither trait, since a `Slice` has no
+mutable backing and length changes belong to `List` alone. `String` implements
+neither; its bytes are viewed through `AsByteSlice`, and its text through
+[`AsStrSlice`](#string-views).
+
+A function that reads any of the three takes the trait by value:
+
+```wado
+fn total<S: AsSlice<Elem = i32>>(xs: S) -> i32 {
+    return xs.iter_value().fold(0, |acc, x| acc + x);
+}
+```
+
+### Slice Semantics
+
+A slice refers to the whole backing array plus a start and an end. It is an
+ordinary value: assigning one copies those three fields and never the elements.
+A view reads its elements but never hands out `&mut` into the array, so nothing
+writes through it (see [Dispatch](#dispatch)). Two consequences follow, both
+memory-safe:
+
+- Snapshot. A view keeps referring to the buffer it was created from, so a
+  source `List` that grows and reallocates is not observed.
+- Aliasing. A write to the source that does not reallocate is visible through
+  the view.
+
+A slice compares, orders, displays, and inspects by its elements, not by the
+buffer it refers to.
+
+### Bounds Checks
+
+`get(i)` returns `Option<T>` on all three types. `xs[i]` traps when `i` is
+outside `0..<len()`, and the trap is the whole contract: its message is
+implementation-defined. On a slice this includes a negative index, although the
+backing array holds an element there: a view never reads outside itself.
+
+`get_unchecked(i)` leaves the check to the caller, who must guarantee
+`0 <= i < len()`. Violating that yields an unspecified value of the element type
+or traps. It is never undefined behavior and never compromises memory safety,
+because every element read is bounds-checked by the Wasm engine. Wado's
+`_unchecked` elides a semantic check, not a memory check, which is why Wado
+needs no `unsafe`.
+
+Rationale: [WEP: The Sequence Family](./wep-2026-06-02-sequence-family.md).
 
 ## Builtin Comparison Traits
 
@@ -724,8 +1120,16 @@ On every type but a float, a comparison operator means what `Ord::cmp` answers:
 A float is the one type whose operators are not its `Ord`: all four are IEEE,
 so a NaN answers false and the two zeroes are one value. This holds for `f16`
 and `bf16` as for `f32` and `f64`. One trait cannot carry both orders, because
-`Ordering` has three cases and an IEEE comparison has four answers. See
-[WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
+`Ordering` has three cases and an IEEE comparison has four answers.
+
+A float still implements `Ord`, so a `List<f32>` sorts, and a struct holding a
+float derives `Ord` and can key a `TreeMap`.
+
+Written at a concrete float type, the operators are IEEE. Written in a body
+generic over `T: Ord`, they read `Ord::cmp`, so the same expression answers
+differently at `T = f32`.
+
+Rationale: [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
 ### Default Implementations
 
@@ -742,8 +1146,6 @@ if a < b { ... }  // true
 ```
 
 ## Default Trait
-
-See [WEP: Default Trait](./wep-2026-03-04-default-trait.md).
 
 The prelude defines a `Default` trait providing a uniform "zero value" / "empty value" interface:
 
@@ -783,7 +1185,7 @@ let arr = make_default::<List<String>>();  // []
 
 ### Auto-Derivation
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`). It is derived where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it, not for every eligible struct. A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](./spec-types.md#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+`Default` is derived for a non-generic struct whose every field declares a default expression (`f: T = expr`; see [Struct Field Defaults](./spec-types.md#struct-field-defaults)). A fieldless struct qualifies, having exactly one value. This is what lets a marker like `NoFields` serve as a type parameter's default. A generic struct derives no `Default`, since a default expression is checked against the declaration and not against an instantiation, so it needs a written impl. [Derivation Policy](#derivation-policy) says where the impl is derived, and that a written one wins.
 
 ```wado
 struct Config {
@@ -819,7 +1221,103 @@ f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr::from_str` takes any `AsStrSlice` — a `StrSlice` among them, so a field is parsed out of a larger buffer with no substring allocation. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+A `StrSlice` is an `AsStrSlice`, so a field is parsed out of a larger buffer with no substring allocation (see [String Views](#string-views)).
+
+```wado
+pub trait FromStr {
+    type Err: Error;
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+
+pub trait LenientFromStr {
+    type Err: Error;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
+}
+```
+
+`Err: Error` on both, so a caller reaching a failure through the bound can
+report its reason. The two are independent capabilities: a type implements
+either, both, or neither, and neither implies the other. A newtype inherits both
+from its base, so `type Port = u16` parses like `u16`.
+
+### Leniency
+
+`FromStr` is strict because machine-facing input depends on it: a JSON number
+or a router path segment must reject `"TRUE"` and `"0x2A"`. `LenientFromStr`
+widens the accepted spellings, never the accepted meanings: `"0x2A"` is `42`,
+and `"forty-two"` is still `Err`. An impl never panics, and an input it cannot
+read is `Err`.
+
+It never trims whitespace: trimming is the caller's choice. A type whose
+spellings admit no whitespace rejects it, so `" 1 "` is `Err` for an integer,
+and a value whose whitespace is significant, a `char` `' '` or an indented
+`String`, survives.
+
+The built-in impls accept:
+
+| Type                        | Accepted                                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `String`                    | any string, as itself                                                                    |
+| `char`                      | exactly one Unicode scalar, as `FromStr` does                                            |
+| `i8` … `i128`               | decimal, or `0x` / `0o` / `0b` in either case; an optional leading `+` or `-`            |
+| `u8` … `u128`               | as the signed types, but a leading `-` is `Err`                                          |
+| `f16`, `bf16`, `f32`, `f64` | decimal with an optional exponent; `nan`, `inf`, `infinity`, with a sign and in any case |
+| `bool`                      | `true` / `false` in any case, `1` / `0`                                                  |
+
+An integer or float ignores `_` anywhere in its digits (`1_000`, `0xFF_FF`), as
+a Wado numeric literal does. `,` is not a separator. A leading zero does not
+mean octal: `010` is `10`, and only `0o12` is octal. Every built-in impl's `Err`
+is `LenientParseError`.
+
+Rationale: [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+
+## String Views
+
+`StrSlice` is a prelude type: a view of part of a string, its ends on UTF-8
+character boundaries. Creating one copies nothing, and `to_string()` is where a
+copy is made. It is an ordinary library type; nothing in the language treats
+the name specially.
+
+```wado
+let v = "banana".as_str_slice();
+let part = v.slice(1, 4);        // "ana"; panics off a character boundary
+part.len();                      // 3, in bytes
+part.to_string();                // copies out, here and only here
+```
+
+`slice(start, end)` takes byte offsets from the view's start. It traps when the
+range is out of bounds or either end is not a character boundary.
+`slice_unchecked` leaves both checks to the caller. A view refers to its
+string's bytes as a [slice](#slice-semantics) does, with the same snapshot and
+aliasing behavior.
+
+`AsStrSlice` is the conversion that lets one signature take an owned `String`, a
+reference to one, or a view of one:
+
+```wado
+pub trait AsStrSlice: Eq<String> {
+    fn as_str_slice(&self) -> StrSlice;
+    // default bodies over the view: len, slice, chars, starts_with, find, …
+}
+```
+
+`String` and `StrSlice` implement it, and `impl<T: AsStrSlice> AsStrSlice for &T`
+passes a reference through. A parameter that only reads its text names
+`AsStrSlice` and takes it by value, so a call site passes a literal bare:
+`f("banana")`.
+
+`AsStrSlice` requires `Eq<String>`, so a body generic over it compares its text
+with `==` against a string, and a string-literal pattern matches it. `==` on a
+type parameter reads the parameter's bounds, so without the requirement neither
+would resolve. `StrSlice` and `String` compare in either order, and two views
+compare and order by their text.
+
+`StrSlice` carries the search and split methods (`contains`, `starts_with`,
+`find`, `split`, `split_once`, the trims, the `strip_*` family), and `String`'s
+own delegate to it. A method that answers with part of its input returns a view
+of it, so working on part of a string does not copy it out.
+
+Rationale: [WEP: String Views](./wep-2026-09-13-string-slice.md).
 
 ## Arithmetic Operator Traits
 
@@ -852,8 +1350,8 @@ lists (see [One Trait at Two Argument Lists](#one-trait-at-two-argument-lists)).
 
 The compiler supplies these impls for the integers, and for `f32` / `f64`
 except `Rem`. `bool` holds one bit, so it gets the bit operators and no shift;
-`v128` gets none, its arithmetic being lane-wise and known only to the lane
-type's own impl.
+`v128` gets none, since its arithmetic is lane-wise and only a lane type's own
+impl knows it.
 
 An operator yields `Output`, which a widening impl may make another type, so a
 generic body folding back into its own parameter pins it:
@@ -863,63 +1361,11 @@ fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
 fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
 ```
 
-A bound that writes no argument names the declared default. `T: Add` is
-`Add<Self>`, which `impl Add for Cm` answers and `impl Add<Inch> for Cm` does
-not.
-
-A bound that writes one asks for that argument. `T: Eq<String>` reaches
-`impl Eq<String> for StrSlice`. On a `String` receiver it reaches
-`impl Eq for String`, whose `Rhs` is the restated `Self`.
-
-An impl writing `Self` as a trait argument says its own target, so
-`impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
-
-`Self` in a bound names the type the surrounding declaration implements. A
-`trait` binds one and an `impl` binds one. A free function binds none, so `Self`
-anywhere in a free function's bounds is an error, and the error names the type
-parameter to write instead. A `struct` or `variant` declaration binds none
-either, so a bound on its own parameter is the same error.
-
-The position makes no difference. A trait argument (`T: Uses<Self::Item>`) and
-an associated-type constraint nested under one
-(`T: Sink<Cb = fn(Self::Item) -> i32>`) are both rejected. Rust rejects the same
-spelling.
-
-The rule is the same wherever a bound is written: on a type parameter, on a
-supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
-(`type Item: Eq<String>`). A bound's arguments are spelled where it is written,
-so a supertrait clause naming its own trait's parameter — `trait Gauge<X>:
-Measure<X>` — supplies `Measure<i32>` under `T: Gauge<i32>`. A position the
-clause leaves out takes the declared default there too, so `trait A<T>: B<T>`
-over `trait B<X, Y = i32>: C<Y>` supplies `C<i32>`.
-
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.
 
 An operator names these traits by construction, not by spelling: a trait
 declared as `Add` elsewhere shadows the name but does not answer `+`.
-
-A parameter with no default is left open by a bound that writes nothing there:
-`T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
-`T: Pick<String>` names it, and holds only for `impl Pick<String>`.
-
-Two bounds on one trait are two obligations, each asking for what it writes.
-Under `trait Pick<K = i32>`, `T: Pick + Pick<String>` asks for `impl Pick<i32>`
-as well as `impl Pick<String>`. A method call on such a parameter reads the
-bound that writes arguments. The trait is one either way, so naming it selects
-nothing.
-
-An impl and a bound already in scope read a written argument differently.
-
-An impl answers a bound only where every position agrees, each side counting the
-trait's declared default where it wrote nothing. `impl Conv<i32> for Holder` does
-not answer `U: Conv` when `Conv` declares `X = String`.
-
-A bound already in scope supplies a bare request whatever it writes, and a
-supertrait does the same. `T: Conv<i32>` supplies `Conv`, and
-`AsStrSlice: Eq<String>` supplies `Eq`. Nothing is chosen at such a request. The
-bound is already fixed, and the question is only whether the trait is among what
-the parameter carries.
 
 ## Indexing Traits
 
@@ -972,11 +1418,55 @@ A use site reads the trait that matches what it does with the element:
 - A bare read `c[i]` copies the element out through `IndexValue`.
 - An assignment `c[i] = v` writes through `IndexAssign`.
 - `&c[i]` and a `&self` receiver take `IndexRef` when the container has it, and a copy otherwise.
-- A `&mut self` receiver and a field write `c[i].f = v` take `IndexRefMut`. On a container without it they are compile errors.
+- A `&mut self` receiver, a field write `c[i].f = v`, and a compound one `c[i].f += v` take `IndexRefMut`. On a container without it they are compile errors.
 
-`Ref` and `RefMut` are sealed marker traits the compiler provides. `Ref` holds for a type whose value `&T` can alias, such as a `struct`, `List`, `String`, tuple, `variant`, `fn`, `i128`/`u128`, or reference. `RefMut` holds for the `Ref` types mutated in place rather than replaced on assignment, which excludes `variant` and `fn`. A scalar, `enum`, `flags`, or `resource` element is neither, so it is read and written by value only.
+A write assigns into the element rather than over it, so every subscript the
+target passes through is a `&mut` place: `o[i][j] = v` and `o[i][j].f = v` take
+`IndexRefMut` on `o[i]`. Neither other trait serves there. `IndexRef` hands out
+a shared reference, which a write cannot go through, and `IndexValue` hands out
+a copy, on which the write would be lost.
 
-`List<T>` and `Array<T>` implement `IndexValue` and `IndexAssign` for every element type, `IndexRef` when `T: Ref`, and `IndexRefMut` when `T: RefMut`:
+The four traits are independent: a container implements only the ones it
+supports. A subscript names the prelude's declarations, as an operator does, so
+a user trait spelled `IndexValue` does not answer `c[i]`.
+
+`Ref` and `RefMut` are sealed marker traits the compiler provides for every
+eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
+
+| Types                                                                         | `Ref` | `RefMut` |
+| ----------------------------------------------------------------------------- | ----- | -------- |
+| `struct`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`, `i128` / `u128` | yes   | yes      |
+| `variant`, `fn`                                                               | yes   | no       |
+| `&T`, `&mut T`                                                                | yes   | yes      |
+| scalars, `enum`, `flags`                                                      | no    | no       |
+| `resource`                                                                    | no    | no       |
+| `()`, `!`                                                                     | no    | no       |
+
+`Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
+types mutated in place rather than replaced on assignment, which excludes
+`variant` and `fn`. A `resource` is a handle that cannot be aliased, so a
+resource element is read by value. A newtype follows its base. Neither marker
+asks whether a value holds references: a `struct` with `&T` fields is `Ref`, and
+`i32` is not `Ref`, although `&i32` is.
+
+The markers bound the traits' `Output`, and an impl must meet the bound:
+`impl IndexRef<i32> for C { type Output = i32; … }` is a compile error, since a
+scalar cannot back the reference it promises. They do not restrict the `&`
+operator. `&nums[i]` on a `List<i32>` stays legal, and under value semantics it
+is a reference to a copy.
+
+The standard containers implement:
+
+| Container       | `IndexValue` | `IndexAssign` | `IndexRef` | `IndexRefMut` |
+| --------------- | ------------ | ------------- | ---------- | ------------- |
+| `List<T>`       | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   |
+| `Array<T>`      | every `T`    | every `T`     | `T: Ref`   | `T: RefMut`   |
+| `Slice<T>`      | every `T`    | —             | `T: Ref`   | —             |
+| `TreeMap<K, V>` | every `V`    | every `V`     | `V: Ref`   | `V: RefMut`   |
+
+`List`, `Array` and `Slice` are indexed by `i32` and by a range, which yields a
+`Slice<T>` (see [The Sequence Family](#the-sequence-family)); `TreeMap` by `K`.
+A slice is a shared view, so it has nothing to write through.
 
 ```wado
 let mut arr: List<i32> = [1, 2, 3];
@@ -984,15 +1474,59 @@ let x = arr[0];    // IndexValue::index_value
 arr[1] = 100;      // IndexAssign::index_assign
 ```
 
-See [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
+Rationale: [WEP: Indexing Traits Design](./wep-2026-01-20-indexing-traits.md).
 
-## Serialization and Deserialization
+## Trait Derivation
 
-Wado provides a format-agnostic serialization framework via `core:serde` and a JSON implementation via `core:json`. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+The compiler writes some trait impls itself. This section says which, and when.
+[Serialization](./spec-serialization.md) covers what the derived `Serialize` and
+`Deserialize` impls write.
+
+### Derivation Policy
+
+Each prelude trait follows one policy for when an impl exists:
+
+| Policy    | `T: Trait` holds when                                                             | Traits                                             |
+| --------- | --------------------------------------------------------------------------------- | -------------------------------------------------- |
+| on demand | every member of `T` satisfies the trait                                           | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
+| total     | always                                                                            | `Inspect`                                          |
+| written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
+| explicit  | an impl is written                                                                | every user-defined trait                           |
+
+`Default` is the one on-demand trait with a condition of its own: every field
+carries a default expression, rather than every member satisfying `Default`
+(see [Auto-Derivation](#auto-derivation)).
+
+An on-demand impl is generated only where a use needs it, not for every declared
+type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
+bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
+a bound. A [marker](#compiler-synthesized-impl) needs one too.
+
+A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
+type have no members, so they satisfy every structural obligation: `Eq` and
+`Ord` compare the discriminant or the bitmask.
+
+A generic declaration derives once, for every instantiation whose type
+arguments satisfy the trait: `Pair<T>` is `Eq` where `T: Eq`.
+
+A written `impl Trait for T { … }` wins over a derived one for every kind of
+type, an `enum`, a `flags` type, and a newtype included. It wins only for the
+instances it reaches. `impl<T> Eq for Pair<T, i32>` answers for
+`Pair<String, i32>`, and `Pair<i32, i64>` still derives. An impl reaches every
+instance of its head only when its target writes each argument as a distinct
+type parameter. A concrete argument or a repeated parameter narrows it to some
+instances, and a reference, a tuple, `()`, or a function type is one shape at a
+time.
+
+`Inspect` holds for every type, a type parameter included. A user-defined trait
+is never derived.
 
 ### Compiler-Synthesized `impl`
 
-The syntax `impl Trait for Type;` (semicolon instead of block) signals that the compiler generates the method body. Supported traits: `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`. For the structurally-checkable traits (`Eq` / `Ord` / `Default` / serde) the marker is also a conformance check — a compile error at its own span if `Type` is ineligible. An `Inspect` marker always validates. A `Display` marker (`impl Display for Type;`) is rejected — `Display` is not derivable for an arbitrary type; write a real `impl Display { fn fmt … }`, or rely on the automatic enum / newtype `Display`.
+A marker `impl Trait for Type;` (a semicolon instead of a block) asks the
+compiler to write the impl's methods. It is accepted for `From`, `Serialize`,
+`Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`, on a struct, enum,
+variant, or flags type.
 
 ```wado
 use { Serialize, Deserialize } from "core:serde";
@@ -1006,44 +1540,9 @@ impl Serialize for User;      // compiler generates serialize method
 impl Deserialize for User;    // compiler generates deserialize method
 ```
 
-The compiler inspects the type definition (struct, enum, variant, or flags) and synthesizes the appropriate method body. This is a compile error if a field or case's type doesn't implement the required trait.
-
-Deserialization rejects a repeated field or key by default; a format overrides `Deserializer::on_duplicate_key` to be lenient. Nesting past a format's `max_depth` is a `DepthLimitExceeded` error, not a trap.
-
-Struct field names are serialized verbatim by default (identity); see [Serialization Names](./wep-2026-02-28-serde.md#serialization-names) for `name` / `name_policy` overrides.
-
-### Bound-Driven Serialize / Deserialize
-
-The marker above is optional: a `T: Serialize` bound is satisfied structurally once every field or case of `T` satisfies the trait — the same on-demand model `Eq` / `Ord` use (below). This is how an anonymous struct, which has no name for a marker, becomes serializable:
-
-```wado
-use { to_string } from "core:json";
-
-struct Point { x: i32, y: i32 }              // no impl marker needed
-let json = to_string(&Point { x: 1, y: 2 }); // Ok("{\"x\":1,\"y\":2}")
-let anon = to_string(&{ x: 1, y: 2 });        // Ok("{\"x\":1,\"y\":2}") — anonymous struct
-```
-
-An anonymous literal may also compose spread bases: `{ ..a, ..b, field: v }`
-builds an anonymous struct whose fields are the union of the bases' and explicit
-fields, in source order, last contributor winning on a name collision (and its
-type). Each base is a struct value, evaluated once. Unlike a named struct's
-leading-single `..base`, composition allows spreads in any position and more than
-one; a member every one of whose fields is overwritten by a later member is a
-dead-write error. See [WEP: Literal Spread](./wep-2026-07-03-literal-spread.md).
-
-```wado
-let base = { user_id: 1, ip: "10.0.0.1" };
-let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
-```
-
-The explicit marker `impl Serialize for T;` still works — write it to force the impl with no bound present, or to attach `#[wire(name_policy = "...")]` customization. Like `Eq` / `Ord`'s marker (below), it is a conformance check: an ineligible field or case is a compile error at the marker's own span. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
-
-### Bound-Driven Eq / Ord
-
-`Eq` / `Ord` derive the same on-demand way: the impl for `T` is synthesized only where a `==` / `<` call site, a bound, or an explicit marker needs it. It is not synthesized for every declared type.
-
-The explicit marker `impl Eq for T;` / `impl Ord for T;` is a hard guarantee, not just a request: a compile error, with a reason chain, at the marker's own span if any field or case is ineligible:
+For `Eq`, `Ord`, `Default`, and serde, a marker is also a conformance check. A
+type that is not eligible is a compile error at the marker's own span, with a
+reason chain:
 
 ```wado
 struct Handler { cb: fn(i32) -> i32 }
@@ -1052,63 +1551,23 @@ impl Eq for Handler;
 // compile error: cannot derive `Eq` for `Handler`: not every field/case implements `Eq`
 ```
 
+A bound that does not hold is only unsatisfied where it is asked; only a marker
+fails at its own span. An `Inspect` marker always passes.
+
+A `Display` marker is rejected, since `Display` is not derived for an arbitrary
+type. Write an `impl Display` with a `fmt` body, or rely on the one a plain enum
+or a newtype has.
+
 ### Format Traits
 
-`${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type — no bound needed.
+`${x:?}` / `${x:#?}` render through `Inspect`, which every type has, so they
+need no bound.
 
-`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` runs the same `Display` with `Formatter.alternate` set; an impl that ignores the flag renders identically.
+`${x}` (`Display`) uses the type's `impl Display`. Primitives, `String`, plain enums (bare case name), and newtypes (inherited from the base type) have one. So do the prelude's sequences, tuples and ranges, where their elements allow it. Any other struct or variant needs a hand-written `impl Display`; otherwise `${x}` is a compile error and `${x:?}` gives its debug form. So `T: Display` certifies a real string representation. For example, `String::push_display` takes any `Display`. `${x:#}` is its [alternate form](./spec-literals.md#alternate-form).
 
 ```wado
 fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
 fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
 ```
 
-See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
-
-### JSON Module (`core:json`)
-
-```wado
-use { to_string, from_string } from "core:json";
-
-// Serialize to JSON string
-let json = to_string::<User>(&user);   // Result<String, SerializeError>
-
-// Deserialize from JSON string
-let user = from_string::<User>(json);  // Result<User, DeserializeError>
-```
-
-JSON serialization returns `Err` for `NaN` and `Infinity` float values. JSON deserialization returns `Err` for malformed input, missing required fields, type mismatches, and trailing data.
-
-### JSON NSD Module (`core:json_nsd`)
-
-Non-self-describing JSON format. Structs are encoded as positional arrays (field names omitted), unit variants as discriminant integers, and payload variants as `[disc, payload]`.
-
-```wado
-use { to_string, from_string } from "core:json_nsd";
-
-// Struct as positional array
-let json = to_string::<User>(&user);   // Result: Ok("[\"Alice\",30]")
-
-// Deserialize from positional array
-let user = from_string::<User>(`["Alice",30]`);  // Result<User, DeserializeError>
-```
-
-The same `Serialize` and `Deserialize` trait impls work with both `core:json` and `core:json_nsd`.
-
-### Command-Line Arguments (`core:args`)
-
-`core:args` is a non-self-describing, parse-only `Deserializer` over `argv`. Argument types are ordinary structs with `impl Deserialize for T;`: fields become `--long` options, and fields marked `#[wire(positional)]` are filled from bare tokens in declaration order (required, optional, or variadic). Scalar tokens are converted with `LenientFromStr`. See [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
-
-```wado
-use { parse } from "core:args";
-use { Deserialize } from "core:serde";
-
-struct Cli {
-    #[wire(positional)] input: String,
-    jobs: i32 = 1,
-    verbose: bool = false,
-}
-impl Deserialize for Cli;
-
-let cli = parse::<Cli>(["in.txt", "--jobs", "4", "--verbose"]);
-```
+Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
