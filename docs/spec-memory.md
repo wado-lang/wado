@@ -154,19 +154,6 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 references point to one place. A place is where a value is stored: a variable,
 a field, an element.
 
-<<<<<<< HEAD
-Identity is guaranteed in one direction only. Two references to one object
-always compare equal. Two references to objects of identical content that the
-program built separately may also compare equal: whether they are distinct
-objects is unspecified, and can change with the optimization level and with the
-Wado version. An identity comparison that should be true is never false.
-||||||| 89357d707
-Identity is guaranteed in one direction only. Two references to one object
-always compare equal. Two references to distinct objects of identical content
-may also compare equal, because the optimizer may intern such objects into one.
-Whether it does can change with the optimization level and with the Wado
-version. An identity comparison that should be true is never false.
-=======
 Identity is guaranteed in one direction only. Two references to one place are
 always `ref_eq`: `&x` taken twice of one variable, or a reference and a copy of
 it. References to distinct places may also be `ref_eq`, because the copies value
@@ -175,7 +162,6 @@ by eliding a copy or by interning a constant `String` or `List`. Whether it
 does can change with the optimization level and with the Wado version, so a
 `ref_eq` that is true only by such sharing is unpredictable. Java's `==` on
 strings behaves the same way.
->>>>>>> origin/main
 
 ```wado
 let mut xs: List<i32> = [1, 2, 3];
