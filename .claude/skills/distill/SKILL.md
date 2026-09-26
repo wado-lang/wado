@@ -49,10 +49,6 @@ and often a helper the codebase already had.
 - Efficiency: cut wasted work — recomputation, repeated I/O, independent work
   run in sequence. A stored closure pins everything it captured; prefer a struct
   holding only the fields it needs.
-- Naming and structure: a comment explaining _what_ the code does marks the code
-  to fix. Rename and decompose until it is redundant, then delete it.
-- Invariants: state them as an assertion — `assert!` in Rust, `assert` in Wado
-  — never as a comment.
 - Contracts, not defences: a function states what it requires and trusts its
   callers. Defensive programming is banned. A default or a fallback whose
   validity you cannot argue is the smell. It turns a broken call into a wrong
@@ -64,10 +60,10 @@ and often a helper the codebase already had.
 
 ### Comments
 
-- Delete outright what carries no information or repeats the code; trim only
-  what survives that.
-- What survives follows AGENTS.md § General Rules: a comment says why, a doc
-  comment says what the item is.
+Apply AGENTS.md § General Rules to every comment in scope. A comment saying
+what the code does is a rename or a decomposition to make. A comment stating an
+invariant is an assert to write. A comment that carries no information is
+deleted outright.
 
 ### Markdown
 
