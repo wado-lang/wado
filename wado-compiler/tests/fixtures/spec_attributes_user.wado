@@ -1,0 +1,82 @@
+// Quoted by docs/spec-attributes.md § User-Facing Attributes.
+
+use { InsecureSeed } from "wasi:random";
+use { to_string } from "core:json";
+
+#[inline]              // hint: prefer inlining
+fn small_helper() -> i32 { return 42; }
+
+#[inline(always)]      // always inline (ignores threshold)
+fn critical_path() -> i32 { return 1; }
+
+#[inline(never)]       // never inline
+fn error_handler() { panic("error"); }
+
+test {
+    assert small_helper() + critical_path() == 43;
+}
+
+#[expect_trap]
+test "the handler traps" {
+    error_handler();
+}
+
+pub struct HashIndex {
+    seed: u64, // private, and iteration order never reads it
+}
+
+impl HashIndex {
+    #[benign(InsecureSeed)]
+    pub fn new() -> HashIndex {
+        let [seed, _] = InsecureSeed::get_insecure_seed(); // not required of callers
+        return HashIndex { seed };
+    }
+}
+
+fn fresh() -> HashIndex {   // declares no effect, and needs none
+    return HashIndex::new();
+}
+
+test {
+    assert fresh() matches { HashIndex { .. } };
+}
+
+struct Foo {
+    pub name: String,
+    #[secret]
+    password: String, // excluded from `${foo:?}` output
+}
+
+test {
+    let foo = Foo { name: "ann", password: "hunter2" };
+    assert `${foo:?}` == "Foo { name: \"ann\", .. }";
+}
+
+#[synopsis]
+test {
+    let p = Point { x: 3, y: 4 };
+    assert p.length() == 5.0;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn length(&self) -> f64 {
+        return f64::sqrt((self.x * self.x + self.y * self.y) as f64);
+    }
+}
+
+#[wire(name_policy = "camelCase")]
+struct Event {
+    created_at: String,     // "createdAt"
+    #[wire(name = "type")]
+    event_type: String,     // "type"
+}
+
+test {
+    let e = Event { created_at: "now", event_type: "click" };
+    assert to_string(&e).unwrap() == "{\"createdAt\":\"now\",\"type\":\"click\"}";
+}

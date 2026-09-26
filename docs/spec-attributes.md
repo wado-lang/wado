@@ -10,6 +10,8 @@ These attributes are part of the language surface and can be used in any Wado so
 
 Inlining hints for the optimizer. Applies to functions.
 
+<!-- {"fixture":"spec_attributes_user.wado"} -->
+
 ```wado
 #[inline]              // hint: prefer inlining
 fn small_helper() -> i32 { return 42; }
@@ -19,6 +21,10 @@ fn critical_path() -> i32 { return 1; }
 
 #[inline(never)]       // never inline
 fn error_handler() { panic("error"); }
+
+test {
+    assert small_helper() + critical_path() == 43;
+}
 ```
 
 ### `#[benign(E, ...)]`
@@ -26,6 +32,8 @@ fn error_handler() { panic("error"); }
 Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited.
 
 An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
+
+<!-- {"fixture":"spec_attributes_user.wado"} -->
 
 ```wado
 pub struct HashIndex {
@@ -39,6 +47,14 @@ impl HashIndex {
         return HashIndex { seed };
     }
 }
+
+fn fresh() -> HashIndex {   // declares no effect, and needs none
+    return HashIndex::new();
+}
+
+test {
+    assert fresh() matches { HashIndex { .. } };
+}
 ```
 
 Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
@@ -51,11 +67,18 @@ Exempts a function's body from effect checking. [Ambient Functions](./spec-effec
 
 Hides a struct field from debug/inspect output (the `:?` format specifier).
 
+<!-- {"fixture":"spec_attributes_user.wado"} -->
+
 ```wado
 struct Foo {
     pub name: String,
     #[secret]
     password: String, // excluded from `${foo:?}` output
+}
+
+test {
+    let foo = Foo { name: "ann", password: "hunter2" };
+    assert `${foo:?}` == "Foo { name: \"ann\", .. }";
 }
 ```
 
@@ -69,10 +92,20 @@ Waives a lint on the item carrying it. As the module inner attribute
 - `shadowed_name`: a binder that takes a name already reaching a known symbol.
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
+<!-- {"fixture":"spec_attributes_allow.wado"} -->
+
 ```wado
 #[allow(dead_code)]
 fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
     return 0;
+}
+
+fn used() -> i32 {         // reached, so never reported
+    return 1;
+}
+
+test {
+    assert used() == 1;
 }
 ```
 
@@ -107,6 +140,10 @@ Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
 Marks a `global` as a compile-time build input. The type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.
 
+Built with `-D API_URL=https://example.com` and `PORT=80` in the environment:
+
+<!-- {"fixture":"spec_attributes_param.wado"} -->
+
 ```wado
 #[param]
 global API_URL: String = "http://localhost";   // -D API_URL=...
@@ -116,6 +153,11 @@ global PORT: i32 = 8080;                        // read from an env var
 
 #[param(name = "build.id")]
 global BUILD_ID: String = "dev";                // -D build.id=...
+
+test {
+    assert API_URL == "https://example.com" && PORT == 80;
+    assert BUILD_ID == "dev";                   // nothing set it
+}
 ```
 
 It takes two optional arguments:
@@ -167,6 +209,8 @@ Rationale: [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.m
 
 Declares a name that is deliberately not offered, on a declaration with no body. A call to it is an error that reports the reason. The reason is the only argument, and a removal writes its version into it. A missing or empty reason is an error.
 
+<!-- {"fixture":"spec_attributes_unavailable.wado"} -->
+
 ```wado
 impl File {
     #[unavailable("write `open_with(Options::default())` instead")]
@@ -175,6 +219,15 @@ impl File {
     #[unavailable("removed in 0.5.0; use `open_with`")]
     pub fn open_timeout(&self);
 }
+```
+
+So `f.open()` is rejected with the reason:
+
+<!-- {"fixture":"spec_attributes_unavailable.wado"} -->
+
+```wado
+let f = File { path: "a.txt" };
+f.open();
 ```
 
 The declaration reserves a name rather than a signature. Its parameters and
@@ -226,6 +279,8 @@ Test block attribute. Overrides the default test timeout. [`#[timeout_ms(N)]` At
 ### `#[synopsis]`
 
 Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section, a usage example that is compiled and so stays current.
+
+<!-- {"fixture":"spec_attributes_user.wado"} -->
 
 ```wado
 #[synopsis]
@@ -283,12 +338,19 @@ A name is written as in the source unless one of these keys changes it (see
   A policy reads any source casing, so a `PascalCase` case and a `snake_case`
   field both convert.
 
+<!-- {"fixture":"spec_attributes_user.wado"} -->
+
 ```wado
 #[wire(name_policy = "camelCase")]
 struct Event {
     created_at: String,     // "createdAt"
     #[wire(name = "type")]
     event_type: String,     // "type"
+}
+
+test {
+    let e = Event { created_at: "now", event_type: "click" };
+    assert to_string(&e).unwrap() == "{\"createdAt\":\"now\",\"type\":\"click\"}";
 }
 ```
 
@@ -306,17 +368,27 @@ positional fields from bare tokens (see [Command-Line Arguments](./spec-serializ
 No `#[wire]` key makes a field optional: a field default does. [Missing, Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)
 states the rule, `#[wire(default)]` included.
 
-## Standard Library Attributes
+## Module and Boundary Attributes
 
-These attributes are used in the standard library (`lib/`) to wire Wado code to Wasm and the Component Model. They are not intended for user code.
+These are valid in any module. Most programs never write them: the standard
+library and generated code do.
 
 ### `#![no_prelude]`
 
 Module-level inner attribute. Prevents the automatic import of `core:prelude`. Used by low-level modules that define the prelude itself or that operate below the prelude layer.
 
+<!-- {"fixture":"spec_attributes_no_prelude.wado"} -->
+
 ```wado
 #![no_prelude]
 // This module does not import core:prelude
+
+use { Option } from "core:prelude";
+
+test {
+    let x: Option<i32> = Option::Some(1);
+    assert x matches { Some(1) };
+}
 ```
 
 ### `#![generated]`
@@ -330,39 +402,93 @@ The attribute accepts optional metadata so that generators can attach provenance
 
 Conventional keys are `by` (the tool that produced the file) and `sources` (the list of source paths it was generated from). Unknown keys are tolerated, so generators can introduce additional metadata without requiring a spec change.
 
+<!-- {"fixture":"spec_attributes_generated.wado"} -->
+
 ```wado
 #![generated]
 
 #![generated(by = "wado-from-idl", sources = ["deps/random.wit"])]
 
 #![generated(by = "wado-from-idl", sources = ["cli.wit", "clocks.wit"])]
+
+fn roll() -> i32 { return 4; }
+
+test {
+    assert roll() == 4;   // the attribute does not change how it compiles
+}
+```
+
+### `#![stdlib("path")]`
+
+Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches.
+
+<!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
+
+```wado
+#![wasm_module("mem")]
+#![no_prelude]
+#![stdlib("core:allocator")]
+```
+
+### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
+
+Links Wado definitions (interfaces, worlds, resources, enums) to their Component Model names. See [Attribute Syntax for Component Model Linking](./spec-components.md#attribute-syntax-for-component-model-linking).
+
+## Standard Library Attributes
+
+These attributes wire the standard library to Wasm and the Component Model. They
+are valid only in the standard library: a `core:*` or `wasi:*` module, or the
+declarations the compiler writes for an imported Wasm asset. Anywhere else each
+is an error.
+
+<!-- {"fixture":"spec_attributes_stdlib_only.wado"} -->
+
+```wado
+#[canonical("mem", "realloc")]
+fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 ```
 
 ### `#![wasm_module("name")]`
 
 Module-level inner attribute. All items in this module are compiled into a separate Wasm core module with the given name, which owns its own linear memory.
 
-The Component Model requires a component to provide a linear memory and a `realloc` function for data crossing the boundary. `core:allocator` provides both as the core module `"mem"`, the only `wasm_module` in the standard library.
-
-```wado
-#![wasm_module("mem")]
-#![no_prelude]
-
-global mut heap_offset: i32 = 8;
-
-#[allocator("bump")]
-export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
-    // ...
-}
-```
+The Component Model requires a component to provide a linear memory and a `realloc` function for data crossing the boundary. `core:allocator` provides both as the core module `"mem"`, the only `wasm_module` in the standard library. Its header is quoted under [`#![stdlib]`](#stdlibpath).
 
 ### `#[allocator("name")]`
 
 Marks a function in a `wasm_module` as the `realloc` implementation named `name`. The world selects which one the component uses: `bump` for CLI programs, `freelist` for HTTP services, and `debug` for the test world. `debug` never reuses freed memory and fills it with `0xFF`.
 
-### `#[export_name("name")]`
+<!-- {"source":"wado-compiler/lib/core/allocator.wado"} -->
 
-Overrides the Wasm export name of a function within its core module.
+```wado
+#[allocator("bump")]
+export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32 {
+    // Free: rewind if this was the most recent allocation
+    if newsize == 0 {
+        if oldptr + oldsize == heap_offset {
+            heap_offset = oldptr;
+        }
+        return 0;
+    }
+
+    let aligned = builtin::i32_and(heap_offset + align - 1, 0 - align);
+    let new_offset = aligned + newsize;
+
+    if new_offset > builtin::memory_size() * PAGE_SIZE {
+        builtin::cold_path();
+        grow_memory(new_offset);
+    }
+
+    heap_offset = new_offset;
+
+    return aligned;
+}
+```
+
+### `#[export]` / `#[export_name("name")]`
+
+`#[export]` makes a function a raw Wasm export of its core module.
+`#[export_name("name")]` overrides the name it is exported under.
 
 ### `#[canonical("namespace", "name")]`
 
@@ -374,25 +500,23 @@ Declares that a bodyless function is imported rather than defined. Used in `core
 | `"mem"`         | Exports of the `"mem"` core module (`realloc`)                 |
 | `"wasm:<path>"` | Exports of an imported core-wasm asset (e.g. the bundled libm) |
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
 ```wado
 #[canonical("wasi", "stream-new")]
-fn stream_new() -> i64;
+pub fn stream_new() -> i64;
+```
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
 #[canonical("mem", "realloc")]
-fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
+pub fn realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) -> i32;
 ```
 
 ### `#[compiler_item("name")]`
 
 Binds a stdlib declaration to the language item of that name, such as `#[compiler_item("option")]` on `variant Option` or `#[compiler_item("display")]` on the `Display` trait. It is valid only in `core:*` modules, and an error elsewhere.
-
-### `#![stdlib("path")]`
-
-Module-level inner attribute. Names the bundled stdlib module a file is, such as `#![stdlib("core:cbor")]`. The file is that module however it was loaded, so a file an editor opens directly is the same module an import reaches.
-
-### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
-
-Links Wado definitions (interfaces, worlds, resources, enums) to their Component Model names. See [Attribute Syntax for Component Model Linking](./spec-components.md#attribute-syntax-for-component-model-linking).
 
 ### `#[retain(...)]` / `#[result(...)]`
 
@@ -403,14 +527,29 @@ from one: a `core:builtin` primitive, a Component Model import, a `.wasm` /
 `.wat` asset import. [Reference Retention](./spec-memory.md#reference-retention)
 states what retention is, and that no function type carries it.
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
 ```wado
 #[result(part_of = arr)]
+#[trap(outside = arr, at = idx)]
+#[trap(unset = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+```
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
 #[retain(value, into = arr)]
+#[trap(outside = arr, at = idx)]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+```
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
 #[retain(elements_of = src, into = dst)]
+#[trap(outside = dst, at = dst_offset, len = len)]
+#[trap(outside = src, at = src_offset, len = len)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
 
@@ -443,8 +582,11 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 Names a parameter that becomes a Wasm immediate: the argument's literal value is
 encoded into the instruction itself.
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
 ```wado
 #[immediate(value)]
+#[trap(never)]
 pub fn v128_const(value: i128) -> v128;
 ```
 
@@ -460,22 +602,32 @@ When a call to a declaration with no body traps. Silence means it may trap.
 `#[trap(never)]` says it never traps, and a check names the one condition it
 traps on:
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
 ```wado
 #[trap(never)]
 pub fn f64_sqrt(x: f64) -> f64;
+```
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
+#[result(part_of = arr)]
 #[trap(outside = arr, at = idx)]
 #[trap(unset = arr)]
 pub fn array_get_value<T>(arr: &Array<T>, idx: i32) -> T;
+```
 
-#[trap(outside = dst, at = dst_offset, len = len)]
-#[trap(outside = src, at = src_offset, len = len)]
-pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
 
+```wado
 #[result(owned)]
 #[trap(negative = len, result_len = len)]
 pub fn array_new<T>(len: i32) -> Array<T>;
 ```
+
+`array_copy`, quoted under [`#[retain]`](#retain--result), checks a range in
+each of its two arrays.
 
 `negative = p` traps when `p` is below zero. `outside = a` traps unless the
 range from `at` (0 when absent) of `len` elements (1 when absent) lies within
@@ -497,10 +649,16 @@ How a call to a declaration with no body touches linear memory: `read` or
 `write`. Silence means it touches none. A linear-memory address is a plain
 `i32`, so no parameter type says this, and the attribute is the only source.
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
 ```wado
 #[linear_memory(read)]
 pub fn i32_load(addr: i32) -> i32;
+```
 
+<!-- {"source":"wado-compiler/lib/core/builtin.wado"} -->
+
+```wado
 #[linear_memory(write)]
 pub fn i32_store(addr: i32, value: i32);
 ```

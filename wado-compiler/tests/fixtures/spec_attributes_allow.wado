@@ -1,0 +1,26 @@
+// Quoted by docs/spec-attributes.md § `#[allow(...)]`. The waived function is
+// reached by nothing and not reported; the unwaived one beside it is.
+
+#[allow(dead_code)]
+fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
+    return 0;
+}
+
+fn used() -> i32 {         // reached, so never reported
+    return 1;
+}
+
+test {
+    assert used() == 1;
+}
+
+fn unwaived() -> i32 {
+    return 2;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_contains": ["function `unwaived` is never used"],
+    "warnings_not_contains": ["scaffolding", "`used`"]
+}
