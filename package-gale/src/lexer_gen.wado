@@ -3067,37 +3067,25 @@ fn lexer_elem_leading_chars(
         },
         CharRange(pair) => plain_leading_chars(&folded_ranges(pair.0, pair.1, ci)),
         CharClass(cc) => {
-            // A case-folded complement is not the complement of the folded
-            // ranges, so a negated class under `ci` stays unknown.
-            if cc.negated && ci {
-                return null;
-            }
             let mut ranges: List<[i32, i32]> = [];
             for let r of &cc.ranges {
                 for let f of &folded_ranges(r.start, r.end, ci) {
                     ranges.push(*f);
                 }
             }
-            Option::<LeadingChars>::Some(LeadingChars { ranges, negated: cc.negated, nullable: false });
+            if cc.negated {
+                return complement_leading_chars(&ranges, ci);
+            }
+            plain_leading_chars(&ranges);
         },
         AnyChar => any_leading_chars(),
-        Not(not_inner) => {
-            // Folding widens a positive set but narrows its complement, so a
-            // complement read under `ci` could invent a disjointness that does
-            // not hold. Same guard as the negated `CharClass` above.
-            if ci {
-                return null;
-            }
-            match lexer_elem_leading_chars(&not_inner.element, all_rules, ci, follow_refs, visiting) {
-                Some(inner) => if inner.negated || inner.nullable {
-                    null;
-                } else {
-                    Option::<LeadingChars>::Some(
-                        LeadingChars { ranges: inner.ranges, negated: true, nullable: false },
-                    );
-                },
-                None => null,
-            }
+        Not(not_inner) => match lexer_elem_leading_chars(&not_inner.element, all_rules, ci, follow_refs, visiting) {
+            Some(inner) => if inner.negated || inner.nullable {
+                null;
+            } else {
+                complement_leading_chars(&inner.ranges, ci);
+            },
+            None => null,
         },
         Repeat(rep) => match lexer_elem_leading_chars(&rep.element, all_rules, ci, follow_refs, visiting) {
             Some(inner) => Option::<LeadingChars>::Some(
@@ -3132,6 +3120,21 @@ fn lexer_elem_leading_chars(
 
 fn plain_leading_chars(ranges: &List<[i32, i32]>) -> Option<LeadingChars> {
     return Option::<LeadingChars>::Some(LeadingChars { ranges: *ranges, negated: false, nullable: false });
+}
+
+/// The chars `fold_range_ci` moves.
+global ASCII_LETTERS: List<[i32, i32]> = [
+    [0x41, 0x5A],
+    [0x61, 0x7A],
+];
+
+/// Every char outside `excluded`. Under `ci` the complement of a folded set and
+/// the fold of a complement differ, but only on letters, so a complement that
+/// keeps every letter in is a superset of both: it can lose a disjointness
+/// proof, never invent one.
+fn complement_leading_chars(excluded: &List<[i32, i32]>, ci: bool) -> Option<LeadingChars> {
+    let ranges = if ci { ranges_minus(excluded, &ASCII_LETTERS) } else { *excluded };
+    return Option::<LeadingChars>::Some(LeadingChars { ranges, negated: true, nullable: false });
 }
 
 /// The set every char satisfies — `.`, and the reading a complement that
@@ -4409,6 +4412,14 @@ fn keyword_elem_ends(
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_admitted(kw, *p, reading, admits)).map(
                 |p| *p + 1,
             ).collect();
+        },
+        // Under `ci` a complement's leading chars keep every letter in, a
+        // superset a proof cannot stand on.
+        CharClass(_) && ci => {
+            return unread_keyword_ends(kw, reading, starts);
+        },
+        Not(_) && ci => {
+            return unread_keyword_ends(kw, reading, starts);
         },
         CharClass(_) | AnyChar | Not(_) => {
             let mut no_refs: List<String> = [];

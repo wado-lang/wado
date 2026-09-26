@@ -316,6 +316,38 @@ CMT : '/*' (CMT | .)+? '*/' ;");
     assert report.contains("ATN-class 1"), report;
 }
 
+test "lexer dump keeps a loop off the ATN when a negated fragment excludes the other arm's lead" {
+    // JSON's STRING. A fragment is read folded, and folding moves only letters,
+    // so `SAFE` still excludes the `\\` every `ESC` starts with.
+    let report = lexer_dump("grammar T;
+r : STR ;
+STR : '\"' (ESC | SAFE)* '\"' ;
+fragment ESC : '\\\\' [\"\\\\nt] ;
+fragment SAFE : ~[\"\\\\] ;");
+
+    assert report.contains("rule STR — matcher try_STR"), report;
+    assert report.contains("ATN-class 0"), report;
+}
+
+test "lexer dump keeps a caseInsensitive loop off the ATN when a negated class excludes the other arm's lead" {
+    let report = lexer_dump("grammar T;
+options { caseInsensitive = true; }
+r : STR ;
+STR : '\"' ('\\\\' [nt] | ~[\"\\\\])* '\"' ;");
+
+    assert report.contains("rule STR — matcher try_STR"), report;
+    assert report.contains("ATN-class 0"), report;
+}
+
+test "lexer dump routes a caseInsensitive loop whose negated class admits the other arm's lead" {
+    let report = lexer_dump("grammar T;
+options { caseInsensitive = true; }
+r : STR ;
+STR : '\"' ('\\\\' [nt] | ~[\"])* '\"' ;");
+
+    assert report.contains("rule STR — ATN-class"), report;
+}
+
 test "lexer dump gives no matcher to a rule only an ATN-class rule calls" {
     // `latn_match` simulates what `RAW` and `CMT` reference itself, so neither
     // `CONTENT` nor `ANY_CMT` gets a `try_` matcher nothing would call.
