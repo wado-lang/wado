@@ -880,8 +880,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         for (pattern, ty) in elems {
             if let Pattern::Ident { id, name, span } = pattern {
-                ctx.add_local_at(name.clone(), ty, is_mut, Some(*id), *span);
-                self.record_local_symbol(*id, name, *span, is_mut, ty);
+                self.bind_local(ctx, *id, name, *span, is_mut, ty);
             }
         }
     }
@@ -1160,8 +1159,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } = pattern
         {
             let is_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
-            ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-            self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
+            self.bind_local(ctx, *id, name, *name_span, is_mut, type_id);
             return;
         }
         self.resolve_must_bind_pattern(pattern, type_id, is_mut, span, site, ctx);
@@ -1564,9 +1562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
                 let binding_type =
                     self.pattern_binding_type(name, scrutinee_type, ref_binding, *name_span);
-                let index =
-                    ctx.add_local_at(name.clone(), binding_type, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
+                let index = self.bind_local(ctx, *id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }
             Pattern::Literal(lit) => {

@@ -1315,6 +1315,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.indirect_callees.insert(ast_id, callee);
     }
 
+    /// Bind a name written in source into `ctx`, and record its symbol.
+    fn bind_local(
+        &mut self,
+        ctx: &mut FunctionContext,
+        id: AstId,
+        name: &str,
+        span: Span,
+        is_mut: bool,
+        type_id: TypeId,
+    ) -> u32 {
+        let index = ctx.add_local_at(name.to_string(), type_id, is_mut, Some(id), span);
+        self.record_local_symbol(id, name, span, is_mut, type_id);
+        index
+    }
+
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
     /// LSP hover on a use site can retrieve the defining name / mutability
     /// and inlay hints can surface the inferred type. Called at each site
