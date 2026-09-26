@@ -18,6 +18,7 @@ pub mod dep_component;
 pub mod discover;
 pub mod doc;
 pub mod dump;
+pub mod eval_host;
 pub mod external;
 pub mod fetch;
 pub mod format;

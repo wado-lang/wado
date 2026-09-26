@@ -686,9 +686,9 @@ pub struct GeneratorDiagnostic {
 /// the same file via `wasmtime::component::bindgen!(path = "...")`.
 pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/core/kiln/generator.wit");
 
-/// A simple in-memory compiler host for testing
-///
-/// This host stores sources in an `IndexMap` and collects diagnostics in a Vec.
+/// A compiler host that holds its sources in memory and collects the
+/// diagnostics it is sent. With no sources, it compiles one module that reads
+/// nothing, as `core:eval` does.
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
     /// Source files by path (stored as raw bytes)

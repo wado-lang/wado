@@ -116,7 +116,6 @@ pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, semantics, semantics_for_world, semantics_of,
 };
 
-#[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,

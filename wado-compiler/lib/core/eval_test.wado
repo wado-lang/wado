@@ -1,0 +1,69 @@
+use { eval, EvalError, Status, TrapKind } from "core:eval";
+
+test "output written before a trap is kept" {
+    let out = eval(`use { println, Stdout } from "core:cli";
+export fn run() with Stdout {
+    println("before");
+    panic("boom");
+}`).unwrap();
+    assert out.status matches { Trapped(Unreachable) }, `${out.status}`;
+    assert out.stdout == "before\n";
+    assert out.stderr.contains("boom"), out.stderr;
+}
+
+test "exit carries its code" {
+    let out = eval(`use { exit, Exit } from "core:cli";
+export fn run() with Exit { exit(3); }`).unwrap();
+    assert out.status matches { Exited(3) }, `${out.status}`;
+}
+
+test "bytes that are not UTF-8 decode lossily" {
+    let out = eval(`use { print_bytes, Stdout } from "core:cli";
+export fn run() with Stdout { print_bytes([0x61, 0xff, 0x62]); }`).unwrap();
+    assert out.stdout == "a\u{FFFD}b";
+}
+
+test "a compile error names its codes" {
+    let result = eval(`export fn run() { let x: i32 = "text"; }`);
+    let Err(CompileFailed(failure)) = result else {
+        panic(`expected a compile failure, got ${result:?}`);
+    };
+    assert failure.codes == ["TYPE_MISMATCH"], `${failure.codes:?}`;
+    assert failure.rendered.starts_with("eval.wado:1:"), failure.rendered;
+}
+
+test "a relative import resolves to nothing" {
+    let result = eval(`use { f } from "./f.wado";
+export fn run() { f(); }`);
+    assert result matches { Err(CompileFailed(_)) }, `${result:?}`;
+}
+
+test "an unlinked import is unavailable" {
+    let result = eval(`use { args, Environment } from "core:cli";
+export fn run() with Environment { let _ = args(); }`);
+    let Err(Unavailable(name)) = result else {
+        panic(`expected an unavailable import, got ${result:?}`);
+    };
+    assert name.starts_with("wasi:cli/environment@"), name;
+}
+
+test "fuel bounds the run" {
+    let out = eval(`export fn run() { let mut i = 0; loop { i += 1; } }`, 10_000).unwrap();
+    assert out.status matches { OutOfFuel }, `${out.status}`;
+}
+
+test "the memory ceiling bounds the run" {
+    let out = eval(`export fn run() {
+    let big = List::<u8>::with_capacity(2_000_000_000);
+    assert big.is_empty();
+}`).unwrap();
+    assert out.status matches { OutOfMemory }, `${out.status}`;
+}
+
+test "Display renders each outcome" {
+    assert `${Status::Exited(0)}` == "exited with 0";
+    assert `${Status::Trapped(TrapKind::StackOverflow)}` == "trapped: stack overflow";
+    assert `${Status::OutOfFuel}` == "ran out of fuel";
+    assert `${EvalError::CompileTimedOut}` == "the compile ran past its time limit";
+    assert `${EvalError::Unavailable("wasi:random/random@0.3.0")}` == "the program imports `wasi:random/random@0.3.0`, which eval does not link";
+}

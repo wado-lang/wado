@@ -190,6 +190,7 @@
 - [core:cli](./stdlib-core-cli.md)
 - [core:collections](./stdlib-core-collections.md)
 - [core:digest](./stdlib-core-digest.md)
+- [core:eval](./stdlib-core-eval.md)
 - [core:fs](./stdlib-core-fs.md)
 - [core:icu](./stdlib-core-icu.md)
 - [core:json](./stdlib-core-json.md)

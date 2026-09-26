@@ -16,11 +16,12 @@ use lexopt::Arg::Value;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
-use wasmtime::{Engine, GuestProfiler, UpdateDeadline};
+use wasmtime::{Engine, GuestProfiler, Trap, UpdateDeadline};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::discover;
+use crate::eval_host::{EvalHost, EvalSession};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
@@ -569,6 +570,7 @@ fn format_panic_payload(payload: &Box<dyn Any + Send>) -> String {
 
 struct TestJob {
     module: Arc<LoadedModule>,
+    eval: EvalSession,
     test_name: String,
     display_name: String,
     expect_trap: bool,
@@ -837,7 +839,7 @@ fn load_module(
             runtime_knobs,
         )?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
-        let linker = Arc::new(runtime::create_linker(&component)?);
+        let linker = Arc::new(runtime::create_test_linker(&component)?);
         let profiler = match (profile, profiler_slot) {
             (ProfileMode::Guest { interval_ms, .. }, Some(slot)) => {
                 let interval = Duration::from_millis(*interval_ms);
@@ -1221,6 +1223,7 @@ async fn run_execute_stage(
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     observer: Arc<StageObserver>,
     result_tx: mpsc::Sender<TestResult>,
     reporter: Arc<dyn TestReporter>,
@@ -1235,6 +1238,7 @@ async fn run_execute_stage(
             .iter()
             .map(|t| TestJob {
                 module: module.clone(),
+                eval: EvalSession::new(Arc::clone(&eval_host), &module.path),
                 test_name: t.export_name.clone(),
                 display_name: t.display_name(),
                 expect_trap: t.parsed.kind == TestKind::ExpectTrap,
@@ -1423,6 +1427,7 @@ async fn run_pipeline(
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     no_run: bool,
     profile: ProfileMode,
     runtime_knobs: RuntimeKnobs,
@@ -1516,6 +1521,7 @@ async fn run_pipeline(
             execute_jobs,
             budget.cpu.clone(),
             preopened_dirs,
+            eval_host,
             execute_observer.clone(),
             result_tx,
             reporter.clone(),
@@ -1610,11 +1616,15 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
     let start = Instant::now();
     let module = job.module.as_ref();
 
-    let (mut store, stdout_pipe, stderr_pipe) =
-        match runtime::create_test_store(&module.engine, preopened_dirs, &module.path) {
-            Ok(v) => v,
-            Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
-        };
+    let (mut store, stdout_pipe, stderr_pipe) = match runtime::create_test_store(
+        &module.engine,
+        preopened_dirs,
+        &module.path,
+        job.eval.clone(),
+    ) {
+        Ok(v) => v,
+        Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start),
+    };
 
     // Profiling samples on every epoch tick, so it takes the deadline the
     // timeout was counted in; `parse_args` says so on the flag.
@@ -1627,6 +1637,18 @@ async fn run_single_test(job: &TestJob, preopened_dirs: &[(String, String)]) -> 
         });
         store.set_epoch_deadline(1);
     } else {
+        // Time inside `eval` is spent compiling another program, so the
+        // deadline moves out by that much each time the test reaches it.
+        store.epoch_deadline_callback(|mut store_ctx| {
+            match store_ctx
+                .data_mut()
+                .eval_session()
+                .take_paused_ticks(Duration::from_millis(EPOCH_INTERVAL_MS))
+            {
+                0 => Err(Trap::Interrupt.into()),
+                owed => Ok(UpdateDeadline::Continue(owed)),
+            }
+        });
         let deadline_ticks = (job.timeout_ms / EPOCH_INTERVAL_MS).max(1);
         store.set_epoch_deadline(deadline_ticks);
     }
@@ -2068,6 +2090,7 @@ async fn run_one_package(
     load_jobs: usize,
     execute_jobs: usize,
     preopened_dirs: Arc<Vec<(String, String)>>,
+    eval_host: Arc<EvalHost>,
     show_banner: bool,
     no_run: bool,
     profile: ProfileMode,
@@ -2086,6 +2109,7 @@ async fn run_one_package(
         load_jobs,
         execute_jobs,
         preopened_dirs,
+        eval_host,
         no_run,
         profile,
         runtime_knobs,
@@ -2287,6 +2311,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
+    let eval_host = Arc::new(EvalHost::new(&flags.knobs));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
@@ -2301,6 +2326,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             load_jobs,
             execute_jobs,
             preopened_dirs.clone(),
+            Arc::clone(&eval_host),
             multi_pkg,
             no_run,
             profile.clone(),

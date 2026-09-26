@@ -118,6 +118,7 @@ test {
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
+- [`core:eval`](./stdlib-core-eval.md) belongs to the `test` world too. A program for any other world that reaches it does not compile
 
 #### `#[expect_trap]` Attribute
 
@@ -142,7 +143,7 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 
 #### `#[timeout_ms(N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. This is useful for tests that involve expensive computation or I/O:
+The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and fails. Time spent inside `core:eval`'s `eval` does not count against it. This is useful for tests that involve expensive computation or I/O:
 
 ```wado
 #[timeout_ms(30000)]

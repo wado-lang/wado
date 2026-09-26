@@ -17,6 +17,7 @@ use wasmtime_wasi_tls::{
 };
 
 use crate::args::CliExit;
+use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::http_hooks::WadoHttpHooks;
 use crate::knobs::RuntimeKnobs;
 use crate::timezone_host::add_to_linker;
@@ -75,6 +76,8 @@ pub struct WasiState {
     http: WasiHttpCtx,
     http_hooks: WadoHttpHooks,
     tls: WasiTlsCtx,
+    /// `wado test` only: the store's handle on `core:eval`.
+    eval: Option<EvalSession>,
 }
 
 /// Per-guest stdout/stderr capacity for [`WasiState::new_capturing_stdio`].
@@ -82,7 +85,7 @@ pub struct WasiState {
 /// silently truncating, so this just needs to be generous enough that
 /// realistic test output (assertion diagnostics, a benchmark's own
 /// printed stats) never gets anywhere near it.
-const CAPTURED_STDIO_CAPACITY: usize = 1024 * 1024;
+pub(crate) const CAPTURED_STDIO_CAPACITY: usize = 1024 * 1024;
 
 /// Selects where a [`WasiState`]'s stdout/stderr go.
 enum Stdio {
@@ -111,7 +114,7 @@ impl WasiState {
     ///
     /// Returns an error if a preopened directory cannot be opened.
     pub fn new(preopened_dirs: &[(String, String)], args: &[String]) -> Result<Self> {
-        Self::build(preopened_dirs, args, true, Stdio::Inherit)
+        Self::build(preopened_dirs, args, true, Stdio::Inherit, None)
     }
 
     /// Like [`Self::new`], but captures the guest's stdout/stderr into
@@ -126,12 +129,15 @@ impl WasiState {
     /// deadlock the caller, who only reads the pipes back after the
     /// guest's `Store` is done with them.
     ///
+    /// `eval` is the test's handle on `core:eval`, which only a test links.
+    ///
     /// # Errors
     ///
     /// Returns an error if a preopened directory cannot be opened.
     pub fn new_capturing_stdio(
         preopened_dirs: &[(String, String)],
         args: &[String],
+        eval: EvalSession,
     ) -> Result<(Self, MemoryOutputPipe, MemoryOutputPipe)> {
         let stdout = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
         let stderr = MemoryOutputPipe::new(CAPTURED_STDIO_CAPACITY);
@@ -143,6 +149,7 @@ impl WasiState {
                 stdout: stdout.clone(),
                 stderr: stderr.clone(),
             },
+            Some(eval),
         )?;
         Ok((state, stdout, stderr))
     }
@@ -178,6 +185,7 @@ impl WasiState {
             http,
             http_hooks,
             tls,
+            eval: None,
         }
     }
 
@@ -186,6 +194,7 @@ impl WasiState {
         args: &[String],
         inherit_env: bool,
         stdio: Stdio,
+        eval: Option<EvalSession>,
     ) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         match stdio {
@@ -228,7 +237,15 @@ impl WasiState {
             http,
             http_hooks,
             tls,
+            eval,
         })
+    }
+
+    /// The test's handle on `core:eval`.
+    pub fn eval_session(&mut self) -> &mut EvalSession {
+        self.eval
+            .as_mut()
+            .expect("only a test links core:eval, and every test store carries a session")
     }
 }
 
@@ -453,16 +470,16 @@ pub fn create_engine(
     Ok(Engine::new(&create_config(opt_level, profile, knobs))?)
 }
 
-/// Create a wasmtime Engine tuned for Kiln generator execution.
+/// Create a wasmtime Engine that consumes fuel, for a guest run under a budget:
+/// a Kiln generator, or a program `core:eval` evaluates.
 ///
-/// Differs from [`create_engine`] by enabling fuel consumption so the Kiln
-/// runtime can enforce [`crate::kiln_runtime::KilnRunPolicy::fuel`]. Without
-/// this, `Store::set_fuel` is rejected by the runtime.
+/// Differs from [`create_engine`] by enabling fuel consumption, without which
+/// `Store::set_fuel` is rejected by the runtime.
 ///
 /// # Errors
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
+pub fn create_fuel_engine(opt_level: OptLevel) -> Result<Engine> {
     let mut config = create_config(opt_level, &ProfileMode::None, RuntimeKnobs::default());
     config.consume_fuel(true);
     Ok(Engine::new(&config)?)
@@ -557,9 +574,10 @@ pub fn create_test_store(
     engine: &Engine,
     preopened_dirs: &[(String, String)],
     program: &str,
+    eval: EvalSession,
 ) -> Result<(Store<WasiState>, MemoryOutputPipe, MemoryOutputPipe)> {
     let (state, stdout, stderr) =
-        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()])?;
+        WasiState::new_capturing_stdio(preopened_dirs, &[program.to_owned()], eval)?;
     Ok((Store::new(engine, state), stdout, stderr))
 }
 
@@ -571,11 +589,29 @@ pub fn create_test_store(
 /// Returns an error if WASI bindings cannot be added to the linker, or if an
 /// import is a module or a component.
 pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
+    let mut linker = host_linker(component)?;
+    linker.define_unknown_imports_as_traps(component)?;
+    Ok(linker)
+}
+
+/// Like [`create_linker`], plus `core:eval`, which only a test may reach.
+///
+/// # Errors
+///
+/// Returns an error if a binding cannot be added to the linker, or if an import
+/// is a module or a component.
+pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
+    let mut linker = host_linker(component)?;
+    add_eval_to_linker(&mut linker, WasiState::eval_session)?;
+    linker.define_unknown_imports_as_traps(component)?;
+    Ok(linker)
+}
+
+fn host_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker: Linker<WasiState> = Linker::new(component.engine());
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     add_to_linker(&mut linker)?;
-    linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)
 }

@@ -853,7 +853,7 @@ fn hex32_to_array(hex: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
-fn hex32(bytes: &[u8; 32]) -> String {
+pub(crate) fn hex32(bytes: &[u8; 32]) -> String {
     use std::fmt::Write;
     let mut out = String::with_capacity(64);
     for byte in bytes {
