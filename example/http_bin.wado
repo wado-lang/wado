@@ -193,7 +193,9 @@ fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
 
 /// `body` with each coding a `Content-Encoding` value lists undone, last applied first.
 fn decode_content(content_encoding: &String, body: ByteList) -> Result<ByteList, BodyError> {
-    let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(|c| !c.is_empty()).collect();
+    let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(
+        |c| !c.is_empty(),
+    ).collect();
     codings.reverse();
     let mut decoded = body;
     for let coding of codings {
