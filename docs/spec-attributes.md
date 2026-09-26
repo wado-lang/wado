@@ -461,8 +461,8 @@ an [`#[unavailable]`](#unavailablereason) declaration, which is never called.
 `#[retain(...)]` names one retained thing and repeats where there is more than
 one, so each carries its own destination. A bare name is the parameter itself
 and `elements_of = p` is that parameter's elements; `into = q` names the
-parameter it lands in, and without it the destination is unknown. Silence is the
-conservative reading.
+parameter it lands in, and without it the destination is unknown. Silence says
+the call keeps nothing.
 
 Every parameter is named bare, never quoted, and a name that is not a parameter
 of the declaration is an error. An argument the attribute does not take, or a
