@@ -190,7 +190,7 @@ fn rewrite_frame(
 }
 
 /// Finds, by `for` body label, the mutable bindings a C-style `for` header
-/// declares, where its body builds a closure that may reach them.
+/// declares.
 struct ForHeaders<'a, 'l> {
     locals: &'a FrameLocals<'l>,
     loop_spans: Vec<Span>,
@@ -210,22 +210,18 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                 let Some(&loop_span) = self.loop_spans.last() else {
                     unreachable!("a `for` body is minted inside the loop it runs in");
                 };
-                let mut closures = BuildsClosure::default();
-                closures.visit_block(block);
-                if closures.found {
-                    let headers = self
-                        .locals
-                        .declarations()
-                        .filter(|(_, declared)| {
-                            declared.is_mut
-                                && encloses(&loop_span, &declared.span)
-                                && !encloses(&stmt.span, &declared.span)
-                        })
-                        .map(|(index, _)| index)
-                        .collect::<Vec<_>>();
-                    if !headers.is_empty() {
-                        self.for_headers.insert(label.clone(), headers);
-                    }
+                let headers = self
+                    .locals
+                    .declarations()
+                    .filter(|(_, declared)| {
+                        declared.is_mut
+                            && encloses(&loop_span, &declared.span)
+                            && !encloses(&stmt.span, &declared.span)
+                    })
+                    .map(|(index, _)| index)
+                    .collect::<Vec<_>>();
+                if !headers.is_empty() {
+                    self.for_headers.insert(label.clone(), headers);
                 }
             }
             TirStmtKind::Expr(_)
@@ -247,24 +243,8 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
     }
 }
 
-/// Whether a body builds a closure. What one captures may be a borrow of a
-/// header reached by any path, so the capture list alone cannot rule it out.
-#[derive(Default)]
-struct BuildsClosure {
-    found: bool,
-}
-
-impl TirRefVisitor for BuildsClosure {
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        self.found |= matches!(expr.kind, TirExprKind::Closure { .. });
-        if !self.found {
-            self.walk_expr(expr);
-        }
-    }
-}
-
-/// `let mut header = header;`: a fresh binding for the next iteration, so the
-/// closures of this one keep the box they captured.
+/// `let mut header = header;`: the next iteration's binding, so what this one
+/// captured or borrowed keeps its own box (ECMA-262 CreatePerIterationEnvironment).
 fn redeclaration(locals: &FrameLocals, header: u32) -> TirStmt {
     let Some((name, type_id)) = locals.local(header) else {
         unreachable!("`ForHeaders` takes only locals the frame declares");

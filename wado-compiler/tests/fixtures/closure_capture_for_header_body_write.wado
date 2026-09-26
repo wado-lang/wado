@@ -1,5 +1,5 @@
-// A binding a `for` header declares is one per iteration, so a body's write
-// lands on its own iteration's copy, whether or not it runs.
+// A binding a `for` header declares is one per iteration, as in ECMA-262, so
+// what one iteration captures or borrows keeps that iteration's copy.
 
 fn called(fs: List<fn() -> i32>) -> List<i32> {
     return fs.into_iter().map(|f| f()).collect();
@@ -92,6 +92,19 @@ export fn run() {
         fielded.push(|| *h.r);
     }
     assert called(fielded) == [0, 1];
+
+    let mut stored: List<Held> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        stored.push(Held { r: &mut i });
+    }
+    assert stored.into_iter().map(|h| *h.r).collect() == [0, 1, 2];
+
+    let mut elements: List<fn() -> i32> = [];
+    for let mut x of items {
+        elements.push(|| x);
+        x *= 10;
+    }
+    assert called(elements) == [10, 20];
 }
 
 struct Held {
