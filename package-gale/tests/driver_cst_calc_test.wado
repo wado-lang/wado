@@ -33,15 +33,15 @@ test "tree: parenthesised subexpression" {
 }
 
 test "fail-soft: a syntax error yields a tree plus one diagnostic" {
-    // `1 +` — the `('+' term)*` loop cannot start a full `'+' term` (no right
-    // operand), so the trailing `+` is left for `prog`'s `EOF`, where
-    // single-token deletion drops it as extraneous (as ANTLR4 does). The parser
+    // `1 +` — the `('+' term)*` loop enters on `+`, as ANTLR4's LL(1) loop
+    // does, and the missing right operand is reported at `EOF` (the jar:
+    // "line 1:3 mismatched input '<EOF>' expecting {'(', INT}"). The parser
     // records one diagnostic and folds the tree closed rather than trapping.
     let result = calc::parse("1 +");
     assert result.has_errors();
     assert result.diagnostics.len() == 1;
     let d = &result.diagnostics[0];
-    assert d.code matches { ExtraToken };
+    assert d.line == 1 && d.col == 3, `${d.line}:${d.col}`;
     assert d.is_error();
 }
 

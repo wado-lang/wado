@@ -1317,7 +1317,7 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert output.contains("'B' => {");
 }
 
-test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
+test "set list-label `name+=(A | B)*` takes the token its loop guard proved" {
     let input = "grammar T;
 b : ID val+=(INT | FLOAT)* ;
 ID : 'a'..'z'+ ;
@@ -1327,8 +1327,9 @@ WS : (' '|'\\n') -> skip ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
-    assert body.contains("p.expect_set(&SYNC_0, &EXPECTED_0)"), body;
-    assert output.contains("global EXPECTED_0: List<i32> = [TK_FLOAT, TK_INT];");
+    assert body.contains("while !p.recovering && (_kind_set_0(p.peek_kind()))"), body;
+    assert body.contains("p.take();"), body;
+    assert !body.contains("expect_set"), body;
 }
 
 test "a sync set is tested as bits, and listed only where a diagnostic names it" {

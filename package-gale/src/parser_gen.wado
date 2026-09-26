@@ -4572,13 +4572,19 @@ fn emit_probe_verdict<S: AsStrSlice>(
 /// only on a match. Only where the body's first set overlaps what may follow the
 /// loop, so a trailing token a following `,?` wants is yielded rather than
 /// consumed (`(',' arm)* ','?`), or where the iteration owes a duty the scan
-/// discharges. Elsewhere the first token decides, as ANTLR4's LL(1) loop does.
-fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &GenContext) -> bool {
+/// discharges. Elsewhere the first token decides, as ANTLR4's LL(1) loop does —
+/// unless the body's own alternatives are decided by scanning, which the guard
+/// then reuses, and whose failure is the iteration's to report.
+fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut GenContext) -> bool {
     let body_first = admits_kinds(&r.body_admits);
     let overlaps_follow = body_first.is_empty()
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
-    return r.body_scannable && (overlaps_follow || !r.duties.is_empty());
+    let body_scans_to_decide = match &r.body {
+        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(|b| b.alts.len() > 1) },
+        _ => false,
+    };
+    return r.body_scannable && (overlaps_follow || body_scans_to_decide || !r.duties.is_empty());
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
