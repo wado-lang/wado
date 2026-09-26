@@ -939,11 +939,6 @@ pub fn remap_local_reads(expr: &mut TirExpr, from: u32, to: u32) {
     RemapLocalReads { from, to }.visit_expr(expr);
 }
 
-/// [`remap_local_reads`] over each statement of `block`.
-pub fn remap_local_reads_in_block(block: &mut TirBlock, from: u32, to: u32) {
-    RemapLocalReads { from, to }.visit_block(block);
-}
-
 struct RemapLocalReads {
     from: u32,
     to: u32,
