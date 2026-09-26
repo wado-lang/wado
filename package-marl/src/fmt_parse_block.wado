@@ -50,10 +50,10 @@ internal fn parse_document<S: AsStrSlice>(source: S) -> Node {
 fn build_document(lines: &List<String>, refs: &RefTable) -> Node {
     if let Some([fm, consumed]) = try_front_matter(lines) {
         let mut children: List<Node> = [Node::FrontMatter(fm)];
-        children.extend(&parse_blocks(lines, consumed, lines.len(), refs));
+        children.extend(&parse_blocks(lines, consumed, lines.len(), 1, refs));
         return Node::Document(children);
     }
-    return Node::Document(parse_blocks(lines, 0, lines.len(), refs));
+    return Node::Document(parse_blocks(lines, 0, lines.len(), 1, refs));
 }
 
 // --- link reference definitions (first pass) ---
@@ -167,7 +167,9 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
 
 // --- the main block scanner ---
 
-fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> List<Node> {
+/// Parses `lines[start..end]` into blocks. `origin` is the 1-based source line
+/// of `lines[0]`, so a nested container reports lines of the whole document.
+fn parse_blocks(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &RefTable) -> List<Node> {
     let mut out: List<Node> = [];
     let mut para: List<String> = [];
     let mut i = start;
@@ -191,18 +193,18 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
         }
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
-            let block_end = html_block_bounds(lines, i, end);
+            let block_end = html_block_bounds(lines, &chars, i, end);
             out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
             i = block_end;
             continue;
         }
         if let Some([ch, fence_len, info]) = fence_marker(&chars) {
             flush_paragraph(&mut out, &mut para, refs);
-            i = parse_fenced_code(lines, i, end, ch, fence_len, &info, &mut out);
+            i = parse_fenced_code(lines, i, end, origin, ch, fence_len, &info, &mut out);
             continue;
         }
         if para.is_empty() && line_indent(line) >= 4 {
-            i = parse_indented_code(lines, i, end, &mut out);
+            i = parse_indented_code(lines, i, end, origin, &mut out);
             continue;
         }
         let level = heading_level(&chars);
@@ -221,12 +223,12 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
         }
         if is_blockquote(&chars) {
             flush_paragraph(&mut out, &mut para, refs);
-            i = parse_blockquote(lines, i, end, refs, &mut out);
+            i = parse_blockquote(lines, i, end, origin, refs, &mut out);
             continue;
         }
         if is_list_marker(&chars) {
             flush_paragraph(&mut out, &mut para, refs);
-            i = parse_list(lines, i, end, refs, &mut out);
+            i = parse_list(lines, i, end, origin, refs, &mut out);
             continue;
         }
         if i + 1 < end && line_has_pipe(line) && line_has_pipe(&lines[i + 1]) && is_table_header(line, &lines[i + 1]) {
@@ -298,15 +300,58 @@ fn html_block_interrupts_paragraph(chars: &List<char>) -> bool {
     return p + 1 < len && chars[p] == '<' && chars[p + 1] matches { '!' | '?' };
 }
 
-/// A raw HTML block ends at the next blank line (or the end of the current
-/// range) — matches CommonMark's HTML block types 6/7, which cover this
-/// codebase's actual usage (badge markup, anchor `<div>`s).
-fn html_block_bounds(lines: &List<String>, start: i32, end: i32) -> i32 {
-    let mut k = start + 1;
-    while k < end && !is_blank(&lines[k]) {
-        k += 1;
+/// Where a raw HTML block starting at `lines[start]` (whose `chars` these are)
+/// ends. CommonMark types 1–5 run through the line holding their end marker,
+/// the start line included, or to `end` when no line holds it. Types 6/7 end at
+/// the next blank line.
+fn html_block_bounds(lines: &List<String>, chars: &List<char>, start: i32, end: i32) -> i32 {
+    let Some([marker, after_open]) = html_block_end_marker(chars) else {
+        let mut k = start + 1;
+        while k < end && !is_blank(&lines[k]) {
+            k += 1;
+        }
+        return k;
+    };
+    if slice_chars(chars, after_open, chars.len()).to_ascii_lowercase().contains(&marker) {
+        return start + 1;
     }
-    return k;
+    for let mut k = start + 1; k < end; k += 1 {
+        if lines[k].to_ascii_lowercase().contains(&marker) {
+            return k + 1;
+        }
+    }
+    return end;
+}
+
+global RAW_TEXT_TAGS: List<String> = ["script", "pre", "style", "textarea"];
+
+/// The lowercase end marker of a CommonMark HTML block of types 1–5, and the
+/// char offset past its start marker, or `null` for types 6/7.
+fn html_block_end_marker(chars: &List<char>) -> Option<[String, i32]> {
+    let len = chars.len();
+    let p = skip_indent(chars, len);
+    let rest = slice_chars(chars, p, len);
+    let lower = rest.to_ascii_lowercase();
+    for let tag of RAW_TEXT_TAGS {
+        let open = `<${tag}`;
+        let after = p + open.len();
+        if lower.starts_with(&open) && (after >= len || chars[after] matches { ' ' | '\t' | '>' }) {
+            return Option::Some([`</${tag}>`, after]);
+        }
+    }
+    if rest.starts_with("<!--") {
+        return Option::Some(["-->", p + 4]);
+    }
+    if rest.starts_with("<?") {
+        return Option::Some(["?>", p + 2]);
+    }
+    if rest.starts_with("<![CDATA[") {
+        return Option::Some(["]]>", p + 9]);
+    }
+    if rest.starts_with("<!") && p + 2 < len && chars[p + 2].is_ascii_alphabetic() {
+        return Option::Some([">", p + 2]);
+    }
+    return null;
 }
 
 // --- fenced and indented code ---
@@ -315,6 +360,7 @@ fn parse_fenced_code<S: AsStrSlice>(
     lines: &List<String>,
     open: i32,
     end: i32,
+    origin: i32,
     ch: char,
     fence_len: i32,
     info: S,
@@ -332,11 +378,11 @@ fn parse_fenced_code<S: AsStrSlice>(
         code.push('\n');
         k += 1;
     }
-    out.push(Node::CodeBlock(CodeBlock { fenced: true, tag, code }));
+    out.push(Node::CodeBlock(CodeBlock { fenced: true, tag, code, line: origin + open }));
     return k;
 }
 
-fn parse_indented_code(lines: &List<String>, start: i32, end: i32, out: &mut List<Node>) -> i32 {
+fn parse_indented_code(lines: &List<String>, start: i32, end: i32, origin: i32, out: &mut List<Node>) -> i32 {
     let mut code = String::new();
     let mut k = start;
     loop {
@@ -357,7 +403,7 @@ fn parse_indented_code(lines: &List<String>, start: i32, end: i32, out: &mut Lis
             k = peek;
         }
     }
-    out.push(Node::CodeBlock(CodeBlock { fenced: false, tag: "", code }));
+    out.push(Node::CodeBlock(CodeBlock { fenced: false, tag: "", code, line: origin + start }));
     return k;
 }
 
@@ -513,14 +559,21 @@ fn strip_blockquote_marker<S: AsStrSlice>(line: S) -> String {
     return slice_chars(&chars, p, len);
 }
 
-fn parse_blockquote(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
+fn parse_blockquote(
+    lines: &List<String>,
+    start: i32,
+    end: i32,
+    origin: i32,
+    refs: &RefTable,
+    out: &mut List<Node>,
+) -> i32 {
     let mut inner: List<String> = [];
     let mut k = start;
     while k < end && is_blockquote(&lines[k].to_chars()) {
         inner.push(strip_blockquote_marker(&lines[k]));
         k += 1;
     }
-    out.push(Node::BlockQuote(parse_blocks(&inner, 0, inner.len(), refs)));
+    out.push(Node::BlockQuote(parse_blocks(&inner, 0, inner.len(), origin + start, refs)));
     return k;
 }
 
@@ -581,7 +634,7 @@ fn parse_list_marker(chars: &List<char>) -> Option<ListMarker> {
     return Option::Some(ListMarker { indent, content_col, ordered, delim, number });
 }
 
-fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
+fn parse_list(lines: &List<String>, start: i32, end: i32, origin: i32, refs: &RefTable, out: &mut List<Node>) -> i32 {
     let mut base_indent = 0;
     let mut ordered = false;
     let mut base_delim = '-';
@@ -669,7 +722,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
             break;
         }
 
-        items.push(MdItem { marker, children: parse_blocks(&inner, 0, inner.len(), refs), loose });
+        items.push(MdItem { marker, children: parse_blocks(&inner, 0, inner.len(), origin + item_start, refs), loose });
         k = j;
     }
 

@@ -327,6 +327,95 @@ test "parse_document lets an HTML comment interrupt an open paragraph" {
     assert children.get(1) matches { Some(Node::Html(_)) };
 }
 
+test "parse_document ends an HTML comment at its closing marker" {
+    let source = "<!-- c -->\n```wado\nlet x = 1;\n```";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    if let Some(Node::Html(s)) = children.get(0) {
+        assert s == "<!-- c -->";
+    } else {
+        panic("expected an Html node");
+    }
+    assert children.get(1) matches { Some(Node::CodeBlock(_)) };
+}
+
+test "parse_document keeps a blank line inside a multi-line HTML comment" {
+    let source = "<!-- a\n\nb -->\nafter";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    if let Some(Node::Html(s)) = children.get(0) {
+        assert s == "<!-- a\n\nb -->";
+    } else {
+        panic("expected an Html node");
+    }
+    assert children.get(1) matches { Some(Node::Paragraph(_)) };
+}
+
+test "parse_document ends a processing instruction, declaration, and CDATA at their markers" {
+    for let [source, html] of [
+        ["<?php x ?>\ntext", "<?php x ?>"],
+        ["<!DOCTYPE html>\ntext", "<!DOCTYPE html>"],
+        ["<![CDATA[\n\nx]]>\ntext", "<![CDATA[\n\nx]]>"],
+    ] {
+        let children = doc_children(&source);
+        assert children.len() == 2;
+        if let Some(Node::Html(s)) = children.get(0) {
+            assert s == html;
+        } else {
+            panic("expected an Html node");
+        }
+    }
+}
+
+test "parse_document keeps a blank line inside a pre block" {
+    let source = "<pre>\na\n\nb\n</pre>\ntext";
+    let children = doc_children(&source);
+    assert children.len() == 2;
+    if let Some(Node::Html(s)) = children.get(0) {
+        assert s == "<pre>\na\n\nb\n</pre>";
+    } else {
+        panic("expected an Html node");
+    }
+}
+
+test "parse_document records the source line of a code block" {
+    let source = "# T\n\n```wado\nx\n```\n\n    indented\n";
+    let children = doc_children(&source);
+    if let Some(Node::CodeBlock(cb)) = children.get(1) {
+        assert cb.line == 3;
+    } else {
+        panic("expected a CodeBlock node");
+    }
+    if let Some(Node::CodeBlock(cb)) = children.get(2) {
+        assert cb.line == 7;
+    } else {
+        panic("expected a CodeBlock node");
+    }
+}
+
+test "parse_document records the source line of a nested code block" {
+    let source = "intro\n\n- item\n\n  ```wado\n  x\n  ```\n\n> quote\n>\n> ```wado\n> y\n> ```\n";
+    let children = doc_children(&source);
+    if let Some(Node::List(list)) = children.get(1) {
+        if let Some(Node::CodeBlock(cb)) = list.items[0].children.get(1) {
+            assert cb.line == 5;
+        } else {
+            panic("expected a CodeBlock in the list item");
+        }
+    } else {
+        panic("expected a List node");
+    }
+    if let Some(Node::BlockQuote(inner)) = children.get(2) {
+        if let Some(Node::CodeBlock(cb)) = inner.get(1) {
+            assert cb.line == 11;
+        } else {
+            panic("expected a CodeBlock in the blockquote");
+        }
+    } else {
+        panic("expected a BlockQuote node");
+    }
+}
+
 test "parse_document resolves a forward-referenced link reference definition" {
     let source = "See [the WEP][cli-wep] for details.\n\n[cli-wep]: ./wep.md";
     let children = doc_children(&source);

@@ -1,0 +1,38 @@
+use { fenced_code_blocks } from "./code_blocks.wado";
+
+test "fenced_code_blocks reads the tag, code and line of each fenced block" {
+    let blocks = fenced_code_blocks("# T\n\n```wado\nlet x = 1;\n```\n\n```\nplain\n```\n");
+    assert blocks.len() == 2;
+    assert blocks[0].tag == "wado";
+    assert blocks[0].code == "let x = 1;\n";
+    assert blocks[0].line == 3;
+    assert blocks[1].tag == "";
+    assert blocks[1].line == 7;
+}
+
+test "fenced_code_blocks skips an indented code block" {
+    assert fenced_code_blocks("para\n\n    indented\n").is_empty();
+}
+
+test "fenced_code_blocks reads the HTML block before a fence, across a blank line" {
+    let blocks = fenced_code_blocks("<!-- fixture: a.wado -->\n\n```wado\nx\n```\n");
+    assert blocks.len() == 1;
+    assert blocks[0].html_before == Option::Some("<!-- fixture: a.wado -->");
+}
+
+test "fenced_code_blocks reads no HTML block when another block intervenes" {
+    let blocks = fenced_code_blocks("<!-- fixture: a.wado -->\n\ntext\n\n```wado\nx\n```\n");
+    assert blocks[0].html_before == null;
+}
+
+test "fenced_code_blocks walks list items and blockquotes" {
+    let source = "- item\n\n  <!-- fixture: a.wado -->\n\n  ```wado\n  x\n  ```\n\n> ```wado\n> y\n> ```\n";
+    let blocks = fenced_code_blocks(source);
+    assert blocks.len() == 2;
+    assert blocks[0].code == "x\n";
+    assert blocks[0].line == 5;
+    assert blocks[0].html_before == Option::Some("<!-- fixture: a.wado -->");
+    assert blocks[1].code == "y\n";
+    assert blocks[1].line == 9;
+    assert blocks[1].html_before == null;
+}

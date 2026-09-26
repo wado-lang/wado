@@ -49,8 +49,9 @@ A code block in the specification is a quotation of an e2e fixture.
    `assert`. This rule is provisional: the first migrated file decides whether
    it holds or is absurd, and it is dropped if absurd.
 
-The reference is an HTML comment on the line directly above the fence. GitHub
-does not render it, so the reader sees an ordinary code block:
+The reference is an HTML comment, the block directly before the fence in the
+same container. The formatter puts a blank line between the two, and GitHub does
+not render the comment, so the reader sees an ordinary code block:
 
 ````markdown
 <!-- fixture: cast_fn_type_newtype.wado -->
@@ -108,9 +109,9 @@ finds one, not in a comment or a string. It follows
 `package-gale/tools/rust_inline_paths.wado`: a script under `scripts/` drives
 `wado run`, and a baseline file records the blocks that do not comply yet.
 
-Marl needs extending for this. Its document tree is `internal`, and its nodes
-carry no source line. The checker needs each fenced block's info string, its
-text, its line, and the HTML block directly above it.
+Marl's `fenced_code_blocks` gives the checker what it reads of each fenced
+block: its info string, its text, its source line, and the HTML block directly
+before it. Marl's document tree stays `internal`.
 
 ### Rollout
 
@@ -130,8 +131,10 @@ The last two are what this WEP is for. The migration will find them.
 
 ## Roadmap
 
-1. [ ] Extend Marl with a public read of the fenced code blocks: info string,
-       text, source line, and the HTML block directly preceding each.
+1. [x] Extend Marl with a public read of the fenced code blocks: info string,
+       text, source line, and the HTML block directly preceding each. An HTML
+       comment now ends at `-->`, not at the next blank line, as CommonMark
+       says.
 2. [ ] Write the checker, TDD against small Markdown and fixture cases: the
        reference, the indented substring match, the `assert` rule, the `#[TODO]`
        rule and the baseline.
