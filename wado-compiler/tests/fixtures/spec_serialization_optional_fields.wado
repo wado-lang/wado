@@ -1,0 +1,16 @@
+// A field default makes a field optional on the wire; a field without one
+// is required.
+
+use { from_string } from "core:json";
+
+struct Config {
+    host: String,            // required: MissingField if absent
+    port: i32 = 8080,        // optional: 8080 if absent
+    tags: List<String> = [], // optional: [] if absent
+}
+
+test {
+    let c = from_string::<Config>(`{"host":"h"}`).unwrap();
+    assert c.port == 8080 && c.tags == [];
+    assert from_string::<Config>(`{"port":1}`).unwrap_err().kind matches { MissingField };
+}
