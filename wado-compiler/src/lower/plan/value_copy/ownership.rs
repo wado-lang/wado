@@ -8,8 +8,6 @@
 //! fold materializes only at owner-entry sites, leaving a mutable-place accessor
 //! like `arr[i].field.push(x)` aliased, which copy-on-extract cannot do.
 
-use std::borrow::Cow;
-
 use super::callgraph::CallGraph;
 use super::confine::ConfinedParams;
 use super::funcset::{FuncKeyMap, FuncKeySet};
@@ -17,7 +15,7 @@ use super::place::{carries_storage, is_reference, may_carry_storage, param_posit
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze::{
-    SELECT_OPERANDS, is_owned_value, is_select, returned_value,
+    builtin_projected_params, is_owned_value, returned_value,
 };
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
@@ -66,7 +64,7 @@ fn declares_owned(func: &TirFunction) -> bool {
 /// Oracle the freshness checker consults for a call's return convention.
 pub struct OwnedCalls<'a> {
     returns_owned: &'a FuncKeySet,
-    returns_self_projection: &'a FuncKeyMap<Vec<usize>>,
+    returns_projection: &'a FuncKeyMap<Vec<usize>>,
     builtins: &'a BuiltinDeclarations,
     indirect_owned_returns: Option<&'a IndexSet<TypeId>>,
 }
@@ -74,12 +72,12 @@ pub struct OwnedCalls<'a> {
 impl<'a> OwnedCalls<'a> {
     pub fn new(
         returns_owned: &'a FuncKeySet,
-        returns_self_projection: &'a FuncKeyMap<Vec<usize>>,
+        returns_projection: &'a FuncKeyMap<Vec<usize>>,
         builtins: &'a BuiltinDeclarations,
     ) -> Self {
         Self {
             returns_owned,
-            returns_self_projection,
+            returns_projection,
             builtins,
             indirect_owned_returns: None,
         }
@@ -108,7 +106,7 @@ impl<'a> OwnedCalls<'a> {
     /// extern / opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
         if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return !is_select(func) && self.builtins.part_of(func).is_none();
+            return builtin_projected_params(self.builtins, func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
     }
@@ -119,29 +117,26 @@ impl<'a> OwnedCalls<'a> {
     /// says the result is a component of `p` — and a component of a place
     /// nothing else reaches is one nothing else reaches. `builtin::select`
     /// hands back either operand. A wasm asset declares none.
-    pub fn projected_params(&self, func: &FunctionRef) -> Option<Cow<'a, [usize]>> {
-        if is_select(func) {
-            return Some(Cow::Borrowed(&SELECT_OPERANDS));
-        }
+    pub fn projected_params(&self, func: &FunctionRef) -> Option<&'a [usize]> {
         if func.module_source.is_core_builtin() || self.builtins.declares(func) {
-            return self.builtins.part_of(func).map(|p| Cow::Owned(vec![p]));
+            return builtin_projected_params(self.builtins, func);
         }
         if func.module_source.is_wasm_asset() {
             return None;
         }
-        self.returns_self_projection
+        self.returns_projection
             .get(&func.module_source, &func.name)
-            .map(|ps| Cow::Borrowed(ps.as_slice()))
+            .map(Vec::as_slice)
     }
 }
 
 /// Per-function return conventions the fold consults: `returns_owned` (every
-/// returned value is freshly materialized) and `returns_self_projection` (the
+/// returned value is freshly materialized) and `returns_projection` (the
 /// parameters the returned values that are not owned project, so the call is
 /// fresh exactly when those arguments are).
 pub struct ReturnConventions {
     pub returns_owned: FuncKeySet,
-    pub returns_self_projection: FuncKeyMap<Vec<usize>>,
+    pub returns_projection: FuncKeyMap<Vec<usize>>,
 }
 
 /// Functions whose every value-return aliases the receiver / first parameter
@@ -265,8 +260,8 @@ fn is_receiver_projection(
 /// `#[result(owned)]`, and a builtin that cannot hand storage out allocates —
 /// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
-/// every value it returns is owned, and self-projecting on parameters `P` when
-/// every value it returns that is not owned is a projection of some of `P`.
+/// every value it returns is owned, and projects parameters `P` when every
+/// value it returns that is not owned is a projection of some of `P`.
 /// A parameter its callers pass uncopied (`confined`) is not owned.
 ///
 /// Inside a component `owned` is assumed and then disproved, not built up: a
@@ -293,7 +288,7 @@ pub fn compute_return_conventions(
             owned.insert(func.module_source.clone(), func.name.clone());
         }
     }
-    let mut self_proj = FuncKeyMap::default();
+    let mut projection = FuncKeyMap::default();
 
     for component in call_graph.sccs() {
         settle_component(
@@ -305,13 +300,13 @@ pub fn compute_return_conventions(
             builtins,
             confined,
             &mut owned,
-            &mut self_proj,
+            &mut projection,
         );
     }
 
     ReturnConventions {
         returns_owned: owned,
-        returns_self_projection: self_proj,
+        returns_projection: projection,
     }
 }
 
@@ -328,7 +323,7 @@ fn settle_component(
     builtins: &BuiltinDeclarations,
     confined: &ConfinedParams,
     owned: &mut FuncKeySet,
-    self_proj: &mut FuncKeyMap<Vec<usize>>,
+    projection: &mut FuncKeyMap<Vec<usize>>,
 ) {
     let members: Vec<u32> = component
         .iter()
@@ -340,8 +335,8 @@ fn settle_component(
     }
     let in_component: IndexSet<u32> = members.iter().copied().collect();
     // Only `owned` is assumed. It is the stronger verdict, so a cycle resolves
-    // as optimistically through it, and the parameter a member projects has no
-    // value to assume — the first walk of each is what proposes one.
+    // as optimistically through it, and the parameters a member projects have
+    // no value to assume — the first walk of each is what proposes them.
     for &id in &members {
         let func = project.functions[id as usize].borrow();
         owned.insert(func.module_source.clone(), func.name.clone());
@@ -353,12 +348,12 @@ fn settle_component(
         queued.swap_remove(&id);
         let func = project.functions[id as usize].borrow();
         let held_owned = owned.contains(&func.module_source, &func.name);
-        let held_self_proj = self_proj.get(&func.module_source, &func.name).cloned();
-        if !held_owned && held_self_proj.is_none() {
+        let held_projection = projection.get(&func.module_source, &func.name).cloned();
+        if !held_owned && held_projection.is_none() {
             continue;
         }
-        let (ret_owned, ret_self_proj) = {
-            let oracle = OwnedCalls::new(owned, self_proj, builtins);
+        let (ret_owned, ret_projection) = {
+            let oracle = OwnedCalls::new(owned, projection, builtins);
             let hands_out_payload = hands_out_payload(&func, return_paths);
             function_return_convention(
                 &func,
@@ -375,14 +370,14 @@ fn settle_component(
         }
         // A walk that names other parameters than the ones held refutes both,
         // the same as naming none: the verdict is which arguments to test.
-        match (held_self_proj, ret_self_proj) {
+        match (held_projection, ret_projection) {
             (Some(held), found) if found.as_ref() != Some(&held) => {
-                self_proj.remove(&func.module_source, &func.name);
+                projection.remove(&func.module_source, &func.name);
                 owned.remove(&func.module_source, &func.name);
                 dropped = true;
             }
             (None, Some(found)) => {
-                self_proj.insert(func.module_source.clone(), func.name.clone(), found);
+                projection.insert(func.module_source.clone(), func.name.clone(), found);
             }
             (Some(_), _) | (None, None) => {}
         }

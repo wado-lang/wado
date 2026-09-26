@@ -110,7 +110,7 @@ pub struct ValueCopyPlan {
     /// The parameters the returned values that are not owned project, so a
     /// call is fresh when *those* arguments are: a `[1, 2, 3]` builder
     /// finalized by `.build()` is not defensively copied.
-    pub returns_self_projection: FuncKeyMap<Vec<usize>>,
+    pub returns_projection: FuncKeyMap<Vec<usize>>,
     /// What each builtin declared about storage: where its result comes from,
     /// and which arguments it keeps beyond the call.
     pub builtins: BuiltinDeclarations,
@@ -226,7 +226,7 @@ pub fn plan(
         ),
         return_paths,
         returns_owned: conventions.returns_owned,
-        returns_self_projection: conventions.returns_self_projection,
+        returns_projection: conventions.returns_projection,
         builtins,
         retained_params: retained.retained_params,
         bounded_retention: retained.bounded,

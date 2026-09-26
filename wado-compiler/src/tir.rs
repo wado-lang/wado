@@ -6972,9 +6972,15 @@ impl BuiltinDeclarations {
     /// The parameter a declaration's result is a component of, for a call that
     /// declared `#[result(part_of = p)]`.
     pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
-        match self.get(call.into())?.returns? {
-            ReturnConvention::PartOf(param) => Some(param),
-            ReturnConvention::Owned => None,
+        self.part_of_params(call).map(|params| params[0])
+    }
+
+    /// [`Self::part_of`] as the parameter set a result projects, which for a
+    /// declaration is that one parameter.
+    pub fn part_of_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<&[usize]> {
+        match &self.get(call.into())?.returns {
+            Some(ReturnConvention::PartOf(param)) => Some(std::slice::from_ref(param)),
+            Some(ReturnConvention::Owned) | None => None,
         }
     }
 
