@@ -1850,11 +1850,15 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
 /// continuation from where it ended, then the caller's FOLLOW. The body is
 /// kept only when all three hold, so the scan advances by exactly what the
 /// parse will consume.
+///
+/// With `cont_done` named, the continuation is what the sequence scans next,
+/// so a probe that holds has scanned it already: it sets the flag and stays.
 fn gen_scan_optional_probe<S: AsStrSlice>(
     w: &mut CodeWriter,
     re: &ScanRepeatElement,
     ctx: &mut GenContext,
     caller_follow_gate: S,
+    cont_done: &String = &NO_CONT_DONE,
 ) {
     w.begin(`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
     gen_scan_mark(w, ctx, "sp");
@@ -1862,7 +1866,9 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
     w.begin("if pos < 0");
     gen_scan_rewind(w, ctx, "sp");
     w.else_begin("else");
-    gen_scan_mark(w, ctx, "bp");
+    if cont_done.is_empty() {
+        gen_scan_mark(w, ctx, "bp");
+    }
     w.line("let mut opt_ok: bool = false;");
     w.begin("opt_probe:");
     let fail = "break opt_probe;";
@@ -1872,6 +1878,16 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
     let opt_ok = "opt_ok";
     emit_probe_verdict(w, re.probe_asks_caller, &re.probe_viable, &opt_ok, ctx);
     w.end();
+    if !cont_done.is_empty() {
+        w.begin("if opt_ok");
+        w.line(`${cont_done} = true;`);
+        w.else_begin("else");
+        gen_scan_rewind(w, ctx, "sp");
+        w.end();
+        w.end();
+        w.end();
+        return;
+    }
     // The probe only asks whether the continuation fits, so its walk is undone
     // either way: keeping the body means the gate the body left, dropping it
     // means the gate before the iteration.
@@ -2516,11 +2532,45 @@ fn gen_scan_op_elements<S: AsStrSlice>(
             proven_run += 1;
         } else {
             flush_proven_run(w, &mut proven_run);
+            if gates.is_empty() && probe_scans_rest(se, scan_elems, i + 1, end, ctx) {
+                let Repeat(re) = se else {
+                    unreachable();
+                };
+                let cont_done = `cont_done_${w.next_id()}`;
+                w.line(`let mut ${cont_done} = false;`);
+                let caller_follow_gate = if re.gate_caller_follow { follow_yields_call("tokens", "pos") } else { "" };
+                gen_scan_optional_probe(w, re, ctx, &caller_follow_gate, &cont_done);
+                w.begin(`if !${cont_done}`);
+                let rest_known = known_after(se, &k, ctx);
+                gen_scan_op_elements(w, scan_elems, i + 1, end, ctx, fail_stmt, gates, &NO_SCAN_GATE_COND, &rest_known);
+                w.end();
+                return;
+            }
             gen_scan_op_element(w, se, ctx, fail_stmt, &k);
         }
         k = known_after(se, &k, ctx);
     }
     flush_proven_run(w, &mut proven_run);
+}
+
+/// Whether `se` is an optional probe whose continuation is exactly
+/// `scan_elems[from..end]`, so a probe that holds leaves nothing to scan.
+fn probe_scans_rest(se: &ScanElement, scan_elems: &List<ScanElement>, from: i32, end: i32, ctx: &mut GenContext) -> bool {
+    let Repeat(re) = se else {
+        return false;
+    };
+    if !re.kind matches { Optional } || admits_is_untestable(&re.inner_admits) || !scan_optional_probe_decides(re, ctx) {
+        return false;
+    }
+    if re.continuation_scan.len() != end - from {
+        return false;
+    }
+    for let mut j = 0; j < re.continuation_scan.len(); j += 1 {
+        if re.continuation_scan[j] != scan_elems[from + j] {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Step over tokens the scan already proved, as one move.
@@ -2535,6 +2585,7 @@ fn flush_proven_run(w: &mut CodeWriter, run: &mut i32) {
 /// every site in a grammar without a simulable gate member.
 global NO_SCAN_GATES: List<ScanGate> = [];
 global NO_SCAN_GATE_COND: String = "";
+global NO_CONT_DONE: String = "";
 
 /// Score a gated alternative as no match where the scan's copy of the members
 /// says it does not exist. The parse side's twin is the `alt_initial_gate`
@@ -3749,12 +3800,22 @@ fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String
 }
 
 /// ANTLR4's sync ahead of a decision, calling `method` when the current token
-/// is none the decision expects. Nothing where the rule may end (`expected` null).
-fn gen_decision_sync<S: AsStrSlice>(w: &mut CodeWriter, ctx: &mut GenContext, expected: Option<List<String>>, method: S) {
+/// is none the decision expects. Nothing where the rule may end (`expected` null)
+/// or where an enclosing guard already `proven` the token is one it expects.
+fn gen_decision_sync<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &mut GenContext,
+    expected: Option<List<String>>,
+    method: S,
+    proven: &List<String> = &EMPTY_SYNC,
+) {
     let Some(names) = expected else {
         return;
     };
     assert !names.is_empty(), "a decision the rule cannot end at expects some token";
+    if proves(proven, &names) {
+        return;
+    }
     let bits = sync_set_ref(ctx, &names);
     let list = expected_set_ref(ctx, &names);
     w.line(`if !kind_set_has(${bits}, p.kinds[p.pos]) { builtin::cold_path(); p.${method}(${bits}, ${list}); }`);
@@ -4507,6 +4568,19 @@ fn emit_probe_verdict<S: AsStrSlice>(
     w.line(`if ${cond} { ${verdict} = true; }`);
 }
 
+/// Whether each iteration of a greedy `*` / `+` scans its whole body and commits
+/// only on a match. Only where the body's first set overlaps what may follow the
+/// loop, so a trailing token a following `,?` wants is yielded rather than
+/// consumed (`(',' arm)* ','?`), or where the iteration owes a duty the scan
+/// discharges. Elsewhere the first token decides, as ANTLR4's LL(1) loop does.
+fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &GenContext) -> bool {
+    let body_first = admits_kinds(&r.body_admits);
+    let overlaps_follow = body_first.is_empty()
+        || sets_overlap(&body_first, &r.caller_follow_first)
+        || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
+    return r.body_scannable && (overlaps_follow || !r.duties.is_empty());
+}
+
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
 /// appends), gated on the body's first set.
 fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
@@ -4515,14 +4589,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
         gen_repeat_non_greedy_body(w, r, ctx, nc);
         return;
     }
-    // Scan-guarded `*` / `+`: when the body's first set overlaps the caller's
-    // FOLLOW and the body is scannable, each iteration scans the whole body and
-    // only commits on a match — so a trailing token a following `,?` wants is
-    // yielded instead of greedily consumed (e.g. `(',' arm)* ','?`). `Optional`
-    // never needs it. A body admitting everything overlaps whatever follows.
-    let overlaps_follow = r.body_admits matches { Everything }
-        || sets_overlap(&admits_kinds(&r.body_admits), &r.caller_follow_first);
-    if r.body_scannable && overlaps_follow {
+    if repeat_is_scan_guarded(r, ctx) {
         let is_opt = if let Optional = r.kind {
             true;
         } else {
@@ -4779,8 +4846,8 @@ fn gen_op_inner_for_storable_repeat(
     decided: Option<String> = null,
     proven: &List<String> = &EMPTY_SYNC,
 ) {
-    assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     let entry = open_group_entry(w, elem, ctx, entry);
+    assert proven.is_empty() || entry matches { Guaranteed }, "only an entry that emits nothing keeps what its guard proved";
     let op = &rep_op.body;
     let unwrapped_elem = peel_repeat_body_label(elem);
     return match rep_op.body_shape {
@@ -5702,7 +5769,7 @@ fn gen_op_group(
     // the loop costs nothing.
     if entry matches { Required } {
         if let Group(g_elem) = peel_scalar_label(elem) {
-            gen_decision_sync(w, ctx, ctx.decision_entry_expect(g_elem.atn_decision), "sync_alts");
+            gen_decision_sync(w, ctx, ctx.decision_entry_expect(g_elem.atn_decision), "sync_alts", proven);
         }
     }
     let entry = open_group_entry(w, elem, ctx, entry);
@@ -6435,7 +6502,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
     let _ = dedup_name(&rep_op.field, name_counts);
 
     if let Star = rep.kind {
-        if rep_op.body_scannable {
+        if repeat_is_scan_guarded(rep_op, ctx) {
             w.begin("loop");
             w.line("if p.recovering { break; }");
             let no_flag = String::new();
@@ -6450,14 +6517,14 @@ fn gen_op_repeat_star_plus_non_storable_group(
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_op_group(w, g_op, inner, ctx, &mut nc, looped(), null, &admits_kinds(&rep_op.body_admits));
             gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
         return;
     }
     if let Plus = rep.kind {
-        if rep_op.body_scannable {
+        if repeat_is_scan_guarded(rep_op, ctx) {
             let plus_flag = dedup_name("_plus_first", name_counts);
             w.line(`let mut ${plus_flag} = true;`);
             w.begin("loop");
@@ -6481,7 +6548,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
-            gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
+            gen_op_group(w, g_op, inner, ctx, &mut nc, looped(), null, &admits_kinds(&rep_op.body_admits));
             gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
@@ -6594,7 +6661,7 @@ fn gen_op_repeat_star_plus_storable(
     // scan-guard / caller-FOLLOW gate.
 
     if let Star = rep.kind {
-        if rep_op.body_scannable {
+        if repeat_is_scan_guarded(rep_op, ctx) {
             w.begin("loop");
             w.line("if p.recovering { break; }");
             let no_flag = String::new();
@@ -6619,7 +6686,17 @@ fn gen_op_repeat_star_plus_storable(
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
-            gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &iter_follow, looped());
+            gen_op_inner_for_storable_repeat(
+                w,
+                rep_op,
+                inner,
+                ctx,
+                &mut nc,
+                &iter_follow,
+                looped(),
+                null,
+                &admits_kinds(&rep_op.body_admits),
+            );
             gen_loop_back_sync(w, ctx, rep_op);
             w.end();
         }
@@ -6627,7 +6704,7 @@ fn gen_op_repeat_star_plus_storable(
     }
 
     if let Plus = rep.kind {
-        if rep_op.body_scannable {
+        if repeat_is_scan_guarded(rep_op, ctx) {
             let plus_flag = dedup_name("_plus_first", name_counts);
             w.line(`let mut ${plus_flag} = true;`);
             w.begin("loop");

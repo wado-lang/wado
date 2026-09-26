@@ -28,6 +28,9 @@ pub struct RecoverySets {
     pub decision_entry: List<Option<List<i32>>>,
     /// Indexed by `atn_decision`: after an iteration of a `*` / `+`.
     pub decision_back: List<Option<List<i32>>>,
+    /// Indexed by `atn_decision`: what may follow a `*` / `+` inside its rule,
+    /// and whether the rule may end there. `null` for any other decision.
+    pub decision_exit: List<Option<LoopExit>>,
     /// Indexed by rule: the rule's own alternative block, when it decides.
     pub rule_entry: List<Option<List<i32>>>,
 }
@@ -40,8 +43,15 @@ pub fn empty_recovery_sets() -> RecoverySets {
         leaf_follow_ends: [],
         decision_entry: [],
         decision_back: [],
+        decision_exit: [],
         rule_entry: [],
     };
+}
+
+pub struct LoopExit {
+    pub rule: i32,
+    pub kinds: List<i32>,
+    pub reaches_end: bool,
 }
 
 struct LocalNext {
@@ -173,10 +183,12 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
 
     let mut decision_entry: List<Option<List<i32>>> = [];
     let mut decision_back: List<Option<List<i32>>> = [];
+    let mut decision_exit: List<Option<LoopExit>> = [];
     for let d of &atn.decision_sites {
         if *d < 0 {
             decision_entry.push(null);
             decision_back.push(null);
+            decision_exit.push(null);
             continue;
         }
         let state = atn.decision_state[*d];
@@ -187,6 +199,7 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
             decision_entry.push(at_decision);
         }
         decision_back.push(at_decision);
+        decision_exit.push(loop_exit(&mut w, atn, state));
     }
 
     let mut rule_entry: List<Option<List<i32>>> = [];
@@ -201,8 +214,23 @@ pub fn recovery_sets(atn: &Atn, eof: i32) -> RecoverySets {
         leaf_follow_ends,
         decision_entry,
         decision_back,
+        decision_exit,
         rule_entry,
     };
+}
+
+fn loop_exit(w: &mut Walker, atn: &Atn, state: i32) -> Option<LoopExit> {
+    for let t of &atn.states[state].transitions {
+        if atn.states[t.target].kind == ATN_LOOP_END {
+            let next = w.local_next(atn, t.target);
+            return Option::Some(LoopExit {
+                rule: atn.states[state].rule,
+                kinds: bits_to_kinds(&next.bits, atn.num_tokens),
+                reaches_end: next.reaches_end,
+            });
+        }
+    }
+    return null;
 }
 
 /// The state a `+` loop-back re-enters its body at: its one edge not to the
