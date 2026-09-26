@@ -4891,16 +4891,9 @@ impl<'a> TirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            TirStmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
+            TirStmtKind::LetDestructure { pattern, value } => {
                 self.write_indent();
                 self.output.push_str("let ");
-                if *is_mut {
-                    self.output.push_str("mut ");
-                }
                 self.unparse_tir_pattern(pattern);
                 self.output.push_str(" = ");
                 self.unparse_expr(value);

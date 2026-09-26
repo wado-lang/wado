@@ -144,6 +144,7 @@ pub fn analyze_ownership(
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
+    borrowed_params: &IndexSet<u32>,
 ) -> Ownership {
     let Some(body) = &func.body else {
         return Ownership::default();
@@ -166,7 +167,7 @@ pub fn analyze_ownership(
         retained_params,
         bounded: &plan.bounded_retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
-        borrowed_params: plan.confined_params.borrowed_locals(func),
+        borrowed_params,
         pending_bounded: Vec::new(),
         functor_rows: &plan.functor_rows,
         mut_receiver_methods,
@@ -791,7 +792,7 @@ struct Analyzer<'a> {
     /// frame, whatever the callee does with it.
     params: IndexSet<u32>,
     /// The by-value parameter locals this body's callers pass uncopied.
-    borrowed_params: IndexSet<u32>,
+    borrowed_params: &'a IndexSet<u32>,
     /// `(referent root, field, destination roots)` for each bounded retention,
     /// answered once every escape this body makes is known.
     pending_bounded: Vec<(u32, Option<u32>, Vec<u32>)>,
@@ -2131,8 +2132,6 @@ fn is_scalar_type(type_id: tir::TypeId, type_table: &TypeTable) -> bool {
         )
 }
 
-/// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a
-/// movable owned value. Everything else a function takes by value it owns.
 fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     let mut out = a.clone();
     for &id in b {
@@ -2141,45 +2140,74 @@ fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     out
 }
 
-/// Locals whose storage a move hands to a new owner. An immutable-source share
-/// rooted at one of them keeps its copy: the new owner may be mutable.
-pub fn compute_moved_roots(
-    func: &TirFunction,
-    move_eligible: &MoveEligible,
-    func_moved_spans: Option<&IndexSet<Span>>,
-) -> IndexSet<u32> {
-    let Some(body) = &func.body else {
-        return IndexSet::default();
-    };
-    let mut walker = MovedRoots {
-        move_eligible,
-        func_moved_spans,
-        roots: IndexSet::default(),
-    };
-    walker.visit_block(body);
-    walker.roots
+/// Which reads of one body hand their storage over rather than copy it.
+#[derive(Default)]
+pub struct Moves<'a> {
+    eligible: MoveEligible,
+    /// Last-use spans the source-level pass found (WEP 2026-05-21). It reaches
+    /// bodies written in source only, where `eligible` reaches synthesized
+    /// ones too.
+    source_spans: Option<&'a IndexSet<Span>>,
+    /// The by-value parameter locals this body's callers pass uncopied. The
+    /// source-level pass cannot see them, so its moves of those do not hold.
+    borrowed_params: IndexSet<u32>,
 }
 
-struct MovedRoots<'a> {
-    move_eligible: &'a MoveEligible,
-    func_moved_spans: Option<&'a IndexSet<Span>>,
+impl<'a> Moves<'a> {
+    pub fn new(
+        eligible: MoveEligible,
+        source_spans: &'a IndexSet<Span>,
+        borrowed_params: IndexSet<u32>,
+    ) -> Self {
+        Self {
+            eligible,
+            source_spans: Some(source_spans),
+            borrowed_params,
+        }
+    }
+
+    /// Whether `value` is a move: a whole local read at its final use, or a
+    /// materialization aliasing out of a dead aggregate. A newtype cast hands
+    /// over the same storage, so it does not hide the read underneath it.
+    pub fn is_move(&self, value: &TirExpr) -> bool {
+        let value = strip_casts(value);
+        if self.eligible.place_spans.contains(&value.span) {
+            return true;
+        }
+        let TirExprKind::Local { index, .. } = &value.kind else {
+            return false;
+        };
+        self.eligible.locals.contains(index)
+            || (!self.borrowed_params.contains(index)
+                && self
+                    .source_spans
+                    .is_some_and(|spans| spans.contains(&value.span)))
+    }
+
+    /// Locals whose storage a move hands to a new owner. An immutable-source
+    /// share rooted at one of them keeps its copy: the new owner may be mutable.
+    pub fn roots(&self, func: &TirFunction) -> IndexSet<u32> {
+        let Some(body) = &func.body else {
+            return IndexSet::default();
+        };
+        let mut walker = MovedRoots {
+            moves: self,
+            roots: IndexSet::default(),
+        };
+        walker.visit_block(body);
+        walker.roots
+    }
+}
+
+struct MovedRoots<'a, 'b> {
+    moves: &'b Moves<'a>,
     roots: IndexSet<u32>,
 }
 
-impl TirRefVisitor for MovedRoots<'_> {
+impl TirRefVisitor for MovedRoots<'_, '_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         let stripped = strip_casts(expr);
-        let moved_place = self.move_eligible.place_spans.contains(&stripped.span);
-        let moved_local = match &stripped.kind {
-            TirExprKind::Local { index, .. } => {
-                self.move_eligible.locals.contains(index)
-                    || self
-                        .func_moved_spans
-                        .is_some_and(|spans| spans.contains(&stripped.span))
-            }
-            _ => false,
-        };
-        if (moved_place || moved_local)
+        if self.moves.is_move(stripped)
             && let Some(root) = place::place_root(stripped)
         {
             self.roots.insert(root);

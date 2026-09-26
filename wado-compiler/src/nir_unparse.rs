@@ -443,17 +443,10 @@ impl<'a> NirUnparser<'a> {
                 self.write_indent();
                 self.output.push_str("}\n");
             }
-            StmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => {
+            StmtKind::LetDestructure { pattern, value } => {
                 let (pattern, value) = (*pattern, *value);
                 self.write_indent();
                 self.output.push_str("let ");
-                if *is_mut {
-                    self.output.push_str("mut ");
-                }
                 self.unparse_nir_pattern(body, pattern);
                 self.output.push_str(" = ");
                 self.unparse_operand(body, value);

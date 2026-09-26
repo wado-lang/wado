@@ -526,7 +526,6 @@ pub enum StmtKind {
     },
     LetDestructure {
         pattern: PatId,
-        is_mut: bool,
         value: Operand,
     },
 }
@@ -1204,13 +1203,8 @@ impl Body {
                 block: self.clone_block(block),
                 role,
             },
-            StmtKind::LetDestructure {
-                pattern,
-                is_mut,
-                value,
-            } => StmtKind::LetDestructure {
+            StmtKind::LetDestructure { pattern, value } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),
-                is_mut,
                 value: self.clone_operand(value),
             },
         }

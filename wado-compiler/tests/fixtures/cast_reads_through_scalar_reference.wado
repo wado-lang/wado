@@ -1,6 +1,7 @@
 // A cast reads a reference through to its referent, a scalar one included.
 // Regression: `&i32 as i64` type-checked and reached codegen as a cast of the
-// boxed `i32`, which panicked there.
+// boxed `i32`, which panicked there. The 128-bit integers lower a cast to a
+// prelude call instead, and those paths read through as well.
 
 use { println, Stdout } from "core:cli";
 
@@ -16,12 +17,32 @@ fn all_widened(ids: &List<i32>) -> List<i64> {
     return ids.into_iter().map(|id| id as i64).collect();
 }
 
+fn from_wide(x: &i128) -> f64 {
+    return x as f64;
+}
+
+fn narrowed(x: &u128) -> i32 {
+    return x as i32;
+}
+
+fn to_wide(x: &i32) -> i128 {
+    return x as i128;
+}
+
+fn reinterpreted(x: &i128) -> u128 {
+    return x as u128;
+}
+
 export fn run() with Stdout {
     let x = 7;
     let mut f = 2.5;
     let ids: List<i32> = [1, 2];
     println(`${widened(&x)} ${truncated(&mut f)} ${all_widened(&ids)[1]}`);
+
+    let p: i128 = 5;
+    let q: u128 = 6;
+    println(`${from_wide(&p)} ${narrowed(&q)} ${to_wide(&x)} ${reinterpreted(&p)}`);
 }
 
 __DATA__
-{"stdout": "7 2 2\n"}
+{"stdout": "7 2 2\n5 6 7 5\n"}

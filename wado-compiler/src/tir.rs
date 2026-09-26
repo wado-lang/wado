@@ -5940,8 +5940,6 @@ pub enum TirStmtKind {
     LetDestructure {
         /// The pattern to bind (e.g., [a, b, c] or [x, [y, z]])
         pattern: TirPattern,
-        /// Whether bindings are mutable
-        is_mut: bool,
         /// The value expression (must be a tuple)
         value: TirExpr,
     },
