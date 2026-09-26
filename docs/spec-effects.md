@@ -49,9 +49,9 @@ interface Log {
 }
 ```
 
-A default fills a handler that leaves the operation out, and it is what `..forward` reaches when the outermost handler forwards an operation nobody else handles. So a layer that only decorates one operation is installable on its own. An explicit `..trap` still wins: a mock that says an operation must not be called means it.
+A default also fills a handler that leaves the operation out without `..trap`, and it is what `..forward` reaches from the outermost handler (see [Operations a Handler Leaves Out](#operations-a-handler-leaves-out)). So a layer that only decorates one operation is installable on its own.
 
-A default is a handler body, so it runs in the outer scope like every other one (see [Handlers](#handlers)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops. A trait default calling `self.other()` reaches the impl's override, and a filled operation's call does not.
+A default is a handler body, so it runs in the outer scope like every other one (see [Where a Handler Method Runs](#where-a-handler-method-runs)): an `Effect::op(...)` inside a default reaches the next handler out, not the handler the default is filling. That is what keeps a forward from recursing into itself, and it is the one place the analogy with a trait's default method stops. A trait default calling `self.other()` reaches the impl's override, and a filled operation's call does not.
 
 A parameter may declare a default, and a call that omits the argument gets it filled in at the call site, as a function call does. The handler receives the argument already in place.
 
@@ -174,6 +174,7 @@ Every function declares its effects, whatever its visibility. Nothing is inferre
 
 - for a function, the effects in its `with` clause;
 - for an operation of a host-backed interface (one carrying `#[cm(...)]`), that interface;
+- for an operation of a resource, that resource (see [Resources as Effects](#resources-as-effects));
 - for an operation of a user-defined interface, nothing. An installed handler answers it, and it traps where none is installed (see [Handlers](#handlers)).
 
 ```wado
@@ -189,6 +190,89 @@ pub fn report() with (Stdout, Preopens) {   // `pub` changes nothing
     // ...
 }
 ```
+
+### Resources as Effects
+
+Every `resource` is an effect. Its constructors, static methods and instance methods are host calls, so calling any of them demands the resource. `Stream<T>` and `Future<T>` are resources like any other.
+
+```wado
+use { TcpSocket, IpAddressFamily } from "wasi:sockets";
+
+fn connect() with TcpSocket {
+    let socket = TcpSocket::create(IpAddressFamily::Ipv4);   // OK
+}
+
+fn bad() {
+    let _ = TcpSocket::create(IpAddressFamily::Ipv4);        // ERROR: missing resource 'TcpSocket'
+}
+```
+
+### Implied Resources
+
+A held effect also holds every resource its operations mention in a parameter or return type. The rule applies again to each resource reached, so the grant is transitive:
+
+```text
+with Stdout
+  → Stream, Future        write_via_stream(Stream<u8>) -> Future<…>
+    → StreamWritable      Stream::new() returns one
+    → FutureWritable      Future::new() returns one
+```
+
+So `println` needs only `with Stdout`, though its body creates a stream and drops a future. An effect whose signatures mention no resource implies nothing: `with Environment` holds `Environment` alone.
+
+Only resources are implied. The search looks through references, containers, tuples, newtypes, struct fields and variant payloads to find them, but a struct, enum, variant or primitive is never granted in its own right. Each effect implies its own resources and no others, so a function without `with` cannot call `Stream::<u8>::new()` just because some other effect would have implied `Stream`.
+
+### Resources in a Signature
+
+A function holds every resource its own signature mentions, without naming it in `with`. The signature is searched the way an operation's is (above), and also through function types. The return type counts too, including the declared result of an `export async fn`, which the body delivers with `task return`. Resources implied by those are held as well.
+
+```wado
+fn consume(s: Stream<u8>) {                     // holds Stream, and StreamWritable
+    let [rx, tx] = Stream::<u8>::new();
+    tx.drop();
+    rx.drop();
+    s.drop();
+}
+
+fn make_pair() -> [Stream<u8>, StreamWritable<u8>] {
+    return Stream::<u8>::new();
+}
+
+// `Headers` is a newtype of the `Fields` resource: no `with Fields` needed.
+fn headers_to_map(headers: &Headers) -> TreeMap<String, String> { ... }
+```
+
+A [type pattern](./spec-components.md#type-patterns) that narrows a handle to resource `R` holds `R` from then on, as an operation returning `R` would:
+
+```wado
+fn describe(n: Node) -> String {                // holds Node
+    return match n {
+        input: HtmlInputElement => input.value(), // holds HtmlInputElement too
+        _ => "",
+    };
+}
+```
+
+Apart from a narrowing, nothing a body does adds to what its function holds.
+
+### Ambient Functions
+
+`#[ambient]` on a function exempts its body from effect checking. The body may perform any effect without declaring it, and a call demands only what the function's own `with` clause declares. It is for best-effort output that must work from any function: `log_stdout` and `log_stderr` are ambient, and so is the `core:log` facade.
+
+```wado
+use { log_stderr } from "core:cli";
+
+fn compute(x: i32) -> i32 {
+    log_stderr(`computing ${x}`);   // no `with` needed
+    return x * 2;
+}
+```
+
+[`#[benign(E)]`](./spec-attributes.md#benigne-) is the narrower form: only the named effects go undeclared, and the rest of the body is checked.
+
+### Non-Effects
+
+`panic` and `unreachable` are not effects. Both return `!`, so a pure function may call them.
 
 ## Generic Effects (Effect Polymorphism)
 
@@ -207,10 +291,49 @@ fn map<T, U, effect E>(arr: List<T>, f: fn(T) -> U with E) -> List<U> with E {
 Effect parameters:
 
 - Are declared with the `effect` keyword in generic parameter lists
-- At most one effect parameter is allowed per function
 - Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
+
+The caller of a generic function must hold what its parameter resolves to:
+
+```wado
+fn bad() {
+    wrapper(|| { println("x"); });   // ERROR: E = Stdout, and `bad` does not hold it
+}
+```
+
+A closure declares no effects. Its effects are inferred from its body (see [Closures](./spec-functions.md#closures)), and that is what an effect parameter is inferred from.
+
+### `with _`
+
+`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter:
+
+```wado
+fn wrapper(f: fn() with _) with _ { f(); }      // == fn wrapper<effect E>(f: fn() with E) with E
+
+fn combine(f: fn() with _, g: fn() with _) with _ {
+    f();
+    g();
+}
+```
+
+### An Effect Parameter Is Only Forwarded
+
+A body uses its effect parameter only by forwarding it: calling a function or closure whose effects are `E`, or passing a `fn() with E` on. `E` stands for an unknown set of effects, so the body cannot:
+
+- call an operation through it (`E::op()`), since `E` has no operations;
+- install a handler for it: `with E => h do { ... }` is a compile error;
+- ask or branch on what `E` resolves to.
+
+A function that installs a handler takes a concrete effect instead:
+
+```wado
+fn with_mock_counter(f: fn() with Counter) {
+    let mut c = MockCounter { value: 0 };
+    with Counter => &mut c do { f(); }
+}
+```
 
 ## Effects on Trait Methods
 
@@ -271,16 +394,244 @@ A head that writes nothing reads as `with _`, so a bare trait is open rather tha
 
 A body dispatching on a type parameter has no impl to read. In `s.next()`, where `s: S` and `S: Source`, an open head's hole survives, and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` instead. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
 
-See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+A bound may fix an open trait's effects, so a caller that accepts only a pure impl says so:
+
+```wado
+fn sum<S: Source with ()>(s: S) -> i32 { ... }   // only a pure `Source`
+```
+
+A type implements a trait once, so two impls that differ only in their effects are rejected. The effects are what the impl brings, not a choice a call makes.
+
+Rationale: [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ## Handlers
 
-A handler is an `impl Effect for Type` whose methods may use `resume value` to deliver a value to the suspended caller. The `with E => h do { body }` block installs `h` as the handler for effect `E` for the duration of `body`. The `=>` arrow reads as a dispatch binding ("calls to `E` go to `h`"), not an assignment. An inner `with` for the same effect takes over until its body ends, and the outer handler answers again after it.
+A handler answers an effect's operations in place of the host or the operation's default implementation. It is an ordinary value whose type implements the effect, and a `with ... do` block installs it while the block runs. This is how a program injects a dependency, mocks one in a test, or layers behavior over one.
+
+### Handler Implementations
+
+`impl E for T` makes values of `T` handlers for `E`, where `E` is an effect interface or a resource. A plain trait is neither, even one spelled like an effect, and implementing it grants nothing.
+
+A handler method implements one operation. It takes the operation's parameters and return type, after a receiver the operation does not have: `&self` or `&mut self` to reach the handler's state, or none when the method needs no state. A resource's instance method receives the handle as an explicit parameter after that receiver.
+
+```wado
+interface Stdin {
+    fn read_line() -> String;
+}
+
+struct MockStdin {
+    responses: List<String>,
+    index: i32,
+}
+
+impl Stdin for MockStdin {
+    fn read_line(&mut self) -> String {
+        let line = self.responses[self.index];
+        self.index += 1;
+        resume line
+    }
+}
+
+impl Fields for CountingFields {
+    fn new(&self) -> Fields { ... }                                 // answers `Fields::new()`
+    fn has(&self, this: &Fields, name: FieldName) -> bool { ... }   // answers `f.has(name)`
+    ..trap
+}
+```
+
+A generic impl such as `impl<T> Greeter for Holder<T>` makes every instance of `Holder` a handler. A generic effect is implemented per instance: `impl Stream<u8> for MockStream` handles `Stream<u8>` and no other `Stream`.
+
+A handler method may declare effects in a `with` clause, like any function. Installing the handler demands them where the `with ... do` stands, since that is where the handler's work is done.
+
+### `resume`
+
+`resume value` hands `value` to the operation's caller and ends the handler method, as `return` would. The value is checked against the operation's return type. A method for an operation that returns `()` may end without one.
+
+`resume` is valid only in a handler method's body. Anywhere else it is a compile error, including in a closure written inside a handler method. A caller is resumed at most once: continuations are one-shot.
+
+A statement after `resume` runs once the caller's `do` block has finished. A handler uses it to clean up after the work it handed out:
+
+```wado
+impl FileSystem for ManagedFs {
+    fn open_file(&self, path: String) -> Handle {
+        let handle = real_open(path);
+        resume handle;
+        real_close(handle);   // after the `do` block completes
+    }
+}
+```
+
+Which names `resume` leaves free is in [Contextual Keywords](./spec-lexical.md#contextual-keywords).
+
+### Installing a Handler
+
+`with E => h do { body }` installs `h` as the handler for `E` while `body` runs. The `=>` reads as "calls to `E` go to `h`": it binds a dispatch, and it is not an assignment. One `with` installs several, separated by commas:
 
 ```wado
 with Stdin => &mut mock do { ... }
 with Stdin => &mut s, Stdout => &mut o do { ... }
-with &mut bundle do { ... }                       // bundled (omits effect name)
 ```
 
-See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for resource-as-effect and effect propagation, and [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for handler syntax and semantics.
+- `E` names an effect as a `with` clause does, with its type arguments when it has them (`Stream<u8>`). A name that reaches no effect is a compile error.
+- `h` must implement `E` at those arguments. A handler whose type is a type parameter is rejected, even when its bound names `E`, because which impl would answer is not known.
+- `h` is a unary expression: a name, a reference (`&h`, `&mut h`), a call, a method call, or a field or index access. Anything else, a cast for instance, goes in parentheses: `with E => (h as &mut MockE) do { ... }`.
+- `E` is a concrete effect, never an effect parameter (see [An Effect Parameter Is Only Forwarded](#an-effect-parameter-is-only-forwarded)).
+
+The handler expressions are evaluated before the body, outside the handlers they install.
+
+`with ... do` is an expression. Its value is the body's, as a block's is:
+
+```wado
+let id = with Random => &mut rng do { Uuid::v4() };
+```
+
+The body holds every effect its `with` installs. It may perform them and call functions that declare them, and the enclosing function does not declare them:
+
+```wado
+fn use_both() -> i32 with (A, B) { ... }
+
+fn mocked() -> i32 {                        // declares neither A nor B
+    return with A => &mut a, B => &mut b do { use_both() };
+}
+```
+
+A closure whose body is a `with ... do` puts it in parentheses or a block, since `with` after a closure's parameter list would be the closure's own effects (see [Closures](./spec-functions.md#closures)).
+
+### Handler Scope
+
+A handler is installed for the dynamic extent of its body. Every operation performed from the body reaches it, at any call depth. It stays installed until control leaves the body, by reaching the end or by a `return`, `break` or `continue` that jumps out, and then the handler that was there before answers again. A value that a `return` or `break` carries out is computed while the handler is still installed. A `break` to a label inside the body does not leave it.
+
+An operation reaches the innermost handler installed for its own effect. An inner `with` for the same effect takes over until its body ends:
+
+```wado
+with Counter => &outer do {
+    with Counter => &inner do {
+        Counter::next();     // inner
+    }
+    Counter::next();         // outer
+}
+```
+
+Bindings on one `with` line install in source order, so a later binding for an effect sits inside an earlier one for the same effect. The later one answers, and the earlier one is the next handler out.
+
+A `with` in a global initializer covers that initializer and nothing after it.
+
+### Bundled Handlers
+
+A binding without `E =>` installs its handler for every effect its type implements:
+
+```wado
+with &mut cm do { ... }                          // every effect `cm`'s type implements
+with &mut cm, Stdout => &mut stdout do { ... }   // mixed with explicit bindings
+```
+
+A type implementing several instances of one generic effect is installed for each of them. The handler expression is evaluated once, and every effect it is installed for shares that one value, so state that one operation changes is seen by the others.
+
+A bundled binding whose type implements no effect is a compile error. So is one whose type has no declaration to find impls on: a type parameter, an associated type projection, a function type.
+
+### Handler State
+
+A handler is a value like any other. `with E => &mut h do` hands the handler a reference to `h`, so what its `&mut self` methods change is in `h` once the block ends. A handler written by value is a copy, and its changes end with the block.
+
+```wado
+let mut c = CounterState { value: 0 };
+with Counter => &mut c do {
+    Counter::next();
+    Counter::next();
+}
+assert c.value == 2;
+```
+
+### Where a Handler Method Runs
+
+A handler method for `E` runs with its own installation set aside, so `E`'s operations inside it reach the next handler out. That is how a handler delegates, to an outer handler or to the host, without recursing into itself. The method holds `E` for this without declaring it.
+
+```wado
+use { Random } from "wasi:random";
+
+struct Counting {
+    calls: i32,
+}
+
+impl Random for Counting {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        self.calls += 1;
+        resume Random::get_random_bytes(max_len)   // the next handler out: the host
+    }
+    ..forward
+}
+```
+
+Any other effect the method performs is answered by whatever handles that effect at the operation's call, and must be held like any other effect (see [Handler Implementations](#handler-implementations)).
+
+### Operations a Handler Leaves Out
+
+An `impl E for T` need not implement every operation. An operation it leaves out is decided by the block's rest clause:
+
+- `..forward` sends it to the next handler out. It behaves as `fn op(args) { resume E::op(args) }` would.
+- `..trap` traps if it is dispatched, even where the interface gives it a default. A mock that says an operation must not be called means it.
+- With no rest clause, the interface's [default implementation](#default-implementations) answers it, and it traps where there is none.
+
+The rest clause is the block's last item, and a block may hold nothing else. A bare `..` is a syntax error: forwarding and trapping are each a footgun where the other was meant, so the choice is written out. `forward` and `trap` are [contextual keywords](./spec-lexical.md#contextual-keywords).
+
+```wado
+struct Filter { min: i32 }
+
+impl Log for Filter {                      // a layer: decorate one operation
+    fn enabled(&self, level: i32) -> bool {
+        resume level >= self.min && Log::enabled(level)
+    }
+    ..forward                              // everything else → the outer `Log`
+}
+
+impl TcpSocket for MinimalTcp {            // a mock: anything unexpected traps
+    fn create(&self, family: IpAddressFamily) -> Result<TcpSocket, ErrorCode> {
+        resume Result::Ok(mock_socket())
+    }
+    ..trap
+}
+
+impl Log for Passthrough {                 // implements nothing, forwards all
+    ..forward
+}
+```
+
+### With No Handler Installed
+
+An operation with no handler installed for it is answered by:
+
+- the host, for an operation of a host-backed interface or a resource;
+- the operation's default implementation, where the interface declares one;
+- otherwise nothing, and the operation traps.
+
+The world's imports thus act as the outermost handler. A `..forward` from the outermost handler reaches the same place.
+
+How a handler answers an async operation is in [Async Imports](./spec-components.md#async-imports).
+
+Rationale: [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
+
+## Known gaps
+
+### Code after `resume`
+
+A statement after `resume` never runs: `resume` ends the handler method as `return` does. So a handler cannot yet clean up after the `do` block, and a program written that way silently skips the cleanup.
+
+### Effects a handler method declares
+
+Installing a handler does not demand the effects its methods declare. A function that holds no `Stdout` can install a handler whose method prints, so the `with` site performs an effect it never declared.
+
+### More than one effect parameter
+
+A function may declare at most one `<effect E>`, and more is rejected. So a combinator that handles one abstract effect and forwards another cannot be written. Since `with _` mints a parameter, a function cannot write `with _` and declare its own `<effect E>` either.
+
+### An effect argument on a bound
+
+`S: Source with ()` does not parse. A caller that wants only a pure impl of an open trait has no way to say so, and writes `with _` to accept any.
+
+### How deep an open head resolves
+
+An open head is resolved from the impl a call names: a free call reads its type arguments, a method call its receiver, and a receiver that wraps another type is followed through its type arguments to a bounded depth. Past that depth, or for a receiver whose impl is not found, the effect parameter survives and the caller forwards it with `with _`. That is sound, but it demands more than the impl would.
+
+### A resource used by a generic body
+
+A function with an effect parameter whose body uses a resource, `Stream::<u8>::new()` for instance, is rejected even where every effect it is called with would imply that resource. Inside the body `E` implies nothing.
