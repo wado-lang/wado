@@ -40,11 +40,12 @@ A code block in the specification is a quotation of an e2e fixture.
 
 ### The rule
 
-1. Every `` ```wado `` block in `docs/spec-*.md` names a fixture.
-2. The named fixture contains the block verbatim: its lines, in order and
+1. Every `` ```wado `` block in `docs/spec-*.md` names a fixture or a
+   source file.
+2. The named file contains the block verbatim: its lines, in order and
    contiguous, each shifted by one indentation prefix shared by all of them. A
    blank line matches a blank line.
-3. Any number of blocks may name one fixture.
+3. Any number of blocks may name one file.
 4. A block whose fixture does not expect a compile error contains at least one
    `assert`. This rule is provisional: the first migrated file decides whether
    it holds or is absurd, and it is dropped if absurd.
@@ -66,13 +67,22 @@ assert double(1.5 as Meters) == 3.0 as Meters;
 
 The comment is data, so JSON says what it may hold, and no syntax of its own
 needs a rule. A comment whose body does not open with `{` is no reference, which
-leaves room for a formatter directive. One that does is a reference: `fixture`
-is its only key, and a body that fails to parse or holds another key is an
-error, so a misspelled key is caught rather than read as no reference.
+leaves room for a formatter directive. One that does is a reference: it holds
+exactly one of `fixture` and `source`, and a body that fails to parse or holds
+another key is an error, so a misspelled key is caught rather than read as no
+reference.
 
-The path is relative to `wado-compiler/tests/fixtures/` and may name any `.wado`
-file there, a helper module a fixture imports included. A two-file example
-quotes each file.
+A `fixture` path is relative to `wado-compiler/tests/fixtures/` and names a
+fixture the suite runs, or a helper module a fixture imports. A two-file example
+quotes each file. The block is matched against the code before the fixture's
+`__DATA__`.
+
+A `source` path is relative to the repository root and names any file: a
+standard library module, a package's test, a helper module whose own
+`__DATA__` is the example. The block is matched against the whole file, and
+the `assert` rule does not apply, since what runs the file is not the e2e
+suite. A top-level fixture is named as a `fixture`, so the `assert` rule
+cannot be stepped around.
 
 ### Why a quotation, and not a generated test
 
@@ -102,10 +112,6 @@ example names the test that holds it.
 - A compile-error example quotes a fixture declaring `compile_error` or
   `compile_error_codes`. One fixture expects one report, so each rejected
   example has a fixture of its own.
-- A block quoting a fixture marked `#[TODO]` or `#![TODO]` is an example the
-  compiler does not yet honour. That is a known gap, and the specification
-  records no gaps, so the checker requires a WEP to name that fixture in a
-  code span.
 - A fixture is excluded from the formatter (`[format] exclude`), so its layout
   stays as the specification quotes it.
 
@@ -117,10 +123,12 @@ the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `scripts/check-spec-examples.sh` drives it with `wado run`, as
 `scripts/check-rust-paths.sh` drives `package-gale/tools/rust_inline_paths.wado`.
 
-A block that names no fixture is counted against the baseline. A block with a
-reference is migrated, so any rule it breaks fails the check outright. The
-`#[TODO]` rule reads the fixture as a whole: one marked test anywhere in it
-asks for a WEP.
+A block with a reference is migrated, so any rule it breaks fails the check
+outright.
+
+A `#[TODO]` rule was dropped: it asked a WEP to name every fixture marked
+`#[TODO]` that a block quotes, as a known gap. A marked fixture is not always a
+gap. The example of a `#[TODO]` test is itself marked, by design.
 
 Marl's `fenced_code_blocks` gives the checker what it reads of each fenced
 block: its info string, its text, its source line, and the HTML block directly
@@ -172,5 +180,7 @@ The last two are what this WEP is for. The migration will find them.
 
 - The match proves the quoted text compiles in its fixture, not that the
   fixture exercises it. A block quoted from a function no test calls passes.
+- A `source` quotation is held to its file alone. Nothing asks that the file is
+  compiled or run.
 - The cheatsheet repeats the specification's examples in a shorter form, and
   nothing holds it to this rule.
