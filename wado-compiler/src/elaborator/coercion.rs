@@ -847,8 +847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if TypeSystem::is_null_literal(element) {
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
-                    "`null` names no value of `{slot}`; an `Option` accepts it, and any other \
-                     type by implementing `From<Option<!>>`"
+                    "`null` names no value of `{slot}`; an `Option` or a newtype over one \
+                     accepts it, and any other type by implementing `From<Option<!>>`"
                 ),
                 span: element.span(),
             });

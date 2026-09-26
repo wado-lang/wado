@@ -1099,7 +1099,9 @@ impl TypeSystem {
             ArgClass::BytesLit => {
                 "is a byte-string literal, which admits `List<u8>` and its newtypes".to_string()
             }
-            ArgClass::NullLit => "is `null`, which admits every `Option`".to_string(),
+            ArgClass::NullLit => {
+                "is `null`, which admits every `Option` and its newtypes".to_string()
+            }
             ArgClass::Opaque(OpaqueReason::Closure) => {
                 "is a closure, so the parameter is what would type it".to_string()
             }
