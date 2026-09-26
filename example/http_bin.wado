@@ -19,7 +19,8 @@
 //   *    /anything      — returns request info for any method (incl. custom)
 //
 // Any other text reply goes out gzip-coded to a client whose Accept-Encoding
-// admits it.
+// admits it. A request body in a gzip or deflate Content-Encoding is decoded;
+// one in any other coding is 415.
 
 use {
     Request,
@@ -42,8 +43,8 @@ use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Router, PathParams } from "core:router";
 use json from "core:json";
-use { gzip_compress } from "core:zlib";
-use { request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
+use { ZlibError, gzip_compress, inflate_gzip, inflate_zlib, zlib_compress } from "core:zlib";
+use { field_list, request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
 
 struct RequestInfo {
     method: String,
@@ -99,9 +100,15 @@ struct RouteResponse {
     status: StatusCode,
     content_type: String,
     body: ByteList,
-    allow: Option<String>,
+    headers: List<[String, String]> = [],
     gzip: bool = false,
 }
+
+variant BodyError {
+    UnsupportedCoding(String),
+    Corrupt(ZlibError),
+}
+impl From<ZlibError> for BodyError;
 
 type Handler = fn(Request, PathParams) -> RouteResponse;
 
@@ -165,15 +172,40 @@ fn parse_url(request: &Request) -> Url {
     return Url::from_parts(scheme, authority, request.get_path_with_query(), null);
 }
 
-fn read_body_from_request(request: Request) -> String {
+/// The request body, decoded from its `Content-Encoding`, or the reply refusing it.
+fn read_body_from_request(request: Request) -> Result<String, RouteResponse> {
+    let coding = field_list(&request.get_headers(), "content-encoding");
     let [res_future, _res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream, _trailers] = Request::consume_body(request, res_future);
     let buf = body_stream.read_to_end();
     body_stream.drop();
-    return match String::from_utf8(buf) {
-        Ok(s) => s,
-        Err(_) => "",
+    return match decode_content(&coding, buf as ByteList) {
+        Ok(decoded) => Result::Ok(String::from_utf8(decoded).unwrap_or("")),
+        Err(UnsupportedCoding(c)) => Result::Err(RouteResponse {
+            ..json_response(415, json_error(`Unsupported Content-Encoding: ${c}`)),
+            headers: [
+                ["accept-encoding", "gzip, deflate"],
+            ],
+        }),
+        Err(Corrupt(e)) => Result::Err(json_response(400, json_error(`Malformed request body: ${e}`))),
     };
+}
+
+/// `body` with each coding a `Content-Encoding` value lists undone, last applied first.
+fn decode_content(content_encoding: &String, body: ByteList) -> Result<ByteList, BodyError> {
+    let mut codings: List<String> = content_encoding.split(",").map(|c| c.trim_ascii().to_ascii_lowercase()).filter(|c| !c.is_empty()).collect();
+    codings.reverse();
+    let mut decoded = body;
+    for let coding of codings {
+        decoded = match coding {
+            "gzip" | "x-gzip" => inflate_gzip(&decoded)?,
+            "deflate" => inflate_zlib(&decoded)?,
+            _ => {
+                return Result::Err(BodyError::UnsupportedCoding(coding));
+            },
+        };
+    }
+    return Result::Ok(decoded);
 }
 
 fn parse_status_code(s: String) -> Option<u16> {
@@ -219,7 +251,6 @@ fn json_response(status: StatusCode, body: ByteList) -> RouteResponse {
         status,
         content_type: "application/json",
         body,
-        allow: null,
     };
 }
 
@@ -227,7 +258,15 @@ fn echo(request: Request, read_body: bool) -> RouteResponse {
     let url = parse_url(&request);
     let method = request.get_method();
     let h = request.get_headers();
-    let body = if read_body { Option::Some(read_body_from_request(request)) } else { null };
+    let mut body: Option<String> = null;
+    if read_body {
+        match read_body_from_request(request) {
+            Ok(text) => body = Option::Some(text),
+            Err(refusal) => {
+                return refusal;
+            },
+        }
+    }
     return json_response(200, build_request_json(method, url, &h, body));
 }
 
@@ -236,7 +275,6 @@ fn respond_home() -> RouteResponse {
         status: 200,
         content_type: "text/html; charset=utf-8",
         body: HOMEPAGE,
-        allow: null,
     };
 }
 
@@ -270,7 +308,6 @@ fn respond_status(code_str: String) -> RouteResponse {
             status: code as StatusCode,
             content_type: "text/plain",
             body: [],
-            allow: null,
         };
     }
     return json_response(400, json_error("Invalid status code"));
@@ -282,7 +319,6 @@ fn respond_base64(encoded: String) -> RouteResponse {
             status: 200,
             content_type: "text/plain",
             body: decoded_bytes,
-            allow: null,
         };
     }
     return json_response(400, json_error("Invalid base64"));
@@ -300,11 +336,8 @@ fn respond_gzip(request: Request) -> RouteResponse {
 }
 
 fn respond_anything(request: Request) -> RouteResponse {
-    let url = parse_url(&request);
     let method = request.get_method();
-    let h = request.get_headers();
-    let body = if method matches { Post | Put | Patch } { Option::Some(read_body_from_request(request)) } else { null };
-    return json_response(200, build_request_json(method, url, &h, body));
+    return echo(request, method matches { Post | Put | Patch });
 }
 
 fn format_allow(methods: &List<Method>) -> String {
@@ -351,14 +384,15 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
                 status: 405,
                 content_type: "application/json",
                 body: json_error("Method Not Allowed"),
-                allow: Option::Some(format_allow(&allowed)),
+                headers: [
+                    ["allow", format_allow(&allowed)],
+                ],
             };
         } else {
             RouteResponse {
                 status: 404,
                 content_type: "application/json",
                 body: json_error("Not Found"),
-                allow: null,
             };
         }
     };
@@ -370,8 +404,8 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     resp_headers.append("server", #file.bytes().collect() as FieldValue);
     resp_headers.append("content-type", resp.content_type.bytes().collect() as FieldValue);
     resp_headers.append("trailer", "server-timing".bytes().collect() as FieldValue);
-    if let Some(a) = resp.allow {
-        resp_headers.append("allow", a.bytes().collect() as FieldValue);
+    for let [name, value] of resp.headers {
+        resp_headers.append(name as FieldName, value.bytes().collect() as FieldValue);
     }
     let codable = worth_gzip(&resp.content_type, resp.body.len() as u64);
     let gzip = resp.gzip || codable && accepts_gzip;
@@ -409,4 +443,20 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
         status: resp.status,
         duration_us: elapsed as u64 / 1000,
     }).unwrap());
+}
+
+test "a request body is decoded from each coding, last applied first" {
+    let data: ByteList = b"wado wado wado wado";
+    assert decode_content(&"gzip", gzip_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"X-Gzip", gzip_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"deflate", zlib_compress(&data)) matches { Ok(d) && d == data };
+    assert decode_content(&"deflate, gzip", gzip_compress(&zlib_compress(&data))) matches { Ok(d) && d == data };
+    assert decode_content(&"", data) matches { Ok(d) && d == data };
+}
+
+test "a request body in an unknown or broken coding is refused" {
+    let data: ByteList = b"wado wado wado wado";
+    assert decode_content(&"br", data) matches { Err(UnsupportedCoding(c)) && c == "br" };
+    assert decode_content(&"gzip", data) matches { Err(Corrupt(_)) };
+    assert decode_content(&"gzip", zlib_compress(&data)) matches { Err(Corrupt(_)) };
 }
