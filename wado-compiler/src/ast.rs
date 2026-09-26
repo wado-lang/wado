@@ -732,6 +732,14 @@ fn walk_params<V: AstVisitor>(v: &mut V, params: &[Param]) {
 }
 
 pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
+    walk_function_signature(v, func);
+    if let Some(body) = &func.body {
+        v.visit_block(body);
+    }
+}
+
+/// Everything [`walk_function`] visits but the body.
+pub fn walk_function_signature<V: AstVisitor>(v: &mut V, func: &Function) {
     v.visit_id(func.id, func.span);
     v.visit_generic_params(&func.type_params);
     walk_params(v, &func.params);
@@ -739,9 +747,6 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
         v.visit_type(ret);
     }
     walk_effect_names(v, &func.effects);
-    if let Some(body) = &func.body {
-        v.visit_block(body);
-    }
 }
 
 pub fn walk_block<V: AstVisitor>(v: &mut V, block: &Block) {

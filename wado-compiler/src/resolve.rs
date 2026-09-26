@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
 use crate::bind::expr_references_var;
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
@@ -55,6 +56,33 @@ pub enum Shadowed {
     Binder,
 }
 
+/// A declaration taking a name its own scope already holds, without deriving
+/// from the binding it would replace, or a name one pattern binds twice.
+#[derive(Debug)]
+pub struct Redeclaration {
+    /// The module that wrote the declaration.
+    pub module: ModuleSource,
+    pub name: String,
+    /// Where the scope bound the name first.
+    pub first: Span,
+    /// The redeclaring binder's own identifier.
+    pub second: Span,
+}
+
+impl From<&Redeclaration> for Diagnostic {
+    fn from(r: &Redeclaration) -> Self {
+        Diagnostic {
+            severity: Severity::Error,
+            code: Code::DuplicateDefinition,
+            message: format!(
+                "cannot redeclare '{}' in the same scope (first defined at {}:{})\n  hint: shadowing is allowed when the new value is derived from the old one (e.g., `let {0} = {0} + 1`)",
+                r.name, r.first.line, r.first.column
+            ),
+            span: Some(DiagnosticSpan::from_span(&r.second, None)),
+        }
+    }
+}
+
 /// Every reference site's answer, keyed by the site's own [`AstId`].
 #[derive(Debug)]
 pub struct Resolutions {
@@ -70,6 +98,8 @@ pub struct Resolutions {
     /// Every binder the walk found taking a name that already reached
     /// something. Collected rather than emitted: this pass holds no logger.
     shadowings: Vec<Shadowing>,
+    /// Every same-scope redeclaration, collected for the same reason.
+    redeclarations: Vec<Redeclaration>,
     /// The binders declared `effect`, the only ones that stand for an effect.
     effect_binders: hashmap::IndexSet<AstId>,
 }
@@ -242,6 +272,7 @@ impl Resolutions {
         let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
         let mut shadowings = Vec::new();
+        let mut redeclarations = Vec::new();
         let mut effect_binders = hashmap::IndexSet::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
@@ -254,9 +285,10 @@ impl Resolutions {
                 scopes: &scopes,
                 refs: &mut refs,
                 shadowings: &mut shadowings,
+                redeclarations: &mut redeclarations,
                 effect_binders: &mut effect_binders,
                 pending_binder: None,
-                irrefutable_pattern: false,
+                pattern_site: PatternSite::Test,
                 pattern_start: None,
                 lint_shadowing: !module.has_generated()
                     && !ast::inner_attrs_allow(module.inner_attributes(), ast::lint::SHADOWED_NAME),
@@ -270,6 +302,7 @@ impl Resolutions {
             refs,
             scopes,
             shadowings,
+            redeclarations,
             effect_binders,
         }
     }
@@ -278,6 +311,12 @@ impl Resolutions {
     #[must_use]
     pub fn shadowings(&self) -> &[Shadowing] {
         &self.shadowings
+    }
+
+    /// Every same-scope redeclaration.
+    #[must_use]
+    pub fn redeclarations(&self) -> &[Redeclaration] {
+        &self.redeclarations
     }
 
     /// Every declaration in the program.
@@ -499,6 +538,20 @@ impl Resolutions {
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
 
+/// Where the pattern being walked sits, which decides what its names do.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatternSite {
+    /// A `match` arm, an `if let` or `while let`, a `matches`: a test whose
+    /// names only the construct itself sees.
+    Test,
+    /// A `let … else`: refutable, and its names enter the enclosing scope.
+    RefutableDeclaration,
+    /// A `let` without `else`, a `for let … of`, a tuple comprehension: its
+    /// names enter the enclosing scope, and it cannot be refutable, so a bare
+    /// identifier in it never names a `global`.
+    Declaration,
+}
+
 /// A module's declaration scope: the one implementation of "what does this name
 /// mean here", and the only place a name becomes a [`DefId`].
 struct Resolver<'a> {
@@ -515,22 +568,21 @@ struct Resolver<'a> {
     /// is visible only after it — like a `let`, and unlike a module-level
     /// declaration.
     locals: Vec<IndexMap<String, DefId>>,
-    /// Value bindings in scope — parameters and `let`s, innermost block last.
-    /// Held for the shadowing lint and for deciding what a bare name in a
-    /// pattern is: an expression's reference to a local resolves through the
-    /// elaborator, not here.
-    bindings: Vec<hashmap::IndexSet<String>>,
+    /// Value bindings in scope — parameters and `let`s, innermost scope last —
+    /// each with where it was bound. Held for the shadowing lint, for the
+    /// redeclaration check, and for deciding what a bare name in a pattern is:
+    /// an expression's reference to a local resolves through the elaborator,
+    /// not here.
+    bindings: Vec<IndexMap<String, Span>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
     shadowings: &'a mut Vec<Shadowing>,
+    redeclarations: &'a mut Vec<Redeclaration>,
     /// `#![allow(shadowed_name)]` waives the lint for the whole module, as does
     /// `#![generated]`: a generator's names are not the user's to rename.
     lint_shadowing: bool,
     pending_binder: Option<PendingBinder>,
-    /// The pattern being walked sits where a refutable one cannot: a `let`
-    /// without `else`, a `for let … of`, a tuple comprehension. A bare
-    /// identifier in it never names a `global`.
-    irrefutable_pattern: bool,
+    pattern_site: PatternSite,
     /// While a pattern is walked, how many names the innermost frame held when
     /// it started. The names past it are the pattern's own, which reach none of
     /// its sites.
@@ -623,7 +675,7 @@ impl Resolver<'_> {
         if !self.lint_shadowing || allowed {
             return;
         }
-        let shadowed = if self.bindings.iter().any(|frame| frame.contains(name)) {
+        let shadowed = if self.bindings.iter().any(|frame| frame.contains_key(name)) {
             Shadowed::Binder
         } else {
             match self.resolve_value_name(name) {
@@ -647,13 +699,51 @@ impl Resolver<'_> {
     fn bind_name(&mut self, name: &str, span: Span, allowed: bool) {
         self.check_shadowing(name, span, allowed);
         if let Some(frame) = self.bindings.last_mut() {
-            frame.insert(name.to_string());
+            frame.insert(name.to_string(), span);
         }
+    }
+
+    /// [`Self::bind_name`] for a declaration — a parameter, or a name a `let`,
+    /// `for let … of` or tuple comprehension binds — whose names enter the
+    /// innermost scope, reporting a redeclaration instead where one is.
+    fn declare_name(&mut self, name: &str, span: Span, allowed: bool) {
+        match self.bindings.last().and_then(|frame| frame.get(name)) {
+            Some(&first) if self.redeclares(name) => self.redeclarations.push(Redeclaration {
+                module: self.module.clone(),
+                name: name.to_string(),
+                first,
+                second: span,
+            }),
+            _ => self.bind_name(name, span, allowed),
+        }
+    }
+
+    /// Whether declaring `name`, which the innermost scope already holds,
+    /// redeclares it: always where the pattern being walked bound it, and
+    /// otherwise unless the declaring `let` derives it from the binding it
+    /// replaces.
+    fn redeclares(&self, name: &str) -> bool {
+        let within_pattern = self.pattern_start.is_some_and(|start| {
+            self.bindings
+                .last()
+                .and_then(|frame| frame.get_index_of(name))
+                .is_some_and(|i| i >= start)
+        });
+        within_pattern
+            || !self
+                .pending_binder
+                .as_ref()
+                .is_some_and(|p| p.derived.iter().any(|derived| derived == name))
     }
 
     fn bind_pattern_name(&mut self, name: &str, span: Span) {
         let exempt = self.binder_exempts(name);
-        self.bind_name(name, span, exempt);
+        match self.pattern_site {
+            PatternSite::Test => self.bind_name(name, span, exempt),
+            PatternSite::RefutableDeclaration | PatternSite::Declaration => {
+                self.declare_name(name, span, exempt);
+            }
+        }
     }
 
     /// Whether the binder being walked waives the lint for the name its pattern
@@ -668,7 +758,7 @@ impl Resolver<'_> {
     /// against: in a refutable pattern, where no binding in scope as the
     /// pattern starts has taken the name.
     fn pattern_constant(&self, name: &str) -> Option<DefId> {
-        if self.irrefutable_pattern || self.bound_before_pattern(name) {
+        if self.pattern_site == PatternSite::Declaration || self.bound_before_pattern(name) {
             return None;
         }
         let Resolution::Def(def) = self.resolve_value_name(name) else {
@@ -688,7 +778,7 @@ impl Resolver<'_> {
             return false;
         };
         let start = self.pattern_start.expect("a pattern is being walked");
-        outer.iter().any(|frame| frame.contains(name))
+        outer.iter().any(|frame| frame.contains_key(name))
             || innermost.get_index_of(name).is_some_and(|i| i < start)
     }
 
@@ -710,7 +800,7 @@ impl Resolver<'_> {
     }
 
     fn in_frame(&mut self, walk: impl FnOnce(&mut Self)) {
-        self.bindings.push(hashmap::IndexSet::default());
+        self.bindings.push(IndexMap::default());
         walk(self);
         self.bindings.pop();
     }
@@ -723,12 +813,32 @@ impl Resolver<'_> {
         self.pending_binder = None;
     }
 
-    /// Walk a pattern, irrefutable or not, where a bare identifier may name a
-    /// `global` only in a refutable one.
-    fn in_pattern_position(&mut self, irrefutable: bool, walk: impl FnOnce(&mut Self)) {
-        let saved = std::mem::replace(&mut self.irrefutable_pattern, irrefutable);
+    fn in_pattern_site(&mut self, site: PatternSite, walk: impl FnOnce(&mut Self)) {
+        let saved = std::mem::replace(&mut self.pattern_site, site);
         walk(self);
-        self.irrefutable_pattern = saved;
+        self.pattern_site = saved;
+    }
+
+    /// Walk a block in the innermost frame. Its local items are in scope for
+    /// the whole of it, wherever they are written, and for none of it once it
+    /// closes.
+    fn visit_block_in_frame(&mut self, block: &ast::Block) {
+        let mut scope = IndexMap::default();
+        for stmt in &block.stmts {
+            // A local `impl` block writes no name for the scope to hold.
+            if let ast::Stmt::Item(item) = stmt
+                && !matches!(**item, ast::Item::Impl(_))
+                && let Some(def) = self.defs.of_ast_id(item.id())
+            {
+                let name = self.defs.name(def).to_string();
+                let allowed = ast::attrs_allow(item.attrs(), ast::lint::SHADOWED_NAME);
+                self.check_shadowing(&name, item.name_span(), allowed);
+                scope.insert(name, def);
+            }
+        }
+        self.locals.push(scope);
+        ast::walk_block(self, block);
+        self.locals.pop();
     }
 }
 
@@ -809,39 +919,27 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(params, self_binder, |s| ast::walk_item(s, item));
     }
 
+    /// The parameters and the body's own bindings share one scope, so a `let`
+    /// taking a parameter's name redeclares it.
     fn visit_function(&mut self, func: &ast::Function) {
         self.in_scope(&func.type_params, None, |s| {
             s.in_frame(|s| {
                 for param in &func.params {
                     if param.self_kind == ast::SelfKind::None {
                         let allowed = ast::attrs_allow(&param.attrs, ast::lint::SHADOWED_NAME);
-                        s.bind_name(&param.name, param.name_span, allowed);
+                        s.declare_name(&param.name, param.name_span, allowed);
                     }
                 }
-                ast::walk_function(s, func);
+                ast::walk_function_signature(s, func);
+                if let Some(body) = &func.body {
+                    s.visit_block_in_frame(body);
+                }
             });
         });
     }
 
-    /// A block's local items are in scope for the whole of it, wherever they
-    /// are written, and for none of it once it closes.
     fn visit_block(&mut self, block: &ast::Block) {
-        let mut scope = IndexMap::default();
-        for stmt in &block.stmts {
-            // A local `impl` block writes no name for the scope to hold.
-            if let ast::Stmt::Item(item) = stmt
-                && !matches!(**item, ast::Item::Impl(_))
-                && let Some(def) = self.defs.of_ast_id(item.id())
-            {
-                let name = self.defs.name(def).to_string();
-                let allowed = ast::attrs_allow(item.attrs(), ast::lint::SHADOWED_NAME);
-                self.check_shadowing(&name, item.name_span(), allowed);
-                scope.insert(name, def);
-            }
-        }
-        self.locals.push(scope);
-        self.in_frame(|s| ast::walk_block(s, block));
-        self.locals.pop();
+        self.in_frame(|s| s.visit_block_in_frame(block));
     }
 
     /// A construct that binds outside a block of its own — a `for`'s init, an
@@ -870,15 +968,19 @@ impl AstVisitor for Resolver<'_> {
                 if let Some(block) = &l.else_block {
                     self.visit_block(block);
                 }
+                let site = match l.else_block {
+                    Some(_) => PatternSite::RefutableDeclaration,
+                    None => PatternSite::Declaration,
+                };
                 self.in_binder(pending, |s| {
-                    s.in_pattern_position(l.else_block.is_none(), |s| s.visit_pattern(&l.pattern));
+                    s.in_pattern_site(site, |s| s.visit_pattern(&l.pattern));
                 });
             }
             // The element binding is irrefutable, and the frame is the loop's.
             ast::Stmt::ForOf(f) => self.in_frame(|s| {
                 s.visit_id(f.id, f.span);
                 s.visit_expr(&f.iterable);
-                s.in_pattern_position(true, |s| s.visit_pattern(&f.binding));
+                s.in_pattern_site(PatternSite::Declaration, |s| s.visit_pattern(&f.binding));
                 s.visit_block(&f.body);
             }),
             ast::Stmt::If(i) => self.visit_if(&i.condition, &i.then_block, i.else_block.as_ref()),
@@ -930,7 +1032,7 @@ impl AstVisitor for Resolver<'_> {
     /// the same spelling a struct *literal*'s name uses.
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
         if self.pattern_start.is_none() {
-            self.pattern_start = Some(self.bindings.last().map_or(0, hashmap::IndexSet::len));
+            self.pattern_start = Some(self.bindings.last().map_or(0, IndexMap::len));
             self.visit_pattern(pat);
             self.pattern_start = None;
             return;
@@ -956,7 +1058,7 @@ impl AstVisitor for Resolver<'_> {
                 }
                 self.visit_pattern(alternative);
                 if let Some(frame) = self.bindings.last() {
-                    bound.extend(frame.iter().cloned());
+                    bound.extend(frame.iter().map(|(name, &span)| (name.clone(), span)));
                 }
             }
             if let Some(frame) = self.bindings.last_mut() {
@@ -1015,7 +1117,7 @@ impl AstVisitor for Resolver<'_> {
         // own name, never a name bound inside its value.
         if expr_scopes_bindings(expr) {
             let pending = self.pending_binder.take();
-            let refutable = std::mem::replace(&mut self.irrefutable_pattern, false);
+            let site = std::mem::replace(&mut self.pattern_site, PatternSite::Test);
             if let ast::Expr::If(i) = expr {
                 self.visit_if(&i.condition, &i.then_block, i.else_block.as_ref());
             } else {
@@ -1023,19 +1125,19 @@ impl AstVisitor for Resolver<'_> {
                     if let ast::Expr::Closure(closure) = expr {
                         for param in &closure.params {
                             let allowed = ast::attrs_allow(&param.attrs, ast::lint::SHADOWED_NAME);
-                            s.bind_name(&param.name, param.name_span, allowed);
+                            s.declare_name(&param.name, param.name_span, allowed);
                         }
                     }
                     if let ast::Expr::TupleComprehension(c) = expr {
                         s.visit_expr(&c.iterable);
-                        s.in_pattern_position(true, |s| s.visit_pattern(&c.binding));
+                        s.in_pattern_site(PatternSite::Declaration, |s| s.visit_pattern(&c.binding));
                         s.visit_expr(&c.body);
                         return;
                     }
                     ast::walk_expr(s, expr);
                 });
             }
-            self.irrefutable_pattern = refutable;
+            self.pattern_site = site;
             self.pending_binder = pending;
             return;
         }

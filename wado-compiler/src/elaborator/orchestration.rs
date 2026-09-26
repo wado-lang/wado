@@ -460,6 +460,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             type_table.borrow_mut().attach_defs(defs.clone());
             Rc::new(Resolutions::build(modules, symbols, defs))
         };
+        for redeclaration in resolutions.redeclarations() {
+            let _ = logger.error_in(&redeclaration.module, redeclaration);
+        }
 
         // Ahead of the type-collection passes, which resolve `T::Assoc` in a
         // declaration and need the trait declaring it to name the projection.

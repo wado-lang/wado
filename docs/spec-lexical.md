@@ -235,6 +235,12 @@ let x = 2;  // Error: cannot redeclare 'x' in the same scope
 let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
 ```
 
+A function's parameters share the body's scope, so a `let` taking a parameter's
+name redeclares it, and so does a parameter named twice. One pattern binding a
+name twice is a redeclaration too. Only a name that binds counts: a bare name
+that a case or a constant pattern answers binds nothing, so writing
+`let None = a else { … };` twice in one scope redeclares nothing.
+
 ### The `shadowed_name` Lint
 
 A binder that takes a name already reaching a known symbol is legal and warns.

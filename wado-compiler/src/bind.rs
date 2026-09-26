@@ -48,13 +48,6 @@ impl Scope {
 /// Errors from the bind phase
 #[derive(Debug, Clone)]
 pub enum BindError {
-    /// Duplicate definition in the same scope
-    DuplicateInScope {
-        name: String,
-        first: Span,
-        second: Span,
-    },
-
     /// Assignment to an immutable variable
     AssignToImmutable { name: String, span: Span },
 
@@ -68,31 +61,17 @@ pub enum BindError {
 /// How the names a pattern binds enter the current scope.
 #[derive(Clone, Copy)]
 enum BindingKind {
-    /// A `let` with an initializer, or a `for-of` binding.
+    /// A `let` with an initializer, a `for-of` binding, or a pattern that may
+    /// not match: `if let`, `while let`, a `match` arm, `matches`.
     Initialized { is_mut: bool, is_reactive: bool },
     /// A `let x: T;`, which every read before an assignment reports.
     Uninitialized { is_mut: bool, is_reactive: bool },
-    /// A pattern that may not match: `if let`, `while let`, a `match` arm,
-    /// `matches`. A name the scope already holds is that same binding.
-    Refutable,
 }
 
 impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
-            BindError::DuplicateInScope {
-                name,
-                first,
-                second,
-            } => (
-                Code::DuplicateDefinition,
-                format!(
-                    "cannot redeclare '{name}' in the same scope (first defined at {}:{})\n  hint: shadowing is allowed when the new value is derived from the old one (e.g., `let {name} = {name} + 1`)",
-                    first.line, first.column
-                ),
-                *second,
-            ),
             BindError::AssignToImmutable { name, span } => (
                 Code::ImmutableAssignment,
                 format!("cannot assign to immutable variable '{name}'"),
@@ -553,19 +532,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 self.bind_block(else_block)?;
             }
 
-            // `let x = x + 1` and `let Some(x) = x else { … x … }` shadow a
-            // binding both the initializer and the else block may read, so it
-            // leaves scope only here, before `define` would call it a duplicate.
-            for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
-                let shadowed = self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if shadowed && expr_references_var(value, name) {
-                    self.scopes.last_mut().unwrap().bindings.shift_remove(name);
-                }
-            });
-
             self.bind_pattern_as(
                 &let_stmt.pattern,
                 BindingKind::Initialized {
@@ -651,16 +617,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 is_mut,
                 is_reactive,
             } => self.define_uninit(name, is_mut || pattern_mut, is_reactive, span),
-            BindingKind::Refutable => {
-                let taken = self
-                    .scopes
-                    .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if !pattern_mut && taken {
-                    return Ok(());
-                }
-                self.define(name, pattern_mut, false, span)
-            }
         }
     }
 
@@ -1109,14 +1065,16 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind a pattern (may introduce variables).
-    /// Bare identifiers are tentatively defined: if the name already exists in the
-    /// current scope, it is silently skipped. This is necessary because the parser
-    /// no longer uses case to distinguish variant case names from variable bindings,
-    /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
-    /// (the elaborator disambiguates them using type information).
+    /// Bind a refutable pattern's names.
     fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
-        self.bind_pattern_as(pattern, BindingKind::Refutable, span)
+        self.bind_pattern_as(
+            pattern,
+            BindingKind::Initialized {
+                is_mut: false,
+                is_reactive: false,
+            },
+            span,
+        )
     }
 
     /// Bind a closure
@@ -1166,23 +1124,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 span,
             });
         }
-        // Shared borrow (not `last_mut`) so it ends before `emit` takes `&self`.
-        if let Some(first) = self
-            .scopes
-            .last()
-            .unwrap()
-            .bindings
-            .get(name)
-            .map(|b| b.defined_at)
-        {
-            self.emit(BindError::DuplicateInScope {
-                name: name.to_string(),
-                first,
-                second: span,
-            })?;
-            return Ok(());
-        }
-
+        // A name the scope already holds is replaced; the resolver reports the
+        // redeclarations, since only it knows which bare names bind.
+        self.possibly_uninit
+            .shift_remove(&(self.current_depth, name.to_string()));
         let scope = self.scopes.last_mut().unwrap();
         scope.bindings.insert(
             name.to_string(),
@@ -1263,105 +1208,6 @@ mod tests {
             fn run() {
                 let x = 1;
                 let y = x;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_duplicate_in_scope() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = 2;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(!ok);
-        assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("cannot redeclare"));
-    }
-
-    #[test]
-    fn test_same_scope_shadow_with_self_ref() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "shadowing with self-ref should be allowed: {diags:?}");
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_same_scope_shadow_with_self_ref_in_call() {
-        let module = parse(
-            r"
-            fn transform(n: i32) -> i32 { return n; }
-            fn run() {
-                let x = 1;
-                let x = transform(x);
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(
-            ok,
-            "shadowing with self-ref in call should be allowed: {diags:?}"
-        );
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_same_scope_shadow_closure_param_not_self_ref() {
-        // |x| x + 1 — the x inside refers to the closure param, not the outer variable
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = |x: i32| x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(!ok, "closure param shadowing should NOT count as self-ref");
-        assert!(diags[0].message.contains("cannot redeclare"));
-    }
-
-    #[test]
-    fn test_same_scope_shadow_closure_capture_is_self_ref() {
-        // || x + 1 — captures the outer x, this IS a self-reference
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                let x = || x + 1;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(ok, "closure capture should count as self-ref: {diags:?}");
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_shadowing_in_nested_scope() {
-        let module = parse(
-            r"
-            fn run() {
-                let x = 1;
-                if true {
-                    let x = 2;
-                }
             }
         ",
         );
