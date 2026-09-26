@@ -26,8 +26,8 @@ assert decoded matches { Ok(s) && s == "Wado" };
 
 ### `pub fn ref_eq<T>(a: &T, b: &T) -> bool`
 
-Whether `a` and `b` refer to the same value, not merely equal ones. `==`
-on references compares the values they refer to.
+Whether `a` and `b` point to one place, not merely to equal values. `==`
+on references compares the values.
 
 ### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
 

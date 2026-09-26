@@ -3366,7 +3366,7 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
             // either operand of another comparison must keep its parens, or the
             // round-trip silently rewrites the meaning. The same-precedence arm
             // below would otherwise drop them for the left operand.
-            if is_comparison_op(inner.op) && is_comparison_op(parent_op) {
+            if inner.op.is_comparison() && parent_op.is_comparison() {
                 return true;
             }
             if inner_prec == parent_prec && !is_left {
@@ -3393,20 +3393,6 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
         // `ends_in_trailing_cast`), covering both a bare cast and a nested one.
         _ => false,
     }
-}
-
-/// Comparison operators chain (`a < b < c`) rather than associate, so they
-/// need parenthesization rules distinct from ordinary same-precedence binaries.
-fn is_comparison_op(op: BinaryOp) -> bool {
-    matches!(
-        op,
-        BinaryOp::Eq
-            | BinaryOp::NotEq
-            | BinaryOp::Lt
-            | BinaryOp::LtEq
-            | BinaryOp::Gt
-            | BinaryOp::GtEq
-    )
 }
 
 /// Returns true if `name` can be emitted as a bare identifier or keyword in a

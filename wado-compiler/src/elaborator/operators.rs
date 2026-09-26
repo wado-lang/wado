@@ -162,17 +162,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
         } else {
-            let is_comparison = matches!(
-                op,
-                BinaryOp::Eq
-                    | BinaryOp::NotEq
-                    | BinaryOp::Lt
-                    | BinaryOp::LtEq
-                    | BinaryOp::Gt
-                    | BinaryOp::GtEq
-            );
-            let left_lit = is_comparison && Self::takes_shape_from_expected_type(left_ast);
-            let right_lit = is_comparison && Self::takes_shape_from_expected_type(right_ast);
+            let left_lit = op.is_comparison() && Self::takes_shape_from_expected_type(left_ast);
+            let right_lit = op.is_comparison() && Self::takes_shape_from_expected_type(right_ast);
             if left_lit && !right_lit {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
@@ -184,7 +175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (left, right)
             } else {
                 let left = self.resolve_expr(left_ast, ctx, expected_type);
-                let right_expected = if is_comparison && left != TypeTable::ERROR {
+                let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
                     Some(left)
                 } else {
                     expected_type
@@ -309,7 +300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
     /// and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`] / [`Self::resolve_compound_assign`]
-    /// that have already resolved both sides. Handles handle equality,
+    /// that have already resolved both sides. Handles resource-handle equality,
     /// trait dispatch for non-primitive comparison / arithmetic / shift,
     /// flags-arith rejection, float-`%` rejection, and the trailing
     /// requires-trait diagnostic.
@@ -331,15 +322,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::BOOL;
         }
 
-        let is_comparison = matches!(
-            op,
-            BinaryOp::Eq
-                | BinaryOp::NotEq
-                | BinaryOp::Lt
-                | BinaryOp::LtEq
-                | BinaryOp::Gt
-                | BinaryOp::GtEq
-        );
+        let is_comparison = op.is_comparison();
 
         if is_comparison
             && let Some((resolved, receiver)) = self.resolve_ref_comparison(left, op, right)

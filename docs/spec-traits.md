@@ -684,9 +684,9 @@ reference: no impl answers `&i32 == i32`, so that comparison is an error.
 
 Two references compare the values they point to, as in Rust. The prelude's
 `impl<T: Eq> Eq for &T` (and the same for `&mut T`) answers `&a == &b` with
-`a == b`, so `&T: Eq` holds exactly when `T: Eq` does. `&mut` coerces to `&`,
-so a `&mut` operand compares with a `&` one on either side. To ask whether two references
-point to the same value, call `ref_eq` (see
+`a == b`, so `&T: Eq` holds wherever `T: Eq` does. `&mut` coerces to `&`, so a
+`&mut` operand compares with a `&` one on either side. To ask whether two
+references point to one place, call `ref_eq` (see
 [Reference Identity](./spec-memory.md#reference-identity)).
 
 ### Ordering Enum

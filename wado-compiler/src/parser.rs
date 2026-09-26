@@ -3728,8 +3728,12 @@ impl Parser {
             let expr = self.parse_ref_expr_operand(start_span)?;
             let span = start_span.merge(&expr.span());
             let id = self.alloc_ast_id();
-            let op = UnaryOp::Ref;
-            return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
+            return Ok(Expr::Unary(Box::new(UnaryExpr {
+                id,
+                op: UnaryOp::Ref,
+                expr,
+                span,
+            })));
         }
 
         // Logical `!` is handled at `parse_not_expr` (looser than `matches`),

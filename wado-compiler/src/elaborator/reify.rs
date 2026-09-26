@@ -78,7 +78,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
-use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64, not_expr};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -329,14 +329,7 @@ fn bare_break(span: Span) -> TirStmt {
 
 /// `if !cond { break; }`, a loop's exit test.
 fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
-    let neg_cond = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Not,
-            expr: Box::new(cond),
-        },
-        TypeTable::BOOL,
-        cond_span,
-    );
+    let neg_cond = not_expr(cond, cond_span);
     TirStmt::new(
         TirStmtKind::If {
             condition: neg_cond,
@@ -3458,14 +3451,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cond_type,
             span,
         );
-        let neg_cond = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(cond_ref),
-            },
-            TypeTable::BOOL,
-            span,
-        );
+        let neg_cond = not_expr(cond_ref, span);
 
         // Header + `condition: <source>` + one `<label>: <text>` line per
         // emitted slot.
@@ -4854,15 +4840,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |expr, hint| self.reify_expr(expr, ctx, hint),
                 |expr| expr.type_id,
             )
-        } else if matches!(
-            binary.op,
-            ast::BinaryOp::Eq
-                | ast::BinaryOp::NotEq
-                | ast::BinaryOp::Lt
-                | ast::BinaryOp::LtEq
-                | ast::BinaryOp::Gt
-                | ast::BinaryOp::GtEq
-        ) && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
+        } else if binary.op.is_comparison()
+            && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
             && !Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
@@ -4903,14 +4882,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
             // `Ordering`; an `OperatorOrd` method already answers a `bool`.
             return match op {
-                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(call),
-                    },
-                    TypeTable::BOOL,
-                    span,
-                ),
+                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => not_expr(call, span),
                 ast::BinaryOp::Lt
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq

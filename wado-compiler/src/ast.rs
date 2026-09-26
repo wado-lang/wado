@@ -3289,6 +3289,17 @@ pub enum BinaryOp {
     Shr,
 }
 
+impl BinaryOp {
+    /// Whether this is `==`, `!=`, `<`, `<=`, `>` or `>=`.
+    #[must_use]
+    pub fn is_comparison(self) -> bool {
+        matches!(
+            self,
+            Self::Eq | Self::NotEq | Self::Lt | Self::LtEq | Self::Gt | Self::GtEq
+        )
+    }
+}
+
 /// A comparison in a chain (e.g., the `< b` part of `a < b < c`)
 #[derive(Debug, Clone)]
 pub struct ChainedComparison {

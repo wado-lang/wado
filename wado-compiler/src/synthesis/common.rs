@@ -658,6 +658,18 @@ pub fn write_str_stmt(
     TirStmt::new(TirStmtKind::Expr(call), span)
 }
 
+/// Create a logical negation: `!expr`.
+pub fn not_expr(expr: TirExpr, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Unary {
+            op: TirUnaryOp::Not,
+            expr: Box::new(expr),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 /// Create a dereference expression: `*expr`.
 pub fn deref_expr(expr: TirExpr, inner_type: TypeId, span: Span) -> TirExpr {
     TirExpr::new(
