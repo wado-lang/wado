@@ -792,26 +792,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-        if !matches!(
-            let_stmt.pattern,
-            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard
-        ) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "an uninitialized `let` declares a single name; \
-                          destructure where the value is given"
-                    .to_string(),
-                span: let_stmt.name_span,
-            });
-            return;
+        match &let_stmt.pattern {
+            Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } => {
+                let is_mut =
+                    let_stmt.is_mut || matches!(let_stmt.pattern, Pattern::MutIdent { .. });
+                self.bind_local(ctx, *id, name, *span, is_mut, type_id);
+            }
+            Pattern::Wildcard => {}
+            _ => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message: "an uninitialized `let` declares a single name; \
+                              destructure where the value is given"
+                        .to_string(),
+                    span: let_stmt.name_span,
+                });
+            }
         }
-        self.resolve_let_pattern(
-            &let_stmt.pattern,
-            type_id,
-            let_stmt.is_mut,
-            let_stmt.span,
-            BindingSite::Let,
-            ctx,
-        );
     }
 
     /// Check the binding of a walk over a type pack, a `for` or a tuple
@@ -893,9 +889,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !self.another_case_holds_a_value(scrutinee, variant_name) =>
             {
                 None
-            }
-            Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
-                Some(format!("`{name}` may not match"))
             }
             _ => refutable_shape(pattern),
         }
@@ -1136,38 +1129,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a pattern that must bind: a `let`'s, or a tuple `for`'s. A bare
-    /// name at its root binds, whatever else the name reaches.
+    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s. A bare name
+    /// there is a case of its type or a binding, never a global.
     pub(super) fn resolve_let_pattern(
-        &mut self,
-        pattern: &ast::Pattern,
-        type_id: TypeId,
-        is_mut: bool,
-        span: Span,
-        site: BindingSite,
-        ctx: &mut FunctionContext,
-    ) {
-        if let ast::Pattern::Ident {
-            id,
-            name,
-            span: name_span,
-        }
-        | ast::Pattern::MutIdent {
-            id,
-            name,
-            span: name_span,
-        } = pattern
-        {
-            let is_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
-            self.bind_local(ctx, *id, name, *name_span, is_mut, type_id);
-            return;
-        }
-        self.resolve_must_bind_pattern(pattern, type_id, is_mut, span, site, ctx);
-    }
-
-    /// Resolve a pattern that must bind, reading a bare name at its root as
-    /// `match` does. An iterator `for`'s binding is one.
-    fn resolve_must_bind_pattern(
         &mut self,
         pattern: &ast::Pattern,
         type_id: TypeId,
@@ -1552,7 +1516,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                if !is_mut && let Some(constant) = self.immutable_global_type(name) {
+                // A pattern that must bind never reads one, since a constant
+                // pattern there could only be rejected as refutable.
+                if !is_mut
+                    && ctx.must_bind.is_none()
+                    && let Some(constant) = self.immutable_global_type(name)
+                {
                     self.record_item_reference_by_name(*id, name);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant, peeled, *name_span);
@@ -2860,7 +2829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the loop variable (preserving the binding's real `AstId`) and walks
         // the body for its facts.
         let mut scope = ctx.enter_scope();
-        self.resolve_must_bind_pattern(
+        self.resolve_let_pattern(
             &for_of.binding,
             item_type,
             for_of.is_mut,

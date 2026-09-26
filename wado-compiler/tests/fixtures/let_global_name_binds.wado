@@ -1,0 +1,44 @@
+// A `let` or `for` binding matches every value, so a bare name there never reads
+// a global: it binds, and the lint reports the global it shadows. Only a
+// refutable pattern, `let ... else` among them, compares against a global.
+
+global limit: i32 = 3;
+global size: i32 = 4;
+global mut counter: i32 = 0;
+
+struct Box2 { size: i32, w: i32 }
+
+test "a let binds a global's name at any depth" {
+    let limit = 10;
+    let [counter, y] = [5, 6];
+    let { size, w } = Box2 { size: 1, w: 2 };
+    assert limit + counter + y + size + w == 24;
+}
+
+test "a for binds a global's name" {
+    let xs: List<i32> = [1, 2];
+    let mut sum = 0;
+    for let limit of xs {
+        sum += limit;
+    }
+    for let limit of [3, 4] {
+        sum += limit;
+    }
+    assert sum == 10;
+}
+
+test "let else compares against the global" {
+    let matched = |v: i32| -> bool {
+        let limit = v else { return false; };
+        return true;
+    };
+    assert matched(3);
+    assert !matched(5);
+}
+
+test "an uninitialized let _ declares nothing" {
+    let _: i32;
+}
+
+__DATA__
+{"test": {}, "warnings_contains": ["`limit` shadows the global", "`counter` shadows the global", "`size` shadows the global"]}

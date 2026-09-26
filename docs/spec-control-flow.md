@@ -402,10 +402,17 @@ let Ok(v) = r;                    // OK where r: Result<i32, !>
 let Some(y) = opt;                // Error: `Some` may not match
 ```
 
-A bare name at the root of a `let` binds. Below the root it reads as it
-does in `match`: a case or an immutable global of that name matches by value. So
-`let [None, n] = pair` tests its first element and is an error, since `None`
-may not match.
+A bare name in such a pattern, at its root or below it, is a case pattern when
+it names a case of the type it matches, and a binding otherwise. It never names
+a global: a constant pattern can always fail, so reading one here could only be
+rejected. So `let [None, n] = pair` tests its first element and is an error,
+since `None` may not match, while `let limit = 1` binds even where a
+`global limit` is in scope. The `shadowed_name` lint reports that global.
+
+A refutable pattern reads a bare name that names an immutable global as a
+constant pattern instead. The refutable positions are a `match` arm, `if let`,
+`while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
+block unless `v == limit`.
 
 An uninitialized `let x: T;` declares a single name, or `_`.
 

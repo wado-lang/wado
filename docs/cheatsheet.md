@@ -745,9 +745,10 @@ let value = match node {
 };
 let input: HtmlInputElement = el else { return; };
 
-// Constant patterns: an immutable global or associated const matches by
-// value, not a binding. TK_FOO/TK_BAR are `global`s, and a namespace prefix
-// reaches one the same way (`tok::TK_FOO`).
+// Constant patterns: in a refutable pattern, an immutable global or associated
+// const matches by value, not a binding. TK_FOO/TK_BAR are `global`s, and a
+// namespace prefix reaches one the same way (`tok::TK_FOO`). In a `let` or
+// `for` binding a global's name binds instead, and `shadowed_name` warns.
 let kind = match token {
     TK_FOO | TK_BAR => "keyword",
     i32::MAX        => "max",

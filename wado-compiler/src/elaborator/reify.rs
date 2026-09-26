@@ -2697,7 +2697,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 id,
                 name,
                 span: binding_span,
-            } => {
+            } if self.ann_local_type(*id).is_some() => {
                 // `let mut x = …` carries the mutability on `LetStmt`,
                 // not on the `Ident` pattern.
                 let is_mut =
@@ -2721,11 +2721,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Tuple(_, _)
+            ast::Pattern::Ident { .. }
+            | ast::Pattern::MutIdent { .. }
+            | ast::Pattern::Tuple(_, _)
             | ast::Pattern::Struct { .. }
             | ast::Pattern::Variant { .. } => {
                 // Destructuring `let [a, b] = …;` / `let Point { x, y }
-                // = …;` / `let A(x) = …;` of a one-case variant. The TIR uses
+                // = …;` / `let A(x) = …;` or `let A = …;` of a one-case
+                // variant. The TIR uses
                 // `TirStmtKind::LetDestructure` rather than `Let`. The
                 // shared `reify_pattern` adds the sub-pattern bindings
                 // to `ctx`; the value's recorded type drives the
@@ -4095,7 +4098,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             id,
                             name,
                             span: binding_span,
-                        } => {
+                        } if this.ann_local_type(*id).is_some() => {
                             let is_mut = for_of.is_mut
                                 || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
                             let local_index = ctx.add_local_at(
