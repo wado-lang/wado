@@ -8,5 +8,5 @@ from Hugging Face (MIT) and splits it with `tools/onnx_split.wado`:
     cd package-loam/example/gpt2-124m
     wado run gpt2.wado -- "Hello, my name is"
 
-The downloads are ignored by git, and `wado test` skips this directory, which
-builds only once they are here.
+Git ignores the downloads. `wado test` skips this directory, since it builds
+only after `fetch.sh` has run.

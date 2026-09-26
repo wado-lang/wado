@@ -65,7 +65,7 @@ fn read_header(content: Stream<u8>) -> ByteList {
     loop {
         let chunk = content.read(HEADER_CHUNK);
         prefix.extend(&(chunk.items as ByteList));
-        if chunk.result != CopyResult::Completed || prefix.len() >= 8 && header_read(&prefix) {
+        if chunk.result != CopyResult::Completed || holds_header(&prefix) {
             break;
         }
     }
@@ -73,7 +73,11 @@ fn read_header(content: Stream<u8>) -> ByteList {
     return prefix;
 }
 
-fn header_read(prefix: &ByteList) -> bool {
+/// Whether `prefix` reaches the header's end, or declares one no read can reach.
+fn holds_header(prefix: &ByteList) -> bool {
+    if prefix.len() < 8 {
+        return false;
+    }
     return match declared_header_end(prefix) {
         Ok(end) => prefix.len() >= end,
         Err(_) => true,
