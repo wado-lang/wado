@@ -15,6 +15,7 @@ use {
     max_pool,
     narrow,
     permute,
+    range_i64,
     reduce,
     reduce_mean,
     reshape,
@@ -23,6 +24,7 @@ use {
     slice_axis,
     softmax,
     transpose2,
+    unmet,
     widen,
     zip,
     zip_suffix,
@@ -97,6 +99,19 @@ test "two inputs that disagree on one symbol name both" {
     assert axis_mismatch("N", "B", "Batch", 3, "A", 2) == Option::Some(
         "B: axis Batch is 3 in the tensor and 2 in A, and the graph makes both N",
     );
+}
+
+test "a condition the build owed is met with slack to spare, and missed by how much" {
+    assert unmet(0, "Y = Slice: the bound N must be at most 8") matches { None };
+    assert unmet(-3, "Y = Slice: the bound N must be at most 8") == Option::Some(
+        "Y = Slice: the bound N must be at most 8, and the inputs miss it by 3",
+    );
+}
+
+test "range_i64 counts from its start by its delta" {
+    let r = range_i64::<Row>(2, 3, 5);
+    assert r.data == [2, 7, 12] as List<i64>;
+    assert r.extents == [3] as List<i32>;
 }
 
 test "gather_rows looks up one row per index, counting a negative one from the end" {

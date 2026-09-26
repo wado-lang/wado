@@ -75,6 +75,15 @@ pub fn axis_mismatch(
     );
 }
 
+/// Why the inputs break a condition the build relied on and could not prove:
+/// `slack` is how far within it they are, and `condition` states it.
+pub fn unmet(slack: i32, condition: String) -> Option<String> {
+    if slack >= 0 {
+        return null;
+    }
+    return Option::Some(`${condition}, and the inputs miss it by ${-(slack as i64)}`);
+}
+
 /// Stops `forward` with the reason an input disagrees with the graph.
 pub fn refuse(reason: Option<String>) {
     if let Some(r) = reason {

@@ -270,18 +270,46 @@ impl Error for InferError {
 }
 
 /// A checked graph: every shape a kernel reads and the primitive it holds,
-/// keyed by tensor name, and the elements of every tensor the build folded.
+/// keyed by tensor name, the elements of every tensor the build folded, and
+/// what the inputs owe that the build could not prove.
 pub struct Checked {
     pub shapes: TreeMap<String, Shape>,
     pub primitives: TreeMap<String, String>,
     pub known: TreeMap<String, Known>,
+    pub owed: List<Condition>,
+}
+
+/// A condition on the symbols the build relies on and cannot prove, as a
+/// `Slice` bound within its axis is: `slack` is at least 0 for every input
+/// `forward` accepts, since it checks this before any kernel runs.
+/// See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
+pub struct Condition {
+    pub slack: Poly,
+    /// The condition as the refusal states it, at the node that relies on it.
+    pub reason: String,
+}
+
+/// Owe `slack >= 0`, unless every value of the symbols makes it so. A slack
+/// that is a negative number is no condition on the inputs but a graph wrong
+/// for every one of them.
+fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
+    if slack.is_nonnegative() {
+        return Result::Ok(());
+    }
+    if slack.as_constant() matches { Some(_) } {
+        return Result::Err(refusal(node, `${condition}, and it is not`));
+    }
+    owed.push(Condition { slack, reason: `${node_name(node)} = ${node.op}: ${condition}` });
+    return Result::Ok(());
 }
 
 /// Check a graph. Producing a shape for every tensor a kernel reads is what
-/// discharges the graph's extent conditions, so a successful return is the proof.
+/// discharges the graph's extent conditions, so a successful return is the
+/// proof, save the conditions it hands `forward` to check.
 pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
     let mut shapes = TreeMap::<String, Shape>::new();
     let mut primitives = TreeMap::<String, String>::new();
+    let mut owed: List<Condition> = [];
     let mut known = graph.constants;
     for let declared of [&graph.inputs, &graph.initializers] {
         for let vi of *declared {
@@ -321,7 +349,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
         let produced = if node.op == "Split" {
             split(node, &shapes, &known, schema)?;
         } else {
-            [infer_node(node, &shapes, &known, schema, graph.opset)?] as List<Shape>;
+            [infer_node(node, &shapes, &known, schema, graph.opset, &mut owed)?] as List<Shape>;
         };
         let primitive = produced_primitive(node, &primitives)?;
         for let [i, shape] of produced.into_iter().enumerate() {
@@ -347,7 +375,19 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             }));
         }
     }
-    return Result::Ok(Checked { shapes, primitives, known });
+    return Result::Ok(Checked { shapes, primitives, known, owed: distinct(owed) });
+}
+
+/// `owed` with each slack kept once, as every layer slicing one mask owes the
+/// same, under the first node that owed it.
+fn distinct(owed: List<Condition>) -> List<Condition> {
+    let mut kept: List<Condition> = [];
+    for let c of owed {
+        if !kept.into_iter().any(|k| k.slack == c.slack) {
+            kept.push(c);
+        }
+    }
+    return kept;
 }
 
 /// Whether operand `index` is one the operator reads when the build runs, as
@@ -571,6 +611,7 @@ fn infer_node(
     known: &TreeMap<String, Known>,
     schema: &Schema,
     opset: Option<i64>,
+    owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
     let op = node.op;
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
@@ -584,10 +625,10 @@ fn infer_node(
         return flatten(node, &operand_at(node, shapes, 0), schema);
     }
     if op == "Slice" {
-        return sliced(node, &operand_at(node, shapes, 0), known, schema);
+        return sliced(node, &operand_at(node, shapes, 0), known, schema, owed);
     }
     if op == "Range" {
-        let count = range_count(node, known)?;
+        let count = range_count(node, known, owed)?;
         return Result::Ok(Shape {
             axes: [output_layout_axis(node, &node.outputs[0], schema, 0, 1, count, "is a range")?],
         });
@@ -802,8 +843,14 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Sche
 
 /// A `Slice` the run computes, since a bound or the data is only known then.
 /// An axis it narrows is new, for the output layout to name.
-fn sliced(node: &Node, x: &Shape, known: &TreeMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
-    let cuts = slice_cuts(node, known, x)?;
+fn sliced(
+    node: &Node,
+    x: &Shape,
+    known: &TreeMap<String, Known>,
+    schema: &Schema,
+    owed: &mut List<Condition>,
+) -> Result<Shape, InferError> {
+    let cuts = slice_cuts(node, known, x, owed)?;
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     for let cut of cuts {
         extents[cut.axis] = cut.extent;
@@ -825,9 +872,14 @@ pub struct Cut {
     pub extent: Extent,
 }
 
-/// The axes a `Slice` over `x` narrows. A bound may be symbolic, and the build
-/// must then show it within the axis for every value of the symbols.
-pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<Cut>, InferError> {
+/// The axes a `Slice` over `x` narrows. A bound may be symbolic, and where the
+/// build cannot show it within the axis, the inputs owe that.
+pub fn slice_cuts(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    x: &Shape,
+    owed: &mut List<Condition>,
+) -> Result<List<Cut>, InferError> {
     let starts = required_polys(node, known, 1, "starts")?;
     let ends = required_polys(node, known, 2, "ends")?;
     let mut axes: List<i64> = [];
@@ -851,14 +903,11 @@ pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Res
     for let i of 0..<starts.len() {
         let a = axis_index(axes[i], x.rank()).map_err(|reason| refusal(node, reason))?;
         let dim = x.axes[a].extent.poly();
-        let begin = within(node, &starts[i], &dim)?;
-        let end = within(node, &ends[i], &dim)?;
+        let begin = within(node, &starts[i], &dim, owed)?;
+        let end = within(node, &ends[i], &dim, owed)?;
         let count = end.sub(&begin);
-        let extent = if count.is_nonnegative() { Extent::of(count) } else { null };
-        let Some(e) = extent else {
-            return Result::Err(refusal(node, `axis ${a} runs from ${begin} to ${end}, which may be backwards`));
-        };
-        cuts.push(Cut { axis: a, start: begin, extent: e });
+        owe(node, owed, count, `axis ${a} must not run backwards from ${begin} to ${end}`)?;
+        cuts.push(Cut { axis: a, start: begin, extent: Extent::of(count).unwrap() });
     }
     return Result::Ok(cuts);
 }
@@ -877,39 +926,44 @@ fn required_polys(
     return Result::Ok(values);
 }
 
-/// A `Slice` bound as ONNX clamps it into an axis of `dim`: counted from the
-/// end where negative, and held within `[0, dim]`.
-fn within(node: &Node, bound: &Poly, dim: &Poly) -> Result<Poly, InferError> {
-    let Some(c) = bound.as_constant() else {
-        if bound.is_nonnegative() && dim.sub(bound).is_nonnegative() {
-            return Result::Ok(*bound);
-        }
-        return Result::Err(refusal(node, `the bound ${*bound} may fall outside an axis of ${*dim}`));
-    };
-    if let Some(d) = dim.as_constant() {
+/// A `Slice` bound as ONNX reads it against an axis of `dim`: counted from the
+/// end where negative, and clamped within `[0, dim]`. A symbolic bound is not
+/// clamped: the inputs owe that it lies within, since a clamp has no
+/// polynomial to name the extent it leaves.
+fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> Result<Poly, InferError> {
+    let constant = bound.as_constant();
+    if let Some(c) = constant && let Some(d) = dim.as_constant() {
         return Result::Ok(Poly::constant(i64::clamp(resolve_index(c, d), 0, d)));
     }
     // Past any extent a list can hold, which is how an exporter writes "to the end".
-    if c >= i32::MAX as i64 {
+    if let Some(c) = constant && c >= i32::MAX as i64 {
         return Result::Ok(*dim);
     }
-    if c == 0 {
-        return Result::Ok(*bound);
-    }
-    return Result::Err(refusal(node, `the bound ${c} may fall outside an axis of ${*dim}`));
+    let resolved = if let Some(c) = constant && c < 0 {
+        dim.add(bound);
+    } else {
+        *bound;
+    };
+    owe(node, owed, resolved, `the bound ${resolved} must not be negative`)?;
+    owe(node, owed, dim.sub(&resolved), `the bound ${resolved} must be at most ${*dim}`)?;
+    return Result::Ok(resolved);
 }
 
 /// How many elements a `Range` the run computes yields. Its operands are one
 /// element each, and the build knows them, symbolic or not.
-pub fn range_count(node: &Node, known: &TreeMap<String, Known>) -> Result<Extent, InferError> {
+pub fn range_count(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    owed: &mut List<Condition>,
+) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
     let span = limit.sub(&start);
-    let forward = span.is_nonnegative() && delta.as_constant() matches { Some(d) && d > 0 };
-    let count = if forward { span.divided_by(&delta) } else { null };
-    if let Some(c) = count && let Some(extent) = Extent::of(c) {
-        return Result::Ok(extent);
-    }
-    return Result::Err(refusal(node, `${start} to ${limit} by ${delta} is not a count the build can show exact`));
+    let count = if delta.as_constant() matches { Some(d) && d > 0 } { span.divided_by(&delta) } else { null };
+    let Some(c) = count else {
+        return Result::Err(refusal(node, `${start} to ${limit} by ${delta} is not a count the build can show exact`));
+    };
+    owe(node, owed, c, `${start} to ${limit} must not run backwards`)?;
+    return Result::Ok(Extent::of(c).unwrap());
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.

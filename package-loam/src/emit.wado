@@ -662,7 +662,14 @@ fn emit_forward(
             exprs.values[output] = ident;
         }
     }
+    let mut owed: List<String> = [];
+    for let c of &checked.owed {
+        owed.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
+    }
     for let line of symbols.bindings() {
+        w.line(&line);
+    }
+    for let line of owed {
         w.line(&line);
     }
     for let line of body {
@@ -863,7 +870,8 @@ fn node_call(
     }
     if op == "Range" {
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
-        let count = settled(range_count(node, &checked.known));
+        // Stage 0 kept what the count owes in `checked.owed` already.
+        let count = settled(range_count(node, &checked.known, &mut []));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
         return Result::Ok(
             `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell(&count.poly())?}, ${symbols.spell(&delta)?})`,
@@ -964,7 +972,8 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     let x = checked.shapes.get(node.inputs[0]).unwrap();
     let out = checked.shapes.get(node.outputs[0]).unwrap();
     let element = checked.primitives.get(node.inputs[0]).unwrap();
-    let cuts = settled(slice_cuts(node, &checked.known, &x));
+    // Stage 0 kept what the bounds owe in `checked.owed` already.
+    let cuts = settled(slice_cuts(node, &checked.known, &x, &mut []));
     // A slice that narrows nothing is its operand, read as a value.
     let mut call = exprs.value(&node.inputs[0]);
     let mut operand = exprs.reference(&node.inputs[0]);

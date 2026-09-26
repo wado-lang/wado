@@ -821,6 +821,62 @@ test "a Reshape target that changes the element count stops the build" {
     assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
 }
 
+/// What the inputs owe a graph whose `Y` slices an axis of 8 from `start` to
+/// `end`, each an expression of `X`'s length `N`.
+fn owed_by_slice(start: String, end: String) -> Result<List<String>, String> {
+    let source = `g (float[N] X, float[8] M) => (float[?] Y) <int64[1] Z = {0}, int64[1] Three = {3}> {
+        S = Shape(X)
+        Y = Slice(M, ${start}, ${end})
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Part"]),
+    ];
+    let graph = read(&source).unwrap();
+    return match infer(&graph, &Schema { layout }) {
+        Ok(checked) => Result::Ok(checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect()),
+        Err(e) => Result::Err(`${e}`),
+    };
+}
+
+test "a Slice bound the build cannot show within its axis is owed by the inputs" {
+    assert owed_by_slice("Z", "S").unwrap() == ["Y = Slice: the bound N must be at most 8 (-N + 8 >= 0)"] as List<String>;
+}
+
+test "a Slice from a number to a symbol owes that it does not run backwards" {
+    let owed = owed_by_slice("Three", "S").unwrap();
+    assert owed.contains_str("Y = Slice: axis 0 must not run backwards from 3 to N (N - 3 >= 0)");
+}
+
+test "a Slice that runs backwards for every input stops the build" {
+    let source = `g (float[N] X) => (float[?] Y) <int64[1] B = {5}, int64[1] E = {3}> {
+        Y = Slice(X, B, E)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("Y", ["Part"]),
+    ];
+    assert y_axes(source, layout).unwrap_err() == "Y = Slice: axis 0 must not run backwards from 5 to 3, and it is not";
+}
+
+test "a condition every layer repeats is owed once" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        A = Slice(M, Z, S)
+        B = Slice(M, Z, S)
+        Y = Add(A, B)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("A", ["Seq"]),
+        rule("B", ["Seq"]),
+    ];
+    let graph = read(&source).unwrap();
+    assert infer(&graph, &Schema { layout }).unwrap().owed.len() == 1;
+}
+
 test "a Reshape carries a symbolic extent past the axes it splits" {
     let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[3] S = {0, 3, 4}> {
         Y = Reshape(X, S)

@@ -1,6 +1,7 @@
-//! A tiny GPT-2 decoder, compiled through Loam at a fixed batch and sequence
-//! length from its graph split off its weights, and run from the checkpoint
-//! holding them against the logits onnxruntime computes for it.
+//! A tiny GPT-2 decoder, compiled through Loam at a fixed batch with its
+//! sequence length left to the run, from its graph split off its weights, and
+//! run from the checkpoint holding them against the logits onnxruntime
+//! computes for two sequences of different lengths.
 
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "../src/safetensors.wado";
@@ -10,7 +11,7 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
             module: "../src/generator.wado",
             inputs: ["../tests/models/tiny-gpt2/model.safetensors"],
             options: {
-                dims: { batch_size: 1, sequence_length: 4 },
+                dims: { batch_size: 1 },
                 outputs: ["logits"],
                 layout: [
                     {
@@ -65,9 +66,14 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
                         pattern: "onnx::MatMul_1588",
                         axes: ["Embed", "Vocab"],
                     },
-                    // The position ids and the attention mask, folded or widened.
+                    // The position ids, a range over the sequence, and the
+                    // attention mask widened.
                     {
-                        pattern: "/transformer/Reshape_1_output_0",
+                        pattern: "/transformer/Range_output_0",
+                        axes: ["Seq"],
+                    },
+                    {
+                        pattern: "/transformer/Unsqueeze_2_output_0",
                         axes: ["Batch", "Seq"],
                     },
                     {
@@ -107,7 +113,16 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
                         pattern: "*/attn/Reshape_2_output_0",
                         axes: ["Batch", "Seq", "Head", "Dim"],
                     },
-                    // The causal mask, sliced from the bias buffer at build time.
+                    // The causal mask, sliced from the bias buffer to the
+                    // sequence the run gives.
+                    {
+                        pattern: "*attn.bias",
+                        axes: ["Batch", "Head", "Pos", "Pos"],
+                    },
+                    {
+                        pattern: "*/attn/Slice_3_output_0",
+                        axes: ["Batch", "Head", "Seq", "Pos"],
+                    },
                     {
                         pattern: "*/attn/Slice_4_output_0",
                         axes: ["Batch", "Head", "Seq", "Seq"],
@@ -117,10 +132,12 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
         },
     };
 
-test "a tiny GPT-2 reproduces the logits onnxruntime computes" {
-    let [ids, ids_extents] = ints_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"));
-    let [mask, mask_extents] = ints_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"));
-    let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
+/// The logits `forward` computes from one data set's inputs, against the ones
+/// onnxruntime computed.
+fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
+    let [ids, ids_extents] = ints_of(input_ids);
+    let [mask, mask_extents] = ints_of(attention_mask);
+    let [want, want_extents] = tensor_of(logits);
 
     let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let got = gpt2::forward(
@@ -131,6 +148,42 @@ test "a tiny GPT-2 reproduces the logits onnxruntime computes" {
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);
+}
+
+test "a tiny GPT-2 reproduces the logits onnxruntime computes for four tokens" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+    );
+}
+
+test "the same module reproduces them for seven" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+    );
+}
+
+// The causal mask covers 512 positions, so `forward` stops at the first check
+// it owes rather than inside a kernel.
+#[expect_trap]
+test "a sequence longer than the mask stops forward" {
+    let ids = List::<i64>::filled(513, 0);
+    let mask = List::<i64>::filled(513, 1);
+    let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
+    gpt2::forward(
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: ids,
+            extents: [1, 513],
+        },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
+            data: mask,
+            extents: [1, 513],
+        },
+        &weights,
+    );
 }
 
 test "a checkpoint of another model names the axis it disagrees on" {

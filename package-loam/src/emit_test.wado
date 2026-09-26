@@ -822,6 +822,52 @@ fn folded_add(value: f32) -> Result<String, EmitError> {
     return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
 }
 
+test "a symbol is bound from the input axis carrying it, and spelled where an extent needs it" {
+    let source = `g (float[N, 4] X) => (float[N, 2, 2] Y) <int64[3] S = {0, 2, 2}> {
+        Y = Reshape(X, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq", "Wide"]),
+        rule("Y", ["Seq", "Row", "Col"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let dim_N = X.extents[0];");
+    assert out.contains("let Y = reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [dim_N, 2, 2]);");
+}
+
+test "a symbol nothing spells is not bound" {
+    let out = emitted(&generate(mlp("float"), mlp_layout()).unwrap());
+    assert !out.contains("dim_");
+}
+
+test "a Range over a symbolic length is a kernel call" {
+    let source = `g (int64[N] X) => (int64[N] Y) {
+        S = Shape(X)
+        Z = Constant <value = int64 {0}> ()
+        O = Constant <value = int64 {1}> ()
+        L = Gather <axis = 0> (S, Z)
+        Y = Range(Z, L, O)
+    }`;
+    let out = emitted(&generate(source, [rule("*", ["Seq"])]).unwrap());
+    assert out.contains("let Y = range_i64::<Seq>(0, dim_N, 1);");
+}
+
+test "a Slice bound the build cannot show within its axis is checked before any kernel" {
+    let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
+        S = Shape(X)
+        Y = Slice(M, Z, S)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Seq"]),
+        rule("M", ["Pos"]),
+        rule("Y", ["Seq"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    let check = out.find("refuse(unmet(-dim_N + 8, \"Y = Slice: the bound N must be at most 8\"));").unwrap();
+    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, dim_N);").unwrap();
+    assert check < slice;
+}
+
 test "an int64 input is held as i64 through the layout kernels and Cast converts it" {
     let source = `g (int64[1, 4] M) => (float[1, 1, 4] Y) {
         A = Constant<value_ints = [1]>()
