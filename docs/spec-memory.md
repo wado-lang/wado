@@ -124,18 +124,24 @@ object, so each place holds its own and the object is the place. For a type
 that assignment replaces, such as a primitive, `variant` or `fn`, copies share
 one value, so the place is the variable, field or element holding it.
 
-Identity is guaranteed in one direction only. Two references to one object are
-always `ref_eq`. Two references to distinct objects of identical content may
-also be `ref_eq`, because the optimizer may intern such objects into one.
-Whether it does can change with the optimization level and with the Wado
-version. An identity comparison that should be true is never false.
+Identity is guaranteed in one direction only. Two references to one place are
+always `ref_eq`. Two references to distinct places of identical content may also
+be `ref_eq`: as an optimization, the implementation may make them one place, as
+it does when it interns a constant `String` or `List`. Whether it does can
+change with the optimization level and with the Wado version, so a `ref_eq`
+that is true only by such merging is unpredictable. Java's `==` on strings
+behaves the same way. An identity comparison that should be true is never false.
 
 ```wado
 let xs: List<i32> = [1, 2, 3];
 let ys: List<i32> = [1, 2, 3];
 &xs == &ys;                     // true: equal values
 ref_eq(&xs, &xs);               // always true
-ref_eq(&xs, &ys);               // false or true: the two may be one object
+ref_eq(&xs, &ys);               // false or true: the two may be one place
+
+let a: String = "abc";
+let b: String = "abc";
+ref_eq(&a, &b);                 // false or true, likewise
 ```
 
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
