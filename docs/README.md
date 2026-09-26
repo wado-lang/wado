@@ -180,6 +180,7 @@
 - [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
 - [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
 - [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
+- [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
 
 ## Standard Library
 
