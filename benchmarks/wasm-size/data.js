@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790414047567,
+  "lastUpdate": 1790415884138,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60269,6 +60269,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "89357d707e063a6982794f6df3c67f429225be5c",
+          "message": "Merge pull request #2176 from wado-lang/claude/package-gale-code-quality-l0n52w\n\nperf(gale): parse Rust about 1.45× faster, and lex suffixed fragment alternations as ANTLR4 does",
+          "timestamp": "2026-09-26T18:00:54+09:00",
+          "tree_id": "ae713a3ec488a1b528f513a5d5f7b678be47b25d",
+          "url": "https://github.com/wado-lang/wado/commit/89357d707e063a6982794f6df3c67f429225be5c"
+        },
+        "date": 1790415883033,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19655,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288468,
             "unit": "bytes"
           }
         ]
