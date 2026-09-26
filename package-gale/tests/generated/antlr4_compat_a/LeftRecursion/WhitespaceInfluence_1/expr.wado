@@ -1556,55 +1556,55 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
 fn try_COMMENTS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_18 = pos;
-    let mut alts_best_18 = -1;
-    alts_18_0: {
-        pos = alts_saved_18;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_18_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '*' { break alts_18_0; }
-        pos += 1;
-        loop {
-            let ng_saved_19 = pos;
-            let mut ng_exit_19 = false;
-            ng_19: {
-                if pos >= chars.len() || chars[pos] != '*' { break ng_19; }
+    alts_done_18: {
+        alts_18_0: {
+            pos = alts_saved_18;
+            if pos >= chars.len() || chars[pos] != '/' { break alts_18_0; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != '*' { break alts_18_0; }
+            pos += 1;
+            loop {
+                let ng_saved_19 = pos;
+                let mut ng_exit_19 = false;
+                ng_19: {
+                    if pos >= chars.len() || chars[pos] != '*' { break ng_19; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '/' { break ng_19; }
+                    pos += 1;
+                    ng_exit_19 = true;
+                }
+                if ng_exit_19 {
+                    break;
+                }
+                pos = ng_saved_19;
+                if pos >= chars.len() { break alts_18_0; }
                 pos += 1;
-                if pos >= chars.len() || chars[pos] != '/' { break ng_19; }
-                pos += 1;
-                ng_exit_19 = true;
             }
-            if ng_exit_19 {
+            break alts_done_18;
+        }
+        alts_18_1: {
+            pos = alts_saved_18;
+            if pos >= chars.len() || chars[pos] != '/' { break alts_18_1; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != '/' { break alts_18_1; }
+            pos += 1;
+            loop {
+                let rep_saved_20 = pos;
+                rep_20: {
+                    if pos >= chars.len() { break rep_20; }
+                    if (chars[pos] matches { '\n' }) { break rep_20; }
+                    pos += 1;
+                    continue;
+                }
+                pos = rep_saved_20;
                 break;
             }
-            pos = ng_saved_19;
-            if pos >= chars.len() { break alts_18_0; }
+            if pos >= chars.len() || chars[pos] != '\n' { break alts_18_1; }
             pos += 1;
+            break alts_done_18;
         }
-        if pos > alts_best_18 { alts_best_18 = pos; }
+        return -1;
     }
-    alts_18_1: {
-        pos = alts_saved_18;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_18_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '/' { break alts_18_1; }
-        pos += 1;
-        loop {
-            let rep_saved_20 = pos;
-            rep_20: {
-                if pos >= chars.len() { break rep_20; }
-                if (chars[pos] matches { '\n' }) { break rep_20; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_20;
-            break;
-        }
-        if pos >= chars.len() || chars[pos] != '\n' { break alts_18_1; }
-        pos += 1;
-        if pos > alts_best_18 { alts_best_18 = pos; }
-    }
-    if alts_best_18 < 0 { return -1; }
-    pos = alts_best_18;
     return pos;
 }
 

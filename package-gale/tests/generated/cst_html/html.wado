@@ -1181,59 +1181,59 @@ fn try_DTD(chars: &List<char>, start: i32) -> i32 {
 fn try_SCRIPTLET(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_5 = pos;
-    let mut alts_best_5 = -1;
-    alts_5_0: {
-        pos = alts_saved_5;
-        if pos >= chars.len() || chars[pos] != '<' { break alts_5_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '?' { break alts_5_0; }
-        pos += 1;
-        loop {
-            let ng_saved_6 = pos;
-            let mut ng_exit_6 = false;
-            ng_6: {
-                if pos >= chars.len() || chars[pos] != '?' { break ng_6; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '>' { break ng_6; }
-                pos += 1;
-                ng_exit_6 = true;
-            }
-            if ng_exit_6 {
-                break;
-            }
-            pos = ng_saved_6;
-            if pos >= chars.len() { break alts_5_0; }
+    alts_done_5: {
+        alts_5_0: {
+            pos = alts_saved_5;
+            if pos >= chars.len() || chars[pos] != '<' { break alts_5_0; }
             pos += 1;
-        }
-        if pos > alts_best_5 { alts_best_5 = pos; }
-    }
-    alts_5_1: {
-        pos = alts_saved_5;
-        if pos >= chars.len() || chars[pos] != '<' { break alts_5_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != '%' { break alts_5_1; }
-        pos += 1;
-        loop {
-            let ng_saved_7 = pos;
-            let mut ng_exit_7 = false;
-            ng_7: {
-                if pos >= chars.len() || chars[pos] != '%' { break ng_7; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != '>' { break ng_7; }
-                pos += 1;
-                ng_exit_7 = true;
-            }
-            if ng_exit_7 {
-                break;
-            }
-            pos = ng_saved_7;
-            if pos >= chars.len() { break alts_5_1; }
+            if pos >= chars.len() || chars[pos] != '?' { break alts_5_0; }
             pos += 1;
+            loop {
+                let ng_saved_6 = pos;
+                let mut ng_exit_6 = false;
+                ng_6: {
+                    if pos >= chars.len() || chars[pos] != '?' { break ng_6; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '>' { break ng_6; }
+                    pos += 1;
+                    ng_exit_6 = true;
+                }
+                if ng_exit_6 {
+                    break;
+                }
+                pos = ng_saved_6;
+                if pos >= chars.len() { break alts_5_0; }
+                pos += 1;
+            }
+            break alts_done_5;
         }
-        if pos > alts_best_5 { alts_best_5 = pos; }
+        alts_5_1: {
+            pos = alts_saved_5;
+            if pos >= chars.len() || chars[pos] != '<' { break alts_5_1; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != '%' { break alts_5_1; }
+            pos += 1;
+            loop {
+                let ng_saved_7 = pos;
+                let mut ng_exit_7 = false;
+                ng_7: {
+                    if pos >= chars.len() || chars[pos] != '%' { break ng_7; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != '>' { break ng_7; }
+                    pos += 1;
+                    ng_exit_7 = true;
+                }
+                if ng_exit_7 {
+                    break;
+                }
+                pos = ng_saved_7;
+                if pos >= chars.len() { break alts_5_1; }
+                pos += 1;
+            }
+            break alts_done_5;
+        }
+        return -1;
     }
-    if alts_best_5 < 0 { return -1; }
-    pos = alts_best_5;
     return pos;
 }
 
