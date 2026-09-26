@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790415884138,
+  "lastUpdate": 1790421949873,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60313,6 +60313,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288468,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c3a438b9ce798a85cb7d74f9a7ef6de6ab299ba0",
+          "message": "Merge pull request #2178 from wado-lang/loam-checkpoint\n\nfeat!: Loam loads a safetensors checkpoint and runs GPT-2 (124M); a stream write of any length is whole and linear",
+          "timestamp": "2026-09-26T19:57:13+09:00",
+          "tree_id": "ddced59a753e4f9f6cc9aa4b865e4c3b880d9ae6",
+          "url": "https://github.com/wado-lang/wado/commit/c3a438b9ce798a85cb7d74f9a7ef6de6ab299ba0"
+        },
+        "date": 1790421949320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20153,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288925,
             "unit": "bytes"
           }
         ]
