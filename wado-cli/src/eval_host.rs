@@ -96,7 +96,7 @@ fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
 /// The `core:eval` host for one `wado test` run, shared by every test in it.
 pub struct EvalHost {
     knobs: CompileKnobs,
-    engine: OnceLock<(Arc<Engine>, Arc<Linker<Program>>)>,
+    engine: OnceLock<(Engine, Linker<Program>)>,
     /// One slot per key, so calls sharing a key within the run evaluate once.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
 }
@@ -173,7 +173,7 @@ impl EvalHost {
         // runtime of its own as the compile does.
         join_blocking(tokio::task::spawn_blocking(move || {
             let (engine, linker) = host.engine();
-            current_thread_runtime().block_on(run(&engine, &linker, &wasm, fuel))
+            current_thread_runtime().block_on(run(engine, linker, &wasm, fuel))
         }))
         .await
     }
@@ -206,14 +206,13 @@ impl EvalHost {
         }
     }
 
-    fn engine(&self) -> (Arc<Engine>, Arc<Linker<Program>>) {
-        let (engine, linker) = self.engine.get_or_init(|| {
+    fn engine(&self) -> &(Engine, Linker<Program>) {
+        self.engine.get_or_init(|| {
             let engine = create_fuel_engine(self.knobs.opt_level.to_wasmtime())
                 .expect("building the eval engine");
             let linker = program_linker(&engine).expect("linking the eval host");
-            (Arc::new(engine), Arc::new(linker))
-        });
-        (Arc::clone(engine), Arc::clone(linker))
+            (engine, linker)
+        })
     }
 }
 
@@ -346,6 +345,8 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
                 .await;
             match ran {
                 Ok(Ok(Ok(()))) => Status::Exited(0),
+                // How a command reports failure without calling exit; wasmtime's
+                // own CLI exits with 1 on it.
                 Ok(Ok(Err(()))) => Status::Exited(1),
                 Ok(Err(e)) | Err(e) => stopped(&e, store.data().ceiling.reached),
             }

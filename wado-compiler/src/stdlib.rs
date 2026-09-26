@@ -185,8 +185,9 @@ pub fn is_wit_core_module(name: &str) -> bool {
     })
 }
 
-/// Whether `source` (a CM interface FQ such as `"core:kiln/types@0.1.0"`)
-/// belongs to a [`WIT_CORE_PACKAGES`] package.
+/// Whether `source` (a CM interface FQ such as `"core:kiln/types@0.1.0"`, or
+/// an import path such as `"core:kiln/types.wado"`) is inside a
+/// [`WIT_CORE_PACKAGES`] package.
 #[must_use]
 pub fn is_wit_core_interface(source: &str) -> bool {
     source
@@ -197,10 +198,10 @@ pub fn is_wit_core_interface(source: &str) -> bool {
 /// The WIT-generated submodules of every [`WIT_CORE_PACKAGES`] package, the
 /// facades left out.
 pub fn wit_core_submodules() -> impl Iterator<Item = (&'static str, &'static str)> {
-    all_core_modules().iter().copied().filter(|(path, _)| {
-        path.strip_prefix("core:")
-            .is_some_and(|name| name.contains('/') && is_wit_core_module(name))
-    })
+    all_core_modules()
+        .iter()
+        .copied()
+        .filter(|(path, _)| is_wit_core_interface(path))
 }
 
 stdlib_table! {

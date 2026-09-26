@@ -137,7 +137,7 @@ impl CompileKnobOpt {
                 long: Some("no-cache"),
                 short: None,
                 value: None,
-                desc: "Bypass all build caches: re-run Kiln generators on every invocation,\nrecompile generator wasm components from source, and re-evaluate\nevery `core:eval` program. The cache refreshes automatically, so this is normally unnecessary —\nit exists for benchmarking and cache-bug debugging.",
+                desc: "Bypass all build caches: re-run Kiln generators on every invocation,\nrecompile generator wasm components from source, and re-evaluate\nevery `core:eval` program. The cache refreshes automatically, so this is\nnormally unnecessary — it exists for benchmarking and cache-bug debugging.",
             },
             Self::NoValidate => OptSpec {
                 long: Some("no-validate"),
