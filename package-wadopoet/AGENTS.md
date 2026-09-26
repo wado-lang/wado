@@ -68,16 +68,84 @@ Two helpers cover literals a hole cannot express:
 
 ## Testing
 
-A test of what Wadopoet emits has two kinds of check:
+### What to Check
+
+A test of generated source has two kinds of check:
 
 - A string match, for the layout: indentation, blank lines, where a block
   closes, how a signature reads. The exact text is the contract here.
 - An `eval` from `core:eval`, for what the text means: a literal reads back as
-  its value, and composed declarations compile and run. Match the text alone
+  its value, and generated declarations compile and run. Match the text alone
   and a wrong escape passes, since it can match an equally wrong expectation.
 
-`src/wadopoet_test.wado` has a `printed` helper that compiles a program with
-`eval` and returns what it printed. A round trip reads like this:
+### Running a Program with `eval`
+
+`eval` compiles a source string as a command and runs it. It works only under
+`wado test`. A program for any other world that imports `core:eval` does not
+compile.
+
+```wado
+use { eval } from "core:eval";
+
+test "the generated parser accepts its input" {
+    let generated = generate(grammar);  // the generator under test
+    let program = `use { println, Stdout } from "core:cli";
+${generated}
+export fn run() with Stdout { println(parse("a b")); }`;
+    let out = eval(program).unwrap();
+    assert out.status matches { Exited(0) }, `${out.status}\n${out.stderr}`;
+    assert out.stdout == "ok\n";
+}
+```
+
+The source is the whole program, in one module:
+
+- It exports `run()`, as any `wasi:cli/command` does.
+- Its `use` items may name `core:*` only. A relative path does not compile.
+- It gets stdout, stderr and exit, and nothing else: no arguments, stdin,
+  environment, files, clock or randomness.
+
+`eval` returns `Result<Output, EvalError>`. `Err` means the program never ran:
+
+- `CompileFailed(failure)`: `failure.rendered` is the report `wado compile`
+  prints, and `failure.codes` the code of each error.
+- `CompileTimedOut`: the compile ran past its time limit.
+- `Unavailable(name)`: the program imports an interface `eval` does not link.
+
+`Ok(out)` means it ran, however it ended. `out.stdout` and `out.stderr` hold what
+it wrote, even when it trapped, and a `panic` writes its message to stderr.
+`out.status` says how it ended:
+
+- `Exited(code)`: `run` returned (code 0) or called `exit`.
+- `Trapped(kind)`: it trapped, and `kind` says which trap.
+- `OutOfFuel`: it used up its fuel.
+- `OutOfMemory`: a memory or a table grew past the runner's 1 GiB ceiling.
+
+To test that a generator rejects input, check the codes as an e2e fixture does:
+
+```wado
+let result = eval(program);
+let Err(CompileFailed(failure)) = result else {
+    panic(`expected a compile failure, got ${result:?}`);
+};
+assert failure.codes == ["TYPE_MISMATCH"], failure.rendered;
+```
+
+The second argument is the fuel, 10⁹ by default. Pass a small one to show that
+a loop does not end: `eval(program, 10_000)` returns `OutOfFuel`.
+
+The program compiles at the test's `-O` and with its `-f` flags. Time inside
+`eval` does not count against the test's timeout. Outcomes are cached in
+`build/eval/` under the package root, keyed by the compiler, the flags, the fuel
+and the source, so a later run pays nothing for an unchanged program.
+`--no-cache` skips reading the cache. See
+[`core:eval`](../docs/stdlib-core-eval.md).
+
+### Round Trips in This Package
+
+`src/wadopoet_test.wado` has a `printed` helper. It wraps a body in a `run()`
+that may call `print`, evaluates it, asserts it exited with 0, and returns
+what it printed. A round trip reads like this:
 
 ```wado
 test "a hole in a string literal reads back as its value" {
@@ -94,6 +162,3 @@ test "a hole in a string literal reads back as its value" {
 
 Write the body of a generated program as a `"..."` literal when it holds a
 template. In a template of your own, `${...}` would interpolate in the test.
-
-An evaluated program compiles on the first run, and later runs read the
-outcome from the cache. See [`core:eval`](../docs/stdlib-core-eval.md).
