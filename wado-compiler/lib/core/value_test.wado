@@ -406,9 +406,17 @@ struct Service {
 }
 
 test "from_value reads a struct" {
-    let v: Value = { host: "h", port: 8080, tags: ["a", "b"], timeout: 1.5 };
+    let v: Value = {
+        host: "h",
+        port: 8080,
+        tags: ["a", "b"],
+        timeout: 1.5,
+    };
     let r: Result<Endpoint, DeserializeError> = from_value(&v);
-    assert r matches { Ok(e) && e.host == "h" && e.port == 8080 && e.tags.len() == 2 && e.timeout matches { Some(t) && t == 1.5 } };
+    assert r matches { Ok(e) && e.host == "h"
+        && e.port == 8080
+        && e.tags.len() == 2
+        && e.timeout matches { Some(t) && t == 1.5 } };
 }
 
 test "from_value fills field defaults" {
@@ -424,13 +432,20 @@ test "from_value reports a missing field" {
 }
 
 test "from_value ignores unknown fields" {
-    let v: Value = { host: "h", extra: [1, 2] };
+    let v: Value = {
+        host: "h",
+        extra: [1, 2],
+    };
     let r: Result<Endpoint, DeserializeError> = from_value(&v);
     assert r matches { Ok(e) && e.host == "h" };
 }
 
 test "from_value reads nested structs and variants" {
-    let v: Value = { name: "svc", endpoint: { host: "h" }, shape: { Circle: 3 } };
+    let v: Value = {
+        name: "svc",
+        endpoint: { host: "h" },
+        shape: { Circle: 3 },
+    };
     let r: Result<Service, DeserializeError> = from_value(&v);
     assert r matches { Ok(s) && s.endpoint.host == "h" && s.shape matches { Circle(3) } };
 }
@@ -449,7 +464,15 @@ test "from_value reads what core:json produced" {
 }
 
 test "from_value round-trips to_value" {
-    let s = Service { name: "n", endpoint: Endpoint { host: "h", port: 1, tags: ["t"] }, shape: ToValueShape::Circle(2) };
+    let s = Service {
+        name: "n",
+        endpoint: Endpoint {
+            host: "h",
+            port: 1,
+            tags: ["t"],
+        },
+        shape: ToValueShape::Circle(2),
+    };
     let r: Result<Service, DeserializeError> = from_value(&to_value(&s).unwrap());
     assert r matches { Ok(back) && back.name == "n" && back.endpoint.tags[0] == "t" && back.shape matches { Circle(2) } };
 }
@@ -461,7 +484,9 @@ test "from_value reads a map" {
 }
 
 test "from_value reads Value itself" {
-    let v: Value = { a: [1, null] };
+    let v: Value = {
+        a: [1, null],
+    };
     let r: Result<Value, DeserializeError> = from_value(&v);
     assert r matches { Ok(back) && back == v };
 }
@@ -506,9 +531,18 @@ test "from_value reads a char and bytes" {
 // --- merge ---
 
 test "merge overlays objects key by key, recursively" {
-    let base: Value = { server: { host: "localhost", port: 80 }, debug: false };
-    let overlay: Value = { server: { port: 8080 }, debug: true };
-    let expected: Value = { server: { host: "localhost", port: 8080 }, debug: true };
+    let base: Value = {
+        server: { host: "localhost", port: 80 },
+        debug: false,
+    };
+    let overlay: Value = {
+        server: { port: 8080 },
+        debug: true,
+    };
+    let expected: Value = {
+        server: { host: "localhost", port: 8080 },
+        debug: true,
+    };
     assert merge(base, overlay) == expected;
 }
 
@@ -522,14 +556,22 @@ test "merge adds keys the base lacks, after its own" {
 }
 
 test "merge replaces a list rather than concatenating" {
-    let base: Value = { tags: ["a", "b"] };
-    let overlay: Value = { tags: ["c"] };
-    let expected: Value = { tags: ["c"] };
+    let base: Value = {
+        tags: ["a", "b"],
+    };
+    let overlay: Value = {
+        tags: ["c"],
+    };
+    let expected: Value = {
+        tags: ["c"],
+    };
     assert merge(base, overlay) == expected;
 }
 
 test "merge replaces when either side is not an object" {
-    let base: Value = { a: { b: 1 } };
+    let base: Value = {
+        a: { b: 1 },
+    };
     let overlay: Value = { a: 5 };
     let expected: Value = { a: 5 };
     assert merge(base, overlay) == expected;
