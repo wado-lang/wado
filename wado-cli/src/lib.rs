@@ -54,3 +54,7 @@ pub mod update;
 pub mod wit;
 
 pub use compiler_host::FilesystemCompilerHost;
+
+/// The stack of every thread that compiles. The compiler recurses as deep as
+/// the source nests.
+pub const COMPILER_STACK_SIZE: usize = 64 * 1024 * 1024;

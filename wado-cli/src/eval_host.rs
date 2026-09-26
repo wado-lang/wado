@@ -3,6 +3,7 @@
 //!
 //! See WEP 2026-09-26 (Eval).
 
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -10,7 +11,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 use sha2::{Digest, Sha256};
 use tokio::sync::OnceCell;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
-use wasmtime::{Engine, ResourceLimiter, Store, Trap};
+use wasmtime::{Engine, GcHeapOutOfMemory, ResourceLimiter, Store, Trap};
 use wasmtime_wasi::cli::{WasiCli, WasiCliView};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::p3::bindings::Command;
@@ -20,6 +21,7 @@ use wasmtime_wasi::{I32Exit, WasiCtx, WasiCtxView, WasiView};
 use wado_compiler::hashmap::IndexMap;
 use wado_compiler::{CompilerOptions, Diagnostic, InMemoryCompilerHost, Severity};
 
+use crate::COMPILER_STACK_SIZE;
 use crate::cache::write_atomic;
 use crate::compile::{build_dir, load_nearest_manifest, render_error_diagnostics};
 use crate::kiln_provider::hex32;
@@ -45,8 +47,12 @@ const EVAL_FILE: &str = "eval.wado";
 /// machine-dependent limit is why a timeout is never cached.
 const COMPILE_TIME_LIMIT: Duration = Duration::from_secs(120);
 
-/// The most any one memory of an evaluated program may grow to.
+/// The most any one memory of an evaluated program may grow to, in bytes.
 const MEMORY_CEILING: usize = 1 << 30;
+
+/// The most elements any one table may grow to: as many pointers as fit under
+/// [`MEMORY_CEILING`]. Derived from it, so the cache key covers it.
+const TABLE_CEILING: usize = MEMORY_CEILING / size_of::<usize>();
 
 // The GC heap grows through the same limiter, so it has to start below the
 // ceiling or no program could allocate at all.
@@ -93,7 +99,8 @@ fn hash_dev_stdlib(hasher: &mut Sha256) {
     }
 }
 
-/// A release build embeds the stdlib, so the binary's hash already covers it.
+/// A release build embeds the stdlib, so rebuilding the binary is the only way
+/// to change it.
 #[cfg(not(debug_assertions))]
 fn hash_dev_stdlib(_hasher: &mut Sha256) {}
 
@@ -107,7 +114,8 @@ fn hash_field(hasher: &mut Sha256, bytes: &[u8]) {
 pub struct EvalHost {
     knobs: CompileKnobs,
     engine: OnceLock<(Engine, Linker<Program>)>,
-    /// One slot per key, so calls sharing a key within the run evaluate once.
+    /// One slot per key being evaluated, so calls sharing a key at once
+    /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
 }
 
@@ -143,9 +151,16 @@ impl EvalHost {
     async fn outcome(self: &Arc<Self>, caller: &Path, source: String, fuel: u64) -> Outcome {
         let key = self.key(&source, fuel);
         let slot = Arc::clone(lock(&self.slots).entry(key).or_default());
-        slot.get_or_init(|| self.cached_or_evaluate(key, caller, source, fuel))
+        let outcome = slot
+            .get_or_init(|| self.cached_or_evaluate(key, caller, source, fuel))
             .await
-            .clone()
+            .clone();
+        let mut slots = lock(&self.slots);
+        // A waiter leaving late must not evict a newer slot for the same key.
+        if slots.get(&key).is_some_and(|live| Arc::ptr_eq(live, &slot)) {
+            slots.swap_remove(&key);
+        }
+        outcome
     }
 
     async fn cached_or_evaluate(
@@ -188,30 +203,41 @@ impl EvalHost {
         .await
     }
 
-    /// The compile's future is `!Send` and needs the 64 MiB stack every tokio
-    /// thread has, so it runs on a blocking thread of its own. Past the limit
-    /// that thread is abandoned, not stopped: nothing can interrupt a compile.
+    /// The compile's future is `!Send`, so it runs on a thread of its own. Past
+    /// the limit that thread is abandoned, not stopped: nothing can interrupt a
+    /// compile. It is not one of the runtime's blocking threads, which the
+    /// runtime would wait for when `wado test` shuts it down.
     async fn compile(&self, source: String) -> Compiled {
         let options = CompilerOptions {
             opt_level: self.knobs.opt_level.to_compiler(),
             codegen_flags: self.knobs.codegen_flags.clone(),
             ..CompilerOptions::default()
         };
-        let compile =
-            tokio::task::spawn_blocking(move || {
-                // A host with no sources: the program is one module, and nothing
-                // on the host's disk is read.
-                let host = InMemoryCompilerHost::new();
-                let compiled = current_thread_runtime().block_on(
-                    wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
-                );
-                match compiled {
-                    Ok(result) => Compiled::Wasm(result.wasm),
-                    Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
-                }
-            });
-        match tokio::time::timeout(COMPILE_TIME_LIMIT, join_blocking(compile)).await {
-            Ok(compiled) => compiled,
+        let (report, compiled) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name("eval-compile".to_string())
+            .stack_size(COMPILER_STACK_SIZE)
+            .spawn(move || {
+                let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    // A host with no sources: the program is one module, and
+                    // nothing on the host's disk is read.
+                    let host = InMemoryCompilerHost::new();
+                    let compiled = current_thread_runtime().block_on(
+                        wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
+                    );
+                    match compiled {
+                        Ok(result) => Compiled::Wasm(result.wasm),
+                        Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
+                    }
+                }));
+                // Past the limit nobody is listening, and the outcome is dropped.
+                let _ = report.send(outcome);
+            })
+            .expect("spawning the eval compile thread");
+        match tokio::time::timeout(COMPILE_TIME_LIMIT, compiled).await {
+            Ok(outcome) => outcome
+                .expect("the compile thread reports before it exits")
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
             Err(_) => Compiled::TimedOut,
         }
     }
@@ -234,7 +260,8 @@ enum Compiled {
 
 fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
     CompileFailure {
-        rendered: render_error_diagnostics(diagnostics).unwrap_or_default(),
+        rendered: render_error_diagnostics(diagnostics)
+            .expect("a failed compile reports an error"),
         codes: diagnostics
             .iter()
             .filter(|d| matches!(d.severity, Severity::Error | Severity::Fatal))
@@ -247,7 +274,12 @@ fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
 /// under its directory when it is in no package.
 fn cache_dir(caller: &Path) -> PathBuf {
     let root = load_nearest_manifest(caller).map_or_else(
-        || caller.parent().unwrap_or(Path::new("")).to_path_buf(),
+        || {
+            caller
+                .parent()
+                .expect("the caller is a file, so it has a parent")
+                .to_path_buf()
+        },
         |project| project.root,
     );
     build_dir(&root).join("eval")
@@ -272,7 +304,7 @@ async fn join_blocking<T>(handle: tokio::task::JoinHandle<T>) -> T {
 struct Program {
     ctx: WasiCtx,
     table: ResourceTable,
-    ceiling: MemoryCeiling,
+    ceiling: Ceiling,
 }
 
 impl WasiView for Program {
@@ -284,32 +316,46 @@ impl WasiView for Program {
     }
 }
 
-/// Denies growth past [`MEMORY_CEILING`], and remembers that it did, so the trap
-/// that follows reads as running out of memory.
-#[derive(Default)]
-struct MemoryCeiling {
-    reached: bool,
+/// Stops a program that would grow a memory past [`MEMORY_CEILING`] or a table
+/// past [`TABLE_CEILING`]. Failing the growth, rather than denying it, is what
+/// tells the trap that follows apart from any other.
+struct Ceiling;
+
+#[derive(Debug)]
+struct CeilingReached;
+
+impl std::fmt::Display for CeilingReached {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("grew past the eval ceiling")
+    }
 }
 
-impl ResourceLimiter for MemoryCeiling {
+impl std::error::Error for CeilingReached {}
+
+fn within(desired: usize, ceiling: usize) -> wasmtime::Result<bool> {
+    if desired > ceiling {
+        return Err(CeilingReached.into());
+    }
+    Ok(true)
+}
+
+impl ResourceLimiter for Ceiling {
     fn memory_growing(
         &mut self,
         _current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        let fits = desired <= MEMORY_CEILING;
-        self.reached |= !fits;
-        Ok(fits)
+        within(desired, MEMORY_CEILING)
     }
 
     fn table_growing(
         &mut self,
         _current: usize,
-        _desired: usize,
+        desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        Ok(true)
+        within(desired, TABLE_CEILING)
     }
 }
 
@@ -342,7 +388,7 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
         Program {
             ctx: builder.build(),
             table: ResourceTable::new(),
-            ceiling: MemoryCeiling::default(),
+            ceiling: Ceiling,
         },
     );
     store.limiter(|program| &mut program.ceiling);
@@ -358,10 +404,10 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
                 // How a command reports failure without calling exit; wasmtime's
                 // own CLI exits with 1 on it.
                 Ok(Ok(Err(()))) => Status::Exited(1),
-                Ok(Err(e)) | Err(e) => stopped(&e, store.data().ceiling.reached),
+                Ok(Err(e)) | Err(e) => stopped(&e),
             }
         }
-        Err(e) => stopped(&e, store.data().ceiling.reached),
+        Err(e) => stopped(&e),
     };
     Outcome::Ran(Ran {
         stdout: stdout.contents().to_vec(),
@@ -371,13 +417,16 @@ async fn run(engine: &Engine, linker: &Linker<Program>, wasm: &[u8], fuel: u64) 
 }
 
 /// How a program that did not return from `run` stopped.
-fn stopped(error: &wasmtime::Error, memory_ceiling_reached: bool) -> Status {
+fn stopped(error: &wasmtime::Error) -> Status {
     if let Some(I32Exit(code)) = error.downcast_ref::<I32Exit>() {
         return Status::Exited(*code);
     }
+    // The GC heap swallows a failed growth and reports the allocation instead.
+    if error.is::<CeilingReached>() || error.is::<GcHeapOutOfMemory<()>>() {
+        return Status::OutOfMemory;
+    }
     match error.downcast_ref::<Trap>() {
         Some(Trap::OutOfFuel) => Status::OutOfFuel,
-        _ if memory_ceiling_reached => Status::OutOfMemory,
         Some(trap) => Status::Trapped(trap_kind(*trap)),
         None => Status::Trapped(TrapKind::Other),
     }
@@ -422,13 +471,11 @@ impl EvalSession {
         }
     }
 
-    /// The epoch ticks spent inside `eval` since the last call, rounded up.
-    /// Time there does not count against the test's deadline, so the caller
-    /// extends the deadline by this much.
-    pub fn take_paused_ticks(&mut self, tick: Duration) -> u64 {
-        let ticks = self.paused.as_nanos().div_ceil(tick.as_nanos());
-        self.paused = Duration::ZERO;
-        u64::try_from(ticks).expect("a test pauses for less than u64::MAX ticks")
+    /// The time spent inside `eval` so far, which does not count against the
+    /// test's deadline.
+    #[must_use]
+    pub fn paused(&self) -> Duration {
+        self.paused
     }
 }
 

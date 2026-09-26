@@ -2,6 +2,7 @@ use std::process;
 
 use lexopt::Arg::{Long, Short, Value};
 use mimalloc::MiMalloc;
+use wado_cli::COMPILER_STACK_SIZE;
 use wado_cli::args::CliExit;
 
 // `wado serve` is allocation-heavy per request; mimalloc avoids the
@@ -202,12 +203,10 @@ fn main() {
     // subcommand can reach the stdlib before it is there.
     wado_lsp::host::install_dev_stdlib();
 
-    // The compiler recurses as deep as the source nests, so every thread that
-    // compiles gets this stack: the pool's, and the one `block_on` runs on.
-    const STACK_SIZE: usize = 64 * 1024 * 1024;
+    // The pool's threads and the one `block_on` runs on all compile.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
-        .thread_stack_size(STACK_SIZE)
+        .thread_stack_size(COMPILER_STACK_SIZE)
         .build()
         .unwrap_or_else(|e| {
             eprintln!("Error: failed to create tokio runtime: {e}");
@@ -215,7 +214,7 @@ fn main() {
         });
     let driver = std::thread::Builder::new()
         .name("main".to_string())
-        .stack_size(STACK_SIZE)
+        .stack_size(COMPILER_STACK_SIZE)
         .spawn(move || runtime.block_on(async_main()))
         .unwrap_or_else(|e| {
             eprintln!("Error: failed to start the driver thread: {e}");

@@ -50,7 +50,7 @@ The Wado compiler crate.
 `src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
 them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
-filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT: read
+filesystem. `lib/wasi/`, `lib/core/kiln/` and `lib/core/eval/` are generated from WIT: read
 `wado-from-idl/AGENTS.md` first.
 
 The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
