@@ -692,11 +692,7 @@ impl Resolver<'_> {
     /// already binds; a refutable one taking it binds that same name again.
     fn bind_name(&mut self, name: &str, span: Span, allowed: bool, declares: bool) {
         self.check_shadowing(name, span, allowed);
-        let frame = self
-            .bindings
-            .last_mut()
-            .expect("every binder sits in a body, which opens a frame");
-        if let Some(first) = frame.insert(name.to_string(), span)
+        if let Some(first) = self.frame_mut().insert(name.to_string(), span)
             && declares
         {
             self.redeclarations.push(Redeclaration {
@@ -706,6 +702,13 @@ impl Resolver<'_> {
                 second: span,
             });
         }
+    }
+
+    /// The innermost binding frame.
+    fn frame_mut(&mut self) -> &mut IndexMap<String, Span> {
+        self.bindings
+            .last_mut()
+            .expect("every binder sits in a body, which opens a frame")
     }
 
     /// Whether the binder being walked waives the lint for the name its pattern
@@ -825,15 +828,6 @@ struct PendingBinder {
 impl PendingBinder {
     fn derives(&self, name: &str) -> bool {
         self.derived.iter().any(|derived| derived == name)
-    }
-
-    /// A binder the pattern alone makes, with nothing to waive or derive.
-    fn plain(declares: bool) -> Self {
-        Self {
-            allowed: false,
-            derived: Vec::new(),
-            declares,
-        }
     }
 }
 
@@ -975,7 +969,12 @@ impl AstVisitor for Resolver<'_> {
             ast::Stmt::ForOf(f) => self.in_frame(|s| {
                 s.visit_id(f.id, f.span);
                 s.visit_expr(&f.iterable);
-                s.in_binder(PendingBinder::plain(true), |s| {
+                let element = PendingBinder {
+                    allowed: false,
+                    derived: Vec::new(),
+                    declares: true,
+                };
+                s.in_binder(element, |s| {
                     s.in_pattern_position(true, |s| s.visit_pattern(&f.binding));
                 });
                 s.visit_block(&f.body);
@@ -1042,20 +1041,14 @@ impl AstVisitor for Resolver<'_> {
         // ones: the language requires them to bind the same names, so each is
         // walked against the bindings the whole pattern started from.
         if let ast::Pattern::Or(alternatives) = pat {
-            let before = self.bindings.last().cloned().unwrap_or_default();
+            let before = self.frame_mut().clone();
             let mut bound = before.clone();
             for alternative in alternatives {
-                if let Some(frame) = self.bindings.last_mut() {
-                    frame.clone_from(&before);
-                }
+                self.frame_mut().clone_from(&before);
                 self.visit_pattern(alternative);
-                if let Some(frame) = self.bindings.last() {
-                    bound.extend(frame.iter().map(|(name, span)| (name.clone(), *span)));
-                }
+                bound.extend(self.frame_mut().drain(..));
             }
-            if let Some(frame) = self.bindings.last_mut() {
-                *frame = bound;
-            }
+            *self.frame_mut() = bound;
             return;
         }
         if let ast::Pattern::Ident { name, span, .. } | ast::Pattern::MutIdent { name, span, .. } =
