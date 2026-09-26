@@ -994,14 +994,8 @@ fn validate_imports_representable(project: &Package) -> Result<(), String> {
                 .iter()
                 .map(|p| p.type_id)
                 .filter(|&ty| !matches!(tt.get(ty), ResolvedType::Function { .. }));
-            signature_representable(
-                values,
-                result,
-                Boundary::Import,
-                &tt,
-                &project.tir_modules,
-            )
-            .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
+            signature_representable(values, result, Boundary::Import, &tt, &project.tir_modules)
+                .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
         }
     }
     Ok(())

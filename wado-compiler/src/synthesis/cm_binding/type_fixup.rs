@@ -333,7 +333,11 @@ impl CallRewriteWalker<'_> {
         let mut args = take_call_args(expr);
         let receiver = matches!(kind, CmCallKind::Method).then(|| args.remove(0));
         let param_offset = usize::from(receiver.is_some());
-        self.key_callbacks(func_info, args.iter_mut().map(|a| &mut a.expr), param_offset);
+        self.key_callbacks(
+            func_info,
+            args.iter_mut().map(|a| &mut a.expr),
+            param_offset,
+        );
         let args = {
             // The adapter's name is a non-injective `interface_method` join.
             let adapter_key = Rc::as_ptr(adapter) as usize;
