@@ -960,3 +960,9 @@ This enables seamless local development while ensuring published packages are se
 ### Not Included
 
 - URL dependencies (`url = "..."`): Not included in this WEP. Remote module imports via `use ... from "https://..."` remain a source-level feature (not a `wado.toml` dependency). A `url` dependency source type may be added in a future WEP if a compelling use case emerges that cannot be served by git or registry dependencies.
+
+## Known gaps
+
+- `[dev-dependencies]` resolve into the lock file and reach nothing else. The
+  compiler host indexes `[dependencies]` only, so a `use` of a dev-dependency
+  under `wado test` is an unknown module.
