@@ -1034,10 +1034,8 @@ blocks until a reader rendezvouses rather than writing nothing.
 
 `#[cm("stream-write-raw-all")]`
 
-`write_all` for a view (`list.as_slice()`, `array.slice(start, end)`,
-`string.as_bytes()`), without the deep copy value-semantics `write` makes.
-The view is lowered once however many copies the reader takes it in.
-`T` must be a byte: any other element type is a compile error.
+`write_all` for a byte view, lowered once with no value-semantics copy.
+Any element type but a byte is a compile error.
 
 #### `fn cancel_write(&self)`
 
