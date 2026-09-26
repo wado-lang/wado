@@ -1,0 +1,113 @@
+// Quoted by docs/spec-memory.md § Value Semantics, § Reference Types and
+// § Parameters.
+
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+fn translate(p: &mut Point, dx: i32, dy: i32) {
+    p.x += dx;   // visible to caller (reference)
+    p.y += dy;
+}
+
+test {
+    let mut p = Point { x: 1, y: 2 };
+    translate(&mut p, 10, 20);
+    assert p.x == 11 && p.y == 22;
+}
+
+test "basic references" {
+    let x = 42;
+    let r = &x;           // Immutable reference
+    let v = *r;           // Dereference
+    assert v == 42;
+
+    let mut y = 0;
+    let mr = &mut y;      // Mutable reference
+    *mr = 10;             // Assign through reference
+    assert y == 10;
+}
+
+test "reference to reference" {
+    let x = 42;
+    let r = &x;           // &i32
+    let rr = &r;          // &&i32
+    let val = **rr;       // double dereference
+    assert val == 42;
+}
+
+fn read_value(r: &i32) -> i32 {
+    return *r;
+}
+
+test {
+    let mut x = 10;
+    assert read_value(&mut x) == 10;   // OK: &mut i32 coerces to &i32
+}
+
+fn make_ref() -> &i32 {
+    let x = 42;
+    return &x;  // OK in Wado (x is GC-managed and stays alive)
+}
+
+test {
+    let r = make_ref();
+    assert *r == 42;
+}
+
+test "multiple mutable references" {
+    let mut x = 10;
+    let r1 = &mut x;
+    let r2 = &mut x;  // OK in Wado (no borrow checker)
+
+    *r1 = 20;
+    *r2 = 30;
+    assert x == 30;
+}
+
+impl Point {
+    fn sum(&self) -> i32 { return self.x + self.y; }  // OK: immutable reference
+    fn reset(&mut self) { self.x = 0; self.y = 0; }   // OK: mutable reference
+}
+
+test {
+    let mut p = Point { x: 1, y: 2 };
+    assert p.sum() == 3;
+    p.reset();
+    assert p.sum() == 0;
+}
+
+fn increment(mut n: i32) -> i32 {
+    n += 1;   // mutates the local copy
+    return n;
+}
+
+fn normalize(mut s: String) -> String {
+    s = s.to_ascii_uppercase();  // rebinds local binding
+    return s;
+}
+
+test {
+    assert increment(1) == 2 && normalize("ab") == "AB";
+}
+
+fn countdown(mut n: i32) with Stdout {
+    while n > 0 {
+        println(`${n}`);
+        n -= 1;         // only modifies the local copy
+    }
+}
+
+test {
+    let x = 3;
+    countdown(x);
+    assert x == 3;      // every parameter is passed by value
+}
+
+test "a closure takes a mut parameter" {
+    let add_one = |mut n: i32| {
+        n += 1;
+        return n;
+    };
+    assert add_one(1) == 2;
+}

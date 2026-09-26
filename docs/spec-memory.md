@@ -10,6 +10,8 @@
 
 Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
 
+<!-- {"fixture":"spec_memory_copy.wado"} -->
+
 ```wado
 struct Point { x: i32, y: i32 }
 
@@ -21,10 +23,18 @@ assert a.x == 1;
 
 In-place mutation through a parameter binding (field writes, method calls, index writes) operates on the callee's local copy and is not visible to the caller. To allow callee-side mutation, pass a reference explicitly:
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 fn translate(p: &mut Point, dx: i32, dy: i32) {
     p.x += dx;   // visible to caller (reference)
     p.y += dy;
+}
+
+test {
+    let mut p = Point { x: 1, y: 2 };
+    translate(&mut p, 10, 20);
+    assert p.x == 11 && p.y == 22;
 }
 ```
 
@@ -51,14 +61,18 @@ References in Wado provide indirect access to values. Unlike Rust, Wado uses a G
 
 ### Basic Reference Syntax
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 let x = 42;
 let r = &x;           // Immutable reference
 let v = *r;           // Dereference
+assert v == 42;
 
 let mut y = 0;
 let mr = &mut y;      // Mutable reference
 *mr = 10;             // Assign through reference
+assert y == 10;
 ```
 
 A reference is never null, and there is no arithmetic on it. A reference that
@@ -68,24 +82,31 @@ may be absent is written `Option<&T>`.
 
 References can be nested arbitrarily:
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 let x = 42;
 let r = &x;           // &i32
 let rr = &r;          // &&i32
-let val = **rr;       // 42 (double dereference)
+let val = **rr;       // double dereference
+assert val == 42;
 ```
 
 ### Automatic Coercion (`&mut` to `&`)
 
 Mutable references automatically coerce to immutable references when needed:
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 fn read_value(r: &i32) -> i32 {
     return *r;
 }
 
-let mut x = 10;
-read_value(&mut x);   // OK: &mut i32 coerces to &i32
+test {
+    let mut x = 10;
+    assert read_value(&mut x) == 10;   // OK: &mut i32 coerces to &i32
+}
 ```
 
 ### Key Differences from Rust (GC-Based Memory Model)
@@ -103,14 +124,18 @@ read_value(&mut x);   // OK: &mut i32 coerces to &i32
 
 Because Wado uses garbage collection, references to local variables remain valid after the function returns:
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 fn make_ref() -> &i32 {
     let x = 42;
     return &x;  // OK in Wado (x is GC-managed and stays alive)
 }
 
-let r = make_ref();
-println(`${*r}`);  // Works: prints "42"
+test {
+    let r = make_ref();
+    assert *r == 42;
+}
 ```
 
 This would be a dangling pointer error in Rust, but is safe in Wado due to garbage collection.
@@ -119,6 +144,8 @@ This would be a dangling pointer error in Rust, but is safe in Wado due to garba
 
 Wado allows multiple mutable references to the same value:
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 let mut x = 10;
 let r1 = &mut x;
@@ -126,6 +153,7 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 
 *r1 = 20;
 *r2 = 30;
+assert x == 30;
 ```
 
 ### Reference Retention
@@ -207,11 +235,29 @@ ref_eq(&f, &g);                 // false or true: two places holding one closure
 
 A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
 
+<!-- {"fixture":"spec_memory_values.wado"} -->
+
 ```wado
 impl Point {
-    fn sum(&self) -> i32 { ... }          // OK: immutable reference
-    fn reset(&mut self) { ... }           // OK: mutable reference
-    // fn consume(self) -> i32 { ... }    // ERROR: `Point` holds no resource
+    fn sum(&self) -> i32 { return self.x + self.y; }  // OK: immutable reference
+    fn reset(&mut self) { self.x = 0; self.y = 0; }   // OK: mutable reference
+}
+
+test {
+    let mut p = Point { x: 1, y: 2 };
+    assert p.sum() == 3;
+    p.reset();
+    assert p.sum() == 0;
+}
+```
+
+`Point` holds no resource, so `self` by value on it is an error:
+
+<!-- {"fixture":"spec_memory_self_by_value.wado"} -->
+
+```wado
+impl Point {
+    fn consume(self) -> i32 { return self.x; }
 }
 ```
 
@@ -220,6 +266,8 @@ A by-value `self` is passed as any parameter is. A receiver holding an affine re
 ### `mut` Parameters
 
 A parameter can be declared `mut` to allow the function body to reassign it:
+
+<!-- {"fixture":"spec_memory_values.wado"} -->
 
 ```wado
 fn increment(mut n: i32) -> i32 {
@@ -231,9 +279,15 @@ fn normalize(mut s: String) -> String {
     s = s.to_ascii_uppercase();  // rebinds local binding
     return s;
 }
+
+test {
+    assert increment(1) == 2 && normalize("ab") == "AB";
+}
 ```
 
 The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation of that copy reaches the caller. A parameter of type `&mut T` holds a copy of the reference, so a write through it (`*p = v`) reaches the referent, as through any reference.
+
+<!-- {"fixture":"spec_memory_values.wado"} -->
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
@@ -243,24 +297,31 @@ fn countdown(mut n: i32) with Stdout {
     }
 }
 
-let x = 3;
-countdown(x);
-// x is still 3 — every parameter is passed by value
+test {
+    let x = 3;
+    countdown(x);
+    assert x == 3;      // every parameter is passed by value
+}
 ```
 
 Closures also support `mut` parameters:
+
+<!-- {"fixture":"spec_memory_values.wado"} -->
 
 ```wado
 let add_one = |mut n: i32| {
     n += 1;
     return n;
 };
+assert add_one(1) == 2;
 ```
 
 Without `mut`, any assignment to a parameter is a compile error:
 
+<!-- {"fixture":"spec_memory_assign_immutable_param.wado"} -->
+
 ```wado
 fn bad(n: i32) {
-    n = 10;  // Error: cannot assign to immutable variable 'n'
+    n = 10;
 }
 ```
