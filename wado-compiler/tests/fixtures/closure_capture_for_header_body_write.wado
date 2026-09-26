@@ -64,8 +64,8 @@ export fn run() {
 
     let mut bumped: List<fn() -> i32> = [];
     for let mut i = 0; i < 3; i += 1 {
-        let mut bump = || i += 1;
-        bump();
+        let mut raise = || i += 1;
+        raise();
         bumped.push(|| i);
     }
     assert called(bumped) == [1, 3];
@@ -116,6 +116,11 @@ export fn run() {
         updated.push(|| i);
     }
     assert called(updated) == [0, 2];
+
+    let mut conditioned: List<fn() -> i32> = [];
+    for let mut i = 0; c: { i += 1; i < 3 }; conditioned.push(|| i) {
+    }
+    assert called(conditioned) == [2, 3];
 }
 
 fn bump(r: &mut i32) {

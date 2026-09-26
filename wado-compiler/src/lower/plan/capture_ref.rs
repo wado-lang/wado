@@ -373,7 +373,11 @@ impl Scan {
                         .any(|b| site.clock < b.clock && b.clock < write.clock)
                 } else {
                     write.loops.iter().any(|l| {
-                        site.loops.contains(l) && !bindings.iter().any(|b| b.loops.contains(l))
+                        site.loops.contains(l)
+                            && !bindings.iter().any(|b| {
+                                b.loops.contains(l)
+                                    && (site.clock < b.clock || b.clock < write.clock)
+                            })
                     })
                 }
         })
