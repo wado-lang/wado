@@ -1,5 +1,5 @@
-//! Capture by reference a boxed binding a closure only reads, where the owning
-//! frame may still write it while the closure lives.
+//! Capture by reference a boxed binding a closure only reads while its frame may
+//! still write it, and redeclare a boxed `for` header binding per iteration.
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -125,14 +125,14 @@ fn rewrite_frame(
     let mut headers = ForHeaders {
         locals,
         loop_spans: Vec::new(),
-        captured: IndexMap::default(),
+        for_headers: IndexMap::default(),
     };
     match &body {
         Body::Block(block) => headers.visit_block(block),
         Body::Expr(expr) => headers.visit_expr(expr),
     }
     let mut scan = Scan {
-        boundaries: headers.captured,
+        for_headers: headers.for_headers,
         ..Scan::default()
     };
     match &body {
@@ -170,7 +170,7 @@ fn rewrite_frame(
     }
     let mut redeclare = Redeclare {
         after: scan
-            .boundaries
+            .for_headers
             .into_iter()
             .map(|(label, headers)| {
                 let stmts = headers
@@ -193,7 +193,7 @@ fn rewrite_frame(
 struct ForHeaders<'a, 'l> {
     locals: &'a FrameLocals<'l>,
     loop_spans: Vec<Span>,
-    captured: IndexMap<String, Vec<u32>>,
+    for_headers: IndexMap<String, Vec<u32>>,
 }
 
 impl TirRefVisitor for ForHeaders<'_, '_> {
@@ -224,7 +224,7 @@ impl TirRefVisitor for ForHeaders<'_, '_> {
                     })
                     .collect::<IndexSet<_>>();
                 if !headers.is_empty() {
-                    self.captured
+                    self.for_headers
                         .insert(label.clone(), headers.into_iter().collect());
                 }
             }
@@ -315,19 +315,15 @@ struct Redeclare {
 impl TirMutVisitor for Redeclare {
     fn visit_block(&mut self, block: &mut TirBlock) {
         self.walk_block(block);
-        let Some(at) = block.stmts.iter().position(|stmt| {
-            matches!(&stmt.kind, TirStmtKind::LabeledBlock { label, .. } if self.after.contains_key(label))
-        }) else {
-            return;
-        };
-        let TirStmtKind::LabeledBlock { label, .. } = &block.stmts[at].kind else {
-            unreachable!("`position` found a labeled block");
-        };
-        let Some(stmts) = self.after.swap_remove(label) else {
-            unreachable!("`position` found a key of `after`");
-        };
-        let next = at + 1;
-        block.stmts.splice(next..next, stmts);
+        let found = block.stmts.iter().enumerate().find_map(|(at, stmt)| {
+            let TirStmtKind::LabeledBlock { label, .. } = &stmt.kind else {
+                return None;
+            };
+            self.after.swap_remove(label).map(|stmts| (at + 1, stmts))
+        });
+        if let Some((next, stmts)) = found {
+            block.stmts.splice(next..next, stmts);
+        }
     }
 
     fn visit_expr(&mut self, expr: &mut TirExpr) {
@@ -367,9 +363,9 @@ struct Scan {
     clock: u32,
     loops: Vec<u32>,
     loop_count: u32,
-    /// What [`ForHeaders`] found: each `for` body's header bindings, which the
-    /// iteration after it binds afresh.
-    boundaries: IndexMap<String, Vec<u32>>,
+    /// Each `for` body's captured header bindings, which the iteration after it
+    /// binds afresh.
+    for_headers: IndexMap<String, Vec<u32>>,
     sites: Vec<Site>,
     bindings: Vec<Event>,
     writes: Vec<Event>,
@@ -438,7 +434,7 @@ impl TirRefVisitor for Scan {
             }),
             TirStmtKind::LabeledBlock { label, .. } => {
                 self.walk_stmt(stmt);
-                if let Some(headers) = self.boundaries.get(label).cloned() {
+                if let Some(headers) = self.for_headers.get(label).cloned() {
                     for header in headers {
                         self.bind(header);
                     }

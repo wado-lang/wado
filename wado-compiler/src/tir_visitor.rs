@@ -933,8 +933,7 @@ impl TirMutVisitor for ShiftLocals {
     }
 }
 
-/// Point every read of local `from` in `expr` at `to`, a closure's capture of
-/// it included.
+/// Point every read of local `from` in `expr` at `to`.
 pub fn remap_local_reads(expr: &mut TirExpr, from: u32, to: u32) {
     RemapLocalReads { from, to }.visit_expr(expr);
 }
@@ -946,18 +945,12 @@ struct RemapLocalReads {
 
 impl TirMutVisitor for RemapLocalReads {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            TirExprKind::Local { index, .. } if *index == self.from => *index = self.to,
-            // A closure body numbers its own locals; only its captures name ours.
-            TirExprKind::Closure { captures, .. } => {
-                for capture in captures.iter_mut() {
-                    capture.source = capture
-                        .source
-                        .map_local(|index| if index == self.from { self.to } else { index });
-                }
-            }
-            _ => self.walk_expr(expr),
+        if let TirExprKind::Local { index, .. } = &mut expr.kind
+            && *index == self.from
+        {
+            *index = self.to;
         }
+        self.walk_expr(expr);
     }
 }
 
