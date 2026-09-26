@@ -242,9 +242,9 @@ fn survey(paths: &List<String>, failed: &mut i32) -> TreeMap<String, List<Findin
     return out;
 }
 
-fn broken_count(survey: &TreeMap<String, List<Finding>>) -> i32 with Stderr {
+fn broken_count(found: &TreeMap<String, List<Finding>>) -> i32 with Stderr {
     let mut n = 0;
-    for let [path, findings] of survey.entries() {
+    for let [path, findings] of found.entries() {
         for let f of findings {
             if let Broken(why) = f.verdict {
                 eprintln(`${*path}:${f.line}: ${why}`);
@@ -257,9 +257,9 @@ fn broken_count(survey: &TreeMap<String, List<Finding>>) -> i32 with Stderr {
 
 /// File path to the number of blocks it holds that name no fixture, omitting
 /// the files with none.
-fn unreferenced_counts(survey: &TreeMap<String, List<Finding>>) -> TreeMap<String, i32> {
+fn unreferenced_counts(found: &TreeMap<String, List<Finding>>) -> TreeMap<String, i32> {
     let mut counts = TreeMap::<String, i32>::new();
-    for let [path, findings] of survey.entries() {
+    for let [path, findings] of found.entries() {
         let n = findings.into_iter().filter(|f| f.verdict matches { Unreferenced }).count();
         if n > 0 {
             counts[*path] = n;
