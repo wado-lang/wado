@@ -1,0 +1,157 @@
+#![stdlib("core:jsonc")]
+//! JSONC (JSON with Comments) deserialization.
+//!
+//! Accepts `//` line comments, `/* */` block comments, and one trailing comma
+//! before a `]` or `}`. There is no JSONC writer: JSON is JSONC, so write with
+//! `core:json`.
+//!
+//! The input is rewritten into JSON of the same length, each comment and
+//! trailing comma turned into spaces, and `core:json` reads that. An error
+//! offset therefore points into the original input, and `core:json` carries
+//! none of JSONC's cost.
+
+use { Deserialize, DeserializeError, DEFAULT_MAX_DEPTH } from "core:serde";
+use json from "core:json";
+
+#[synopsis]
+test {
+    struct Server {
+        host: String,
+        port: i32,
+    }
+
+    let src = `{
+        "host": "localhost", // where to listen
+        /* default */ "port": 8080,
+    }`;
+    assert from_string::<Server>(src) matches { Ok(s) && s.port == 8080 };
+}
+
+/// Deserializes a value from a JSONC string. Convenience wrapper over
+/// `from_bytes`.
+pub fn from_string<T: Deserialize, S: AsStrSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
+    return from_bytes(input.as_bytes(), max_depth);
+}
+
+/// Deserializes a value from UTF-8 JSONC bytes — the primary entry point.
+/// Input holding no comment and no trailing comma is read in place.
+pub fn from_bytes<T: Deserialize, S: AsByteSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
+    let mut blanker = Blanker { input: input.as_byte_slice() };
+    blanker.run()?;
+    if blanker.copied {
+        return json::from_bytes(&blanker.out, max_depth);
+    }
+    return json::from_bytes(blanker.input, max_depth);
+}
+
+/// Rewrites JSONC into JSON of the same length, copying the input only once
+/// there is something to blank.
+struct Blanker {
+    input: ByteSlice,
+    out: ByteList = [],
+    copied: bool = false,
+}
+
+impl Blanker {
+    fn run(&mut self) -> Result<(), DeserializeError> {
+        let len = self.input.len();
+        // The last byte that is neither whitespace nor comment, and the comma
+        // it was when a value precedes that comma: blanked if `]` or `}` follows.
+        let mut last = -1;
+        let mut pending_comma = -1;
+        let mut i = 0;
+        while i < len {
+            let b = self.input.get_unchecked(i) as i32;
+            if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+                i += 1;
+                continue;
+            }
+            if b == b'/' && i + 1 < len {
+                let next = self.input.get_unchecked(i + 1) as i32;
+                if next == b'/' {
+                    let end = self.line_end(i + 2);
+                    self.blank(i, end);
+                    i = end;
+                    continue;
+                }
+                if next == b'*' {
+                    let end = self.block_comment_end(i + 2);
+                    if end < 0 {
+                        return Result::Err(DeserializeError::eof(i as i64));
+                    }
+                    self.blank(i, end);
+                    i = end;
+                    continue;
+                }
+            }
+            if pending_comma >= 0 && (b == b']' || b == b'}') {
+                self.blank(pending_comma, pending_comma + 1);
+            }
+            let follows_value = last >= 0 && last != b'[' && last != b'{' && last != b',' && last != b':';
+            pending_comma = if b == b',' && follows_value { i } else { -1 };
+            last = b;
+            i = if b == b'"' { self.string_end(i + 1) } else { i + 1 };
+        }
+        return Result::Ok(());
+    }
+
+    /// The offset of the `\n` ending the line comment that reaches `from`, or
+    /// the input's end.
+    fn line_end(&self, from: i32) -> i32 {
+        let len = self.input.len();
+        let mut i = from;
+        while i < len && self.input.get_unchecked(i) as i32 != b'\n' {
+            i += 1;
+        }
+        return i;
+    }
+
+    /// The offset just past the `*/` closing the block comment whose body
+    /// starts at `from`, or -1 when the input ends first.
+    fn block_comment_end(&self, from: i32) -> i32 {
+        let len = self.input.len();
+        for let mut i = from; i + 1 < len; i += 1 {
+            if self.input.get_unchecked(i) as i32 == b'*' && self.input.get_unchecked(i + 1) as i32 == b'/' {
+                return i + 2;
+            }
+        }
+        return -1;
+    }
+
+    /// The offset just past the string whose content starts at `from`. An
+    /// unterminated string runs to the input's end, where `core:json`
+    /// reports it.
+    fn string_end(&self, from: i32) -> i32 {
+        let len = self.input.len();
+        let mut i = from;
+        while i < len {
+            let b = self.input.get_unchecked(i) as i32;
+            if b == b'"' {
+                return i + 1;
+            }
+            i += if b == b'\\' { 2 } else { 1 };
+        }
+        return len;
+    }
+
+    /// Turns `[start, end)` into spaces. Line breaks stay, so a line number
+    /// derived from an offset stays right too.
+    fn blank(&mut self, start: i32, end: i32) {
+        if !self.copied {
+            self.out = self.input.to_list() as ByteList;
+            self.copied = true;
+        }
+        for let mut i = start; i < end; i += 1 {
+            let b = self.out[i];
+            if b != b'\n' && b != b'\r' {
+                self.out[i] = b' ';
+            }
+        }
+    }
+}

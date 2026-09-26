@@ -1,0 +1,139 @@
+use { DeserializeError, DeserializeErrorKind } from "core:serde";
+use { TreeMap } from "core:collections";
+
+use { from_string, from_bytes } from "core:jsonc";
+
+struct Server {
+    host: String,
+    port: i32,
+}
+
+// --- Comments ---
+
+test "line comment" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1, // one\n2]");
+    assert r matches { Ok(v) && v.len() == 2 && v[1] == 2 };
+}
+
+test "line comment at end of input" {
+    let r: Result<i32, DeserializeError> = from_string("42 // the answer");
+    assert r matches { Ok(42) };
+}
+
+test "block comment" {
+    let r: Result<List<i32>, DeserializeError> = from_string("/* head */[1, /* mid */ 2]/* tail */");
+    assert r matches { Ok(v) && v.len() == 2 };
+}
+
+test "block comment spanning lines" {
+    let r: Result<i32, DeserializeError> = from_string("/*\n * doc\n */ 7");
+    assert r matches { Ok(7) };
+}
+
+test "block comment does not nest" {
+    let r: Result<i32, DeserializeError> = from_string("/* a /* b */ 1");
+    assert r matches { Ok(1) };
+}
+
+test "comments around key, colon and value" {
+    let src = `{
+        // where to listen
+        "host" /* key */ : /* value */ "localhost",
+        "port": 8080 // default
+    }`;
+    let r: Result<Server, DeserializeError> = from_string(src);
+    assert r matches { Ok(s) && s.host == "localhost" && s.port == 8080 };
+}
+
+test "comment markers inside a string are text" {
+    let r: Result<String, DeserializeError> = from_string(`"http://a/*b*/"`);
+    assert r matches { Ok(s) && s == "http://a/*b*/" };
+}
+
+test "escaped quote does not end the string" {
+    let r: Result<String, DeserializeError> = from_string("\"a\\\"//b\" // c");
+    assert r matches { Ok(s) && s == "a\"//b" };
+}
+
+test "non-ASCII text in a comment" {
+    let r: Result<i32, DeserializeError> = from_string("// 日本語\n1");
+    assert r matches { Ok(1) };
+}
+
+// --- Trailing commas ---
+
+test "trailing comma in array" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1, 2,]");
+    assert r matches { Ok(v) && v.len() == 2 };
+}
+
+test "trailing comma in object" {
+    let r: Result<Server, DeserializeError> = from_string(`{"host": "h", "port": 1,}`);
+    assert r matches { Ok(s) && s.port == 1 };
+}
+
+test "trailing comma in map" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a": 1, "b": 2,}`);
+    assert r matches { Ok(m) && m.len() == 2 };
+}
+
+test "trailing comma before a comment and newline" {
+    let r: Result<List<List<i32>>, DeserializeError> = from_string("[[1,],\n[2, // two\n],\n]");
+    assert r matches { Ok(v) && v.len() == 2 && v[1][0] == 2 };
+}
+
+test "empty array with a comma is rejected" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[,]");
+    assert r matches { Err(_) };
+}
+
+test "empty object with a comma is rejected" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string("{,}");
+    assert r matches { Err(_) };
+}
+
+test "double comma is rejected" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1,,]");
+    assert r matches { Err(_) };
+}
+
+test "comma after a key's colon is rejected" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a":,}`);
+    assert r matches { Err(_) };
+}
+
+test "comma after a top-level value is rejected" {
+    let r: Result<i32, DeserializeError> = from_string("1,");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
+}
+
+// --- Errors ---
+
+test "unterminated block comment" {
+    let r: Result<i32, DeserializeError> = from_string("1 /* open");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof && e.offset == 2 };
+}
+
+test "lone slash is rejected" {
+    let r: Result<i32, DeserializeError> = from_string("1 / 2");
+    assert r matches { Err(_) };
+}
+
+test "error offset points into the original input" {
+    // `x` sits at offset 13, past a comment that is blanked, not removed.
+    let r: Result<List<i32>, DeserializeError> = from_string("/* c */ [1, 2x]");
+    assert r matches { Err(e) && e.offset == 13 };
+}
+
+// --- Plain JSON ---
+
+test "plain JSON reads as JSON does" {
+    let r: Result<Server, DeserializeError> = from_string(`{"host":"h","port":2}`);
+    assert r matches { Ok(s) && s.host == "h" && s.port == 2 };
+}
+
+test "from_bytes" {
+    let bytes: ByteList = b"[1, /* two */ 2,]";
+    let r: Result<List<i32>, DeserializeError> = from_bytes(&bytes);
+    assert r matches { Ok(v) && v.len() == 2 };
+}

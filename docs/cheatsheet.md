@@ -1844,6 +1844,8 @@ use { Account } from "./account.proto" with { generator: { module: "wado-lang:gr
 ### Other core modules
 
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
+- [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and
+  trailing commas
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
 - [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
