@@ -831,8 +831,8 @@ test "a symbol is bound from the input axis carrying it, and spelled where an ex
         rule("Y", ["Seq", "Row", "Col"]),
     ];
     let out = emitted(&generate(source, layout).unwrap());
-    assert out.contains("let dim_N = X.extents[0];");
-    assert out.contains("let Y = reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [dim_N, 2, 2]);");
+    assert out.contains("let dim_N = X.extents[0] as i64;");
+    assert out.contains("let Y = reshape::<f32, [Seq, Wide], [Seq, Row, Col]>(X, [to_extent(dim_N), 2, 2]);");
 }
 
 test "a symbol nothing spells is not bound" {
@@ -849,7 +849,7 @@ test "a Range over a symbolic length is a kernel call" {
         Y = Range(Z, L, O)
     }`;
     let out = emitted(&generate(source, [rule("*", ["Seq"])]).unwrap());
-    assert out.contains("let Y = range_i64::<Seq>(0, dim_N, 1);");
+    assert out.contains("let Y = range_i64::<Seq>(0, to_extent(dim_N), 1);");
 }
 
 test "a Slice bound the build cannot show within its axis is checked before any kernel" {
@@ -864,7 +864,7 @@ test "a Slice bound the build cannot show within its axis is checked before any 
     ];
     let out = emitted(&generate(source, layout).unwrap());
     let check = out.find("refuse(unmet(-dim_N + 8, \"Y = Slice: the bound N must be at most 8\"));").unwrap();
-    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, dim_N);").unwrap();
+    let slice = out.find("let Y = slice_axis::<f32, [], Pos, Seq, []>(M, 0, 0, to_extent(dim_N));").unwrap();
     assert check < slice;
 }
 
@@ -1011,4 +1011,23 @@ test "a folded output of several elements is returned as its literal" {
 
     assert out.contains("let Y = Tensor::<i64, [Dim]> { data: [2, 3], extents: [2] };");
     assert out.contains("return Y;");
+}
+
+test "a folded tensor a Cast names again under its own type is spelled once" {
+    let source = `g (float[1, 4] X) => (float[4, 8] Y) <float[16, 8] W, int64[4] Q = {0, 1, 2, 3}> {
+        C = Cast<to = 7>(Q)
+        E = Gather(W, Q)
+        F = Gather(W, C)
+        Y = Add(E, F)
+    }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Seq"]),
+        rule("Q", ["Seq"]),
+        rule("C", ["Seq"]),
+        rule("W", ["Vocab", "Hidden"]),
+    ];
+    let out = emitted(&generate(source, layout).unwrap());
+    assert out.contains("let Q = Tensor::<i64, [Seq]> { data: [0, 1, 2, 3], extents: [4] };");
+    assert !out.contains("let C");
+    assert out.contains("let F = gather_rows(&weights.W, &Q);");
 }

@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { axes_of, axis_index, count_of, fits, fold, polys_at, regrouped_extents, resolve_index } from "./fold.wado";
+use { axes_of, axis_indices, count_of, fits, fold, polys_at, regrouped_extents, resolve_index } from "./fold.wado";
 use {
     AttrError,
     Dim,
@@ -853,9 +853,6 @@ fn sliced(
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     let mut axes = x.axes;
     for let cut of slice_cuts(node, known, x, owed)? {
-        if cut.start == Poly::constant(0) && cut.extent.agrees(&x.axes[cut.axis].extent) {
-            continue;
-        }
         extents[cut.axis] = cut.extent;
         axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
     }
@@ -869,8 +866,9 @@ pub struct Cut {
     pub extent: Extent,
 }
 
-/// The axes a `Slice` over `x` narrows. A bound may be symbolic, and where the
-/// build cannot show it within the axis, the inputs owe that.
+/// The axes a `Slice` over `x` narrows, leaving out one it keeps whole. A bound
+/// may be symbolic, and where the build cannot show it within the axis, the
+/// inputs owe that.
 pub fn slice_cuts(
     node: &Node,
     known: &TreeMap<String, Known>,
@@ -897,14 +895,16 @@ pub fn slice_cuts(
         return Result::Err(refusal(node, "a step is not 1, and the run slices by 1"));
     }
     let mut cuts: List<Cut> = [];
-    for let i of 0..<starts.len() {
-        let a = axis_index(axes[i], x.rank()).map_err(|reason| refusal(node, reason))?;
+    let resolved = axis_indices(&axes, x.rank()).map_err(|reason| refusal(node, reason))?;
+    for let [i, a] of resolved.into_iter().enumerate() {
         let dim = x.axes[a].extent.poly();
         let begin = within(node, &starts[i], &dim, owed)?;
         let end = within(node, &ends[i], &dim, owed)?;
         let count = end.sub(&begin);
         owe(node, owed, count, `axis ${a} must not run backwards from ${begin} to ${end}`)?;
-        cuts.push(Cut { axis: a, start: begin, extent: Extent::of(count).unwrap() });
+        if begin != Poly::constant(0) || count != dim {
+            cuts.push(Cut { axis: a, start: begin, extent: Extent::of(count).unwrap() });
+        }
     }
     return Result::Ok(cuts);
 }
@@ -932,9 +932,13 @@ fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> 
     if let Some(c) = constant && let Some(d) = dim.as_constant() {
         return Result::Ok(Poly::constant(i64::clamp(resolve_index(c, d), 0, d)));
     }
-    // Past any extent a list can hold, which is how an exporter writes "to the end".
+    // Past any extent a list can hold, which is how an exporter writes "to the
+    // end", or back from it past the start.
     if let Some(c) = constant && c >= i32::MAX as i64 {
         return Result::Ok(*dim);
+    }
+    if let Some(c) = constant && c <= -(i32::MAX as i64) {
+        return Result::Ok(Poly::constant(0));
     }
     let resolved = if let Some(c) = constant && c < 0 {
         dim.add(bound);
@@ -1152,17 +1156,14 @@ pub fn is_reduction(op: &String) -> bool {
 pub fn reduced_axes(node: &Node, known: &TreeMap<String, Known>, rank: i32) -> Result<List<i32>, InferError> {
     let written = axes_of(node, known, 1, "axes").map_err(|reason| refusal(node, reason))?;
     let listed: List<i64> = written.unwrap_or([]);
-    let mut axes: List<i32> = [];
-    if listed.is_empty() {
-        if int_attr(node, "noop_with_empty_axes", 0)? == 0 {
-            for let i of 0..<rank {
-                axes.push(i);
-            }
-        }
-        return Result::Ok(axes);
+    if !listed.is_empty() {
+        return axis_indices(&listed, rank).map_err(|reason| refusal(node, reason));
     }
-    for let a of listed {
-        axes.push(axis_index(a, rank).map_err(|reason| refusal(node, reason))?);
+    let mut axes: List<i32> = [];
+    if int_attr(node, "noop_with_empty_axes", 0)? == 0 {
+        for let i of 0..<rank {
+            axes.push(i);
+        }
     }
     return Result::Ok(axes);
 }

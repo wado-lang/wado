@@ -23,6 +23,7 @@ use {
     sigmoid_f32,
     slice_axis,
     softmax,
+    to_extent,
     transpose2,
     unmet,
     widen,
@@ -106,6 +107,20 @@ test "a condition the build owed is met with slack to spare, and missed by how m
     assert unmet(-3, "Y = Slice: the bound N must be at most 8") == Option::Some(
         "Y = Slice: the bound N must be at most 8, and the inputs miss it by 3",
     );
+    // A product of two extents, which an `i32` would have wrapped positive.
+    assert unmet(8 - 65536 as i64 * 65536, "Y: N * M must be at most 8") == Option::Some(
+        "Y: N * M must be at most 8, and the inputs miss it by 4294967288",
+    );
+}
+
+test "a length computed from the inputs reaches a kernel only where a list holds it" {
+    assert to_extent(i32::MAX as i64) == i32::MAX;
+    assert to_extent(0) == 0;
+}
+
+#[expect_trap]
+test "a length past what a list holds stops forward" {
+    to_extent(i32::MAX as i64 + 1);
 }
 
 test "range_i64 counts from its start by its delta" {

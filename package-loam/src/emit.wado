@@ -501,7 +501,7 @@ impl Symbols {
         return symbols;
     }
 
-    /// A symbolic integer as the `i32` expression `forward` computes it by.
+    /// A symbolic integer as the `i64` expression `forward` computes it by.
     fn spell(&mut self, p: &Poly) -> Result<String, EmitError> {
         for let symbol of p.symbols() {
             if !self.idents.contains_key(symbol) {
@@ -513,10 +513,19 @@ impl Symbols {
         return Result::Ok(p.spelled(&self.idents));
     }
 
+    /// A length or a position within one, as the `i32` a kernel takes.
+    fn spell_extent(&mut self, p: &Poly) -> Result<String, EmitError> {
+        if let Some(c) = p.as_constant() {
+            assert 0 <= c <= i32::MAX as i64;
+            return Result::Ok(`${c}`);
+        }
+        return Result::Ok(`to_extent(${self.spell(p)?})`);
+    }
+
     fn spell_all(&mut self, extents: &List<Extent>) -> Result<String, EmitError> {
         let mut spelled: List<String> = [];
         for let e of *extents {
-            spelled.push(self.spell(&e.poly())?);
+            spelled.push(self.spell_extent(&e.poly())?);
         }
         return Result::Ok(`[${spelled.join(", ")}]`);
     }
@@ -525,7 +534,7 @@ impl Symbols {
     fn bindings(&self) -> List<String> {
         let mut lines: List<String> = [];
         for let symbol of self.used {
-            lines.push(`let ${self.idents.get(symbol).unwrap()} = ${self.sources.get(symbol).unwrap()};`);
+            lines.push(`let ${self.idents.get(symbol).unwrap()} = ${self.sources.get(symbol).unwrap()} as i64;`);
         }
         return lines;
     }
@@ -704,9 +713,9 @@ fn scalar_literals(checked: &Checked) -> TreeMap<String, String> {
 /// The folded tensors `forward` binds as literals.
 struct Literals {
     spelled: List<String>,
-    /// A tensor an `Identity` names again under the same axes, and the spelled
-    /// one it reads: a transformer names its mask once per layer, and the mask
-    /// is as large as the context.
+    /// A tensor a node names again under the same axes (`is_alias`), and the
+    /// spelled one it reads: a transformer names its mask once per layer, and
+    /// the mask is as large as the context.
     aliases: TreeMap<String, String>,
 }
 
@@ -715,7 +724,7 @@ struct Literals {
 fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, String>) -> Literals {
     let mut sources = TreeMap::<String, String>::new();
     for let node of &graph.nodes {
-        if node.op == "Identity" && checked.known.contains_key(node.outputs[0]) {
+        if is_alias(node, checked) && checked.known.contains_key(node.outputs[0]) {
             sources[node.outputs[0]] = node.inputs[0];
         }
     }
@@ -768,7 +777,7 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
         Symbolic(v) => {
             let mut spelled: List<String> = [];
             for let p of v {
-                spelled.push(`(${symbols.spell(&p)?}) as i64`);
+                spelled.push(symbols.spell(&p)?);
             }
             `[${spelled.join(", ")}]`;
         },
@@ -906,7 +915,7 @@ fn node_call(
         let count = settled(range_count(node, &checked.known, &mut []));
         let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
         return Result::Ok(
-            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell(&count.poly())?}, ${symbols.spell(&delta)?})`,
+            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell_extent(&count.poly())?}, ${symbols.spell(&delta)?})`,
         );
     }
     if op == "Cast" {
@@ -1017,7 +1026,7 @@ fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
             a + 1,
             current.rank(),
         )}]>`;
-        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell(&cut.start)?}, ${symbols.spell(
+        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell_extent(&cut.start)?}, ${symbols.spell_extent(
             &cut.extent.poly(),
         )?})`;
         operand = `&${call}`;

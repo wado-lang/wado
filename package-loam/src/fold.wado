@@ -237,11 +237,7 @@ fn gather(data: &Known, indices: &Known, axis: i64) -> Result<Known, String> {
 fn unsqueezed(input: &List<Extent>, axes: &List<i64>) -> Result<List<Extent>, String> {
     let rank = input.len() + axes.len();
     let mut inserted = List::<bool>::filled(rank, false);
-    for let axis of *axes {
-        let i = axis_index(axis, rank)?;
-        if inserted[i] {
-            return Result::Err(`axis ${axis} is listed twice`);
-        }
+    for let i of axis_indices(axes, rank)? {
         inserted[i] = true;
     }
     let mut extents: List<Extent> = [];
@@ -264,10 +260,9 @@ fn squeezed(input: &List<Extent>, axes: Option<List<i64>>) -> Result<List<Extent
     let mut dropped = List::<bool>::filled(rank, false);
     match axes {
         Some(listed) => {
-            for let axis of listed {
-                let i = axis_index(axis, rank)?;
+            for let i of axis_indices(&listed, rank)? {
                 if !input[i].is_one() {
-                    return Result::Err(`axis ${axis} has extent ${input[i]}, not 1`);
+                    return Result::Err(`axis ${i} has extent ${input[i]}, not 1`);
                 }
                 dropped[i] = true;
             }
@@ -348,8 +343,7 @@ fn slice(x: &Known, node: &Node, known: &TreeMap<String, Known>) -> Result<Optio
     let mut begin = List::<i64>::filled(rank, 0);
     let mut step = List::<i64>::filled(rank, 1);
     let mut extents = x.extents;
-    for let i of 0..<starts.len() {
-        let a = axis_index(axes[i], rank)?;
+    for let [i, a] of axis_indices(&axes, rank)?.into_iter().enumerate() {
         let dim = x.extents[a] as i64;
         let s = steps[i];
         if s == 0 {
@@ -544,6 +538,9 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
 /// `int_op` where a symbol stands for an operand. A quotient is one the build
 /// can show exact for every value of the symbols, which needs no rounding.
 fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
+    if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
+        return int_op(op, a, b).map(|c| Poly::constant(c));
+    }
     return match op.as_str_slice() {
         "Add" => Result::Ok(l.add(r)),
         "Sub" => Result::Ok(l.sub(r)),
@@ -718,4 +715,18 @@ pub fn axis_index(axis: i64, rank: i32) -> Result<i32, String> {
         return Result::Err(`axis ${axis} is outside rank ${rank}`);
     }
     return Result::Ok(i as i32);
+}
+
+/// Each of `axes` resolved against `rank`. ONNX leaves a list that names an
+/// axis twice undefined, so one stops the build.
+pub fn axis_indices(axes: &List<i64>, rank: i32) -> Result<List<i32>, String> {
+    let mut resolved: List<i32> = [];
+    for let axis of *axes {
+        let i = axis_index(axis, rank)?;
+        if resolved.contains(&i) {
+            return Result::Err(`axis ${axis} is listed twice`);
+        }
+        resolved.push(i);
+    }
+    return Result::Ok(resolved);
 }

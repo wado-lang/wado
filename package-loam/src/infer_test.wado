@@ -860,6 +860,24 @@ test "a Slice that runs backwards for every input stops the build" {
     assert y_axes(source, layout).unwrap_err() == "Y = Slice: axis 0 must not run backwards from 5 to 3, and it is not";
 }
 
+test "Slice bounds past either end of a symbolic axis keep it whole and owe nothing" {
+    let source = `g (float[N] X) => (float[N] Y) <int64[1] B = {-4000000000}, int64[1] E = {4000000000}> {
+        Y = Slice(X, B, E)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema { layout: [rule("X", ["Seq"])] }).unwrap();
+    assert checked.owed.is_empty();
+    assert checked.shapes["Y"].axes[0].name == "Seq";
+}
+
+test "Slice listing an axis twice stops the build rather than guessing" {
+    let source = `g (float[4] X) => (float[1] Y) <int64[2] B = {0, 1}, int64[2] E = {3, 2}, int64[2] P = {0, 0}> {
+        Y = Slice(X, B, E, P)
+    }`;
+    let e = y_axes(source, [rule("*", ["A"])]).unwrap_err();
+    assert e == "Y = Slice: axis 0 is listed twice";
+}
+
 test "a condition every layer repeats is owed once" {
     let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
         S = Shape(X)
