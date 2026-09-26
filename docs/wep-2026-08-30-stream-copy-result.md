@@ -126,12 +126,16 @@ the loop over `read` itself.
 per copy. Each copy lowers what it offers, and a reader may take a short
 prefix, so offering the whole rest every time would make the loop quadratic.
 
+No copy offers more than the Canonical ABI's `2^28 - 1` elements, which is where
+the canonical traps. `read` and `write` hand it at most that many, so a larger
+buffer reads or writes short, as any copy may.
+
 `write_raw_all` is the same loop for elements already in one array, without the
 value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A
 loop in Wado cannot hold a linear-memory pointer, so it would lower the view
-again on every copy. `core:rt` lowers it once and advances the pointer, each
-copy capped at the Canonical ABI's `2^28 - 1`. A file write is the case that
-needs it: wasmtime's filesystem stream takes 8 KiB per copy. Being a primitive,
+again on every copy. `core:rt` lowers it once and advances the pointer. A file
+write is the case that needs it: wasmtime's filesystem stream takes 8 KiB per
+copy. Being a primitive,
 it is also what a handler for `StreamWritable<u8>` claims to capture `println`.
 
 A view has no single-copy write. A caller looping over one would lower the rest
