@@ -241,7 +241,7 @@ let raw: List<u8> = b"\x89PNG\r\n";     // Also OK: newtype literal coercion to 
 The content must be ASCII; each `\xNN` escape (two hex digits) or source
 character contributes one byte, and the standard escapes (`\n`, `\t`, `\\`,
 `\"`, `\0`, `\r`, `\'`) are also accepted. Unicode escapes (`\u{...}` /
-`\uHHHH`) are rejected — a Unicode escape denotes a scalar, not a byte; use
+`\uHHHH`) are rejected, since a Unicode escape denotes a scalar, not a byte. Use
 `\xNN` for a raw byte. (`#include_bytes("path")` produces the same `ByteList` from a file.)
 The default type is `ByteList`, but newtype literal coercion lets it flow into a
 `List<u8>` context (or any type whose base is `List<u8>`) with no cast.
@@ -283,9 +283,10 @@ except where the table names one:
 | `\uHHHH` | Unicode BMP (4 hex digits)  |
 | `\u{H+}` | Unicode full range          |
 
-In a template string only `${` opens an interpolation, so `{` and `}` are
-literal and need no escaping, though `\{` and `\}` are accepted. Use `\$` to
-write a literal `$` before a `{` (e.g. `` `\${x}` `` renders the text `${x}`).
+A bare `{` or `}` in a template string needs no escape, as
+[Template Strings](#template-strings) states, but `\{` and `\}` are accepted.
+Use `\$` to write a literal `$` before a `{`: `` `\${x}` `` renders the text
+`${x}`.
 
 For characters outside BMP (U+10000 and above), use either:
 
@@ -363,11 +364,12 @@ precision     := digit+
 ```
 
 Every part of `spec` is optional, but `spec` itself is not: a `:` must be
-followed by one. `width` and `precision` must fit in an `i32`. A character is a
-fill only when an alignment follows it. The
-fill may be any character except `'`, `"`, `` ` ``, `{`, `}` and a `/` that
-opens a comment, which the interpolation reads as structure. Only `+` is a sign,
-so `${42:-<4}` is `-` as the fill and renders `42--`.
+followed by one. `width` and `precision` must fit in an `i32`.
+
+A character is a fill only when an alignment follows it. The fill may be any
+character except `'`, `"`, `` ` ``, `{`, `}` and a `/` that opens a comment,
+since the interpolation reads those as structure. Only `+` is a sign, so in
+`${42:-<4}` the `-` is the fill, and it renders `42--`.
 
 The grammar is closed. Anything it does not accept is a compile error, so a
 printf-style `${x:08d}` is rejected rather than rendered as `${x:08}`:
@@ -398,12 +400,11 @@ type does not implement that trait is a compile error.
 | `E`    | `UpperExp` | integers, `f32`, `f64` | `${1200:E}` → `1.2E3`     |
 
 `f` selects no trait of its own. `Display` already honours precision, so
-`${x:.2f}` and `${x:.2}` render the same, and `f` only makes a float format read
-as one. There is no adaptive `g` and no pointer `p`.
+`${x:.2f}` and `${x:.2}` render the same. Writing `f` only marks the format as a
+float format for the reader. There is no adaptive `g` and no pointer `p`.
 
 Which types implement `Display` is stated in
-[Format Traits](./spec-traits.md#format-traits). `${x}` on a type without one is
-a compile error that names `${x:?}` as the debug form.
+[Format Traits](./spec-traits.md#format-traits).
 
 `b`, `o`, `x` and `X` render a negative signed integer as the two's complement
 bit pattern of its own width: `${-1 as i32:x}` renders `ffffffff`.
@@ -582,7 +583,7 @@ as [Format Traits](./spec-traits.md#format-traits) states.
 - `bool` renders `true` or `false`, `char` the character itself, and `String`
   and `StrSlice` their text. `()` renders `()`.
 - `List`, `Array` and `Slice` render `[a, b, c]`, each element in its `Inspect`
-  form, with no default cap and no truncation marker.
+  form.
 - A tuple renders `[a, b]`, each element in its `Display` form. A tuple has
   `Display` only when every element does.
 - A range renders `start..<end` or `start..=end`.
@@ -592,11 +593,10 @@ as [Format Traits](./spec-traits.md#format-traits) states.
 #### Inspect Output
 
 `Inspect` is the debug form behind `${x:?}` and `${x:#?}`. Every type has it,
-so a `T: Inspect` bound always holds. The prelude implements it for the
-primitives, `String`, references, sequences, tuples and the standard
-collections. A struct, variant, enum, flags or newtype gets it from its shape,
-and a resource and a closure get one from the compiler. A hand-written
-`impl Inspect` replaces the derived one.
+as [Derivation Policy](./spec-traits.md#derivation-policy) states. The prelude
+implements it for the primitives, `String`, references, sequences, tuples and
+the standard collections. A struct, variant, enum, flags or newtype derives it
+from its shape, and a resource and a closure have a built-in one.
 
 The output follows Wado's literal syntax where it has one:
 
@@ -672,9 +672,8 @@ let arr: List<i32> = [1, 2, 3];
 
 With no precision in the spec, `Inspect` of a string or a sequence caps it at
 `Formatter::DEFAULT_SEQ_LIMIT`, 256 characters or elements, and marks the cut as
-an explicit precision does. This keeps debug output readable, the operand dumps
-of a failed [`assert`](./spec-testing.md) included. An explicit precision
-replaces the cap. `Display` never applies it.
+an explicit precision does, which keeps debug output readable. An explicit
+precision replaces the cap. `Display` never applies it.
 
 The cap covers `String`, `StrSlice`, `List`, `Array` and `Slice`. A sequence
 that shows no element before the cut renders `[...]`, and the `#` form puts
@@ -742,14 +741,14 @@ They take separate `impl`s, so a method defined on one is not found on the other
 a `tuple` carries at least one type, and `()` is the type that carries none. An
 export naming one is rejected at compile time.
 
-#### The `never` type (`!`) — bottom type
+#### The Never Type `!`
 
-`never` is the bottom type: it is a subtype of every type. An expression of type `never` never returns — it always diverges (traps). `panic()` and `unreachable()` both return `!`.
+The never type `!` is the bottom type: it is a subtype of every type. An expression of type `!` never returns, because it always diverges (traps). `panic()` and `unreachable()` both return `!`.
 
-Because `never` is assignable to any type, a `never`-typed expression may appear in any value position without a type mismatch:
+Because `!` is assignable to any type, an expression of type `!` may appear in any value position without a type mismatch:
 
 ```wado
-// In a match arm — the None branch panics, so the match has type i32
+// In a match arm: the None branch panics, so the match has type i32
 let opt: Option<i32> = Option::<i32>::Some(5);
 let x = match opt {
     Some(v) => v,
@@ -759,7 +758,7 @@ let x = match opt {
 // In a let binding with explicit type annotation
 let y: i32 = panic("unreachable");
 
-// In a binary expression — execution diverges before the addition
+// In a binary expression: execution diverges before the addition
 let z: i32 = panic("boom") + 1;
 ```
 
@@ -773,31 +772,17 @@ fn fail(msg: String) -> ! {
 
 ### List Literals
 
-A bracket literal becomes a `List` through an explicit `as`, or through implicit coercion where the target type is known.
+A bracket literal coerces to a `List` where the target type is known, as a
+function parameter or a type annotation makes it. Elsewhere it is a tuple, and
+`as List<T>` converts it.
 
 ```wado
-// Explicit conversion with `as`
-let numbers = [1, 2, 3, 4, 5] as List<i32>;
+let t = [1, 2, 3];                      // Tuple [i32, i32, i32]: no context
+let numbers = [1, 2, 3] as List<i32>;   // explicit conversion
 
-// Implicit coercion (target type known)
 fn takes_list(a: List<i32>) { ... }
-takes_list([1, 2, 3]);  // OK - compiler knows List<i32> is expected
-
-// Type annotation
-let explicit: List<i32> = [1, 2, 3];  // Coerced to List
-```
-
-#### Coercion Rules
-
-- Where the target type is known (a function parameter, a type annotation), the literal coerces implicitly
-- Elsewhere it is a tuple, and `as List<T>` converts it
-
-```wado
-let t = [1, 2, 3];               // Tuple [i32, i32, i32] - no context
-let a = [1, 2, 3] as List<i32>; // List - explicit conversion
-
-fn process(data: List<i32>) { ... }
-process([1, 2, 3]);              // OK - implicit coercion
+takes_list([1, 2, 3]);                  // implicit coercion to the parameter type
+let explicit: List<i32> = [1, 2, 3];    // implicit coercion to the annotation
 ```
 
 Rationale: [WEP: Tuple and List Literal Syntax](./wep-2026-01-15-tuple-and-array-literals.md).
@@ -832,7 +817,9 @@ let len = arr.len(); // Get length
 - Index must be within bounds (runtime check, traps if out of bounds)
 - Works with lists of any element type
 
-Sorting (stable, O(n log n) worst case):
+#### Sorting
+
+Every sort is stable and O(n log n) in the worst case:
 
 | Method        | Mutates? | Comparator                          |
 | ------------- | -------- | ----------------------------------- |
@@ -870,7 +857,7 @@ their priority: with no target type `[1, 2, 3]` is still the tuple
 nominal struct with matching fields is still a struct literal.
 
 A key-value literal is an array of pairs, so `[["a", 1]]` builds the same map
-`{ a: 1 }` does. `Array<T>` itself needs no impl — the array the coercion
+`{ a: 1 }` does. `Array<T>` itself needs no impl, since the array the coercion
 materializes is already the result.
 
 #### Usage
@@ -1019,7 +1006,7 @@ __DATA__
 
 `#include_str("path")` reads an external file at compile time and returns its content as a `String`. The file must be valid UTF-8; otherwise, a compile error is raised. `#include_bytes("path")` returns the raw bytes as `ByteList` without UTF-8 validation.
 
-The argument is a parenthesized string literal; any other expression is a compile error. The path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
+The argument is a parenthesized string literal; any other expression is a compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file a dependency exports is named by its package, as [Exported files](./spec-modules.md#exported-files) states. A file that does not exist is a compile error.
 
 ```wado
 let template = #include_str("./templates/header.html");
@@ -1043,7 +1030,7 @@ Returns the name without type arguments or signature:
 
 ### Call-site evaluation in default arguments
 
-As a [default argument](./spec-functions.md#default-arguments), `#file` / `#line` / `#function` evaluate at the call site, so a defaulted location parameter reports the caller (cf. Swift's `#file`/`#line` defaults, C++'s `std::source_location::current()`):
+A [default argument](./spec-functions.md#default-arguments) resolves its names where it is declared, as [Where a Default Resolves](./spec-functions.md#where-a-default-resolves) states. `#file`, `#line` and `#function` are the exception: they evaluate at the call site, so a defaulted location parameter reports the caller.
 
 ```wado
 pub fn log(msg: String, file: String = #file, line: i32 = #line) { /* ... */ }
@@ -1051,7 +1038,9 @@ pub fn log(msg: String, file: String = #file, line: i32 = #line) { /* ... */ }
 log("started"); // file/line report this call, not where `log` is defined
 ```
 
-Name resolution in a default otherwise uses the callee's scope; only these three literals are redirected. `#data` / `#include_str` / `#include_bytes` and struct field defaults always report their own defining file. For a nested defaulted call (`fn outer(x = loc())`), every literal reports the outermost call site (`outer(...)`).
+Where a default's own call fills a default in turn (`fn outer(x = loc())`), every one of these literals reports the outermost call (`outer(...)`).
+
+`#data`, `#include_str` and `#include_bytes` in a default read the file that wrote the default. A struct field default is not redirected either: its location literals report the file that declares the struct.
 
 ## Object Literals
 
@@ -1081,9 +1070,8 @@ let keys = map.keys();  // an iterator over the keys, in insertion order
 let m2: TreeMap<String, i32> = { ..map, "x": 99, "w": 40 };
 ```
 
-A `{ ..base, "k": v }` literal takes every entry of `base` and then the
-explicit keys, so an explicit key overrides the base. The rules for spreads in a
-key-value literal are in [`..base` Spread](#base-spread).
+The rules for a spread in a key-value literal are in
+[`..base` Spread](#base-spread).
 
 ### Access Methods
 

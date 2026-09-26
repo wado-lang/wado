@@ -28,6 +28,8 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 | `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
 | `Future<T>`               | `future<T>`               | Component Model async future                                                               |
 
+For function types, see [Component Model Callbacks](./spec-functions.md#component-model-callbacks).
+
 `f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
 `v128` have no Component Model type, so they do not cross a component boundary.
 Neither does a SIMD lane type such as `f32x4`, since each is a newtype over
@@ -116,7 +118,7 @@ This distinction is not part of the Component Model specification, which treats 
 
 ### World Declaration
 
-A world imports whole interfaces and exports interfaces or functions:
+A world imports whole interfaces, as a WIT world does, and exports interfaces or functions:
 
 ```wado
 #[cm("example:app/plugin@0.1.0")]
@@ -130,7 +132,7 @@ pub world Plugin {
 }
 ```
 
-- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version.
+- `import Iface;` and `export Iface;` name a `pub interface`. The interface's own `#[cm(...)]` gives its Component Model name and version, and an export takes its signatures from the interface.
 - `export [async] fn name(...) -> T;` exports a freestanding function. `async` marks an export that maps to a WIT `async func`.
 - `#[cm("namespace:package/world@version")]` on the world gives its Component Model name.
 
@@ -197,21 +199,13 @@ lib = "src/lib.wado"
 
 A hosted world's entry module exports the entry point that world requires (see [Entry Points](#entry-points)). The library world requires none: every `export` item of its entry module becomes part of an interface named after the package, `<namespace>:<name>/<name>@<version>`. A library world therefore needs `[package].namespace` to be built. The world itself is named `root`, so no package may take that name, in any letter case.
 
-A dependency specifier (`"ns:pkg"` or `"lib:nick"`, see [Module Path Validation](./spec-modules.md#module-path-validation)) imports from the dependency's library world entry module. A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
+A dependency is imported through its library world's entry module, which a specifier with no path segment names (see [Exported files](./spec-modules.md#exported-files)). A dependency without `[package].lib` cannot be imported. A `path` dependency that names a single `.wado` file has that file as its entry module.
 
 Rationale: [WEP: Package Manifest](./wep-2026-02-14-package-manifest.md).
-
-### Design Notes
-
-- Interface imports: a world imports whole interfaces, as a WIT world does.
-- Versions: the `#[cm(...)]` of each interface and of the world carries its version (`@0.3.0`).
-- Exports: an interface export takes its signatures from the interface. A function export spells its own.
 
 ## WASI / Browser Support
 
 Wado targets WASI Preview 3 (0.3.0), which introduces native `stream<T>` and `future<T>` types that map directly to Wado's `Stream<T>` and `Future<T>`.
-
-All Wado types map directly to Component Model (WIT) types. See the [Type Mapping at Component Boundaries](#type-mapping-at-component-boundaries) table in the Type System section for the complete mapping reference.
 
 ### WASI P3 CLI Interfaces
 
@@ -240,7 +234,7 @@ Each hosted world defines its entry point:
 
 ### `task return` Statement
 
-`task return expr;` is a statement valid only inside `export async fn` bodies. It calls the Component Model `task.return` instruction, delivering the function's result to the CM runtime without terminating the Wasm function. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
+`task return expr;` is a statement that calls the Component Model `task.return` instruction, delivering the function's result without terminating the Wasm function. Execution continues after `task return`, allowing the function to fulfill outstanding futures (e.g. trailers) or perform cleanup.
 
 #### Motivation
 
@@ -260,11 +254,11 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> {
 #### Rules
 
 - `task return` is only valid inside `export async fn` bodies.
-- An `export async fn` body must carry a `task return`. One that carries none can never deliver, so every call of it would reach the boundary with the task unfinished; the compiler rejects it instead. A body whose every path provably exits first (`panic`, an endless loop) has no delivery to make and is exempt.
+- An `export async fn` body must carry a `task return`, because a body without one could never deliver its result. A body whose every path provably exits first (`panic`, an endless loop) has no result to deliver and is exempt.
 - Whether a `task return` under a branch is reached is not checked. A path that misses it traps at the boundary, the same as a declared result the body never binds.
 - Regular `return` is forbidden in `async fn` bodies. It would exit the Wasm function without notifying the CM runtime.
 - The `task return` expression is type-checked against the declared return type of the enclosing `export async fn`.
-- `task return` names the function's result, and where it goes depends on who entered the function. The Component Model runtime receives it when the export binding did; a Wado caller receives it as an ordinary return value.
+- `task return` delivers the result to the function's caller. A call through the component boundary delivers it to the Component Model runtime, and a Wado caller receives it as an ordinary return value.
 - The `async` of an `export async fn` asks nothing of a Wado call site, which calls it as any other function. It selects the CM async calling convention at the component boundary.
 
 ### Attribute Syntax for Component Model Linking
@@ -334,7 +328,7 @@ A method consumes a resource through a bare `self` receiver, and borrows it thro
 
 #### No Move Out of a Borrow
 
-A borrow leaves its referent with its owner, so a resource read out of a borrowed place would have two owners. A function whose result is a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. That covers a field read, a dereference, a `match` binding over the borrowed value, and a `let` bound from any of these. A resource the function produces itself may be returned.
+Returning a resource reached through a `&` or `&mut` parameter, `&self` included, is a compile error. A borrow leaves its referent with its owner, so the returned resource would have a second owner. The rule covers a field read, a dereference, a `match` binding over the borrowed value, and a `let` bound from any of these. A resource the function produces itself may be returned.
 
 ```wado
 struct Holder { f: Fields }
@@ -435,9 +429,9 @@ A type pattern narrowing to `T` tests whether the handle's class lies in `T`'s r
 
 #### Traits on Handles
 
-- `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object, because the host hands out one handle per object. Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
+- `Eq`: every unrestricted resource is `Eq`, so a type holding one derives `Eq` too. `==` and `!=` compare two handles when one type extends the other. Equal handles name one object (see [Handle Encoding](#handle-encoding)). Handles compare by bits, so a NaN handle equals itself and `-0.0` differs from `0.0`.
 - `Ord`: none. Handles have no order.
-- `Inspect`: `${x:?}` renders the dynamic type the class names, with the class and the index: `Element { type_id: 1, object_id: 7 }`. A class no resource in the tree owns keeps the static type's name. A resource without `classes`, or an `f64` no host minted, renders its number: `Node { handle: 1.5 }`.
+- `Inspect`: `${x:?}` renders the dynamic type the handle's class names, as [Inspect Output](./spec-literals.md#inspect-output) states.
 - `Display`: `${x}` asks the host, through an imported formatter.
 - `Serialize` and `Deserialize`: a resource, and a struct or variant that holds one, cannot derive either. A handle means something only inside its running instance. A hand-written impl may serialize what it reads from the host object.
 
@@ -485,7 +479,7 @@ A type pattern narrows a value at runtime, unlike `match type`, which narrows a 
 
 ### Only an Imported Async Operation Can Be Handled
 
-A handler for an async operation that no Component Model import backs, one declared by a user `interface` or `resource`, is a compile error. Such an operation may not carry a default body either, so dispatching it always traps.
+A handler for an async operation that no Component Model import backs, one declared by a user `interface` or `resource`, is a compile error. No async operation may carry a body either (see [Default Implementations](./spec-effects.md#default-implementations)), so dispatching such an operation always traps.
 
 ### Some Resource Holders Are Not Move-Checked or Dropped
 
