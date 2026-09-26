@@ -3,6 +3,7 @@
 //! `resume` reads twice, so skips.
 
 use super::analyze::is_owned_value;
+use super::confine::ConfinedParams;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
@@ -166,6 +167,7 @@ pub fn analyze_ownership(
         retained_params,
         bounded: &plan.bounded_retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
+        confined_params: &plan.confined_params,
         pending_bounded: Vec::new(),
         functor_rows: &plan.functor_rows,
         mut_receiver_methods,
@@ -402,14 +404,21 @@ impl Analyzer<'_> {
         type_table: &TypeTable,
     ) -> IndexSet<u32> {
         // A by-value parameter is owned, the caller having copied or moved it
-        // in; a reference local never is.
+        // in — unless it is confined, which the caller passes uncopied. A
+        // reference local never is.
+        let owned_params = func.params.iter().enumerate().filter_map(|(i, p)| {
+            (!self
+                .confined_params
+                .is_confined(&func.module_source, &func.name, i))
+            .then_some(p.local_index)
+        });
         let mut fresh: IndexSet<u32> = self
             .let_sources
             .keys()
             .copied()
             .chain(self.declared_owned.iter().copied())
             .chain(self.match_sources.iter().map(|(l, _)| *l))
-            .chain(func.params.iter().map(|p| p.local_index))
+            .chain(owned_params)
             .filter(|idx| {
                 !func
                     .locals
@@ -784,6 +793,8 @@ struct Analyzer<'a> {
     /// This body's parameter locals. A retention landing in one leaves the
     /// frame, whatever the callee does with it.
     params: IndexSet<u32>,
+    /// Which by-value parameters of this body its callers pass uncopied.
+    confined_params: &'a ConfinedParams,
     /// `(referent root, field, destination roots)` for each bounded retention,
     /// answered once every escape this body makes is known.
     pending_bounded: Vec<(u32, Option<u32>, Vec<u32>)>,

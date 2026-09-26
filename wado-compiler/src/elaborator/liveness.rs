@@ -329,6 +329,8 @@ fn analyze_body(
     };
     // By-value parameters are move-eligible; borrow (`&T` / `&mut T`) and `self`
     // receivers are not — they name the caller's storage and are never moved.
+    // The planner withdraws a parameter its callers pass uncopied, which only
+    // the whole program shows.
     for param in &func.params {
         if param.self_kind == ast::SelfKind::None
             && !matches!(
@@ -401,6 +403,16 @@ impl AstVisitor for EligibilityPass<'_> {
             self.exclude_destructured(&arm.pattern);
         }
         ast::walk_match_expr(self, m);
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        // `let P = e else { … }` is a match on `e`, as `if let` is.
+        if let ast::Stmt::Let(l) = stmt
+            && l.else_block.is_some()
+        {
+            self.exclude_destructured(&l.pattern);
+        }
+        ast::walk_stmt(self, stmt);
     }
 
     fn visit_condition(&mut self, cond: &ast::Condition) {

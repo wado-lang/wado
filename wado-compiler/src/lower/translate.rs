@@ -353,6 +353,9 @@ struct FunctionTranslator<'a, 'p> {
     /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
     /// derives). Unioned with the span check.
     move_eligible_locals: IndexSet<u32>,
+    /// The locals of this function's by-value parameters its callers pass
+    /// uncopied ([`value_copy::confine`]), which it holds borrowed.
+    confined_params: IndexSet<u32>,
     /// Spans of field / whole-value materializations that alias out of a *dead*
     /// aggregate at a struct/tuple literal (place-level move): the copy is elided
     /// exactly as for a whole-local final-use move, but for a projection.
@@ -459,6 +462,17 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
+        let confined_params = func
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| {
+                base.value_copy
+                    .confined_params
+                    .is_confined(&func.module_source, &func.name, *i)
+            })
+            .map(|(_, p)| p.local_index)
+            .collect();
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {
@@ -481,6 +495,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken,
             func_moved_spans,
             move_eligible_locals,
+            confined_params,
             move_eligible_place_spans,
             hands_out_payload,
             share_eligible_locals,
@@ -507,6 +522,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken: IndexSet::default(),
             func_moved_spans: None,
             move_eligible_locals: IndexSet::default(),
+            confined_params: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
@@ -805,10 +821,13 @@ impl FunctionTranslator<'_, '_> {
         let TirExprKind::Local { index, .. } = &value.kind else {
             return false;
         };
+        // The span check names no confined parameter: its callers pass it
+        // uncopied, which the source-level pass cannot see.
         self.move_eligible_locals.contains(index)
-            || self
-                .func_moved_spans
-                .is_some_and(|spans| spans.contains(&value.span))
+            || (!self.confined_params.contains(index)
+                && self
+                    .func_moved_spans
+                    .is_some_and(|spans| spans.contains(&value.span)))
     }
 
     /// Apply a boxing-derived rewrite to `expr`, returning `Some` if
@@ -1936,8 +1955,8 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .enumerate()
                 .map(|(i, (e, is_mut))| {
-                    if has_receiver && i == 0 {
-                        self.convert_receiver_arg(e, *is_mut)
+                    if has_receiver && i == 0 && *is_mut {
+                        self.convert_mut_receiver_arg(e)
                     } else if self.passes_through(func, i) {
                         ArenaCallArg {
                             expr: self.convert_operand(e),
@@ -2427,25 +2446,25 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
-    /// Convert a method call's receiver. It occupies `args[0]` like any other
-    /// argument, but a place receiver takes no `$value_copy$T`: the copy would
-    /// hand the callee a throwaway and discard the mutation the call exists to
-    /// perform (a `String` builder's `push_str` would append to the copy). One
-    /// that is not a place names no storage the caller can reach again, so a
-    /// `&mut self` call must not write through it to whatever it was read out
-    /// of — there it takes the copy every by-value argument takes.
+    /// Convert the receiver of a call that writes through it. A place receiver
+    /// takes no `$value_copy$T`: the copy would hand the callee a throwaway and
+    /// discard the mutation the call exists to perform (a `String` builder's
+    /// `push_str` would append to the copy). One that is not a place names no
+    /// storage the caller can reach again, so the call must not write through it
+    /// to whatever it was read out of — there it takes the copy every by-value
+    /// argument takes.
     ///
-    /// Either way it is never re-wrapped as a canonical closure the way a
-    /// specialized fn-param argument is: the method resolved against the
-    /// receiver's own type, not `fn(...)`.
-    fn convert_receiver_arg(&self, receiver: &TirExpr, is_mut: bool) -> ArenaCallArg {
+    /// Any other receiver is an ordinary argument: a by-value `self` is the
+    /// callee's to return or keep, so it is copied in unless confined, as every
+    /// by-value argument is.
+    fn convert_mut_receiver_arg(&self, receiver: &TirExpr) -> ArenaCallArg {
         let value = receiver_value(receiver);
         let names_a_place =
             place::is_source_place(value, self.base.type_table.borrow().compiler_items());
-        if !is_mut || names_a_place || !self.should_wrap_value_copy(value) {
+        if names_a_place || !self.should_wrap_value_copy(value) {
             return ArenaCallArg {
                 expr: self.convert_operand(receiver),
-                is_mut,
+                is_mut: true,
             };
         }
         let copied = self.wrap_value_copy_operand(self.convert_operand(value), value.type_id);
@@ -2472,7 +2491,7 @@ impl FunctionTranslator<'_, '_> {
             },
             _ => copied,
         };
-        ArenaCallArg { expr, is_mut }
+        ArenaCallArg { expr, is_mut: true }
     }
 
     /// Whether the callee hands parameter `pos` straight back instead of keeping
@@ -2540,7 +2559,7 @@ impl FunctionTranslator<'_, '_> {
             self.base
                 .value_copy
                 .confined_params
-                .is_confined(c, param_index)
+                .is_confined(&c.module_source, &c.name, param_index)
         });
         if !confined {
             return false;

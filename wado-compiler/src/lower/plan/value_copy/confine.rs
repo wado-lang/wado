@@ -2,7 +2,8 @@
 //!
 //! A by-value parameter is *confined* when the callee neither returns it nor
 //! leaks it to storage outliving the call, so a caller passing a still-live
-//! value into it needs no defensive copy. Two escape channels per parameter —
+//! value into it needs no defensive copy. The callee then holds it borrowed, not
+//! owned, and copies before any write. Two escape channels per parameter —
 //! `ret` (flows into a returned value) and `side` (written to lasting storage) —
 //! reach a least fixpoint; a parameter is confined iff neither is raised. The
 //! analysis over-approximates escape: unmodelled constructs, a closure's
@@ -14,6 +15,7 @@ use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
@@ -26,9 +28,9 @@ pub struct ConfinedParams {
 }
 
 impl ConfinedParams {
-    pub fn is_confined(&self, func: &FunctionRef, param_index: usize) -> bool {
+    pub fn is_confined(&self, module: &ModuleSource, name: &str, param_index: usize) -> bool {
         self.map
-            .get(&func.module_source, &func.name)
+            .get(module, name)
             .and_then(|bits| bits.get(param_index))
             .copied()
             .unwrap_or(false)

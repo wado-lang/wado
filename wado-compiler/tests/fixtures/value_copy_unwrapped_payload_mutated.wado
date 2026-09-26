@@ -1,0 +1,74 @@
+// A value unwrapped out of an `Option` a caller does not own is a copy: writing
+// to it leaves the `Option`, and whatever the `Option` was read from, unchanged.
+//
+// Regression: the payload was handed out uncopied — through `&Option<T>`, a
+// `*o`, a by-value `Option` the caller still returns, a `let … else` on `*o`,
+// and `TreeMap::get` — so `let mut c = …; c.axes[0] = …` wrote through to the
+// original.
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+struct Shape {
+    axes: List<String>,
+}
+
+fn unwrap_ref(o: &Option<Shape>) {
+    let mut c = o.unwrap();
+    c.axes[0] = "S";
+}
+
+fn unwrap_deref(o: &Option<Shape>) {
+    let mut c = (*o).unwrap();
+    c.axes[0] = "S";
+}
+
+fn unwrap_owned(o: Option<Shape>) -> Option<Shape> {
+    let mut c = o.unwrap();
+    c.axes[0] = "S";
+    return o;
+}
+
+fn let_else_deref(o: &Option<Shape>) {
+    let Some(x) = *o else {
+        return;
+    };
+    let mut c = x;
+    c.axes[0] = "S";
+}
+
+fn map_get(shapes: &TreeMap<String, Shape>) {
+    let mut c = shapes.get("a").unwrap();
+    c.axes[0] = "S";
+}
+
+fn map_get_then_bind(shapes: &TreeMap<String, Shape>) {
+    let x = shapes.get("a").unwrap();
+    let mut c = x;
+    c.axes[0] = "S";
+}
+
+fn fresh() -> Option<Shape> {
+    return Option::Some(Shape { axes: ["P"] });
+}
+
+export fn run() with Stdout {
+    let o1 = fresh();
+    unwrap_ref(&o1);
+    println(o1.unwrap().axes[0]);
+    let o2 = fresh();
+    unwrap_deref(&o2);
+    println(o2.unwrap().axes[0]);
+    println(unwrap_owned(fresh()).unwrap().axes[0]);
+    let o4 = fresh();
+    let_else_deref(&o4);
+    println(o4.unwrap().axes[0]);
+    let mut m = TreeMap::<String, Shape>::new();
+    m["a"] = Shape { axes: ["P"] };
+    map_get(&m);
+    println(m["a"].axes[0]);
+    map_get_then_bind(&m);
+    println(m["a"].axes[0]);
+}
+
+__DATA__
+{"stdout": "P\nP\nP\nP\nP\nP\n"}

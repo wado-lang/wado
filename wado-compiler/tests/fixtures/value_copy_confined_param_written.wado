@@ -1,0 +1,56 @@
+// A by-value parameter the callee neither returns nor keeps is confined, and a
+// caller passes it uncopied. The callee holds it borrowed, so a write to it,
+// or to a binding that took it over, lands on a copy of its own.
+//
+// Regression: the callee took the parameter over as its own — through a
+// `let mut`, an unwrapped payload or a match binding — and wrote the caller's
+// value.
+use { println, Stdout } from "core:cli";
+
+struct Shape {
+    axes: List<String>,
+}
+
+fn scribble(s: Shape) {
+    let mut c = s;
+    c.axes[0] = "S";
+}
+
+fn scribble_payload(o: Option<Shape>) {
+    let mut c = o.unwrap();
+    c.axes[0] = "S";
+}
+
+fn scribble_match(o: Option<Shape>) {
+    if let Some(x) = o {
+        let mut c = x;
+        c.axes[0] = "S";
+    }
+}
+
+fn via_ref(s: &Shape) {
+    scribble(*s);
+}
+
+fn via_ref_opt(o: &Option<Shape>) {
+    scribble_payload(*o);
+    scribble_match(*o);
+}
+
+export fn run() with Stdout {
+    let a = Shape { axes: ["P"] };
+    scribble(a);
+    println(a.axes[0]);
+    via_ref(&a);
+    println(a.axes[0]);
+    let o = Option::Some(Shape { axes: ["P"] });
+    scribble_payload(o);
+    println(o.unwrap().axes[0]);
+    scribble_match(o);
+    println(o.unwrap().axes[0]);
+    via_ref_opt(&o);
+    println(o.unwrap().axes[0]);
+}
+
+__DATA__
+{"stdout": "P\nP\nP\nP\nP\n"}
