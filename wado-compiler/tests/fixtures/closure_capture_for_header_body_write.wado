@@ -109,7 +109,7 @@ export fn run() {
     let mut updated: List<fn() -> i32> = [];
     for let mut i = 0; i < 3; i += match builtin::black_box(1) {
         mut step => {
-            bump(&mut step);
+            increment(&mut step);
             step
         },
     } {
@@ -118,7 +118,7 @@ export fn run() {
     assert called(updated) == [0, 2];
 }
 
-fn bump(r: &mut i32) {
+fn increment(r: &mut i32) {
     *r += 1;
 }
 
