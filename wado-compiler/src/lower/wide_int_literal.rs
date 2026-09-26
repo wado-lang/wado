@@ -10,16 +10,8 @@ use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::reify::ord_bool_from_cmp;
-<<<<<<< HEAD
 use crate::name::LocalMethodName;
-||||||| c3a438b9c
-use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
-=======
-use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
 use crate::synthesis::common::not_expr;
->>>>>>> origin/main
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
     TypeTable,
