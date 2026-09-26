@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790366323981,
+  "lastUpdate": 1790383302220,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59897,6 +59897,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/71580bd9659f81700b96b722755e6a2f461e94a1"
         },
         "date": 1790366323354,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1a62dbf31ea77dfbb0ebdbdf244d3947f694226a",
+          "message": "Merge pull request #2167 from wado-lang/claude/web-tide-status-viiaiy\n\nrefactor(web)!: import the web bindings as `wado-lang:web`, with no `web:*` special case left in the toolchain",
+          "timestamp": "2026-09-26T09:14:57+09:00",
+          "tree_id": "b21cf811ac397bcd497210599121e9cf5932789d",
+          "url": "https://github.com/wado-lang/wado/commit/1a62dbf31ea77dfbb0ebdbdf244d3947f694226a"
+        },
+        "date": 1790383301522,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
