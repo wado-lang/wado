@@ -1134,7 +1134,7 @@ impl AstVisitor for Resolver<'_> {
                     if let ast::Expr::TupleComprehension(c) = expr {
                         s.visit_expr(&c.iterable);
                         s.in_pattern_site(PatternSite::Declaration, |s| {
-                            s.visit_pattern(&c.binding)
+                            s.visit_pattern(&c.binding);
                         });
                         s.visit_expr(&c.body);
                         return;
