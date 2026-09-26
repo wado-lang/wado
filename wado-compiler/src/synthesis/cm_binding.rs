@@ -988,8 +988,14 @@ fn validate_imports_representable(project: &Package) -> Result<(), String> {
             } else {
                 op.return_type
             };
+            // A closure crosses as its callback key; the elaborator checked its shape.
+            let values = op
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .filter(|&ty| !matches!(tt.get(ty), ResolvedType::Function { .. }));
             signature_representable(
-                op.params.iter().map(|p| p.type_id),
+                values,
                 result,
                 Boundary::Import,
                 &tt,
