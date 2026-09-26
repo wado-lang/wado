@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790459416877,
+  "lastUpdate": 1790461211109,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60445,6 +60445,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 288925,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4cf9b655e148bd1a2162f604e3dbdd1e2f9d4e96",
+          "message": "Merge pull request #2182 from wado-lang/claude/package-gale-code-quality-gm33ty\n\nperf(gale): tokenize JSON at 87 MB/s and Rust at 29 MB/s; fix(value_copy): a dead borrow no longer forces a deep copy",
+          "timestamp": "2026-09-27T06:22:12+09:00",
+          "tree_id": "bc78e9dc7dbed7919844f523caf7974daa582a50",
+          "url": "https://github.com/wado-lang/wado/commit/4cf9b655e148bd1a2162f604e3dbdd1e2f9d4e96"
+        },
+        "date": 1790461210046,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20153,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288402,
             "unit": "bytes"
           }
         ]
