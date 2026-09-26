@@ -420,12 +420,7 @@ impl Analyzer<'_> {
             .chain(self.declared_owned.iter().copied())
             .chain(self.match_sources.iter().map(|(l, _)| *l))
             .chain(func.params.iter().map(|p| p.local_index))
-            .filter(|idx| {
-                !func
-                    .locals
-                    .get(*idx as usize)
-                    .is_some_and(|l| is_reference_type(l.type_id, type_table))
-            })
+            .filter(|idx| !is_reference_local(func, *idx, type_table))
             .collect();
         let mut changed = true;
         while changed {
@@ -735,6 +730,12 @@ fn released_edges(alias_sites: &[(u32, u32, IndexSet<u32>)]) -> IndexSet<(u32, u
         .map(|(binding, source, _)| (*binding, *source))
         .filter(|edge| !held.contains(edge))
         .collect()
+}
+
+fn is_reference_local(func: &TirFunction, local: u32, type_table: &TypeTable) -> bool {
+    func.locals
+        .get(local as usize)
+        .is_some_and(|l| is_reference_type(l.type_id, type_table))
 }
 
 /// Every local holding what `destinations` hold: they themselves, and whatever
@@ -1189,16 +1190,11 @@ impl Analyzer<'_> {
     /// `source`. The resolver names such a copy by its referent rather than by
     /// `source`, so no alias chain leads back from the copy to it.
     fn reference_copies(&self, func: &TirFunction, type_table: &TypeTable) -> Vec<(u32, u32)> {
-        let is_reference_local = |local: u32| {
-            func.locals
-                .get(local as usize)
-                .is_some_and(|l| is_reference_type(l.type_id, type_table))
-        };
         self.let_sources
             .iter()
             .flat_map(|(local, sources)| sources.iter().map(move |s| (*local, s)))
             .chain(self.match_sources.iter().map(|(local, s)| (*local, s)))
-            .filter(|(local, _)| is_reference_local(*local))
+            .filter(|(local, _)| is_reference_local(func, *local, type_table))
             .filter_map(|(local, source)| Some((alias_root(source)?, local)))
             .collect()
     }
@@ -1219,20 +1215,35 @@ impl Analyzer<'_> {
             expr: place,
         } = &arg.kind
         {
-            if record && matches!(op, TirUnaryOp::MutRef) {
-                self.record_mutation(place, live);
-            }
-            let referent = self.borrow_read(place, live, record);
-            if record && let Some(r) = referent {
-                self.pin_borrow(*op, r, place, kept);
-            }
+            self.walk_borrow(*op, place, kept, live, record);
         } else {
             if record {
-                self.hand_to_call(arg, kept);
+                self.hand_on(arg, kept);
             }
             self.walk_expr(arg, live, record);
         }
     }
+
+    /// A `&place` / `&mut place` whose borrow is kept as `kept` says. The write
+    /// a `&mut` makes is recorded here, wherever its holder runs it.
+    fn walk_borrow(
+        &mut self,
+        op: TirUnaryOp,
+        place: &TirExpr,
+        kept: &Kept,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if record && op == TirUnaryOp::MutRef {
+            self.record_mutation(place, live);
+        }
+        if let Some(r) = self.borrow_read(place, live, record)
+            && record
+        {
+            self.pin_borrow(op, r, place, kept);
+        }
+    }
+
     /// One call argument. A `&`/`&mut` is transient unless the callee stores
     /// that position; `borrowing_receiver` marks the one it reads through.
     fn walk_call_arg(
@@ -1275,7 +1286,7 @@ impl Analyzer<'_> {
             }
         } else {
             if record {
-                self.hand_to_call(arg, kept);
+                self.hand_on(arg, kept);
             }
             if borrowing_receiver {
                 self.walk_place_base(arg, live, record);
@@ -1285,13 +1296,12 @@ impl Analyzer<'_> {
         }
     }
 
-    /// A value handed to a call position that keeps it as `kept` says. A
-    /// reference pins its referent; any other value hands on what it holds.
-    /// `&place` is left to [`Analyzer::walk_expr`], which knows the field it
-    /// borrows.
-    fn hand_to_call(&mut self, arg: &TirExpr, kept: &Kept) {
+    /// A value handed to a position that keeps it as `kept` says. A reference
+    /// pins its referent; any other value hands on what it holds. `&place` is
+    /// left to [`Analyzer::walk_borrow`], which knows the field it borrows.
+    fn hand_on(&mut self, expr: &TirExpr, kept: &Kept) {
         let mut yielded = Vec::new();
-        yielded_values(arg, self.type_table, &mut yielded);
+        yielded_values(expr, self.type_table, &mut yielded);
         for value in yielded {
             if let Some((root, field)) = value.reference {
                 self.pin(root, field, kept);
@@ -1314,16 +1324,7 @@ impl Analyzer<'_> {
     /// holds, through whichever arm yields it.
     fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if record {
-            let mut yielded = Vec::new();
-            yielded_values(expr, self.type_table, &mut yielded);
-            for value in yielded {
-                if let Some((root, field)) = value.reference {
-                    self.mark_escaped(root, field);
-                }
-                if let Some(root) = value.root {
-                    self.handed_away.insert(root);
-                }
-            }
+            self.hand_on(expr, &Kept::Frame);
         }
         self.walk_expr(expr, live, record);
     }
@@ -1345,15 +1346,8 @@ impl Analyzer<'_> {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                 expr: place,
             } => {
-                if record && matches!(op, TirUnaryOp::MutRef) {
-                    self.record_mutation(place, live);
-                }
-                if let Some(r) = self.borrow_read(place, live, record)
-                    && record
-                {
-                    let kept = self.held_in(local);
-                    self.pin_borrow(*op, r, place, &kept);
-                }
+                let kept = self.held_in(local);
+                self.walk_borrow(*op, place, &kept, live, record);
             }
             _ if alias_root(stripped).is_some() => self.walk_expr(value, live, record),
             _ => {
@@ -1851,11 +1845,7 @@ impl Analyzer<'_> {
         let mut work: Vec<u32> = self.borrow_escaped.keys().copied().collect();
         let mut seen: IndexSet<u32> = work.iter().copied().collect();
         while let Some(local) = work.pop() {
-            if !func
-                .locals
-                .get(local as usize)
-                .is_some_and(|l| is_reference_type(l.type_id, type_table))
-            {
+            if !is_reference_local(func, local, type_table) {
                 continue;
             }
             for root in self.referent_roots(local) {
@@ -2005,24 +1995,12 @@ impl Analyzer<'_> {
                 }
                 self.walk_expr(callee, live, record);
             }
-            // A `&`/`&mut` outside a call argument persists past the borrow, so
-            // the referent escapes and stays copied.
+            // A `&`/`&mut` neither passed to a call nor stored in a local may
+            // persist anywhere, so the referent escapes and stays copied.
             TirExprKind::Unary {
                 op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
                 expr: place,
-            } => {
-                if record && matches!(op, TirUnaryOp::MutRef) {
-                    self.record_mutation(place, live);
-                }
-                if let Some(r) = self.borrow_read(place, live, record)
-                    && record
-                {
-                    if matches!(op, TirUnaryOp::MutRef) {
-                        self.written_through_escape.insert(r);
-                    }
-                    self.mark_escaped(r, top_field_of(place));
-                }
-            }
+            } => self.walk_borrow(*op, place, &Kept::Frame, live, record),
             TirExprKind::StructLiteral { fields, .. } => {
                 if record {
                     let children: Vec<&TirExpr> = fields.iter().map(|f| &f.value).collect();
