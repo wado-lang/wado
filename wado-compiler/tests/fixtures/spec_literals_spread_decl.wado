@@ -1,0 +1,19 @@
+// The prelude's `LiteralSpread`, declared here under its own name. A trait
+// spelled `LiteralSpread` does not answer `..base`, so the method is called by
+// name.
+
+struct Tally { n: i32 }
+
+impl LiteralSpread for Tally {
+    fn spread_literal(&mut self, base: Tally) { self.n += base.n; }
+}
+
+pub trait LiteralSpread with () {
+    fn spread_literal(&mut self, base: Self);
+}
+
+test {
+    let mut t = Tally { n: 1 };
+    t.spread_literal(Tally { n: 2 });
+    assert t.n == 3;
+}

@@ -1,0 +1,10 @@
+// `char` casts only to integer types.
+
+test {
+    let c = 'A';
+    let f = c as f64;     // compile error: char can only be cast to integer types
+    let s = c as String;  // compile error: the two types share no representation
+}
+
+__DATA__
+{"compile_error":"cannot cast 'char' to 'f64': char can only be cast to integer types","compile_errors_contains":["cannot cast 'char' to 'String': the two types share no representation"]}
