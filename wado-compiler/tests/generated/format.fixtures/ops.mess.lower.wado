@@ -1836,12 +1836,12 @@ pub struct "Box<wasi:cli/types.wado/ErrorCode>" {
     value: ErrorCode,
 }
 
-pub struct "Box<fn()->()>" {
-    value: fn() -> (),
-}
-
 pub struct "Box<fn mut(char)->bool>" {
     value: fn mut(char) -> bool,
+}
+
+pub struct "Box<fn()->()>" {
+    value: fn() -> (),
 }
 
 pub struct "Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -4779,7 +4779,7 @@ fn cm_callback_key(callback: fn() -> ()) -> u32 {
             break;
         }
         $for_0_body: {
-            if core::builtin::ref_eq(core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i), callback) {
+            if core::builtin::ref_eq::<fn() -> ()>(core::rt::CM_CALLBACKS."core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i), callback) {
                 return i as u32;
             }
         }

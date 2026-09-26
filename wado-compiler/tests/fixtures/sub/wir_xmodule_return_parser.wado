@@ -153,10 +153,6 @@ impl Token {
     }
 }
 
-// Note: Token Eq is intentionally omitted. Auto-derived Eq on recursive structs
-// with reference-containing fields triggers a compiler bug
-// (see wado-compiler/tests/fixtures/recursive_struct_ref_eq.wado).
-
 /// TokenStream is the struct-of-arrays token storage for generated parsers.
 /// A "token" is an `i32` index into these parallel arrays; no per-token
 /// aggregate is ever allocated. The hot fields (`kinds` / `starts` / `ends`)

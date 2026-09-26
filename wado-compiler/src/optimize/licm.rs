@@ -1751,7 +1751,7 @@ fn find_hoist_candidates(
 /// loop-invariant instance can be speculatively computed once in the
 /// pre-header. `Div` / `Mod` are excluded (trap on a zero divisor — hoisting
 /// out of a possibly-zero-iteration loop could trap where the original would
-/// not). `RefEq` / `RefNotEq` are excluded (reference operands, not arithmetic).
+/// not). `RefNotEq` is excluded (reference operands, not arithmetic).
 fn is_hoistable_binop(op: NirBinaryOp) -> bool {
     use crate::nir::NirBinaryOp::{
         Add, And, BitAnd, BitOr, BitXor, Eq, Gt, GtEq, Lt, LtEq, Mul, NotEq, Or, Shl, Shr, Sub,

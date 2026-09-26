@@ -265,7 +265,7 @@ traitBounds
     ;
 
 typeRef
-    : '&' 'mut'? typeRef
+    : ('&' | '&&') 'mut'? typeRef
     | '!'
     | '_'
     | '(' (typeRef (',' typeRef)*)? ')'
@@ -460,7 +460,7 @@ expression
     ;
 
 unary
-    : ('-' | '~' | '&' '&'? 'mut'? | '*') unary
+    : ('-' | '~' | ('&' | '&&') 'mut'? | '*') unary
     | postfix
     ;
 
@@ -566,7 +566,7 @@ exprNoStruct
     ;
 
 unaryNoStruct
-    : ('-' | '~' | '&' '&'? 'mut'? | '*') unaryNoStruct
+    : ('-' | '~' | ('&' | '&&') 'mut'? | '*') unaryNoStruct
     | postfixNoStruct
     ;
 

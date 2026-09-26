@@ -2357,7 +2357,6 @@ impl FunctionTranslator<'_, '_> {
                 | NirBinaryOp::GtEq
                 | NirBinaryOp::And
                 | NirBinaryOp::Or
-                | NirBinaryOp::RefEq
                 | NirBinaryOp::RefNotEq
         ) && let ResolvedType::Primitive(prim) = self.type_table.get(left_ty)
         {
