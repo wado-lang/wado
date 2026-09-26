@@ -600,9 +600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             BindingSite::Let,
             ctx,
         );
-        let (ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. }) =
-            &let_stmt.pattern
-        else {
+        let Some(binding) = let_stmt.pattern.as_name() else {
             return;
         };
         let mut closure_candidate = ast_value;
@@ -616,7 +614,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|p| (p.name.clone(), p.default.clone()))
                 .collect();
             if defaults.iter().any(|(_, d)| d.is_some()) {
-                ctx.closure_defaults.insert(name.clone(), defaults);
+                ctx.closure_defaults
+                    .insert(binding.name.to_string(), defaults);
             }
         }
     }
@@ -792,13 +791,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-        match &let_stmt.pattern {
-            Pattern::Ident { id, name, span } | Pattern::MutIdent { id, name, span } => {
-                let is_mut =
-                    let_stmt.is_mut || matches!(let_stmt.pattern, Pattern::MutIdent { .. });
-                self.bind_local(ctx, *id, name, *span, is_mut, type_id);
+        match (&let_stmt.pattern, let_stmt.pattern.as_name()) {
+            (_, Some(n)) => {
+                self.bind_local(
+                    ctx,
+                    n.id,
+                    n.name,
+                    n.span,
+                    let_stmt.is_mut || n.is_mut,
+                    type_id,
+                );
             }
-            Pattern::Wildcard => {}
+            (Pattern::Wildcard, None) => {}
             _ => {
                 let _ = self.emit(TypeError::InvalidPattern {
                     message: "an uninitialized `let` declares a single name; \

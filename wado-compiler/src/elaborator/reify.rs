@@ -2629,17 +2629,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
             let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
-            let (ast::Pattern::Ident {
-                id,
-                name,
-                span: binding_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: binding_span,
-            }) = &let_stmt.pattern
-            else {
+            let Some(binding) = let_stmt.pattern.as_name() else {
                 assert!(
                     matches!(let_stmt.pattern, ast::Pattern::Wildcard),
                     "annotate rejects an uninitialized `let` that destructures"
@@ -2647,15 +2637,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
             };
             let type_id = self
-                .ann_local_type(*id)
+                .ann_local_type(binding.id)
                 .expect("annotate records an uninitialized `let`'s type on its local");
-            let is_mut =
-                let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-            let local_index =
-                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *binding_span);
+            let is_mut = let_stmt.is_mut || binding.is_mut;
+            let local_index = ctx.add_local_at(
+                binding.name.to_string(),
+                type_id,
+                is_mut,
+                Some(binding.id),
+                binding.span,
+            );
             return TirStmt::new(
                 TirStmtKind::Let {
-                    name: name.clone(),
+                    name: binding.name.to_string(),
                     local_index,
                     is_mut,
                     is_reactive: let_stmt.is_reactive,
