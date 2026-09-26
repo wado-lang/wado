@@ -169,16 +169,17 @@ impl Ctx<'_> {
         }
     }
 
-    /// Whether the operand at `param_index` outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names, a body
+    /// Whether `operand`, at `param_index`, outlives this call. A value-copy
+    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names — and
+    /// under `elements_of = p` only elements that carry an identity — a body
     /// answers from the fixpoint, and a callee this scan cannot read keeps all.
-    fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
+    fn callee_keeps(&self, func: &FunctionRef, param_index: usize, operand: &TirExpr) -> bool {
         match self.kind(func) {
             Kind::ValueCopy => false,
-            Kind::Builtin => self
-                .builtins
-                .retained_params(func)
-                .any(|p| p == param_index),
+            Kind::Builtin => self.builtins.retain_specs(func).any(|r| {
+                r.source == param_index
+                    && (!r.elements || holds_identity(operand.type_id, self.type_table))
+            }),
             Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
             Kind::Opaque => true,
         }
@@ -267,7 +268,7 @@ impl TirRefVisitor for SinkWalker<'_> {
 impl SinkWalker<'_> {
     fn raise_call_sides(&mut self, func: &FunctionRef, operands: &[&TirExpr]) {
         for (i, op) in operands.iter().enumerate() {
-            if self.ctx.callee_keeps(func, i) {
+            if self.ctx.callee_keeps(func, i, op) {
                 self.raise_side(op);
             }
         }
@@ -500,6 +501,16 @@ fn carries_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
             type_table.get(type_id),
             ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         )
+}
+
+/// Whether the elements of the array `type_id` refers to carry an identity: an
+/// array of plain data hands on nothing. `elements_of` is declared on arrays
+/// alone.
+fn holds_identity(type_id: TypeId, type_table: &TypeTable) -> bool {
+    match type_table.get(type_table.peel_refs(type_id)) {
+        ResolvedType::BuiltinArray(element) => carries_identity(*element, type_table),
+        other => unreachable!("`elements_of` names a non-array operand: {other:?}"),
+    }
 }
 
 fn union(mut a: Taint, b: Taint) -> Taint {
