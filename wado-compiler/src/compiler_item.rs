@@ -551,6 +551,8 @@ pub enum CompilerItem {
     /// `i128::from_u64` — zero-extending constructor; lowers an unsigned
     /// `x as i128`.
     I128FromU64,
+    /// `i128::from_f64` — saturating constructor; lowers a float `x as i128`.
+    I128FromF64,
     /// `i128::from_pair` — low/high pair constructor used by the
     /// wide-int literal lowering pass.
     I128FromPair,
@@ -560,6 +562,8 @@ pub enum CompilerItem {
     /// `u128::from_i64` — sign-extending constructor; lowers a signed
     /// `x as u128`.
     U128FromI64,
+    /// `u128::from_f64` — saturating constructor; lowers a float `x as u128`.
+    U128FromF64,
     /// `u128::from_pair` — low/high pair constructor used by the
     /// wide-int literal lowering pass.
     U128FromPair,
@@ -871,9 +875,11 @@ impl CompilerItem {
         Self::ByteSliceLen,
         Self::I128FromI64,
         Self::I128FromU64,
+        Self::I128FromF64,
         Self::I128FromPair,
         Self::U128FromU64,
         Self::U128FromI64,
+        Self::U128FromF64,
         Self::U128FromPair,
         Self::I128FromU128,
         Self::U128FromI128,
@@ -1126,9 +1132,11 @@ impl CompilerItem {
             Self::ByteSliceLen => "byte_slice_len",
             Self::I128FromI64 => "i128_from_i64",
             Self::I128FromU64 => "i128_from_u64",
+            Self::I128FromF64 => "i128_from_f64",
             Self::I128FromPair => "i128_from_pair",
             Self::U128FromU64 => "u128_from_u64",
             Self::U128FromI64 => "u128_from_i64",
+            Self::U128FromF64 => "u128_from_f64",
             Self::U128FromPair => "u128_from_pair",
             Self::I128FromU128 => "i128_from_u128",
             Self::U128FromI128 => "u128_from_i128",
@@ -1314,9 +1322,11 @@ impl CompilerItem {
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64
+            | Self::I128FromF64
             | Self::I128FromPair
             | Self::U128FromU64
             | Self::U128FromI64
+            | Self::U128FromF64
             | Self::U128FromPair
             | Self::I128FromU128
             | Self::U128FromI128
@@ -1602,9 +1612,11 @@ impl CompilerItem {
             | Self::ByteSliceLen
             | Self::I128FromI64
             | Self::I128FromU64
+            | Self::I128FromF64
             | Self::I128FromPair
             | Self::U128FromU64
             | Self::U128FromI64
+            | Self::U128FromF64
             | Self::U128FromPair
             | Self::I128FromU128
             | Self::U128FromI128

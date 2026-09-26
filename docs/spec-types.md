@@ -93,6 +93,7 @@ the equivalent `==` or range comparison holds.
 
 ```wado
 let a = 42 as u128;           // numeric → wide int
+let e = 1.0e40 as u128;       // float → wide int, saturates (u128::MAX)
 let b = a as f64;             // wide int → float, correctly rounded (ties to even)
 let c = a as i64;             // wide int → int, truncates to the low bits
 let d = (-1 as i128) as u128; // i128 ↔ u128 reinterprets the bits (u128::MAX)

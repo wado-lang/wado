@@ -679,19 +679,21 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(229)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(230)
+type "functype//core:prelude/half.wado/f16::from_f32$spec0" = fn() -> u16;  // TypeId(230)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(231)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(231)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(232)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(232)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(233)
+type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(233)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(234)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(234)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(235)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(235)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(236)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(236)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(237)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -8466,7 +8468,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                 })));
             }
             if arg_14 == -1_i64 {
-                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                break $inline_core_cbor_int_item_f16__9: "core:prelude/half.wado/f16::from_f32$spec0"();
             }
             break $inline_core_cbor_int_item_f16__9: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_14 + 1_i64);
         }, ref.null none;
@@ -8530,7 +8532,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                         })));
                     }
                     if arg_19 == -1_i64 {
-                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                        break $inline_core_cbor_int_item_f16__16: "core:prelude/half.wado/f16::from_f32$spec0"();
                     }
                     break $inline_core_cbor_int_item_f16__16: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_19 + 1_i64);
                 }, ref.null none;
@@ -8547,7 +8549,7 @@ fn "core:cbor/core:cbor/CborDeserializer::read_float<f16>"(self) {
                         })));
                     }
                     if arg_19 == -1_i64 {
-                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32"(-18446744000000000000_f32);
+                        break $inline_core_cbor_int_item_f16__17: "core:prelude/half.wado/f16::from_f32$spec0"();
                     }
                     break $inline_core_cbor_int_item_f16__17: "core:cbor/f16^core:cbor/CborFloat::from_int$spec1"(arg_19 + 1_i64);
                 }, ref.null none;
@@ -11045,6 +11047,65 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     return;
 }
 
+fn "core:prelude/half.wado/f16::from_f32$spec0"() {
+    let bits_0: u32;
+    let sign: u16;
+    let exp: i32;
+    let mantissa: u32;
+    let half_exp: i32;
+    let full: u32;
+    let shift_7: u32;
+    let kept_8: u16;
+    let rounded_9: u16;
+    let kept_10: u16;
+    let rounded_11: u16;
+    let half_19: u32;
+    let remainder_20: u32;
+    let remainder_26: u32;
+    sign = (local.tee bits_0(builtin::i32_reinterpret_f32(-18446744000000000000_f32)) >>u 16) & 32768;
+    exp = (bits_0 >>u 23) & 255;
+    mantissa = bits_0 & 8388607;
+    if exp == 255 {
+        return (((sign | 31744) & 65535) | select u16(mantissa == 0, 0, 512)) & 65535;
+    }
+    half_exp = exp - 112;
+    if half_exp >= 31 {
+        return (sign | 31744) & 65535;
+    }
+    if half_exp <= 0 {
+        if half_exp < -10 {
+            return sign;
+        }
+        full = mantissa | 8388608;
+        shift_7 = 14 - half_exp;
+        kept_8 = (full >>u shift_7) & 65535;
+        rounded_9 = $inline_round_to_even_4: block -> u16 {
+            half_19 = 1 << (shift_7 - 1);
+            remainder_20 = full & ((1 << shift_7) - 1);
+            if remainder_20 >u half_19 {
+                break $inline_round_to_even_4: (kept_8 + 1) & 65535;
+            }
+            if (remainder_20 == half_19) & ((kept_8 & 1) == 1) {
+                break $inline_round_to_even_4: (kept_8 + 1) & 65535;
+            }
+            break $inline_round_to_even_4: kept_8;
+        };
+        return (sign | rounded_9) & 65535;
+    }
+    kept_10 = ((half_exp << 10) | (mantissa >>u 13)) & 65535;
+    rounded_11 = $inline_round_to_even_6: block -> u16 {
+        remainder_26 = mantissa & 8191;
+        if remainder_26 >u 4096 {
+            break $inline_round_to_even_6: (kept_10 + 1) & 65535;
+        }
+        if (remainder_26 == 4096) & ((kept_10 & 1) == 1) {
+            break $inline_round_to_even_6: (kept_10 + 1) & 65535;
+        }
+        break $inline_round_to_even_6: kept_10;
+    };
+    return (sign | rounded_11) & 65535;
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let digit_count_2: i32;
     let offset_3: i32;
@@ -11058,14 +11119,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_3 + digit_count_2;
     t = self;
     i = 0;
-    b1210: block {
-        l1211: loop {
-            break_if b1210 i >= digit_count_2;
+    b1218: block {
+        l1219: loop {
+            break_if b1218 i >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l1211;
+            continue l1219;
         };
     };
 }
@@ -11087,14 +11148,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b1212: block {
-        l1213: loop {
-            break_if b1212 i >= digit_count_4;
+    b1220: block {
+        l1221: loop {
+            break_if b1220 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l1213;
+            continue l1221;
         };
     };
 }

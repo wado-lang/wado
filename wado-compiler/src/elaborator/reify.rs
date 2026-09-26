@@ -8885,19 +8885,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ));
         }
         // An integer extends by its own signedness, as Rust's `as` does. A
-        // float truncates through the 64-bit integer of the target's sign.
-        let extend_signed = {
+        // float truncates and saturates across the full 128 bits, through the
+        // f64 that holds any f32 exactly.
+        let (method_name, intermediate_type) = {
             let tt = self.tysys.type_table.borrow();
             if tt.is_float(inner.type_id) {
-                item == CompilerItem::I128
+                ("from_f64", TypeTable::F64)
+            } else if tt.is_unsigned_int(inner.type_id) {
+                ("from_u64", TypeTable::U64)
             } else {
-                !tt.is_unsigned_int(inner.type_id)
+                ("from_i64", TypeTable::I64)
             }
-        };
-        let intermediate_type = if extend_signed {
-            TypeTable::I64
-        } else {
-            TypeTable::U64
         };
         let casted = TirExpr::new(
             TirExprKind::Cast {
@@ -8909,7 +8907,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         Some(build_int128_from_intermediate(
             &name,
-            extend_signed,
+            method_name,
             casted,
             target_type,
             cast.span,
@@ -10602,18 +10600,16 @@ fn build_int128_literal_call(
     build_int128_from_pair(item, name, low, high, target_type, span)
 }
 
-/// Build `<name>::from_i64(intermediate)` (sign-extending) or
-/// `<name>::from_u64(intermediate)` (zero-extending) for the general
-/// (non-literal) `expr as i128/u128` cast. `intermediate` is already the `i64`
-/// or `u64` that `signed` names.
+/// Build `<name>::<method_name>(intermediate)` for the general (non-literal)
+/// `expr as i128/u128` cast: `from_i64`, `from_u64` or `from_f64`, with
+/// `intermediate` already the `i64`, `u64` or `f64` the method takes.
 fn build_int128_from_intermediate(
     name: &FqTypeName,
-    signed: bool,
+    method_name: &str,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if signed { "from_i64" } else { "from_u64" };
     let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
     let mangled_func_name = method_info.to_mangled_name();
     TirExpr::new(

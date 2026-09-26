@@ -152,7 +152,6 @@ global global:core:prelude/primitive.wado::$const_obj_80: ref null Array<u8> = a
 fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     let total: i32;
     let i_1: i32;
-    let x_2: f64;
     let total2: i32;
     let i_5: i32;
     let x_6: f64;
@@ -207,7 +206,6 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 i_1 >= 5;
-            x_2 = builtin::f64_convert_i32_s(i_1);
             $tmpl_buf_213.used = 0;
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_1, $tmpl_buf_213);
             new_used_39 = $tmpl_buf_213.used + 2;
@@ -219,7 +217,7 @@ fn "tmpl_hoist_fmt_mixed.wado/run"() with Stdout {
             $tmpl_buf_213.used = new_used_39;
             builtin::array_copy<u8>($tmpl_buf_213.repr, start_40, global:tmpl_hoist_fmt_mixed.wado::$const_obj_22, 0, 2);
             $inline_f64__fmt_into_scalar_spec1_0: block {
-                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(x_2, 2, $tmpl_buf_213);
+                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(builtin::f64_convert_i32_s(i_1), 2, $tmpl_buf_213);
                 break $inline_f64__fmt_into_scalar_spec1_0;
             };
             total = total + $tmpl_buf_213.used;

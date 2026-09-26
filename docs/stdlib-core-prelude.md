@@ -3658,6 +3658,13 @@ Create a u128 from a u64 value (zero-extended)
 Create a u128 from an i64 value (sign-extended, as `value as u128`
 is)
 
+#### `pub fn from_f64(value: f64) -> u128`
+
+`#[compiler_item("u128_from_f64")]`
+
+`value` truncated toward zero and saturated at `u128`'s bounds, NaN as
+0: what `value as u128` is.
+
 #### `pub fn from_pair(low: u64, high: u64) -> u128`
 
 `#[compiler_item("u128_from_pair")]`
@@ -3885,6 +3892,13 @@ Create an i128 from an i64 value (sign-extended)
 `#[compiler_item("i128_from_u64")]`
 
 Create an i128 from a u64 value (zero-extended)
+
+#### `pub fn from_f64(value: f64) -> i128`
+
+`#[compiler_item("i128_from_f64")]`
+
+`value` truncated toward zero and saturated at `i128`'s bounds, NaN as
+0: what `value as i128` is.
 
 #### `pub fn from_pair(low: u64, high: i64) -> i128`
 

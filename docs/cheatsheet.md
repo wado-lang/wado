@@ -604,6 +604,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 
 // Type cast
 42 as f64
+300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
 'A' as i32              // char -> i32: 65
 // 65 as char           // compile error: use char::from_u32()
 

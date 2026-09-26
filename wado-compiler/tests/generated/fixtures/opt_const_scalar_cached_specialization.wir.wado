@@ -150,7 +150,6 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
     let i_5: i32;
     let total2: i32;
     let i_8: i32;
-    let x_9: f64;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_21: ref "core:prelude/string.wado//String";
@@ -262,7 +261,6 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
     b7: block {
         l8: loop {
             break_if b7 i_8 >= 3;
-            x_9 = builtin::f64_convert_i32_s(i_8);
             $tmpl_buf_184.used = 0;
             new_used_119 = $tmpl_buf_184.used + 2;
             if @unlikely(new_used_119 > builtin::array_len($tmpl_buf_184.repr)) {
@@ -282,7 +280,7 @@ fn "opt_const_scalar_cached_specialization.wado/run"() with Stdout {
             $tmpl_buf_184.used = new_used_137;
             builtin::array_copy<u8>($tmpl_buf_184.repr, start_138, global:opt_const_scalar_cached_specialization.wado::$const_obj_17, 0, 4);
             $inline_f64__fmt_into_scalar_spec1_0: block {
-                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(x_9, 2, $tmpl_buf_184);
+                "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(builtin::f64_convert_i32_s(i_8), 2, $tmpl_buf_184);
                 break $inline_f64__fmt_into_scalar_spec1_0;
             };
             total2 = total2 + $tmpl_buf_184.used;

@@ -1,8 +1,8 @@
 // Collapsing an `if` (or `match`) whose arms are all the same constant deletes
 // the condition, so the condition must be one that can neither be observed nor
-// trap. A float-to-int cast lowers to the trapping `i32.trunc_f64_s`, and a
-// field read traps on a null reference — reordering either is fine, deleting it
-// erases a trap the program is entitled to observe.
+// trap. An integer division traps on a zero divisor, and deleting it erases a
+// trap the program is entitled to observe. A float-to-int cast saturates rather
+// than traps, so a condition over one collapses like any pure one.
 use { println, Stdout } from "core:cli";
 
 #[inline(never)]
@@ -15,8 +15,17 @@ fn equal_arms_over_pure_condition(flag: bool) -> i32 {
 }
 
 #[inline(never)]
-fn equal_arms_over_trapping_cast(huge: f64) -> i32 {
+fn equal_arms_over_cast(huge: f64) -> i32 {
     if (huge as i32) == 0 {
+        return 5;
+    } else {
+        return 5;
+    }
+}
+
+#[inline(never)]
+fn equal_arms_over_trapping_division(n: i32, d: i32) -> i32 {
+    if n / d == 0 {
         return 5;
     } else {
         return 5;
@@ -25,12 +34,13 @@ fn equal_arms_over_trapping_cast(huge: f64) -> i32 {
 
 export fn run() with Stdout {
     println(`${equal_arms_over_pure_condition(true)}`);
-    println(`${equal_arms_over_trapping_cast(1.0e30)}`);
+    println(`${equal_arms_over_cast(1.0e30)}`);
+    println(`${equal_arms_over_trapping_division(1, 0)}`);
 }
 
 __DATA__
 {
-    "stdout": "5\n",
+    "stdout": "5\n5\n",
     "trapped": true,
-    "wir_not_expect:O2": ["equal_arms_over_pure_condition"]
+    "wir_not_expect:O2": ["equal_arms_over_pure_condition", "equal_arms_over_cast"]
 }

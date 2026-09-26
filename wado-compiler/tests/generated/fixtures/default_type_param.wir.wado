@@ -170,23 +170,23 @@ array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut 
 
 array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(36)
 
-struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value> {  // TypeId(37)
-    mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
-    mut index: i32,
-}
-
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(38)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(37)
     mut key: ref "core:prelude/string.wado//String",
     mut value: ref "core:value//Value",
     mut deleted: bool,
 }
 
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(39)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(38)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
     mut left: ref "core:prelude/types.wado//Option<i32>",
     mut right: ref "core:prelude/types.wado//Option<i32>",
+}
+
+struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value> {  // TypeId(39)
+    mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
+    mut index: i32,
 }
 
 struct core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value> {  // TypeId(40)
@@ -284,9 +284,9 @@ type "functype//default_type_param.wado/default_type_param.wado/box_fields<defau
 
 type "functype//default_type_param.wado/default_type_param.wado/box_fields<default_type_param.wado/NoFields>" = fn(ref "default_type_param.wado//NoFields") -> ref "core:value//Value";  // TypeId(68)
 
-type "functype//default_type_param.wado/$value_copy$core:collections/TreeMapNode<core:prelude/string.wado/String>" = fn(ref "core:collections//TreeMapNode<core:prelude/string.wado/String>") -> ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";  // TypeId(69)
+type "functype//default_type_param.wado/$value_copy$core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" = fn(ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>") -> ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(69)
 
-type "functype//default_type_param.wado/$value_copy$core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" = fn(ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>") -> ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";  // TypeId(70)
+type "functype//default_type_param.wado/$value_copy$core:collections/TreeMapNode<core:prelude/string.wado/String>" = fn(ref "core:collections//TreeMapNode<core:prelude/string.wado/String>") -> ref "core:collections//TreeMapNode<core:prelude/string.wado/String>";  // TypeId(70)
 
 type "functype//default_type_param.wado/$value_copy$core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>" = fn(ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>") -> ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";  // TypeId(71)
 
@@ -1076,16 +1076,16 @@ fn "default_type_param.wado/default_type_param.wado/box_fields<default_type_para
     return $sroa_slot_33 = ref.null none, out = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } }, $sroa_st_entries_41 = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_37 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_37, used: 0 }), entries: ref.as_non_null(elements_38 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_38, used: 0 }), size: 0, deleted_count: 0 }, out.value = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null("default_type_param.wado/$value_copy$core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>"($sroa_st_entries_41)) }, $sroa_slot_33 = ref.as_non_null("default_type_param.wado/$value_copy$core:value/Value"(out.value)), v = ref.as_non_null($sroa_slot_33), v;
 }
 
-fn "default_type_param.wado/$value_copy$core:collections/TreeMapNode<core:prelude/string.wado/String>"(v) {
-    let $load_2: i32;
-    let v_1: ref "core:prelude/string.wado//String";
-    return struct.new "core:collections//TreeMapNode<core:prelude/string.wado/String>" { key: ref.as_non_null(v_1 = v.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_2(v_1.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_2 }), index: v.index, level: v.level, left: v.left, right: v.right };
-}
-
 fn "default_type_param.wado/$value_copy$core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>"(v) {
     let $load_2: i32;
     let v_1: ref "core:prelude/string.wado//String";
     return struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: ref.as_non_null(v_1 = v.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_2(v_1.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_2 }), value: ref.as_non_null("default_type_param.wado/$value_copy$core:value/Value"(v.value)), deleted: v.deleted };
+}
+
+fn "default_type_param.wado/$value_copy$core:collections/TreeMapNode<core:prelude/string.wado/String>"(v) {
+    let $load_2: i32;
+    let v_1: ref "core:prelude/string.wado//String";
+    return struct.new "core:collections//TreeMapNode<core:prelude/string.wado/String>" { key: ref.as_non_null(v_1 = v.key; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_2(v_1.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_2 }), index: v.index, level: v.level, left: v.left, right: v.right };
 }
 
 fn "default_type_param.wado/$value_copy$core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>"(v) {
@@ -3373,7 +3373,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$cold0"(
     builtin::array_copy<u8>(self_45, offset_46, global:core:value::$const_obj_89, 0, 1);
     $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 };
     f_51 = $local_20;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(271, f_51);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(296, f_51);
     new_used_56 = $local_19.used + 28;
     if @unlikely(new_used_56 > builtin::array_len($local_19.repr)) {
         cold_path;
@@ -3464,7 +3464,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$cold1"(
     builtin::array_copy<u8>(self_45, offset_46, global:core:value::$const_obj_89, 0, 1);
     $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 };
     f_51 = $local_18;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(250, f_51);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(275, f_51);
     new_used_56 = $local_17.used + 23;
     if @unlikely(new_used_56 > builtin::array_len($local_17.repr)) {
         cold_path;
@@ -3548,7 +3548,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem$cold0"(q) {
     builtin::array_copy<u8>(self_40, offset_41, global:core:value::$const_obj_89, 0, 1);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
     f_46 = $local_14;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(335, f_46);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(360, f_46);
     new_used_51 = $local_13.used + 22;
     if @unlikely(new_used_51 > builtin::array_len($local_13.repr)) {
         cold_path;

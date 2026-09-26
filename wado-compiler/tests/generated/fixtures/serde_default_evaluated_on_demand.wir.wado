@@ -6444,7 +6444,7 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self, lead) {
     } else {
         unreachable;
     });
-    return 0, builtin::i32_trunc_f64_s(v_10), ref.null none;
+    return 0, builtin::i32_trunc_sat_f64_s(v_10), ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_string"(self) {
@@ -7198,7 +7198,6 @@ fn "core:protobuf/core:protobuf/SizeState::close_frame"(self, number) {
 }
 
 fn "core:protobuf/core:protobuf/SizeSerializer::count_integer"(self, v) {
-    let payload_6: u64;
     let rest_11: u64;
     let len_12: i32;
     let rest_14: u64;
@@ -7229,7 +7228,6 @@ fn "core:protobuf/core:protobuf/SizeSerializer::count_integer"(self, v) {
         }; len_15);
         ref.null none;
     } else if $match_scrut_0 == 1 -> ref null "core:serde//SerializeError" {
-        payload_6 = (v << 1_i64) ^ (v >> 63_i64);
         "core:protobuf/core:protobuf/SizeState::add"(self.state, rest_18 = builtin::i64_extend_i32_s($av_27) << 3_i64; len_19 = 1; b617: block {
             l618: loop {
                 break_if b617 rest_18 <u 128_i64;
@@ -7237,7 +7235,7 @@ fn "core:protobuf/core:protobuf/SizeSerializer::count_integer"(self, v) {
                 len_19 = len_19 + 1;
                 continue l618;
             };
-        }; len_19 + rest_21 = payload_6; len_22 = 1; b619: block {
+        }; len_19 + rest_21 = (v << 1_i64) ^ (v >> 63_i64); len_22 = 1; b619: block {
             l620: loop {
                 break_if b619 rest_21 <u 128_i64;
                 rest_21 = rest_21 >>u 7_i64;

@@ -2155,7 +2155,7 @@ fn "core:rt/inspect_handle"(f, $mv$name$repr, $mv$name$used, handle, class, stri
         let $mv_arg_6: ref "core:prelude/string.wado//String";
         $mv_arg_6 = global:core:rt::$const_obj_35;
         "core:prelude/traits.wado/struct_field"(f, $mv_arg_6.repr, $mv_arg_6.used, 0);
-        "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(builtin::i64_trunc_f64_s(handle - (builtin::f64_convert_i32_s(class) * stride)), f);
+        "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(builtin::i64_trunc_sat_f64_s(handle - (builtin::f64_convert_i32_s(class) * stride)), f);
     }
     if f.alternate {
         self_120 = f.buf;
@@ -2746,7 +2746,7 @@ fn "unrestricted_handle_bits.wado/unrestricted_handle_bits.wado/Node^core:prelud
         if select i32(select i32(sign_clear, $h < 9007199254740992, 0), builtin::f64_floor($h) == $h, 0) == 0 {
             break $inline_handle_class_0: -1;
         }
-        break $inline_handle_class_0: builtin::i32_trunc_f64_s(builtin::f64_floor($h / 137438953472));
+        break $inline_handle_class_0: builtin::i32_trunc_sat_f64_s(builtin::f64_floor($h / 137438953472));
     };
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = (if $class == 1 -> ref "core:prelude/string.wado//String" {

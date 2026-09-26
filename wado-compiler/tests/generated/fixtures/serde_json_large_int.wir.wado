@@ -2930,7 +2930,7 @@ fn "core:json/core/json/parse_u64_from<&core:prelude/string.wado/String>"(raw, s
             } else {
                 unreachable;
             });
-            return 0, builtin::i64_trunc_f64_u(checked), ref.null none;
+            return 0, builtin::i64_trunc_sat_f64_u(checked), ref.null none;
         } else if @unlikely($mv$$vr_11$0 == 1) {
             e_6 = ref.as_non_null($mv$$vr_11$2);
             cold_path;
@@ -3005,7 +3005,7 @@ fn "core:json/core/json/parse_i64_from<&core:prelude/string.wado/String>"(raw, s
             } else {
                 unreachable;
             });
-            return 0, builtin::i64_trunc_f64_s(checked), ref.null none;
+            return 0, builtin::i64_trunc_sat_f64_s(checked), ref.null none;
         } else if @unlikely($mv$$vr_11$0 == 1) {
             e_6 = ref.as_non_null($mv$$vr_11$2);
             cold_path;
@@ -3383,7 +3383,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$cold0"(
     offset_46 = 0 + 66;
     builtin::array_copy<u8>(self_45, offset_46, global:core:json::$const_obj_42, 0, 1);
     $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(271, $local_20.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(296, $local_20.buf);
     new_used_56 = $local_19.used + 28;
     if @unlikely(new_used_56 > builtin::array_len($local_19.repr)) {
         cold_path;
@@ -3468,7 +3468,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem_wide$cold1"(
     offset_46 = 0 + 66;
     builtin::array_copy<u8>(self_45, offset_46, global:core:json::$const_obj_42, 0, 1);
     $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(250, $local_18.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(275, $local_18.buf);
     new_used_56 = $local_17.used + 23;
     if @unlikely(new_used_56 > builtin::array_len($local_17.repr)) {
         cold_path;
@@ -3547,7 +3547,7 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem$cold0"(q) {
     offset_41 = 0 + 61;
     builtin::array_copy<u8>(self_40, offset_41, global:core:json::$const_obj_42, 0, 1);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(335, $local_14.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(360, $local_14.buf);
     new_used_51 = $local_13.used + 22;
     if @unlikely(new_used_51 > builtin::array_len($local_13.repr)) {
         cold_path;
@@ -5174,7 +5174,7 @@ fn "core:json/core:json/JsonDeserializer::parse_i64_with_lead"(self, lead) {
     } else {
         unreachable;
     });
-    return 0, builtin::i64_trunc_f64_s(v_19), ref.null none;
+    return 0, builtin::i64_trunc_sat_f64_s(v_19), ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::parse_u64_with_lead"(self, lead) {
@@ -5256,7 +5256,7 @@ fn "core:json/core:json/JsonDeserializer::parse_u64_with_lead"(self, lead) {
     } else {
         unreachable;
     });
-    return 0, builtin::i64_trunc_f64_u(v_9), ref.null none;
+    return 0, builtin::i64_trunc_sat_f64_u(v_9), ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer^core:serde/Deserializer::deserialize_i64"(self) {

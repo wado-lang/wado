@@ -1787,10 +1787,8 @@ fn is_hoistable_unop(op: NirUnaryOp) -> bool {
 /// total ops over `Local` leaves. A promoted (`Operand::Value`) leaf has no
 /// skeleton expr and is treated as hoistable.
 ///
-/// `Cast` is deliberately excluded: a float→int cast lowers to the trapping
-/// `i32.trunc_f64_s` family (not `trunc_sat`), so hoisting one to the
-/// pre-header could trap on a NaN/out-of-range value where a zero-iteration
-/// loop never would — the same trap-soundness reason `Div`/`Mod` are excluded.
+/// `Cast` is total but outside the grammar: [`ArithKey`] would have to key it
+/// by its target's `TypeKey`, and this walk holds no type table to ask.
 fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
