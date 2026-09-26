@@ -161,8 +161,8 @@ outer();
 assert count == 1;
 ```
 
-There is no `move` keyword. To capture a snapshot, copy the value into a local
-first and let the closure capture that:
+To capture a snapshot, copy the value into a local first and let the closure
+capture that:
 
 ```wado
 let snapshot = original;     // a copy, independent of `original`

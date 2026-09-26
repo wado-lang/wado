@@ -304,7 +304,7 @@ An unrestricted resource is not a Component Model `resource`. Its operations are
 
 ### Resource Ownership
 
-An affine resource is move-only. Assigning it, passing it by value, returning it, placing it in an aggregate, and calling a method that takes `self` by value each move it. There is no `move` keyword: the transfer happens at the use. Using a binding after it has moved is a compile error.
+An affine resource is move-only. Assigning it, passing it by value, returning it, placing it in an aggregate, and calling a method that takes `self` by value each move it. Using a binding after it has moved is a compile error.
 
 ```wado
 pub resource Counter {

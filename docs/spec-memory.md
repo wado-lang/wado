@@ -30,7 +30,6 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 
 These semantics are as-if. A program may rely on the value each expression
 denotes; it may not rely on the number of copies performed to produce it.
-There is no `move` operator.
 
 A program never chooses where a value lives. There is no stack or heap to pick
 between. A value needs no annotation to outlive its scope, because the garbage
