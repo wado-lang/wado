@@ -50,7 +50,7 @@ use { Parser } from "./Calc.g4" with { // Gale parses ANTLR4 grammar files
 
 Code a generator writes may call a runtime library. Grog's does, so a package
 lists `wado-lang:grog` under `[dependencies]` as well. See
-[WEP: Grog](./wep-2026-09-22-grog.md).
+[the spec](./spec-modules.md#manifest).
 
 ```wado
 use grog from "lib:grog";
@@ -1765,24 +1765,9 @@ Format-agnostic `Serialize` / `Deserialize` framework.
 A plain struct derives with no marker, and `#[wire(...)]` applies with or
 without one. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
-<<<<<<< HEAD
-(per field). A format keyed by numbers rather than names reads
-`#[wire(number = N)]`, which a struct carries on every field or on none; such a
-type satisfies `WireNumbered`, the bound those formats require. See
-[`core:serde`](./stdlib-core-serde.md),
+(per field). See [`core:serde`](./stdlib-core-serde.md),
 [Serialization](./spec-serialization.md#bound-driven-serialize--deserialize) and
 [`#[wire(...)]`](./spec-attributes.md#wire).
-||||||| c8b5409d1
-(per field). A format keyed by numbers rather than names reads
-`#[wire(number = N)]`, which a struct carries on every field or on none; such a
-type satisfies `WireNumbered`, the bound those formats require. See
-[`core:serde`](./stdlib-core-serde.md),
-[WEP: Serde](./wep-2026-02-28-serde.md) and
-[WEP: Grog](./wep-2026-09-22-grog.md).
-=======
-(per field). See [`core:serde`](./stdlib-core-serde.md) and
-[WEP: Serde](./wep-2026-02-28-serde.md).
->>>>>>> origin/main
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed

@@ -15,7 +15,7 @@ pub trait Deserialize {
 
 A format implements `Serializer` and `Deserializer`, and a value's `Serialize` /
 `Deserialize` impl works with any of them. The formats in the standard library
-are `core:json`, `core:json_nsd`, `core:cbor`, `core:protobuf`, and `core:args`.
+are `core:json`, `core:json_nsd`, `core:cbor`, and `core:args`.
 [`core:serde`](./stdlib-core-serde.md) lists each trait's methods.
 
 `Deserialize::deserialize` has no `self`: it builds a new value from what the

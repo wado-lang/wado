@@ -235,16 +235,10 @@ test {
 }
 ```
 
-<<<<<<< HEAD
 A synopsis documents the module that holds it, not one item. `wado test` counts
 it in the ordinary pass/fail total, and it combines with `#[expect_trap]`,
 `#[TODO]` and `#[timeout_ms]`. It is conventionally unnamed, since it is the
 example rather than one case among several.
-||||||| c8b5409d1
-### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(encoding = "...")]` / `#[wire(positional)]`
-=======
-### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(positional)]`
->>>>>>> origin/main
 
 `wado doc` places the `## Synopsis` section after the module's `//!` doc and
 before its items. The code is the test body exactly as written between the
@@ -252,19 +246,7 @@ outer braces, with its indentation removed, so nothing hidden sets it up. Each
 `#[synopsis]` test in the module is one code block, in source order. A module
 with none has no section. `wado doc` runs nothing.
 
-<<<<<<< HEAD
 Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
-||||||| c8b5409d1
-- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
-- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
-- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. On an enum case, `N` is an `i32` and is the case's discriminant on every wire, in place of its position; an enum numbers every case or none. See [WEP: Grog](./wep-2026-09-22-grog.md).
-- `#[wire(encoding = "zigzag")]` and `#[wire(encoding = "fixed")]` choose how a number-keyed format writes an integer field: `"zigzag"` on `i32` / `i64`, `"fixed"` on any 32- or 64-bit integer, and on an `Option` or `List` of one.
-- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
-=======
-- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
-- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
-- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
->>>>>>> origin/main
 
 ### `#[wire(...)]`
 
@@ -276,12 +258,11 @@ Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 Each declaration reads its own keys:
 
-| Declaration                                   | Keys                                       |
-| --------------------------------------------- | ------------------------------------------ |
-| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`                              |
-| Struct field                                  | `name`, `number`, `encoding`, `positional` |
-| Enum case                                     | `name`, `number`                           |
-| Variant case                                  | `name`                                     |
+| Declaration                                   | Keys                            |
+| --------------------------------------------- | ------------------------------- |
+| `struct`, `enum`, `variant`, `flags`, newtype | `name_policy`                   |
+| Struct field                                  | `name`, `positional`, `default` |
+| Enum case, variant case                       | `name`                          |
 
 A key the declaration does not read is an error, and so is `#[wire]` anywhere
 else, a flags member included. The keys may be split across several `#[wire]`
@@ -310,42 +291,6 @@ struct Event {
     event_type: String,     // "type"
 }
 ```
-
-#### Numbers and Encodings
-
-`#[wire(number = N)]` gives a struct field the numeric key that a number-keyed
-format such as `core:protobuf` reads. A format keyed by name ignores it, so a
-numbered struct still serializes through `core:json` by name.
-
-- A struct numbers every field or none. A struct with no fields satisfies this.
-- `N` runs from 1 to 536870911, and 19000 to 19999 are reserved.
-- Two fields of one struct never share a number.
-- A numbered struct satisfies the `WireNumbered` bound that number-keyed formats
-  require, so passing an unnumbered one is a bound error where the call is
-  written.
-
-No policy assigns numbers, so each number is written out on its field.
-
-On an enum case, `N` is an `i32`, negative values included. It replaces the
-case's position as its discriminant on every wire, `core:json_nsd` included. An
-enum numbers every case or none, and two cases never share a number. A variant
-case takes no number.
-
-`#[wire(encoding = "...")]` chooses how a number-keyed format writes an integer
-field. `"zigzag"` accepts `i32` and `i64`. `"fixed"` accepts any 32- or 64-bit
-integer. Either also accepts an `Option` or `List` of such an integer, since the
-encoding is the element's. Anything else, including any other encoding name, is
-an error where the attribute is written. A format keyed by name ignores it.
-
-```wado
-struct Account {
-    #[wire(number = 1)] id: i32 = 0,
-    #[wire(number = 2)] #[wire(encoding = "zigzag")] delta: i64 = 0,  // sint64
-    #[wire(number = 3)] #[wire(encoding = "fixed")] hash: u32 = 0,    // fixed32
-}
-```
-
-Rationale: [WEP: Grog](./wep-2026-09-22-grog.md).
 
 #### Positional Fields
 
@@ -568,9 +513,6 @@ It is written once, and is an error where `#[trap]` is.
   compilation loads. A function whose only user is a test in a file the
   compilation does not load, such as a test file that imports it, is reported
   "never used" rather than "only used by tests".
-- `WireNumbered` holds only for the type a number-keyed format is handed. A
-  field holding a struct without numbers is not bound by it, so that struct is
-  reported when its bytes are produced rather than where the call is written.
 - A trait may declare a name `#[unavailable]` while an `impl` of the trait
   supplies a body under that name. A call through the implementing type then
   reaches the body, so the reservation does not hold there.

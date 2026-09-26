@@ -423,6 +423,10 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 "wado-lang:gale" = { version = "^0.0.9" }
 ```
 
+Generated code that calls a runtime library the generator's package ships
+imports it like any other dependency, so the consumer also lists that package
+under `[dependencies]`.
+
 ### Authoring a generator
 
 A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/generator` world to a module under `[world]`:
@@ -461,6 +465,11 @@ What a generator receives and returns:
 - `req.primary` and `req.inputs` are `InputFile`s: the path as the use site
   wrote it, and the content as a `Stream<u8>`. `read_all` and `read_text`
   collect a whole file.
+- `req.module` is how the use site named the generator: the `module:`
+  specifier as written, or for a relative path, that path from the project
+  root. Output that imports a library the generator's package also ships names
+  it through this, since only the use site knows what the consumer calls that
+  package.
 - `req.options` is the use site's options, with defaults filled in.
 - It returns a `Response` whose `files` are `OutputFile`s: a path relative to
   the output directory, the Wado source, and whether this file is the entry
@@ -486,8 +495,8 @@ Outputs are written to the invocation's output directory, each stamped with a
 `#![generated(by = "...", sources = [...])]` header naming the generator and
 its inputs. A file in that directory that carries the header belongs to the
 invocation, and a later run may overwrite or remove it. A file without it is
-left alone. A compile reruns a generator only when its generator, inputs, or
-options have changed.
+left alone. A compile reruns a generator only when its generator, the name it
+was invoked under, its inputs, or its options have changed.
 
 Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
