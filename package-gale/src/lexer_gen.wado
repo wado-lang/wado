@@ -364,7 +364,7 @@ pub fn gen_lexer<S: AsStrSlice>(
         if uses_modes {
             gen_mode_constants(w, &grammar.mode_names);
         }
-        gen_lexer_apply_fns(w, grammar, has_members, sc_name);
+        gen_lexer_apply_fns(w, grammar, &act_rule_names, has_members, sc_name);
     }
     gen_lexer_match_fns(
         w,
@@ -807,7 +807,7 @@ pub struct LexerSubsumedRoute {
 
 pub struct LexerKeywordRoute {
     pub carrier: String,
-    /// A rule an emitted matcher calls keeps a `try_` matcher on top of the
+    /// A rule an emitted body calls keeps a `try_` matcher on top of the
     /// classifier shortcut.
     pub also_matcher: bool = false,
 }
@@ -1555,12 +1555,15 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 ///
 /// The rule re-runs its own match with the actions dropped in at their cursors —
 /// every emit the match can take replays, restructured repeats included.
-fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has_members: bool, sc_name: S) {
-    let executes = lexer_grammar_executes_actions(grammar);
+fn gen_lexer_apply_fns<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    grammar: &Grammar,
+    replayed: &List<String>,
+    has_members: bool,
+    sc_name: S,
+) {
     for let rule of &grammar.lexer_rules {
-        let mut ids: List<i32> = [];
-        lexer_rule_executed_action_ids(grammar, executes, rule, &mut ids);
-        if ids.is_empty() {
+        if !replayed.contains(&rule.name) {
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
