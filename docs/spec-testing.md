@@ -119,12 +119,8 @@ test {
 - A test passes if it completes without panicking or trapping
 - A test fails if `assert` fails, `panic` is called, or a trap occurs
 - Test blocks belong to the `test` world. Compiling for any other world leaves them out
-<<<<<<< HEAD
 - [`core:eval`](./stdlib-core-eval.md) belongs to the `test` world too. A program for any other world that reaches it does not compile
-||||||| c3a438b9c
-=======
 - Only the test blocks of the file being tested run. A test block in a module it imports is compiled but not run, so each test runs once, from the file that declares it
->>>>>>> origin/main
 
 #### `#[expect_trap]` Attribute
 

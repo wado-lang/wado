@@ -180,12 +180,8 @@
 - [Grog — Protocol Buffers for Wado](./wep-2026-09-22-grog.md)
 - [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
 - [The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md)
-<<<<<<< HEAD
 - [Eval — Compiling and Running Wado Source from a Test](./wep-2026-09-26-eval.md)
-||||||| c3a438b9c
-=======
 - [Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md)
->>>>>>> origin/main
 
 ## Standard Library
 
