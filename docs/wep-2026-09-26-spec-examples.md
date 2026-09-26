@@ -49,12 +49,13 @@ A code block in the specification is a quotation of an e2e fixture.
    `assert`. This rule is provisional: the first migrated file decides whether
    it holds or is absurd, and it is dropped if absurd.
 
-The reference is an HTML comment, the block directly before the fence in the
-same container. The formatter puts a blank line between the two, and GitHub does
-not render the comment, so the reader sees an ordinary code block:
+The reference is an HTML comment holding a JSON object, the block directly
+before the fence in the same container. The formatter puts a blank line between
+the two, and GitHub does not render the comment, so the reader sees an ordinary
+code block:
 
 ````markdown
-<!-- fixture: cast_fn_type_newtype.wado -->
+<!-- {"fixture": "cast_fn_type_newtype.wado"} -->
 
 ```wado
 type Meters = f64;
@@ -62,6 +63,12 @@ let double = (|x| x + x) as fn(Meters) -> Meters;
 assert double(1.5 as Meters) == 3.0 as Meters;
 ```
 ````
+
+The comment is data, so JSON says what it may hold, and no syntax of its own
+needs a rule. A comment whose body does not open with `{` is no reference, which
+leaves room for a formatter directive. One that does is a reference: `fixture`
+is its only key, and a body that fails to parse or holds another key is an
+error, so a misspelled key is caught rather than read as no reference.
 
 The path is relative to `wado-compiler/tests/fixtures/` and may name any `.wado`
 file there, a helper module a fixture imports included. A two-file example
@@ -109,8 +116,8 @@ the lexer finds one, not in a comment or a string. It reads the Markdown with
 Marl. `scripts/check-spec-examples.sh` drives it with `wado run`, as
 `scripts/check-rust-paths.sh` drives `package-gale/tools/rust_inline_paths.wado`.
 
-A block that names no fixture is counted against the baseline. A block that
-names one is migrated, so any rule it breaks fails the check outright. The
+A block that names no fixture is counted against the baseline. A block with a
+reference is migrated, so any rule it breaks fails the check outright. The
 `#[TODO]` rule reads the fixture as a whole: one marked test anywhere in it
 asks for a WEP.
 

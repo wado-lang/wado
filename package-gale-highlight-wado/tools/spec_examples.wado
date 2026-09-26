@@ -42,21 +42,34 @@ pub fn wado_blocks<S: AsStrSlice>(markdown: S) -> List<FencedCode> {
     return fenced_code_blocks(markdown).into_iter().filter(|b| b.tag == "wado").collect();
 }
 
-/// The fixture a block names in the HTML comment before it, if it names one.
-pub fn fixture_of(block: &FencedCode) -> Option<String> {
+/// The fixture a block names in the HTML comment before it: `null` when the
+/// comment holds no JSON object, or why the object is no reference.
+pub fn fixture_of(block: &FencedCode) -> Result<Option<String>, String> {
     let Some(html) = block.html_before else {
-        return null;
+        return Result::Ok(null);
     };
     let Some(inner) = html.strip_prefix("<!--") else {
-        return null;
+        return Result::Ok(null);
     };
     let Some(inner) = inner.strip_suffix("-->") else {
-        return null;
+        return Result::Ok(null);
     };
-    let Some(name) = inner.trim().strip_prefix("fixture:") else {
-        return null;
+    let body = inner.trim();
+    if !body.starts_with("{") {
+        return Result::Ok(null);
+    }
+    let reference = from_string::<TreeMap<String, String>>(body.to_string()).map_err(
+        |e| `the reference is not a JSON object of strings: ${e:?}`,
+    )?;
+    for let [key, _value] of reference.entries() {
+        if *key != "fixture" {
+            return Result::Err(`the reference has an unknown key \`${*key}\``);
+        }
+    }
+    return match reference.get("fixture") {
+        Some(name) => Result::Ok(Option::Some(name)),
+        None => Result::Err("the reference names no `fixture`"),
     };
-    return Option::Some(name.trim().to_string());
 }
 
 fn is_blank<S: AsStrSlice>(line: S) -> bool {
@@ -172,12 +185,13 @@ fn check_block(block: &FencedCode, name: &String, fixtures: &TreeMap<String, Str
 pub fn audit(blocks: &List<FencedCode>, fixtures: &TreeMap<String, String>, weps: &String) -> List<Finding> {
     let mut out: List<Finding> = [];
     for let block of blocks {
-        let Some(name) = fixture_of(block) else {
-            out.push(Finding { line: block.line, verdict: Verdict::Unreferenced });
-            continue;
+        let verdict = match fixture_of(block) {
+            Ok(Some(name)) => check_block(block, &name, fixtures, weps).map(|why| Verdict::Broken(why)),
+            Ok(None) => Option::Some(Verdict::Unreferenced),
+            Err(why) => Option::Some(Verdict::Broken(why)),
         };
-        if let Some(why) = check_block(block, &name, fixtures, weps) {
-            out.push(Finding { line: block.line, verdict: Verdict::Broken(why) });
+        if let Some(verdict) = verdict {
+            out.push(Finding { line: block.line, verdict });
         }
     }
     return out;
@@ -188,7 +202,7 @@ pub fn audit(blocks: &List<FencedCode>, fixtures: &TreeMap<String, String>, weps
 /// Each fixture `blocks` names that can be read, by name.
 fn read_fixtures(blocks: &List<FencedCode>, into: &mut TreeMap<String, String>) with Preopens {
     for let block of blocks {
-        if let Some(name) = fixture_of(block) {
+        if let Ok(Some(name)) = fixture_of(block) {
             if !into.contains_key_str(&name) {
                 if let Ok(source) = fs::read_to_string(fs::join(&FIXTURE_DIR, &name)) {
                     into[name] = source;
@@ -321,16 +335,27 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
 }
 
-test "a block names the fixture in the HTML comment before it" {
-    let blocks = wado_blocks("<!-- fixture: a.wado -->\n\n```wado\nx\n```\n\n```wado\ny\n```\n\n```text\nz\n```\n");
+test "a block names the fixture in the JSON comment before it" {
+    let blocks = wado_blocks(
+        "<!-- {\"fixture\": \"a.wado\"} -->\n\n```wado\nx\n```\n\n```wado\ny\n```\n\n```text\nz\n```\n",
+    );
     assert blocks.len() == 2;
-    assert fixture_of(&blocks[0]) == Option::Some("a.wado");
-    assert fixture_of(&blocks[1]) == null;
+    assert fixture_of(&blocks[0]) == Result::Ok(Option::Some("a.wado"));
+    assert fixture_of(&blocks[1]) == Result::Ok(null);
 }
 
-test "another comment names no fixture" {
-    let blocks = wado_blocks("<!-- note -->\n```wado\nx\n```\n");
-    assert fixture_of(&blocks[0]) == null;
+test "a comment holding no JSON object names no fixture" {
+    let blocks = wado_blocks("<!-- dprint-ignore -->\n```wado\nx\n```\n");
+    assert fixture_of(&blocks[0]) == Result::Ok(null);
+}
+
+test "a JSON comment that is not a reference breaks the rule" {
+    let malformed = "<!-- {\"fixture\": } -->\n```wado\nx\n```\n";
+    assert verdict_of(malformed, &TreeMap::new(), "") matches { Some(Broken(_)) };
+    let misspelled = "<!-- {\"fixure\": \"a.wado\"} -->\n```wado\nx\n```\n";
+    assert verdict_of(misspelled, &TreeMap::new(), "") matches { Some(Broken(_)) };
+    let extra = "<!-- {\"fixture\": \"a.wado\", \"note\": \"x\"} -->\n```wado\nx\n```\n";
+    assert verdict_of(extra, &TreeMap::new(), "") matches { Some(Broken(_)) };
 }
 
 test "a quotation matches under one indentation prefix" {
@@ -369,7 +394,7 @@ fn verdict_of(markdown: String, fixtures: &TreeMap<String, String>, weps: String
 }
 
 fn quoting() -> String {
-    return "<!-- fixture: a.wado -->\n\n```wado\nassert f() == 1;\n```\n";
+    return "<!-- {\"fixture\": \"a.wado\"} -->\n\n```wado\nassert f() == 1;\n```\n";
 }
 
 test "a block quoting its fixture complies" {
@@ -396,7 +421,7 @@ test "the quotation is read from the code, not the data" {
 }
 
 test "a block with no assert breaks the rule unless its fixture is rejected" {
-    let markdown = "<!-- fixture: a.wado -->\n```wado\nlet x: i32 = \"s\";\n```\n";
+    let markdown = "<!-- {\"fixture\": \"a.wado\"} -->\n```wado\nlet x: i32 = \"s\";\n```\n";
     let accepted = fixture_map("a.wado", "let x: i32 = \"s\";\n__DATA__\n{\"test\": {}}\n");
     assert verdict_of(markdown, &accepted, "") matches { Some(Broken(_)) };
     let rejected = fixture_map(

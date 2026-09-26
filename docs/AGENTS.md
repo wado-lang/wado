@@ -23,7 +23,7 @@ place for implementation details or bugs. Where the compiler falls short of a
 rule, the shortfall is a known gap in the WEP that proposed the rule.
 
 A `wado` code block quotes an e2e fixture, named in an HTML comment before it
-(`<!-- fixture: name.wado -->`). `mise run check-spec-examples` holds this, and
+(`<!-- {"fixture": "name.wado"} -->`). `mise run check-spec-examples` holds this, and
 [WEP: Spec Examples Quote Fixtures](./wep-2026-09-26-spec-examples.md) says
 what it asks of the block and the fixture.
 
