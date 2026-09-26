@@ -3443,8 +3443,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
             // General expression cast (not a literal)
             let source_type = self.resolve_expr(&cast.expr, ctx, None);
-
-            if self.tysys.type_table.borrow().is_numeric(source_type) {
+            let tt = self.tysys.type_table.borrow();
+            if tt.is_numeric(tt.cast_operand_type(source_type, target_type)) {
                 // Reify emits the two-step form,
                 // `name::from_u64/from_i64(expr as u64/i64)`.
                 return target_type;
@@ -3484,10 +3484,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .cast_read_through(source_type, target_type)
-            .last()
-            .copied()
-            .unwrap_or(source_type);
+            .cast_operand_type(source_type, target_type);
 
         let refused_cast = {
             let tt = self.tysys.type_table.borrow();

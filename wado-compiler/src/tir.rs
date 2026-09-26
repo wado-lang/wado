@@ -2918,6 +2918,16 @@ impl TypeTable {
         referents
     }
 
+    /// The type a cast of `source` to `target` converts: the last referent it
+    /// reads through, or `source` itself.
+    #[must_use]
+    pub fn cast_operand_type(&self, source: TypeId, target: TypeId) -> TypeId {
+        self.cast_read_through(source, target)
+            .last()
+            .copied()
+            .unwrap_or(source)
+    }
+
     /// Peel through Ref/MutRef wrappers to get the underlying type.
     pub fn peel_refs(&self, mut type_id: TypeId) -> TypeId {
         loop {
