@@ -297,7 +297,7 @@ Effect parameters:
 - Are declared with the `effect` keyword in generic parameter lists
 - Are inferred from the effects of function-typed arguments at each call site; when multiple function-typed arguments reference the same effect parameter, `E` resolves to the union of all their effects
 - Can coexist with type parameters: `<T, effect E>`
-- Number at most one per function, so every closure a function takes resolves into the same parameter
+- Can be declared in any number, each resolved on its own from the arguments that name it, so a function can keep the effects of two closures apart
 
 The caller of a generic function must hold what its parameter resolves to:
 
@@ -311,7 +311,7 @@ A closure argument's effects are those inferred from its body (see [Closures](./
 
 ### `with _`
 
-`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. It is the function's one effect parameter, so a signature writing `with _` declares no `<effect E>` of its own. Every `_` in one signature is the same parameter:
+`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. Every `_` in one signature is the same parameter, distinct from any `<effect E>` the signature declares:
 
 ```wado
 fn wrapper(f: fn() with _) with _ { f(); }      // == fn wrapper<effect E>(f: fn() with E) with E
@@ -595,6 +595,10 @@ How a handler answers an async operation is in [Handling an Async Operation](./s
 Rationale: [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
 
 ## Known gaps
+
+### More than one effect parameter
+
+A function may declare at most one `<effect E>`, and more is rejected. So one function cannot keep the effects of two closures apart: every closure it takes resolves into the same parameter. Since `with _` mints a parameter, a function cannot write `with _` and declare its own `<effect E>` either.
 
 ### How deep an open head resolves
 

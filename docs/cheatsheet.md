@@ -1404,7 +1404,7 @@ fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
 }
 
-// Generic effects — polymorphic over effects (one effect param per function)
+// Generic effects — polymorphic over effects
 fn wrapper<effect E>(f: fn() with E) with E {
     f();
 }
