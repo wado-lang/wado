@@ -41,7 +41,12 @@ struct LatnVisited {
 
 impl LatnVisited {
     fn new(nstates: i32) -> LatnVisited {
-        return LatnVisited { step: 0, step_of: List::filled(nstates, -1), stack_of: List::filled(nstates, -1), more: TreeSet::<i64>::new() };
+        return LatnVisited {
+            step: 0,
+            step_of: List::filled(nstates, -1),
+            stack_of: List::filled(nstates, -1),
+            more: TreeSet::<i64>::new(),
+        };
     }
 
     fn first_visit(&mut self, state: i32, stack: i32) -> bool {
@@ -153,7 +158,15 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
                         false;
                     };
                     if matched {
-                        latn_closure(sim, &mut stacks, &mut nlist, &mut visited, sim.tr_target[idx], th.stack, &mut open);
+                        latn_closure(
+                            sim,
+                            &mut stacks,
+                            &mut nlist,
+                            &mut visited,
+                            sim.tr_target[idx],
+                            th.stack,
+                            &mut open,
+                        );
                     }
                 }
             }

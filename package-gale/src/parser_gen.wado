@@ -8405,12 +8405,8 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 /// Run alternative `idx` from the rule's start as the rule's whole match.
 fn emit_leaf_pick<S: AsStrSlice>(w: &mut CodeWriter, side: PickSide, fn_name: S, idx: i32, ctx: &GenContext) {
     match side {
-        Parse => {
-            emit_alt_helper_exit(w, fn_name, idx, ctx);
-        },
-        Scan => {
-            w.line(`return ${alt_scan_call(idx, ctx)};`);
-        },
+        Parse => emit_alt_helper_exit(w, fn_name, idx, ctx),
+        Scan => w.line(`return ${alt_scan_call(idx, ctx)};`),
     }
 }
 
