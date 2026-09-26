@@ -921,10 +921,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Unknown variable - report error
-        let _ = self.emit(TypeError::UnknownIdentifier {
-            name: ident.name.clone(),
-            span: ident.span,
+        let name = ident.name.clone();
+        let span = ident.span;
+        let _ = self.emit(if ctx.declared(&name) {
+            TypeError::OutOfScope { name, span }
+        } else {
+            TypeError::UnknownIdentifier { name, span }
         });
         TypeTable::ERROR
     }

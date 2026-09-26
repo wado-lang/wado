@@ -1802,9 +1802,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let Some(callee) = callee_opt else {
-            let _ = self.emit(TypeError::UnknownFunction {
-                name: display_name,
-                span: call.span,
+            let _ = self.emit(if ctx.declared(&display_name) {
+                TypeError::OutOfScope {
+                    name: display_name,
+                    span: ident.span,
+                }
+            } else {
+                TypeError::UnknownFunction {
+                    name: display_name,
+                    span: call.span,
+                }
             });
             return TypeTable::ERROR;
         };

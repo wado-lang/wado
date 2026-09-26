@@ -544,6 +544,12 @@ pub enum TypeError {
         name: String,
         span: Span,
     },
+    /// A name resolving to nothing, spelled like a local of the frame whose
+    /// scope has ended.
+    OutOfScope {
+        name: String,
+        span: Span,
+    },
     /// A path naming something only a call can use, read as a value.
     CallableAsValue {
         name: String,
@@ -1600,6 +1606,11 @@ impl TypeError {
             TypeError::Unavailable { message, span } => {
                 (Code::Unavailable, message.clone(), *span)
             }
+            TypeError::OutOfScope { name, span } => (
+                Code::UndefinedVariable,
+                format!("'{name}' is not in scope"),
+                *span,
+            ),
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{}'", unalias_namespace_member(name)),
@@ -3379,6 +3390,11 @@ impl FunctionContext {
                 defining_ast_id: None,
             },
         );
+    }
+
+    /// Whether this frame declared a local spelled `name`, in scope here or not.
+    pub(super) fn declared(&self, name: &str) -> bool {
+        self.locals.iter().any(|local| local.name == name)
     }
 
     /// Look up a variable by name (searches from innermost to outermost scope)

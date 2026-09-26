@@ -1,7 +1,5 @@
-//! Local name binding: resolution *within* function bodies. It tracks variable
-//! scopes, detects use-before-define and duplicate definitions, and records
-//! mutability and reactivity. Imports belong to the analyzer, and cross-module
-//! references and type checking to the resolve phase.
+//! Local name binding within function bodies: duplicate and keyword-spelled
+//! bindings, reads before initialization, and assignments to immutable locals.
 
 use crate::hashmap::IndexSet;
 
@@ -50,9 +48,6 @@ impl Scope {
 /// Errors from the bind phase
 #[derive(Debug, Clone)]
 pub enum BindError {
-    /// Variable used before it was defined
-    UseBeforeDefine { name: String, used_at: Span },
-
     /// Duplicate definition in the same scope
     DuplicateInScope {
         name: String,
@@ -86,11 +81,6 @@ impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
-            BindError::UseBeforeDefine { name, used_at } => (
-                Code::UndefinedVariable,
-                format!("'{name}' is not in scope"),
-                *used_at,
-            ),
             BindError::DuplicateInScope {
                 name,
                 first,
@@ -389,21 +379,6 @@ fn condition_binds_name(condition: &Condition, name: &str) -> bool {
     })
 }
 
-/// Collect bare `Pattern::Ident` names at the top level of a pattern,
-/// including through or-alternatives. These are candidates for global
-/// constant references that should not be tracked as local variables.
-/// Nested idents inside variants/structs/tuples are real local bindings.
-fn collect_top_level_bare_idents(pattern: &Pattern) -> Vec<String> {
-    match pattern {
-        Pattern::Ident { name, .. } => vec![name.clone()],
-        Pattern::Or(alternatives) => alternatives
-            .iter()
-            .flat_map(collect_top_level_bare_idents)
-            .collect(),
-        _ => vec![],
-    }
-}
-
 /// The binder performs local name resolution
 pub struct Binder<'a, H: CompilerHost> {
     scopes: Vec<Scope>,
@@ -412,9 +387,6 @@ pub struct Binder<'a, H: CompilerHost> {
     /// its source file.
     module_source: &'a ModuleSource,
     current_depth: u32,
-    /// All local variable names defined in the current function
-    /// Used to distinguish "out of scope" errors from "global reference"
-    local_names_in_function: IndexSet<String>,
     /// Variables declared without an initializer that have not yet been
     /// definitely assigned on all paths reaching the current point.
     /// Key: (`scope_depth`, name) — `scope_depth` disambiguates shadowed vars.
@@ -429,7 +401,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             logger,
             module_source,
             current_depth: 0,
-            local_names_in_function: IndexSet::default(),
             possibly_uninit: IndexSet::default(),
         }
     }
@@ -510,8 +481,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a function's local variables
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
-        // Clear per-function state
-        self.local_names_in_function.clear();
         self.possibly_uninit.clear();
 
         self.enter_scope();
@@ -844,19 +813,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     fn bind_expr(&mut self, expr: &Expr) -> Result<(), Bail> {
         match expr {
             Expr::Ident(ident) => {
-                // Check if the identifier is defined in any scope
-                if self.lookup(&ident.name).is_none() {
-                    // Only report error if this name was defined as a local variable
-                    // somewhere in this function (but is now out of scope).
-                    // Unknown names might be global functions/constants - those are
-                    // resolved later by the analyzer.
-                    if self.local_names_in_function.contains(&ident.name) {
-                        self.emit(BindError::UseBeforeDefine {
-                            name: ident.name.clone(),
-                            used_at: ident.span,
-                        })?;
-                    }
-                } else if self.is_possibly_uninit(&ident.name) {
+                if self.is_possibly_uninit(&ident.name) {
                     self.emit(BindError::UseBeforeInit {
                         name: ident.name.clone(),
                         span: ident.span,
@@ -1016,25 +973,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Expr::Matches(matches_expr) => {
                 // Bind the scrutinee expression
                 self.bind_expr(&matches_expr.expr)?;
-                // Pattern bindings are scoped to the matches expression only
-                // (specifically, they're only visible in the guard if present)
-                // Always enter a scope and bind pattern to track variable names,
-                // so we can detect "use after scope exit" errors.
-                //
-                // Bare idents at the top level of the pattern (or or-alternatives)
-                // might be global constants rather than new locals. We must remove
-                // those from local_names_in_function after the scope exits, otherwise
-                // they shadow the real globals when used as expressions later.
-                let bare_idents = collect_top_level_bare_idents(&matches_expr.pattern);
+                // The pattern's bindings reach only its guard.
                 self.enter_scope();
                 self.bind_pattern(&matches_expr.pattern, matches_expr.span)?;
                 if let Some(guard) = &matches_expr.guard {
                     self.bind_expr(guard)?;
                 }
                 self.exit_scope();
-                for name in &bare_idents {
-                    self.local_names_in_function.shift_remove(name);
-                }
             }
 
             Expr::TryOp(qm) => {
@@ -1140,7 +1085,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Process each arm from the pre-match state
             self.possibly_uninit.clone_from(&uninit_before);
 
-            let bare_idents = collect_top_level_bare_idents(&arm.pattern);
             self.enter_scope();
             self.bind_pattern(&arm.pattern, arm.span)?;
             if let Some(guard) = &arm.guard {
@@ -1148,9 +1092,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             }
             self.bind_expr(&arm.body)?;
             self.exit_scope();
-            for name in &bare_idents {
-                self.local_names_in_function.shift_remove(name);
-            }
 
             // Merge: a var is possibly-uninit after the match if possibly-uninit in any arm
             match uninit_after_all_arms.take() {
@@ -1243,9 +1184,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             return Ok(());
         }
 
-        // Track this name as a local variable in the current function
-        self.local_names_in_function.insert(name.to_string());
-
         let scope = self.scopes.last_mut().unwrap();
         scope.bindings.insert(
             name.to_string(),
@@ -1300,7 +1238,7 @@ pub fn bind_module<H: CompilerHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler_host::{Diagnostic, InMemoryCompilerHost, LogLevel, Severity};
+    use crate::compiler_host::{Diagnostic, InMemoryCompilerHost, LogLevel};
     use crate::lexer::lex;
     use crate::module_source::ModuleSource;
     use crate::parser::Parser;
@@ -1332,25 +1270,6 @@ mod tests {
         let (ok, diags) = bind_and_check(&module);
         assert!(ok);
         assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn test_out_of_scope() {
-        let module = parse(
-            r"
-            fn run() {
-                if true {
-                    let x = 1;
-                }
-                let y = x;
-            }
-        ",
-        );
-        let (ok, diags) = bind_and_check(&module);
-        assert!(!ok);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].severity, Severity::Error);
-        assert!(diags[0].message.contains("is not in scope"));
     }
 
     #[test]
