@@ -344,16 +344,28 @@ fn html_block_end_markers(chars: &List<char>) -> Option<[List<String>, i32]> {
         }
     }
     if rest.starts_with("<!--") {
-        return Option::Some([["-->"], p + 4]);
+        return Option::Some([
+            ["-->"],
+            p + 4,
+        ]);
     }
     if rest.starts_with("<?") {
-        return Option::Some([["?>"], p + 2]);
+        return Option::Some([
+            ["?>"],
+            p + 2,
+        ]);
     }
     if rest.starts_with("<![CDATA[") {
-        return Option::Some([["]]>"], p + 9]);
+        return Option::Some([
+            ["]]>"],
+            p + 9,
+        ]);
     }
     if rest.starts_with("<!") && p + 2 < len && chars[p + 2].is_ascii_alphabetic() {
-        return Option::Some([[">"], p + 2]);
+        return Option::Some([
+            [">"],
+            p + 2,
+        ]);
     }
     return null;
 }

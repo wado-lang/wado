@@ -66,7 +66,7 @@ jobs:
             || grep -qE '^docs/(spec|wep)-[^/]*\.md$' <<< "$files"; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Docs-only (*.md) change: skipping test jobs."
+            echo "Docs-only change: skipping test jobs."
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -234,7 +234,7 @@ jobs:
           CODE: ${{ needs.changes.outputs.code }}
         run: |
           set -euo pipefail
-          # Docs-only (*.md) change: the test jobs were skipped on purpose, so
+          # Docs-only change: the test jobs were skipped on purpose, so
           # report success and let the required "Test" check go green at once.
           if [ "$CHANGES_RESULT" = "success" ] && [ "$CODE" != "true" ]; then
             echo "Docs-only change: test jobs skipped, reporting success."
