@@ -143,7 +143,7 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    let [dtype, rank] = read_tensor_type(s, toks, tensor);
+    let [dtype, rank] = read_tensor_type(s, toks, tensor, &name)?;
     let data = read_constant_data(s, toks, vi, &name, &dtype, &rank)?;
     return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
@@ -260,7 +260,7 @@ fn read_tensor_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32, n
     let Some(tensor_type) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    let [dtype, rank] = read_tensor_type(s, toks, tensor_type);
+    let [dtype, rank] = read_tensor_type(s, toks, tensor_type, &name)?;
     let values = first_child_of_kind(s, tensor, onnx::RK_TENSOR_VALUES).unwrap();
     let texts = element_texts(s, toks, values, &name, &rank)?;
     let known = known_of(&name, &dtype, static_extents(&rank).unwrap(), texts)?;
@@ -315,7 +315,12 @@ fn digit_after_point(text: &String) -> String {
     return spelled;
 }
 
-fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {
+fn read_tensor_type(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    tensor: i32,
+    name: &String,
+) -> Result<[String, Rank], String> {
     let mut dtype = "";
     let mut saw_bracket = false;
     let mut rank = Rank::Scalar;
@@ -328,36 +333,33 @@ fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -
                 dtype = text;
             }
         } else if s.is_node(c) {
-            rank = Rank::Dims(read_dims(s, toks, c));
+            let mut dims: List<Dim> = [];
+            for let d of children_of_kind(s, c, onnx::RK_DIM) {
+                dims.push(read_dim(s, toks, d, name)?);
+            }
+            rank = Rank::Dims(dims);
         }
     }
     if saw_bracket && rank matches { Scalar } {
         rank = Rank::Unranked;
     }
-    return [dtype, rank];
+    return Result::Ok([dtype, rank]);
 }
 
-fn read_dims(s: &onnx::CstStore, toks: &onnx::TokenStream, dims: i32) -> List<Dim> {
-    let mut out: List<Dim> = [];
-    for let c of children_of_kind(s, dims, onnx::RK_DIM) {
-        out.push(read_dim(s, toks, c));
-    }
-    return out;
-}
-
-fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32) -> Dim {
+fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32, tensor: &String) -> Result<Dim, String> {
     for let c of children(s, dim) {
         if s.is_node(c) {
-            return Dim::Symbol(quotable_text(s, toks, c));
+            return Result::Ok(Dim::Symbol(quotable_text(s, toks, c)));
         }
         if s.is_token(c) {
             let text = toks.token_text(s.token_index(c));
             if text == "?" {
-                return Dim::Unknown;
+                return Result::Ok(Dim::Unknown);
             }
             return match i32::from_str(&text) {
-                Ok(n) => Dim::Static(n),
-                Err(_) => Dim::Symbol(text),
+                Ok(n) && n < 0 => Result::Err(`${tensor}: dimension ${n}`),
+                Ok(n) => Result::Ok(Dim::Static(n)),
+                Err(_) => Result::Ok(Dim::Symbol(text)),
             };
         }
     }

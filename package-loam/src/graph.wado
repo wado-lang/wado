@@ -2,6 +2,7 @@
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use { TreeMap } from "core:collections";
+use { checked_element_count } from "./runtime/tensor.wado";
 
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
@@ -108,16 +109,10 @@ pub fn push_element(bytes: &mut ByteList, bits: u64, width: i32) {
 /// The extents' product is how many elements the tensor says it has, and a
 /// payload of any other length is a file disagreeing with itself.
 pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
-    let mut declared: i64 = if extents.contains(&0) { 0 } else { 1 };
-    for let e of *extents {
-        declared = declared * e as i64;
-        // No payload is longer than what was read, so a product past it is
-        // already wrong and cannot overflow on the way.
-        if declared > elements as i64 {
-            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
-        }
-    }
-    if declared != elements as i64 {
+    let Some(declared) = checked_element_count(extents) else {
+        return Result::Err(`${tensor}: ${elements} elements for a shape holding more than a list can`);
+    };
+    if declared != elements {
         return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
     }
     return Result::Ok(());
