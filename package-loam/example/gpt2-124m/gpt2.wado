@@ -9,9 +9,8 @@ use gpt2 from "./gpt2.onnxtext"
     with {
         generator: {
             module: "../../src/generator.wado",
-            inputs: ["./gpt2.safetensors"],
+            inputs: ["./gpt2-header.safetensors"],
             options: {
-                // `sequence_length` is CONTEXT.
                 dims: { batch_size: 1, sequence_length: 32 },
                 outputs: ["logits"],
                 layout: [
@@ -125,7 +124,6 @@ use gpt2 from "./gpt2.onnxtext"
         },
     };
 
-global CONTEXT: i32 = 32;
 global STEPS: i32 = 8;
 
 /// The token the model ranks first after `ids`, padded on the right to the
@@ -133,23 +131,18 @@ global STEPS: i32 = 8;
 fn next_token(ids: &List<i32>, weights: &gpt2::Weights) -> i32 {
     let mut input: List<i64> = [];
     let mut mask: List<i64> = [];
-    for let i of 0..<CONTEXT {
+    for let i of 0..<gpt2::Seq::EXTENT {
         let real = i < ids.len();
         input.push(if real { ids[i] as i64 } else { 0 });
         mask.push(if real { 1 } else { 0 });
     }
+    let extents: List<i32> = [gpt2::Batch::EXTENT, gpt2::Seq::EXTENT];
     let logits = gpt2::forward(
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-            data: input,
-            extents: [1, CONTEXT],
-        },
-        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> {
-            data: mask,
-            extents: [1, CONTEXT],
-        },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: input, extents },
+        &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents },
         weights,
     );
-    let vocab = logits.extents[2];
+    let vocab = gpt2::Vocab::EXTENT;
     let row = (ids.len() - 1) * vocab;
     let mut best = 0;
     for let v of 1..<vocab {
@@ -167,8 +160,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
     }
     let tokenizer = Tokenizer::new(&#include_str("./vocab.json"), &#include_str("./merges.txt"), ["<|endoftext|>"]);
     let mut ids = tokenizer.encode(&prompt);
-    if ids.is_empty() || ids.len() + STEPS > CONTEXT {
-        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${CONTEXT - STEPS}`);
+    if ids.is_empty() || ids.len() + STEPS > gpt2::Seq::EXTENT {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${gpt2::Seq::EXTENT - STEPS}`);
         return;
     }
     let checkpoint = match fs::read("gpt2.safetensors") {

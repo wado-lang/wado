@@ -125,8 +125,14 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
     let names = Names::of(graph, checked, &literals, &axes)?;
+    let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
+        if let Some(extent) = fixed.get(axis) {
+            ImplSpec::new(axis).emit_begin(&mut w);
+            w.line(`pub const EXTENT: i32 = ${extent};`);
+            w.end();
+        }
     }
     w.blank();
     w.raw(&RUNTIME);
@@ -138,6 +144,30 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     emit_weights(&mut w, graph, checked, &names, &held);
     emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals)?;
     return Result::Ok(w.to_string());
+}
+
+/// The length of each axis that every input and output naming it fixes to one,
+/// which the caller then writes as the axis's `EXTENT` rather than a number.
+fn boundary_extents(graph: &Graph, shapes: &TreeMap<String, Shape>) -> TreeMap<String, i32> {
+    let mut fixed = TreeMap::<String, i32>::new();
+    let mut open = TreeSet::<String>::new();
+    for let declared of [&graph.inputs, &graph.outputs] {
+        for let vi of *declared {
+            for let axis of shapes.get(vi.name).unwrap().axes {
+                let Static(extent) = axis.extent else {
+                    open.insert(axis.name);
+                    continue;
+                };
+                if !fixed.try_insert(axis.name, extent) && fixed[axis.name] != extent {
+                    open.insert(axis.name);
+                }
+            }
+        }
+    }
+    for let name of open {
+        fixed.remove(name);
+    }
+    return fixed;
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel

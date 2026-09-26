@@ -80,6 +80,31 @@ test "the forward pass checks each input against the graph before any kernel" {
     assert check < body.find("matmul(").unwrap();
 }
 
+test "an axis the boundary fixes to one length carries it as a constant" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains("impl In {\n    pub const EXTENT: i32 = 4;\n}");
+    assert out.contains("impl Out {\n    pub const EXTENT: i32 = 2;\n}");
+    assert !out.contains("impl Batch {");
+    assert !out.contains("impl Hidden {");
+}
+
+test "an axis the boundary gives two lengths carries no constant" {
+    let source = `
+stretch (float[1, 2] A, float[3, 2] B) => (float[3, 2] Y)
+{
+    Y = Add(A, B)
+}
+`;
+    let out = generate(source, [
+        rule("A", ["Row", "Col"]),
+        rule("B", ["Row", "Col"]),
+    ]).unwrap();
+
+    assert !out.contains("impl Row {");
+    assert out.contains("impl Col {\n    pub const EXTENT: i32 = 2;\n}");
+}
+
 test "inputs sharing an axis the graph leaves to the run are checked against each other" {
     let source = `
 pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
