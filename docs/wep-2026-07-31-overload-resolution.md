@@ -83,7 +83,7 @@ cannot.
 
 ### What can and cannot overload
 
-Never overloadable — declaring a second one with the same name is an error:
+Not overloadable — declaring a second one with the same name is an error:
 
 - free functions,
 - inherent methods on one type (per instantiation),
@@ -501,8 +501,6 @@ annotation on an argument that is already pinned.
 
 ### Non-goals
 
-- Ad-hoc overloading of free functions or inherent methods — permanently out,
-  per the design philosophy.
 - Expected-type or return-type directed selection. Inference stays forward;
   `?` / `From` remains the one target-directed conversion, on its own path.
 - Ranking. Beyond the existing specific-impls-win rule there is no preference
