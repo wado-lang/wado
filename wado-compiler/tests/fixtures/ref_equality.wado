@@ -1,5 +1,7 @@
 // `==` on references compares what they point to, as in Rust; `ref_eq`
 // compares identity.
+use { Fields } from "wasi:http";
+
 struct Point {
     x: i32,
     y: i32,
@@ -74,6 +76,25 @@ test "reference to reference" {
     assert &ra == &rb;
 }
 
+test "a reference to a resource is identical only to its own resource" {
+    let a = Fields::new();
+    let b = Fields::new();
+    let ra = &a;
+    assert ref_eq(ra, &a);
+    assert !ref_eq(&a, &b);
+}
+
+test "a reference to a replace-on-assign element or field points to a copy" {
+    let mut xs: List<i32> = [1, 2, 3];
+    let mut p = Point { x: 1, y: 2 };
+    let rx = &xs[0];
+    let rp = &p.x;
+    xs[0] = 9;
+    p.x = 9;
+    assert *rx == 1;
+    assert *rp == 1;
+}
+
 test "a reference to a closure is identical only to its own place" {
     let f = || 1;
     let g = f;
@@ -90,4 +111,24 @@ test "a generic body compares references by value" {
     let p2 = Point { x: 1, y: 2 };
     assert same(&p1, &p2);
     assert !same(&p1, &Point { x: 0, y: 2 });
+}
+
+struct Callback {
+    id: i32,
+    f: fn(),
+}
+
+impl Eq for &Callback {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
+    }
+}
+
+test "an impl written for the reference answers where the pointee has no Eq" {
+    let a = Callback { id: 1, f: || {} };
+    let b = Callback { id: 1, f: || {} };
+    let c = Callback { id: 2, f: || {} };
+    assert &a == &b;
+    assert same(&a, &b);
+    assert !same(&a, &c);
 }

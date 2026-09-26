@@ -1479,12 +1479,16 @@ impl TypeSystem {
             ),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner_id = *inner;
-                // The prelude's `Eq for &T` compares the pointees, so `&T: Eq`
-                // is `T: Eq`. A bound writing an argument asks an impl.
-                if is_eq && wanted.is_empty() {
-                    return self.type_implements_trait(ctx, scope, inner_id, trait_);
+                // The prelude's `Eq for &T` makes `&T: Eq` wherever `T: Eq`.
+                // Where it is not, an impl written for the reference may still
+                // answer, as the solver finds.
+                if is_eq
+                    && wanted.is_empty()
+                    && self.type_implements_trait(ctx, scope, inner_id, trait_)
+                {
+                    return true;
                 }
-                let kind = RefKind::from_resolved(&resolved)
+                let kind = RefKind::from_resolved(resolved)
                     .expect("a reference type has a reference kind");
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
                 if self.find_trait_impl_for_type_with_args(

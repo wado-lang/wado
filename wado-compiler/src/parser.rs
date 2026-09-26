@@ -3514,6 +3514,7 @@ impl Parser {
 
         // Collect comparisons
         let mut comparisons = vec![ChainedComparison {
+            id: self.alloc_ast_id(),
             op: first_op,
             right: second.clone(),
             op_span: first_op_span,
@@ -3573,6 +3574,7 @@ impl Parser {
             let right = self.parse_not_expr()?;
 
             comparisons.push(ChainedComparison {
+                id: self.alloc_ast_id(),
                 op: next_op,
                 right: right.clone(),
                 op_span: next_op_span,
@@ -3586,7 +3588,7 @@ impl Parser {
             let cmp = comparisons.pop().unwrap();
             let merged_span = first_span.merge(&cmp.right.span());
             return Ok(Expr::Binary(Box::new(BinaryExpr {
-                id: self.alloc_ast_id(),
+                id: cmp.id,
                 left: first,
                 op: cmp.op,
                 right: cmp.right,

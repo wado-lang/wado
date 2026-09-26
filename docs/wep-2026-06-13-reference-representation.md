@@ -299,7 +299,9 @@ fix to conform; none should be preserved.
       predicate, so `&mut resource` has no stable cell. Decide and document: either
       box resource handles like other replace types, or explicitly reject `&mut`
       of a resource. (`&mut resource` is currently unverified / effectively
-      unsupported.)
+      unsupported.) A `&resource` is the handle itself, so `ref_eq` on two
+      compares handles: exact for an affine resource, whose handle only one
+      place holds, and true for two copies of an unrestricted one.
 - [x] D7 — whole-value `*ref = v` write-back for `List<T>` and tuples. An in-place
       `&mut T` makes `*r = v` a field-wise write-back onto the shared handle,
       lowered by `try_expand_deref_aggregate_assign`. That expansion only

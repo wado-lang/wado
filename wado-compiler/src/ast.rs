@@ -886,6 +886,7 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         Expr::ComparisonChain(e) => {
             v.visit_expr(&e.first);
             for c in &e.comparisons {
+                v.visit_id(c.id, c.op_span);
                 v.visit_expr(&c.right);
             }
         }
@@ -3291,6 +3292,7 @@ pub enum BinaryOp {
 /// A comparison in a chain (e.g., the `< b` part of `a < b < c`)
 #[derive(Debug, Clone)]
 pub struct ChainedComparison {
+    pub id: AstId,
     pub op: BinaryOp,
     pub right: Expr,
     pub op_span: Span,

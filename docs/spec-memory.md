@@ -119,39 +119,47 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 (see [Eq](./spec-traits.md#eq---equality)). The prelude function
 `ref_eq(a: &T, b: &T) -> bool` compares identity instead: whether the two
 references point to one place. A place is where a value is stored: a variable,
-a field, an element. For a `struct`, `List` or `String`, assignment copies the
-object, so each place holds its own and the object is the place. For a type
-that assignment replaces, such as a primitive, `variant` or `fn`, copies share
-one value, so the place is the variable, field or element holding it.
+a field, an element.
 
 Identity is guaranteed in one direction only. Two references to one place are
-always `ref_eq`. Two references to distinct places of identical content may also
-be `ref_eq`: as an optimization, the implementation may make them one place, as
-it does when it interns a constant `String` or `List`. Whether it does can
-change with the optimization level and with the Wado version, so a `ref_eq`
-that is true only by such merging is unpredictable. Java's `==` on strings
-behaves the same way. An identity comparison that should be true is never false.
+always `ref_eq`: `&x` taken twice of one variable, or a reference and a copy of
+it. References to distinct places may also be `ref_eq`, because the copies value
+semantics promise are as-if: the implementation may store equal content once,
+by eliding a copy or by interning a constant `String` or `List`. Whether it
+does can change with the optimization level and with the Wado version, so a
+`ref_eq` that is true only by such sharing is unpredictable. Java's `==` on
+strings behaves the same way.
 
 ```wado
-let xs: List<i32> = [1, 2, 3];
+let mut xs: List<i32> = [1, 2, 3];
 let ys: List<i32> = [1, 2, 3];
+let zs = xs;
 &xs == &ys;                     // true: equal values
 ref_eq(&xs, &xs);               // always true
-ref_eq(&xs, &ys);               // false or true: the two may be one place
+ref_eq(&xs, &ys);               // false or true: the two may be stored once
+ref_eq(&xs, &zs);               // false or true: the copy may be elided
+```
 
-let a: String = "abc";
-let b: String = "abc";
-ref_eq(&a, &b);                 // false or true, likewise
+A `&` to a `List` element or a struct field of a type that assignment replaces
+(a primitive, `enum`, `flags`, `variant` or `fn`) points to a copy of the value,
+taken where the `&` is written. It does not see a later assignment to the
+element or field, and two such references are two places:
+
+```wado
+let r = &xs[0];
+xs[0] = 9;
+*r;                             // 1
+ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 ```
 
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
-reference to a closure points to the place holding it:
+reference to a closure points to the place holding it, not to the closure:
 
 ```wado
 let f = || 1;
 let g = f;
-ref_eq(&f, &f);                 // true
-ref_eq(&f, &g);                 // false: two places holding one closure
+ref_eq(&f, &f);                 // always true
+ref_eq(&f, &g);                 // false or true: two places holding one closure
 ```
 
 ### Design Trade-offs

@@ -3859,43 +3859,6 @@ fn try_lower_comparison(
     right: &TirExpr,
     type_table: &mut TypeTable,
 ) -> Option<TirExprKind> {
-    // The prelude's `Eq for &T` compares the pointees, and so does this.
-    let is_ref = |t: TypeId| {
-        matches!(
-            type_table.get(t),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
-    };
-    if is_ref(left.type_id) && is_ref(right.type_id) {
-        assert!(
-            matches!(op, TirBinaryOp::Eq | TirBinaryOp::NotEq),
-            "the elaborator rejects ordering a pair of references"
-        );
-        let deref = |e: &TirExpr, tt: &TypeTable| {
-            let (ResolvedType::Ref(pointee) | ResolvedType::MutRef(pointee)) = *tt.get(e.type_id)
-            else {
-                unreachable!("both operands are references")
-            };
-            TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(e.clone()),
-                },
-                pointee,
-                span,
-            )
-        };
-        let (left, right) = (deref(left, type_table), deref(right, type_table));
-        return Some(
-            try_lower_comparison(trait_env, span, op, &left, &right, type_table).unwrap_or(
-                TirExprKind::Binary {
-                    op,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                },
-            ),
-        );
-    }
     let operand_type = type_table.get(left.type_id);
     let (impl_type_args, type_module_source): (Vec<FqTypeName>, Option<ModuleSource>) =
         match operand_type {

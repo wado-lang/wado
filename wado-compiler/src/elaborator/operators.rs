@@ -1590,7 +1590,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             right0_tir,
             cmp0.right.span(),
             cmp0.op_span,
-            None,
+            Some(cmp0.id),
         );
         let mut prev = right0_tir;
 
@@ -1604,8 +1604,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if idx != last_idx {
                 self.bind_chain_operand(idx + 1, right, ctx);
             }
-            let cmp_type =
-                self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
+            let cmp_type = self.resolve_binary_op(
+                prev,
+                cmp.op,
+                right,
+                cmp.right.span(),
+                cmp.op_span,
+                Some(cmp.id),
+            );
             // The `&` joining two comparisons is synthesised, so its right
             // operand is the comparison the chain just built, not written text.
             acc = self.resolve_binary_op(
@@ -1915,9 +1921,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // When the operator-dispatch request carries a source AST id in
         // `origin`, record the dispatch decision so reify can re-emit the
         // same method-call TIR for the binary / index expression.
-        // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
-        // comparisons) pass `None` and the record is skipped — they have
-        // no source-level `BinaryExpr` reify would key on.
+        // Synthesised callers (e.g. the `&` joining a comparison chain's
+        // links) pass `None` and the record is skipped — they have no
+        // source-level node reify would key on.
         if let Some(ast_id) = origin {
             self.record_operator_dispatch(
                 ast_id,
