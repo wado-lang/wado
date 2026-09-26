@@ -2682,70 +2682,44 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
-        // is present. The WIR builder zero-initialises the slot;
-        // reify emits a Unit placeholder as the `value` and the
-        // `type_id` field carries the user-declared type. Refutable
-        // patterns in this position are rejected at annotate; the
-        // recovery path emits an Expr-Unit placeholder to mirror.
+        // is present, and annotate that the pattern is a single name. The
+        // WIR builder zero-initialises the slot; reify emits a Unit
+        // placeholder as the `value` and the `type_id` field carries the
+        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            // 7-A: same as the initialised case — read the binding's recorded
-            // type (this path always binds a simple `Ident` / `MutIdent`).
-            let binding_id = match &let_stmt.pattern {
-                ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
-                _ => None,
+            let (ast::Pattern::Ident {
+                id,
+                name,
+                span: binding_span,
+            }
+            | ast::Pattern::MutIdent {
+                id,
+                name,
+                span: binding_span,
+            }) = &let_stmt.pattern
+            else {
+                unreachable!("annotate rejects an uninitialized `let` that destructures")
             };
-            let type_id = let_stmt
-                .ty
-                .as_ref()
-                .map(|_| {
-                    binding_id
-                        .and_then(|id| self.ann_local_type(id))
-                        .or_else(|| self.ann_let_annotated_type(let_stmt.id))
-                        .expect(
-                            "uninitialised let with annotation: annotate records the type on \
-                             local_types (simple binding) or let_annotated_types (destructure)",
-                        )
-                })
-                .unwrap_or(TypeTable::UNKNOWN);
-            return match &let_stmt.pattern {
-                ast::Pattern::Ident {
-                    id,
-                    name,
-                    span: binding_span,
-                }
-                | ast::Pattern::MutIdent {
-                    id,
-                    name,
-                    span: binding_span,
-                } => {
-                    let is_mut = let_stmt.is_mut
-                        || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                    let local_index =
-                        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *binding_span);
-                    let placeholder =
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name: name.clone(),
-                            local_index,
-                            is_mut,
-                            is_reactive: let_stmt.is_reactive,
-                            type_id,
-                            value: placeholder,
-                            skip_value_copy: false,
-                        },
-                        let_stmt.span,
-                    )
-                }
-                _ => TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Unit,
-                        TypeTable::UNIT,
-                        let_stmt.span,
-                    )),
-                    let_stmt.span,
-                ),
-            };
+            let type_id = self
+                .ann_local_type(*id)
+                .expect("annotate records an uninitialized `let`'s type on its local");
+            let is_mut =
+                let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
+            let local_index =
+                ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *binding_span);
+            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+            return TirStmt::new(
+                TirStmtKind::Let {
+                    name: name.clone(),
+                    local_index,
+                    is_mut,
+                    is_reactive: let_stmt.is_reactive,
+                    type_id,
+                    value: placeholder,
+                    skip_value_copy: false,
+                },
+                let_stmt.span,
+            );
         };
 
         // 7-A (E2-thin): a simple binding's annotated type is the
@@ -4212,9 +4186,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 span,
                             ));
                         }
-                        ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                            let tir_pattern =
-                                this.reify_pattern(&for_of.binding, bind_elem_type, ctx);
+                        binding => {
+                            let tir_pattern = this.reify_pattern(binding, bind_elem_type, ctx);
                             block_stmts.push(TirStmt::new(
                                 TirStmtKind::LetDestructure {
                                     pattern: tir_pattern,
@@ -4223,12 +4196,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 },
                                 span,
                             ));
-                        }
-                        ast::Pattern::Wildcard => {
-                            block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
-                        }
-                        _ => {
-                            // Annotate diagnosed; emit nothing.
                         }
                     }
                 }

@@ -258,7 +258,8 @@ fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
 
 A bare identifier pattern is exempt where the name reaches a case or a
 `global`. Such a pattern matches by value rather than binding, and the
-scrutinee's type decides which it does.
+scrutinee's type decides which it does. The root of a `let` is the exception: a
+bare name there always binds.
 
 The derivation is read off the binder's own source, not off the `let` keyword,
 and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and

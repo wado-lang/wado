@@ -606,26 +606,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let Some(name) = self.bind_let_ident(let_stmt, type_id, ctx) else {
-            match &let_stmt.pattern {
-                ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                    self.resolve_let_pattern(
-                        &let_stmt.pattern,
-                        type_id,
-                        let_stmt.is_mut,
-                        let_stmt.span,
-                        BindingSite::Let,
-                        ctx,
-                    );
-                }
-                ast::Pattern::Wildcard => {}
-                _ => {
-                    self.check_irrefutable_pattern(
-                        &let_stmt.pattern,
-                        let_stmt.span,
-                        BindingSite::Let,
-                    );
-                }
-            }
+            self.resolve_let_pattern(
+                &let_stmt.pattern,
+                type_id,
+                let_stmt.is_mut,
+                let_stmt.span,
+                BindingSite::Let,
+                ctx,
+            );
             return;
         };
         let mut closure_candidate = ast_value;
@@ -736,6 +724,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Report a tuple pattern naming more elements than the tuple holds, or,
+    /// without `..`, fewer.
+    fn check_tuple_pattern_arity(&self, written: usize, has_rest: bool, held: usize, span: Span) {
+        let (expected, found) = if has_rest && written > held {
+            (format!("tuple with at least {written} elements"), held)
+        } else if !has_rest && written != held {
+            (format!("tuple with {held} elements"), written)
+        } else {
+            return;
+        };
+        let _ = self.emit(TypeError::PatternTypeMismatch {
+            expected,
+            found: format!("pattern with {found} elements"),
+            span,
+        });
+    }
+
     /// Report the fields a struct pattern without `..` leaves out.
     fn check_struct_pattern_complete(
         &self,
@@ -778,23 +783,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
         if self.bind_let_ident(let_stmt, type_id, ctx).is_none() {
-            self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "an uninitialized `let` declares a single name; \
+                          destructure where the value is given"
+                    .to_string(),
+                span: let_stmt.name_span,
+            });
         }
     }
 
-    /// Check that a pattern is irrefutable (guaranteed to match).
-    ///
-    /// Irrefutable patterns bind variables unconditionally and are valid in `let` bindings
-    /// and `for` loops. Refutable patterns may fail to match and are only valid in `match`
-    /// arms, `if let`, and `while let`.
-    ///
-    /// Emits a compile error and returns `false` if the pattern is refutable.
-    fn check_irrefutable_pattern(
-        &mut self,
-        pattern: &ast::Pattern,
-        span: Span,
-        site: BindingSite,
-    ) -> bool {
+    /// Reject a `for` binding over a type pack that can fail by its shape alone,
+    /// since no one element type answers for the rest.
+    fn check_pack_binding_irrefutable(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
         let reason = match pattern {
             // `Pattern::Error` is a parser recovery placeholder; treat it as
             // irrefutable so it does not cascade a second "refutable" error.
@@ -805,17 +805,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Tuple(patterns, _) => {
                 return patterns
                     .iter()
-                    .all(|p| self.check_irrefutable_pattern(p, span, site));
+                    .all(|p| self.check_pack_binding_irrefutable(p, span));
             }
             Pattern::Struct { fields, .. } => {
                 return fields
                     .iter()
-                    .all(|f| self.check_irrefutable_pattern(&f.pattern, span, site));
+                    .all(|f| self.check_pack_binding_irrefutable(&f.pattern, span));
             }
-            // Whether the ascription narrows is a question of types, which
-            // the pattern's resolution answers.
             Pattern::Typed { pattern, .. } => {
-                return self.check_irrefutable_pattern(pattern, span, site);
+                return self.check_pack_binding_irrefutable(pattern, span);
             }
             Pattern::Literal(_)
             | Pattern::Variant { .. }
@@ -824,7 +822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 refutable_shape(pattern).expect("a testing pattern is refutable by its shape")
             }
         };
-        self.reject_refutable(site, &reason, span);
+        self.reject_refutable(BindingSite::ForOf, &reason, span);
         false
     }
 
@@ -1079,7 +1077,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
+    /// Resolve a destructuring pattern that must bind (`let`, the `for` of a tuple).
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1089,8 +1087,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: BindingSite,
         ctx: &mut FunctionContext,
     ) {
-        self.check_irrefutable_pattern(pattern, span, site);
-        self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
+        let pattern = if is_mut {
+            &mut_bindings_of(pattern)
+        } else {
+            pattern
+        };
+        self.resolve_if_pattern_inner(
+            pattern,
+            type_id,
+            &mut ctx.replacing(|ctx| &mut ctx.irrefutable_site, Some(site)),
+            span,
+            RefBinding::None,
+        );
     }
 
     /// The struct a pattern destructures (a newtype's base), and whether its
@@ -1165,173 +1173,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return plain();
         }
         (expected, qualified)
-    }
-
-    fn resolve_let_pattern_inner(
-        &mut self,
-        pattern: &ast::Pattern,
-        type_id: TypeId,
-        is_mut: bool,
-        span: Span,
-        site: BindingSite,
-        ctx: &mut FunctionContext,
-        ref_binding: RefBinding,
-    ) {
-        if type_id == TypeTable::ERROR
-            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
-        {
-            for p in subpatterns {
-                let error = TypeTable::ERROR;
-                self.resolve_let_pattern_inner(p, error, is_mut, span, site, ctx, ref_binding);
-            }
-            return;
-        }
-        match pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
-                let binding_type =
-                    self.pattern_binding_type(name, type_id, ref_binding, *name_span);
-                ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
-            }
-            ast::Pattern::Tuple(patterns, has_rest) => {
-                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                let elem_types = {
-                    let type_table = self.tysys.type_table.borrow();
-                    if let Some(elem_types) = type_table.as_tuple(type_id) {
-                        elem_types
-                    } else {
-                        // Error: expected tuple type
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: "tuple type".to_string(),
-                            found: type_table.type_name(type_id),
-                            span,
-                        });
-                        vec![TypeTable::UNKNOWN; patterns.len()]
-                    }
-                };
-
-                // Check length
-                if *has_rest {
-                    if patterns.len() > elem_types.len() {
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: format!("tuple with at least {} elements", patterns.len()),
-                            found: format!("tuple with {} elements", elem_types.len()),
-                            span,
-                        });
-                    }
-                } else if patterns.len() != elem_types.len() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: format!("tuple with {} elements", elem_types.len()),
-                        found: format!("pattern with {} elements", patterns.len()),
-                        span,
-                    });
-                }
-
-                // Resolve each sub-pattern with its corresponding element type
-                for (p, &elem_type) in patterns.iter().zip(
-                    elem_types
-                        .iter()
-                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                ) {
-                    self.resolve_let_pattern_inner(
-                        p,
-                        elem_type,
-                        is_mut,
-                        span,
-                        site,
-                        ctx,
-                        ref_binding,
-                    );
-                }
-            }
-            ast::Pattern::Struct {
-                type_name,
-                type_name_id,
-                fields,
-                has_rest,
-                span: pat_span,
-            } => {
-                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                let head = self.struct_pattern_head(
-                    type_name.as_deref(),
-                    *type_name_id,
-                    type_id,
-                    *pat_span,
-                );
-
-                for field in fields {
-                    let field_type = match head {
-                        Some(_) => {
-                            self.lookup_field_type(type_id, &field.field_name, field.span)
-                                .1
-                        }
-                        None => TypeTable::ERROR,
-                    };
-                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
-                        self.check_field_visibility(
-                            type_id,
-                            &field.field_name,
-                            Some(field.id),
-                            field.span,
-                        );
-                    }
-                    self.resolve_let_pattern_inner(
-                        &field.pattern,
-                        field_type,
-                        is_mut,
-                        field.span,
-                        site,
-                        ctx,
-                        ref_binding,
-                    );
-                }
-
-                if let Some((head, _)) = head
-                    && !has_rest
-                {
-                    self.check_struct_pattern_complete(head, fields, *pat_span);
-                }
-            }
-            ast::Pattern::Typed {
-                id,
-                pattern: inner,
-                ty,
-                span: typed_span,
-            } => {
-                let target = self.resolve_ascription(*id, ty);
-                if self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .is_resource_narrowing(type_id, target)
-                {
-                    self.reject_refutable_narrowing(type_id, target, *typed_span, site);
-                } else {
-                    self.check_ascription(type_id, target, *typed_span);
-                }
-                self.resolve_let_pattern_inner(inner, target, is_mut, span, site, ctx, ref_binding);
-            }
-            // Wildcard binds nothing. Refutable patterns (literal / variant /
-            // or / range) in let position already had an error emitted by
-            // `check_irrefutable_pattern`; the parser error placeholder is
-            // inert. None of them introduce a binding here.
-            ast::Pattern::Wildcard
-            | ast::Pattern::Literal(_)
-            | ast::Pattern::Variant { .. }
-            | ast::Pattern::Or(_)
-            | ast::Pattern::Range { .. }
-            | ast::Pattern::Error(_) => {}
-        }
     }
 
     /// Resolve an expression statement
@@ -1664,7 +1505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Vec::new()
             }
-            Pattern::Tuple(patterns, _) => {
+            Pattern::Tuple(patterns, has_rest) => {
                 let (scrutinee_type, ref_binding) =
                     self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
@@ -1678,6 +1519,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
+                self.check_tuple_pattern_arity(patterns.len(), *has_rest, element_types.len(), span);
 
                 let mut bindings: PatBindings = Vec::new();
                 for (p, &ty) in patterns.iter().zip(
@@ -2612,7 +2454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        if !self.check_irrefutable_pattern(&for_of.binding, for_of.span, BindingSite::ForOf) {
+        if !self.check_pack_binding_irrefutable(&for_of.binding, for_of.span) {
             return;
         }
         let name_or_wildcard = |p: &Pattern| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard);
@@ -2784,24 +2626,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         );
                         self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
                     }
-                    Pattern::Tuple(_, _) | Pattern::Struct { .. } => {
+                    binding => {
                         self.resolve_let_pattern(
-                            &for_of.binding,
+                            binding,
                             bind_elem_type,
                             for_of.is_mut,
                             span,
                             BindingSite::ForOf,
                             ctx,
                         );
-                    }
-                    Pattern::Wildcard => {
-                        // Discard the element; nothing to bind.
-                    }
-                    _ => {
-                        let _ = self.emit(TypeError::InvalidPattern {
-                            message: "invalid binding pattern in for-of loop".to_string(),
-                            span,
-                        });
                     }
                 }
             }

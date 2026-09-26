@@ -173,7 +173,10 @@ returns `None`.
 The binding is a copy of each element (value semantics), so modifying it does
 not affect the original collection.
 
-The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
+The binding must match every element, as a `let` pattern must (see
+[Patterns That Cannot Fail](#patterns-that-cannot-fail)). A pattern that can
+fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error.
+Match on the element in the body instead.
 
 ### Tuple for-of (compile-time expansion)
 
@@ -369,6 +372,9 @@ match command {
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
+A tuple pattern names every element of the tuple, or ends in `..` after at most
+that many.
+
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
@@ -380,6 +386,27 @@ fn kind<S: AsStrSlice>(s: S) -> i32 {
 }
 kind("digit".as_str_slice());   // 2
 ```
+
+### Patterns That Cannot Fail
+
+A `let` or `for` binding takes a pattern that matches every value of its type.
+A case pattern does so when no other case of the type holds a value, as defined
+under Exhaustiveness below. A literal, a range, a constant, an or-pattern, and a
+narrowing type pattern never do.
+
+```wado
+variant W { A(i32) }
+let A(x) = w;                     // OK: W has no other case
+let Ok(v) = r;                    // OK where r: Result<i32, !>
+let Some(y) = opt;                // Error: `Some` may not match
+```
+
+A bare name at the root of a `let` binds. Below the root it reads as it does in
+`match`: a case or a constant of that name matches by value. So
+`let [None, n] = pair` tests its first element and is an error, since `None`
+may not match.
+
+An uninitialized `let x: T;` declares a single name.
 
 ### Exhaustiveness
 

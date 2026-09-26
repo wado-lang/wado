@@ -455,7 +455,7 @@ struct Resolver<'a> {
     lint_shadowing: bool,
     pending_binder: Option<PendingBinder>,
     /// The pattern being walked sits where a refutable one cannot: a `let`, a
-    /// `for let … of`, a tuple comprehension. Every bare identifier in it binds.
+    /// `for let … of`, a tuple comprehension. A bare identifier at its root binds.
     irrefutable_pattern: bool,
 }
 
@@ -578,10 +578,10 @@ impl Resolver<'_> {
             .is_some_and(|p| p.allowed || p.derived.iter().any(|derived| derived == name))
     }
 
-    /// Whether an identifier pattern binds rather than matches. `mut x` and any
-    /// pattern in an irrefutable position always bind; elsewhere a bare `x`
-    /// binds unless a case or a `global` answers the name, since either of
-    /// those matches by value instead.
+    /// Whether an identifier pattern binds rather than matches. `mut x` and the
+    /// root of an irrefutable pattern always bind; elsewhere a bare `x` binds
+    /// unless a case or a `global` answers the name, since either of those
+    /// matches by value instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
     /// reference, and even where the module does not import its type: only the
@@ -876,7 +876,11 @@ impl AstVisitor for Resolver<'_> {
             let exempt = self.binder_exempts(name);
             self.bind_name(name, *span, exempt);
         }
+        // Below the root, the elaborator reads a name as `match` does.
+        let at_root = self.irrefutable_pattern;
+        self.irrefutable_pattern &= matches!(pat, ast::Pattern::Typed { .. });
         ast::walk_pattern(self, pat);
+        self.irrefutable_pattern = at_root;
     }
 
     /// A bound is a reference to a trait, and its associated-type bindings are
