@@ -1,4 +1,4 @@
-// Test: StreamWritable::write_raw writes exactly the slice's byte window.
+// Test: StreamWritable::write_raw_all writes exactly the slice's byte window.
 // A larger buffer "XXerr msg\nYY" is written as its middle 8 bytes only (a
 // non-zero slice start), so verifying stderr receives exactly "err msg\n"
 // exercises the slice offset.
@@ -13,7 +13,7 @@ export fn run() with Stderr {
 
     let list: List<u8> = [88, 88, 101, 114, 114, 32, 109, 115, 103, 10, 89, 89];
     let buf = list.to_array();
-    tx.write_raw(buf.slice(2, 10));
+    tx.write_raw_all(buf.slice(2, 10));
 
     tx.drop();
     subtask.read();

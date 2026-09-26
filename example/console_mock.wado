@@ -83,15 +83,14 @@ impl StreamWritable<u8> for MockStdio {
         resume StreamWrite { count: count, result: CopyResult::Completed };
     }
 
-    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
+    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         let _ = this;
-        let count = data.len();
         if self.to_stderr {
             self.err.extend_from_slice(data);
         } else {
             self.out.extend_from_slice(data);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed };
+        resume CopyResult::Completed;
     }
 
     fn drop(&mut self, this: &StreamWritable<u8>) {

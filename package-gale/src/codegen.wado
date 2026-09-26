@@ -29,6 +29,7 @@ use {
     vocab_display_names,
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
+    splice_suffixed_alternations,
 } from "./lexer_gen.wado";
 use { gen_parser, grammar_scans_through_atn } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
@@ -129,6 +130,7 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
+    splice_suffixed_alternations(grammar);
     // Canonicalization is done; everything downstream may assume its shape.
     assert_canonical_shape(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s
@@ -311,7 +313,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     gen_parser(&mut w, grammar, &lowered, &parser_members, &mut ctx);
     warn_unhandled_lexer_actions(grammar, &mut ctx);
     warn_atn_class_lexer_predicates(grammar, &latn.atn_class_rules, &mut ctx);
-    gen_string_tree_helper(&mut w, grammar, &lit_tokens, ctx.emit_actions());
+    gen_string_tree_helper(&mut w, grammar, &lit_tokens);
     if let Some(query) = &options.highlight_query {
         if any_base {
             let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };

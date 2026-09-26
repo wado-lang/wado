@@ -1,0 +1,11 @@
+// An uninitialized `let` declares a single name.
+
+test {
+    let [a, b]: [i32, i32];
+    let { x, y }: Point;
+}
+
+struct Point { x: i32, y: i32 }
+
+__DATA__
+{"compile_error": ":4:9: analysis error: invalid pattern: an uninitialized `let` declares a single name; destructure where the value is given; 5:9: invalid pattern: an uninitialized `let` declares a single name; destructure where the value is given"}

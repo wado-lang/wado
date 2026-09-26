@@ -13,7 +13,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::SymbolTable;
+use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
 
@@ -525,8 +525,9 @@ struct Resolver<'a> {
     /// `#![generated]`: a generator's names are not the user's to rename.
     lint_shadowing: bool,
     pending_binder: Option<PendingBinder>,
-    /// The pattern being walked sits where a refutable one cannot: a `let`, a
-    /// `for let … of`, a tuple comprehension. Every bare identifier in it binds.
+    /// The pattern being walked sits where a refutable one cannot: a `let`
+    /// without `else`, a `for let … of`, a tuple comprehension. A bare
+    /// identifier in it never names a `global`.
     irrefutable_pattern: bool,
 }
 
@@ -652,10 +653,10 @@ impl Resolver<'_> {
             .is_some_and(|p| p.allowed || p.derived.iter().any(|derived| derived == name))
     }
 
-    /// Whether an identifier pattern binds rather than matches. `mut x` and any
-    /// pattern in an irrefutable position always bind; elsewhere a bare `x`
-    /// binds unless a case or a `global` answers the name, since either of
-    /// those matches by value instead.
+    /// Whether an identifier pattern binds rather than matches. `mut x` always
+    /// binds; a bare `x` binds unless a case answers the name, or, in a
+    /// refutable pattern, an immutable `global` does. Either matches by value
+    /// instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
     /// reference, and even where the module does not import its type: only the
@@ -663,14 +664,22 @@ impl Resolver<'_> {
     /// module's own tier, since the lint this feeds had better miss a binder
     /// than order a rename of a pattern that binds nothing.
     fn pattern_binds(&self, pat: &ast::Pattern, name: &str) -> bool {
-        if self.irrefutable_pattern || matches!(pat, ast::Pattern::MutIdent { .. }) {
+        if matches!(pat, ast::Pattern::MutIdent { .. }) {
             return true;
         }
         if self.scopes.case_names.contains(name) {
             return false;
         }
+        if self.irrefutable_pattern {
+            return true;
+        }
         match self.resolve_value_name(name) {
-            Resolution::Def(def) => self.defs.kind(def) != DefKind::Global,
+            Resolution::Def(def) => !matches!(
+                self.symbols
+                    .get(&self.defs.ast_id(def))
+                    .map(|sym| &sym.kind),
+                Some(SymbolKind::Global(GlobalSymbol { is_mut: false }))
+            ),
             _ => true,
         }
     }
@@ -706,10 +715,10 @@ impl Resolver<'_> {
         self.pending_binder = None;
     }
 
-    /// Walk a pattern that cannot fail to match, where every bare identifier
-    /// binds rather than naming a case or a `global`.
-    fn in_irrefutable_pattern(&mut self, walk: impl FnOnce(&mut Self)) {
-        let saved = std::mem::replace(&mut self.irrefutable_pattern, true);
+    /// Walk a pattern, irrefutable or not, where a bare identifier may name a
+    /// `global` only in a refutable one.
+    fn in_pattern_position(&mut self, irrefutable: bool, walk: impl FnOnce(&mut Self)) {
+        let saved = std::mem::replace(&mut self.irrefutable_pattern, irrefutable);
         walk(self);
         self.irrefutable_pattern = saved;
     }
@@ -854,14 +863,14 @@ impl AstVisitor for Resolver<'_> {
                     self.visit_block(block);
                 }
                 self.in_binder(pending, |s| {
-                    s.in_irrefutable_pattern(|s| s.visit_pattern(&l.pattern));
+                    s.in_pattern_position(l.else_block.is_none(), |s| s.visit_pattern(&l.pattern));
                 });
             }
             // The element binding is irrefutable, and the frame is the loop's.
             ast::Stmt::ForOf(f) => self.in_frame(|s| {
                 s.visit_id(f.id, f.span);
                 s.visit_expr(&f.iterable);
-                s.in_irrefutable_pattern(|s| s.visit_pattern(&f.binding));
+                s.in_pattern_position(true, |s| s.visit_pattern(&f.binding));
                 s.visit_block(&f.body);
             }),
             ast::Stmt::If(i) => self.visit_if(&i.condition, &i.then_block, i.else_block.as_ref()),
@@ -994,7 +1003,7 @@ impl AstVisitor for Resolver<'_> {
                     }
                     if let ast::Expr::TupleComprehension(c) = expr {
                         s.visit_expr(&c.iterable);
-                        s.in_irrefutable_pattern(|s| s.visit_pattern(&c.binding));
+                        s.in_pattern_position(true, |s| s.visit_pattern(&c.binding));
                         s.visit_expr(&c.body);
                         return;
                     }

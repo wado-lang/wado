@@ -1,0 +1,11 @@
+// `iter_ref` yields `&i32`, and a `List<i32>` collects `i32`. Taking one for the
+// other pushed a reference into the list, an invalid module for a scalar.
+
+export fn run() {
+    let xs: List<i32> = [1, 2, 3];
+    let out: List<i32> = xs.iter_ref().filter(|x| *x > 1).collect();
+    assert out.len() == 2;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type 'FromIterator::Elem = &i32': it is 'i32'"}

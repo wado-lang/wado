@@ -52,6 +52,8 @@ global mut CM_CALLBACKS: List<fn() -> ()> = deferred null;
 
 global HANDLE_LIMIT: f64 = 9007199254740992.0;
 
+global CM_COPY_MAX: i32 = deferred 0;
+
 global mut $modules_initialized: bool = false;
 
 pub struct Formatter {
@@ -4826,6 +4828,10 @@ fn write_copy_is_final(written: &StreamWrite) -> bool {
     return ((written.result != CopyResult::Completed) || (written.count <= 0));
 }
 
+fn cm_packed_upper(packed: i32) -> i32 {
+    return (packed as u32 >> 4) as i32;
+}
+
 pub fn "$field_get$core:prelude/types.wado/StreamWrite$i32"(v: &StreamWrite, index: i32) -> i32 {
     return match index {
         0 => v.count,
@@ -4894,9 +4900,9 @@ fn write_string_to_stream(tx: StreamWritable<u8>, message: String, add_newline: 
         let mut new_repr: Array<u8> = "core::builtin::core/builtin/array_new<u8>"((len + 1));
         "core::builtin::core/builtin/array_copy<u8>"(&mut new_repr, 0, message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len);
         core::builtin::array_set_u8(&mut new_repr, len, 10);
-        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
+        core::rt::cm_stream_write_raw_all_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&new_repr, 0, (len + 1)));
     } else {
-        tx."core:prelude/types.wado/StreamWritable<u8>::write_raw_all"("core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
+        core::rt::cm_stream_write_raw_all_u8(&tx as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(message."core:prelude/string.wado/String::internal_raw_bytes"(), 0, len));
     }
     cm_raw_call stream-drop-writable(tx as i32);
 }
@@ -4930,13 +4936,17 @@ fn cm_lower_string(s: String) -> i64 {
     let bytes: &Array<u8> = s."core:prelude/string.wado/String::internal_raw_bytes"();
     let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
     core::rt::gc_array_to_memory(bytes, 0, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
+    return core::rt::pack_ptr_len(ptr, len);
+}
+
+fn pack_ptr_len(ptr: i32, len: i32) -> i64 {
+    return (ptr as u32 as i64 | (len as i64 << 32));
 }
 
 fn cm_lower_list_u8(data: &Array<u8>, start: i32, len: i32) -> i64 {
     let ptr: i32 = core::builtin::realloc(0, 0, 1, len);
     core::rt::gc_array_to_memory(data, start, ptr, len);
-    return (ptr as i64 | (len as i64 << 32));
+    return core::rt::pack_ptr_len(ptr, len);
 }
 
 fn cm_lower_array_u8(arr: List<u8>) -> i64 {
@@ -5013,15 +5023,32 @@ fn cm_copy_result(packed: i32) -> CopyResult {
     return CopyResult::Cancelled;
 }
 
+fn cm_copy_count(count: i32) -> i32 {
+    return "core::prelude/primitive.wado::i32::min"(count, core::rt::CM_COPY_MAX);
+}
+
+fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
+    if ((count < 0) || (count > (2147483647 / elem_size))) {
+        core::builtin::cold_path();
+        core::rt::panic(String { repr: packed"a buffer's length is negative or past what linear memory can address", used: 68 });
+    }
+    return (count * elem_size);
+}
+
+fn cm_packed_count(packed: i32) -> i32 {
+    return "core::prelude/types.wado::cm_packed_upper"(packed);
+}
+
 fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
-    let ptr: i32 = core::builtin::realloc(0, 0, 1, max);
-    let mut result: i32 = core::builtin::stream_read(handle, ptr, max);
+    let room: i32 = core::rt::cm_buffer_bytes(core::rt::cm_copy_count(max), 1);
+    let ptr: i32 = core::builtin::realloc(0, 0, 1, room);
+    let mut result: i32 = core::builtin::stream_read(handle, ptr, room);
     if (result == -1) {
         result = core::rt::cm_await_blocked(handle);
     }
-    let count: i32 = (result >> 4);
+    let count: i32 = core::rt::cm_packed_count(result);
     let arr: Array<u8> = core::rt::memory_to_gc_array(ptr, count);
-    let freed: i32 = core::builtin::realloc(ptr, max, 1, 0);
+    let freed: i32 = core::builtin::realloc(ptr, room, 1, 0);
     return StreamChunk<u8> { items: "core::prelude/list.wado::core:prelude/list.wado/List<u8>::internal_from_raw"(arr, count), result: core::rt::cm_copy_result(result) };
 }
 
@@ -5035,21 +5062,28 @@ fn cm_stream_write_u8(handle: i32, data: List<u8>) -> StreamWrite {
 }
 
 fn cm_stream_write_once(handle: i32, ptr: i32, count: i32) -> StreamWrite {
-    let mut result: i32 = core::builtin::stream_write(handle, ptr, count);
+    let mut result: i32 = core::builtin::stream_write(handle, ptr, core::rt::cm_copy_count(count));
     if (result == -1) {
         result = core::rt::cm_await_blocked(handle);
     }
-    return StreamWrite { count: (result >> 4), result: core::rt::cm_copy_result(result) };
+    return StreamWrite { count: core::rt::cm_packed_count(result), result: core::rt::cm_copy_result(result) };
 }
 
-#[inline(always)]
-fn cm_stream_write_raw_u8(handle: i32, data: Slice<u8>) -> StreamWrite {
-    let packed: i64 = core::rt::cm_lower_list_u8(data."core:prelude/slice.wado/Slice<u8>::internal_repr"(), data."core:prelude/slice.wado/Slice<u8>::internal_start"(), data."core:prelude/slice.wado/Slice<u8>::len"());
-    let ptr: i32 = packed as i32;
-    let raw_len: i32 = (packed >> 32) as i32;
-    let written: StreamWrite = core::rt::cm_stream_write_once(handle, ptr, raw_len);
-    let freed: i32 = core::builtin::realloc(ptr, raw_len, 1, 0);
-    return written;
+fn cm_stream_write_raw_all_u8(handle: i32, data: Slice<u8>) -> CopyResult {
+    let len: i32 = data."core:prelude/slice.wado/Slice<u8>::len"();
+    if (len == 0) {
+        return CopyResult::Completed;
+    }
+    let ptr: i32 = core::rt::cm_lower_list_u8(data."core:prelude/slice.wado/Slice<u8>::internal_repr"(), data."core:prelude/slice.wado/Slice<u8>::internal_start"(), len) as i32;
+    let mut taken: i32 = 0;
+    loop {
+        let written: StreamWrite = core::rt::cm_stream_write_once(handle, (ptr + taken), (len - taken));
+        taken = (taken + written.count);
+        if ("core::prelude/types.wado::write_copy_is_final"(&written) || (taken >= len)) {
+            let freed: i32 = core::builtin::realloc(ptr, len, 1, 0);
+            return written.result;
+        }
+    }
 }
 
 fn cm_error_context_new(msg: String) -> i32 {
@@ -5297,22 +5331,6 @@ fn "core:prelude/list.wado/List<u8>::internal_raw_data_ref"(self: &List<u8>) -> 
 
 pub fn "core:prelude/list.wado/List<u8>::len"(self: &List<u8>) -> i32 {
     return self.used;
-}
-
-pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
-    if data."core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"() {
-        return CopyResult::Completed;
-    }
-    let repr: &Array<u8> = data."core:prelude/slice.wado/Slice<u8>::internal_repr"();
-    let end: i32 = (data."core:prelude/slice.wado/Slice<u8>::internal_start"() + data."core:prelude/slice.wado/Slice<u8>::len"());
-    let mut offset: i32 = data."core:prelude/slice.wado/Slice<u8>::internal_start"();
-    loop {
-        let written: StreamWrite = core::rt::cm_stream_write_raw_u8(self as i32, "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(repr, offset, end));
-        offset = (offset + written.count);
-        if ("core::prelude/types.wado::write_copy_is_final"(&written) || (offset >= end)) {
-            return written.result;
-        }
-    }
 }
 
 pub fn "core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>"(self: &mut Formatter, close: String) {
@@ -5704,10 +5722,6 @@ pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSl
 #[retain(self)]
 fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &&String) -> StrSlice {
     return *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
-}
-
-pub fn "core:prelude/slice.wado/Slice<u8>^core:prelude/slice.wado/Sequence::is_empty"(self: &Slice<u8>) -> bool {
-    return (self."core:prelude/slice.wado/Slice<u8>::len"() == 0);
 }
 
 fn "Array<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<fn() -> ()>, index: i32) -> fn() -> () {
@@ -10961,6 +10975,7 @@ pub fn "$initialize_module"() {
 
 pub fn "$initialize_module"() {
     core::rt::CM_CALLBACKS = "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"([]);
+    core::rt::CM_COPY_MAX = 268435455;
 }
 
 pub fn "$initialize_modules"() {

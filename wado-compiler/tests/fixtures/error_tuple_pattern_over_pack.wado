@@ -1,0 +1,17 @@
+// Only the elements ahead of a variadic pack have a fixed position, so a tuple
+// pattern over one names those and ends in `..`.
+
+fn f<A, ..T>(t: [A, ..T]) -> A {
+    let [a, b] = t;
+    let [c] = t;
+    let r = match t { [d, e, ..] => d };
+    let [g, ..] = t;
+    return g;
+}
+
+test {
+    assert f([1, 2]) == 1;
+}
+
+__DATA__
+{"compile_error": ":5:5: analysis error: pattern mismatch: expected '`..` after at most 1 elements, since a variadic pack follows them', found 'pattern with 2 elements'; 6:5: pattern mismatch: expected '`..` after at most 1 elements, since a variadic pack follows them', found 'pattern with 1 elements'; 7:23: pattern mismatch: expected '`..` after at most 1 elements, since a variadic pack follows them', found 'pattern with 2 elements'"}

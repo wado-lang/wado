@@ -1,0 +1,19 @@
+//! ATN-class lexer rules whose actions replay through fragment matchers that no
+//! statically emitted matcher calls.
+
+use g from "./grammars/latn_action_callee.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_latn_action_callee" },
+    };
+
+test "an escaped quote stays inside the action-carrying string" {
+    let result = g::parse("\"a\\\"b\"");
+    assert result.ok(), `${result.diagnostics:?}`;
+    assert g::to_string_tree(&result) == "(start \"a\\\"b\")";
+}
+
+test "a nested bracket stays inside the action-carrying token" {
+    let result = g::parse("<x<<>>z>");
+    assert result.ok(), `${result.diagnostics:?}`;
+    assert g::to_string_tree(&result) == "(start <x<<>>z>)";
+}

@@ -9,6 +9,7 @@ use {
     KilnHost,
     Diagnostic as KilnDiagnostic,
     DiagnosticLevel,
+    InputFile,
     read_all,
     read_text,
 } from "core:kiln";
@@ -17,6 +18,8 @@ use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
 use { Graph } from "./graph.wado";
 use { infer } from "./infer.wado";
+use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
+use { check_checkpoint } from "./safetensors.wado";
 use onnx_proto from "./onnx_proto.wado";
 use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -55,7 +58,62 @@ fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, KilnError> {
     return onnx_text::read(&source).map_err(|e| at(path, &e));
 }
 
+/// A checkpoint's leading bytes, through the end of its header, of the file, or
+/// of a length no module can address. The payloads are the loader's to read.
+fn read_header(content: Stream<u8>) -> ByteList {
+    let mut prefix = ByteList::with_capacity(HEADER_CHUNK);
+    loop {
+        let chunk = content.read(HEADER_CHUNK);
+        prefix.extend(&(chunk.items as ByteList));
+        if chunk.result != CopyResult::Completed || holds_header(&prefix) {
+            break;
+        }
+    }
+    content.drop();
+    return prefix;
+}
+
+/// Whether `prefix` reaches the header's end, or declares one no read can reach.
+fn holds_header(prefix: &ByteList) -> bool {
+    if prefix.len() < 8 {
+        return false;
+    }
+    return match declared_header_end(prefix) {
+        Ok(end) => prefix.len() >= end,
+        Err(_) => true,
+    };
+}
+
+/// Why the invocation's inputs are not one `.safetensors` checkpoint at most.
+fn input_refusal(inputs: &List<InputFile>) -> Option<String> {
+    if inputs.len() > 1 {
+        return Option::Some(`loam: ${inputs.len()} inputs, and a checkpoint is one file`);
+    }
+    for let input of *inputs {
+        if !input.path.ends_with(".safetensors") {
+            return Option::Some(`loam: '${input.path}': an input is a .safetensors checkpoint`);
+        }
+    }
+    return null;
+}
+
+/// Enough for GPT-2's header in one read, which is 14 KiB.
+global HEADER_CHUNK: i32 = 65536;
+
 export fn generate(req: Request<Options>) -> Result<Response, KilnError> with KilnHost {
+    // A stream is outside drop elaboration, so every one is consumed or dropped
+    // before the first return that could leave it open.
+    if let Some(reason) = input_refusal(&req.inputs) {
+        req.primary.content.drop();
+        for let input of req.inputs {
+            input.content.drop();
+        }
+        return Result::Err(KilnError::InvalidSchema(reason));
+    }
+    let mut headers: List<[String, ByteList]> = [];
+    for let input of req.inputs {
+        headers.push([input.path, read_header(input.content)]);
+    }
     let path = req.primary.path;
     let mut graph = read_graph(&path, req.primary.content)?;
     bind_dims(&mut graph, &req.options.dims).map_err(|e| at(&path, &e))?;
@@ -63,7 +121,13 @@ export fn generate(req: Request<Options>) -> Result<Response, KilnError> with Ki
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
     let checked = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
+    // Emitting first refuses an element type no kernel holds, which the check
+    // below takes as given.
     let generated = emit(&graph, &checked).map_err(|e| at(&path, &e))?;
+    for let [input_path, header] of headers {
+        let checkpoint = read_checkpoint(&header).map_err(|e| at(&input_path, &e))?;
+        check_checkpoint(&graph, &checked.shapes, &checkpoint).map_err(|e| at(&input_path, &e))?;
+    }
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,

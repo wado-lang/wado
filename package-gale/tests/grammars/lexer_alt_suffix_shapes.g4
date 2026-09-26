@@ -25,3 +25,13 @@ D : 'd'+ 'e'? 'd' ;
 fragment R : 'r' ;
 
 J : . ;
+
+// An alternation ending a fragment or a nested group has no suffix of its own:
+// the reference's caller, or the enclosing sequence, supplies it.
+E : F 'h' ;
+fragment F : 'x' ('y' | 'yz') ;
+G : ('g' ('i' | 'ik')) 'l' ;
+
+// A fragment whose whole body is the alternation: the caller supplies the suffix.
+K : W 'v' ;
+fragment W : 'w' | 'wv' ;

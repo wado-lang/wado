@@ -2420,70 +2420,42 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
         // Uninitialised `let x: T;` — the parser guarantees `ty`
-        // is present. The WIR builder zero-initialises the slot;
-        // reify emits a Unit placeholder as the `value` and the
-        // `type_id` field carries the user-declared type. Refutable
-        // patterns in this position are rejected at annotate; the
-        // recovery path emits an Expr-Unit placeholder to mirror.
+        // is present, and annotate that the pattern is a single name or `_`.
+        // The WIR builder zero-initialises the slot; reify emits a Unit
+        // placeholder as the `value` and the `type_id` field carries the
+        // user-declared type.
         let Some(ast_value) = let_stmt.value.as_ref() else {
-            // 7-A: same as the initialised case — read the binding's recorded
-            // type (this path always binds a simple `Ident` / `MutIdent`).
-            let binding_id = match &let_stmt.pattern {
-                ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
-                _ => None,
+            let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
+            let Some(binding) = let_stmt.pattern.as_name() else {
+                assert!(
+                    matches!(let_stmt.pattern, ast::Pattern::Wildcard),
+                    "annotate rejects an uninitialized `let` that destructures"
+                );
+                return TirStmt::new(TirStmtKind::Expr(placeholder), let_stmt.span);
             };
-            let type_id = let_stmt
-                .ty
-                .as_ref()
-                .map(|_| {
-                    binding_id
-                        .and_then(|id| self.ann_local_type(id))
-                        .or_else(|| self.ann_let_annotated_type(let_stmt.id))
-                        .expect(
-                            "uninitialised let with annotation: annotate records the type on \
-                             local_types (simple binding) or let_annotated_types (destructure)",
-                        )
-                })
-                .unwrap_or(TypeTable::UNKNOWN);
-            return match &let_stmt.pattern {
-                ast::Pattern::Ident {
-                    id,
-                    name,
-                    span: binding_span,
-                }
-                | ast::Pattern::MutIdent {
-                    id,
-                    name,
-                    span: binding_span,
-                } => {
-                    let is_mut = let_stmt.is_mut
-                        || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-                    let local_index =
-                        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *binding_span);
-                    let placeholder =
-                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, let_stmt.span);
-                    TirStmt::new(
-                        TirStmtKind::Let {
-                            name: name.clone(),
-                            local_index,
-                            is_mut,
-                            is_reactive: let_stmt.is_reactive,
-                            type_id,
-                            value: placeholder,
-                            skip_value_copy: false,
-                        },
-                        let_stmt.span,
-                    )
-                }
-                _ => TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Unit,
-                        TypeTable::UNIT,
-                        let_stmt.span,
-                    )),
-                    let_stmt.span,
-                ),
-            };
+            let type_id = self
+                .ann_local_type(binding.id)
+                .expect("annotate records an uninitialized `let`'s type on its local");
+            let is_mut = let_stmt.is_mut || binding.is_mut;
+            let local_index = ctx.add_local_at(
+                binding.name.to_string(),
+                type_id,
+                is_mut,
+                Some(binding.id),
+                binding.span,
+            );
+            return TirStmt::new(
+                TirStmtKind::Let {
+                    name: binding.name.to_string(),
+                    local_index,
+                    is_mut,
+                    is_reactive: let_stmt.is_reactive,
+                    type_id,
+                    value: placeholder,
+                    skip_value_copy: false,
+                },
+                let_stmt.span,
+            );
         };
 
         // 7-A (E2-thin): a simple binding's annotated type is the
@@ -2511,10 +2483,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 id,
                 name,
                 span: binding_span,
-            } => {
+            }
+            | ast::Pattern::MutIdent {
+                id,
+                name,
+                span: binding_span,
+            } if self.ann_local_type(*id).is_some() => {
                 // `let mut x = …` carries the mutability on `LetStmt`,
                 // not on the `Ident` pattern.
-                let is_mut = let_stmt.is_mut;
+                let is_mut =
+                    let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
                 let local_index =
                     ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *binding_span);
                 TirStmt::new(
@@ -2530,35 +2508,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.span,
                 )
             }
-            ast::Pattern::MutIdent {
-                id,
-                name,
-                span: binding_span,
-            } => {
-                let local_index =
-                    ctx.add_local_at(name.clone(), type_id, true, Some(*id), *binding_span);
-                TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index,
-                        is_mut: true,
-                        is_reactive: let_stmt.is_reactive,
-                        type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    let_stmt.span,
-                )
-            }
             ast::Pattern::Wildcard => {
                 // `let _ = expr;` discards. Lower as an Expr stmt.
                 TirStmt::new(TirStmtKind::Expr(value), let_stmt.span)
             }
-            ast::Pattern::Tuple(_, _)
+            ast::Pattern::Ident { .. }
+            | ast::Pattern::MutIdent { .. }
+            | ast::Pattern::Tuple(_, _)
             | ast::Pattern::Struct { .. }
             | ast::Pattern::Variant { .. } => {
                 // Destructuring `let [a, b] = …;` / `let Point { x, y }
-                // = …;` / `let Some(x) = …;`. The TIR uses
+                // = …;` / `let A(x) = …;` or `let A = …;` of a one-case
+                // variant. The TIR uses
                 // `TirStmtKind::LetDestructure` rather than `Let`. The
                 // shared `reify_pattern` adds the sub-pattern bindings
                 // to `ctx`; the value's recorded type drives the
@@ -3921,7 +3882,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             id,
                             name,
                             span: binding_span,
-                        } => {
+                        } if this.ann_local_type(*id).is_some() => {
                             let is_mut = for_of.is_mut
                                 || matches!(&for_of.binding, ast::Pattern::MutIdent { .. });
                             let local_index = ctx.add_local_at(
@@ -3944,9 +3905,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 span,
                             ));
                         }
-                        ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                            let tir_pattern =
-                                this.reify_pattern(&for_of.binding, bind_elem_type, ctx);
+                        binding => {
+                            let tir_pattern = this.reify_pattern(binding, bind_elem_type, ctx);
                             block_stmts.push(TirStmt::new(
                                 TirStmtKind::LetDestructure {
                                     pattern: tir_pattern,
@@ -3955,12 +3915,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 },
                                 span,
                             ));
-                        }
-                        ast::Pattern::Wildcard => {
-                            block_stmts.push(TirStmt::new(TirStmtKind::Expr(bind_value), span));
-                        }
-                        _ => {
-                            // Annotate diagnosed; emit nothing.
                         }
                     }
                 }
@@ -4063,88 +4017,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             bound_type
         };
 
-        let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            } => (name.clone(), Some(*id), *name_span),
-            ast::Pattern::Tuple(..) | ast::Pattern::Wildcard => (
-                minted_name("pattern_temp", unique_id),
-                None,
-                Span::default(),
-            ),
-            _ => {
-                return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
-            }
-        };
+        if for_of.binding.as_name().is_none()
+            && !matches!(
+                for_of.binding,
+                ast::Pattern::Tuple(..) | ast::Pattern::Wildcard
+            )
+        {
+            return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
+        }
 
         let is_mut = for_of.is_mut;
         let ctx = &mut ctx.enter_scope();
-        let binding_local = ctx.add_local_at(
-            binding_name.clone(),
-            binding_type,
-            is_mut,
-            binding_id,
-            binding_name_span,
-        );
-
-        // Destructured binding (`for let [a, b] of …`): bind each inner
-        // pattern variable to its element type and prepend a field-access
-        // `Let` reading it from the synthetic pair temp, mirroring
-        // `resolve_variadic_for_of`. Without this the inner
-        // names (`a`, `b`) never enter scope, so the body resolves them to
-        // `Unknown` — e.g. `a != b` in the variadic `Eq for [..T]` impl
-        // dispatches to a nonexistent `unknown^Eq::eq`.
-        let mut destruct_stmts: Vec<TirStmt> = Vec::new();
-        if let ast::Pattern::Tuple(tp, _) = &for_of.binding {
-            let inner_elems = self
-                .tysys
-                .type_table
-                .borrow()
-                .elem_types_or_self(binding_type);
-            for (i, pat_elem) in tp.iter().enumerate() {
-                if let ast::Pattern::Ident {
-                    id,
-                    name,
-                    span: elem_span,
-                    ..
-                } = pat_elem
-                {
-                    let elem_type = inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    let local_idx =
-                        ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *elem_span);
-                    let field_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: binding_local,
-                                    name: binding_name.clone(),
-                                },
-                                binding_type,
-                                span,
-                            )),
-                            field_index: i as u32,
-                            field_name: i.to_string(),
-                        },
-                        elem_type,
-                        span,
-                    );
-                    destruct_stmts.push(TirStmt::new(
-                        TirStmtKind::Let {
-                            name: name.clone(),
-                            local_index: local_idx,
-                            is_mut,
-                            is_reactive: false,
-                            type_id: elem_type,
-                            value: field_access,
-                            skip_value_copy: false,
-                        },
-                        span,
-                    ));
-                }
-            }
-        }
+        let (binding_name, binding_local, mut destruct_stmts) =
+            self.reify_pack_binding(&for_of.binding, binding_type, is_mut, unique_id, span, ctx);
 
         let index_binding =
             Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
@@ -4200,78 +4085,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             elem_type
         };
 
-        let binding_name = match &comp.binding {
-            ast::Pattern::Ident { name, .. } => name.clone(),
-            _ => format!("$comp_temp_{unique_id}"),
-        };
-        let binding_name_span = match &comp.binding {
-            ast::Pattern::Ident { span, .. } => *span,
-            _ => Span::default(),
-        };
-        let binding_id = match &comp.binding {
-            ast::Pattern::Ident { id, .. } => Some(*id),
-            _ => None,
-        };
-
         let ctx = &mut ctx.enter_scope();
-        let binding_local = ctx.add_local_at(
-            binding_name.clone(),
-            binding_type,
-            false,
-            binding_id,
-            binding_name_span,
-        );
-
-        let mut destructure: Vec<TirStmt> = Vec::new();
-        if let ast::Pattern::Tuple(elems, _) = &comp.binding {
-            let inner = self
-                .tysys
-                .type_table
-                .borrow()
-                .elem_types_or_self(binding_type);
-            for (i, elem) in elems.iter().enumerate() {
-                let ast::Pattern::Ident {
-                    id,
-                    name,
-                    span: elem_span,
-                    ..
-                } = elem
-                else {
-                    continue;
-                };
-                let sub_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                let local_index =
-                    ctx.add_local_at(name.clone(), sub_type, false, Some(*id), *elem_span);
-                let field_access = TirExpr::new(
-                    TirExprKind::FieldAccess {
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
-                                index: binding_local,
-                                name: binding_name.clone(),
-                            },
-                            binding_type,
-                            span,
-                        )),
-                        field_index: i as u32,
-                        field_name: i.to_string(),
-                    },
-                    sub_type,
-                    span,
-                );
-                destructure.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: sub_type,
-                        value: field_access,
-                        skip_value_copy: false,
-                    },
-                    span,
-                ));
-            }
-        }
+        let (binding_name, binding_local, destructure) =
+            self.reify_pack_binding(&comp.binding, binding_type, false, unique_id, span, ctx);
 
         let index_binding =
             Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
@@ -4294,6 +4110,84 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             recorded_type,
             span,
         )
+    }
+
+    /// Bind a type-pack walk's binding: its name, or a minted temp that each
+    /// name of a tuple binding reads its element from. Answers the bound name,
+    /// its local, and the `Let`s that destructure the temp.
+    fn reify_pack_binding(
+        &mut self,
+        binding: &ast::Pattern,
+        binding_type: TypeId,
+        is_mut: bool,
+        unique_id: u32,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> (String, u32, Vec<TirStmt>) {
+        let root = binding.as_name();
+        let binding_name = root.map_or_else(
+            || minted_name("pattern_temp", unique_id),
+            |n| n.name.to_string(),
+        );
+        let binding_local = ctx.add_local_at(
+            binding_name.clone(),
+            binding_type,
+            is_mut || root.is_some_and(|n| n.is_mut),
+            root.map(|n| n.id),
+            root.map_or_else(Span::default, |n| n.span),
+        );
+        let ast::Pattern::Tuple(elems, _) = binding else {
+            return (binding_name, binding_local, Vec::new());
+        };
+        let held = self
+            .tysys
+            .type_table
+            .borrow()
+            .elem_types_or_self(binding_type);
+        let mut destructure = Vec::new();
+        for (i, (elem, elem_type)) in elems.iter().zip(held).enumerate() {
+            let Some(elem_name) = elem.as_name() else {
+                continue;
+            };
+            let name = elem_name.name.to_string();
+            let is_mut = is_mut || elem_name.is_mut;
+            let local_index = ctx.add_local_at(
+                name.clone(),
+                elem_type,
+                is_mut,
+                Some(elem_name.id),
+                elem_name.span,
+            );
+            let field_access = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(TirExpr::new(
+                        TirExprKind::Local {
+                            index: binding_local,
+                            name: binding_name.clone(),
+                        },
+                        binding_type,
+                        span,
+                    )),
+                    field_index: i as u32,
+                    field_name: i.to_string(),
+                },
+                elem_type,
+                span,
+            );
+            destructure.push(TirStmt::new(
+                TirStmtKind::Let {
+                    name: name.clone(),
+                    local_index,
+                    is_mut,
+                    is_reactive: false,
+                    type_id: elem_type,
+                    value: field_access,
+                    skip_value_copy: false,
+                },
+                span,
+            ));
+        }
+        (binding_name, binding_local, destructure)
     }
 
     /// Reify a C-style `for init; cond; update { body }` loop into
@@ -9269,25 +9163,32 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::Pattern::Ident { id, name, span } => {
                 // A bare ident in a pattern is ambiguous: a nullary
                 // enum/variant case (`None`, `Red`), an immutable global
-                // constant, or a fresh binding. Disambiguate in the same
-                // order as `Elaborator::resolve_if_pattern_inner`
-                // known case first, then immutable global, then binding.
-                if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
-                    return TirPattern::Enum {
-                        enum_type: self
-                            .tysys
-                            .type_table
-                            .borrow()
-                            .scrutinee_structure_head(scrutinee_type),
-                        case_name: name.clone(),
-                        case_index,
-                    };
-                }
-                if self.scrutinee_has_variant_case(scrutinee_type, name) {
-                    return self.reify_nullary_variant_case(scrutinee_type, name);
-                }
-                if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
-                    return self.compare_constant_by_eq(Some(*id), const_pat, scrutinee_type, ctx);
+                // constant, or a fresh binding. A name annotate bound is a
+                // binding; otherwise disambiguate in the same order as
+                // `Elaborator::resolve_if_pattern_inner`.
+                if self.ann_local_type(*id).is_none() {
+                    if let Some(case_index) = self.scrutinee_enum_case_index(scrutinee_type, name) {
+                        return TirPattern::Enum {
+                            enum_type: self
+                                .tysys
+                                .type_table
+                                .borrow()
+                                .scrutinee_structure_head(scrutinee_type),
+                            case_name: name.clone(),
+                            case_index,
+                        };
+                    }
+                    if self.scrutinee_has_variant_case(scrutinee_type, name) {
+                        return self.reify_nullary_variant_case(scrutinee_type, name);
+                    }
+                    if let Some(const_pat) = self.reify_immutable_global_pattern(name, *span) {
+                        return self.compare_constant_by_eq(
+                            Some(*id),
+                            const_pat,
+                            scrutinee_type,
+                            ctx,
+                        );
+                    }
                 }
                 let local_index = ctx.add_local_at(
                     name.clone(),

@@ -671,6 +671,11 @@ pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> 
     return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
 }
 
+/// `follow_yields_call` where the site is `gated` on the caller's FOLLOW, else "".
+pub fn follow_yields_call_if<S: AsStrSlice, S1: AsStrSlice>(gated: bool, tokens: S, pos: S1) -> String {
+    return if gated { follow_yields_call(tokens, pos) } else { String::new() };
+}
+
 /// A `follow_yields` call on a continuation held in one local.
 pub fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(tokens: S, pos: S1, head: S2) -> String {
     return `follow_yields(${tokens}, ${pos}, ${head}, &FOLLOW_SETS, TK_EOF)`;

@@ -729,6 +729,25 @@ C2 : 'c' ;
     assert !t.contains("p.expect(kind"), `the dispatch proved the token\n${t}`;
 }
 
+test "a loop scans its body only where the token it enters on may also exit it" {
+    // `fs`'s loop may end the rule, and `p` continues it with `','` too.
+    let input = "grammar T;
+s : e EOF | p EOF ;
+e : t (('+' | '-') t)* ;
+t : Y ;
+p : '{' fs (',' '..')? '}' ;
+fs : t (',' t)* ;
+Y : 'Y' ;
+";
+    let output = gen_source(input);
+    let e = extract_fn_body(&output, "fn _parse_e__inner(");
+    assert e.contains("while !p.recovering && ("), e;
+    assert e.contains("p.take();"), `the loop guard proved the operator\n${e}`;
+    assert !e.contains("sync_alts"), `the loop guard proved the operator\n${e}`;
+    let fs = extract_fn_body(&output, "fn _parse_fs__inner(");
+    assert fs.contains("loop {"), fs;
+}
+
 test "a dispatch never re-tests the token its arm tested" {
     let input = "grammar T;
 s : r e EOF ;
@@ -1298,7 +1317,7 @@ WS : [ \\t\\n\\r]+ -> skip ;
     assert output.contains("'B' => {");
 }
 
-test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
+test "set list-label `name+=(A | B)*` takes the token its loop guard proved" {
     let input = "grammar T;
 b : ID val+=(INT | FLOAT)* ;
 ID : 'a'..'z'+ ;
@@ -1308,8 +1327,9 @@ WS : (' '|'\\n') -> skip ;
 ";
     let output = gen_source(input);
     let body = extract_fn_body(&output, "fn _parse_b__inner(");
-    assert body.contains("p.expect_set(&SYNC_0, &EXPECTED_0)"), body;
-    assert output.contains("global EXPECTED_0: List<i32> = [TK_FLOAT, TK_INT];");
+    assert body.contains("while !p.recovering && (_kind_set_0(p.peek_kind()))"), body;
+    assert body.contains("p.take();"), body;
+    assert !body.contains("expect_set"), body;
 }
 
 test "a sync set is tested as bits, and listed only where a diagnostic names it" {

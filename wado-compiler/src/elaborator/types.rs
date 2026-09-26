@@ -2975,6 +2975,14 @@ pub(super) enum BindingSite {
     ForOf,
 }
 
+/// A pattern being resolved at a [`BindingSite`], and whether the statement's
+/// `mut` makes each name it binds mutable.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MustBind {
+    pub(super) site: BindingSite,
+    pub(super) is_mut: bool,
+}
+
 /// Function context during resolution with scope tracking
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
@@ -3043,7 +3051,7 @@ pub(super) struct FunctionContext {
     pub(super) for_continue_labels: Vec<String>,
     /// The binding site whose pattern is being resolved, when it must match
     /// every value. `None` inside `match`, `if let` and `while let`.
-    pub(super) irrefutable_site: Option<BindingSite>,
+    pub(super) must_bind: Option<MustBind>,
     /// Power-assert capture side-channel. `Some` only while
     /// [`Elaborator::desugar_assert`] is resolving an assert condition;
     /// the [`Elaborator::resolve_expr`] entry consults it to extract
@@ -3300,7 +3308,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
-            irrefutable_site: None,
+            must_bind: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
@@ -3386,7 +3394,7 @@ impl FunctionContext {
             in_handler_method: false,
             next_internal: 0,
             for_continue_labels: Vec::new(),
-            irrefutable_site: None,
+            must_bind: None,
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),

@@ -661,12 +661,18 @@ pub enum CompilerItem {
     StreamWrite,
     /// `core:rt::cm_copy_result`.
     CmCopyResult,
+    /// `core:rt::cm_copy_count`.
+    CmCopyCount,
+    /// `core:rt::cm_buffer_bytes`.
+    CmBufferBytes,
+    /// `core:rt::cm_packed_count`.
+    CmPackedCount,
     /// `core:rt::cm_stream_read_u8`.
     CmStreamReadU8,
     /// `core:rt::cm_stream_write_u8`.
     CmStreamWriteU8,
-    /// `core:rt::cm_stream_write_raw_u8`.
-    CmStreamWriteRawU8,
+    /// `core:rt::cm_stream_write_raw_all_u8`.
+    CmStreamWriteRawAllU8,
     /// `core:rt::cm_error_context_new`.
     CmErrorContextNew,
     /// `core:rt::cm_error_context_debug_message`.
@@ -896,9 +902,12 @@ impl CompilerItem {
         Self::CmCallback,
         Self::CmAwaitBlocked,
         Self::CmCopyResult,
+        Self::CmCopyCount,
+        Self::CmBufferBytes,
+        Self::CmPackedCount,
         Self::CmStreamReadU8,
         Self::CmStreamWriteU8,
-        Self::CmStreamWriteRawU8,
+        Self::CmStreamWriteRawAllU8,
         Self::CmErrorContextNew,
         Self::CmErrorContextDebugMessage,
         Self::CmWaitableSetWait,
@@ -1067,9 +1076,12 @@ impl CompilerItem {
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
             Self::CmCopyResult => "cm_copy_result",
+            Self::CmCopyCount => "cm_copy_count",
+            Self::CmBufferBytes => "cm_buffer_bytes",
+            Self::CmPackedCount => "cm_packed_count",
             Self::CmStreamReadU8 => "cm_stream_read_u8",
             Self::CmStreamWriteU8 => "cm_stream_write_u8",
-            Self::CmStreamWriteRawU8 => "cm_stream_write_raw_u8",
+            Self::CmStreamWriteRawAllU8 => "cm_stream_write_raw_all_u8",
             Self::CmErrorContextNew => "cm_error_context_new",
             Self::CmErrorContextDebugMessage => "cm_error_context_debug_message",
             Self::CmWaitableSetWait => "cm_waitable_set_wait",
@@ -1162,9 +1174,12 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmCopyCount
+            | Self::CmBufferBytes
+            | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
-            | Self::CmStreamWriteRawU8
+            | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
@@ -1426,9 +1441,12 @@ impl CompilerItem {
             | Self::CmCallback
             | Self::CmAwaitBlocked
             | Self::CmCopyResult
+            | Self::CmCopyCount
+            | Self::CmBufferBytes
+            | Self::CmPackedCount
             | Self::CmStreamReadU8
             | Self::CmStreamWriteU8
-            | Self::CmStreamWriteRawU8
+            | Self::CmStreamWriteRawAllU8
             | Self::CmErrorContextNew
             | Self::CmErrorContextDebugMessage
             | Self::CmWaitableSetWait
