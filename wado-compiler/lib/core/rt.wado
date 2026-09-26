@@ -316,6 +316,7 @@ global CM_COPY_MAX: i32 = (1 << 28) - 1;
 /// The part of `count` elements one copy may move, since a longer copy traps.
 #[compiler_item("cm_copy_count")]
 internal fn cm_copy_count(count: i32) -> i32 {
+    assert count >= 0, "a copy moves a count of elements, never a negative one";
     return i32::min(count, CM_COPY_MAX);
 }
 
@@ -323,7 +324,7 @@ internal fn cm_copy_count(count: i32) -> i32 {
 /// `i32` must be able to count.
 #[compiler_item("cm_buffer_bytes")]
 internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
-    assert count <= i32::MAX / elem_size, "the buffer is past what linear memory can address";
+    assert 0 <= count <= i32::MAX / elem_size, "the buffer is past what linear memory can address";
     return count * elem_size;
 }
 

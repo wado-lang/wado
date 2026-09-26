@@ -37,14 +37,13 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
             exit(1);
         },
     };
-    for let [path, written] of [
-        [`${stem}.onnxtext`, fs::write(`${stem}.onnxtext`, &text)],
-        [`${stem}.safetensors`, fs::write(`${stem}.safetensors`, &write_safetensors(&stored))],
-    ] {
-        if let Err(e) = written {
-            eprintln(`${path}: ${e}`);
-            exit(1);
-        }
+    if let Err(e) = fs::write(`${stem}.onnxtext`, &text) {
+        eprintln(`${e}`);
+        exit(1);
+    }
+    if let Err(e) = fs::write(`${stem}.safetensors`, &write_safetensors(&stored)) {
+        eprintln(`${e}`);
+        exit(1);
     }
     println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
 }
