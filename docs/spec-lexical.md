@@ -163,9 +163,8 @@ read.
 ### Semicolons
 
 `;` separates statements; it does not terminate them. A block's last statement
-may drop it, whatever kind of statement it is — but dropping it does not make
-the statement an expression, so a value-returning function still needs
-`return`.
+may drop it, whatever kind of statement it is. Dropping it does not make the
+statement an expression, so a value-returning function still needs `return`.
 
 ```wado
 fn f() -> i32 {
@@ -184,9 +183,8 @@ let x = 1 let y = 2    // error: expected `;`
 Consecutive semicolons enclose empty statements, which mean nothing. `wado
 format` removes them.
 
-A block's value is its last expression whether or not a `;` follows it —
-unlike Rust, a trailing `;` does not turn it into `()`. Write `()` to mean
-`()`:
+A block's value is its last expression whether or not a `;` follows it. Unlike
+in Rust, a trailing `;` does not turn it into `()`. Write `()` to mean `()`:
 
 ```wado
 let a = if c { 1 } else { 2 };         // 1 or 2
@@ -317,11 +315,11 @@ precede the declaration statement, and one local item may name another declared
 later in the same block. Once the block closes the name is gone, so a nested
 `if`/`while`/`for` body cannot export an item to the rest of the function.
 Within its block a local item shadows a same-named module-level one, and two
-unrelated blocks may declare the same name without collision. A local item never
-reaches another function, even one in the same module.
+unrelated blocks may declare the same name without collision.
 
-A local item is always private to its enclosing function. A `pub`, `internal`
-or `export` prefix on one is an error, whether or not attributes precede it.
+A local item is always private to its enclosing function: it never reaches
+another function, even one in the same module. A `pub`, `internal` or `export`
+prefix on one is an error, whether or not attributes precede it.
 
 Local structs support their own generic parameters:
 
@@ -450,9 +448,10 @@ a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`.
 
 ### `matches` and `!` binding
 
-The two tables above group operators by form, not by binding strength. The
-[precedence table](#precedence) puts `matches` below every binary operator and
-logical `!` between `matches` and comparison, so:
+The two tables above group operators by form, not by binding strength. In the
+[precedence table](#precedence), `matches` binds looser than the arithmetic and
+bitwise operators. Logical `!` binds looser than `matches` and tighter than
+comparison. So:
 
 - `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does not match
   `Some(_)`".
@@ -464,8 +463,8 @@ logical `!` between `matches` and comparison, so:
 ### Prohibited Operators
 
 Wado has no `++`/`--`: write `x += 1` and `x -= 1`. Neither pair forms an
-expression, so `a--b` is an error rather than `a - (-b)`. Write `- -x` for a
-double negation.
+expression, so `a--b` is an error rather than `a - (-b)` (see
+[Known gaps](#known-gaps)). Write `- -x` for a double negation.
 
 It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 
@@ -510,7 +509,8 @@ let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 
 ### Comparison Chaining
 
-Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax, but not Python's evaluation:
+Comparisons chain as they do in mathematics. The syntax is Python's, but the
+evaluation is not:
 
 ```wado
 a < b < c       // (a < b) & (b < c)
@@ -565,6 +565,9 @@ let c = 5..<5;            // OK: empty
 
 Bounds known only at run time are not checked. A reversed range is then empty.
 
+A range written as a pattern is a
+[range pattern](./spec-control-flow.md#range-patterns), with rules of its own.
+
 ### Range Methods
 
 - `r.contains(&v)` is whether `v` lies between the bounds, the end included only
@@ -576,9 +579,9 @@ Bounds known only at run time are not checked. A reversed range is then empty.
 
 ### Range Iteration
 
-A range is an iterator over `T` where `T` implements the prelude trait `Step`,
-which every integer type and `char` does. A range is its own iterator, so it
-serves `for`-of and every `Iterator` method:
+Where `T` implements the prelude trait `Step`, as every integer type and `char`
+does, a range is itself an iterator over `T`. It serves `for`-of and every
+`Iterator` method:
 
 ```wado
 for let i of 0..<3 { }                        // 0, 1, 2
@@ -594,31 +597,6 @@ and stops. A float range does not iterate, but `contains` still works on it.
 A `List<T>`, `Array<T>` or `Slice<T>` indexed by a range of `i32` gives a
 `Slice<T>` of the elements the range covers: `xs[1..<4]` holds `xs[1]`, `xs[2]`
 and `xs[3]`, as does `xs[1..=3]`.
-
-### Range Patterns
-
-A range pattern matches a value between its bounds. It stands wherever a
-refutable pattern may, nested ones included:
-
-```wado
-let grade = match score {
-    0..<60 => "F",
-    60..=100 => "P",
-    _ => "invalid",
-};
-let lower = c matches { 'a'..='z' };
-```
-
-- The scrutinee is an integer or `char`.
-- Each bound is an integer, `char` or byte literal, optionally negated, or a
-  primitive type's associated constant such as `i32::MAX`. A user-defined
-  constant is not a bound.
-- A reversed range pattern is an error, and so is an empty one (`5..<5`).
-- Two arms' range patterns must not overlap. The alternatives of one arm's
-  or-pattern may.
-- Range patterns count toward
-  [exhaustiveness](./spec-control-flow.md#exhaustiveness): `0 => …` and
-  `1..=255 => …` together cover a `u8`.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
 

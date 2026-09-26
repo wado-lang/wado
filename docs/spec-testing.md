@@ -2,7 +2,9 @@
 
 ## The `assert` Statement
 
-The `assert` keyword is used to assert that a condition is true. If the condition is false, the program will panic with messages that includes the source of the condition and related intermediate values (like the power-assert).
+`assert` checks that a condition is true. If it is false, the program panics
+with a message showing the condition's source and the values of its operands,
+as power-assert does.
 
 ```wado
 // If x is not greater than 0, the program will panic, printing x.
@@ -40,9 +42,7 @@ value into the message yourself shows all of it.
 ## Testing
 
 Tests are first-class syntax: a `test` block declares one, and `wado test`
-finds and runs them. Which files it reads and what it reports are stated below
-([Test Discovery](#test-discovery), [Test Outcome Model](#test-outcome-model)).
-The runner's flags are described by `wado test --help`.
+finds and runs them. The runner's flags are described by `wado test --help`.
 
 ### Test Declaration Syntax
 
@@ -140,7 +140,7 @@ test "panics on null dereference" {
 
 #### `#[TODO]` Attribute
 
-The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. TODO tests are reported on a separate axis from regular pass/fail results (see Test Outcome Model below). When the body traps, the test is reported as pending (expected). When the body completes normally, the test is reported as resolved, which is a hard failure requiring the developer to remove the `#[TODO]` attribute.
+The `#[TODO]` attribute marks a test as a placeholder for a feature not yet implemented. Its outcome is reported on a separate axis from regular pass/fail results (see [TODO Tests](#todo-tests)).
 
 #### `#[timeout_ms(N)]` Attribute
 
@@ -178,7 +178,9 @@ Tests marked with `#[TODO]` are reported separately from regular tests. They do 
 
 A resolved TODO test fails the run. This enforces cleanup: once the underlying feature is implemented, the `#[TODO]` attribute must be removed so the test joins the regular pass/fail pool.
 
-A pending TODO test never causes a failure. This means fixing a compiler bug cannot increase the failure count — newly-passing TODO tests appear as "resolved" on the TODO axis rather than as unexpected failures on the pass/fail axis.
+A pending TODO test never causes a failure. So fixing a compiler bug cannot
+raise the failure count: a TODO test the fix makes pass shows as resolved on the
+TODO axis, not as a failure on the pass/fail axis.
 
 #### `#![TODO]` Modules
 
@@ -190,11 +192,9 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 
 #### Run Result
 
-A run reports three axes: compile (passed / failed), test (passed / failed),
-and TODO (pending / resolved). Every discovered file is compiled, including one
-with no test blocks, so a compile error anywhere fails the run on the compile
-axis. A run exits non-zero when any file fails to compile, any test fails, or
-any TODO test is resolved.
+A run reports a third axis beside the two above: compile (passed / failed),
+over every [discovered](#test-discovery) file. It exits non-zero when any file
+fails to compile, any test fails, or any TODO test is resolved.
 
 ### Test Discovery
 

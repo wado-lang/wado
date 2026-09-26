@@ -273,8 +273,8 @@ therefore a parse error.
 `break` alone leaves the innermost loop. A labeled block around a nest leaves
 all of it at once, and its tail is the path no `break` took. Inside a block,
 `break LABEL` skips the rest, so a chain of guards stays flat instead of nesting
-one inside the next. A `break` may also leave an effect handler's `do` block,
-which restores the outer handler either way.
+one inside the next. A `break` may also leave an effect handler's `do` block
+(see [Handler Scope](./spec-effects.md#handler-scope)).
 
 ```wado
 search: {
@@ -369,8 +369,6 @@ match command {
 | Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct       |
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
-
-[Range Patterns](./spec-lexical.md#range-patterns) states what a range pattern's bounds may be.
 
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
@@ -486,6 +484,32 @@ let kind = match token {
 The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
 type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 `Option` constant matches at the top of an arm or nested in another pattern.
+
+### Range Patterns
+
+A range pattern matches a value between its bounds. It stands wherever a
+refutable pattern may, nested ones included:
+
+```wado
+let grade = match score {
+    0..<60 => "F",
+    60..=100 => "P",
+    _ => "invalid",
+};
+let lower = c matches { 'a'..='z' };
+```
+
+- The scrutinee is an integer or `char`.
+- Each bound is an integer, `char` or byte literal, optionally negated, or a
+  primitive type's associated constant such as `i32::MAX`. A user-defined
+  constant is not a bound.
+- A reversed range pattern is an error, and so is an empty one (`5..<5`).
+- Two arms' range patterns must not overlap. The alternatives of one arm's
+  or-pattern may.
+- Range patterns count toward [exhaustiveness](#exhaustiveness): `0 => …` and
+  `1..=255 => …` together cover a `u8`.
+
+The range operators themselves are in [Ranges](./spec-lexical.md#ranges).
 
 ### Or Patterns
 

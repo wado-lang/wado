@@ -34,13 +34,12 @@ There is no `move` operator. Where a source is not read again, the compiler may
 move the value instead of copying it, and the program cannot tell.
 
 A program never chooses where a value lives. There is no stack or heap to pick
-between, and no annotation lets a value outlive a scope, because every value a
-reference can reach is kept alive by the garbage collector.
+between. A value needs no annotation to outlive its scope, because the garbage
+collector keeps alive every value a reference can reach.
 
-A closure value is copied like any other value. Its captures are references to
-the outer bindings ([Closures](./spec-functions.md#closures)), so every copy
-observes the same bindings. A closure that outlives the scope that declared it
-needs no rule of its own: the collector keeps what it captured alive.
+A closure that outlives the scope that declared it needs no rule of its own:
+the collector keeps what it captured alive. How a closure copies is in
+[Closures Are Values](./spec-functions.md#closures-are-values).
 
 A call across a component boundary copies its arguments and its result, so the
 two components never share a value's storage. A resource crosses as a handle
@@ -138,13 +137,13 @@ global, or write it through a `&mut` parameter the caller still holds. It may
 also return a reference into a parameter's storage. Each is safe, because the
 referent is GC-managed and cannot dangle.
 
-Nothing in a signature states what a function keeps. A function with a body
-declares nothing about it; the compiler reads it from the body. A function type
-carries none, and neither does a closure, so a function value is called the same
-way whatever the function keeps. Retention is not an effect either: it grants no
-authority and no handler intercepts it, so it has no place in a `with` clause.
+A function with a body declares nothing about what it keeps: that is inferred
+from the body. A function type carries no such declaration, and neither does a
+closure, so a function value is called the same way whatever the function
+keeps. Retention is not an effect either. It grants no authority and no handler
+intercepts it, so it has no place in a `with` clause.
 
-A declaration with no body has nothing to read, so it states what it keeps with
+A declaration with no body has nothing to infer from, so it states what it keeps with
 [`#[retain(...)]` / `#[result(...)]`](./spec-attributes.md#retain--result).
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
@@ -169,16 +168,11 @@ let ys: List<i32> = [1, 2, 3];
 same(&xs, &ys);                 // false or true: the two may be one object
 ```
 
-### Design Trade-offs
-
-- Simplicity: No lifetime annotations or borrow checker errors
-- Flexibility: Can freely share and modify references
-- Cost: Runtime overhead from garbage collection
-- Safety: Memory safety guaranteed by GC, not compile-time checks
+## Parameters
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, whose type arguments may be resources (`Option<T>::unwrap(self)`):
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, since its type arguments may be resources (`Option<T>::unwrap(self)`):
 
 ```wado
 impl Point {
@@ -206,7 +200,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. Wado uses value semantics for every parameter: every value is deeply copied when passed to a function. This applies uniformly to primitives, structs, `String`, and `List<T>`. References (`&T`, `&mut T`) are the exception: they share state with the caller. An affine resource is never copied: passing it moves it. Inside the callee, reassignment (`p = new_value`) and in-place mutation operate on the callee's local copy and are not visible to the caller. In-place mutation covers field writes (`p.x = ...`), method calls (`s.push_str("!")`, `arr.push(0)`), and index writes (`arr[0] = ...`). To let the callee mutate the caller's value, declare the parameter as `&mut T` and pass a `&mut`-reference at the call site.
+The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation reaches the caller.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {
