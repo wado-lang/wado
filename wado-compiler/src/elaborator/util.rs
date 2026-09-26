@@ -188,11 +188,6 @@ pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
     }
 }
 
-/// Unpack i128 into (low, high) pair for codegen.
-pub(super) fn unpack_i128(value: i128) -> (u64, i64) {
-    (value as u64, (value >> 64) as i64)
-}
-
 /// Run `body` with `owner`'s `field` set to `value`, answering its result and
 /// what the field then held. The enclosing value returns even on a panic.
 pub(super) fn replaced<O, T, R>(

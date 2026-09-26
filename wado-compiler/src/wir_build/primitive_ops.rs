@@ -444,7 +444,14 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let inner_instr = self.translate_operand(inner);
-        let from = self.type_table.get(from_type);
+        let from = match self.type_table.get(from_type) {
+            // A discriminant and a bitmask are unsigned i32s, so they convert
+            // as a `u32` does.
+            ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
+                &ResolvedType::Primitive(PrimitiveType::U32)
+            }
+            other => other,
+        };
         let to = self.type_table.get(to_type);
 
         // Numeric casts: extension/conversion mode is determined by the source
@@ -634,7 +641,7 @@ impl FunctionTranslator<'_, '_> {
                 ),
             ) => Self::truncate_to_sub_i32(inner_instr, to_prim),
             _ => {
-                // Other casts — newtype and SIMD reinterprets, enum→i32,
+                // Other casts — newtype and SIMD reinterprets, i32↔u32,
                 // struct→struct — are Wasm-level no-ops and pass through, which
                 // is valid only when both sides share a representation kind. A
                 // reference↔scalar cast here means an earlier phase failed to

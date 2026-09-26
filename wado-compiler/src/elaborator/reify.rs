@@ -19,6 +19,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
+use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
@@ -69,7 +70,7 @@ use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128, unpack_i128,
+    range_endpoint_to_i128,
 };
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
@@ -2887,10 +2888,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
                     return tir;
                 }
-                // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
-                // / `from_pair` constructor call rather than a bare cast,
-                // since the 128-bit types are prelude structs. Mirrors
-                // `Elaborator::resolve_cast`'s int128 branch.
+                // `expr as i128/u128` lowers to a constructor call rather
+                // than a bare cast, since the 128-bit types are prelude
+                // structs.
                 if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
                     return tir;
                 }
@@ -8764,16 +8764,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
     /// returning `None` for every other shape. The 128-bit types are prelude
-    /// structs, so the value is materialized by a `from_u64` / `from_i64` /
-    /// `from_pair` call; every other `NumericLiteral` coercion is free, the
-    /// literal already carrying its coerced type.
+    /// structs, so the value is materialized by a constructor call; every other
+    /// `NumericLiteral` coercion is free, the literal already carrying its
+    /// coerced type.
     fn try_reify_int128_coercion(&self, expr: &ast::Expr) -> Option<TirExpr> {
         let choice = self.ann_coercions(expr.id())?;
         if choice.kind != CoercionKind::NumericLiteral {
             return None;
         }
         let target_type = choice.target_type;
-        let (item, name) = self.tysys.wide_int_of(target_type)?;
+        let item = self.tysys.type_table.borrow().wide_int_item(target_type)?;
 
         // Every shape the coercion admits, the negated `-NUM` among them, whose
         // coercion is keyed on the enclosing `Unary` node. Reading the one
@@ -8794,32 +8794,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             parse_i128_literal(&repr)
         };
         let value = parse_result.ok()?;
-
-        Some(build_int128_literal_call(
+        Some(create_literal(
             item,
-            &name,
             value,
-            &repr,
-            !negated,
             target_type,
+            &self.tysys.type_table.borrow(),
             expr.span(),
         ))
     }
 
     /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
-    /// any other target; a non-numeric operand yields the bare cast.
+    /// any other target; a wide-int operand, which only a newtype step brings
+    /// here, yields the bare cast.
     fn try_reify_int128_cast(
         &mut self,
         cast: &ast::CastExpr,
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        let target_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        let (item, name) = self.tysys.wide_int_of(target_base)?;
+        let item = {
+            let tt = self.tysys.type_table.borrow();
+            tt.wide_int_item(tt.representation_head(target_type))?
+        };
 
         // Literal operand: `1042 as u128`.
         if let ast::Expr::Literal(lit) = &cast.expr
@@ -8831,13 +8827,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
-                return Some(build_int128_literal_call(
+                return Some(create_literal(
                     item,
-                    &name,
                     value,
-                    repr,
-                    true,
                     target_type,
+                    &self.tysys.type_table.borrow(),
                     cast.span,
                 ));
             }
@@ -8854,27 +8848,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && !is_float_only_literal(repr)
             && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
         {
-            return Some(build_int128_literal_call(
+            return Some(create_literal(
                 item,
-                &name,
                 value,
-                repr,
-                false,
                 target_type,
+                &self.tysys.type_table.borrow(),
                 unary.span,
             ));
         }
 
-        // General numeric operand: `x as u128` →
-        // `u128::from_u64(x as u64)`. `inner` is reified once here; a
-        // non-numeric operand (no valid construction) emits the bare cast
-        // directly rather than re-reifying through the caller's fallback.
         let inner = self.reify_expr(&cast.expr, ctx, None);
-        let source_is_numeric = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_numeric(inner.type_id)
-        };
-        if !source_is_numeric {
+        let tt = self.tysys.type_table.borrow();
+        if tt.is_wide_int(inner.type_id) {
             return Some(TirExpr::new(
                 TirExprKind::Cast {
                     expr: Box::new(inner),
@@ -8884,34 +8869,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        // An integer extends by its own signedness, as Rust's `as` does. A
-        // float truncates and saturates across the full 128 bits, through the
-        // f64 that holds any f32 exactly.
-        let (method_name, intermediate_type) = {
-            let tt = self.tysys.type_table.borrow();
-            if tt.is_float(inner.type_id) {
-                ("from_f64", TypeTable::F64)
-            } else if tt.is_unsigned_int(inner.type_id) {
-                ("from_u64", TypeTable::U64)
-            } else {
-                ("from_i64", TypeTable::I64)
-            }
-        };
-        let casted = TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(inner),
-                target_type: intermediate_type,
-            },
-            intermediate_type,
-            cast.span,
-        );
-        Some(build_int128_from_intermediate(
-            &name,
-            method_name,
-            casted,
-            target_type,
-            cast.span,
-        ))
+        Some(create_conversion(item, inner, target_type, &tt, cast.span))
     }
 
     /// `i128/u128 as T` for a wide-int *source*. The 128-bit types are
@@ -8997,24 +8955,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             },
         };
 
-        let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
-            let (owner_head, method_name) = {
-                let tt = tysys.type_table.borrow();
-                let (_, _, method_name) = tt.compiler_method(item);
-                (
-                    tt.compiler_items().require_method_owner(item).clone(),
-                    method_name.to_string(),
-                )
-            };
-            let method_info = LocalMethodName::new(owner_head, None, method_name);
-            tir::FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: method_info.to_mangled_name(),
-                template: None,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }
-        };
+        let make_func_ref =
+            |tysys: &TypeSystem, item: CompilerItem| method_ref(&tysys.type_table.borrow(), item);
         // Repr-compatible `Cast` bridging a newtype boundary (no-op in
         // codegen); identity when the types already match.
         let bridge = |expr: TirExpr, to: TypeId, span: Span| {
@@ -10227,12 +10169,6 @@ impl TypeSystem {
         (table.base_type_name(recorded) == table.base_type_name(expected)).then_some(expected)
     }
 
-    /// Which wide-integer prelude struct `head` is, with the name its methods mangle under.
-    fn wide_int_of(&self, head: TypeId) -> Option<(CompilerItem, FqTypeName)> {
-        let tt = self.type_table.borrow();
-        Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
-    }
-
     /// `inner` wrapped in the reference kind of `scrutinee_type` for match
     /// ergonomics, as [`Self::peel_scrutinee_refs`] reckons it.
     fn apply_scrutinee_ref_kind(&self, scrutinee_type: TypeId, inner: TypeId) -> TypeId {
@@ -10473,161 +10409,6 @@ fn deref_to_value(
             _ => return receiver,
         }
     }
-}
-
-/// Build the `from_pair` call that materializes a 128-bit value from its
-/// `(low: u64, high: u64/i64)` halves.
-fn build_int128_from_pair(
-    item: CompilerItem,
-    type_name: &FqTypeName,
-    low: u64,
-    high: i64,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let low_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: low,
-            repr: low.to_string(),
-        },
-        TypeTable::U64,
-        span,
-    );
-    let high_literal = TirExpr::new(
-        TirExprKind::IntLiteral {
-            value: high.cast_unsigned(),
-            repr: high.to_string(),
-        },
-        if item == CompilerItem::U128 {
-            TypeTable::U64
-        } else {
-            TypeTable::I64
-        },
-        span,
-    );
-
-    let method_info = LocalMethodName::new(type_name.clone(), None, "from_pair".to_string());
-    let mangled_func_name = method_info.to_mangled_name();
-
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(tir::FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_func_name,
-                template: None,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![
-                CallArg::new(low_literal, false),
-                CallArg::new(high_literal, false),
-            ],
-            has_receiver: false,
-        },
-        target_type,
-        span,
-    )
-}
-
-/// Materialize an `i128` / `u128` from a parsed numeric literal. `allow_small`
-/// admits the cheaper `from_u64` / `from_i64`; the negated `-NUM` shape denies
-/// it and always takes `from_pair`.
-fn build_int128_literal_call(
-    item: CompilerItem,
-    name: &FqTypeName,
-    value: i128,
-    repr: &str,
-    allow_small: bool,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let use_small = allow_small
-        && if item == CompilerItem::U128 {
-            u64::try_from(value).is_ok()
-        } else {
-            i64::try_from(value).is_ok()
-        };
-
-    if use_small {
-        let (inner_type, method_name, store_value) = if item == CompilerItem::U128 {
-            (
-                TypeTable::U64,
-                "from_u64",
-                u64::try_from(value).expect("value fits in u64"),
-            )
-        } else {
-            (
-                TypeTable::I64,
-                "from_i64",
-                i64::try_from(value)
-                    .expect("value fits in i64")
-                    .cast_unsigned(),
-            )
-        };
-
-        let inner_literal = TirExpr::new(
-            TirExprKind::IntLiteral {
-                value: store_value,
-                repr: repr.to_string(),
-            },
-            inner_type,
-            span,
-        );
-
-        let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
-        let mangled_func_name = method_info.to_mangled_name();
-
-        return TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(tir::FunctionRef {
-                    module_source: ModuleSource::int128(),
-                    name: mangled_func_name,
-                    template: None,
-                    monomorph_info: None,
-                    method_info: Some(method_info),
-                }),
-                type_args: vec![],
-                args: vec![CallArg::new(inner_literal, false)],
-                has_receiver: false,
-            },
-            target_type,
-            span,
-        );
-    }
-
-    let (low, high) = unpack_i128(value);
-    build_int128_from_pair(item, name, low, high, target_type, span)
-}
-
-/// Build `<name>::<method_name>(intermediate)` for the general (non-literal)
-/// `expr as i128/u128` cast: `from_i64`, `from_u64` or `from_f64`, with
-/// `intermediate` already the `i64`, `u64` or `f64` the method takes.
-fn build_int128_from_intermediate(
-    name: &FqTypeName,
-    method_name: &str,
-    intermediate: TirExpr,
-    target_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
-    let mangled_func_name = method_info.to_mangled_name();
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(tir::FunctionRef {
-                module_source: ModuleSource::int128(),
-                name: mangled_func_name,
-                template: None,
-                monomorph_info: None,
-                method_info: Some(method_info),
-            }),
-            type_args: vec![],
-            args: vec![CallArg::new(intermediate, false)],
-            has_receiver: false,
-        },
-        target_type,
-        span,
-    )
 }
 
 /// Wrap an `Ord::cmp` call into a `bool` by comparing the returned
