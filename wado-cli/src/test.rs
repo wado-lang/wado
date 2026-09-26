@@ -2300,10 +2300,10 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
     // `jobs` (= `--parallel N`, default `cpus`) is the **true** cap
-    // on peak in-flight CPU work, enforced by the pipeline's shared
-    // `cpu` semaphore (`PipelineBudget::cpu`): every per-fixture
-    // worker — compile, load, execute — acquires one CPU permit
-    // before doing its work. Per-stage `*_jobs` caps below only
+    // on peak in-flight CPU work, enforced by the run's shared `cpu`
+    // semaphore: every per-fixture worker — compile, load, execute —
+    // and every `eval` compile acquires one CPU permit before doing
+    // its work. Per-stage `*_jobs` caps below only
     // shape queueing depth and how upstream backpressure is
     // distributed; they cannot exceed `jobs` in actual concurrency.
     //
@@ -2312,6 +2312,8 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     // load workers on top of internal Cranelift threading thrashes
     // more than it helps. The shared cpu semaphore enforces the
     // cross-stage total either way.
+    assert!(jobs > 0, "a CPU budget of zero never runs anything");
+    let cpu = Arc::new(Semaphore::new(jobs));
     let compile_jobs = jobs;
     let load_jobs = (jobs / 2).max(1);
     let execute_jobs = jobs;
@@ -2328,8 +2330,6 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     // One view of the source tree for the whole run, across packages.
     let run_cache = Arc::new(RunCache::new());
-    assert!(jobs > 0, "a CPU budget of zero never runs anything");
-    let cpu = Arc::new(Semaphore::new(jobs));
     let eval_host = Arc::new(EvalHost::new(&flags.knobs, Arc::clone(&cpu)));
     // `parse_args` admits one file under `--profile`, so this one slot holds
     // the run's only profiler and the write below happens once.

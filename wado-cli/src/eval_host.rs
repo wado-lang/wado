@@ -120,8 +120,8 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
-    /// The runner's CPU budget, which a compile outliving its test keeps a
-    /// permit of.
+    /// The runner's CPU budget. A compile takes its caller's permit, and the
+    /// caller waits here for a fresh one.
     cpu: Arc<Semaphore>,
 }
 
@@ -239,7 +239,8 @@ impl EvalHost {
             ..CompilerOptions::default()
         };
         let permit = cpu.take().expect("the caller holds its CPU permit");
-        let report = tokio::time::timeout(COMPILE_TIME_LIMIT, spawn_compile(source, options, permit));
+        let report =
+            tokio::time::timeout(COMPILE_TIME_LIMIT, spawn_compile(source, options, permit));
         let compiled = match report.await {
             Ok(report) => report
                 .expect("the compile thread reports before it exits")
