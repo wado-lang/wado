@@ -973,7 +973,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             Expr::Matches(matches_expr) => {
                 // Bind the scrutinee expression
                 self.bind_expr(&matches_expr.expr)?;
-                // The pattern's bindings reach only its guard.
                 self.enter_scope();
                 self.bind_pattern(&matches_expr.pattern, matches_expr.span)?;
                 if let Some(guard) = &matches_expr.guard {

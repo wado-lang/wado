@@ -1,0 +1,14 @@
+// Filling a default binds the callee's parameters for its expression alone;
+// the caller never wrote them, so naming one is unknown, not out of scope.
+
+fn connect(host: String, port: i32 = 8080) -> i32 {
+    return host.len() + port;
+}
+
+export fn run() {
+    assert connect("h") == 8081;
+    let m = port;
+}
+
+__DATA__
+{"compile_error": "scope_default_param_name_unknown.wado:10:13: error: unknown identifier 'port'"}

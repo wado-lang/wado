@@ -1,0 +1,12 @@
+// A scope error in an imported module is reported against that module.
+
+use { println, Stdout } from "core:cli";
+use { helper } from "./scope_error_dep/dep.wado";
+
+export fn run() with Stdout {
+    let x = helper();
+    println(`${x}`);
+}
+
+__DATA__
+{"compile_error": "dep.wado:8:12: error: 'x' is not in scope"}
