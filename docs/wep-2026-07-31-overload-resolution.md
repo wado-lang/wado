@@ -83,7 +83,7 @@ cannot.
 
 ### What can and cannot overload
 
-Not overloadable — declaring a second one with the same name is an error:
+These do not overload. Declaring a second one with the same name is an error:
 
 - free functions,
 - inherent methods on one type (per instantiation),
