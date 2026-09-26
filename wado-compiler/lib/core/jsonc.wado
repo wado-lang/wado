@@ -570,13 +570,13 @@ impl Editor {
         if !trailing {
             splices.push(Splice { start: last.value_end, end: last.value_end, text: "," });
         }
+        let indent = self.line_indent(last.start);
+        let placed = self.place(&member, &indent);
         let eol = if multi_line { self.line_rest(after) } else { -1 };
         if eol >= 0 {
-            let indent = self.line_indent(last.start);
-            let placed = self.place(&member, &indent);
             splices.push(Splice { start: eol, end: eol, text: `${self.newline}${indent}${placed}${tail}` });
         } else {
-            splices.push(Splice { start: after, end: after, text: ` ${member}${tail}` });
+            splices.push(Splice { start: after, end: after, text: ` ${placed}${tail}` });
         }
         return Result::Ok(splices);
     }
@@ -611,8 +611,17 @@ impl Editor {
             ];
         }
         if index > 0 {
+            let comma = c.members[index - 1].comma;
+            // A line break between the comma and the member ends the previous
+            // member's line, and whatever comment that line carries stays.
+            if self.spans_lines(comma, member.start) {
+                return [
+                    Splice { start: comma, end: comma + 1, text: "" },
+                    Splice { start: self.line_start(member.start), end: member.value_end, text: "" },
+                ];
+            }
             return [
-                Splice { start: c.members[index - 1].comma, end: member.value_end, text: "" },
+                Splice { start: comma, end: member.value_end, text: "" },
             ];
         }
         return [

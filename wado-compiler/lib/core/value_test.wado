@@ -505,6 +505,24 @@ test "from_value reads a whole float as an integer" {
     assert from_value::<i32>(&Value::Float(4.5)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
 }
 
+test "from_value reads a whole float past 64 bits into a wide integer" {
+    assert from_value::<i128>(&Value::Float(1.0e20)) matches { Ok(n) && n == 100000000000000000000 };
+    let two_pow_127: u128 = 170141183460469231731687303715884105728;
+    assert from_value::<u128>(&Value::Float(1.7014118346046923e38)) matches { Ok(n) && n == two_pow_127 };
+}
+
+test "an out-of-range error names the target type" {
+    let for_u32 = |e: &DeserializeError| e.kind == DeserializeErrorKind::Overflow && e.message == "value out of range for u32";
+    assert from_value::<u32>(&Value::UInt128(u128::MAX)) matches { Err(e) && for_u32(&e) };
+    assert from_value::<u32>(&Value::Float(1.0e30)) matches { Err(e) && for_u32(&e) };
+    assert from_value::<i128>(&Value::Float(1.0e40)) matches {
+        Err(e) && e.message == "value out of range for i128"
+    };
+    assert from_value::<u128>(&Value::Float(-1.0)) matches {
+        Err(e) && e.message == "value out of range for u128"
+    };
+}
+
 test "from_value reads a string-encoded integer, as core:json writes one" {
     assert from_value::<i64>(&Value::String("9007199254740993")) matches { Ok(9007199254740993) };
 }

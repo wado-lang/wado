@@ -694,13 +694,24 @@ pub fn merge(base: Value, overlay: Value) -> Value {
     let Object(layer) = overlay else {
         return overlay;
     };
-    for let [key, value] of layer.entries() {
-        merged[*key] = match merged.get(*key) {
-            Some(under) => merge(under, *value),
-            None => *value,
-        };
-    }
+    merge_fields(&mut merged, &layer);
     return Value::Object(merged);
+}
+
+/// [`merge`] of two objects' fields, in place, copying only what `layer`
+/// puts into `fields`.
+fn merge_fields(fields: &mut TreeMap<String, Value>, layer: &TreeMap<String, Value>) {
+    for let [key, value] of layer.entries() {
+        if let Object(sub_layer) = value {
+            if fields.contains_key(*key) {
+                if let Object(sub_fields) = &mut fields[*key] {
+                    merge_fields(sub_fields, sub_layer);
+                    continue;
+                }
+            }
+        }
+        fields[*key] = *value;
+    }
 }
 
 /// Reads a typed value out of the `Value` it points at.
@@ -729,24 +740,19 @@ pub struct ValueVariantAccess {
     payload: Option<&Value>,
 }
 
-global TWO_POW_63: f64 = 9223372036854775808.0;
-global TWO_POW_64: f64 = 18446744073709551616.0;
+global TWO_POW_127: f64 = 170141183460469231731687303715884105728.0;
+global TWO_POW_128: f64 = 340282366920938463463374607431768211456.0;
 
 /// The integer `value` holds, as `i128`, the width every narrower target is
-/// range-checked from.
-fn integer_of(value: &Value) -> Result<i128, DeserializeError> {
+/// range-checked from. A value past `i128` is out of range for `type_name`.
+fn integer_of(value: &Value, type_name: String) -> Result<i128, DeserializeError> {
     return match value {
         Int(n) => Result::Ok(*n as i128),
         UInt(n) => Result::Ok(*n as i128),
         Int128(n) => Result::Ok(*n),
-        UInt128(n) => {
-            if *n > i128::MAX as u128 {
-                Result::Err(DeserializeError::overflow("value out of range for i128"));
-            } else {
-                Result::Ok(*n as i128);
-            }
-        },
-        Float(f) => whole_float(*f),
+        UInt128(n) && *n <= i128::MAX as u128 => Result::Ok(*n as i128),
+        UInt128(_) => Result::Err(out_of_range(type_name)),
+        Float(f) => Result::Ok(whole_float(*f, -TWO_POW_127, TWO_POW_127, type_name)? as i128),
         String(s) => integer_string(s),
         _ => Result::Err(DeserializeError::unexpected_type("expected integer")),
     };
@@ -760,27 +766,28 @@ fn integer_string<T: FromStr>(s: &String) -> Result<T, DeserializeError> {
     };
 }
 
-/// `f` as an integer, when it is whole and within the i64 or u64 range.
-fn whole_float(f: f64) -> Result<i128, DeserializeError> {
+/// `f`, when it is whole and within `[min, max)`.
+fn whole_float(f: f64, min: f64, max: f64, type_name: String) -> Result<f64, DeserializeError> {
     if f != f64::floor(f) {
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float"));
     }
-    if !(-TWO_POW_63 <= f < TWO_POW_64) {
-        return Result::Err(DeserializeError::overflow("value out of range for a 64-bit integer"));
+    if !(min <= f < max) {
+        return Result::Err(out_of_range(type_name));
     }
-    if f < TWO_POW_63 {
-        return Result::Ok(f as i64 as i128);
-    }
-    return Result::Ok(f as u64 as i128);
+    return Result::Ok(f);
 }
 
 /// The integer `value` holds, when it lies in `[min, max]`.
 fn integer_in(value: &Value, min: i128, max: i128, type_name: String) -> Result<i128, DeserializeError> {
-    let n = integer_of(value)?;
+    let n = integer_of(value, type_name)?;
     if !(min <= n <= max) {
-        return Result::Err(DeserializeError::overflow(`value out of range for ${type_name}`));
+        return Result::Err(out_of_range(type_name));
     }
     return Result::Ok(n);
+}
+
+fn out_of_range(type_name: String) -> DeserializeError {
+    return DeserializeError::overflow(`value out of range for ${type_name}`);
 }
 
 fn float_of(value: &Value) -> Result<f64, DeserializeError> {
@@ -935,13 +942,14 @@ impl Deserializer for ValueDeserializer {
     }
 
     fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
-        return integer_of(self.value);
+        return integer_of(self.value, "i128");
     }
 
     fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
         return match self.value {
             UInt128(n) => Result::Ok(*n),
             String(s) => integer_string(s),
+            Float(f) => Result::Ok(whole_float(*f, 0.0, TWO_POW_128, "u128")? as u128),
             _ => Result::Ok(integer_in(self.value, 0, i128::MAX, "u128")? as u128),
         };
     }
