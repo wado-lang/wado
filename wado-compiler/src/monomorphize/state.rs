@@ -358,23 +358,17 @@ impl Monomorphizer {
             .receiver()
             .is_declared_binder_of(impl_type_params.iter().map(|p| p.name.as_str()));
 
-        let mangled_struct = if is_blanket && !impl_arg_names.is_empty() {
+        let receiver = if is_blanket && !impl_arg_names.is_empty() {
             // Replace struct name entirely: "I" → "StrCharIter"
-            MethodName::format_struct_with_args(
-                &impl_arg_names[0],
-                None,
-                &[],
-                method_info.trait_name.as_ref(),
-            )
+            impl_arg_names[0].clone()
+        } else if impl_arg_names.is_empty() {
+            method_info.struct_name()
         } else {
             // Normal: append type args: "List" → "List<i32>"
-            MethodName::format_struct_with_args(
-                &method_info.struct_name(),
-                method_info.receiver().ref_kind(),
-                &impl_arg_names,
-                method_info.trait_name.as_ref(),
-            )
+            method_info.receiver().mangle(&impl_arg_names)
         };
+        let mangled_struct =
+            MethodName::format_struct_with_trait(&receiver, method_info.trait_name.as_ref());
 
         // Build method name: transform<i64> (using method type args)
         let method_arg_names: Vec<String> = key

@@ -140,28 +140,11 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait WireNumbered with ()`
-
-A struct whose every field carries `#[wire(number = N)]`. A format keyed by
-numbers requires it, so a type without them is refused where the call is
-written rather than where the bytes are produced. See
-`docs/wep-2026-09-22-grog.md`.
-
 ### `pub trait SerializeStruct with ()`
 
 #### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
 `#[compiler_item("serialize_struct_field")]`
-
-#### `fn reads_default<T: Serialize>(&self, value: &T) -> Result<bool, SerializeError>`
-
-Whether writing `value` needs the field's declared default, which is then
-evaluated and passed to `field_numbered`. A format keyed by name never does.
-
-#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, encoding: WireEncoding, default: &Option<T>, name: S, value: &T) -> Result<(), SerializeError>`
-
-The same field with its `#[wire(...)]` number and encoding, and its
-declared default where `reads_default` asked for it.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
@@ -220,11 +203,6 @@ sequence of `u8` (the historical `List<u8>` behaviour), so a format
 with no distinct byte-string form keeps working unchanged.
 
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
-
-#### `fn serialize_some<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
-
-The value an `Option::Some` holds, which a format with explicit
-presence on the wire writes even when it is the zero.
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 
@@ -300,12 +278,6 @@ Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
 
-#### `fn by_number(number: i32) -> Option<i32>`
-
-Field index of the field `#[wire(number = N)]` gave `number` to.
-Returns `null` for every number when the type carries none, which a
-format keyed by numbers rules out through `WireNumbered`.
-
 ### `pub trait DeserializeStruct with ()`
 
 #### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
@@ -315,11 +287,6 @@ format keyed by numbers rules out through `WireNumbered`.
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
 
 `#[compiler_item("deserialize_struct_value")]`
-
-#### `fn value_encoded<T: Deserialize>(&mut self, encoding: WireEncoding) -> Result<T, DeserializeError>`
-
-The same value, read as the field's `#[wire(encoding = …)]` says. A
-format that spells an integer one way only drops it.
 
 #### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
@@ -564,14 +531,3 @@ default; `Warn` and `PassThru` both keep the last occurrence.
 #### `Warn`
 
 #### `PassThru`
-
-### `pub enum WireEncoding`
-
-How a numbered format writes an integer field: `#[wire(encoding = "zigzag")]`
-or `"fixed"`, `Plain` where none is written. See WEP 2026-09-22.
-
-#### `Plain`
-
-#### `ZigZag`
-
-#### `Fixed`

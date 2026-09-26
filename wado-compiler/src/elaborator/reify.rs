@@ -4,7 +4,6 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
-use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::ast::{
@@ -39,11 +38,7 @@ use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::{Identity, TypeSystem};
 use super::util;
 use crate::ast::RangeKind;
-use crate::ast::{
-    AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, WireEncoding, wire_case_number_of, wire_encoding_written, wire_number_of,
-    wire_number_written,
-};
+use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -813,7 +808,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify an `enum E { … }` declaration. Pure projection from the
     /// AST shape; cases keep their declared index.
     fn reify_enum(&self, enum_decl: &ast::EnumDecl) -> TirEnum {
-        let wire_numbers = self.checked_case_numbers(&enum_decl.cases);
         TirEnum {
             def: self.tysys.def_at(enum_decl.id),
             name: enum_decl.name.clone(),
@@ -830,7 +824,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     index: i as u32,
                     span: case.span,
                     wire_name_override: wire_name_override_of(&case.attrs),
-                    wire_number: wire_numbers[i],
                 })
                 .collect(),
             span: enum_decl.span,
@@ -960,15 +953,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // context named as `resolve_struct` names it, so both see the same TIR.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         struct_decl
             .fields
             .iter()
             .zip(field_types)
-            .zip(wire_numbers)
             .enumerate()
-            .map(|(index, ((field, &type_id), wire_number))| {
-                self.reify_struct_field(field, index, type_id, wire_number, &mut field_ctx)
+            .map(|(index, (field, &type_id))| {
+                self.reify_struct_field(field, index, type_id, &mut field_ctx)
             })
             .collect()
     }
@@ -1288,7 +1279,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             String::new(),
         );
         if let Some(owner) = facts.concrete_owner.as_ref() {
-            naming = naming.with_substituted_struct_name(owner);
+            naming = naming.at_owner(owner);
         }
 
         Some(TirImpl {
@@ -1478,7 +1469,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // handle it, and `impl List<u8>` vs `impl List<i32>` stay distinct.
         if let Some(owner) = concrete_owner {
             mangled_name = MethodName::format_local(owner, facts.trait_name.as_ref(), &func.name);
-            method_info = method_info.with_substituted_struct_name(owner);
+            method_info = method_info.at_owner(owner);
             impl_type_params = Vec::new();
         }
 
@@ -1679,47 +1670,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Report a malformed `#[wire(number = …)]` at the field it was written on.
-    fn wire_number_error(&self, span: &Span, message: String) {
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::WireNumber,
-                message,
-                span: Some(DiagnosticSpan::from_span(span, None)),
-            },
-        );
-    }
-
-    /// Each field's `#[wire(number = N)]`, by field position. A struct numbers
-    /// every field or none, so the result is all `Some` or all `None`, and
-    /// anything else is reported here. See
-    /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
-    fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
-        let members: Vec<NumberedMember<'_>> = fields
-            .iter()
-            .map(|f| NumberedMember {
-                name: &f.name,
-                span: &f.span,
-                attrs: &f.attrs,
-            })
-            .collect();
-        self.checked_numbers(
-            &members,
-            "a struct numbers every field or none",
-            wire_number_of,
-            wire_number_fault,
-        )
-    }
-
     /// A declared struct field as TIR: its attributes read, its default reified.
     fn reify_struct_field(
         &mut self,
         field: &ast::StructField,
         index: usize,
         type_id: TypeId,
-        wire_number: Option<u32>,
         field_ctx: &mut FunctionContext,
     ) -> TirField {
         let default_expr = field
@@ -1739,159 +1695,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .attrs
                 .iter()
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
-            serde_number: wire_number,
-            serde_encoding: self.checked_wire_encoding(field, type_id),
             default_expr,
-        }
-    }
-
-    /// A field's `#[wire(encoding = "…")]`, checked against the integer the
-    /// field holds, directly or in an `Option` or `List`.
-    fn checked_wire_encoding(&self, field: &ast::StructField, type_id: TypeId) -> WireEncoding {
-        let Some(written) = wire_encoding_written(&field.attrs) else {
-            return WireEncoding::Plain;
-        };
-        let (encoding, admits, needs): (_, &[PrimitiveType], _) = match written {
-            "zigzag" => (
-                WireEncoding::ZigZag,
-                &[PrimitiveType::I32, PrimitiveType::I64],
-                "a signed integer, `i32` or `i64`,",
-            ),
-            "fixed" => (
-                WireEncoding::Fixed,
-                &[
-                    PrimitiveType::I32,
-                    PrimitiveType::I64,
-                    PrimitiveType::U32,
-                    PrimitiveType::U64,
-                ],
-                "a 32- or 64-bit integer,",
-            ),
-            _ => {
-                self.wire_encoding_error(
-                    &field.span,
-                    format!(
-                        "`#[wire(encoding = \"{written}\")]`: an encoding is \"zigzag\" or \"fixed\""
-                    ),
-                );
-                return WireEncoding::Plain;
-            }
-        };
-        let tt = self.tysys.type_table.borrow();
-        let held = tt.representation_head(type_id);
-        let element = tt.representation_head(
-            tt.as_option(held)
-                .or_else(|| tt.as_list(held))
-                .unwrap_or(held),
-        );
-        if !matches!(tt.get(element), ResolvedType::Primitive(p) if admits.contains(p)) {
-            self.wire_encoding_error(
-                &field.span,
-                format!(
-                    "`#[wire(encoding = \"{written}\")]` needs {needs} and `{}` holds `{}`",
-                    field.name,
-                    tt.type_name(element)
-                ),
-            );
-        }
-        encoding
-    }
-
-    fn wire_encoding_error(&self, span: &Span, message: String) {
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code: Code::WireEncoding,
-                message,
-                span: Some(DiagnosticSpan::from_span(span, None)),
-            },
-        );
-    }
-
-    /// Each enum case's `#[wire(number = N)]`, by case position, under the
-    /// struct rule: every case or none, and no number twice.
-    fn checked_case_numbers(&self, cases: &[ast::EnumCase]) -> Vec<Option<i32>> {
-        let members: Vec<NumberedMember<'_>> = cases
-            .iter()
-            .map(|c| NumberedMember {
-                name: &c.name,
-                span: &c.span,
-                attrs: &c.attrs,
-            })
-            .collect();
-        self.checked_numbers(
-            &members,
-            "an enum numbers every case or none",
-            wire_case_number_of,
-            |written| format!("`#[wire(number = {written})]`: an enum case number is an `i32`"),
-        )
-    }
-
-    fn checked_numbers<N: Copy + PartialEq + Display>(
-        &self,
-        members: &[NumberedMember<'_>],
-        all_or_none: &str,
-        number_of: fn(&[ast::Attribute]) -> Option<N>,
-        fault: impl Fn(&str) -> String,
-    ) -> Vec<Option<N>> {
-        let written: Vec<Option<&str>> = members
-            .iter()
-            .map(|m| wire_number_written(m.attrs))
-            .collect();
-        self.check_numbers_are_all_or_none(members, &written, all_or_none);
-
-        let mut numbers: Vec<Option<N>> = Vec::with_capacity(members.len());
-        let mut taken: Vec<(N, &str)> = Vec::new();
-        for (member, written) in members.iter().zip(&written) {
-            let Some(written) = *written else {
-                numbers.push(None);
-                continue;
-            };
-            let Some(number) = number_of(member.attrs) else {
-                self.wire_number_error(member.span, fault(written));
-                numbers.push(None);
-                continue;
-            };
-            if let Some((_, owner)) = taken.iter().find(|(taken, _)| *taken == number) {
-                self.wire_number_error(
-                    member.span,
-                    format!("`#[wire(number = {number})]` is already `{owner}`'s number"),
-                );
-                numbers.push(None);
-                continue;
-            }
-            taken.push((number, member.name));
-            numbers.push(Some(number));
-        }
-        numbers
-    }
-
-    /// One numbered member makes the rest owe a number, since a format that
-    /// reads numbers has nothing to put on the wire for a member without one.
-    fn check_numbers_are_all_or_none(
-        &self,
-        members: &[NumberedMember<'_>],
-        written: &[Option<&str>],
-        all_or_none: &str,
-    ) {
-        let Some(numbered) = written
-            .iter()
-            .position(Option::is_some)
-            .map(|index| members[index].name)
-        else {
-            return;
-        };
-        for (member, written) in members.iter().zip(written) {
-            if written.is_none() {
-                self.wire_number_error(
-                    member.span,
-                    format!(
-                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: {all_or_none}",
-                        member.name
-                    ),
-                );
-            }
         }
     }
 
@@ -10889,31 +10693,6 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
         }
     })
 }
-
-/// A struct field or an enum case, as `#[wire(number = N)]` checking reads it.
-struct NumberedMember<'a> {
-    name: &'a str,
-    span: &'a Span,
-    attrs: &'a [ast::Attribute],
-}
-
-/// Why a written field number is not one, said to whoever wrote it.
-fn wire_number_fault(written: &str) -> String {
-    if written
-        .parse::<u32>()
-        .is_ok_and(|n| WIRE_NUMBER_RESERVED.contains(&n))
-    {
-        return format!(
-            "`#[wire(number = {written})]`: {} to {} are reserved by the wire format",
-            WIRE_NUMBER_RESERVED.start(),
-            WIRE_NUMBER_RESERVED.end()
-        );
-    }
-    format!(
-        "`#[wire(number = {written})]`: a field number runs from {WIRE_NUMBER_MIN} to {WIRE_NUMBER_MAX}"
-    )
-}
-
 /// `#[wire(name_policy = "...")]` on a declaration. The attribute check refuses
 /// a policy `NamePolicy` does not name.
 fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {

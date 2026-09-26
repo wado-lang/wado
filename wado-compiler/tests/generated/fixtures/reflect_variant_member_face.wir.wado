@@ -68,7 +68,6 @@ struct core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle> { 
     mut value: "core:prelude/traits.wado//enum:CaseStyle",
     mut case_name: ref "core:prelude/string.wado//String",
     mut wire_override: ref null "core:prelude/string.wado//String",
-    mut wire_discriminant: i32,
 }
 
 struct core:prelude/traits.wado//VariantCase<reflect_variant_member_face.wado/Command,()> {  // TypeId(13)
@@ -157,9 +156,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Inspect::inspect$scalar" = fn(ref "core:prelude/types.wado//Box<core:prelude/traits.wado/CaseStyle>", ref "core:prelude/string.wado//String");  // TypeId(50)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(51)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(52)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(53)
 
@@ -1264,7 +1263,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/ReflectEnum::members"() {
-    return struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 0, value: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Identity"), used: 8 }, wire_override: ref.null none, wire_discriminant: 0 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 1, value: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Camel"), used: 5 }, wire_override: ref.null none, wire_discriminant: 1 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 2, value: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Snake"), used: 5 }, wire_override: ref.null none, wire_discriminant: 2 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 3, value: 3, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ScreamingSnake"), used: 14 }, wire_override: ref.null none, wire_discriminant: 3 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 4, value: 4, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Pascal"), used: 6 }, wire_override: ref.null none, wire_discriminant: 4 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 5, value: 5, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Kebab"), used: 5 }, wire_override: ref.null none, wire_discriminant: 5 }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 6, value: 6, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ScreamingKebab"), used: 14 }, wire_override: ref.null none, wire_discriminant: 6 };
+    return struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 0, value: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Identity"), used: 8 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 1, value: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Camel"), used: 5 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 2, value: 2, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Snake"), used: 5 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 3, value: 3, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ScreamingSnake"), used: 14 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 4, value: 4, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Pascal"), used: 6 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 5, value: 5, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Kebab"), used: 5 }, wire_override: ref.null none }, struct.new "core:prelude/traits.wado//EnumCase<core:prelude/traits.wado/CaseStyle>" { discriminant: 6, value: 6, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("ScreamingKebab"), used: 14 }, wire_override: ref.null none };
 }
 
 fn "reflect_variant_member_face.wado/reflect_variant_member_face.wado/Command^core:prelude/traits.wado/ReflectVariant::members"() {
@@ -2711,6 +2710,10 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/CaseStyle^core:prelude/tra
     }
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -2744,10 +2747,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l275;
         };
     };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {

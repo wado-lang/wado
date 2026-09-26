@@ -336,14 +336,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The auto-derived `Default`: synthesis emits the body, so no
         // declaration backs it. It takes no arguments and answers with the
         // receiver's own type.
-        if let Some(method_ref) = self.auto_derived_default_ref(receiver_name, method_name) {
+        if let Some((method_ref, return_type)) = self.auto_derived_default_ref(&key, method_name) {
             return StaticLookup::Found(Box::new(StaticCallee {
                 params: CalleeParams::default(),
                 own_params: Vec::new(),
-                return_type: self
-                    .tysys
-                    .auto_derive_default_struct_type(&self.type_lookup(), receiver_name)
-                    .unwrap_or(TypeTable::UNKNOWN),
+                return_type,
                 method_ref,
             }));
         }

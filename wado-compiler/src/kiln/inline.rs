@@ -363,6 +363,7 @@ fn lower_inline(
             source,
             synthetic_id,
         }],
+        invoked_as: module.as_written(),
         module,
         from,
         inputs,
@@ -552,7 +553,7 @@ fn module_key(module: &GeneratorModule) -> String {
 }
 
 fn identity_key(inv: &Invocation) -> String {
-    let (module, from, inputs, output_dir, options) = inv.identity_tuple();
+    let (module, _, from, inputs, output_dir, options) = inv.identity_tuple();
     clause_digest(module, from, inputs, Some(output_dir), &options)
 }
 
@@ -702,6 +703,7 @@ mod tests {
             "",
         ));
         assert_matches!(&result[0].module, GeneratorModule::Spec(s) if s.spec == "lib:gen");
+        assert_eq!(result[0].invoked_as, "lib:gen");
     }
 
     #[test]
@@ -988,6 +990,7 @@ mod tests {
             GeneratorModule::LocalPath(p) => assert_eq!(p.as_str(), "gen.wado"),
             other => panic!("expected LocalPath, got {other:?}"),
         }
+        assert_eq!(result[0].invoked_as, "gen.wado");
     }
 
     #[test]

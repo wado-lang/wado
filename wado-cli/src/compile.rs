@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
@@ -17,7 +18,7 @@ use crate::dep_component::{
 };
 use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
-use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, normalize_path, relative_to};
+use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
@@ -1282,6 +1283,7 @@ mod kiln_dir_module_tests {
                 synthetic_id: "kiln-test".to_string(),
             }],
             module: GeneratorModule::LocalPath(InvocationPath::normalize(module_path)),
+            invoked_as: module_path.to_string(),
             from: InvocationPath::normalize("grammar.g4"),
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),

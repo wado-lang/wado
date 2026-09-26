@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility, wire_numbers_of};
+use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -44,9 +44,6 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
-    /// every field or none, which `WireNumbered` is the bound for.
-    pub(super) field_wire_numbers: Vec<Option<u32>>,
     /// The declaration's real type parameters. Bounds, defaults and arity are
     /// all read from here, never from a projection of it.
     pub(super) type_params: RealTypeParams,
@@ -146,7 +143,6 @@ impl StructFieldInfo {
             fields,
             field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
             field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
-            field_wire_numbers: wire_numbers_of(&decl.fields),
             type_params: RealTypeParams::of(&decl.type_params),
             type_param_type_ids,
         }
@@ -3907,10 +3903,6 @@ pub(crate) struct TypeLookup<'a> {
 }
 
 impl<'a> TypeLookup<'a> {
-    pub(super) fn struct_fields(&self, name: &str) -> Option<&'a StructFieldInfo> {
-        self.struct_fields_of(self.declaration(name)?)
-    }
-
     /// Field info for a struct type's own head — the form with nothing left to
     /// resolve, since the head is already an identity or a shape.
     pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {

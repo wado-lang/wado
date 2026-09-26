@@ -856,8 +856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if !subst_ctx.is_empty() {
-            return_type =
-                subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+            return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
         }
 
         // Deferred-inference solve point: a hole that flowed in from an
@@ -888,7 +887,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             expected_param_types
                 .iter()
-                .map(|&t| subst_ctx.substitute(t, &mut self.tysys.type_table.borrow_mut()))
+                .map(|&t| self.substitute_ctx_in_frame(&subst_ctx, t))
                 .collect()
         };
         if !method_type_args.is_empty() {
@@ -1047,7 +1046,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .receiver_head_awaits_substitution(base_type_id);
         let base_receiver = match matched_ref_kind {
-            Some(kind) => Receiver::Ref(kind),
+            Some(kind) => Receiver::of_ref_impl(kind, &receiver_struct_name),
             None => Receiver::Type(base_struct_name),
         };
         let mut method_info =
@@ -2079,8 +2078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let method_params = self.qualified_method_own_slots(&struct_name, &static_call.method);
             let subst_ctx = SubstitutionContext::new().bind(&method_params, &method_type_args);
             if !subst_ctx.is_empty() {
-                return_type =
-                    subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+                return_type = self.substitute_ctx_in_frame(&subst_ctx, return_type);
             }
         }
 
@@ -2961,29 +2959,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The `Default::default` no declaration backs, which bound-driven
     /// synthesis emits on demand. It is not a candidate: nothing declares it,
     /// so no rule has anything to read, and it answers only where the rules
-    /// found nothing.
+    /// found nothing. Answers the reference and the struct type it returns.
     pub(super) fn auto_derived_default_ref(
         &self,
-        struct_name: &str,
+        key: &ImplTargetKey,
         method_name: &str,
-    ) -> Option<StaticMethodRef> {
+    ) -> Option<(StaticMethodRef, TypeId)> {
         if method_name == "default"
+            && let ImplTargetKey::Decl(def) = key
             && let Some(struct_type) = self
                 .tysys
-                .auto_derive_default_struct_type(&self.type_lookup(), struct_name)
+                .auto_derive_default_struct_type(&self.type_lookup(), *def)
         {
             let default_trait_name = self
                 .tysys
                 .type_table
                 .borrow()
                 .compiler_trait_fq(CompilerItem::Default);
-            let module_source = self
+            let (struct_name, module_source) = self
                 .tysys
                 .type_table
                 .borrow()
                 .nominal_head(struct_type)
-                .expect("a derivable struct names its declaration")
-                .1;
+                .expect("a derivable struct names its declaration");
             self.tysys
                 .type_table
                 .borrow_mut()
@@ -2994,13 +2992,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .canonical()
                         .expect("a compiler trait item names a declaration"),
                 );
-            return Some(StaticMethodRef::new(
+            let method_ref = StaticMethodRef::new(
                 module_source,
-                struct_name,
+                &struct_name,
                 method_name,
                 Some(default_trait_name),
                 None,
-            ));
+            );
+            return Some((method_ref, struct_type));
         }
 
         None
@@ -3179,7 +3178,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !impl_type_args.is_empty() || !method_type_args.is_empty() {
             let mut combined = impl_type_args.to_vec();
             combined.extend_from_slice(method_type_args);
-            return_type = self.tysys.substitute_type_params(return_type, &combined);
+            return_type = self.substitute_in_frame(return_type, &combined);
         }
 
         if let Some((newtype_id, base_type_id, _)) = newtype_dispatch

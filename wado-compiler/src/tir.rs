@@ -14,7 +14,7 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility, WireEncoding};
+use crate::ast::{AstId, HandleClasses, NamePolicy, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -3669,8 +3669,10 @@ impl TypeTable {
                     && let Some(answer) = projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
-                            .find(|(name, _)| *name == assoc_name)
-                            .map(|(_, type_id)| *type_id)
+                            .find(|(trait_, name, _)| {
+                                *trait_ == owning_trait && *name == assoc_name
+                            })
+                            .map(|(_, _, type_id)| *type_id)
                     })
                 {
                     return answer;
@@ -4301,10 +4303,25 @@ impl TypeTable {
     /// Whether `id` (recursively) mentions an associated-type projection
     /// (`I::Item`), i.e. still needs a bound's impl to become concrete.
     pub fn contains_assoc_type_projection(&self, id: TypeId) -> bool {
-        match self.get(id) {
-            ResolvedType::AssocTypeProjection { .. } => true,
-            _ => self.any_constituent(id, &mut |t| self.contains_assoc_type_projection(t)),
+        !self.assoc_type_projections(id).is_empty()
+    }
+
+    /// Every associated-type projection `id` mentions, outermost first.
+    pub fn assoc_type_projections(&self, id: TypeId) -> Vec<TypeId> {
+        let mut out = Vec::new();
+        self.collect_assoc_type_projections(id, &mut out);
+        out
+    }
+
+    fn collect_assoc_type_projections(&self, id: TypeId, out: &mut Vec<TypeId>) {
+        if let ResolvedType::AssocTypeProjection { .. } = self.get(id) {
+            out.push(id);
+            return;
         }
+        self.any_constituent(id, &mut |t| {
+            self.collect_assoc_type_projections(t, out);
+            false
+        });
     }
 
     /// The frame slot `id` names where it is a type parameter or a pack.
@@ -5977,14 +5994,14 @@ pub struct TirTypeParam {
 }
 
 /// What a use site knows about the associated types projected from a slot,
-/// beyond the type filling it: slot index → `[(associated-type name, what it
-/// means here)]`.
+/// beyond the type filling it: slot index → `[(declaring trait,
+/// associated-type name, what it means here)]`.
 ///
 /// The companion of the slot substitution in
 /// [`TypeTable::substitute_type_params_with`]. A declaration resolves
 /// `Self::Item` in its own frame, where it can only be a projection; what it
 /// stands for is written at the use site (`I: IntoIterator<Item = u8>`).
-pub type SlotProjections = IndexMap<u32, Vec<(String, TypeId)>>;
+pub type SlotProjections = IndexMap<u32, Vec<(DefId, String, TypeId)>>;
 
 /// Substitution-key base for method-level type params: past the highest
 /// impl-param *index*, not the count. A concrete type in a receiver slot
@@ -7311,12 +7328,6 @@ pub struct TirField {
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
     pub serde_positional: bool,
-    /// `#[wire(number = N)]` — the numeric wire key, which a format reads
-    /// instead of the name. A struct numbers every field or none, so this is
-    /// `Some` for all of a struct's fields or for none of them.
-    pub serde_number: Option<u32>,
-    /// `#[wire(encoding = "…")]` — how a numbered format writes this integer.
-    pub serde_encoding: WireEncoding,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,
@@ -7341,8 +7352,6 @@ impl TirField {
             wire_name_override: None,
             serde_default: false,
             serde_positional: false,
-            serde_number: None,
-            serde_encoding: WireEncoding::Plain,
             default_expr: None,
         }
     }
@@ -7374,9 +7383,6 @@ pub struct TirEnumCase {
     pub span: Span,
     /// `#[wire(name = "...")]` — custom serialized name for this case.
     pub wire_name_override: Option<String>,
-    /// `#[wire(number = N)]` — the discriminant a format writes for this case.
-    /// An enum numbers every case or none.
-    pub wire_number: Option<i32>,
 }
 
 /// A flags type declaration (bitmask type, like WIT flags)
@@ -7982,15 +7988,39 @@ mod tests {
         let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
-        let projections =
-            SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]);
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
-            &projections,
+            &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
         assert_eq!(substituted, TypeTable::U8);
+    }
+
+    fn answer_item(trait_: DefId, answer: TypeId) -> SlotProjections {
+        SlotProjections::from_iter([(0, vec![(trait_, "Item".to_string(), answer)])])
+    }
+
+    /// An answer is for one trait's associated type: another trait declaring
+    /// the same name on the same slot is a different projection.
+    #[test]
+    fn an_answer_for_another_trait_leaves_the_projection() {
+        let mut table = TypeTable::new();
+        let self_param = table.make_type_param("Self".to_string(), 0);
+        let projection = make_projection(&mut table, self_param, "Item");
+
+        let receiver = table.make_type_param("I".to_string(), 1);
+        let substituted = table.substitute_type_params_with(
+            projection,
+            &IndexMap::from_iter([(0, receiver)]),
+            &answer_item(DefId::for_test(1), TypeTable::U8),
+        );
+
+        let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()
+        else {
+            panic!("expected a projection, got {:?}", table.get(substituted));
+        };
+        assert_eq!(param_id, receiver);
     }
 
     /// An unanswered name leaves the projection abstract over the substituted
@@ -8006,7 +8036,7 @@ mod tests {
         let substituted = table.substitute_type_params_with(
             projection,
             &IndexMap::from_iter([(0, receiver)]),
-            &SlotProjections::from_iter([(0, vec![("Item".to_string(), TypeTable::U8)])]),
+            &answer_item(DefId::for_test(0), TypeTable::U8),
         );
 
         let ResolvedType::AssocTypeProjection { param_id, .. } = table.get(substituted).clone()

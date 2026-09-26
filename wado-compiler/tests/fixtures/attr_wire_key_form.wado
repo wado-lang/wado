@@ -1,11 +1,11 @@
-// Each `#[wire]` key takes one form: a quoted field number is not one.
+// Each `#[wire]` key takes one form: an unquoted number is not a name.
 
 struct Sample {
-    #[wire(number = "1")]
+    #[wire(name = 1)]
     delta: i64,
 }
 
 export fn run() {}
 
 __DATA__
-{"compile_error": "`wire` takes `name = \"…\"`, `name_policy = \"…\"`, `number = N`, `encoding = \"…\"`, `positional`, or `default`", "compile_error_codes": ["ATTR_MISUSE"]}
+{"compile_error": "`wire` takes `name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`", "compile_error_codes": ["ATTR_MISUSE"]}

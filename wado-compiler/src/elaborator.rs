@@ -1037,10 +1037,33 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The name an `impl` block's receiver registers under. One block, one
     /// name: two spellings of it register two templates.
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
-        self.qualified_receiver_name_owned(
-            &self.get_type_name(&impl_block.ty),
+        self.receiver_name_of_impl(
+            &impl_block.ty,
+            &impl_block.type_params,
             Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
         )
+    }
+
+    /// [`Self::impl_receiver_name`] from the block's parts. A `&X` block names
+    /// `&X`, as an `X` block names `X`: its kind alone is shared with every
+    /// other such block.
+    pub(super) fn receiver_name_of_impl(
+        &self,
+        impl_ty: &ast::Type,
+        type_params: &[ast::GenericParam],
+        owner: Option<DefId>,
+    ) -> FqTypeName {
+        if RefKind::from_ast(impl_ty).is_some() {
+            let target = trait_env::written_type_arg(impl_ty, &self.tysys.resolutions);
+            if Receiver::ref_to(&target).is_some() {
+                return if type_params.is_empty() {
+                    target
+                } else {
+                    target.head_only()
+                };
+            }
+        }
+        self.qualified_receiver_name_owned(&self.get_type_name(impl_ty), owner)
     }
 
     /// The declaration `ns::Name` reaches from this module.
@@ -1916,21 +1939,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .and_then(FqTraitName::canonical)
                 .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
-            let is_ref_impl = matches!(
-                &impl_block.ty,
-                ast::Type::Reference(_) | ast::Type::MutReference(_),
-            );
             // Two names, two uses. `reify_impl_default_methods` recomputes a
             // default method's name from `qualified_struct_name`, so it must be
             // what this block's methods are recorded under — owned, or the
             // block writes two templates. `receiver` keys `method_info` against
             // receivers built elsewhere, so it stays plain.
-            let qualified_struct_name =
-                scope.qualified_receiver_name_owned(&struct_name, impl_owner);
+            let qualified_struct_name = scope.impl_receiver_name(impl_block);
             let receiver = match RefKind::from_ast(&impl_block.ty) {
-                Some(kind) => Receiver::Ref(kind),
+                Some(kind) => Receiver::of_ref_impl(kind, &qualified_struct_name),
                 None => Receiver::Type(scope.qualified_receiver_name(&struct_name)),
             };
+            let is_ref_impl = receiver.ref_kind().is_some();
             // Concrete type args of the impl's trait reference
             // (`impl Future<i32>` → `[i32]`), resolved in the
             // impl's type-param scope so generic impls
@@ -1944,10 +1963,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .collect(),
                 _ => Vec::new(),
             };
-            // Concrete-impl owner (`impl List<u8>`): the receiver's
-            // qualified mangle, matching call sites (issue #1348).
+            // Concrete-impl owner (`impl List<u8>`, `impl Eq for &Item`): the
+            // receiver's qualified mangle, matching call sites (issue #1348).
             let concrete_owner: Option<FqTypeName> =
-                if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
+                if !qualified_struct_name.references().is_empty()
+                    && impl_block.type_params.is_empty()
+                {
+                    Some(qualified_struct_name.clone())
+                } else if scope.tysys.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
@@ -1958,7 +1981,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // The shapes a call site mangles with their arguments.
                         _ => tt.nominal_type_args(peeled).is_some(),
                     };
-                    is_instantiation.then(|| tt.fq_type_name(peeled))
+                    is_instantiation.then(|| tt.fq_type_name(self_type))
                 } else {
                     None
                 };

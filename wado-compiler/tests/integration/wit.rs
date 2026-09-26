@@ -68,7 +68,7 @@ fn check(source: &str, expected: &str) {
 /// generator world. Otherwise the `generate` export exposes the generic
 /// `Request<Options>`, which is not representable in WIT, and the whole
 /// component-type section is dropped. `semantics_for_world` runs the adapter,
-/// leaving the representable revision-3 `generate(primary, inputs, options)`
+/// leaving the representable `generate(primary, inputs, module, options)`
 /// signature with `options` typed to the generator's own `Options` record.
 #[test]
 fn kiln_generator_world_emits_typed_params_not_generic_request() {
@@ -108,9 +108,9 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
     .expect("emit_wit_text must succeed for the generator world (issue #1478)");
     assert!(
         text.contains(
-            "generate: func(primary: input-file, inputs: list<input-file>, options: options)"
+            "generate: func(primary: input-file, inputs: list<input-file>, module: string, options: options)"
         ),
-        "generate must export the representable revision-3 typed params:\n{text}"
+        "generate must export the representable typed params:\n{text}"
     );
     assert!(
         !text.contains("Request<")

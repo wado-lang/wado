@@ -1,0 +1,35 @@
+// A nested variant pattern over a reference binds its leaf by reference, a
+// primitive leaf included.
+
+variant Choice {
+    Num(i32),
+    Text(String),
+}
+
+fn inner_number(c: &Option<Option<i32>>) -> i32 {
+    if let Some(Some(v)) = c {
+        return *v;
+    }
+    return -1;
+}
+
+fn choice_width(c: &Option<Choice>) -> i32 {
+    return match c {
+        Some(Choice::Num(v)) => *v,
+        Some(Choice::Text(t)) => t.len(),
+        None => 0,
+    };
+}
+
+test "a primitive leaf under two variant patterns binds by reference" {
+    assert inner_number(&Option::Some(Option::Some(3))) == 3;
+    assert inner_number(&Option::Some(null)) == -1;
+    assert choice_width(&Option::Some(Choice::Num(7))) == 7;
+    assert choice_width(&Option::Some(Choice::Text("ab"))) == 2;
+    assert choice_width(&null) == 0;
+}
+
+__DATA__
+{
+    "test": {}
+}

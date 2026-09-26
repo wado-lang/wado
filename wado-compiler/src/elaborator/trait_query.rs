@@ -63,7 +63,6 @@ pub(super) enum OnBoundTrait {
     Ord,
     Serialize,
     Deserialize,
-    WireNumbered,
     Default,
     Reflect,
     ReflectStruct,
@@ -87,7 +86,6 @@ impl OnBoundTrait {
             Self::Ord => CompilerItem::Ord,
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
-            Self::WireNumbered => CompilerItem::WireNumbered,
             Self::Default => CompilerItem::Default,
             Self::Reflect => CompilerItem::Reflect,
             Self::ReflectStruct => CompilerItem::ReflectStruct,
@@ -110,7 +108,6 @@ impl OnBoundTrait {
             CompilerItem::Ord => Self::Ord,
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
-            CompilerItem::WireNumbered => Self::WireNumbered,
             CompilerItem::Default => Self::Default,
             CompilerItem::Reflect => Self::Reflect,
             CompilerItem::ReflectStruct => Self::ReflectStruct,
@@ -341,7 +338,7 @@ impl TypeSystem {
 
     /// The return type an auto-derived trait fixes, regardless of what any user
     /// impl writes (`Eq` → `bool`, `Ord` → `Ordering`).
-    fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
+    pub(super) fn auto_derive_return_type(&self, item: CompilerItem) -> TypeId {
         match item {
             CompilerItem::Eq => TypeTable::BOOL,
             _ => self
@@ -1151,9 +1148,6 @@ impl TypeSystem {
         if tr == OnBoundTrait::Default {
             return self.is_defaultable_struct(scope, type_id);
         }
-        if tr == OnBoundTrait::WireNumbered {
-            return self.is_numbered_struct(scope, type_id);
-        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
@@ -1181,32 +1175,12 @@ impl TypeSystem {
     }
 
     fn is_defaultable_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let name = {
-            let tt = self.type_table.borrow();
-            if !matches!(tt.get(type_id), ResolvedType::Struct { .. }) {
-                return false;
-            }
-            tt.type_name(type_id)
+        let def = match self.type_table.borrow().get(type_id) {
+            ResolvedType::Struct { def, .. } => def.decl(),
+            _ => None,
         };
-        self.auto_derive_default_struct_type(scope, &name).is_some()
-    }
-
-    /// The `WireNumbered` bound's eligibility: a struct whose every field
-    /// carries `#[wire(number = N)]`. A struct with no fields qualifies, and
-    /// encodes as the empty record protobuf reads it as.
-    fn is_numbered_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
-        let Some(def) = ({
-            let tt = self.type_table.borrow();
-            match tt.get(type_id) {
-                ResolvedType::Struct { def, .. } => def.decl(),
-                _ => None,
-            }
-        }) else {
-            return false;
-        };
-        scope
-            .struct_fields_of(def)
-            .is_some_and(|info| info.field_wire_numbers.iter().all(Option::is_some))
+        def.and_then(|def| self.auto_derive_default_struct_type(scope, def))
+            .is_some()
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
@@ -1425,16 +1399,9 @@ impl TypeSystem {
             }
         }
 
-        if on_bound == Some(OnBoundTrait::WireNumbered) {
-            return self.is_numbered_struct(scope, type_id);
-        }
-
         if let ResolvedType::Struct { def, .. } = &resolved
             && on_bound == Some(OnBoundTrait::Default)
-            && let Some(name) = def
-                .decl()
-                .map(|d| self.type_table.borrow().def_name(d).to_string())
-            && self.auto_derive_default_struct_type(scope, &name).is_some()
+            && self.is_defaultable_struct(scope, type_id)
         {
             if let Some(key) = on_bound.and_then(|t| self.compiler_trait_def(t.compiler_item())) {
                 let module_source = self
@@ -1669,9 +1636,22 @@ impl TypeSystem {
         wanted: &[FqTypeName],
     ) -> bool {
         let trait_env = self.trait_env.clone();
+        // A `&X` block answers only for the reference to `X`.
+        let subject_ref = subject.and_then(|id| {
+            let fq = self.type_table.borrow().fq_type_name(id);
+            let (kind, _) = fq.split_reference()?;
+            Some(Receiver::of_ref_impl(kind, &fq))
+        });
         {
             for entry in trait_env.entries_by_receiver_vec(type_key) {
                 let header = &trait_env.impl_headers[&entry];
+                if let Some(referent) = header.ref_receiver()
+                    && subject_ref
+                        .as_ref()
+                        .is_some_and(|subject| *subject != referent)
+                {
+                    continue;
+                }
                 // Both sides are declarations: the query's comes from the
                 // reference site that asked (a bound, a `T::method()` prefix),
                 // the header's from the site it writes, and each was resolved by
@@ -1906,7 +1886,6 @@ impl TypeSystem {
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
-            | OnBoundTrait::WireNumbered
             | OnBoundTrait::Default
             | OnBoundTrait::Ref
             | OnBoundTrait::RefMut
@@ -1950,7 +1929,6 @@ fn declaring_module_of_kind(
         | OnBoundTrait::Ord
         | OnBoundTrait::Serialize
         | OnBoundTrait::Deserialize
-        | OnBoundTrait::WireNumbered
         | OnBoundTrait::Default
         | OnBoundTrait::Ref
         | OnBoundTrait::RefMut
@@ -2033,7 +2011,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         assoc_types: &[DeclaredAssocType],
         self_type_id: TypeId,
-    ) -> Vec<(String, TypeId)> {
+    ) -> Vec<(DefId, String, TypeId)> {
         let self_name = match self.tysys.type_table.borrow().get(self_type_id) {
             ResolvedType::TypeParam { name, .. } => name.clone(),
             _ => String::new(),
@@ -2049,7 +2027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &decl.name,
                 )
             });
-            answers.push((decl.name.clone(), answer));
+            answers.push((*declaring, decl.name.clone(), answer));
         }
         answers
     }
@@ -2411,13 +2389,14 @@ impl TypeSystem {
             };
             return self.bounds_hold(ctx, scope, pointee, bounds);
         }
-
         let Some(type_args) = type_args else {
             // An existence or bounds check that threaded no positions has
             // nothing to compare against.
             return true;
         };
 
+        // `&Container<T>` reads the pointee's arguments, as its positions do.
+        let impl_ty = impl_ty.referent();
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg
