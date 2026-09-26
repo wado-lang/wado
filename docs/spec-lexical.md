@@ -25,10 +25,35 @@ characters such as the no-break space (U+00A0) and the ideographic space
 
 Block comments do not nest.
 
-A doc comment is a line comment that documents code. `///` documents the item
-that follows it, and consecutive `///` lines form one doc string. `//!`
-documents the module, and appears before any item. Neither changes what a
-program means. See [WEP: Documentation Generation](./wep-2026-02-28-doc-command.md).
+A doc comment is a line comment that documents code. Neither kind changes what
+a program means.
+
+- `///` documents the declaration that follows it: an item, or a field, case or
+  method inside one. Consecutive `///` lines form one doc string. Attributes may
+  stand between the doc comment and the declaration, but a blank line may not:
+  it detaches the comment.
+- `//!` documents the module. The `//!` lines ahead of the first item form the
+  module's doc string.
+- `////` and longer runs of `/` are ordinary line comments.
+
+A doc string is Markdown. Each line loses its `///` or `//!` marker and one
+space after it, so a line holding only `///` is an empty line.
+
+```wado
+//! Geometry helpers.
+
+/// A point on the plane.
+///
+/// Both coordinates are in pixels.
+#[wire(name_policy = "camelCase")]
+pub struct Point {
+    /// Distance from the left edge.
+    x: i32,
+    y: i32,
+}
+```
+
+Rationale: [WEP: Documentation Generation](./wep-2026-02-28-doc-command.md).
 
 ## Shebang
 
@@ -292,8 +317,11 @@ precede the declaration statement, and one local item may name another declared
 later in the same block. Once the block closes the name is gone, so a nested
 `if`/`while`/`for` body cannot export an item to the rest of the function.
 Within its block a local item shadows a same-named module-level one, and two
-unrelated blocks may declare the same name without collision. A local item
-cannot be `pub` or `internal`: it is always private to its enclosing function.
+unrelated blocks may declare the same name without collision. A local item never
+reaches another function, even one in the same module.
+
+A local item is always private to its enclosing function. A `pub`, `internal`
+or `export` prefix on one is an error, whether or not attributes precede it.
 
 Local structs support their own generic parameters:
 
@@ -310,10 +338,14 @@ fn wrap<T>(value: T) -> i32 {
 So do local newtypes: `type N<T> = List<T>;`.
 
 A function body may also declare `enum`, `variant` and `flags` items, and
-`impl`/`trait` blocks that give a local type methods.
+`impl`/`trait` blocks that give a local type methods (see
+[Known Gaps](#known-gaps)).
 
-Not yet implemented. See
-[WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
+No other item is local. `fn`, `use`, `interface`, `global`, `world`, `test`
+and `resource` are module-level only, and one inside a function body is a parse
+error.
+
+Rationale: [WEP: Local Item Definitions](./wep-2026-07-09-local-item-definitions.md).
 
 ## Global Variables
 
@@ -366,39 +398,32 @@ reaches it through a call. A cycle among them is an error.
 
 ## Operators
 
-### Binary Operators
+### Precedence
 
-In order of precedence, lowest to highest:
+From the tightest binding to the loosest:
 
-| Precedence | Operators                        | Description    | Associativity |
-| ---------- | -------------------------------- | -------------- | ------------- |
-| 1          | `=`, `+=`, `-=`, `*=`, `/=`, etc | Assignment     | Right         |
-| 2          | `\|\|`                           | Logical OR     | Left          |
-| 3          | `&&`                             | Logical AND    | Left          |
-| 4          | `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparison     | Restricted    |
-| 5          | `\|`                             | Bitwise OR     | Left          |
-| 6          | `^`                              | Bitwise XOR    | Left          |
-| 7          | `&`                              | Bitwise AND    | Left          |
-| 8          | `<<`, `>>`                       | Bitwise shift  | Left          |
-| 9          | `+`, `-`                         | Additive       | Left          |
-| 10         | `*`, `/`, `%`                    | Multiplicative | Left          |
+| Operators                                  | Kind           | Associativity                                  |
+| ------------------------------------------ | -------------- | ---------------------------------------------- |
+| `.`, `::`, `()`, `[]`, `?`                 | Postfix        | Left                                           |
+| `-`, `~`, `*`, `&`, `&mut`                 | Prefix unary   | Right                                          |
+| `as Type`                                  | Type cast      | Left                                           |
+| `*`, `/`, `%`                              | Multiplicative | Left                                           |
+| `+`, `-`                                   | Additive       | Left                                           |
+| `<<`, `>>`                                 | Bitwise shift  | Left                                           |
+| `&`                                        | Bitwise AND    | Left                                           |
+| `^`                                        | Bitwise XOR    | Left                                           |
+| `\|`                                       | Bitwise OR     | Left                                           |
+| `matches { pattern }`                      | Pattern test   | Left                                           |
+| `!`                                        | Logical NOT    | Right                                          |
+| `==`, `!=`, `<`, `<=`, `>`, `>=`           | Comparison     | [Chained](#comparison-chaining)                |
+| `&&`                                       | Logical AND    | Left                                           |
+| `\|\|`                                     | Logical OR     | Left                                           |
+| `..<`, `..=`                               | Range          | None: `a..<b..<c` is an error                  |
+| `=`, `+=`, `-=`, `*=`, `/=`, `%=`, and the rest | Assignment | Right                                     |
 
-Between assignment (1) and logical OR (2), the range operators sit at precedence level 1.5:
-
-| Precedence | Operators    | Description | Associativity   |
-| ---------- | ------------ | ----------- | --------------- |
-| 1.5        | `..<`, `..=` | Range       | Non-associative |
-
-- `..<` creates a half-open range `[start, end)` — `RangeExclusive<T>`
-- `..=` creates an inclusive range `[start, end]` — `RangeInclusive<T>`
-- Non-associative: `a..<b..<c` is a compile error
-- Both operands must have the same type (after literal coercion)
-
-See [WEP: Range Object](./wep-2026-03-03-range-object.md) for the full design.
-
-### Design Note
-
-Bitwise operators (`&`, `|`, `^`) have higher precedence than comparison operators, fixing C's well-known design flaw. This means `flags & MASK == EXPECTED` correctly parses as `(flags & MASK) == EXPECTED`.
+The bitwise operators bind tighter than comparison, so `flags & MASK ==
+EXPECTED` is `(flags & MASK) == EXPECTED`. A postfix operator binds tighter than
+a prefix one, so `-x?` is `-(x?)` and `*p.x` is `*(p.x)`.
 
 ### Unary Operators
 
@@ -425,21 +450,24 @@ Bitwise operators (`&`, `|`, `^`) have higher precedence than comparison operato
 
 ### `matches` and `!` binding
 
-These tables group operators by form, not by binding strength. `matches` binds
-looser than the binary operators, `as`, and the value-producing unary operators
-(`-`, `~`, `&`, `&mut`, `*`), but tighter than logical `!`:
+The two tables above group operators by form, not by binding strength. The
+[precedence table](#precedence) puts `matches` below every binary operator and
+logical `!` between `matches` and comparison, so:
 
 - `!x matches { Some(_) }` is `!(x matches { Some(_) })` — "`x` does not match
   `Some(_)`".
 - `*x matches { "kw" }`, `x as i32 matches { 0 }`, `a + b matches { 10 }`, and
   `flags & MASK matches { 0 }` need no parentheses. A comparison, range, or
   assignment scrutinee does: `(a == b) matches { true }`.
+- `!a == b` is `(!a) == b`.
 
 ### Prohibited Operators
 
-Wado has no `++`/`--`: write `x += 1` and `x -= 1`. It has no `**` power
-operator: call `f64::pow(x, y)` or `f32::pow(x, y)`. See
-[WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for why.
+Wado has no `++`/`--`: write `x += 1` and `x -= 1`. Neither pair forms an
+expression, so `a--b` is an error rather than `a - (-b)`. Write `- -x` for a
+double negation.
+
+It has no `**` power operator: call `f64::pow(x, y)` or `f32::pow(x, y)`.
 
 ### Type Cast (`as`)
 
@@ -453,8 +481,8 @@ Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
 [char Casting and Conversion](./spec-literals.md#char-casting-and-conversion)).
 
-`as` binds tighter than every binary operator and looser than a prefix unary
-operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
+By its [precedence](#precedence), `-x as u32` is `(-x) as u32`, and
+`a / b as f64` is `a / (b as f64)`.
 
 ```wado
 let i = 42;
@@ -506,5 +534,100 @@ them. It does not short-circuit, so a later operand runs even where an earlier
 comparison already decided the answer. Write `&&` where an operand must not run
 on that path.
 
-See [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) for the
-rationale.
+Rationale: [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md).
+
+## Ranges
+
+A range operator builds a range value from two bounds:
+
+```wado
+0..<10        // RangeExclusive<i32>: 0 up to, but not including, 10
+1..=10        // RangeInclusive<i32>: 1 through 10
+'a'..='z'     // RangeInclusive<char>
+0.0..<1.0     // RangeExclusive<f64>
+```
+
+`RangeExclusive<T>` and `RangeInclusive<T>` are prelude structs with public
+`start` and `end` fields. Every range has both bounds: there is no `a..<`,
+`..<b` or bare `..` range.
+
+Both bounds must have the same type after literal coercion, and that type is
+`T`. `T` must implement `Ord`, so a range over any other type is an error.
+
+A range whose bounds are both literals must not run backwards. An integer,
+float or `char` literal counts as one, negated or cast too:
+
+```wado
+let a = 10..<5;           // Error: reversed range
+let b = (-1 as u8)..=5;   // Error: `-1 as u8` is 255
+let c = 5..<5;            // OK: empty
+```
+
+Bounds known only at run time are not checked. A reversed range is then empty.
+
+### Range Methods
+
+- `r.contains(&v)` is whether `v` lies between the bounds, the end included only
+  for `..=`.
+- `r.is_empty()` is whether no value does.
+- `r1 == r2` compares the bounds.
+- `` `${r}` `` renders the range as written, `0..<10` or `1..=5`, where `T`
+  implements `Display`.
+
+### Range Iteration
+
+A range is an iterator over `T` where `T` implements the prelude trait `Step`,
+which every integer type and `char` does. A range is its own iterator, so it
+serves `for`-of and every `Iterator` method:
+
+```wado
+for let i of 0..<3 { }                        // 0, 1, 2
+let sum = (1..=100).fold(0, |acc, x| acc + x); // 5050
+for let i of (0..<10).step_by(3) { }          // 0, 3, 6, 9
+```
+
+Iteration never steps past `T`'s maximum. `0 as u8..=255` yields all 256 values
+and stops. A float range does not iterate, but `contains` still works on it.
+
+### Range Indexing
+
+A `List<T>`, `Array<T>` or `Slice<T>` indexed by a range of `i32` gives a
+`Slice<T>` of the elements the range covers: `xs[1..<4]` holds `xs[1]`, `xs[2]`
+and `xs[3]`, as does `xs[1..=3]`.
+
+### Range Patterns
+
+A range pattern matches a value between its bounds. It stands wherever a
+refutable pattern may, nested ones included:
+
+```wado
+let grade = match score {
+    0..<60 => "F",
+    60..=100 => "P",
+    _ => "invalid",
+};
+let lower = c matches { 'a'..='z' };
+```
+
+- The scrutinee is an integer or `char`.
+- Each bound is an integer, `char` or byte literal, optionally negated, or a
+  primitive type's associated constant such as `i32::MAX`. A user-defined
+  constant is not a bound.
+- A reversed range pattern is an error, and so is an empty one (`5..<5`).
+- Two arms' range patterns must not overlap. The alternatives of one arm's
+  or-pattern may.
+- Range patterns count toward
+  [exhaustiveness](./spec-control-flow.md#exhaustiveness): `0 => …` and
+  `1..=255 => …` together cover a `u8`.
+
+Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
+
+## Known Gaps
+
+- `--` reads as two `-` operators, so `a--b` compiles as `a - (-b)` and `--x`
+  as `-(-x)`.
+- A local `enum`, `variant` or `flags` parses, but its cases do not resolve:
+  `Color::Red` is an unknown identifier and `Shape::Circle(1)` an unknown
+  function.
+- A local `impl` or `trait` parses, but gives the local type no methods: a call
+  of one reports that no such method exists.
