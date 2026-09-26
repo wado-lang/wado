@@ -565,7 +565,7 @@ spelling, so the two emit walkers partition the same group differently
 `alt_grouping` owns the whole decision. `decision_partition` splits the
 alternatives into branches and says what each admits, and `fallback_last`
 orders them. A token that only one alternative starts gets a branch of its own,
-so only a contested token scans. The surface walker, the op-only
+so only a contested token runs a scan tournament. The surface walker, the op-only
 walker, the scan and lower's kind-set interning are four readers of that one
 answer rather than four derivations of it. Lower bakes the classification into
 `DispatchBranch.alt_class` and `ScanGroupElement.alt_classes`, and `GroupOp`

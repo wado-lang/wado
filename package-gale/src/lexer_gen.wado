@@ -341,10 +341,18 @@ pub fn gen_lexer<S: AsStrSlice>(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    let routes = lexer_rule_routes(&grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, grammar_ci, atn_class);
+    let act_rule_names = executed_action_rule_names(grammar);
+    let routes = lexer_rule_routes(
+        &grammar.lexer_rules,
+        &keywords,
+        lit_tokens,
+        &grammar.options,
+        grammar_ci,
+        atn_class,
+        &act_rule_names,
+    );
     // A superClass base is wired independently of the action language.
     let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
-    let act_rule_names = executed_action_rule_names(grammar);
     let has_actions = !act_rule_names.is_empty();
     let uses_modes = has_modes(&grammar.mode_names);
     let surface = lexer_surface(grammar, members, sc_ops, mode_use);
@@ -364,6 +372,7 @@ pub fn gen_lexer<S: AsStrSlice>(
         &routes,
         &grammar.options,
         atn_class,
+        &act_rule_names,
         ea,
         has_members,
         sc_name,
@@ -676,12 +685,13 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
     ea: bool,
     hm: bool,
     sc_name: S,
 ) {
-    check_lexer_calls_resolve(lexer_rules, routes, atn_class);
-    let plans = lexer_matcher_plans(lexer_rules, routes, grammar_opts, atn_class);
+    check_lexer_calls_resolve(lexer_rules, routes, atn_class, replayed);
+    let plans = lexer_matcher_plans(lexer_rules, routes, grammar_opts, atn_class, replayed);
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         if routes[i].has_match_fn() {
             gen_lexer_match_fn(
@@ -777,7 +787,7 @@ pub variant LexerRuleRoute {
     InlinedFragment,
     /// Recursive fragment: reached by call, so it keeps its own matcher.
     RecursiveFragment,
-    /// Recursive fragment only `latn_match` reaches, so no matcher calls it.
+    /// Recursive fragment only `latn_match` reaches, so no emitted body calls it.
     Unreached,
     /// Folded into the keyword classifier, which rewrites the carrier rule's
     /// match into this keyword.
@@ -827,7 +837,7 @@ impl LexerRuleRoute {
 }
 
 /// Every lexer rule's route, by declaration index. `atn_class` names the rules
-/// matched by `latn_match`, whose bodies call no `try_` matcher.
+/// matched by `latn_match`; `replayed` names the rules with an action replay.
 pub fn lexer_rule_routes(
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,
@@ -835,30 +845,32 @@ pub fn lexer_rule_routes(
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
     atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
 ) -> List<LexerRuleRoute> {
     let mut routes: List<LexerRuleRoute> = [];
     for let rule of lexer_rules {
         let route = lexer_rule_route(rule, &routes, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
         routes.push(route);
     }
-    let called = statically_called_rules(lexer_rules, &routes, atn_class);
+    let called = statically_called_rules(lexer_rules, &routes, atn_class, replayed);
     for let mut i = 0; i < routes.len(); i += 1 {
         routes[i] = route_with_callers(routes[i], called.contains(&lexer_rules[i].name));
     }
     return routes;
 }
 
-/// The rules whose `try_` matcher an emitted matcher calls: reached from the
-/// dispatched rules through every body emitted statically.
+/// The rules whose `try_` matcher an emitted body calls: reached from the
+/// dispatched rules and the action replays through every body emitted statically.
 fn statically_called_rules(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
 ) -> List<String> {
     let mut emitted: List<String> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let name = &lexer_rules[i].name;
-        if routes[i].is_dispatched() && !atn_class.contains_key_str(name) {
+        if routes[i].is_dispatched() && !atn_class.contains_key_str(name) || replayed.contains(name) {
             emitted.push(*name);
         }
     }
@@ -1023,10 +1035,11 @@ fn check_lexer_calls_resolve(
     lexer_rules: &List<LexerRule>,
     routes: &List<LexerRuleRoute>,
     atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
 ) {
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let caller = &lexer_rules[i];
-        if !emits_static_matcher(&routes[i], caller, atn_class) {
+        if !emits_static_body(&routes[i], caller, atn_class, replayed) {
             continue;
         }
         for let name of &lexer_rule_calls(caller, lexer_rules) {
@@ -1044,6 +1057,17 @@ fn check_lexer_calls_resolve(
 /// delegated to `latn_match`.
 fn emits_static_matcher(route: &LexerRuleRoute, rule: &LexerRule, atn_class: &TreeMap<String, i32>) -> bool {
     return route.has_match_fn() && !atn_class.contains_key_str(&rule.name);
+}
+
+/// Whether some body of `rule` is emitted here: its static `try_` matcher, or
+/// its action replay, which walks the body statically even for an ATN-class rule.
+fn emits_static_body(
+    route: &LexerRuleRoute,
+    rule: &LexerRule,
+    atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
+) -> bool {
+    return emits_static_matcher(route, rule, atn_class) || replayed.contains(&rule.name);
 }
 
 /// The rules `rule`'s emitted body calls by their `try_` matcher, reading
@@ -2451,7 +2475,8 @@ pub struct LexerFragmentFn {
 }
 
 /// The plan of each rule whose `try_` body is emitted here, by declaration index,
-/// and every `frag_` matcher those plans reach, in first-reached order.
+/// and every `frag_` matcher those plans or an action replay reach, in
+/// first-reached order.
 pub struct LexerMatcherPlans {
     pub rules: List<Option<LexerBodyPlan>>,
     pub fragments: List<LexerFragmentFn>,
@@ -2462,18 +2487,19 @@ pub fn lexer_matcher_plans(
     routes: &List<LexerRuleRoute>,
     grammar_opts: &List<GrammarOption>,
     atn_class: &TreeMap<String, i32>,
+    replayed: &List<String>,
 ) -> LexerMatcherPlans {
     let mut rules: List<Option<LexerBodyPlan>> = [];
     let mut keys: List<LexerFragmentKey> = [];
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         let rule = &lexer_rules[i];
-        if emits_static_matcher(&routes[i], rule, atn_class) {
-            let plan = lexer_rule_plan(rule, lexer_rules, grammar_opts);
-            collect_body_calls(&plan, &mut keys);
-            rules.push(Option::Some(plan));
-        } else {
+        if !emits_static_body(&routes[i], rule, atn_class, replayed) {
             rules.push(null);
+            continue;
         }
+        let plan = lexer_rule_plan(rule, lexer_rules, grammar_opts);
+        collect_body_calls(&plan, &mut keys);
+        rules.push(if emits_static_matcher(&routes[i], rule, atn_class) { Option::Some(plan) } else { null });
     }
     let mut out: List<LexerFragmentFn> = [];
     for let mut i = 0; i < keys.len(); i += 1 {

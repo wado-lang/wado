@@ -26,6 +26,7 @@ use {
     lexer_alt_suffix,
     find_fragment,
     lexer_matcher_plans,
+    executed_action_rule_names,
     LexerBodyPlan,
     LexerSeqPlan,
     LexerGroupPlan,
@@ -81,6 +82,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
     canonicalize_for_analysis(&mut grammar);
     let empty_opts: List<GrammarOption> = [];
     let atn_class = latn_rule_indices(&grammar);
+    let replayed = executed_action_rule_names(&grammar);
     let ctx = DumpCtx {
         rules: grammar.lexer_rules,
         grammar_opts: grammar.options,
@@ -91,6 +93,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
             &grammar.options,
             resolve_ci(&grammar.options, &empty_opts),
             &atn_class,
+            &replayed,
         ),
         atn_class,
     };
@@ -99,7 +102,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
         text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
     };
     o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
-    let plans = lexer_matcher_plans(&ctx.rules, &ctx.routes, &ctx.grammar_opts, &ctx.atn_class);
+    let plans = lexer_matcher_plans(&ctx.rules, &ctx.routes, &ctx.grammar_opts, &ctx.atn_class, &replayed);
     for let mut i = 0; i < ctx.rules.len(); i += 1 {
         render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i], &plans.rules[i]);
     }
