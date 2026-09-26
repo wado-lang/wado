@@ -943,7 +943,7 @@ impl ValuePool {
 
     /// Whether `id`'s value can be re-emitted purely from the graph and
     /// position-independent leaves: literal constants and `Local`-sourced
-    /// opaques, composed by `Binary` / `Unary` / `Cast`. A `Local` opaque is
+    /// opaques, composed by `Binary` / `Unary` / `Select`. A `Local` opaque is
     /// sound only when the local holds **one value**, so the caller rejects every
     /// index in `multi_version_locals` (`Engine::local_has_one_version`).
     pub fn value_fully_reemittable_locally(

@@ -616,9 +616,6 @@ pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
 /// Two callers, for the two ways a promoted value can lose a trap: extraction
 /// materialises it at a point that dominates the uses — above the guard each use
 /// sits behind — and the deletion predicates drop the statement holding it.
-///
-/// Conservative on `Cast`: classifying one needs the operand's source type, and
-/// nothing guarantees the type-erased tree recorded it.
 pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
     match pool.kind(v) {
         ValueKind::Binary { op, lhs, rhs, .. } => {
@@ -627,7 +624,7 @@ pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
         ValueKind::Unary { op, operand, .. } => {
             unary_op_may_trap(*op) || value_may_trap(pool, *operand)
         }
-        ValueKind::Cast { .. } => true,
+        ValueKind::Cast { operand, .. } => value_may_trap(pool, *operand),
         ValueKind::Select { cond, then, else_ } => {
             value_may_trap(pool, *cond)
                 || value_may_trap(pool, *then)
