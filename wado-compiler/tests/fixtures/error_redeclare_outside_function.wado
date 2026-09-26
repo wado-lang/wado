@@ -1,0 +1,18 @@
+// A body outside a function obeys the scope rules one inside does: a `let`
+// that neither derives from the name it takes nor opens a scope of its own is
+// a redeclaration, in a `test` block and in a global's initializer alike.
+
+global PICK: fn() -> i32 = || {
+    let a = 1;
+    let a = 2;
+    return a;
+};
+
+test {
+    let y = 3;
+    let y = 5;
+    assert y == 5 && PICK() == 2;
+}
+
+__DATA__
+{"compile_error": ":7:5: analysis error: cannot redeclare 'a' in the same scope (first defined at 6:5)\n  hint: shadowing is allowed when the new value is derived from the old one (e.g., `let a = a + 1`); 13:5: cannot redeclare 'y' in the same scope (first defined at 12:5)"}

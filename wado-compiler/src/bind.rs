@@ -1,4 +1,4 @@
-//! Local name binding within function bodies: duplicate and keyword-spelled
+//! Local name binding within bodies: duplicate and keyword-spelled
 //! bindings, reads before initialization, and assignments to immutable locals.
 
 use crate::hashmap::IndexSet;
@@ -446,55 +446,56 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind an item (only functions have local scopes)
+    /// Bind every body an item carries: a function's, a method's (a trait's or
+    /// an interface operation's default included), a test's, and a global's
+    /// initializer.
     fn bind_item(&mut self, item: &Item) -> Result<(), Bail> {
-        if let Item::Function(func) = item {
+        match item {
+            Item::Function(func) => self.bind_function(func),
+            Item::Impl(impl_block) => self.bind_functions(&impl_block.methods),
+            Item::Trait(trait_decl) => self.bind_functions(&trait_decl.methods),
+            Item::Interface(interface_decl) => self.bind_functions(&interface_decl.methods),
+            Item::Resource(resource_decl) => self.bind_functions(&resource_decl.methods),
+            Item::Test(test) => self.in_body(|s| s.bind_block_contents(&test.body)),
+            Item::Global(global) => self.in_body(|s| s.bind_expr(&global.initializer)),
+            Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Use(_)
+            | Item::Error(_) => Ok(()),
+        }
+    }
+
+    fn bind_functions(&mut self, functions: &[Function]) -> Result<(), Bail> {
+        for func in functions {
             self.bind_function(func)?;
-        }
-        // Impl blocks contain functions
-        if let Item::Impl(impl_block) = item {
-            for method in &impl_block.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // Trait declarations contain method signatures (with optional bodies)
-        if let Item::Trait(trait_decl) = item {
-            for method in &trait_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // An interface operation's default body is a body like any other, so it
-        // gets the same local-binding pass; a `resource` method never has one,
-        // and `bind_function` returns immediately for a signature.
-        if let Item::Interface(interface_decl) = item {
-            for method in &interface_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        if let Item::Resource(resource_decl) = item {
-            for method in &resource_decl.methods {
-                self.bind_function(method)?;
-            }
         }
         Ok(())
     }
 
-    /// Bind a function's local variables
+    /// Bind a function's parameters and body; a signature has no body to bind.
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
+        self.in_body(|s| {
+            for param in &func.params {
+                s.define(&param.name, param.is_mut, false, param.span)?;
+            }
+            match &func.body {
+                Some(body) => s.bind_block_contents(body),
+                None => Ok(()),
+            }
+        })
+    }
+
+    /// Bind one body in a scope of its own.
+    fn in_body(&mut self, bind: impl FnOnce(&mut Self) -> Result<(), Bail>) -> Result<(), Bail> {
         self.possibly_uninit.clear();
-
         self.enter_scope();
-
-        // Bind parameters as local variables
-        for param in &func.params {
-            self.define(&param.name, param.is_mut, false, param.span)?;
-        }
-
-        // Bind body
-        if let Some(ref body) = func.body {
-            self.bind_block_contents(body)?;
-        }
-
+        bind(self)?;
         self.exit_scope();
         Ok(())
     }
