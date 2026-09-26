@@ -9,7 +9,7 @@ use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
-use tokio::sync::{OnceCell, Semaphore};
+use tokio::sync::{OnceCell, OwnedSemaphorePermit, Semaphore, oneshot};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Engine, GcHeapOutOfMemory, ResourceLimiter, Store, Trap};
 use wasmtime_wasi::cli::{WasiCli, WasiCliView};
@@ -120,9 +120,7 @@ pub struct EvalHost {
     /// One slot per key being evaluated, so calls sharing a key at once
     /// evaluate once. A resolved slot leaves, and a later call reads the cache.
     slots: Mutex<IndexMap<[u8; 32], Arc<OnceCell<Outcome>>>>,
-    /// One permit per compile thread, held until the thread ends. A compile
-    /// abandoned past its limit keeps running, so its permit is what stops
-    /// such threads from outnumbering the runner's CPUs.
+    /// One permit per compile thread, held until the thread ends.
     compilers: Arc<Semaphore>,
 }
 
@@ -221,8 +219,8 @@ impl EvalHost {
     /// the limit that thread is abandoned, not stopped: nothing can interrupt a
     /// compile. It is not one of the runtime's blocking threads, which the
     /// runtime would wait for when `wado test` shuts it down. It holds one of
-    /// [`Self::compilers`] until it ends, and waiting for one counts against
-    /// the limit.
+    /// [`Self::compilers`] until it ends, so abandoned threads never outnumber
+    /// the runner's CPUs. Waiting for one counts against the limit.
     ///
     /// A panic on either thread `evaluate` starts is a bug in the compiler or
     /// the host, so it carries on into the calling test, which reports it.
@@ -237,33 +235,7 @@ impl EvalHost {
                 .acquire_owned()
                 .await
                 .expect("the compile semaphore is never closed");
-            let (report, compiled) = tokio::sync::oneshot::channel();
-            std::thread::Builder::new()
-                .name("eval-compile".to_string())
-                .stack_size(COMPILER_STACK_SIZE)
-                .spawn(move || {
-                    let _permit = permit;
-                    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                        // A host with no sources: the program is one module, and
-                        // nothing on the host's disk is read.
-                        let host = InMemoryCompilerHost::new();
-                        let compiled =
-                            current_thread_runtime().block_on(wado_compiler::compile_with_options(
-                                &source,
-                                &host,
-                                Some(EVAL_FILE),
-                                options,
-                            ));
-                        match compiled {
-                            Ok(result) => Compiled::Wasm(result.wasm),
-                            Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
-                        }
-                    }));
-                    // Past the limit nobody is listening, and the outcome is dropped.
-                    let _ = report.send(outcome);
-                })
-                .expect("spawning the eval compile thread");
-            compiled
+            spawn_compile(source, options, permit)
                 .await
                 .expect("the compile thread reports before it exits")
         };
@@ -287,6 +259,38 @@ enum Compiled {
     Wasm(Vec<u8>),
     Failed(CompileFailure),
     TimedOut,
+}
+
+/// Compile `source` on a thread that holds `permit` until it ends, and report
+/// the outcome, or the panic that ended it, on the returned channel.
+fn spawn_compile(
+    source: String,
+    options: CompilerOptions,
+    permit: OwnedSemaphorePermit,
+) -> oneshot::Receiver<std::thread::Result<Compiled>> {
+    let (report, compiled) = oneshot::channel();
+    std::thread::Builder::new()
+        .name("eval-compile".to_string())
+        .stack_size(COMPILER_STACK_SIZE)
+        .spawn(move || {
+            let _permit = permit;
+            let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                // A host with no sources: the program is one module, and
+                // nothing on the host's disk is read.
+                let host = InMemoryCompilerHost::new();
+                let compiled = current_thread_runtime().block_on(
+                    wado_compiler::compile_with_options(&source, &host, Some(EVAL_FILE), options),
+                );
+                match compiled {
+                    Ok(result) => Compiled::Wasm(result.wasm),
+                    Err(_) => Compiled::Failed(compile_failure(&host.diagnostics())),
+                }
+            }));
+            // Past the limit nobody is listening, and the outcome is dropped.
+            let _ = report.send(outcome);
+        })
+        .expect("spawning the eval compile thread");
+    compiled
 }
 
 fn compile_failure(diagnostics: &[Diagnostic]) -> CompileFailure {
