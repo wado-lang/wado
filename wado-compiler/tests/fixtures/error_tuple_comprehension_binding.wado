@@ -1,0 +1,14 @@
+// A tuple comprehension binds a name, or `[i, v]` of names; a pattern that
+// could fail is rejected rather than ignored.
+
+fn f<..T>(t: [..T]) -> i32 {
+    let r = [for let [i, 3] of t.enumerate() { i }];
+    return 0;
+}
+
+test {
+    assert f([1, 2]) == 0;
+}
+
+__DATA__
+{"compile_error": ":5:13: analysis error: invalid pattern: a tuple comprehension binds an identifier or `[i, v]`"}

@@ -1,5 +1,6 @@
 // A `let` or `for` binding reads a bare name the way `match` does: a case of
 // the scrutinee's type is a case pattern, so one that can fail is rejected.
+// The statement's `mut` makes the names mutable without making a case a name.
 
 variant Two { A(i32), B }
 
@@ -8,7 +9,10 @@ test {
     let [None, x] = [o, 1];
     let [B, y] = [Two::A(1), 2];
     for let A(z) of [Two::A(1), Two::B] {}
+    let mut [None, w] = [o, 1];
+    let xs: List<[Option<i32>, i32]> = [[o, 1]];
+    for let mut [None, v] of xs {}
 }
 
 __DATA__
-{"compile_error": ":8:5: analysis error: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 9:5: invalid pattern: refutable pattern in `let` binding: `B` may not match; use `let ... else` or `if let` instead; 10:5: invalid pattern: refutable pattern in `for` binding: `A` may not match; match on the element in the loop body instead"}
+{"compile_error": ":9:5: analysis error: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 10:5: invalid pattern: refutable pattern in `let` binding: `B` may not match; use `let ... else` or `if let` instead; 11:5: invalid pattern: refutable pattern in `for` binding: `A` may not match; match on the element in the loop body instead; 12:5: invalid pattern: refutable pattern in `let` binding: `None` may not match; use `let ... else` or `if let` instead; 14:5: invalid pattern: refutable pattern in `for` binding: `None` may not match; match on the element in the loop body instead"}

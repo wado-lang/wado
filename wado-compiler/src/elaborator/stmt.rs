@@ -12,7 +12,7 @@ use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
-use super::types::{BindingSite, FunctionContext, TypeError};
+use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{Elaborator, ForwardDefaults};
@@ -727,16 +727,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report a tuple pattern naming more elements than the tuple holds, or,
     /// without `..`, fewer.
     fn check_tuple_pattern_arity(&self, written: usize, has_rest: bool, held: usize, span: Span) {
-        let (expected, found) = if has_rest && written > held {
-            (format!("tuple with at least {written} elements"), held)
+        let [expected, found] = if has_rest && written > held {
+            [
+                format!("tuple with at least {written} elements"),
+                format!("tuple with {held} elements"),
+            ]
         } else if !has_rest && written != held {
-            (format!("tuple with {held} elements"), written)
+            [
+                format!("tuple with {held} elements"),
+                format!("pattern with {written} elements"),
+            ]
         } else {
             return;
         };
         let _ = self.emit(TypeError::PatternTypeMismatch {
             expected,
-            found: format!("pattern with {found} elements"),
+            found,
             span,
         });
     }
@@ -745,7 +751,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn check_struct_pattern_complete(
         &self,
         head: StructDef,
-        fields: &[ast::StructPatternField],
+        fields: &[StructPatternField],
         span: Span,
     ) {
         let Some(struct_info) = self.lookup_struct_fields_of(head) else {
@@ -1077,7 +1083,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a destructuring pattern that must bind (`let`, the `for` of a tuple).
+    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s.
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1087,15 +1093,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: BindingSite,
         ctx: &mut FunctionContext,
     ) {
-        let pattern = if is_mut {
-            &mut_bindings_of(pattern)
-        } else {
-            pattern
-        };
         self.resolve_if_pattern_inner(
             pattern,
             type_id,
-            &mut ctx.replacing(|ctx| &mut ctx.irrefutable_site, Some(site)),
+            &mut ctx.replacing(|ctx| &mut ctx.must_bind, Some(MustBind { site, is_mut })),
             span,
             RefBinding::None,
         );
@@ -1430,7 +1431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
         }
-        if let Some(site) = ctx.irrefutable_site
+        if let Some(MustBind { site, .. }) = ctx.must_bind
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
             self.reject_refutable(site, &reason, span);
@@ -1481,6 +1482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
                 }
+                let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
                 let binding_type =
                     self.pattern_binding_type(name, scrutinee_type, ref_binding, *name_span);
                 let index =
@@ -1519,7 +1521,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
-                self.check_tuple_pattern_arity(patterns.len(), *has_rest, element_types.len(), span);
+                self.check_tuple_pattern_arity(
+                    patterns.len(),
+                    *has_rest,
+                    element_types.len(),
+                    span,
+                );
 
                 let mut bindings: PatBindings = Vec::new();
                 for (p, &ty) in patterns.iter().zip(
@@ -1953,8 +1960,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_resource_narrowing(scrutinee_type, target)
                 {
                     self.require_handle_classes(target, *typed_span);
-                    match ctx.irrefutable_site {
-                        Some(site) => self.reject_refutable_narrowing(
+                    match ctx.must_bind {
+                        Some(MustBind { site, .. }) => self.reject_refutable_narrowing(
                             scrutinee_type,
                             target,
                             *typed_span,
@@ -2849,20 +2856,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the
         // `$for_of_N: { let mut $iter = …; loop { match $iter.next() { … } } }`
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
-        // the loop variable (`resolve_if_pattern_inner`, preserving the
-        // binding's real `AstId`) and walks the body for its facts.
+        // the loop variable (preserving the binding's real `AstId`) and walks
+        // the body for its facts.
         let mut scope = ctx.enter_scope();
-        let binding = if for_of.is_mut {
-            mut_bindings_of(&for_of.binding)
-        } else {
-            for_of.binding.clone()
-        };
-        self.resolve_if_pattern_inner(
-            &binding,
+        self.resolve_let_pattern(
+            &for_of.binding,
             item_type,
-            &mut scope.replacing(|ctx| &mut ctx.irrefutable_site, Some(BindingSite::ForOf)),
+            for_of.is_mut,
             span,
-            RefBinding::None,
+            BindingSite::ForOf,
+            &mut scope,
         );
         self.resolve_block(&for_of.body, &mut scope, None);
     }
@@ -3168,73 +3171,6 @@ fn refutable_shape(pattern: &Pattern) -> Option<String> {
         | Pattern::Struct { .. }
         | Pattern::Typed { .. }
         | Pattern::Error(_) => None,
-    }
-}
-
-/// The pattern with every identifier leaf made mutable.
-///
-/// `for let mut …` carries the `mut` on the statement while the pattern walker
-/// reads it off a `MutIdent`, so a destructuring binding needs it pushed down
-/// to the names it introduces.
-fn mut_bindings_of(pattern: &Pattern) -> Pattern {
-    match pattern {
-        Pattern::Ident { id, name, span } => Pattern::MutIdent {
-            id: *id,
-            name: name.clone(),
-            span: *span,
-        },
-        Pattern::Tuple(elements, has_rest) => {
-            Pattern::Tuple(elements.iter().map(mut_bindings_of).collect(), *has_rest)
-        }
-        Pattern::Struct {
-            type_name,
-            type_name_id,
-            fields,
-            has_rest,
-            span,
-        } => Pattern::Struct {
-            type_name: type_name.clone(),
-            type_name_id: *type_name_id,
-            fields: fields
-                .iter()
-                .map(|f| StructPatternField {
-                    pattern: mut_bindings_of(&f.pattern),
-                    ..f.clone()
-                })
-                .collect(),
-            has_rest: *has_rest,
-            span: *span,
-        },
-        Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            name_id,
-            name_span,
-            bindings,
-            span,
-        } => Pattern::Variant {
-            variant_name: variant_name.clone(),
-            variant_qualifier: variant_qualifier.clone(),
-            name_id: *name_id,
-            name_span: *name_span,
-            bindings: bindings.iter().map(mut_bindings_of).collect(),
-            span: *span,
-        },
-        Pattern::Or(alternatives) => {
-            Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
-        }
-        Pattern::Typed {
-            id,
-            pattern,
-            ty,
-            span,
-        } => Pattern::Typed {
-            id: *id,
-            pattern: Box::new(mut_bindings_of(pattern)),
-            ty: ty.clone(),
-            span: *span,
-        },
-        other => other.clone(),
     }
 }
 

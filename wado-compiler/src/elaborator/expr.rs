@@ -4684,20 +4684,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .elem_types_or_self(binding_type);
                 for (i, elem) in elems.iter().enumerate() {
-                    if let ast::Pattern::Ident { id, name, span } = elem {
-                        let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                        ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
-                        self.record_local_symbol(*id, name, *span, false, elem_type);
+                    match elem {
+                        ast::Pattern::Ident { id, name, span } => {
+                            let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
+                            ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
+                            self.record_local_symbol(*id, name, *span, false, elem_type);
+                        }
+                        ast::Pattern::Wildcard => {}
+                        _ => self.reject_comprehension_binding(fallback_span),
                     }
                 }
             }
-            _ => {
-                let _ = self.emit(TypeError::InvalidPattern {
-                    message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
-                    span: fallback_span,
-                });
-            }
+            _ => self.reject_comprehension_binding(fallback_span),
         }
+    }
+
+    fn reject_comprehension_binding(&self, span: Span) {
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
+            span,
+        });
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`
