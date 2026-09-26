@@ -8884,10 +8884,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if item == CompilerItem::U128 {
-            TypeTable::U64
-        } else {
+        // An integer extends by its own signedness, as Rust's `as` does. A
+        // float truncates through the 64-bit integer of the target's sign.
+        let extend_signed = {
+            let tt = self.tysys.type_table.borrow();
+            if tt.is_float(inner.type_id) {
+                item == CompilerItem::I128
+            } else {
+                !tt.is_unsigned_int(inner.type_id)
+            }
+        };
+        let intermediate_type = if extend_signed {
             TypeTable::I64
+        } else {
+            TypeTable::U64
         };
         let casted = TirExpr::new(
             TirExprKind::Cast {
@@ -8898,8 +8908,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cast.span,
         );
         Some(build_int128_from_intermediate(
-            item,
             &name,
+            extend_signed,
             casted,
             target_type,
             cast.span,
@@ -10592,20 +10602,18 @@ fn build_int128_literal_call(
     build_int128_from_pair(item, name, low, high, target_type, span)
 }
 
-/// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the general
-/// (non-literal) `expr as i128/u128` cast. `intermediate` is already `u64`/`i64`.
+/// Build `<name>::from_i64(intermediate)` (sign-extending) or
+/// `<name>::from_u64(intermediate)` (zero-extending) for the general
+/// (non-literal) `expr as i128/u128` cast. `intermediate` is already the `i64`
+/// or `u64` that `signed` names.
 fn build_int128_from_intermediate(
-    item: CompilerItem,
     name: &FqTypeName,
+    signed: bool,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if item == CompilerItem::U128 {
-        "from_u64"
-    } else {
-        "from_i64"
-    };
+    let method_name = if signed { "from_i64" } else { "from_u64" };
     let method_info = LocalMethodName::new(name.clone(), None, method_name.to_string());
     let mangled_func_name = method_info.to_mangled_name();
     TirExpr::new(

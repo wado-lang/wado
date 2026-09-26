@@ -3651,6 +3651,13 @@ _Fields are private._
 
 Create a u128 from a u64 value (zero-extended)
 
+#### `pub fn from_i64(value: i64) -> u128`
+
+`#[compiler_item("u128_from_i64")]`
+
+Create a u128 from an i64 value (sign-extended, as `value as u128`
+is)
+
 #### `pub fn from_pair(low: u64, high: u64) -> u128`
 
 `#[compiler_item("u128_from_pair")]`
@@ -3872,6 +3879,12 @@ _Fields are private._
 `#[compiler_item("i128_from_i64")]`
 
 Create an i128 from an i64 value (sign-extended)
+
+#### `pub fn from_u64(value: u64) -> i128`
+
+`#[compiler_item("i128_from_u64")]`
+
+Create an i128 from a u64 value (zero-extended)
 
 #### `pub fn from_pair(low: u64, high: i64) -> i128`
 

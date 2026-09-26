@@ -49,9 +49,9 @@ fn ctor_ref(type_table: &TypeTable, owner: CompilerItem, ctor: CompilerItem) -> 
 /// cannot drift from the producer.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum WideIntCtor {
-    /// `i128::from_i64(v)` — sign-extends.
+    /// `<i128|u128>::from_i64(v)` — sign-extends.
     FromI64,
-    /// `u128::from_u64(v)` — zero-extends.
+    /// `<i128|u128>::from_u64(v)` — zero-extends.
     FromU64,
     /// `<i128|u128>::from_pair(low, high)` — the halves verbatim.
     FromPair,
@@ -59,10 +59,12 @@ pub(crate) enum WideIntCtor {
 
 impl WideIntCtor {
     /// Every `(owner, shape)` pair a wide-int literal can take.
-    const ALL: [(CompilerItem, Self); 4] = [
+    const ALL: [(CompilerItem, Self); 6] = [
         (CompilerItem::I128, Self::FromI64),
+        (CompilerItem::I128, Self::FromU64),
         (CompilerItem::I128, Self::FromPair),
         (CompilerItem::U128, Self::FromU64),
+        (CompilerItem::U128, Self::FromI64),
         (CompilerItem::U128, Self::FromPair),
     ];
 
@@ -72,8 +74,10 @@ impl WideIntCtor {
     fn method(self, item: CompilerItem) -> CompilerItem {
         match (item, self) {
             (CompilerItem::I128, Self::FromI64) => CompilerItem::I128FromI64,
+            (CompilerItem::I128, Self::FromU64) => CompilerItem::I128FromU64,
             (CompilerItem::I128, Self::FromPair) => CompilerItem::I128FromPair,
             (CompilerItem::U128, Self::FromU64) => CompilerItem::U128FromU64,
+            (CompilerItem::U128, Self::FromI64) => CompilerItem::U128FromI64,
             (CompilerItem::U128, Self::FromPair) => CompilerItem::U128FromPair,
             (item, shape) => panic!("{item} has no {shape:?} constructor"),
         }
