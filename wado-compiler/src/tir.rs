@@ -294,6 +294,19 @@ impl std::fmt::Display for TypeId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeKey(TypeId);
 
+/// An arbitrary but fixed order, for a key that has to sort.
+impl Ord for TypeKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.0.cmp(&other.0.0)
+    }
+}
+
+impl PartialOrd for TypeKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
 ///
 /// Minted per module by the elaborator, so two uses of the same polymorphic

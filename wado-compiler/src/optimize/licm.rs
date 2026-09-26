@@ -1784,11 +1784,8 @@ fn is_hoistable_unop(op: NirUnaryOp) -> bool {
 }
 
 /// Whether `e`'s shape fits the hoistable-arithmetic grammar: a tree of pure,
-/// total ops over `Local` leaves. A promoted (`Operand::Value`) leaf has no
-/// skeleton expr and is treated as hoistable.
-///
-/// `Cast` is total but outside the grammar: [`ArithKey`] would have to key it
-/// by its target's `TypeKey`, and this walk holds no type table to ask.
+/// total ops over `Local` leaves, every cast among them. A promoted
+/// (`Operand::Value`) leaf has no skeleton expr and is treated as hoistable.
 fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Local { .. } => true,
@@ -1807,6 +1804,9 @@ fn is_hoistable_arith_shape(body: &Body, e: ExprId) -> bool {
                     .as_expr()
                     .is_none_or(|e| is_hoistable_arith_shape(body, e))
         }
+        ExprKind::Cast { expr, .. } => expr
+            .as_expr()
+            .is_none_or(|e| is_hoistable_arith_shape(body, e)),
         _ => false,
     }
 }
@@ -1823,7 +1823,7 @@ fn collect_arith_local_leaves(body: &Body, e: ExprId, out: &mut Vec<(ExprId, u32
                 collect_arith_local_leaves(body, re, out);
             }
         }
-        ExprKind::Unary { expr, .. } => {
+        ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
             if let Some(ie) = expr.as_expr() {
                 collect_arith_local_leaves(body, ie, out);
             }
@@ -1851,13 +1851,16 @@ enum ArithKey {
     Opaque(u32),
     Unary(u8, Box<ArithKey>),
     Binary(u8, Box<ArithKey>, Box<ArithKey>),
+    /// A cast by its target: `x as i32 as i64` and `x as u32 as i64` differ
+    /// only there.
+    Cast(TypeKey, Box<ArithKey>),
 }
 
-fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
+fn arith_structural_key(body: &Body, types: &TypeTable, e: ExprId) -> ArithKey {
     match &body.exprs[e].kind {
         ExprKind::Binary { left, op, right } => {
-            let mut l = arith_operand_key(body, *left);
-            let mut r = arith_operand_key(body, *right);
+            let mut l = arith_operand_key(body, types, *left);
+            let mut r = arith_operand_key(body, types, *right);
             // Commutative ops: order-independent so `a+b` ≡ `b+a`.
             if matches!(
                 op,
@@ -1873,11 +1876,14 @@ fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
             ArithKey::Binary(*op as u8, Box::new(l), Box::new(r))
         }
         ExprKind::Unary { op, expr } => {
-            ArithKey::Unary(*op as u8, Box::new(arith_operand_key(body, *expr)))
+            ArithKey::Unary(*op as u8, Box::new(arith_operand_key(body, types, *expr)))
         }
+        ExprKind::Cast { expr, target_type } => ArithKey::Cast(
+            types.type_key(*target_type),
+            Box::new(arith_operand_key(body, types, *expr)),
+        ),
         ExprKind::Local { index, .. } => ArithKey::Local(*index),
         ExprKind::Assign { .. }
-        | ExprKind::Cast { .. }
         | ExprKind::Call { .. }
         | ExprKind::CmRawCall { .. }
         | ExprKind::IndirectCall { .. }
@@ -1903,9 +1909,9 @@ fn arith_structural_key(body: &Body, e: ExprId) -> ArithKey {
     }
 }
 
-fn arith_operand_key(body: &Body, op: Operand) -> ArithKey {
+fn arith_operand_key(body: &Body, types: &TypeTable, op: Operand) -> ArithKey {
     match op {
-        Operand::Expr(e) => arith_structural_key(body, e),
+        Operand::Expr(e) => arith_structural_key(body, types, e),
         Operand::Value(v) => ArithKey::Value(v.index()),
     }
 }
@@ -1922,6 +1928,7 @@ struct ArithHoist<'a> {
     /// Loop-modified locals — a leaf is invariant iff none of its aliases are
     /// here (replaces the `value_of` `use == entry` invariance check).
     modified: &'a ModifiedVars,
+    types: &'a TypeTable,
 }
 
 impl ArithHoist<'_> {
@@ -1933,7 +1940,7 @@ impl ArithHoist<'_> {
     fn candidate(&self, body: &Body, e: ExprId) -> Option<ArithKey> {
         let compound = matches!(
             &body.exprs[e].kind,
-            ExprKind::Binary { .. } | ExprKind::Unary { .. }
+            ExprKind::Binary { .. } | ExprKind::Unary { .. } | ExprKind::Cast { .. }
         );
         if !compound || !is_hoistable_arith_shape(body, e) {
             return None;
@@ -1959,7 +1966,7 @@ impl ArithHoist<'_> {
         }
         // With every `Local` leaf invariant, the structural key is exact
         // value-identity for the dedup (replaces `engine.value(e)`).
-        Some(arith_structural_key(body, e))
+        Some(arith_structural_key(body, self.types, e))
     }
 
     /// Collect the maximal hoistable arithmetic subexpressions under `node`,
@@ -2017,6 +2024,7 @@ fn hoist_invariant_arith(
         pending_hoist_locals: &pending_hoist_locals,
         address_taken: &address_taken,
         modified,
+        types: ctx.type_table,
     };
     let mut found: Vec<(ExprId, ArithKey)> = Vec::new();
     walk.collect(engine.body, NodeRef::Block(loop_body), &mut found);
@@ -2025,7 +2033,7 @@ fn hoist_invariant_arith(
         // invariant as a bare `Operand::Value` slot (no skeleton expr) — hoist
         // those.
         let mut c = hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
-        c |= cse_loop_body(engine, loop_body, modified);
+        c |= cse_loop_body(engine, loop_body, modified, ctx.type_table);
         return c;
     }
 
@@ -2078,7 +2086,7 @@ fn hoist_invariant_arith(
     }
 
     hoist_invariant_value_operands(engine, loop_body, all_hoist_stmts, ctx);
-    cse_loop_body(engine, loop_body, modified);
+    cse_loop_body(engine, loop_body, modified, ctx.type_table);
     true
 }
 
@@ -2154,7 +2162,12 @@ fn cse_operand_in_scope(
 /// each occurrence is still re-emitted. Binding a clone to a temp before the
 /// earliest occurrence's statement dominates them all, and their shared leaves
 /// are in scope there. Trap-prone ops are excluded, so hoisting cannot trap.
-fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVars) -> bool {
+fn cse_loop_body(
+    engine: &mut Engine,
+    loop_body: BlockId,
+    modified: &ModifiedVars,
+    types: &TypeTable,
+) -> bool {
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     // Occurrences of each materialisable arith value, keyed by a value-graph-free
     // **structural key**, as (top-level stmt index, expr) in first-seen order.
@@ -2177,7 +2190,7 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
             if leaves.is_empty() {
                 continue;
             }
-            occ.entry(arith_structural_key(engine.body, e))
+            occ.entry(arith_structural_key(engine.body, types, e))
                 .or_default()
                 .push((i, e));
         }
@@ -2382,7 +2395,7 @@ fn local_assigned_in(body: &Body, node: NodeRef, idx: u32) -> bool {
 }
 
 /// Whether `e` is a pure arithmetic compound worth CSE-materialising: a
-/// `Binary` / `Unary` with a non-trap-prone op, checked structurally
+/// `Binary` / `Unary` with a non-trap-prone op, or a cast, checked structurally
 /// (value-graph-free). The leaves need no availability check here — see
 /// [`cse_loop_body`]'s soundness note (shared scope of ≥2 occurrences) — only
 /// the root must be a compound, not a bare leaf.
@@ -2390,6 +2403,7 @@ fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {
     match &body.exprs[e].kind {
         ExprKind::Binary { op, .. } => is_hoistable_binop(*op),
         ExprKind::Unary { op, .. } => is_hoistable_unop(*op),
+        ExprKind::Cast { .. } => true,
         _ => false,
     }
 }
