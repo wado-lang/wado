@@ -256,8 +256,8 @@ the module `#![allow(shadowed_name)]`:
 fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
 ```
 
-A bare identifier pattern is exempt where the name reaches a case or a
-`global`. Such a pattern matches by value rather than binding, and the
+A bare identifier pattern is exempt where the name reaches a case or an
+immutable `global`. Such a pattern matches by value rather than binding, and the
 scrutinee's type decides which it does. The root of a `let` is the exception: a
 bare name there always binds.
 

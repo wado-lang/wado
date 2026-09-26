@@ -592,15 +592,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let Some(name) = self.bind_let_ident(let_stmt, type_id, ctx) else {
-            self.resolve_let_pattern(
-                &let_stmt.pattern,
-                type_id,
-                let_stmt.is_mut,
-                let_stmt.span,
-                BindingSite::Let,
-                ctx,
-            );
+        self.resolve_let_pattern(
+            &let_stmt.pattern,
+            type_id,
+            let_stmt.is_mut,
+            let_stmt.span,
+            BindingSite::Let,
+            ctx,
+        );
+        let (ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. }) =
+            &let_stmt.pattern
+        else {
             return;
         };
         let mut closure_candidate = ast_value;
@@ -617,33 +619,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ctx.closure_defaults.insert(name.clone(), defaults);
             }
         }
-    }
-
-    /// Bind a `let`'s single-name pattern into `ctx`, answering the name; `None`
-    /// for any other pattern, which is left unbound.
-    fn bind_let_ident<'s>(
-        &mut self,
-        let_stmt: &'s LetStmt,
-        type_id: TypeId,
-        ctx: &mut FunctionContext,
-    ) -> Option<&'s String> {
-        let (ast::Pattern::Ident {
-            id,
-            name,
-            span: name_span,
-        }
-        | ast::Pattern::MutIdent {
-            id,
-            name,
-            span: name_span,
-        }) = &let_stmt.pattern
-        else {
-            return None;
-        };
-        let is_mut = let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-        self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-        Some(name)
     }
 
     /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
@@ -712,8 +687,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report a tuple pattern naming more elements than the tuple holds, or,
-    /// without `..`, fewer.
-    fn check_tuple_pattern_arity(&self, written: usize, has_rest: bool, held: usize, span: Span) {
+    /// without `..`, fewer. Answers whether the arity fits.
+    fn check_tuple_pattern_arity(
+        &self,
+        written: usize,
+        has_rest: bool,
+        held: usize,
+        span: Span,
+    ) -> bool {
         let [expected, found] = if has_rest && written > held {
             [
                 format!("tuple with at least {written} elements"),
@@ -725,13 +706,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 format!("pattern with {written} elements"),
             ]
         } else {
-            return;
+            return true;
         };
         let _ = self.emit(TypeError::PatternTypeMismatch {
             expected,
             found,
             span,
         });
+        false
+    }
+
+    /// The type each element of a tuple pattern matches against `held`,
+    /// reporting an arity that does not fit. Only the elements ahead of a
+    /// variadic pack have a fixed position, so a pattern over one stops there
+    /// with `..`.
+    fn tuple_pattern_element_types(
+        &self,
+        written: usize,
+        has_rest: bool,
+        held: &[TypeId],
+        span: Span,
+    ) -> Vec<TypeId> {
+        let pack_at = {
+            let table = self.tysys.type_table.borrow();
+            held.iter().position(|&t| table.is_type_pack(t))
+        };
+        let fixed = if let Some(pack_at) = pack_at {
+            if !has_rest || written > pack_at {
+                let _ = self.emit(TypeError::PatternTypeMismatch {
+                    expected: format!(
+                        "`..` after at most {pack_at} elements, since a variadic pack follows them"
+                    ),
+                    found: format!("pattern with {written} elements"),
+                    span,
+                });
+            }
+            &held[..pack_at]
+        } else {
+            self.check_tuple_pattern_arity(written, has_rest, held.len(), span);
+            held
+        };
+        (0..written)
+            .map(|i| fixed.get(i).copied().unwrap_or(TypeTable::UNKNOWN))
+            .collect()
     }
 
     /// Report the fields a struct pattern without `..` leaves out.
@@ -775,48 +792,98 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-        if self.bind_let_ident(let_stmt, type_id, ctx).is_none() {
+        if !matches!(
+            let_stmt.pattern,
+            Pattern::Ident { .. } | Pattern::MutIdent { .. } | Pattern::Wildcard
+        ) {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "an uninitialized `let` declares a single name; \
                           destructure where the value is given"
                     .to_string(),
                 span: let_stmt.name_span,
             });
+            return;
         }
+        self.resolve_let_pattern(
+            &let_stmt.pattern,
+            type_id,
+            let_stmt.is_mut,
+            let_stmt.span,
+            BindingSite::Let,
+            ctx,
+        );
     }
 
-    /// Reject a `for` binding over a type pack that can fail by its shape alone,
-    /// since no one element type answers for the rest.
-    fn check_pack_binding_irrefutable(&mut self, pattern: &ast::Pattern, span: Span) -> bool {
-        let reason = match pattern {
-            // `Pattern::Error` is a parser recovery placeholder; treat it as
-            // irrefutable so it does not cascade a second "refutable" error.
-            Pattern::Ident { .. }
-            | Pattern::MutIdent { .. }
-            | Pattern::Wildcard
-            | Pattern::Error(_) => return true,
-            Pattern::Tuple(patterns, _) => {
-                return patterns
-                    .iter()
-                    .all(|p| self.check_pack_binding_irrefutable(p, span));
-            }
-            Pattern::Struct { fields, .. } => {
-                return fields
-                    .iter()
-                    .all(|f| self.check_pack_binding_irrefutable(&f.pattern, span));
-            }
-            Pattern::Typed { pattern, .. } => {
-                return self.check_pack_binding_irrefutable(pattern, span);
-            }
-            Pattern::Literal(_)
-            | Pattern::Variant { .. }
-            | Pattern::Or(_)
-            | Pattern::Range { .. } => {
-                refutable_shape(pattern).expect("a testing pattern is refutable by its shape")
-            }
+    /// Check the binding of a walk over a type pack, a `for` or a tuple
+    /// comprehension: a name, `_`, or a tuple of them as long as the element.
+    pub(super) fn check_pack_binding(
+        &mut self,
+        binding: &Pattern,
+        binding_type: TypeId,
+        span: Span,
+    ) -> bool {
+        let parts = match binding {
+            Pattern::Tuple(elems, _) => elems.iter().collect(),
+            binding => vec![binding],
         };
-        self.reject_refutable(BindingSite::ForOf, &reason, span);
-        false
+        if let Some(reason) = parts.iter().find_map(|p| refutable_shape(p)) {
+            self.reject_refutable(BindingSite::ForOf, &reason, span);
+            return false;
+        }
+        if !parts
+            .iter()
+            .all(|p| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard))
+        {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "a walk over a type pack binds a name, `_`, or a tuple of them"
+                    .to_string(),
+                span,
+            });
+            return false;
+        }
+        let Pattern::Tuple(elems, has_rest) = binding else {
+            return true;
+        };
+        let Some(held) = self.tysys.type_table.borrow().as_tuple(binding_type) else {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: "tuple type".to_string(),
+                found: self.tysys.type_table.borrow().type_name(binding_type),
+                span,
+            });
+            return false;
+        };
+        self.check_tuple_pattern_arity(elems.len(), *has_rest, held.len(), span)
+    }
+
+    /// Bind the names a type-pack walk's binding spells, an element past the
+    /// end with the error type.
+    pub(super) fn bind_pack_binding(
+        &mut self,
+        binding: &Pattern,
+        binding_type: TypeId,
+        is_mut: bool,
+        ctx: &mut FunctionContext,
+    ) {
+        let elems = match binding {
+            Pattern::Tuple(elems, _) => {
+                let held = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .elem_types_or_self(binding_type);
+                elems
+                    .iter()
+                    .zip(held.into_iter().chain(std::iter::repeat(TypeTable::ERROR)))
+                    .collect()
+            }
+            binding => vec![(binding, binding_type)],
+        };
+        for (pattern, ty) in elems {
+            if let Pattern::Ident { id, name, span } = pattern {
+                ctx.add_local_at(name.clone(), ty, is_mut, Some(*id), *span);
+                self.record_local_symbol(*id, name, *span, is_mut, ty);
+            }
+        }
     }
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
@@ -1070,8 +1137,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s.
+    /// Resolve a pattern that must bind: a `let`'s, or a tuple `for`'s. A bare
+    /// name at its root binds, whatever else the name reaches.
     pub(super) fn resolve_let_pattern(
+        &mut self,
+        pattern: &ast::Pattern,
+        type_id: TypeId,
+        is_mut: bool,
+        span: Span,
+        site: BindingSite,
+        ctx: &mut FunctionContext,
+    ) {
+        if let ast::Pattern::Ident {
+            id,
+            name,
+            span: name_span,
+        }
+        | ast::Pattern::MutIdent {
+            id,
+            name,
+            span: name_span,
+        } = pattern
+        {
+            let is_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
+            ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
+            self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
+            return;
+        }
+        self.resolve_must_bind_pattern(pattern, type_id, is_mut, span, site, ctx);
+    }
+
+    /// Resolve a pattern that must bind, reading a bare name at its root as
+    /// `match` does. An iterator `for`'s binding is one.
+    fn resolve_must_bind_pattern(
         &mut self,
         pattern: &ast::Pattern,
         type_id: TypeId,
@@ -1502,22 +1600,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
-                self.check_tuple_pattern_arity(
+                let element_types = self.tuple_pattern_element_types(
                     patterns.len(),
                     *has_rest,
-                    element_types.len(),
+                    &element_types,
                     span,
                 );
-
-                let mut bindings: PatBindings = Vec::new();
-                for (p, &ty) in patterns.iter().zip(
-                    element_types
-                        .iter()
-                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                ) {
-                    bindings.extend(self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding));
-                }
-                bindings
+                patterns
+                    .iter()
+                    .zip(element_types)
+                    .flat_map(|(p, ty)| {
+                        self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding)
+                    })
+                    .collect()
             }
             Pattern::Variant {
                 variant_name,
@@ -2447,41 +2542,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        if !self.check_pack_binding_irrefutable(&for_of.binding, for_of.span) {
+        if !self.check_pack_binding(&for_of.binding, binding_type, for_of.span) {
             return;
-        }
-        let name_or_wildcard = |p: &Pattern| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard);
-        let supported = match &for_of.binding {
-            Pattern::Tuple(elems, _) => elems.iter().all(name_or_wildcard),
-            binding => name_or_wildcard(binding),
-        };
-        if !supported {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "a `for` over a type pack binds a name, `_`, or a tuple of them"
-                    .to_string(),
-                span: for_of.span,
-            });
-            return;
-        }
-
-        let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
-            Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            _ => (minted_name("pattern_temp", unique_id), None, None),
-        };
-
-        let is_mut = for_of.is_mut;
-        let is_destructured = matches!(&for_of.binding, Pattern::Tuple(..));
-
-        let ctx = &mut ctx.enter_scope();
-        ctx.add_local_at(
-            binding_name.clone(),
-            binding_type,
-            is_mut,
-            binding_id,
-            binding_name_span.unwrap_or_default(),
-        );
-        if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
-            self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
 
         // Reify rebuilds the `VariadicForOf` node
@@ -2489,26 +2551,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::ForOfVariadic` tag. This walk binds the loop variable
         // and any destructured sub-bindings into `ctx` (recording their
         // symbols) and walks the body for its facts.
-        if is_destructured && let Pattern::Tuple(tp, _) = &for_of.binding {
-            let inner_elems = self
-                .tysys
-                .type_table
-                .borrow()
-                .elem_types_or_self(binding_type);
-            for (i, pat_elem) in tp.iter().enumerate() {
-                if let Pattern::Ident {
-                    id,
-                    name,
-                    span: name_span,
-                } = pat_elem
-                {
-                    let elem_type: TypeId =
-                        inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *name_span);
-                    self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
-                }
-            }
+        let ctx = &mut ctx.enter_scope();
+        if !matches!(for_of.binding, Pattern::Ident { .. }) {
+            ctx.add_local_at(
+                minted_name("pattern_temp", unique_id),
+                binding_type,
+                for_of.is_mut,
+                None,
+                Span::default(),
+            );
         }
+        self.bind_pack_binding(&for_of.binding, binding_type, for_of.is_mut, ctx);
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
@@ -2579,58 +2632,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
             // element's facts are captured.
-            if is_enumerate {
-                // For enumerate the binding is `[idx, val]`; resolve the pattern
-                // against the synthetic `[i32, elem_type]` tuple type.
-                let i32_type = TypeTable::I32;
-                let enum_tuple_type = self
-                    .tysys
+            // For enumerate the binding is `[idx, val]`, resolved against the
+            // synthetic `[i32, elem_type]` tuple type.
+            let binding_type = if is_enumerate {
+                self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_tuple(vec![i32_type, bind_elem_type]);
-                self.resolve_let_pattern(
-                    &for_of.binding,
-                    enum_tuple_type,
-                    for_of.is_mut,
-                    span,
-                    BindingSite::ForOf,
-                    ctx,
-                );
+                    .make_tuple(vec![TypeTable::I32, bind_elem_type])
             } else {
-                match &for_of.binding {
-                    Pattern::Ident {
-                        id,
-                        name,
-                        span: name_span,
-                    }
-                    | Pattern::MutIdent {
-                        id,
-                        name,
-                        span: name_span,
-                    } => {
-                        let is_mut =
-                            for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        ctx.add_local_at(
-                            name.clone(),
-                            bind_elem_type,
-                            is_mut,
-                            Some(*id),
-                            *name_span,
-                        );
-                        self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
-                    }
-                    binding => {
-                        self.resolve_let_pattern(
-                            binding,
-                            bind_elem_type,
-                            for_of.is_mut,
-                            span,
-                            BindingSite::ForOf,
-                            ctx,
-                        );
-                    }
-                }
-            }
+                bind_elem_type
+            };
+            self.resolve_let_pattern(
+                &for_of.binding,
+                binding_type,
+                for_of.is_mut,
+                span,
+                BindingSite::ForOf,
+                ctx,
+            );
 
             // Resolve the body AST (each expansion gets its own resolution with
             // different element types) for its facts.
@@ -2845,7 +2864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the loop variable (preserving the binding's real `AstId`) and walks
         // the body for its facts.
         let mut scope = ctx.enter_scope();
-        self.resolve_let_pattern(
+        self.resolve_must_bind_pattern(
             &for_of.binding,
             item_type,
             for_of.is_mut,

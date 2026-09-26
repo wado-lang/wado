@@ -4641,7 +4641,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let mut scope = ctx.enter_scope();
-        self.bind_comprehension_pattern(&comp.binding, binding_type, comp.span, &mut scope);
+        self.check_pack_binding(&comp.binding, binding_type, comp.span);
+        self.bind_pack_binding(&comp.binding, binding_type, false, &mut scope);
         let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, &scope);
         let body_type = self.resolve_expr(
             &comp.body,
@@ -4657,49 +4658,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut type_table = self.tysys.type_table.borrow_mut();
         let mapped = type_table.make_mapped_type_pack(pack_name, pack_index, body_type);
         type_table.make_tuple(vec![mapped])
-    }
-
-    /// Bind a comprehension's element pattern: an ident, or the sub-idents of a
-    /// tuple pattern (`[i, v]`).
-    fn bind_comprehension_pattern(
-        &mut self,
-        binding: &ast::Pattern,
-        binding_type: TypeId,
-        fallback_span: Span,
-        ctx: &mut FunctionContext,
-    ) {
-        match binding {
-            ast::Pattern::Ident { id, name, span } => {
-                ctx.add_local_at(name.clone(), binding_type, false, Some(*id), *span);
-                self.record_local_symbol(*id, name, *span, false, binding_type);
-            }
-            ast::Pattern::Tuple(elems, _) => {
-                let inner = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .elem_types_or_self(binding_type);
-                for (i, elem) in elems.iter().enumerate() {
-                    match elem {
-                        ast::Pattern::Ident { id, name, span } => {
-                            let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                            ctx.add_local_at(name.clone(), elem_type, false, Some(*id), *span);
-                            self.record_local_symbol(*id, name, *span, false, elem_type);
-                        }
-                        ast::Pattern::Wildcard => {}
-                        _ => self.reject_comprehension_binding(fallback_span),
-                    }
-                }
-            }
-            _ => self.reject_comprehension_binding(fallback_span),
-        }
-    }
-
-    fn reject_comprehension_binding(&self, span: Span) {
-        let _ = self.emit(TypeError::InvalidPattern {
-            message: "a tuple comprehension binds an identifier or `[i, v]`".to_string(),
-            span,
-        });
     }
 
     /// Resolve a tuple literal expression: `[1, 2, 3]` or `[1, "hello", true]`

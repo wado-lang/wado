@@ -1,0 +1,18 @@
+// A walk over a type pack binds a name, `_`, or a tuple of them as long as
+// the element; any other pattern is rejected rather than ignored.
+
+fn f<..T>(t: [..T]) -> i32 {
+    let r = [for let [i, 3] of t.enumerate() { i }];
+    let s = [for let [i, v, w] of t.enumerate() { i }];
+    for let [i, v, w] of t.enumerate() {}
+    for let Some(v) of t {}
+    let q = [for let [[a, b], v] of t.enumerate() { 0 }];
+    return 0;
+}
+
+test {
+    assert f([1, 2]) == 0;
+}
+
+__DATA__
+{"compile_error": ":5:13: analysis error: invalid pattern: refutable pattern in `for` binding: literal patterns may not match; match on the element in the loop body instead; 6:13: pattern mismatch: expected 'tuple with 2 elements', found 'pattern with 3 elements'; 7:5: pattern mismatch: expected 'tuple with 2 elements', found 'pattern with 3 elements'; 8:5: invalid pattern: refutable pattern in `for` binding: `Some` may not match; match on the element in the loop body instead; 9:13: invalid pattern: a walk over a type pack binds a name, `_`, or a tuple of them"}

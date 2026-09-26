@@ -1,0 +1,13 @@
+// A mutable global never matches by value, so its name in a `let` pattern binds.
+// An uninitialized `let _: T;` declares nothing.
+
+global mut counter: i32 = 0;
+
+test {
+    let [counter, y] = [5, 6];
+    assert counter + y == 11;
+    let _: i32;
+}
+
+__DATA__
+{"test": {}, "warnings_contains": ["`counter` shadows the global"]}

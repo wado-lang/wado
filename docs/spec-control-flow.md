@@ -373,7 +373,8 @@ match command {
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
 A tuple pattern names every element of the tuple, or ends in `..` after at most
-that many.
+that many. Over a tuple carrying a variadic pack, only the elements ahead of the
+pack have a fixed position, so the pattern names at most those and ends in `..`.
 
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
@@ -401,12 +402,12 @@ let Ok(v) = r;                    // OK where r: Result<i32, !>
 let Some(y) = opt;                // Error: `Some` may not match
 ```
 
-A bare name at the root of a `let` binds. Below the root it reads as it does in
-`match`: a case or a constant of that name matches by value. So
+A bare name at the root of a `let` binds. Below the root it reads as it
+does in `match`: a case or an immutable global of that name matches by value. So
 `let [None, n] = pair` tests its first element and is an error, since `None`
 may not match.
 
-An uninitialized `let x: T;` declares a single name.
+An uninitialized `let x: T;` declares a single name, or `_`.
 
 ### Exhaustiveness
 

@@ -13,7 +13,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::SymbolTable;
+use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
 
@@ -654,8 +654,8 @@ impl Resolver<'_> {
 
     /// Whether an identifier pattern binds rather than matches. `mut x` and the
     /// root of an irrefutable pattern always bind; elsewhere a bare `x` binds
-    /// unless a case or a `global` answers the name, since either of those
-    /// matches by value instead.
+    /// unless a case or an immutable `global` answers the name, since either of
+    /// those matches by value instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
     /// reference, and even where the module does not import its type: only the
@@ -670,7 +670,12 @@ impl Resolver<'_> {
             return false;
         }
         match self.resolve_value_name(name) {
-            Resolution::Def(def) => self.defs.kind(def) != DefKind::Global,
+            Resolution::Def(def) => !matches!(
+                self.symbols
+                    .get(&self.defs.ast_id(def))
+                    .map(|sym| &sym.kind),
+                Some(SymbolKind::Global(GlobalSymbol { is_mut: false }))
+            ),
             _ => true,
         }
     }
