@@ -613,6 +613,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -939,8 +940,9 @@ pub global TK_D: i32 = 3;
 pub global TK_J: i32 = 4;
 pub global TK_E: i32 = 5;
 pub global TK_G: i32 = 6;
-pub global TK_EOF: i32 = 7;
-pub global TK_ERROR: i32 = 8;
+pub global TK_K: i32 = 7;
+pub global TK_EOF: i32 = 8;
+pub global TK_ERROR: i32 = 9;
 
 struct Lexer {
     chars: List<char>,
@@ -1341,6 +1343,59 @@ fn try_G(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
+fn try_K(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let la_saved_20 = pos;
+    let mut la_reach_20: i32 = -1;
+    let mut la_end_20: i32 = -1;
+    let mut la_win_20: i32 = -1;
+    let mut la_arm_20_0: i32 = -1;
+    la_alt_20_0: {
+        pos = la_saved_20;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_20_0; }
+        pos += 1;
+        la_arm_20_0 = pos;
+    }
+    let mut la_arm_20_1: i32 = -1;
+    la_alt_20_1: {
+        pos = la_saved_20;
+        if pos >= chars.len() || chars[pos] != 'w' { break la_alt_20_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'v' { break la_alt_20_1; }
+        pos += 1;
+        la_arm_20_1 = pos;
+    }
+    for let mut la_i_20 = 0; la_i_20 < 2; la_i_20 += 1 {
+        let la_at_20 = match la_i_20 { 0 => la_arm_20_0, _ => la_arm_20_1 };
+        if la_at_20 < 0 { continue; }
+        pos = la_at_20;
+        let mut la_tot_20: i32 = -1;
+        let peek_save_21 = pos;
+        let mut peek_ok_21 = false;
+        let mut peek_end_21: i32 = -1;
+        peek_21: {
+            if pos >= chars.len() || chars[pos] != 'v' { break peek_21; }
+            pos += 1;
+            peek_end_21 = pos;
+            peek_ok_21 = true;
+        }
+        pos = peek_save_21;
+        if peek_ok_21 {
+            la_tot_20 = peek_end_21;
+        }
+        if la_tot_20 > la_reach_20 {
+            la_reach_20 = la_tot_20;
+            la_end_20 = la_at_20;
+            la_win_20 = la_i_20;
+        }
+    }
+    if la_win_20 < 0 { return -1; }
+    pos = la_end_20;
+    if pos >= chars.len() || chars[pos] != 'v' { return -1; }
+    pos += 1;
+    return pos;
+}
+
 pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
@@ -1410,6 +1465,19 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 end = try_J(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_J; }
             },
+            'w' => {
+                end = try_J(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_J; }
+                let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\u{0}' };
+                match second_char {
+                    'v' => {
+                        end = try_K(&lexer.chars, start);
+                        if end > best_end { best_end = end; best_kind = TK_K; }
+                    },
+                    _ => {
+                    },
+                }
+            },
             'x' => {
                 end = try_J(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_J; }
@@ -1452,6 +1520,7 @@ pub fn token_kind_name(kind: i32) -> String {
         TK_J => "J",
         TK_E => "E",
         TK_G => "G",
+        TK_K => "K",
         TK_EOF => "Eof",
         TK_ERROR => "Error",
         _ => "Unknown",
@@ -1809,15 +1878,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [];
 global CALL_FOLLOW: List<i32> = [];
 global CALL_FOLLOW_ENDS: List<bool> = [];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(9);
-    for let mut k = 0; k < 9; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["A", "B", "C", "D", "J", "E", "G", "K", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);

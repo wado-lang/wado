@@ -613,6 +613,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -2114,38 +2115,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [[65248255], [134217728], [6144], [24
 global CALL_FOLLOW: List<i32> = [0, 0, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6, 7, 8, 8];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(29);
-    for let mut k = 0; k < 29; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    v[TK_COS] = "'cos'";
-    v[TK_SIN] = "'sin'";
-    v[TK_TAN] = "'tan'";
-    v[TK_ACOS] = "'acos'";
-    v[TK_ASIN] = "'asin'";
-    v[TK_ATAN] = "'atan'";
-    v[TK_LN] = "'ln'";
-    v[TK_LOG] = "'log'";
-    v[TK_SQRT] = "'sqrt'";
-    v[TK_LPAREN] = "'('";
-    v[TK_RPAREN] = "')'";
-    v[TK_PLUS] = "'+'";
-    v[TK_MINUS] = "'-'";
-    v[TK_TIMES] = "'*'";
-    v[TK_DIV] = "'/'";
-    v[TK_GT] = "'>'";
-    v[TK_LT] = "'<'";
-    v[TK_EQ] = "'='";
-    v[TK_COMMA] = "','";
-    v[TK_POINT] = "'.'";
-    v[TK_POW] = "'^'";
-    v[TK_PI] = "'pi'";
-    v[TK_I] = "'i'";
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["'cos'", "'sin'", "'tan'", "'acos'", "'asin'", "'atan'", "'ln'", "'log'", "'sqrt'", "'('", "')'", "'+'", "'-'", "'*'", "'/'", "'>'", "'<'", "'='", "','", "'.'", "'^'", "'pi'", "EULER", "'i'", "VARIABLE", "SCIENTIFIC_NUMBER", "WS", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);

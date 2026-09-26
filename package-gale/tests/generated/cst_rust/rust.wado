@@ -621,6 +621,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -26721,121 +26722,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [[-1, 134217727, -61472, -1073741825,
 global CALL_FOLLOW: List<i32> = [0, 0, 1, 2, 3, 4, 5, 0, 2, 2, 2, 2, 2, 1, 3, 1, 4, 1, 5, 0, 2, 6, 7, 8, 9, 9, 10, 2, 3, 4, 5, 0, 2, 11, 2, 3, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 12, 5, 5, 0, 9, 2, 2, 9, 13, 14, 14, 15, 2, 16, 0, 17, 6, 0, 0, 2, 2, 18, 18, 18, 18, 0, 2, 2, 19, 2, 0, 2, 2, 11, 2, 2, 0, 0, 20, 9, 2, 2, 0, 0, 12, 8, 0, 17, 6, 9, 18, 18, 0, 0, 11, 2, 18, 18, 0, 0, 2, 0, 0, 21, 8, 18, 18, 0, 0, 0, 2, 2, 2, 6, 8, 2, 0, 0, 21, 8, 11, 20, 9, 11, 20, 9, 0, 0, 0, 21, 5, 5, 2, 2, 0, 0, 21, 5, 5, 0, 22, 0, 21, 5, 5, 21, 5, 5, 0, 2, 0, 2, 2, 18, 23, 0, 2, 2, 2, 24, 2, 0, 25, 26, 2, 11, 2, 18, 2, 2, 2, 11, 2, 0, 11, 2, 2, 0, 2, 0, 2, 2, 2, 7, 7, 6, 0, 2, 2, 2, 2, 2, 2, 2, 0, 27, 20, 28, 9, 9, 9, 0, 0, 0, 0, 2, 17, 6, 2, 0, 2, 0, 2, 2, 6, 2, 7, 2, 0, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 0, 0, 2, 0, 2, 0, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 6, 4, 7, 3, 6, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5, 8, 0, 2, 2, 2, 2, 18, 18, 9, 2, 18, 2, 2, 2, 2, 21, 5, 8, 8, 18, 18, 2, 0, 2, 11, 11, 2, 2, 17, 3, 29, 29, 2, 2, 2, 2, 21, 8, 18, 18, 2, 11, 11, 2, 17, 29, 29, 2, 18, 18, 30, 2, 0, 2, 18, 18, 0, 11, 2, 0, 2, 2, 2, 2, 2, 0, 0, 2, 26, 0, 0, 2, 31, 0, 2, 0, 0, 32, 2, 2, 2, 26, 0, 0, 32, 2, 2, 2, 26, 2, 21, 5, 8, 10, 0, 10, 18, 18, 18, 0, 0, 2, 26, 0, 0, 0, 0, 30, 30, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 33, 2, 34, 2, 35, 36, 2, 2, 2, 21, 8, 18, 2, 2, 18, 18, 0, 11, 2, 11, 2, 2, 0, 17, 6, 18, 18, 6, 18, 2, 18, 18, 6, 7, 18, 18, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 6, 18, 6, 9, 7, 7, 0, 2, 2, 0, 16, 6, 2, 2, 2, 2, 2, 18, 18, 0, 11, 2, 18, 18, 0, 2, 2, 2, 2, 37, 37, 2, 2, 2, 18, 23, 2, 2, 0, 2, 0, 6, 37, 2, 13, 13, 2, 13, 13, 13, 2, 2, 23, 23, 23, 23, 23, 18, 23, 2, 2, 2, 2, 2, 2, 2, 18, 18, 18, 18, 18, 18, 26, 2, 13, 13, 38, 39, 13, 13, 13, 13, 0, 2, 2, 6, 2, 18, 18, 6, 2, 2, 2];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false, true, false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, true, false, false, false, false, true, true, false, false, false, false, false, false, true, true, true, false, true, true, false, true, true, false, true, false, true, true, false, true, true, false, false, false, false, true, true, false, false, false, false, false, false, false, false, true, true, false, false, false, true, true, true, false, false, true, false, false, false, false, true, true, false, false, true, true, true, true, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, true, true, true, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, true, false, true, true, true, false, false, false, false, true, false, true, false, false, false, false, false, false, true, true, true, true, false, true, false, true, false, true, false, false, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, true, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, false, true, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, true, false, false, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, false, true, false, true, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, true, true, true, false, false, true, false, true, true, false, false, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, true];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(133);
-    for let mut k = 0; k < 133; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    v[TK_KW_AS] = "'as'";
-    v[TK_KW_BREAK] = "'break'";
-    v[TK_KW_CONST] = "'const'";
-    v[TK_KW_CONTINUE] = "'continue'";
-    v[TK_KW_CRATE] = "'crate'";
-    v[TK_KW_ELSE] = "'else'";
-    v[TK_KW_ENUM] = "'enum'";
-    v[TK_KW_EXTERN] = "'extern'";
-    v[TK_KW_FALSE] = "'false'";
-    v[TK_KW_FN] = "'fn'";
-    v[TK_KW_FOR] = "'for'";
-    v[TK_KW_IF] = "'if'";
-    v[TK_KW_IMPL] = "'impl'";
-    v[TK_KW_IN] = "'in'";
-    v[TK_KW_LET] = "'let'";
-    v[TK_KW_LOOP] = "'loop'";
-    v[TK_KW_MATCH] = "'match'";
-    v[TK_KW_MOD] = "'mod'";
-    v[TK_KW_MOVE] = "'move'";
-    v[TK_KW_MUT] = "'mut'";
-    v[TK_KW_PUB] = "'pub'";
-    v[TK_KW_REF] = "'ref'";
-    v[TK_KW_RETURN] = "'return'";
-    v[TK_KW_SELFVALUE] = "'self'";
-    v[TK_KW_SELFTYPE] = "'Self'";
-    v[TK_KW_STATIC] = "'static'";
-    v[TK_KW_STRUCT] = "'struct'";
-    v[TK_KW_SUPER] = "'super'";
-    v[TK_KW_TRAIT] = "'trait'";
-    v[TK_KW_TRUE] = "'true'";
-    v[TK_KW_TYPE] = "'type'";
-    v[TK_KW_UNSAFE] = "'unsafe'";
-    v[TK_KW_USE] = "'use'";
-    v[TK_KW_WHERE] = "'where'";
-    v[TK_KW_WHILE] = "'while'";
-    v[TK_KW_ASYNC] = "'async'";
-    v[TK_KW_AWAIT] = "'await'";
-    v[TK_KW_DYN] = "'dyn'";
-    v[TK_KW_ABSTRACT] = "'abstract'";
-    v[TK_KW_BECOME] = "'become'";
-    v[TK_KW_BOX] = "'box'";
-    v[TK_KW_DO] = "'do'";
-    v[TK_KW_FINAL] = "'final'";
-    v[TK_KW_MACRO] = "'macro'";
-    v[TK_KW_OVERRIDE] = "'override'";
-    v[TK_KW_PRIV] = "'priv'";
-    v[TK_KW_TYPEOF] = "'typeof'";
-    v[TK_KW_UNSIZED] = "'unsized'";
-    v[TK_KW_VIRTUAL] = "'virtual'";
-    v[TK_KW_YIELD] = "'yield'";
-    v[TK_KW_TRY] = "'try'";
-    v[TK_KW_RAW] = "'raw'";
-    v[TK_KW_UNION] = "'union'";
-    v[TK_KW_STATICLIFETIME] = "'\\'static'";
-    v[TK_KW_MACRORULES] = "'macro_rules'";
-    v[TK_KW_UNDERLINELIFETIME] = "'\\'_'";
-    v[TK_KW_DOLLARCRATE] = "'$crate'";
-    v[TK_PLUS] = "'+'";
-    v[TK_MINUS] = "'-'";
-    v[TK_STAR] = "'*'";
-    v[TK_SLASH] = "'/'";
-    v[TK_PERCENT] = "'%'";
-    v[TK_CARET] = "'^'";
-    v[TK_NOT] = "'!'";
-    v[TK_AND] = "'&'";
-    v[TK_OR] = "'|'";
-    v[TK_ANDAND] = "'&&'";
-    v[TK_OROR] = "'||'";
-    v[TK_PLUSEQ] = "'+='";
-    v[TK_MINUSEQ] = "'-='";
-    v[TK_STAREQ] = "'*='";
-    v[TK_SLASHEQ] = "'/='";
-    v[TK_PERCENTEQ] = "'%='";
-    v[TK_CARETEQ] = "'^='";
-    v[TK_ANDEQ] = "'&='";
-    v[TK_OREQ] = "'|='";
-    v[TK_SHLEQ] = "'<<='";
-    v[TK_SHREQ] = "'>>='";
-    v[TK_EQ] = "'='";
-    v[TK_EQEQ] = "'=='";
-    v[TK_NE] = "'!='";
-    v[TK_GT] = "'>'";
-    v[TK_LT] = "'<'";
-    v[TK_GE] = "'>='";
-    v[TK_LE] = "'<='";
-    v[TK_AT] = "'@'";
-    v[TK_UNDERSCORE] = "'_'";
-    v[TK_DOT] = "'.'";
-    v[TK_DOTDOT] = "'..'";
-    v[TK_DOTDOTDOT] = "'...'";
-    v[TK_DOTDOTEQ] = "'..='";
-    v[TK_COMMA] = "','";
-    v[TK_SEMI] = "';'";
-    v[TK_COLON] = "':'";
-    v[TK_PATHSEP] = "'::'";
-    v[TK_RARROW] = "'->'";
-    v[TK_FATARROW] = "'=>'";
-    v[TK_POUND] = "'#'";
-    v[TK_DOLLAR] = "'$'";
-    v[TK_QUESTION] = "'?'";
-    v[TK_LCURLYBRACE] = "'{'";
-    v[TK_RCURLYBRACE] = "'}'";
-    v[TK_LSQUAREBRACKET] = "'['";
-    v[TK_RSQUAREBRACKET] = "']'";
-    v[TK_LPAREN] = "'('";
-    v[TK_RPAREN] = "')'";
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["'as'", "'break'", "'const'", "'continue'", "'crate'", "'else'", "'enum'", "'extern'", "'false'", "'fn'", "'for'", "'if'", "'impl'", "'in'", "'let'", "'loop'", "'match'", "'mod'", "'move'", "'mut'", "'pub'", "'ref'", "'return'", "'self'", "'Self'", "'static'", "'struct'", "'super'", "'trait'", "'true'", "'type'", "'unsafe'", "'use'", "'where'", "'while'", "'async'", "'await'", "'dyn'", "'abstract'", "'become'", "'box'", "'do'", "'final'", "'macro'", "'override'", "'priv'", "'typeof'", "'unsized'", "'virtual'", "'yield'", "'try'", "'raw'", "'union'", "'\\'static'", "'macro_rules'", "'\\'_'", "'$crate'", "NON_KEYWORD_IDENTIFIER", "RAW_IDENTIFIER", "LINE_COMMENT", "BLOCK_COMMENT", "INNER_LINE_DOC", "INNER_BLOCK_DOC", "OUTER_LINE_DOC", "OUTER_BLOCK_DOC", "BLOCK_COMMENT_OR_DOC", "SHEBANG", "WHITESPACE", "NEWLINE", "CHAR_LITERAL", "STRING_LITERAL", "RAW_STRING_LITERAL", "BYTE_LITERAL", "BYTE_STRING_LITERAL", "RAW_BYTE_STRING_LITERAL", "INTEGER_LITERAL", "DEC_LITERAL", "HEX_LITERAL", "OCT_LITERAL", "BIN_LITERAL", "FLOAT_LITERAL", "LIFETIME_OR_LABEL", "'+'", "'-'", "'*'", "'/'", "'%'", "'^'", "'!'", "'&'", "'|'", "'&&'", "'||'", "'+='", "'-='", "'*='", "'/='", "'%='", "'^='", "'&='", "'|='", "'<<='", "'>>='", "'='", "'=='", "'!='", "'>'", "'<'", "'>='", "'<='", "'@'", "'_'", "'.'", "'..'", "'...'", "'..='", "','", "';'", "':'", "'::'", "'->'", "'=>'", "'#'", "'$'", "'?'", "'{'", "'}'", "'['", "']'", "'('", "')'", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);

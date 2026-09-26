@@ -613,6 +613,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -1699,21 +1700,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [[31], [30], [64]];
 global CALL_FOLLOW: List<i32> = [0, 1, 2];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, false];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(8);
-    for let mut k = 0; k < 8; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    v[TK_AND] = "'and'";
-    v[TK_DOG] = "'dog'";
-    v[TK_CAT] = "'cat'";
-    v[TK_HARDWARE] = "'hardware'";
-    v[TK_SOFTWARE] = "'software'";
-    v[TK_WS] = "' '";
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["'and'", "'dog'", "'cat'", "'hardware'", "'software'", "' '", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);

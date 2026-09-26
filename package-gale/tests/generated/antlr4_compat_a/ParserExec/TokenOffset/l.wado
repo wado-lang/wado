@@ -613,6 +613,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -2423,15 +2424,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [];
 global CALL_FOLLOW: List<i32> = [];
 global CALL_FOLLOW_ENDS: List<bool> = [];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(69);
-    for let mut k = 0; k < 69; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["WS", "Eof", "Error", "'1'", "'2'", "'3'", "'4'", "'5'", "'6'", "'7'", "'8'", "'9'", "'10'", "'11'", "'12'", "'13'", "'14'", "'15'", "'16'", "'17'", "'18'", "'19'", "'20'", "'21'", "'22'", "'23'", "'24'", "'25'", "'26'", "'27'", "'28'", "'29'", "'30'", "'31'", "'32'", "'33'", "'34'", "'35'", "'36'", "'37'", "'38'", "'39'", "'40'", "'41'", "'42'", "'43'", "'44'", "'45'", "'46'", "'47'", "'48'", "'49'", "'50'", "'51'", "'52'", "'53'", "'54'", "'55'", "'56'", "'57'", "'58'", "'59'", "'60'", "'61'", "'62'", "'63'", "'64'", "'65'", "'66'"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);

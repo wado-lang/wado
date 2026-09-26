@@ -613,6 +613,7 @@ impl TreeBuilder {
     }
 
     pub fn start_node_at(&mut self, checkpoint: i32, kind: NodeKind, start: i32) {
+        assert self.innermost_open() < checkpoint, "a node wraps only rows finished before it";
         self.tag.insert(checkpoint, EventTag::Open);
         self.id.insert(checkpoint, kind as i32);
         self.offset.insert(checkpoint, start);
@@ -14965,39 +14966,7 @@ global CALL_FOLLOW_SETS: List<List<i32>> = [[-16776235, -1, -1, -1, 838860799], 
 global CALL_FOLLOW: List<i32> = [0, 0, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 2, 2, 2, 2, 3, 2, 5, 2, 2, 2, 0, 6, 7, 8, 8, 9, 2, 3, 10, 11, 12, 12, 2, 3, 13, 12, 12, 12, 2, 3, 14, 15, 15, 3, 16, 17, 1, 1, 1, 1, 3, 5, 2, 3, 18, 11, 12, 12, 19, 20, 2, 19, 21, 22, 8, 8, 9, 2, 2, 3, 2, 3, 2, 3, 2, 3, 2, 0, 0, 0, 0, 8, 8, 9, 2, 23, 3, 0, 12, 12, 12, 12, 12, 12, 2, 3, 24, 2, 25, 2, 3, 2, 2, 2, 26, 2, 2, 0, 22, 8, 8, 9, 2, 0, 0, 0, 0, 8, 8, 9, 2, 27, 27, 28, 28, 29, 30, 31, 31, 2, 12, 12, 12, 12, 32, 33, 34, 35, 34, 35, 2, 32, 33, 34, 36, 34, 36, 22, 8, 8, 9, 2, 0, 0, 0, 0, 25, 37, 25, 0, 38, 2, 2, 25, 2, 2, 25, 2, 2, 39, 3, 3, 39, 0, 39, 2, 39, 2, 39, 2, 39, 2, 39, 2, 39, 2, 39, 2, 25, 12, 12, 3, 39, 2, 39, 2, 39, 11, 12, 12, 25, 5, 25, 2, 39, 2, 40, 39, 2, 2, 39, 2, 41, 39, 25, 42, 43, 44, 45, 39, 46, 12, 12, 47, 25, 48, 49, 50, 12, 12, 2, 25, 12, 12, 2, 37, 37, 3, 51, 2, 48, 49, 2, 2, 13, 12, 12, 25, 3, 0, 2, 3, 0, 51, 2, 3, 11, 12, 12, 2, 12, 12, 25, 25, 2, 0, 0, 0, 0, 2, 12, 12, 27, 27, 28, 28, 29, 30, 31, 31, 2, 12, 12, 12, 12, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 25, 2, 2, 25];
 global CALL_FOLLOW_ENDS: List<bool> = [false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, true, true, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, true, false, true, false, true, false, true, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, false, false, true, false, true, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, false, true, true, true, true, true, true, false, false, false, false, true, true, true, false, true, true, false, true, true, true, false, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, false, true, false, true, false, true, false, false, false, false, false, false, false, true, false, true, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, true, false];
 
-fn _token_names() -> List<String> {
-    let mut v: List<String> = List::with_capacity(159);
-    for let mut k = 0; k < 159; k += 1 {
-        v.push(token_kind_name(k));
-    }
-    v[TK_SCOL] = "';'";
-    v[TK_DOT] = "'.'";
-    v[TK_OPEN_PAR] = "'('";
-    v[TK_CLOSE_PAR] = "')'";
-    v[TK_COMMA] = "','";
-    v[TK_ASSIGN] = "'='";
-    v[TK_STAR] = "'*'";
-    v[TK_PLUS] = "'+'";
-    v[TK_MINUS] = "'-'";
-    v[TK_TILDE] = "'~'";
-    v[TK_PIPE2] = "'||'";
-    v[TK_DIV] = "'/'";
-    v[TK_MOD] = "'%'";
-    v[TK_LT2] = "'<<'";
-    v[TK_GT2] = "'>>'";
-    v[TK_AMP] = "'&'";
-    v[TK_PIPE] = "'|'";
-    v[TK_LT] = "'<'";
-    v[TK_LT_EQ] = "'<='";
-    v[TK_GT] = "'>'";
-    v[TK_GT_EQ] = "'>='";
-    v[TK_EQ] = "'=='";
-    v[TK_NOT_EQ1] = "'!='";
-    v[TK_NOT_EQ2] = "'<>'";
-    return v;
-}
-
-global TOKEN_NAMES: List<String> = _token_names();
+global TOKEN_NAMES: List<String> = ["';'", "'.'", "'('", "')'", "','", "'='", "'*'", "'+'", "'-'", "'~'", "'||'", "'/'", "'%'", "'<<'", "'>>'", "'&'", "'|'", "'<'", "'<='", "'>'", "'>='", "'=='", "'!='", "'<>'", "K_ABORT", "K_ACTION", "K_ADD", "K_AFTER", "K_ALL", "K_ALTER", "K_ANALYZE", "K_AND", "K_AS", "K_ASC", "K_ATTACH", "K_AUTOINCREMENT", "K_BEFORE", "K_BEGIN", "K_BETWEEN", "K_BY", "K_CASCADE", "K_CASE", "K_CAST", "K_CHECK", "K_COLLATE", "K_COLUMN", "K_COMMIT", "K_CONFLICT", "K_CONSTRAINT", "K_CREATE", "K_CROSS", "K_CURRENT_DATE", "K_CURRENT_TIME", "K_CURRENT_TIMESTAMP", "K_DATABASE", "K_DEFAULT", "K_DEFERRABLE", "K_DEFERRED", "K_DELETE", "K_DESC", "K_DETACH", "K_DISTINCT", "K_DROP", "K_EACH", "K_ELSE", "K_END", "K_ESCAPE", "K_EXCEPT", "K_EXCLUSIVE", "K_EXISTS", "K_EXPLAIN", "K_FAIL", "K_FOR", "K_FOREIGN", "K_FROM", "K_FULL", "K_GLOB", "K_GROUP", "K_HAVING", "K_IF", "K_IGNORE", "K_IMMEDIATE", "K_IN", "K_INDEX", "K_INDEXED", "K_INITIALLY", "K_INNER", "K_INSERT", "K_INSTEAD", "K_INTERSECT", "K_INTO", "K_IS", "K_ISNULL", "K_JOIN", "K_KEY", "K_LEFT", "K_LIKE", "K_LIMIT", "K_MATCH", "K_NATURAL", "K_NO", "K_NOT", "K_NOTNULL", "K_NULL", "K_OF", "K_OFFSET", "K_ON", "K_OR", "K_ORDER", "K_OUTER", "K_PLAN", "K_PRAGMA", "K_PRIMARY", "K_QUERY", "K_RAISE", "K_RECURSIVE", "K_REFERENCES", "K_REGEXP", "K_REINDEX", "K_RELEASE", "K_RENAME", "K_REPLACE", "K_RESTRICT", "K_RIGHT", "K_ROLLBACK", "K_ROW", "K_SAVEPOINT", "K_SELECT", "K_SET", "K_TABLE", "K_TEMP", "K_TEMPORARY", "K_THEN", "K_TO", "K_TRANSACTION", "K_TRIGGER", "K_UNION", "K_UNIQUE", "K_UPDATE", "K_USING", "K_VACUUM", "K_VALUES", "K_VIEW", "K_VIRTUAL", "K_WHEN", "K_WHERE", "K_WITH", "K_WITHOUT", "IDENTIFIER", "NUMERIC_LITERAL", "BIND_PARAMETER", "STRING_LITERAL", "BLOB_LITERAL", "SINGLE_LINE_COMMENT", "MULTILINE_COMMENT", "SPACES", "UNEXPECTED_CHAR", "Eof", "Error"];
 
 pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &TOKEN_NAMES);
