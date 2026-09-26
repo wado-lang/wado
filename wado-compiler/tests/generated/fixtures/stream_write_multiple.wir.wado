@@ -78,11 +78,11 @@ fn "stream_write_multiple.wado/run"() with Stdout {
     let result: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_31: i32;
-    let handle_39: i32;
-    let packed_41: i64;
-    let rx_42: i32;
-    let tx_43: i32;
+    let status_32: i32;
+    let handle_40: i32;
+    let packed_42: i64;
+    let rx_43: i32;
+    let tx_44: i32;
     let i: i32;
     rx_5 = builtin::i32_wrap_i64(local.tee packed_4("wasi/stream-new"()));
     tx_6 = builtin::i32_wrap_i64(packed_4 >> 32_i64);
@@ -96,38 +96,38 @@ fn "stream_write_multiple.wado/run"() with Stdout {
         };
     }; builtin::i64_extend_i32_u(ptr_22) | 17179869184_i64));
     len_12 = builtin::i32_wrap_i64(packed_10 >> 32_i64);
-    result = "wasi/stream-write"(tx_6, ptr_11, len_12);
+    result = "wasi/stream-write"(tx_6, ptr_11, select i32(len_12 < 268435455, len_12, 268435455));
     if result == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(tx_6, ws);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(ws, evt_ptr));
-        status_31 = builtin::load_i32(evt_ptr + 4);
+        status_32 = builtin::load_i32(evt_ptr + 4);
         drop("mem/realloc"(evt_ptr, 8, 4, 0));
         "wasi/waitable-join"(tx_6, 0);
         "wasi/waitable-set-drop"(ws);
-        result = status_31;
+        result = status_32;
     }
-    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >>u 4, result: $inline_cm_copy_result_11: block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop(struct.new "core:prelude/types.wado//StreamWrite" { count: result >>u 4, result: $inline_cm_copy_result_12: block -> "core:prelude/types.wado//enum:CopyResult" {
         let $match_scrut_0: i32;
         $match_scrut_0 = result & 15;
         if $match_scrut_0 == 0 {
-            break $inline_cm_copy_result_11: 0;
+            break $inline_cm_copy_result_12: 0;
         } else if $match_scrut_0 == 1 {
-            break $inline_cm_copy_result_11: 1;
+            break $inline_cm_copy_result_12: 1;
         } else {
         }
-        break $inline_cm_copy_result_11: 2;
+        break $inline_cm_copy_result_12: 2;
     } });
     drop("mem/realloc"(ptr_11, len_12, 1, 0));
     "wasi/stream-drop-writable"(tx_6);
-    rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
-    tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
-    handle_39 = "stream_write_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
+    rx_43 = builtin::i32_wrap_i64(local.tee packed_42("wasi/stream-new"()));
+    tx_44 = builtin::i32_wrap_i64(packed_42 >> 32_i64);
+    handle_40 = "stream_write_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_43);
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:stream_write_multiple.wado::$const_obj_0;
-    "core:rt/write_string_to_stream"(tx_43, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_39);
+    "core:rt/write_string_to_stream"(tx_44, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_40);
 }
 
 fn "stream_write_multiple.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -158,15 +158,14 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
-    let count: i32;
+    let count_16: i32;
     let result: i32;
-    let a: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_24: i32;
+    let status_23: i32;
     let i: i32;
-    let $sroa_written_count_37: i32;
-    let $sroa_written_result_38: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_39: i32;
+    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
     len_2 = $mv$data$end - $mv$data$start;
     if len_2 == 0 {
         return 0;
@@ -183,22 +182,21 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l10: loop {
             ptr_15 = ptr_3 + taken;
-            a = len_2 - taken;
-            count = select i32(a < 268435455, a, 268435455);
-            result = "wasi/stream-write"(handle, ptr_15, count);
+            count_16 = len_2 - taken;
+            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
             if result == -1 {
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
                 drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status_24 = builtin::load_i32(evt_ptr + 4);
+                status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                result = status_24;
+                result = status_23;
             }
-            $sroa_written_count_37 = result >>u 4;
-            $sroa_written_result_38 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_39 = result >>u 4;
+            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -209,10 +207,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_37;
-            if (($sroa_written_result_38 != 0) | ($sroa_written_count_37 <= 0)) | (taken >= len_2) {
+            taken = taken + $sroa_written_count_39;
+            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_38;
+                return $sroa_written_result_40;
             }
             continue l10;
         };

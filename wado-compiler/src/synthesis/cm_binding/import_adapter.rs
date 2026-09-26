@@ -21,22 +21,10 @@ use crate::synthesis::common::{
     synth_span,
 };
 
-<<<<<<< HEAD
-use super::lift::{
-    lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
-};
+use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
 use super::lower::{
     buffer_bytes, synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory,
 };
-||||||| 71580bd9659
-use super::lift::{
-    lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
-};
-use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
-=======
-use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
-use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
->>>>>>> origin/main
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
     cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,

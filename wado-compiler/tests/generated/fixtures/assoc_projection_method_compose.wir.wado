@@ -456,15 +456,14 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let ptr_13: i32;
     let ptr_15: i32;
-    let count: i32;
+    let count_16: i32;
     let result: i32;
-    let a: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_24: i32;
+    let status_23: i32;
     let i: i32;
-    let $sroa_written_count_37: i32;
-    let $sroa_written_result_38: "core:prelude/types.wado//enum:CopyResult";
+    let $sroa_written_count_39: i32;
+    let $sroa_written_result_40: "core:prelude/types.wado//enum:CopyResult";
     len_2 = $mv$data$end - $mv$data$start;
     if len_2 == 0 {
         return 0;
@@ -481,22 +480,21 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l49: loop {
             ptr_15 = ptr_3 + taken;
-            a = len_2 - taken;
-            count = select i32(a < 268435455, a, 268435455);
-            result = "wasi/stream-write"(handle, ptr_15, count);
+            count_16 = len_2 - taken;
+            result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
             if result == -1 {
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
                 evt_ptr = "mem/realloc"(0, 0, 4, 8);
                 drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status_24 = builtin::load_i32(evt_ptr + 4);
+                status_23 = builtin::load_i32(evt_ptr + 4);
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                result = status_24;
+                result = status_23;
             }
-            $sroa_written_count_37 = result >>u 4;
-            $sroa_written_result_38 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
+            $sroa_written_count_39 = result >>u 4;
+            $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -507,10 +505,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-            taken = taken + $sroa_written_count_37;
-            if (($sroa_written_result_38 != 0) | ($sroa_written_count_37 <= 0)) | (taken >= len_2) {
+            taken = taken + $sroa_written_count_39;
+            if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
-                return $sroa_written_result_38;
+                return $sroa_written_result_40;
             }
             continue l49;
         };
