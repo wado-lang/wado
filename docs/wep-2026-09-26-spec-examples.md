@@ -104,7 +104,8 @@ example names the test that holds it.
   example has a fixture of its own.
 - A block quoting a fixture marked `#[TODO]` or `#![TODO]` is an example the
   compiler does not yet honour. That is a known gap, and the specification
-  records no gaps, so the checker requires a WEP to name that fixture.
+  records no gaps, so the checker requires a WEP to name that fixture in a
+  code span.
 - A fixture is excluded from the formatter (`[format] exclude`), so its layout
   stays as the specification quotes it.
 

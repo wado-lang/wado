@@ -193,8 +193,9 @@ The `#![TODO]` inner attribute applies TODO semantics to an entire module:
 #### Run Result
 
 A run reports a third axis beside the two above: compile (passed / failed),
-over every [discovered](#test-discovery) file. It exits non-zero when any file
-fails to compile, any test fails, or any TODO test is resolved.
+over every [discovered](#test-discovery) file. It exits non-zero when any test
+fails, any TODO test is resolved, or any file fails to compile other than a
+`#![TODO]` module, which counts as a pending TODO instead.
 
 ### Test Discovery
 

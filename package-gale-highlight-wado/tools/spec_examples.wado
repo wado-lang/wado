@@ -175,7 +175,7 @@ fn check_block(block: &FencedCode, name: &String, fixtures: &TreeMap<String, Str
     if !rejected && assert_count(&block.code) == 0 {
         return Option::Some(`the block holds no \`assert\`, and \`${name}\` expects no compile error`);
     }
-    if is_todo(&code) && !weps.contains(name) {
+    if is_todo(&code) && !weps.contains(`\`${name}\``) {
         return Option::Some(`\`${name}\` is marked TODO, and no WEP names it as a known gap`);
     }
     return null;
@@ -438,4 +438,5 @@ test "a TODO fixture needs a WEP to name it" {
     let fixtures = fixture_map("a.wado", "#[TODO]\ntest {\n    assert f() == 1;\n}\n");
     assert verdict_of(quoting(), &fixtures, "") matches { Some(Broken(_)) };
     assert verdict_of(quoting(), &fixtures, "- `a.wado` fails.") == null;
+    assert verdict_of(quoting(), &fixtures, "- `ba.wado` fails.") matches { Some(Broken(_)) };
 }

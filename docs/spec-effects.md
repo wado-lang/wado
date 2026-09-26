@@ -39,7 +39,7 @@ interface Http {
 
 ### Default Implementations
 
-An `interface` dispatches differently from a trait, but writes its members exactly as a trait does. An operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation. It is what the operation does when it is dispatched with no handler installed. Without one, dispatching an unhandled operation traps.
+An `interface` dispatches differently from a trait, but writes its members exactly as a trait does. An operation is a signature ending in `;`, or a signature followed by a block. That block is the operation's default implementation. What answers an operation dispatched with no handler installed is in [With No Handler Installed](#with-no-handler-installed).
 
 ```wado
 interface Log {

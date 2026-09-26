@@ -66,6 +66,18 @@ impl EffectRef {
         }
     }
 
+    /// The name a message prints: in `MODULE#SYMBOL` notation when `qualified`,
+    /// for a concrete effect that another of its name would otherwise print as.
+    pub fn display_name(&self, qualified: bool) -> String {
+        match self {
+            EffectRef::Concrete {
+                name,
+                module_source,
+            } if qualified => render(&module_source.to_string(), name),
+            EffectRef::Concrete { name, .. } | EffectRef::Param { name } => name.clone(),
+        }
+    }
+
     pub fn is_param(&self) -> bool {
         matches!(self, EffectRef::Param { .. })
     }
@@ -4478,7 +4490,8 @@ impl TypeTable {
             } => {
                 let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
                 let keyword = if *is_mut { "fn mut" } else { "fn" };
-                let effect_names: Vec<&str> = effects.iter().map(EffectRef::name).collect();
+                let effect_names: Vec<String> =
+                    effects.iter().map(|e| e.display_name(qualified)).collect();
                 let clause = match effect_names.as_slice() {
                     [] => String::new(),
                     [one] => format!(" with {one}"),

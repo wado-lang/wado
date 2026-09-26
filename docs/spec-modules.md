@@ -390,8 +390,9 @@ into its input files.
 - A `use` whose generator produced no module for that schema is
   `KILN_NO_GENERATED_MODULE`. The compiler never falls back to parsing the
   schema as Wado.
-- Two clauses that agree on `module`, the primary input, `inputs`, `options`,
-  and `output_dir` are one invocation, wherever in the program they appear.
+- Two clauses that agree on `module`, `version`, `registry`, the primary input,
+  `inputs`, `options`, and `output_dir` are one invocation, wherever in the
+  program they appear.
   Two clauses that share a primary input but disagree on any of those are an
   error naming both.
 
@@ -495,8 +496,7 @@ Outputs are written to the invocation's output directory, each stamped with a
 `#![generated(by = "...", sources = [...])]` header naming the generator and
 its inputs. A file in that directory that carries the header belongs to the
 invocation, and a later run may overwrite or remove it. A file without it is
-left alone. A compile reruns a generator only when its generator, the name it
-was invoked under, its inputs, or its options have changed.
+left alone.
 
 Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 

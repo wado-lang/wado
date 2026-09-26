@@ -467,8 +467,8 @@ implementation reads, or ignores.
 character chooses the case of the digits.
 
 A hand-written `Display` may branch on the flag. `core:temporal`'s `Instant`
-renders whole seconds plainly and milliseconds under `#`. Every primitive
-ignores it.
+renders whole seconds plainly and milliseconds under `#`. Every primitive's
+`Display` ignores it.
 
 #### Precision
 

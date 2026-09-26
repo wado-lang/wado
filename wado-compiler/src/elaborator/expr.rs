@@ -386,7 +386,12 @@ fn fn_step_refusal(
             .map(|effect| (effect, "only one function type has the effect"))
     };
     if let Some((effect, reason)) = unmatched {
-        return Some(format!("{reason} `{}`", effect.name()));
+        let ambiguous = from
+            .effects
+            .iter()
+            .chain(to.effects)
+            .any(|other| other.name() == effect.name() && *other != effect);
+        return Some(format!("{reason} `{}`", effect.display_name(ambiguous)));
     }
     from.params
         .iter()
@@ -3491,7 +3496,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
                 .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
-                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
+                .map(|hint| {
+                    let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
+                    (from, to, hint)
+                })
         };
         if let Some((from, to, hint)) = refused_cast {
             let _ = self.emit(TypeError::InvalidCast {
@@ -3507,7 +3515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // f64/f32 (correctly rounded), the integer widths (truncating),
         // and i128 ↔ u128 (bit reinterpret) — each modulo newtypes, which
         // share their base's representation. Reify lowers them
-        // (`try_reify_int128_source_cast`); here reject anything else, so
+        // (`lower_int128_source_cast`); here reject anything else, so
         // an unsupported target fails with a diagnostic instead of leaking
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
@@ -3533,8 +3541,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     )
                 );
             if !target_supported {
-                let from_name = tt.type_name(source_type);
-                let to_name = tt.type_name(target_type);
+                let (from_name, to_name) = tt.type_names_for_mismatch(source_type, target_type);
                 drop(tt);
                 let _ = self.emit(TypeError::InvalidCast {
                     from: from_name,

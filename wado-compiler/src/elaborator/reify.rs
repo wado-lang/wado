@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
+use std::ops::ControlFlow;
 use std::rc::Rc;
 
 use crate::ast::{
@@ -2658,22 +2659,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
-                // `i128/u128 as T` lowers to prelude calls rather than a
-                // bare cast, since the 128-bit types are prelude structs:
-                // floats go through the correctly rounded `as_f64` /
-                // `as_f32`, integer targets truncate via `low()`, and
-                // `i128 ↔ u128` reinterprets via `from_u128` / `from_i128`.
-                // Must run before the target-side `try_reify_int128_cast`
-                // so `i128 ↔ u128` is not mis-handled by its non-numeric
-                // bare-cast fallback.
-                if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
-                    return tir;
-                }
-                // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
-                // / `from_pair` constructor call rather than a bare cast,
-                // since the 128-bit types are prelude structs. Mirrors
-                // `Elaborator::resolve_cast`'s int128 branch.
-                if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
+                // Mirrors `Elaborator::resolve_cast`'s int128 branch.
+                if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
                     return tir;
                 }
                 // annotate types a direct literal operand as the target but not
@@ -2699,6 +2686,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 let inner =
                     read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
+                let inner = match self.lower_int128_cast(inner, target_type, span) {
+                    ControlFlow::Break(lowered) => return lowered,
+                    ControlFlow::Continue(inner) => inner,
+                };
                 let (from_handle, to_handle) = {
                     let tt = self.tysys.type_table.borrow();
                     (
@@ -8523,13 +8514,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
-    /// any other target; a non-numeric operand yields the bare cast.
-    fn try_reify_int128_cast(
+    /// `LITERAL as i128/u128`: a `from_pair` constructor carries a literal past
+    /// `u64`, which the numeric path's `from_u64` / `from_i64` cannot.
+    fn try_reify_int128_literal_cast(
         &mut self,
         cast: &ast::CastExpr,
         target_type: TypeId,
-        ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         let target_base = self
             .tysys
@@ -8581,26 +8571,40 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unary.span,
             ));
         }
+        None
+    }
 
-        // General numeric operand: `x as u128` →
-        // `u128::from_u64(x as u64)`. `inner` is reified once here; a
-        // non-numeric operand (no valid construction) emits the bare cast
-        // directly rather than re-reifying through the caller's fallback.
-        let inner = self.reify_expr(&cast.expr, ctx, None);
-        let source_is_numeric = {
+    /// A cast with a wide integer on either side, `inner` already read through
+    /// its references. The 128-bit types are prelude structs, so a bare `Cast`
+    /// would leak the boxed struct ref into a slot expecting a Wasm scalar
+    /// (issue #1328), or a scalar into one expecting the struct. `Continue` hands
+    /// `inner` on to the bare cast where neither side needs a lowering.
+    fn lower_int128_cast(
+        &self,
+        inner: TirExpr,
+        target_type: TypeId,
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let (source_is_wide, source_is_numeric) = {
             let tt = self.tysys.type_table.borrow();
-            tt.is_numeric(inner.type_id)
+            let source_base = tt.representation_head(inner.type_id);
+            (tt.is_wide_int(source_base), tt.is_numeric(source_base))
+        };
+        if source_is_wide {
+            return self.lower_int128_source_cast(inner, target_type, span);
+        }
+        let target_base = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(target_type);
+        let Some((item, name)) = self.tysys.wide_int_of(target_base) else {
+            return ControlFlow::Continue(inner);
         };
         if !source_is_numeric {
-            return Some(TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(inner),
-                    target_type,
-                },
-                target_type,
-                cast.span,
-            ));
+            return ControlFlow::Continue(inner);
         }
+        // `x as u128` → `u128::from_u64(x as u64)`.
         let intermediate_type = if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
@@ -8612,32 +8616,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 target_type: intermediate_type,
             },
             intermediate_type,
-            cast.span,
+            span,
         );
-        Some(build_int128_from_intermediate(
+        ControlFlow::Break(build_int128_from_intermediate(
             item,
             &name,
             casted,
             target_type,
-            cast.span,
+            span,
         ))
     }
 
-    /// `i128/u128 as T` for a wide-int *source*. The 128-bit types are
-    /// prelude structs, so a bare `Cast` would leak the boxed struct ref
-    /// into a slot expecting a Wasm scalar (issue #1328). Lower instead to
-    /// prelude calls: `f64`/`f32` through the correctly rounded
+    /// `i128/u128 as T`: `f64`/`f32` through the correctly rounded
     /// `as_f64`/`as_f32`, integer targets through `low()` plus a primitive
     /// cast (truncation), and `i128 ↔ u128` through the bit-reinterpreting
-    /// `from_u128`/`from_i128` constructors. Targets outside that set
-    /// return `None`; `resolve_cast` has already reported them as invalid.
-    fn try_reify_int128_source_cast(
-        &mut self,
-        cast: &ast::CastExpr,
+    /// `from_u128`/`from_i128` constructors. Any other target hands `inner`
+    /// on; `resolve_cast` has already reported it if it is invalid.
+    fn lower_int128_source_cast(
+        &self,
+        inner: TirExpr,
         target_type: TypeId,
-        ctx: &mut FunctionContext,
-    ) -> Option<TirExpr> {
-        let source_type = self.ann_expression_types(cast.expr.id())?;
+        span: Span,
+    ) -> ControlFlow<TirExpr, TirExpr> {
+        let source_type = inner.type_id;
         // Newtypes share their base's representation, so dispatch on the
         // ultimate base of both sides; explicit repr-compatible `Cast`
         // nodes bridge the newtype boundaries below.
@@ -8651,7 +8652,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (source_item, target_item) = {
             let tt = self.tysys.type_table.borrow();
             (
-                tt.wide_int_item(source_base)?,
+                tt.wide_int_item(source_base)
+                    .expect("the caller checked the source is a wide integer"),
                 tt.wide_int_item(target_base),
             )
         };
@@ -8696,13 +8698,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         // Same wide base but a newtype on either side: the
                         // bare `Cast` emitted by the caller is the correct
                         // repr-compatible reinterpret.
-                        return None;
+                        return ControlFlow::Continue(inner);
                     }
                 }
                 Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
                 Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
                 Some(other) => unreachable!("wide_int_item answered {other:?}"),
-                None => return None,
+                None => return ControlFlow::Continue(inner),
             },
         };
 
@@ -8740,13 +8742,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             )
         };
 
-        let inner = self.reify_expr(&cast.expr, ctx, None);
-        let span = cast.span;
         // A newtype source first reinterprets to its wide base so the
         // prelude calls below see their declared receiver/argument type.
         let inner = bridge(inner, source_base, span);
         match lowering {
-            Lowering::Identity => Some(inner),
+            Lowering::Identity => ControlFlow::Break(inner),
             Lowering::Method(item) => {
                 let func = make_func_ref(&self.tysys, item);
                 let receiver = adjust_receiver_for_self_kind(
@@ -8757,7 +8757,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     &self.tysys.type_table,
                 );
                 let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
-                Some(bridge(call, target_type, span))
+                ControlFlow::Break(bridge(call, target_type, span))
             }
             Lowering::LowThenCast => {
                 let item = if signed_source {
@@ -8787,7 +8787,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         span,
                     )
                 };
-                Some(bridge(converted, target_type, span))
+                ControlFlow::Break(bridge(converted, target_type, span))
             }
             Lowering::Reinterpret(item) => {
                 let func = make_func_ref(&self.tysys, item);
@@ -8801,7 +8801,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     target_base,
                     span,
                 );
-                Some(bridge(call, target_type, span))
+                ControlFlow::Break(bridge(call, target_type, span))
             }
         }
     }

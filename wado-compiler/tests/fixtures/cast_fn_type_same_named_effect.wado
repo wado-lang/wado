@@ -1,0 +1,16 @@
+// Two modules declare an effect named `Beep`. The cast message qualifies each
+// by its module, or the two function types would print as one.
+
+use { Beep } from "./sub/cast_fn_type_same_named_effect_a.wado";
+use { Beep as OtherBeep } from "./sub/cast_fn_type_same_named_effect_b.wado";
+
+fn loud() with Beep {
+    Beep::beep();
+}
+
+test "same-named effects" {
+    let f = loud as fn() with OtherBeep;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'fn() -> () with ./sub/cast_fn_type_same_named_effect_a.wado#Beep' to 'fn() -> () with ./sub/cast_fn_type_same_named_effect_b.wado#Beep': `as` cannot drop the effect `./sub/cast_fn_type_same_named_effect_a.wado#Beep`"}

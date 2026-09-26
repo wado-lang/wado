@@ -176,7 +176,7 @@ A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed o
 impl Point {
     fn sum(&self) -> i32 { ... }          // OK: immutable reference
     fn reset(&mut self) { ... }           // OK: mutable reference
-    // fn consume(self) -> i32 { ... }    // ERROR: `self` by value is only allowed on a resource
+    // fn consume(self) -> i32 { ... }    // ERROR: `Point` holds no resource
 }
 ```
 
