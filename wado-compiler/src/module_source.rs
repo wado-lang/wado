@@ -370,7 +370,7 @@ pub enum ModuleSource {
         /// Module name within core (e.g., "prelude", "cli", "rt", "builtin")
         name: InternedStr,
     },
-    /// A bundled CM binding module (e.g., `wasi:cli`, `web:dom`). Bodiless
+    /// A bundled CM binding module (e.g., `wasi:cli`). Bodiless
     /// declarations that lower to component imports, unlike [`Self::Core`].
     Binding {
         /// The reserved namespace the module belongs to.
@@ -700,7 +700,7 @@ impl ModuleSource {
         matches!(self, Self::Core { .. })
     }
 
-    /// Check if this is a bundled CM binding module (`wasi:*`, `web:*`).
+    /// Check if this is a bundled CM binding module (`wasi:*`).
     #[must_use]
     pub fn is_binding(&self) -> bool {
         matches!(self, Self::Binding { .. })
@@ -894,7 +894,7 @@ mod tests {
     fn every_bundled_namespace_is_a_bundled_specifier() {
         assert!(is_bundled_specifier("core:libm.wat"));
         assert!(is_bundled_specifier("wasi:cli/stdout.wado"));
-        assert!(!is_bundled_specifier("web:dom/dom.wat"));
+        assert!(!is_bundled_specifier("wado-lang:web/dom.wat"));
         assert!(!is_bundled_specifier("./libm.wat"));
         assert!(!is_bundled_specifier("dep:../greet/src/lib.wado"));
         assert!(!is_bundled_specifier("https://example.com/x.wasm"));

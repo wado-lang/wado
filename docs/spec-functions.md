@@ -104,7 +104,7 @@ Key points:
   - Turbofish on the name itself: `let f = identity::<i32>;` evaluates to a `fn(i32) -> i32` value, and a non-call use like `apply(identity::<i32>, 7)` works the same way.
   - An expected `fn(...)` type at the use site: `let f: fn(i32) -> i32 = identity;` and `apply(identity, 7)` (where `apply`'s parameter is `fn(i32) -> i32`) both pin the type arguments through positional inference against the expected signature.
   - When neither form applies, it is a compile error, and the diagnostic suggests turbofish or a closure wrapper (`|x| identity(x)`).
-- A function type crosses the Component Model boundary only as a `#[cm]` import's parameter, as a `u32` key the host calls back through. It takes scalars and handles and returns nothing. Anywhere else, an `export fn` included, it is a compile error. See [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+- A function type crosses the Component Model boundary only as a `#[cm]` import's parameter, as a `u32` key the host calls back through. It takes scalars and handles and returns nothing. Anywhere else, an `export fn` included, it is a compile error. See [Web § Callbacks](./wep-2026-04-01-web.md#callbacks).
 
 ## Default Arguments
 

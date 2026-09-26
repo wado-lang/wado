@@ -98,7 +98,7 @@ Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward t
 
 An exported signature may not carry a closure type in any position, including one buried in a container, a named struct's field, or a variant payload. An imported one carries it only as a whole parameter, a callback taking scalars and handles and returning nothing.
 
-The closure stays in a guest-side registry and a `u32` key crosses instead, with a synthesized export as the trampoline. See [Tide § Callbacks](./wep-2026-04-01-tide.md#callbacks).
+The closure stays in a guest-side registry and a `u32` key crosses instead, with a synthesized export as the trampoline. See [Web § Callbacks](./wep-2026-04-01-web.md#callbacks).
 
 ## Consequences
 

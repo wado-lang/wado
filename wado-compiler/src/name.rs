@@ -1526,7 +1526,7 @@ pub fn wado_identifier(idl_name: &str) -> String {
 }
 
 /// `true` for an opaque module identifier that is not a filesystem path and
-/// must never be normalized: a reserved namespace (`core:`, `wasi:`, `web:`) or
+/// must never be normalized: a reserved namespace (`core:`, `wasi:`) or
 /// a remote URI (`http://` / `https://`).
 fn has_special_prefix(path: &str) -> bool {
     path.starts_with("core:")

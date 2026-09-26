@@ -7292,7 +7292,7 @@ mod tests {
     #[test]
     fn resource_declares_a_parent() {
         let source = r#"
-            #[cm("web:dom/node", linearity="unrestricted")]
+            #[cm("wado-lang:web/node", linearity="unrestricted")]
             pub resource Node extends EventTarget {}
         "#;
         let module = parse(source).unwrap();
@@ -7327,7 +7327,7 @@ mod tests {
     #[test]
     fn cm_attribute_carries_a_resource_linearity() {
         let source = r#"
-            #[cm("web:dom/element", linearity="unrestricted")]
+            #[cm("wado-lang:web/element", linearity="unrestricted")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -7359,7 +7359,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_an_unknown_linearity() {
         let source = r#"
-            #[cm("web:dom/element", linearity="extern-handle")]
+            #[cm("wado-lang:web/element", linearity="extern-handle")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7392,7 +7392,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_a_repeated_linearity_field() {
         let source = r#"
-            #[cm("web:dom/element", linearity="unrestricted", linearity="affine")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", linearity="affine")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7406,7 +7406,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_an_unknown_field() {
         let source = r#"
-            #[cm("web:dom/element", backing="unrestricted")]
+            #[cm("wado-lang:web/element", backing="unrestricted")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7420,7 +7420,7 @@ mod tests {
     #[test]
     fn cm_attribute_carries_handle_classes() {
         let source = r#"
-            #[cm("web:dom/element", linearity="unrestricted", classes="2..=4")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", classes="2..=4")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -7437,7 +7437,7 @@ mod tests {
     fn cm_attribute_rejects_malformed_classes() {
         for classes in ["4..=2", "1..3", "0..=65536", "a..=b", "", "1..=1..=2"] {
             let source = format!(
-                "#[cm(\"web:dom/element\", linearity=\"unrestricted\", classes=\"{classes}\")]\n\
+                "#[cm(\"wado-lang:web/element\", linearity=\"unrestricted\", classes=\"{classes}\")]\n\
                  pub resource Element {{}}"
             );
             let err = parse(&source).unwrap_err();
@@ -7453,7 +7453,7 @@ mod tests {
     fn cm_attribute_classes_need_an_unrestricted_resource() {
         for linearity in ["", ", linearity=\"affine\""] {
             let source = format!(
-                "#[cm(\"web:dom/element\"{linearity}, classes=\"0..=0\")]\n\
+                "#[cm(\"wado-lang:web/element\"{linearity}, classes=\"0..=0\")]\n\
                  pub resource Element {{}}"
             );
             let err = parse(&source).unwrap_err();
@@ -7468,7 +7468,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_repeated_classes() {
         let source = r#"
-            #[cm("web:dom/element", linearity="unrestricted", classes="0..=1", classes="0..=2")]
+            #[cm("wado-lang:web/element", linearity="unrestricted", classes="0..=1", classes="0..=2")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7482,7 +7482,7 @@ mod tests {
     #[test]
     fn cm_attribute_linearity_belongs_on_a_resource() {
         let source = r#"
-            #[cm("web:dom/element", linearity="unrestricted")]
+            #[cm("wado-lang:web/element", linearity="unrestricted")]
             pub struct Element {}
         "#;
         let err = parse(source).unwrap_err();
