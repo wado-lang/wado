@@ -1,0 +1,13 @@
+// `()` fills only a slot the Component Model lets stay empty: a function's
+// result, a `result` arm, a case payload. A parameter always carries a type.
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#put")]
+    fn put(u: ());
+}
+
+export fn run() with Sink {
+    Sink::put(());
+}
+
+__DATA__
+{"compile_error": "import function `put`: `()` has no Component Model representation here — it stands only where a type may be absent: a function result, a `Result` arm or a case payload"}

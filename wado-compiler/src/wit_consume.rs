@@ -67,9 +67,8 @@ pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
 /// Build a Wado AST module from a component's decoded `Resolve` + target world.
 ///
 /// # Errors
-/// Returns a message naming the offending shape if the component exports a WIT
-/// construct not yet supported for import (resources/handles, world-level
-/// function exports, etc.).
+/// A message naming each shape the component exports that has no import
+/// mapping yet: a resource, a world-level type, or `error-context`.
 pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBindings, String> {
     let mut b = Builder::new();
     let mut interface_fqs = Vec::new();
@@ -316,7 +315,6 @@ impl Builder {
                 params_span: syn(),
                 return_type,
                 effects: Vec::new(),
-                effect_ids: Vec::new(),
                 effects_inherited: false,
                 body: None,
                 span: syn(),
@@ -346,7 +344,8 @@ impl Builder {
     ) -> Option<Type> {
         let result = func.result.map(|r| self.map_type(resolve, r, fq));
         if is_async_func(func) {
-            return Some(self.generic("AsyncCall", vec![result.unwrap_or_else(unit)]));
+            let result = result.unwrap_or_else(|| self.unit());
+            return Some(self.generic("AsyncCall", vec![result]));
         }
         result
     }
@@ -403,7 +402,6 @@ impl Builder {
             params_span: syn(),
             return_type,
             effects: Vec::new(),
-            effect_ids: Vec::new(),
             effects_inherited: false,
             body: None,
             span: syn(),
@@ -570,11 +568,11 @@ impl Builder {
             CmShape::Result { ok, err } => {
                 let ok = match ok {
                     Some(t) => self.map_type(resolve, t, current_fq),
-                    None => unit(),
+                    None => self.unit(),
                 };
                 let err = match err {
                     Some(t) => self.map_type(resolve, t, current_fq),
-                    None => unit(),
+                    None => self.unit(),
                 };
                 self.generic("Result", vec![ok, err])
             }
@@ -611,7 +609,15 @@ impl Builder {
             WitType::F64 => Some("f64"),
             WitType::Char => Some("char"),
             WitType::String => Some("String"),
-            WitType::ErrorContext | WitType::Id(_) => None,
+            WitType::ErrorContext => {
+                self.errors.push(
+                    "importing a component whose signature carries `error-context` is not yet \
+                     supported"
+                        .to_string(),
+                );
+                return self.unit();
+            }
+            WitType::Id(_) => None,
         };
         if let Some(name) = prim {
             return self.named(name, None);
@@ -627,7 +633,7 @@ impl Builder {
             self.errors.push(
                 "encountered an unnameable WIT leaf type while importing a component".to_string(),
             );
-            unit()
+            self.unit()
         }
     }
 
@@ -641,6 +647,10 @@ impl Builder {
             name: name.to_string(),
             span: syn(),
         })
+    }
+
+    fn unit(&mut self) -> Type {
+        Type::unit(self.id(), syn())
     }
 
     fn generic(&mut self, name: &str, args: Vec<Type>) -> Type {
@@ -716,10 +726,6 @@ fn interface_fq(resolve: &Resolve, iface_id: wit_parser::InterfaceId) -> String 
         Some(v) => format!("{}:{}/{}@{}", pkg.namespace, pkg.name, name, v),
         None => format!("{}:{}/{}", pkg.namespace, pkg.name, name),
     }
-}
-
-fn unit() -> Type {
-    Type::Tuple(Vec::new())
 }
 
 fn syn() -> Span {

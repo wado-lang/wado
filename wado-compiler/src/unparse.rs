@@ -4421,18 +4421,16 @@ pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
 
 /// Emit a `with` row: one item goes bare, more than one is parenthesized.
 /// An empty row emits nothing.
-pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
+pub(crate) fn unparse_with_row_into<S: AsRef<str>>(items: &[S], output: &mut String) {
     match items {
         [] => {}
         [only] => {
             output.push_str(" with ");
-            output.push_str(only);
+            output.push_str(only.as_ref());
         }
-        many => {
-            output.push_str(" with (");
-            output.push_str(&many.join(", "));
-            output.push(')');
-        }
+        many => delimited_into(" with (", ")", many, output, |item, out| {
+            out.push_str(item.as_ref());
+        }),
     }
 }
 
@@ -5056,6 +5054,7 @@ impl<'a> TirUnparser<'a> {
                 name,
                 module_source,
                 type_args,
+                template: _,
             } => {
                 // Source-form reproduces the name as written (bare); debug-form
                 // qualifies every module the same way.

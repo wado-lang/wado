@@ -2038,8 +2038,7 @@ impl FunctionTranslator<'_, '_> {
                     .get_box_inner_type(peeled)
                     .or_else(|| match tt.get(peeled) {
                         tir::ResolvedType::Struct { def, type_args }
-                            if !type_args.is_empty()
-                                && tt.is_compiler_struct(*def, CompilerItem::Box) =>
+                            if tt.is_compiler_struct_instance(peeled, CompilerItem::Box) =>
                         {
                             self.base
                                 .struct_fields_map

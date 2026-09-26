@@ -1,0 +1,21 @@
+// A struct imported under an alias is that struct, whatever resource this
+// module declares under the name it came from.
+use { Foo as Bar } from "./sub/resource_named_like_aliased_struct_dep.wado";
+
+resource Foo {
+    fn ping(&self) -> i32;
+}
+
+impl Bar {
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let b = Bar { v: 1 };
+    assert b.get() == 1;
+}
+
+__DATA__
+{"stdout": ""}

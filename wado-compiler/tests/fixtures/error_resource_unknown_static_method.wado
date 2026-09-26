@@ -1,0 +1,11 @@
+// A resource is a type, so a static method it does not declare is an unknown
+// function, as it is on a struct.
+
+use { Fields } from "wasi:http";
+
+export fn run() {
+    let f = Fields::nope();
+}
+
+__DATA__
+{"compile_error": "unknown function 'Fields::nope'"}

@@ -460,8 +460,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_string_or_template {
             let is_string_newtype = {
                 let tt = self.tysys.type_table.borrow();
-                tt.newtype_representation(target_type)
-                    .is_some_and(|base| tt.is_string(base))
+                let base_id = tt.representation_head(target_type);
+                tt.is_string(base_id) && target_type != base_id
             };
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
@@ -967,6 +967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> LiteralCallee {
         let mut callee = LiteralCallee {
             method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method)),
+            impl_def,
             impl_module_source,
             trait_name,
             target_base_name: self.tysys.fq_receiver_head(output_type),
@@ -978,7 +979,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_default(),
             type_arg_names: Vec::new(),
             method,
-            mangled_name: String::new(),
         };
         callee.remangle(&self.tysys.type_table.borrow());
         callee

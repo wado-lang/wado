@@ -1,0 +1,29 @@
+// A written `Default` for some instantiations of a head answers wherever it
+// reaches, spelled bare, through a bound, or at a turbofish (finding 6).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T: Default> Default for Pair<T, i32> {
+    fn default() -> Self {
+        return Pair { a: T::default(), b: 7 };
+    }
+}
+
+fn make<P: Default>() -> P {
+    return P::default();
+}
+
+test "the written impl answers where it reaches" {
+    let p: Pair<String, i32> = Pair::default();
+    assert p.a == "" && p.b == 7;
+    let q = make::<Pair<bool, i32>>();
+    assert !q.a && q.b == 7;
+    let r = Pair::<i64, i32>::default();
+    assert r.a == 0 && r.b == 7;
+}
+
+__DATA__
+{"test": {}}

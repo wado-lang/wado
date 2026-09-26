@@ -1,8 +1,5 @@
-//! Post-synthesis type fixups and call-site rewrites. Import-adapter binding
-//! bodies carry WASI-derived `TypeId`s while call sites see the user's
-//! newtype-aliased ones, so [`rewrite_calls_in_block`] swaps in the binding
-//! `FunctionRef`, flattens args to the flat CM shape, and re-types the body.
-//! One binding serves every call site, so a disagreeing site is an ICE.
+//! The rewrite pointing each call of a CM import at its adapter, retyped to
+//! the call site.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,179 +20,6 @@ use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
 use super::callback_export::{Callbacks, erased_callback_type};
 use super::import_adapter::is_gc_passthrough_param;
 use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
-use crate::name::FqTypeName;
-
-/// Recursively replace WASI-derived types with user types in the binding.
-/// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
-/// and replace it, then recurse into sub-types (List elements, Tuple fields, etc.).
-fn replace_wasi_derived_type_recursive(
-    adapter: &mut TirFunction,
-    wasi_type: &Type,
-    user_type: TypeId,
-    cm_interface_registry: &CmInterfaceRegistry,
-    wasi_package: &str,
-    type_table: &RefCell<TypeTable>,
-) {
-    let names = CmStdlibNames::from_type_table(&type_table.borrow());
-    let old_type = {
-        let mut tt = type_table.borrow_mut();
-        cm_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
-    };
-    if old_type != user_type && old_type != TypeTable::I32 && old_type != TypeTable::UNIT {
-        // Skip replacement if the user type resolves to the same base type
-        // after deep newtype resolution. Introducing newtypes into adapter
-        // bodies creates monomorphization and WIR type lookup issues.
-        let tt = type_table.borrow();
-        let old_name = tt.mangle_type_name(old_type);
-        let user_resolved_name = tt.mangle_type_name_resolving_newtypes(user_type);
-        drop(tt);
-        if old_name == user_resolved_name {
-            // Same underlying type after resolving newtypes — no replacement needed
-        } else {
-            let tt = type_table.borrow();
-            let new_name = tt.mangle_type_name(user_type);
-            // The two spellings differ, so a callee naming the old type has to
-            // be told about the swap — as the pair of identities, which is what
-            // its own key is built from.
-            let swap = (old_name != new_name)
-                .then(|| (tt.fq_type_name(old_type), tt.fq_type_name(user_type)));
-            drop(tt);
-            match swap {
-                None => replace_type_in_adapter(adapter, old_type, user_type),
-                Some((old_fq, new_fq)) => replace_type_in_adapter_with_names(
-                    adapter, old_type, user_type, &old_fq, &new_fq,
-                ),
-            }
-        }
-    }
-    match wasi_type {
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
-            let tt = type_table.borrow();
-            if let Some(new_elem_args) = tt.generic_type_args(user_type)
-                && new_elem_args.len() == 1
-            {
-                let new_elem = new_elem_args[0];
-                drop(tt);
-                replace_wasi_derived_type_recursive(
-                    adapter,
-                    &g.args[0],
-                    new_elem,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
-            }
-        }
-        Type::Tuple(elems) => {
-            // Get the user's tuple field types
-            if let Some(user_elems) = type_table.borrow().as_tuple(user_type) {
-                for (wasi_elem, &user_elem) in elems.iter().zip(user_elems.iter()) {
-                    replace_wasi_derived_type_recursive(
-                        adapter,
-                        wasi_elem,
-                        user_elem,
-                        cm_interface_registry,
-                        wasi_package,
-                        type_table,
-                    );
-                }
-            }
-        }
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            let tt = type_table.borrow();
-            if let Some(new_args) = tt.generic_type_args(user_type)
-                && new_args.len() == 1
-            {
-                let new_inner = new_args[0];
-                drop(tt);
-                replace_wasi_derived_type_recursive(
-                    adapter,
-                    &g.args[0],
-                    new_inner,
-                    cm_interface_registry,
-                    wasi_package,
-                    type_table,
-                );
-            }
-        }
-        Type::Generic(g)
-            if (g.name == names.result && g.args.len() == 2) || names.is_tree_map(g) =>
-        {
-            let new_args = type_table.borrow().generic_type_args(user_type);
-            if let Some(new_args) = new_args
-                && new_args.len() == 2
-            {
-                for (wasi_arg, &new_arg) in g.args.iter().zip(new_args.iter()) {
-                    replace_wasi_derived_type_recursive(
-                        adapter,
-                        wasi_arg,
-                        new_arg,
-                        cm_interface_registry,
-                        wasi_package,
-                        type_table,
-                    );
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Fix up WASI-derived types in the binding body to match the user's types.
-///
-/// The binding body uses `TypeIds` from `cm_type_to_type_id` (e.g., `List<Tuple<String, List<u8>>>`).
-/// The call site uses user types with newtype aliases (e.g., `List<Tuple<FieldName, FieldValue>>`).
-/// This function computes the WASI-derived `TypeId` for each param and replaces it in the body.
-fn fixup_wasi_derived_types_in_adapter(
-    adapter: &mut TirFunction,
-    func_info: &CmFunctionInfo,
-    call_args: &[TirExpr],
-    user_return_type: TypeId,
-    type_table: &RefCell<TypeTable>,
-    cm_interface_registry: &CmInterfaceRegistry,
-    skip_self: bool,
-) {
-    let wasi_package = func_info.package.as_str();
-    let params_iter: Box<dyn Iterator<Item = &(String, String, Type)>> = if skip_self {
-        Box::new(func_info.params.iter().skip(1))
-    } else {
-        Box::new(func_info.params.iter())
-    };
-    for (i, (_param_name, _, param_type)) in params_iter.enumerate() {
-        if i >= call_args.len() {
-            break;
-        }
-        let new_type = call_args[i].type_id;
-        // Resolve newtypes (e.g., FieldName → String) before computing WASI-derived TypeId
-        let resolved = cm_interface_registry.value_type(param_type);
-        replace_wasi_derived_type_recursive(
-            adapter,
-            &resolved,
-            new_type,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
-        );
-    }
-    // Also fix up return type's WASI-derived sub-types — but skip for CM bindings
-    // that return non-flat types (tuples, variants). Their return TypeId was set
-    // precisely by synthesis and should not be modified by the recursive type
-    // replacement, which can produce different TypeIds for the same logical type
-    // through different cm_type_to_type_id resolution paths.
-    if !adapter.is_cm_binding
-        && let Some(return_type) = &func_info.return_type
-    {
-        let resolved = cm_interface_registry.value_type(return_type);
-        replace_wasi_derived_type_recursive(
-            adapter,
-            &resolved,
-            user_return_type,
-            cm_interface_registry,
-            wasi_package,
-            type_table,
-        );
-    }
-}
 
 /// Give the return value the caller's type, in place of the `TypeTable::I32`
 /// the binding was built with.
@@ -211,9 +35,8 @@ fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_ty
     }
 }
 
-/// Where the adapter's `CmRawCall` sits, or 0 where it makes none. Parameter
-/// lowering precedes it, so a statement before it holds a parameter's
-/// intermediate and never the result.
+/// Where the adapter's `CmRawCall` sits, or 0 where it makes none. A statement
+/// before it lowers a parameter, so it never holds the result.
 fn raw_call_stmt_index(body: &TirBlock) -> usize {
     struct FindRawCall {
         found: bool,
@@ -236,155 +59,13 @@ fn raw_call_stmt_index(body: &TirBlock) -> usize {
         .unwrap_or(0)
 }
 
-/// Replace ALL occurrences of `old_type` with `new_type` throughout the binding's
-/// body, locals, and params. Used when a param or return type is fixed up from
-/// WASI-derived types to the user code's newtype aliases.
-fn replace_type_in_adapter(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
-    if old_type == new_type {
-        return;
-    }
-    // Don't replace the return type of CM binding adapters.
-    // The return type was set by synthesis with precise TypeIds from the entry
-    // module's TypeTable. Replacing it with a TypeId computed by cm_type_to_type_id
-    // (which may produce different TypeIds for Stream/Future/Result composition)
-    // corrupts the type and causes WIR build failures.
-    if !adapter.is_cm_binding && adapter.return_type == old_type {
-        adapter.return_type = new_type;
-    }
-    // Fix params
-    for param in &mut adapter.params {
-        if param.type_id == old_type {
-            param.type_id = new_type;
-        }
-    }
-    // Fix locals
-    for lt in &mut adapter.locals {
-        if lt.type_id == old_type {
-            lt.type_id = new_type;
-        }
-    }
-    // Fix body
-    if let Some(body) = &mut adapter.body {
-        TypeReplacer {
-            old_type,
-            new_type,
-            rename: None,
-        }
-        .visit_block(body);
-    }
-}
-
-/// Like `replace_type_in_adapter` but also substitutes the old type inside a
-/// callee's own identity. This is needed when the binding body calls
-/// monomorphized functions like `List<T>::with_capacity` where `T` is a
-/// WASI-derived type that differs from the user's newtype alias: the call is
-/// keyed on the receiver its `method_info` names, so a swap that stops at the
-/// body's types leaves the call naming the type the adapter no longer uses.
-fn replace_type_in_adapter_with_names(
-    adapter: &mut TirFunction,
-    old_type: TypeId,
-    new_type: TypeId,
-    old_fq: &FqTypeName,
-    new_fq: &FqTypeName,
-) {
-    if old_type == new_type {
-        return;
-    }
-    // Don't replace return type of CM binding adapters (same as replace_type_in_adapter)
-    if !adapter.is_cm_binding && adapter.return_type == old_type {
-        adapter.return_type = new_type;
-    }
-    // Fix params
-    for param in &mut adapter.params {
-        if param.type_id == old_type {
-            param.type_id = new_type;
-        }
-    }
-    for lt in &mut adapter.locals {
-        if lt.type_id == old_type {
-            lt.type_id = new_type;
-        }
-    }
-    if let Some(body) = &mut adapter.body {
-        TypeReplacer {
-            old_type,
-            new_type,
-            rename: Some((old_fq, new_fq)),
-        }
-        .visit_block(body);
-    }
-}
-
-/// Replaces every `old_type` with `new_type` throughout an adapter body, and
-/// with `rename` set also substitutes the same pair inside each callee's own
-/// identity — needed for a monomorphized `List<T>::with_capacity` whose `T` is
-/// WASI-derived. Traversal rides `TirMutVisitor`, so the swap reaches every
-/// expression position.
-struct TypeReplacer<'a> {
-    old_type: TypeId,
-    new_type: TypeId,
-    rename: Option<(&'a FqTypeName, &'a FqTypeName)>,
-}
-
-impl TypeReplacer<'_> {
-    /// Apply the type swap (and optional rename) to a callee `FunctionRef`'s
-    /// name and monomorphization type arguments.
-    fn fix_func_ref(&self, func: &mut FunctionRef) {
-        if let Some((old_fq, new_fq)) = self.rename
-            && let Some(info) = &mut func.method_info
-        {
-            info.substitute_type(old_fq, new_fq);
-        }
-        if let Some(mono) = &mut func.monomorph_info {
-            for ta in mono
-                .impl_type_args
-                .iter_mut()
-                .chain(mono.method_type_args.iter_mut())
-            {
-                if *ta == self.old_type {
-                    *ta = self.new_type;
-                }
-            }
-        }
-    }
-}
-
-impl TirMutVisitor for TypeReplacer<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        if let TirStmtKind::Let { type_id, .. } = &mut stmt.kind
-            && *type_id == self.old_type
-        {
-            *type_id = self.new_type;
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        if expr.type_id == self.old_type {
-            expr.type_id = self.new_type;
-        }
-        match &mut expr.kind {
-            TirExprKind::Call { func, .. } => {
-                self.fix_func_ref(func);
-            }
-            TirExprKind::VariantConstruct { variant_type, .. } => {
-                if *variant_type == self.old_type {
-                    *variant_type = self.new_type;
-                }
-            }
-            _ => {}
-        }
-        self.walk_expr(expr);
-    }
-}
-
 /// Replace `old_type`, and the `TypeTable::I32` the binding used as its
 /// placeholder, with `new_type` across returns, lets, and expressions.
 fn fixup_types_in_stmts(
     stmts: &mut [TirStmt],
     old_type: TypeId,
     new_type: TypeId,
-    locals: &mut Vec<TirLocal>,
+    locals: &mut [TirLocal],
 ) {
     for stmt in stmts {
         match &mut stmt.kind {
@@ -424,10 +105,7 @@ fn fixup_types_in_stmts(
 }
 
 /// Retype a Let holding an adapter intermediate: a method-call result, or the
-/// starting value of a lifted result — `ref.null`, or the `None` an option lift
-/// seeds its accumulator with. The assignment in the `Some` arm and the `return`
-/// are retyped by their own arms, so a starting value left behind puts the two
-/// arms of one option in different GC type families.
+/// `ref.null` or `None` a lifted result starts from.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -473,76 +151,12 @@ fn fixup_variant_construct(expr: &mut TirExpr, old_type: TypeId, new_type: TypeI
     }
 }
 
-/// Recursively fix the `type_id` of an expression and its leaf nodes.
+/// Retype a returned value, and the variant it constructs.
 fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
     if expr.type_id == old_type || expr.type_id == TypeTable::I32 {
         expr.type_id = new_type;
     }
-    match &mut expr.kind {
-        TirExprKind::TupleLiteral { .. } | TirExprKind::Call { .. } | TirExprKind::Local { .. } => {
-        }
-        TirExprKind::VariantConstruct { variant_type, .. } => {
-            if *variant_type == TypeTable::I32 || *variant_type == old_type {
-                *variant_type = new_type;
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Collect local type updates from Let stmts that were modified by the rewrite.
-/// This is needed because the lower phase pre-populates `locals`, and the streaming
-/// adapter rewrite changes Let binding types from Result<..> to i32.
-pub(super) fn collect_local_type_updates(
-    block: &TirBlock,
-    locals: &[TirLocal],
-    updates: &mut Vec<(usize, TypeId)>,
-) {
-    LocalTypeUpdateCollector { locals, updates }.visit_block(block);
-}
-
-/// Collects `(local_index, new_type)` for every `Let` whose recorded binding
-/// type drifted from the slot's `TirLocal` (e.g. a streaming binding call
-/// retyped the let from `Result<…>` to `i32`). Exhaustive traversal reaches
-/// lets nested in match arms / block expressions that the previous walker
-/// skipped.
-struct LocalTypeUpdateCollector<'a> {
-    locals: &'a [TirLocal],
-    updates: &'a mut Vec<(usize, TypeId)>,
-}
-
-impl TirRefVisitor for LocalTypeUpdateCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                local_index,
-                type_id,
-                value,
-                ..
-            } => {
-                let idx = *local_index as usize;
-                if idx < self.locals.len() && self.locals[idx].type_id != *type_id {
-                    self.updates.push((idx, *type_id));
-                }
-                self.visit_expr(value);
-            }
-            // `TaskReturn` is still present this early (stripped in a later
-            // step); descend into its value without the default walk's
-            // `unreachable!` guard.
-            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        // A closure body owns a separate local-index space; descending into it
-        // would collect `Let` indices that belong to the closure and wrongly
-        // apply them to the enclosing function's `locals`.
-        if matches!(expr.kind, TirExprKind::Closure { .. }) {
-            return;
-        }
-        self.walk_expr(expr);
-    }
+    fixup_variant_construct(expr, old_type, new_type);
 }
 
 pub(super) fn rewrite_calls_in_block(
@@ -554,8 +168,6 @@ pub(super) fn rewrite_calls_in_block(
     applied_returns: &mut IndexMap<usize, TypeId>,
     callbacks: &mut Callbacks,
 ) {
-    // The stdlib-name snapshot is invariant across the whole walk; build it
-    // once here instead of once per expression node in `rewrite_expr`.
     let names = CmStdlibNames::from_type_table(&type_table.borrow());
     CallRewriteWalker {
         adapters,
@@ -569,14 +181,8 @@ pub(super) fn rewrite_calls_in_block(
     .visit_block(block);
 }
 
-/// Drives the exhaustive block / statement / generic-expression traversal for
-/// [`Self::rewrite_expr`]. The per-node rewrite logic (effect calls,
-/// resource methods, resource statics) lives in `rewrite_expr`, which
-/// this walker re-enters via `visit_expr`; the walker supplies the shared
-/// traversal plus the `Let` type-sync, the defensive `TaskReturn` descent,
-/// and `applied_returns` — the per-run record of which call-site return type
-/// each shared adapter was retyped to, so a second call site that disagrees
-/// is an ICE instead of a silent last-write-wins overwrite.
+/// Points every call of a CM import at its adapter, retyped to the call site.
+/// `applied_returns` records each adapter's retyped return across all sites.
 struct CallRewriteWalker<'a> {
     adapters: &'a IndexMap<DeclPath, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
@@ -589,45 +195,20 @@ struct CallRewriteWalker<'a> {
 }
 
 impl TirMutVisitor for CallRewriteWalker<'_> {
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { value, type_id, .. } => {
-                let old_type = value.type_id;
-                self.visit_expr(value);
-                // A streaming-binding rewrite can retype the let value (e.g. to
-                // i32); keep the binding's recorded type in sync.
-                if value.type_id != old_type {
-                    *type_id = value.type_id;
-                }
-            }
-            // `TaskReturn` is still present this early (stripped in a later
-            // step); descend into its value without the default walk's guard.
-            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
-            _ => self.walk_stmt(stmt),
-        }
-    }
-
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         self.rewrite_expr(expr);
     }
 }
 
-/// Retype a shared adapter's return from a call site, leaving a streaming
-/// adapter's WIR-level i32 return alone. Every call site of the import shares
-/// the adapter, so `applied_returns` records what each was typed to and a
-/// disagreeing site is an ICE. Keyed by the adapter's `Rc` identity, its name
-/// being a non-injective `interface_method` join.
+/// Retype a shared adapter's return from a call site. Call sites that disagree
+/// are an ICE.
 fn fixup_adapter_return_from_call_site(
     adapter: &mut TirFunction,
     adapter_key: usize,
     call_site_type: TypeId,
-    is_streaming: bool,
     type_table: &RefCell<TypeTable>,
     applied_returns: &mut IndexMap<usize, TypeId>,
 ) {
-    if is_streaming {
-        return;
-    }
     // A newtype over a CM resource (`type Trailers = Fields`) shares the base's
     // canonical binding, so normalize to the underlying resource.
     let call_site_type = {
@@ -638,7 +219,13 @@ fn fixup_adapter_return_from_call_site(
             call_site_type
         }
     };
-    if let Some(prev) = record_applied_return(applied_returns, adapter_key, call_site_type) {
+    let same_type = |a, b| {
+        let tt = type_table.borrow();
+        tt.type_key(a) == tt.type_key(b)
+    };
+    if let Some(prev) =
+        record_applied_return(applied_returns, adapter_key, call_site_type, same_type)
+    {
         let tt = type_table.borrow();
         panic!(
             "call sites disagree on the return type of shared CM binding `{}`: \
@@ -656,17 +243,16 @@ fn fixup_adapter_return_from_call_site(
     fixup_return_type_in_body(adapter, old_return_type, call_site_type);
 }
 
-/// Record `call_site_type` as the applied return for `adapter_key`. Returns
-/// `Some(prev)` — leaving the map unchanged — when a different type was already
-/// recorded (a shared-adapter conflict the caller turns into an ICE); returns
-/// `None` on the first record or a matching re-record.
+/// Record `call_site_type` as the applied return for `adapter_key`, or answer
+/// the different type already recorded, leaving it in place.
 fn record_applied_return(
     applied_returns: &mut IndexMap<usize, TypeId>,
     adapter_key: usize,
     call_site_type: TypeId,
+    same_type: impl Fn(TypeId, TypeId) -> bool,
 ) -> Option<TypeId> {
     match applied_returns.get(&adapter_key) {
-        Some(&prev) if prev != call_site_type => Some(prev),
+        Some(&prev) if !same_type(prev, call_site_type) => Some(prev),
         _ => {
             applied_returns.insert(adapter_key, call_site_type);
             None
@@ -674,26 +260,16 @@ fn record_applied_return(
     }
 }
 
-/// Retype one adapter param (and its local slot) from a call-site arg.
-/// Skipped when the param is a flat wasm type whose adapter-side type is
-/// authoritative — the arg is cast at the call site instead — and for
-/// streaming adapters, which keep their i32 params. Pass
-/// `is_gc_passthrough: true, is_streaming: false` for an unconditional
-/// retype (the `self` receiver param).
+/// Retype one adapter param and its local from a call-site arg, except a flat
+/// one, whose arg is cast instead.
 fn fixup_adapter_param_from_call_site(
     adapter: &mut TirFunction,
     param_idx: usize,
     arg_type: TypeId,
     is_gc_passthrough: bool,
-    is_streaming: bool,
 ) {
-    let Some(param) = adapter.params.get_mut(param_idx) else {
-        return;
-    };
+    let param = &mut adapter.params[param_idx];
     if param.type_id == arg_type {
-        return;
-    }
-    if is_streaming && param.type_id == TypeTable::I32 {
         return;
     }
     if !is_gc_passthrough && is_wasm_flat_type(param.type_id) {
@@ -704,77 +280,84 @@ fn fixup_adapter_param_from_call_site(
     adapter.locals[local_idx].type_id = arg_type;
 }
 
-/// Cast call-site args whose flat-typed adapter param is authoritative
-/// (e.g. an i32 literal passed where the ABI wants i64). `param_offset`
-/// skips the `self` param for method calls.
-fn cast_args_to_adapter_params(adapter: &TirFunction, args: &mut [CallArg], param_offset: usize) {
-    for (i, arg) in args.iter_mut().enumerate() {
-        let idx = i + param_offset;
-        if idx < adapter.params.len()
-            && adapter.params[idx].type_id != arg.expr.type_id
-            && is_wasm_flat_type(adapter.params[idx].type_id)
-        {
-            let target = adapter.params[idx].type_id;
-            let original = std::mem::replace(
-                &mut arg.expr,
-                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-            );
-            arg.expr = cast(original, target);
-        }
-    }
-}
-
-/// Call-site args in the binding's param shape: a GC passthrough param passes
-/// through, a bare `null` typed as its `None`. `skip_self` skips the receiver.
-fn flatten_call_site_args(
-    func_info: &CmFunctionInfo,
-    args: &[TirExpr],
-    skip_self: bool,
-    cm_interface_registry: &CmInterfaceRegistry,
-    type_table: &RefCell<TypeTable>,
+/// The args from WASI param `param_offset` on that reach an adapter param, each
+/// with its adapter param index and WASI type. A param flattening to nothing has none.
+fn adapter_params_of<'f, A>(
+    func_info: &'f CmFunctionInfo,
+    args: impl ExactSizeIterator<Item = A>,
+    param_offset: usize,
+    registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
-) -> Vec<TirExpr> {
-    let param_offset = usize::from(skip_self);
-    let mut flat = Vec::new();
-    for (i, arg) in args.iter().enumerate() {
-        let Some((_, _, param_type)) = func_info.params.get(i + param_offset) else {
-            flat.push(arg.clone());
-            continue;
-        };
-        let flat_tys = flatten_param_type(param_type, cm_interface_registry, names);
-        if flat_tys.is_empty() {
-            continue;
-        }
-        if is_gc_passthrough_param(param_type, cm_interface_registry, names) {
-            if matches!(arg.kind, TirExprKind::Null) {
-                // Use the binding's param type (from the WASI registry) to
-                // type the `None`; the source null's inner type may be unknown.
-                let none_expr = {
-                    let mut tt = type_table.borrow_mut();
-                    let option_type_id = cm_type_to_type_id(
-                        param_type,
-                        &mut tt,
-                        cm_interface_registry,
-                        &func_info.package,
-                    );
-                    option_none(option_type_id, tt.compiler_items())
-                };
-                flat.push(none_expr);
-            } else {
-                flat.push(arg.clone());
+) -> Vec<(usize, &'f Type, A)> {
+    let wasi_params = &func_info.params[param_offset..];
+    assert_eq!(
+        args.len(),
+        wasi_params.len(),
+        "a CM import call passes one arg per WASI param"
+    );
+    let mut next_param = param_offset;
+    wasi_params
+        .iter()
+        .zip(args)
+        .filter_map(|((_, _, param_type), arg)| {
+            let slots = flatten_param_type(param_type, registry, names).len();
+            if slots == 0 {
+                return None;
             }
-        } else {
             assert!(
-                flat_tys.len() == 1,
+                slots == 1 || is_gc_passthrough_param(param_type, registry, names),
                 "a direct CM import param takes one flat slot, got {param_type:?}"
             );
-            flat.push(arg.clone());
-        }
-    }
-    flat
+            next_param += 1;
+            Some((next_param - 1, param_type, arg))
+        })
+        .collect()
 }
 
 impl CallRewriteWalker<'_> {
+    fn rewrite_expr(&mut self, expr: &mut TirExpr) {
+        let adapters = self.adapters;
+        let Some((key, kind)) =
+            cm_call_key(expr, self.type_table, self.cm_interface_registry, |key| {
+                adapters.contains_key(key)
+            })
+        else {
+            self.walk_expr(expr);
+            return;
+        };
+        let adapter = &adapters[&key];
+        let func_info = self
+            .cm_interface_registry
+            .get_function(&key)
+            .expect("an adapter exists only for a registered CM function");
+        let mut args = take_call_args(expr);
+        let receiver = matches!(kind, CmCallKind::Method).then(|| args.remove(0));
+        let param_offset = usize::from(receiver.is_some());
+        self.key_callbacks(
+            func_info,
+            args.iter_mut().map(|a| &mut a.expr),
+            param_offset,
+        );
+        let args = {
+            // The adapter's name is a non-injective `interface_method` join.
+            let adapter_key = Rc::as_ptr(adapter) as usize;
+            let mut adapter = adapter.borrow_mut();
+            fixup_adapter_return_from_call_site(
+                &mut adapter,
+                adapter_key,
+                expr.type_id,
+                self.type_table,
+                self.applied_returns,
+            );
+            if let Some(receiver) = &receiver {
+                fixup_adapter_param_from_call_site(&mut adapter, 0, receiver.expr.type_id, true);
+            }
+            let adapted = self.adapt_args(&mut adapter, func_info, args, param_offset);
+            receiver.into_iter().chain(adapted).collect()
+        };
+        self.retarget_to_adapter(expr, adapter, args);
+    }
+
     /// Replace each closure `func_info` takes with its `u32` key. `args` starts at
     /// parameter `param_offset`.
     fn key_callbacks<'e>(
@@ -807,417 +390,154 @@ impl CallRewriteWalker<'_> {
         }
     }
 
-    fn rewrite_expr(&mut self, expr: &mut TirExpr) {
-        let (adapters, entry_source, cm_interface_registry, type_table, names) = (
-            self.adapters,
-            self.entry_source,
-            self.cm_interface_registry,
-            self.type_table,
+    /// Call-site args in the adapter's param shape, from WASI param
+    /// `param_offset` on: a GC param retyped to its arg, a flat one's arg cast.
+    fn adapt_args(
+        &self,
+        adapter: &mut TirFunction,
+        func_info: &CmFunctionInfo,
+        args: Vec<CallArg>,
+        param_offset: usize,
+    ) -> Vec<CallArg> {
+        let registry = self.cm_interface_registry;
+        adapter_params_of(
+            func_info,
+            args.into_iter(),
+            param_offset,
+            registry,
             self.names,
-        );
-        // World function (Phase 9): retarget the bare call to its synthesized adapter.
-        if let TirExprKind::Call {
+        )
+        .into_iter()
+        .map(|(param_idx, param_type, CallArg { expr: arg, .. })| {
+            let is_gc_passthrough = is_gc_passthrough_param(param_type, registry, self.names);
+            let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
+                // The source null's inner type may be unknown; the registry's is not.
+                let mut tt = self.type_table.borrow_mut();
+                let option_type_id =
+                    cm_type_to_type_id(param_type, &mut tt, registry, &func_info.package);
+                option_none(option_type_id, tt.compiler_items())
+            } else {
+                arg
+            };
+            fixup_adapter_param_from_call_site(adapter, param_idx, arg.type_id, is_gc_passthrough);
+            let param_type = adapter.params[param_idx].type_id;
+            let arg = if arg.type_id == param_type {
+                arg
+            } else {
+                cast(arg, param_type)
+            };
+            CallArg::new(arg, false)
+        })
+        .collect()
+    }
+
+    /// Replace `expr` with a call of `adapter` on `args`, then rewrite inside them.
+    fn retarget_to_adapter(
+        &mut self,
+        expr: &mut TirExpr,
+        adapter: &RefCell<TirFunction>,
+        mut args: Vec<CallArg>,
+    ) {
+        let func = Box::new(FunctionRef::from_resolved(
+            &adapter.borrow(),
+            self.entry_source.clone(),
+        ));
+        for arg in &mut args {
+            self.visit_expr(&mut arg.expr);
+        }
+        expr.kind = TirExprKind::Call {
             func,
             args,
-            type_args,
-            ..
-        } = &mut expr.kind
-            && cm_interface_registry.world_import_source(&func.name) == Some(&func.module_source)
-            && let Some(adapter_rc) = adapters.get(&DeclPath::from_declared(&func.name))
-        {
-            let wasi_func =
-                cm_interface_registry.get_function(&DeclPath::from_declared(&func.name));
-            if let Some(info) = wasi_func {
-                self.key_callbacks(info, args.iter_mut().map(|a| &mut a.expr), 0);
-            }
-            {
-                let adapter_key = Rc::as_ptr(adapter_rc) as usize;
-                let mut adapter = adapter_rc.borrow_mut();
-                fixup_adapter_return_from_call_site(
-                    &mut adapter,
-                    adapter_key,
-                    expr.type_id,
-                    false,
-                    type_table,
-                    self.applied_returns,
-                );
-                for (i, arg) in args.iter().enumerate() {
-                    let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                        i < f.params.len()
-                            && is_gc_passthrough_param(&f.params[i].2, cm_interface_registry, names)
-                    });
-                    fixup_adapter_param_from_call_site(
-                        &mut adapter,
-                        i,
-                        arg.expr.type_id,
-                        is_gc_passthrough,
-                        false,
-                    );
-                }
-            }
-            cast_args_to_adapter_params(&adapter_rc.borrow(), args, 0);
-            **func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
-            *type_args = vec![];
-            for arg in args {
-                self.rewrite_expr(&mut arg.expr);
-            }
-            return;
-        }
-
-        // Check if this is an effect-like Call that should be rewritten
-        let is_effect_call = matches!(&expr.kind, TirExprKind::Call { func, .. }
-            if func.module_source.clone().is_effect_like() && func.module_source.clone().interface_name().is_some());
-        if is_effect_call
-            && let TirExprKind::Call {
-                func,
-                args,
-                type_args,
-                ..
-            } = &mut expr.kind
-        {
-            let interface_name = func
-                .module_source
-                .clone()
-                .interface_name()
-                .unwrap_or_default();
-            let method_name = func.name.clone();
-            let qualified = DeclPath::from_declared(format!("{interface_name}::{method_name}"));
-
-            if let Some(adapter_rc) = adapters.get(&qualified) {
-                let wasi_func = cm_interface_registry.get_function(&qualified);
-                if let Some(info) = wasi_func {
-                    self.key_callbacks(info, args.iter_mut().map(|a| &mut a.expr), 0);
-                }
-                let is_streaming =
-                    wasi_func.is_some_and(|f| !f.is_async && f.has_streaming_param());
-
-                // Fix up binding function types from the call site
-                {
-                    let adapter_key = Rc::as_ptr(adapter_rc) as usize;
-                    let mut adapter = adapter_rc.borrow_mut();
-                    fixup_adapter_return_from_call_site(
-                        &mut adapter,
-                        adapter_key,
-                        expr.type_id,
-                        is_streaming,
-                        type_table,
-                        self.applied_returns,
-                    );
-                    for (i, arg) in args.iter().enumerate() {
-                        let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                            i < f.params.len()
-                                && is_gc_passthrough_param(
-                                    &f.params[i].2,
-                                    cm_interface_registry,
-                                    names,
-                                )
-                        });
-                        fixup_adapter_param_from_call_site(
-                            &mut adapter,
-                            i,
-                            arg.expr.type_id,
-                            is_gc_passthrough,
-                            is_streaming,
-                        );
-                    }
-                }
-
-                // Cast call-site args to match adapter param types when they differ
-                // (e.g., i32 literal → i64 for Duration newtype)
-                cast_args_to_adapter_params(&adapter_rc.borrow(), args, 0);
-
-                // For streaming adapters, cast GC ref args to i32
-                if is_streaming {
-                    for arg in args.iter_mut() {
-                        if arg.expr.type_id != TypeTable::I32 {
-                            let original = std::mem::replace(
-                                &mut arg.expr,
-                                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
-                            );
-                            arg.expr = cast(original, TypeTable::I32);
-                        }
-                    }
-                }
-
-                **func = FunctionRef::from_resolved(&adapter_rc.borrow(), entry_source.clone());
-                *type_args = vec![];
-
-                for arg in args {
-                    self.rewrite_expr(&mut arg.expr);
-                }
-                return;
-            }
-        }
-
-        // Check if this is a resource method call that should be rewritten to target a binding
-        if let Some((receiver, func, _)) = expr.kind.as_method_call()
-            && let Some(method_info) = func.method_info.clone()
-        {
-            // The adapter map is keyed by the declared `Resource::method`, the same
-            // key `EffectCallCollector` inserted under.
-            let head = {
-                let tt = type_table.borrow();
-                tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
-                    .decl_key()
-            };
-            let mut qualified = DeclPath::method_of(&head, &method_info.method_name);
-            // Resolve through type aliases (e.g., Headers -> Fields), scoped to the
-            // bundled CM namespaces.
-            if !adapters.contains_key(&qualified)
-                && let Some(source) = cm_interface_registry
-                    .find_binding_source(CmTypeKind::Newtype, head.as_decl_str())
-                && let Some(Type::Named(resolved)) =
-                    cm_interface_registry.get_newtype_by_source(source, &head)
-            {
-                let aliased =
-                    DeclPath::method_of(&DeclName::new(&resolved.name), &method_info.method_name);
-                if adapters.contains_key(&aliased) {
-                    qualified = aliased;
-                }
-            }
-            if let Some(adapter_rc) = adapters.get(&qualified) {
-                let wasi_func = cm_interface_registry.get_function(&qualified);
-                let is_streaming =
-                    wasi_func.is_some_and(|f| !f.is_async && f.has_streaming_param());
-
-                let (taken_receiver, mut taken_args) = if let TirExprKind::Call {
-                    args,
-                    has_receiver: true,
-                    ..
-                } = &mut expr.kind
-                {
-                    let mut taken = std::mem::take(args);
-                    let receiver = taken.remove(0).expr;
-                    (receiver, taken)
-                } else {
-                    unreachable!()
-                };
-                if let Some(info) = wasi_func {
-                    self.key_callbacks(info, taken_args.iter_mut().map(|a| &mut a.expr), 1);
-                }
-
-                // Fix up binding function types from the call site
-                // The binding params include self as the first param
-                {
-                    let adapter_key = Rc::as_ptr(adapter_rc) as usize;
-                    let mut adapter = adapter_rc.borrow_mut();
-                    fixup_adapter_return_from_call_site(
-                        &mut adapter,
-                        adapter_key,
-                        expr.type_id,
-                        is_streaming,
-                        type_table,
-                        self.applied_returns,
-                    );
-                    // Self param (index 0): unconditional retype from the receiver.
-                    fixup_adapter_param_from_call_site(
-                        &mut adapter,
-                        0,
-                        taken_receiver.type_id,
-                        true,
-                        false,
-                    );
-                    // Remaining params: the i-th arg corresponds to WASI param
-                    // index i+1 (WASI params include self at index 0).
-                    for (i, arg) in taken_args.iter().enumerate() {
-                        let wasi_param_idx = i + 1;
-                        let is_gc_passthrough = wasi_func.is_some_and(|f| {
-                            wasi_param_idx < f.params.len()
-                                && is_gc_passthrough_param(
-                                    &f.params[wasi_param_idx].2,
-                                    cm_interface_registry,
-                                    names,
-                                )
-                        });
-                        fixup_adapter_param_from_call_site(
-                            &mut adapter,
-                            i + 1,
-                            arg.expr.type_id,
-                            is_gc_passthrough,
-                            is_streaming,
-                        );
-                    }
-                    // Replace WASI-derived types in the body (including function names).
-                    // Skip for CM bindings — their types were set precisely by synthesis
-                    // and the recursive replacement can produce TypeId mismatches for
-                    // complex return types like [Stream<T>, Future<Result<_, E>>].
-                    if !adapter.is_cm_binding
-                        && let Some(func_info) = wasi_func
-                    {
-                        let call_args: Vec<TirExpr> =
-                            taken_args.iter().map(|a| a.expr.clone()).collect();
-                        fixup_wasi_derived_types_in_adapter(
-                            &mut adapter,
-                            func_info,
-                            &call_args,
-                            expr.type_id,
-                            type_table,
-                            cm_interface_registry,
-                            true, // skip_self: call_args excludes self
-                        );
-                    }
-                }
-
-                // Cast call-site args to match adapter param types when they differ
-                cast_args_to_adapter_params(&adapter_rc.borrow(), &mut taken_args, 1);
-
-                // Flatten call site args to match the binding's flat CM params.
-                // For method calls, self is the first param; remaining args may need flattening.
-                let taken_exprs: Vec<TirExpr> = taken_args.into_iter().map(|a| a.expr).collect();
-                let flat_taken_args = match wasi_func {
-                    Some(func_info) => flatten_call_site_args(
-                        func_info,
-                        &taken_exprs,
-                        true,
-                        cm_interface_registry,
-                        type_table,
-                        names,
-                    ),
-                    None => taken_exprs,
-                };
-
-                let mut all_args = vec![taken_receiver];
-                all_args.extend(flat_taken_args);
-
-                expr.kind = TirExprKind::Call {
-                    func: Box::new(FunctionRef::from_resolved(
-                        &adapter_rc.borrow(),
-                        entry_source.clone(),
-                    )),
-                    args: all_args
-                        .into_iter()
-                        .map(|e| CallArg::new(e, false))
-                        .collect(),
-                    type_args: vec![],
-                    has_receiver: false,
-                };
-
-                if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                    for arg in args {
-                        self.rewrite_expr(&mut arg.expr);
-                    }
-                }
-                return;
-            }
-        }
-
-        // Check if this is a resource static Call (with method_info) that should be rewritten to target a binding
-        if let TirExprKind::Call { func, .. } = &expr.kind
-            && let Some(info) = func.method_info.as_ref()
-        {
-            // Keyed as the registry declares it — `Resource::method`, no module.
-            let func_name = DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
-            if let Some(adapter_rc) = adapters.get(&func_name) {
-                let wasi_func_info = cm_interface_registry.get_function(&func_name).cloned();
-
-                let mut taken_args = if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                    std::mem::take(args)
-                        .into_iter()
-                        .map(|a| a.expr)
-                        .collect::<Vec<_>>()
-                } else {
-                    unreachable!()
-                };
-                if let Some(info) = &wasi_func_info {
-                    self.key_callbacks(info, taken_args.iter_mut(), 0);
-                }
-
-                // Fix up adapter return type and param types from the call site
-                {
-                    let adapter_key = Rc::as_ptr(adapter_rc) as usize;
-                    let mut adapter = adapter_rc.borrow_mut();
-                    fixup_adapter_return_from_call_site(
-                        &mut adapter,
-                        adapter_key,
-                        expr.type_id,
-                        false,
-                        type_table,
-                        self.applied_returns,
-                    );
-                    if let Some(func_info) = &wasi_func_info {
-                        let mut adapter_idx = 0;
-                        for (i, (_name, _, param_type)) in func_info.params.iter().enumerate() {
-                            if is_gc_passthrough_param(param_type, cm_interface_registry, names) {
-                                if let Some(arg) = taken_args.get(i) {
-                                    fixup_adapter_param_from_call_site(
-                                        &mut adapter,
-                                        adapter_idx,
-                                        arg.type_id,
-                                        true,
-                                        false,
-                                    );
-                                }
-                                adapter_idx += 1;
-                            } else {
-                                adapter_idx +=
-                                    flatten_param_type(param_type, cm_interface_registry, names)
-                                        .len();
-                            }
-                        }
-                    }
-                    // Replace WASI-derived types in the body with the user's types.
-                    // Skip for CM bindings (same reason as above).
-                    if !adapter.is_cm_binding
-                        && let Some(func_info) = &wasi_func_info
-                    {
-                        fixup_wasi_derived_types_in_adapter(
-                            &mut adapter,
-                            func_info,
-                            &taken_args,
-                            expr.type_id,
-                            type_table,
-                            cm_interface_registry,
-                            false, // skip_self: static calls have no self
-                        );
-                    }
-                }
-
-                // Flatten call site args to match the binding's flat CM params.
-                // GC passthrough types (String, List<u8>, Option<T>) are passed
-                // through as GC refs — the binding body handles lowering.
-                // Other multi-flat types are flattened here into individual i32 args.
-                let flat_call_args = if let Some(func_info) = &wasi_func_info {
-                    flatten_call_site_args(
-                        func_info,
-                        &taken_args,
-                        false,
-                        cm_interface_registry,
-                        type_table,
-                        names,
-                    )
-                } else {
-                    // No WASI function info: pass args as-is (fallback)
-                    taken_args
-                };
-
-                // Replace static Call with Call targeting the binding
-                expr.kind = TirExprKind::Call {
-                    func: Box::new(FunctionRef::from_resolved(
-                        &adapter_rc.borrow(),
-                        entry_source.clone(),
-                    )),
-                    args: flat_call_args
-                        .into_iter()
-                        .map(|e| CallArg::new(e, false))
-                        .collect(),
-                    type_args: vec![],
-                    has_receiver: false,
-                };
-
-                if let TirExprKind::Call { args, .. } = &mut expr.kind {
-                    for arg in args {
-                        self.rewrite_expr(&mut arg.expr);
-                    }
-                }
-                return;
-            }
-        }
-
-        // Recurse into sub-expressions through the shared exhaustive walk; each
-        // child re-enters `rewrite_expr` via the walker's `visit_expr`,
-        // so a rewrite-eligible call nested anywhere is still rewritten.
-        self.walk_expr(expr);
+            type_args: vec![],
+            has_receiver: false,
+        };
     }
+}
+
+fn take_call_args(expr: &mut TirExpr) -> Vec<CallArg> {
+    let TirExprKind::Call { args, .. } = &mut expr.kind else {
+        unreachable!("only a call is retargeted to an adapter");
+    };
+    std::mem::take(args)
+}
+
+/// Whether a CM import call passes its receiver apart from the args it
+/// lowers: a resource method called through one does.
+enum CmCallKind {
+    Function,
+    Method,
+}
+
+/// The registry key of the CM import `expr` calls, where `is_bound` accepts it.
+fn cm_call_key(
+    expr: &TirExpr,
+    type_table: &RefCell<TypeTable>,
+    registry: &CmInterfaceRegistry,
+    is_bound: impl Fn(&DeclPath) -> bool,
+) -> Option<(DeclPath, CmCallKind)> {
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
+    };
+    // The same-source check keeps a same-named local function from being taken
+    // for a world import.
+    let world_import = (registry.world_import_source(&func.name) == Some(&func.module_source))
+        .then(|| DeclPath::from_declared(&func.name));
+    let interface_function = func
+        .module_source
+        .interface_name()
+        .map(|interface| DeclPath::method_of(&DeclName::new(interface), &func.name));
+    if let Some(key) = world_import
+        .into_iter()
+        .chain(interface_function)
+        .find(|key| is_bound(key))
+    {
+        return Some((key, CmCallKind::Function));
+    }
+    if let Some((receiver, func, _)) = expr.kind.as_method_call()
+        && let Some(key) = cm_method_call_key(receiver, func, type_table, registry, &is_bound)
+    {
+        return Some((key, CmCallKind::Method));
+    }
+    cm_static_method_key(func)
+        .filter(|key| is_bound(key))
+        .map(|key| (key, CmCallKind::Function))
+}
+
+/// The registry key, `Resource::method`, of a `#[cm]` static call.
+fn cm_static_method_key(func: &FunctionRef) -> Option<DeclPath> {
+    let info = func.method_info.as_ref().filter(|i| i.cm_name.is_some())?;
+    Some(DeclPath::method_of(
+        &info.receiver_decl_name(),
+        &info.method_name,
+    ))
+}
+
+/// The registry key of a `#[cm]` method call that `is_bound` accepts: the
+/// receiver's declared `Resource::method`, or the one its bundled alias names.
+fn cm_method_call_key(
+    receiver: &TirExpr,
+    func: &FunctionRef,
+    type_table: &RefCell<TypeTable>,
+    registry: &CmInterfaceRegistry,
+    is_bound: impl Fn(&DeclPath) -> bool,
+) -> Option<DeclPath> {
+    let info = func.method_info.as_ref().filter(|i| i.cm_name.is_some())?;
+    // A mangled head carries the declaring module the registry never stores.
+    let head = {
+        let tt = type_table.borrow();
+        tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
+            .decl_key()
+    };
+    let qualified = DeclPath::method_of(&head, &info.method_name);
+    if is_bound(&qualified) {
+        return Some(qualified);
+    }
+    let source = registry.find_binding_source(CmTypeKind::Newtype, head.as_decl_str())?;
+    let Some(Type::Named(resolved)) = registry.get_newtype_by_source(source, &head) else {
+        return None;
+    };
+    let aliased = DeclPath::method_of(&DeclName::new(&resolved.name), &info.method_name);
+    is_bound(&aliased).then_some(aliased)
 }
 
 pub(super) fn collect_effect_calls_in_block(
@@ -1234,12 +554,8 @@ pub(super) fn collect_effect_calls_in_block(
     .visit_block(block);
 }
 
-/// Discovery pass that records every used WASI effect call and resource
-/// method call so [`super::generate_adapters`] synthesizes a binding for
-/// each. Detection fires on a call; the exhaustive
-/// `TirRefVisitor` walk reaches every other position (closures, `with`
-/// handler bodies, match arms, template interpolations, …) so an effect
-/// call nested anywhere still triggers adapter generation.
+/// Records the registry key of every CM import call, for
+/// [`super::generate_adapters`] to synthesize an adapter for each.
 struct EffectCallCollector<'a> {
     effects: &'a mut IndexSet<DeclPath>,
     cm_interface_registry: &'a CmInterfaceRegistry,
@@ -1247,96 +563,12 @@ struct EffectCallCollector<'a> {
 }
 
 impl TirRefVisitor for EffectCallCollector<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        // `TaskReturn` is still present this early (stripped in a later
-        // step); descend into its value without the default walk's guard.
-        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
-            self.visit_expr(value);
-        } else {
-            self.walk_stmt(stmt);
-        }
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
-        match &expr.kind {
-            TirExprKind::Call { func, .. } => {
-                // Sync WASI effect calls (e.g. `Environment::get_arguments`).
-                if func.module_source.clone().is_effect_like()
-                    && let Some(interface_name) = func.module_source.clone().interface_name()
-                {
-                    let qualified =
-                        DeclPath::from_declared(format!("{interface_name}::{}", func.name));
-                    if self
-                        .cm_interface_registry
-                        .get_function(&qualified)
-                        .is_some()
-                    {
-                        self.effects.insert(qualified);
-                    }
-                }
-                // WASI resource static method calls (e.g. `Response::new`).
-                // The registry keys on the declared `Resource::method`, so the
-                // receiver reaches it by its declaration name.
-                if let Some(info) = func.method_info.as_ref() {
-                    let qualified =
-                        DeclPath::method_of(&info.receiver_decl_name(), &info.method_name);
-                    if self
-                        .cm_interface_registry
-                        .get_function(&qualified)
-                        .is_some()
-                    {
-                        self.effects.insert(qualified);
-                    }
-                }
-                // World function (Phase 9): the same-source check keeps a
-                // same-named local function from being taken for the import.
-                if self.cm_interface_registry.world_import_source(&func.name)
-                    == Some(&func.module_source)
-                {
-                    self.effects
-                        .insert(DeclPath::from_declared(func.name.clone()));
-                }
-            }
-            kind if kind.as_method_call().is_some() => {
-                let Some((receiver, func, _)) = kind.as_method_call() else {
-                    return;
-                };
-                if let Some(method_info) = func.method_info.clone() {
-                    // The registry keys on the declared `Resource::method`, as
-                    // the `Call` arm above does — a mangled head carries the
-                    // declaring module the registry never stores, and would
-                    // match nothing.
-                    let head = {
-                        let tt = self.type_table.borrow();
-                        tt.impl_receiver_key(tt.peel_refs(receiver.type_id))
-                            .decl_key()
-                    };
-                    let qualified = DeclPath::method_of(&head, &method_info.method_name);
-                    if self
-                        .cm_interface_registry
-                        .get_function(&qualified)
-                        .is_some()
-                    {
-                        self.effects.insert(qualified);
-                    } else if let Some(source) = self
-                        .cm_interface_registry
-                        .find_binding_source(CmTypeKind::Newtype, head.as_decl_str())
-                        && let Some(Type::Named(resolved)) = self
-                            .cm_interface_registry
-                            .get_newtype_by_source(source, &head)
-                    {
-                        // Resolve through type aliases (e.g. Headers -> Fields).
-                        let aliased = DeclPath::method_of(
-                            &DeclName::new(&resolved.name),
-                            &method_info.method_name,
-                        );
-                        if self.cm_interface_registry.get_function(&aliased).is_some() {
-                            self.effects.insert(aliased);
-                        }
-                    }
-                }
-            }
-            _ => {}
+        let registry = self.cm_interface_registry;
+        if let Some((key, _)) = cm_call_key(expr, self.type_table, registry, |key| {
+            registry.get_function(key).is_some()
+        }) {
+            self.effects.insert(key);
         }
         self.walk_expr(expr);
     }
@@ -1348,26 +580,29 @@ mod tests {
     use crate::hashmap::IndexMap;
     use crate::tir::TypeId;
 
+    fn record(m: &mut IndexMap<usize, TypeId>, key: usize, ty: u32) -> Option<TypeId> {
+        // Slots 10 through 19 hold one type.
+        record_applied_return(m, key, TypeId(ty), |a, b| a.0 / 10 == b.0 / 10)
+    }
+
     #[test]
     fn record_applied_return_first_and_matching_are_ok() {
         let mut m: IndexMap<usize, TypeId> = IndexMap::default();
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
-        // Same key, same type re-records without conflict.
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        assert_eq!(record(&mut m, 1, 10), None);
+        // Same key, same type re-records without conflict, from any slot.
+        assert_eq!(record(&mut m, 1, 10), None);
+        assert_eq!(record(&mut m, 1, 12), None);
         // A distinct adapter key is independent.
-        assert_eq!(record_applied_return(&mut m, 2, TypeId(20)), None);
+        assert_eq!(record(&mut m, 2, 20), None);
     }
 
     #[test]
     fn record_applied_return_detects_conflict() {
         let mut m: IndexMap<usize, TypeId> = IndexMap::default();
-        assert_eq!(record_applied_return(&mut m, 1, TypeId(10)), None);
+        assert_eq!(record(&mut m, 1, 10), None);
         // Same key, different type → the earlier type is reported and the map
         // is left unchanged so the caller can ICE with both names.
-        assert_eq!(
-            record_applied_return(&mut m, 1, TypeId(11)),
-            Some(TypeId(10))
-        );
+        assert_eq!(record(&mut m, 1, 21), Some(TypeId(10)));
         assert_eq!(m.get(&1), Some(&TypeId(10)));
     }
 }

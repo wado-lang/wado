@@ -1,0 +1,34 @@
+// A static trait method on an impl whose target nests its type parameter binds
+// the parameter from the receiver, spelled or inferred.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Make {
+    fn make(n: i32) -> Self;
+}
+
+impl<T: Default> Make for Pair<List<T>, i32> {
+    fn make(n: i32) -> Self {
+        let mut a: List<T> = [];
+        for let _ of 0..<n {
+            a.push(T::default());
+        }
+        return Pair { a, b: n };
+    }
+}
+
+test "a turbofish receiver" {
+    let p = Pair::<List<String>, i32>::make(2);
+    assert p.a.len() == 2 && p.a[0] == "" && p.b == 2;
+}
+
+test "an annotated receiver" {
+    let q: Pair<List<u8>, i32> = Pair::make(3);
+    assert q.a.len() == 3 && q.a[0] == 0;
+}
+
+__DATA__
+{"test": {}}

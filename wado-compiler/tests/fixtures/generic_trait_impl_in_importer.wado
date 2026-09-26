@@ -1,0 +1,24 @@
+// A generic impl declared outside its type's module, reached through a bound in
+// either module. The call dispatches into the impl's module, not the type's.
+
+use { Pair, Tag, tag_here } from "./sub/generic_trait_impl_in_importer_decl.wado";
+
+impl<T> Tag for Pair<T, i64> {
+    fn tag(&self) -> i32 {
+        return 200 + self.b as i32;
+    }
+}
+
+fn tag_there<X: Tag>(x: &X) -> i32 {
+    return x.tag();
+}
+
+test "through a bound in either module" {
+    let q: Pair<String, i64> = Pair { a: "y", b: 4 };
+    assert q.tag() == 204;
+    assert tag_there(&q) == 204;
+    assert tag_here(&q) == 204;
+}
+
+__DATA__
+{"test": {}}

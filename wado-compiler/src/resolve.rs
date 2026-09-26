@@ -12,14 +12,13 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias, split_local_method};
+use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::SymbolTable;
+use crate::tir::EffectRef;
 use crate::token::Span;
 
-/// What a reference site refers to.
-///
-/// The three cases stay distinct on purpose: reading [`Self::Unresolved`] as a
-/// binder loses the diagnostic a name that reaches nothing deserves.
+/// What a reference site refers to. [`Self::Unresolved`] is never read as a
+/// binder: that loses the diagnostic a name reaching nothing deserves.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Resolution {
     /// A declaration.
@@ -71,6 +70,8 @@ pub struct Resolutions {
     /// Every binder the walk found taking a name that already reached
     /// something. Collected rather than emitted: this pass holds no logger.
     shadowings: Vec<Shadowing>,
+    /// The binders declared `effect`, the only ones that stand for an effect.
+    effect_binders: hashmap::IndexSet<AstId>,
 }
 
 /// What every module can see, by layer.
@@ -180,26 +181,21 @@ impl Scopes {
             let reexport_reaches = symbols
                 .get_reexport(&prelude, &name)
                 .is_some_and(|r| r.visibility.reachable_from(in_another_package));
-            if reexport_reaches
-                && let Some(sym) = symbols.lookup_in_module(&prelude, &name)
-                && let Some(def) = defs.of_ast_id(sym.defined_at)
-            {
-                surface.insert(name, def);
+            if reexport_reaches && let Some(sym) = symbols.lookup_in_module(&prelude, &name) {
+                surface.insert(name, defs.def_at(sym.defined_at));
             }
         }
         for sym in symbols.get_module_symbols(&prelude) {
-            if sym.visibility.reachable_from(in_another_package)
-                && let Some(def) = defs.of_ast_id(sym.defined_at)
-            {
-                surface.entry(sym.name.clone()).or_insert(def);
+            if sym.visibility.reachable_from(in_another_package) {
+                surface
+                    .entry(sym.name.clone())
+                    .or_insert(defs.def_at(sym.defined_at));
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
         // names the same thing in a module that imports nothing.
         for (name, id) in symbols.prelude_builtin_types() {
-            if let Some(def) = defs.of_ast_id(id) {
-                surface.entry(name.to_string()).or_insert(def);
-            }
+            surface.entry(name.to_string()).or_insert(defs.def_at(id));
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
@@ -208,18 +204,16 @@ impl Scopes {
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
                 .imports_in(module)
-                .filter_map(|(name, sym)| Some((name.to_string(), defs.of_ast_id(sym.defined_at)?)))
+                .map(|(name, sym)| (name.to_string(), defs.def_at(sym.defined_at)))
                 .collect();
             let mut own: IndexMap<String, DefId> = symbols
                 .get_module_symbols(module)
                 .into_iter()
-                .filter_map(|sym| Some((sym.name.clone(), defs.of_ast_id(sym.defined_at)?)))
+                .map(|sym| (sym.name.clone(), defs.def_at(sym.defined_at)))
                 .collect();
             for name in symbols.reexport_names(module) {
-                if let Some(sym) = symbols.lookup_in_module(module, &name)
-                    && let Some(def) = defs.of_ast_id(sym.defined_at)
-                {
-                    own.entry(name).or_insert(def);
+                if let Some(sym) = symbols.lookup_in_module(module, &name) {
+                    own.entry(name).or_insert(defs.def_at(sym.defined_at));
                 }
             }
             // Both tiers bring their cases, imports ranking first for the same
@@ -248,6 +242,7 @@ impl Resolutions {
         let scopes = Scopes::build(modules, symbols, &defs);
         let mut refs = IndexMap::default();
         let mut shadowings = Vec::new();
+        let mut effect_binders = hashmap::IndexSet::default();
         for (module_source, module) in modules {
             let mut resolver = Resolver {
                 module: module_source,
@@ -259,6 +254,7 @@ impl Resolutions {
                 scopes: &scopes,
                 refs: &mut refs,
                 shadowings: &mut shadowings,
+                effect_binders: &mut effect_binders,
                 pending_binder: None,
                 irrefutable_pattern: false,
                 lint_shadowing: !module.has_generated()
@@ -273,6 +269,7 @@ impl Resolutions {
             refs,
             scopes,
             shadowings,
+            effect_binders,
         }
     }
 
@@ -334,6 +331,48 @@ impl Resolutions {
             .copied()
     }
 
+    /// The declaration `name` refers to as written in `module`, for a spelling
+    /// no walk visits — an attribute argument. A reference site reads its own.
+    #[must_use]
+    pub fn resolve_in(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
+        self.scopes.resolve(module, name)
+    }
+
+    /// The effect the `with`-clause name at `site` refers to: a parameter for
+    /// an `effect` binder, the declaration for an `interface` or resource.
+    #[must_use]
+    pub fn effect_at(&self, site: AstId, name: &str) -> Option<EffectRef> {
+        match self.get(site) {
+            Resolution::Binder(binder) => {
+                self.effect_binders
+                    .contains(&binder)
+                    .then(|| EffectRef::Param {
+                        name: name.to_string(),
+                    })
+            }
+            Resolution::Def(def) => self.effect_decl(def),
+            Resolution::Projection(_) | Resolution::Unresolved => None,
+        }
+    }
+
+    /// The effect a `with`-clause name written in `module` refers to. Elaboration
+    /// reported one reaching none, which stands as a concrete effect of its name.
+    #[must_use]
+    pub fn effect_named(&self, effect: &ast::EffectName, module: &ModuleSource) -> EffectRef {
+        self.effect_at(effect.id, &effect.name)
+            .unwrap_or_else(|| EffectRef::unresolved(&effect.name, module))
+    }
+
+    /// `def` as an effect, when it declares an `interface` or a resource.
+    #[must_use]
+    pub fn effect_decl(&self, def: DefId) -> Option<EffectRef> {
+        let defs = self.defs();
+        defs.kind(def).is_effect().then(|| EffectRef::Concrete {
+            name: defs.name(def).to_string(),
+            module_source: defs.module(def).clone(),
+        })
+    }
+
     /// Every declaration `module` may name — what each name it can write
     /// reaches, through the one scope order: its `use` imports, then its own
     /// (including what its `pub use` re-exports reach), then the prelude's.
@@ -376,38 +415,69 @@ impl Resolutions {
         }
     }
 
-    /// The declaration an operation call names, with the operation: `E` of
-    /// `[ns::]E::op`, or of a bare `op` imported as `use { E::{op} }`.
+    /// The declaration a bound names: the referent a synthesised bound carries,
+    /// else what its site names.
     #[must_use]
-    pub fn operation_at<'a>(&'a self, ident: &'a ast::IdentExpr) -> Option<(DefId, &'a str)> {
-        if let Some(owner) = ident.owner_segment() {
-            return Some((self.declared(owner.id)?, &ident.segments.last()?.name));
+    pub fn bound_decl(&self, bound: &ast::TraitBound) -> Option<DefId> {
+        bound.resolved.or_else(|| self.declared(bound.id))
+    }
+
+    /// The declaration owning what `ident` names: `E` in `[ns::]E::op` through
+    /// its site, or the owner of an imported bare `op` through the operation's.
+    #[must_use]
+    pub fn operation_owner(&self, ident: &ast::IdentExpr) -> Option<DefId> {
+        match ident.owner_segment() {
+            Some(_) => self.owner_decl(ident),
+            None => self.defs().parent(self.declared_if_walked(ident.id)?),
         }
-        let member = self.declared_if_walked(ident.id)?;
-        let name = self.defs().name(member);
-        let operation = split_local_method(name).map_or(name, |(_, op)| op);
-        Some((self.defs().parent(member)?, operation))
+    }
+
+    /// The declaration a qualified path's owner segment names: `Color` in
+    /// `Color::Red` or `ns::Color::Red`; `None` for a bare name.
+    #[must_use]
+    pub fn owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
+        self.declared(ident.owner_segment()?.id)
+    }
+
+    /// The declaration a written type names at its head.
+    #[must_use]
+    pub fn head_decl(&self, ty: &ast::Type) -> Option<DefId> {
+        head_site(ty).and_then(|site| self.declared(site))
+    }
+
+    /// [`Self::head_decl`] for a type that may have been synthesised.
+    #[must_use]
+    pub fn head_decl_if_walked(&self, ty: &ast::Type) -> Option<DefId> {
+        head_site(ty).and_then(|site| self.declared_if_walked(site))
+    }
+
+    /// The declaration `site` names, or `unwalked`'s answer where no walk
+    /// reached it: a node the elaborator minted, which only a spelling names.
+    #[must_use]
+    pub fn declared_or(
+        &self,
+        site: Option<AstId>,
+        unwalked: impl FnOnce() -> Option<DefId>,
+    ) -> Option<DefId> {
+        match site.and_then(|site| self.walked(site)) {
+            Some(Resolution::Def(def)) => Some(def),
+            Some(Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved) => {
+                None
+            }
+            None => unwalked(),
+        }
     }
 
     /// The whole answer for a site the walk reached, `None` for a node it
-    /// never saw.
-    ///
-    /// The three cases stay apart for a caller that must tell "this names a
-    /// binder" from "this names nothing" from "no walk saw this node" — the
-    /// last being the only one for which any other source of truth is honest.
+    /// never saw — the only case for which any other source of truth is honest.
     #[must_use]
     pub fn walked(&self, site: AstId) -> Option<Resolution> {
         self.refs.get(&site).copied()
     }
 
-    /// The answer for a reference site, or `None` when the site was never
-    /// walked — a coverage hole rather than an unresolved name.
+    /// The answer for a reference site. Total: the walk reaches every site and
+    /// a name reaching nothing is [`Resolution::Unresolved`]; panics otherwise.
     #[must_use]
-    /// Total: every reference site has an answer, because the walk reaches
-    /// every one and a name that reaches nothing is [`Resolution::Unresolved`]
-    /// rather than a missing entry. A caller therefore has no "no answer" case
-    /// to write a fallback for — which is the point, since that fallback is
-    /// where a spelling used to be re-resolved.
     pub fn get(&self, site: AstId) -> Resolution {
         self.refs.get(&site).copied().unwrap_or_else(|| {
             panic!("every reference site is resolved before elaboration, {site:?} was not")
@@ -438,6 +508,7 @@ struct Resolver<'a> {
     /// Binders in scope, innermost last. A name found here is the enclosing
     /// item's parameter and no module scope is consulted for it.
     binders: Vec<IndexMap<String, AstId>>,
+    effect_binders: &'a mut hashmap::IndexSet<AstId>,
     /// Items declared inside the function body being walked, innermost block
     /// last. Filled as the walk passes each declaration, because a local item
     /// is visible only after it — like a `let`, and unlike a module-level
@@ -517,6 +588,9 @@ impl Resolver<'_> {
         }
         for p in params {
             scope.insert(p.name.clone(), p.id);
+            if p.is_effect {
+                self.effect_binders.insert(p.id);
+            }
         }
         self.binders.push(scope);
     }
@@ -702,9 +776,7 @@ impl AstVisitor for Resolver<'_> {
                 // minted spelling would be a reference the walk never saw — so
                 // the declaration node answers for itself and the bound names
                 // it instead of respelling its name.
-                if let Some(def) = self.defs.of_ast_id(t.id) {
-                    self.record(t.id, Resolution::Def(def));
-                }
+                self.record(t.id, Resolution::Def(self.defs.def_at(t.id)));
                 (&t.type_params, Some(t.id))
             }
             Item::Function(_)
@@ -999,28 +1071,30 @@ impl AstVisitor for Resolver<'_> {
                             self.module,
                             &namespace_member_alias(&ns.namespace, &ns.name),
                         )
-                        .and_then(|sym| self.defs.of_ast_id(sym.defined_at))
-                        .map_or(Resolution::Unresolved, Resolution::Def),
+                        .map_or(Resolution::Unresolved, |sym| {
+                            Resolution::Def(self.defs.def_at(sym.defined_at))
+                        }),
                 };
                 self.record(ns.id, answer);
                 for arg in &ns.args {
                     self.visit_type(arg);
                 }
             }
-            Type::Tuple(elems) => {
-                for e in elems {
-                    self.visit_type(e);
-                }
-            }
-            Type::Reference(inner) | Type::MutReference(inner) => self.visit_type(inner),
-            Type::Function(ft) => {
-                for p in &ft.params {
-                    self.visit_type(p);
-                }
-                self.visit_type(&ft.return_type);
-            }
-            Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+            Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Function(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => ast::walk_type(self, ty),
         }
+    }
+
+    /// An effect parameter, the `_` a signature's hole mints included, is a
+    /// binder; any other effect name resolves like a type name.
+    fn visit_effect_name(&mut self, effect: &ast::EffectName) {
+        let answer = self.resolve_name(&effect.name);
+        self.record(effect.id, answer);
     }
 }
 
@@ -1398,12 +1472,11 @@ mod tests {
             "pub struct Widget { b: i32 }\npub fn there(w: Widget) {}",
         );
         let mut seen: Vec<(ModuleSource, DefId)> = Vec::new();
-        for (site, answer) in &r.refs {
+        for answer in r.refs.values() {
             if let Resolution::Def(def) = answer
                 && r.defs().name(*def) == "Widget"
             {
                 seen.push((r.defs().module(*def).clone(), *def));
-                let _ = site;
             }
         }
         assert!(seen.iter().any(|(m, _)| m == &entry));

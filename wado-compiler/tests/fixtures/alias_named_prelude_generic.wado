@@ -1,0 +1,16 @@
+// An import alias spelled like a prelude generic names what it aliases, not
+// the prelude type of that spelling.
+use { Box2 as Stream, Box2 as Option } from "./sub/alias_named_prelude_generic_dep.wado";
+
+fn take(x: Stream<i32>) -> i32 {
+    return x.a;
+}
+
+fn take_opt(x: Option<i32>) -> i32 {
+    return x.a;
+}
+
+test "an alias named like a prelude generic resolves to its target" {
+    assert take(Stream::<i32> { a: 7 }) == 7;
+    assert take_opt(Option::<i32> { a: 8 }) == 8;
+}

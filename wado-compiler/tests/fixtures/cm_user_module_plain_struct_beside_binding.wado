@@ -1,0 +1,23 @@
+// A module binding a `#[cm]` import may declare plain types of its own; they
+// stay out of the Component Model registry.
+struct Point {
+    x: i32,
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: u32) -> i32;
+}
+
+export fn run() with Gfx {
+    let p = Point { x: Gfx::get_count(1) };
+    assert p.x >= 0;
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"get-count\""], "count": 1 }
+  ]
+}

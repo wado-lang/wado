@@ -2152,32 +2152,7 @@ pub struct "VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/
     is_unit: bool,
 }
 
-pub struct "IterSkip<core:prelude/string.wado/String>" {
-    pub inner: String,
-    pub remaining: i32,
-}
-
 pub struct "StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-    wire_number: i32,
-    wire_encoding: WireEncoding,
-}
-
-pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>,i32>" {
-    index: i32,
-    field_name: String,
-    wire_override: Option<String>,
-    has_default: bool,
-    is_secret: bool,
-    wire_number: i32,
-    wire_encoding: WireEncoding,
-}
-
-pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>,core:prelude/string.wado/String>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -5576,6 +5551,10 @@ pub fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::push"(self
     self.used = (used + 1);
 }
 
+pub fn "core:prelude/list.wado/List<core:prelude/string.wado/String>::with_capacity"(capacity: i32) -> List<String> {
+    return List<core:prelude/string.wado/String> { repr: core::builtin::array_new::<String>(capacity), used: 0 };
+}
+
 pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::push"(self: &mut List<[String, String]>, value: [String, String]) {
     let used: i32 = self.used;
     if (used >= self.repr."Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::len"()) {
@@ -5584,6 +5563,10 @@ pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelud
     }
     self.repr."Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
+}
+
+pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::with_capacity"(capacity: i32) -> List<[String, String]> {
+    return List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> { repr: core::builtin::array_new::<[String, String]>(capacity), used: 0 };
 }
 
 fn "core:prelude/slice.wado/Slice<u8>::internal_start"(self: &Slice<u8>) -> i32 {
@@ -5623,7 +5606,7 @@ fn "core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 336 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -5849,6 +5832,10 @@ pub fn "core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/strin
     }
 }
 
+pub fn "core:prelude/list.wado/List<u32>::with_capacity"(capacity: i32) -> List<u32> {
+    return List<u32> { repr: core::builtin::array_new::<u32>(capacity), used: 0 };
+}
+
 pub fn "core:prelude/list.wado/List<u32>::push"(self: &mut List<u32>, value: u32) {
     let used: i32 = self.used;
     if (used >= self.repr."Array<u32>::len"()) {
@@ -5857,6 +5844,43 @@ pub fn "core:prelude/list.wado/List<u32>::push"(self: &mut List<u32>, value: u32
     }
     self.repr."Array<u32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(used, value);
     self.used = (used + 1);
+}
+
+fn "core:prelude/list.wado/List<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<u32>, index: i32) -> u32 {
+    $assert_0: {
+        let $v1: i32 = self.used;
+        let $cond: bool = (index < $v1);
+        if !$cond {
+            core::builtin::cold_path();
+            core::rt::panic($tmpl: {
+                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(173);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"List::index_value", used: 17 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
+                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index: ", used: 7 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: index }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.used: ", used: 11 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: $v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                break $tmpl: $r;
+            });
+        }
+    }
+    return self.repr."Array<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
+}
+
+pub fn "core:prelude/list.wado/List<u32>::len"(self: &List<u32>) -> i32 {
+    return self.used;
 }
 
 pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self: &mut String, other: &String) {
@@ -5883,7 +5907,7 @@ fn "core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::i
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 336 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
@@ -5929,6 +5953,47 @@ pub fn "core:prelude/slice.wado/Slice<u8>::len"(self: &Slice<u8>) -> i32 {
     return (self.end - self.start);
 }
 
+pub fn "core:prelude/list.wado/List<i32>::len"(self: &List<i32>) -> i32 {
+    return self.used;
+}
+
+fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &List<[String, String]>, index: i32) -> [String, String] {
+    $assert_0: {
+        let $v1: i32 = self.used;
+        let $cond: bool = (index < $v1);
+        if !$cond {
+            core::builtin::cold_path();
+            core::rt::panic($tmpl: {
+                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(173);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"Assertion failed in ", used: 20 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"List::index_value", used: 17 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed" at ", used: 4 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/list.wado", used: 22 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
+                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: 339 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index out of bounds", used: 19 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: index < self.used\n", used: 30 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"index: ", used: 7 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: index }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.used: ", used: 11 });
+                $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                Box<i32> { value: $v1 }."i32^core:prelude/traits.wado/Inspect::inspect"(&mut $f);
+                $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\n", used: 1 });
+                break $tmpl: $r;
+            });
+        }
+    }
+    return self.repr."Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
+}
+
+pub fn "core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::len"(self: &List<[String, String]>) -> i32 {
+    return self.used;
+}
+
 fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>] {
     let rx: i32 = packed as i32;
     let tx: i32 = (packed >> 32) as i32;
@@ -5937,6 +6002,10 @@ fn "core/rt/cm_stream_pair<u8>"(packed: i64) -> [Stream<u8>, StreamWritable<u8>]
 
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(self: &mut String, other: String) {
     other."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+}
+
+fn "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<[String, String]>, index: i32) -> [String, String] {
+    return core::builtin::array_get_value::<[String, String]>(self, index);
 }
 
 pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>^core:prelude/traits.wado/ReflectVariant::members"() -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>] {
@@ -5949,6 +6018,10 @@ fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arr
 
 fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &&String, out: &mut String) {
     *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
+}
+
+fn "Array<u32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u32>, index: i32) -> u32 {
+    return core::builtin::array_get_value::<u32>(self, index);
 }
 
 fn "Array<u32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self: &mut Array<u32>, index: i32, value: u32) {
@@ -6804,20 +6877,6 @@ pub fn "$field_get$core:prelude/slice.wado/Slice<u8>$i32"(v: &Slice<u8>, index: 
     return match index {
         1 => v.start,
         2 => v.end,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>$core:prelude/string.wado/String"(v: &IterSkip<core:prelude/string.wado/String>, index: i32) -> String {
-    return match index {
-        0 => v.inner,
-        _ => core::builtin::unreachable(),
-    };
-}
-
-pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>$i32"(v: &IterSkip<core:prelude/string.wado/String>, index: i32) -> i32 {
-    return match index {
-        1 => v.remaining,
         _ => core::builtin::unreachable(),
     };
 }
@@ -11868,10 +11927,6 @@ fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/intparse.wado/Pa
     };
 }
 
-fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/String>"(v: IterSkip<core:prelude/string.wado/String>) -> IterSkip<core:prelude/string.wado/String> {
-    return IterSkip<core:prelude/string.wado/String> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.inner), remaining: v.remaining };
-}
-
 fn "$value_copy$core:prelude/range.wado/RangeExclusive<i32>"(v: RangeExclusive<i32>) -> RangeExclusive<i32> {
     return RangeExclusive<i32> { start: v.start, end: v.end };
 }
@@ -12074,6 +12129,10 @@ fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Res
 
 fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>]"(v: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>]) -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>] {
     return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/String>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>"(v.1) };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<i32>"(v: List<i32>) -> List<i32> {
+    return List<i32> { repr: core::builtin::array_clone_prefix::<i32>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$Array<u64>"(v: Array<u64>) -> Array<u64> {
@@ -12329,13 +12388,13 @@ fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
 
 fn ref_eq();
 
+fn array_new();
+
 fn array_len();
 
 fn array_get_value();
 
 fn array_set();
-
-fn array_new();
 
 fn array_copy();
 

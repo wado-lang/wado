@@ -1,0 +1,29 @@
+// A concrete and a generic inherent impl that reach no receiver in common may
+// each define `m` (finding 4).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Pair<i32, i64> {
+    fn m<U>(&self, u: U) -> String {
+        return "concrete";
+    }
+}
+
+impl<T> Pair<T, i32> {
+    fn m<U>(&self, u: U) -> String {
+        return "generic";
+    }
+}
+
+test "each receiver reaches its own block" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let q: Pair<String, i32> = Pair { a: "x", b: 2 };
+    assert p.m(true) == "concrete";
+    assert q.m(1) == "generic";
+}
+
+__DATA__
+{"test": {}}

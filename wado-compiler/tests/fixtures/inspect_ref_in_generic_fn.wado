@@ -1,0 +1,25 @@
+// A `&T` blanket call inside a generic function keeps its `&` head when the
+// function is instantiated, whatever the function's own parameters are.
+
+use { println, Stdout } from "core:cli";
+
+struct Branch { n: i32 }
+
+fn show<S>(b: &Branch, s: S) -> String {
+    return `${b:?}`;
+}
+
+fn check<S: AsStrSlice>(branches: &List<Branch>, i: i32, kind: S) {
+    assert branches[i].n > 0 || i == branches.len() - 1, "only the last may be empty";
+}
+
+export fn run() with Stdout {
+    let b = Branch { n: 1 };
+    let s: String = "k";
+    println(show(&b, &s));
+    let l: List<Branch> = [b, Branch { n: 0 }];
+    check(&l, 1, &s);
+}
+
+__DATA__
+{"stdout": "&Branch { n: 1 }\n"}

@@ -1,0 +1,18 @@
+// A plain struct imported under a primitive's name is the struct, and is
+// rejected as it is under its own name, not lowered as a `u32`.
+use { Foo as u32 } from "./sub/alias_user_struct_as_primitive_dep.wado";
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: u32) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(u32 { v: 1 });
+}
+
+__DATA__
+{
+  "compile_error": "`u32` (`Foo`) crosses the Component Model boundary in `get_count` but declares no interface; bind it with `#[cm(\"<interface>#<name>\")]`",
+  "compile_error_codes": ["CM_BOUNDARY_TYPE"]
+}

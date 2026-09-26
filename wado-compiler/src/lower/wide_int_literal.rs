@@ -137,6 +137,7 @@ pub(crate) fn create_literal(
             func: Box::new(FunctionRef {
                 module_source: ctor.module_source,
                 name: method_info.to_mangled_name(),
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             }),
@@ -285,6 +286,7 @@ fn trait_method_call(
             FunctionRef {
                 module_source,
                 name: method_info.to_mangled_name(),
+                template: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
             },

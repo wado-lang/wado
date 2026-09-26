@@ -11,11 +11,14 @@
 use std::assert_matches;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use wado_compiler::Span;
-use wado_compiler::compiler_item::SeqField;
+use wado_compiler::ast::{AstId, Visibility};
+use wado_compiler::compiler_item::{CompilerItem, Resolved, SeqField};
 use wado_compiler::const_eval::{MAX_SEQ_ELEMENTS, Value};
-use wado_compiler::hashmap::IndexSet;
+use wado_compiler::defs::DefTable;
+use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
     FunctionKind, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal, NirParam,
@@ -32,6 +35,7 @@ use wado_compiler::niri::{
     GlobalFieldEnv, Interpreter, Lattice, is_ctfe_eligible,
 };
 use wado_compiler::primitive::PrimitiveType;
+use wado_compiler::symbol::{StructSymbol, SymbolKind, SymbolTable};
 use wado_compiler::tir::{EffectRef, TypeId, TypeTable};
 
 /// A struct type for a fixture.
@@ -3690,28 +3694,28 @@ fn seq_lit(table: &mut TypeTable, type_id: TypeId, bytes: Vec<u8>) -> Build {
     container_lit(type_id, packed_array(bytes, array_ty), used)
 }
 
-/// Register the container items `materialize_seq_via` identifies by, and the
-/// `Array<u8>` the literal it writes names. A bare table has neither, and the
-/// compiler's own has both.
-fn register_seq_containers(table: &mut TypeTable) {
+/// Declare `String`, `List` and `Array<u8>` as the compiler's own table has
+/// them, for `materialize_seq_via` to identify by. Returns the `String` type.
+fn register_seq_containers(table: &mut TypeTable) -> TypeId {
     table.make_builtin_array(TypeTable::U8);
+    let mut symbols = SymbolTable::new();
     for (item, name) in [
-        (wado_compiler::compiler_item::CompilerItem::String, "String"),
-        (wado_compiler::compiler_item::CompilerItem::List, "List"),
+        (CompilerItem::String, "String"),
+        (CompilerItem::List, "List"),
     ] {
-        // A compiler item names a declaration, so the fixture makes one: intern
-        // the struct, bind it to a declaring node, and register the item
-        // against that same node. Registering a node nothing is bound to leaves
-        // `is_string` / `is_list` answering no, which is what
-        // `is_seq_container` asks.
-        let decl = wado_compiler::ast::AstId::fresh();
-        let ty = fixture_struct(table, name, ModuleSource::default());
-        table.register_decl_type(decl, ty);
+        let decl = symbols.define(
+            &ModuleSource::default(),
+            AstId::fresh(),
+            name,
+            SymbolKind::Struct(StructSymbol { fields: vec![] }),
+            Visibility::Public,
+            None,
+        );
         table
             .compiler_items_mut()
             .register(
                 item,
-                wado_compiler::compiler_item::Resolved::Struct {
+                Resolved::Struct {
                     module_source: ModuleSource::default(),
                     name: name.to_string(),
                     decl,
@@ -3719,6 +3723,8 @@ fn register_seq_containers(table: &mut TypeTable) {
             )
             .expect("a struct item takes a struct");
     }
+    table.attach_defs(Arc::new(DefTable::build(&IndexMap::default(), &symbols)));
+    table.make_compiler_struct(CompilerItem::String)
 }
 
 #[test]
@@ -3727,8 +3733,7 @@ fn a_constant_string_call_result_becomes_a_literal() {
     // the exit writes that container back as the literal the lower phase emits
     // for a source string — instead of discarding it for not being a scalar.
     let mut table = TypeTable::new();
-    register_seq_containers(&mut table);
-    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
+    let string_ty = register_seq_containers(&mut table);
     let greeting = make_pure_fn(
         "greeting",
         vec![],
@@ -3770,8 +3775,7 @@ fn a_container_still_copying_its_contents_becomes_a_literal_once() {
     // literal, which is the same node kind it admits, so a second pass finding
     // more to do would keep the fixed-point loop reporting changes forever.
     let mut table = TypeTable::new();
-    register_seq_containers(&mut table);
-    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
+    let string_ty = register_seq_containers(&mut table);
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let clone_id = next_test_func_id();
     let builtins = ctfe_builtin_map(clone_id, CtfeBuiltin::ArrayClonePrefix);
@@ -4175,8 +4179,7 @@ fn a_container_the_frame_never_filled_stays_an_allocation() {
     // Materializing it would write the reservation back as an empty literal,
     // trading a capacity the source asked for against nothing.
     let mut table = TypeTable::new();
-    register_seq_containers(&mut table);
-    let string_ty = fixture_struct(&mut table, "String", ModuleSource::default());
+    let string_ty = register_seq_containers(&mut table);
     let array_ty = table.make_builtin_array(TypeTable::U8);
     let new_id = next_test_func_id();
     let builtins = ctfe_builtin_map(new_id, CtfeBuiltin::ArrayNew);
@@ -5241,7 +5244,7 @@ fn make_pure_fn_stmts(
         is_dead: false,
         name: name.to_string(),
         module_source: ModuleSource::default(),
-        visibility: wado_compiler::ast::Visibility::Public,
+        visibility: Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),

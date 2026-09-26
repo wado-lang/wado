@@ -7,8 +7,9 @@
 use crate::common::{InMemoryHost, WEB_PACKAGE, block_on, web_host, world_surface};
 use wado_compiler::compiler_host::CompilerHost;
 use wado_compiler::semantics::{semantics, semantics_for_world};
-use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
+use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text, emit_wit_text_from};
 use wado_compiler::world_registry::WorldSurface;
+use wado_compiler::{CompilerOptions, OptLevel, compile_with_options};
 
 /// Emit WIT for `source` under `scope` targeting `world_fq`, feeding the
 /// emitter the world surface as the CLI does.
@@ -165,12 +166,66 @@ fn wide_int_export_emits_its_prelude_record() {
     );
 }
 
+/// Emit WIT as `wado wit` does: from the subset one compile retains.
+fn emit_compiled(source: &str, scope: WitScope) -> String {
+    let host = InMemoryHost::new();
+    let options = CompilerOptions {
+        opt_level: OptLevel::O2,
+        retain_wir: true,
+        unused_diagnostics: false,
+        embed_wit_contract: Some(wit_emit::wit_contract(
+            Some("wasi:cli/command"),
+            None,
+            Some("entry"),
+        )),
+        ..Default::default()
+    };
+    let result = block_on(compile_with_options(
+        source,
+        &host,
+        Some("entry.wado"),
+        options,
+    ))
+    .expect("compiles");
+    let snapshot = result
+        .wit_emit_snapshot
+        .expect("the WIT subset is retained");
+    let surface = result
+        .wir_package
+        .map(|pkg| pkg.world_surface)
+        .unwrap_or_default();
+    emit_wit_text_from(snapshot.input(), &WitEmitOptions { scope }, &surface)
+        .expect("emit_wit_text_from failed")
+}
+
+/// A program's own `#[cm]` binding reaches `wado wit` as it reaches the
+/// component: the imported interface carries the function it binds.
+#[test]
+fn user_cm_binding_emits_its_imported_function() {
+    const SOURCE: &str = r#"
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: u32) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(1);
+}
+"#;
+    for text in [
+        emit_compiled(SOURCE, WitScope::Full),
+        emit_world(SOURCE, WitScope::Full, "wasi:cli/command"),
+    ] {
+        assert!(text.contains("get-count: func(x: u32) -> s32;"), "\n{text}");
+    }
+}
+
 #[test]
 fn cli_program_emits_faithful_world_imports_and_run_export() {
     // A `run` entry with `with Stdout` maps to the standard `wasi:cli/run`
     // export and imports the used `wasi:cli/stdout` interface by FQ.
     let text = emit(
-        "use { println } from \"core:cli\";\n\
+        "use { println, Stdout } from \"core:cli\";\n\
          export fn run() with Stdout { println(\"hi\"); }",
     );
     assert!(text.contains("world command {"), "\n{text}");
@@ -322,7 +377,7 @@ fn full_scope_inlines_referenced_interfaces_and_reparses() {
     // `full` scope inlines the referenced WASI interfaces as nested packages,
     // producing a self-describing document that re-parses without a registry.
     let text = emit_scope(
-        "use { println } from \"core:cli\";\n\
+        "use { println, Stdout } from \"core:cli\";\n\
          export fn run() with Stdout { println(\"hi\"); }",
         WitScope::Full,
     );

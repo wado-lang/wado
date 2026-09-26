@@ -1,0 +1,77 @@
+// A call written in a generic body is dispatched again at each instance: where
+// an impl for that one instantiation exists, it wins over the generic one the
+// body was checked against (coherence Rule 1).
+
+struct Box_<T> {
+    v: T,
+}
+
+trait Tag with () {
+    fn tag(&self) -> String;
+}
+
+impl<T> Tag for Box_<T> {
+    fn tag(&self) -> String {
+        return "generic";
+    }
+}
+
+impl Tag for Box_<i32> {
+    fn tag(&self) -> String {
+        return "concrete";
+    }
+}
+
+impl<T> Box_<T> {
+    fn label(&self) -> String {
+        return self.tag();
+    }
+}
+
+fn label_of<T>(boxed: &Box_<T>) -> String {
+    return boxed.tag();
+}
+
+trait Kind with () {
+    fn kind() -> String;
+}
+
+impl<T> Kind for Box_<T> {
+    fn kind() -> String {
+        return "generic";
+    }
+}
+
+impl Kind for Box_<i32> {
+    fn kind() -> String {
+        return "concrete";
+    }
+}
+
+fn kind_of<T>() -> String {
+    return Box_::<T>::kind();
+}
+
+test "a method body instantiated at the concrete impl's instance calls it" {
+    let boxed = Box_ { v: 1 };
+    assert boxed.label() == "concrete";
+}
+
+test "a free generic body instantiated there calls it too" {
+    let boxed = Box_ { v: 1 };
+    assert label_of(&boxed) == "concrete";
+}
+
+test "another instance keeps the generic impl" {
+    let boxed = Box_ { v: "s" };
+    assert boxed.label() == "generic";
+    assert label_of(&boxed) == "generic";
+}
+
+test "a static call in a generic body reaches the concrete impl too" {
+    assert kind_of::<i32>() == "concrete";
+    assert kind_of::<String>() == "generic";
+}
+
+__DATA__
+{"test": {}}

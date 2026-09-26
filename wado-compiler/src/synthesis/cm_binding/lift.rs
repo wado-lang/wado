@@ -28,8 +28,7 @@ use super::types::{
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
-use crate::name::FqTypeName;
-use crate::name::LocalMethodName;
+use crate::name::{FqTypeName, LocalMethodName, UNIT_TYPE_NAME};
 use crate::tir::CallArg;
 use crate::tir::FunctionRef;
 use crate::tir::StructDef;
@@ -139,7 +138,11 @@ fn synthesize_lift_inner(
                     .type_table
                     .borrow_mut()
                     .make_compiler_struct(CompilerItem::String);
-                return internal_call("memory_to_gc_string", vec![ptr, len], string_type_id);
+                return internal_call(
+                    CompilerItem::MemoryToGcString.attr_name(),
+                    vec![ptr, len],
+                    string_type_id,
+                );
             }
             match named_name {
                 "i32" | "u32" => builtin_call("i32_load", vec![addr], TypeTable::I32),
@@ -159,9 +162,7 @@ fn synthesize_lift_inner(
                 }
                 "char" => builtin_call("i32_load", vec![addr], TypeTable::CHAR),
                 // Unit occupies no memory, so there is nothing to load.
-                TypeTable::UNIT_TYPE_NAME => {
-                    TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
-                }
+                UNIT_TYPE_NAME => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
                 _ => {
                     // A non-CM reference falls through to the i32-handle default.
                     if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {
@@ -748,7 +749,7 @@ pub(super) fn synthesize_lift_list(
     // a second `TypeId` for shared stdlib records, producing a mismatched
     // `List<T>`. Otherwise (nested lists) fall back to rebuilding from the
     // element type.
-    let (elem_type_id, array_type_id, list_head) = {
+    let (elem_type_id, array_type_id, list_head, with_capacity, push) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (list_tid, elem_tid) = if let Some(pair) =
             override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem)))
@@ -760,7 +761,14 @@ pub(super) fn synthesize_lift_list(
             (lt, elem)
         };
         let list_head = tt.compiler_struct_fq_name(CompilerItem::List);
-        (elem_tid, list_tid, list_head)
+        let items = tt.compiler_items();
+        (
+            elem_tid,
+            list_tid,
+            list_head,
+            items.require_template(CompilerItem::ListWithCapacity),
+            items.require_template(CompilerItem::ListPush),
+        )
     };
 
     let buffer = CmBuffer::read(&addr, elem_size, elem_align, next_local, stmts, locals);
@@ -774,6 +782,7 @@ pub(super) fn synthesize_lift_list(
             &list_head,
             "with_capacity",
             ModuleSource::list(),
+            with_capacity,
             vec![elem_type_id],
             vec![buffer.count_ref()],
             array_type_id,
@@ -807,6 +816,7 @@ pub(super) fn synthesize_lift_list(
         &list_head,
         "push",
         ModuleSource::list(),
+        push,
         vec![lifted_elem],
         TypeTable::UNIT,
     )));
@@ -843,7 +853,7 @@ pub(super) fn synthesize_lift_map(
     let pair_size = layout.size;
     let pair_align = layout.align;
 
-    let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign) = {
+    let (map_type_id, key_tid, value_tid, map_head, map_source, index_assign, templates) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (map_type_id, key_tid, value_tid) = if let Some(tid) = override_map_ty
             && let Some((key_tid, value_tid)) = tt.as_tree_map(tid)
@@ -863,6 +873,10 @@ pub(super) fn synthesize_lift_map(
         let method = items
             .method_name(CompilerItem::TreeMapIndexAssign)
             .to_string();
+        let templates = (
+            items.require_template(CompilerItem::TreeMapNew),
+            items.require_template(CompilerItem::TreeMapIndexAssign),
+        );
         (
             map_type_id,
             key_tid,
@@ -870,8 +884,10 @@ pub(super) fn synthesize_lift_map(
             map_head,
             map_source,
             (index_assign, method),
+            templates,
         )
     };
+    let (new_template, index_assign_template) = templates;
 
     let buffer = CmBuffer::read(&addr, pair_size, pair_align, next_local, stmts, locals);
 
@@ -884,6 +900,7 @@ pub(super) fn synthesize_lift_map(
             &map_head,
             "new",
             map_source.clone(),
+            new_template,
             vec![key_tid, value_tid],
             vec![],
             map_type_id,
@@ -934,6 +951,7 @@ pub(super) fn synthesize_lift_map(
             FunctionRef {
                 module_source: map_source,
                 name: mangled,
+                template: Some(index_assign_template),
                 monomorph_info: None,
                 method_info: Some(info),
             },
