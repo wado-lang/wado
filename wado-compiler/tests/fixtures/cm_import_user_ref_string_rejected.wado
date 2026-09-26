@@ -1,0 +1,14 @@
+// A reference crosses a `#[cm]` import only as a borrowed resource handle; a
+// reference to a string has no Component Model representation.
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#put")]
+    fn put(s: &String);
+}
+
+export fn run() with Sink {
+    let s = "hello";
+    Sink::put(&s);
+}
+
+__DATA__
+{"compile_error": "import function `put`: a reference crosses a Component Model import only as a borrowed resource handle, and `&String` borrows no resource"}

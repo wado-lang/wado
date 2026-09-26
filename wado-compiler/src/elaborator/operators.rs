@@ -5,9 +5,21 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::hashmap::IndexMap;
+<<<<<<< HEAD
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
+||||||| 2c9c5304996
+use crate::name::{FqTypeName, LocalMethodName, MethodName};
+=======
+use crate::name::{LocalMethodName, MethodName};
+>>>>>>> origin/main
 use crate::primitive::PrimitiveType;
+<<<<<<< HEAD
 use crate::tir::{FunctionRef, MonomorphInfo, ResolvedType, TypeId, TypeTable};
+||||||| 2c9c5304996
+use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+=======
+use crate::tir::{FunctionRef, ResolvedType, TemplateId, TypeId, TypeTable};
+>>>>>>> origin/main
 use crate::token::Span;
 use crate::unparse::binary_op_str;
 
@@ -21,7 +33,12 @@ use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
+<<<<<<< HEAD
 use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
+||||||| 2c9c5304996
+use crate::elaborator::trait_env::ImplHeader;
+=======
+>>>>>>> origin/main
 use crate::elaborator::types::RequiredTrait;
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::name::FqTraitName;
@@ -1025,20 +1042,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys
                         .trait_impl_base_lookup(&struct_name, expr_type, trait_);
                 let resolved = self
-                    .resolve_trait_method_for_op(
-                        &struct_name,
-                        expr_type,
-                        trait_,
-                        &trait_name,
-                        method_name,
-                        None,
-                    )
+                    .resolve_trait_method_for_op(&struct_name, expr_type, trait_, method_name, None)
                     .or_else(|| {
                         self.resolve_trait_method_for_op(
                             &lookup_name,
                             lookup_type_id,
                             trait_,
-                            &trait_name,
                             method_name,
                             None,
                         )
@@ -1193,6 +1202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
+<<<<<<< HEAD
         // Mirror `resolve_index`'s one-level reference peel before the tuple
         // check.
         let base = self.tysys.pointee_of(recv_type).unwrap_or(recv_type);
@@ -1202,6 +1212,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::GenericInstance { def, .. }
                 if TypeTable::is_tuple_type(table.def_name(*def))
         )
+||||||| 2c9c5304996
+        let table = self.tysys.type_table.borrow();
+        // Mirror `resolve_index`'s one-level reference peel before the tuple
+        // check.
+        let base = match table.get(recv_type) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => recv_type,
+        };
+        matches!(
+            table.get(base),
+            ResolvedType::GenericInstance { def, .. }
+                if TypeTable::is_tuple_type(table.def_name(*def))
+        )
+=======
+        let base = self.tysys.through_ref(recv_type);
+        self.tysys.type_table.borrow().is_tuple(base)
+>>>>>>> origin/main
     }
 
     /// Whether `*operand = v` is a valid l-value: it is, unless `operand`
@@ -1277,7 +1304,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
 
+<<<<<<< HEAD
             let base_type_id = self.tysys.pointee_of(indexed_type).unwrap_or(indexed_type);
+||||||| 2c9c5304996
+            // Get base type (unwrap reference if needed)
+            let base_type_id = match self.tysys.type_table.borrow().get(indexed_type) {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                _ => indexed_type,
+            };
+=======
+            // Get base type (unwrap reference if needed)
+            let base_type_id = self.tysys.through_ref(indexed_type);
+>>>>>>> origin/main
 
             // Check for IndexAssign trait implementation
             // Arrays now use IndexAssign trait like other types
@@ -1346,6 +1384,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let func = FunctionRef {
                             module_source: trait_info.impl_module_source.clone(),
                             name: mangled_method_name,
+                            template: Some(
+                                self.tysys
+                                    .signatures
+                                    .declared_template(trait_info.method_def),
+                            ),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 receiver,
@@ -1682,20 +1725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         let trait_ = self.tysys.compiler_trait_def(item)?;
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_trait_name(item)
-            .to_string();
-        self.resolve_trait_method_for_op(
-            struct_name,
-            lookup_type_id,
-            trait_,
-            &trait_name,
-            method,
-            rhs,
-        )
+        self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, rhs)
     }
 
     /// A comparison of a reference with a value, answered by an impl written
@@ -1907,7 +1937,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // match. For a concrete parameter (e.g. `rhs: u32` on `Shl::shl`)
             // the expected type is the parameter type itself.
             let expected = if wrap {
+<<<<<<< HEAD
                 let referent = self.tysys.pointee_of(param_ty).unwrap_or(param_ty);
+||||||| 2c9c5304996
+                let referent = match self.tysys.type_table.borrow().get(param_ty) {
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+                    _ => param_ty,
+                };
+=======
+                let referent = self.tysys.through_ref(param_ty);
+>>>>>>> origin/main
                 // A trait spelled with an argument (`Add<Feet>`) declares a
                 // referent of its own. A bare `Add` declares `&Self`, which a
                 // variadic `impl Ord for [..T]` resolves to a shape the operand
@@ -1924,6 +1963,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             wrap_flags.push(wrap);
         }
 
+<<<<<<< HEAD
         let function_ref = match self.ref_impl_of(resolved) {
             Some((kind, header)) => self.ref_impl_function(kind, header, resolved, receiver),
             None => self.operator_impl_function(resolved, receiver),
@@ -2031,6 +2071,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             || FqTypeName::binder(&resolved.impl_name),
             |id| self.tysys.fq_receiver_head(id),
         );
+||||||| 2c9c5304996
+        // The receiver is named by the type whose impl matched; a type-param
+        // receiver names no declaration, so it stays a binder.
+        let receiver_fq = resolved.impl_type_id.map_or_else(
+            || FqTypeName::binder(&resolved.impl_name),
+            |id| self.tysys.fq_receiver_head(id),
+        );
+=======
+        let receiver_fq = resolved.receiver.clone();
+>>>>>>> origin/main
         let mangled_method_name = MethodName::format_local(
             &receiver_fq,
             Some(&resolved.trait_name),
@@ -2052,13 +2102,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the link the lookup was made on — peeling to the base would send an
         // impl written on the newtype to the base's module.
         let defs = self.tysys.resolutions.defs();
-        let concrete_impl = resolved.impl_def.filter(|def| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(def)
-                .is_some_and(ImplHeader::is_concrete)
-        });
+        let concrete_impl = resolved
+            .impl_def
+            .filter(|def| self.tysys.trait_env.impl_headers[def].is_concrete());
         let module_source = match concrete_impl {
             Some(def) => defs.module(def).clone(),
             None => self
@@ -2068,9 +2114,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     |def| defs.module(def).clone(),
                 ),
         };
+<<<<<<< HEAD
         FunctionRef {
+||||||| 2c9c5304996
+        let function_ref = FunctionRef {
+=======
+        let template = match resolved.method_def {
+            _ if resolved.is_type_param_receiver => None,
+            Some(def) => Some(match resolved.impl_def {
+                Some(block) => TemplateId::in_block(def, block),
+                None => self.tysys.signatures.declared_template(def),
+            }),
+            None => Some(TemplateId::derived(module_source.clone(), &method_info)),
+        };
+        let function_ref = FunctionRef {
+>>>>>>> origin/main
             module_source,
             name: mangled_method_name,
+            template,
             monomorph_info: None,
             method_info: Some(method_info),
         }

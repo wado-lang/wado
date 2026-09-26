@@ -646,13 +646,6 @@ impl ModuleSource {
         }
     }
 
-    /// [`Self::of_primitive`] for a caller holding the type's name; `None`
-    /// where the name is not a primitive's.
-    #[must_use]
-    pub fn of_primitive_name(name: &str) -> Option<Self> {
-        PrimitiveType::from_name(name).map(Self::of_primitive)
-    }
-
     /// Convert to the legacy `Vec<String>` module path representation.
     ///
     /// This is the module's **portable qualifier** — the identity used to
@@ -704,6 +697,13 @@ impl ModuleSource {
     #[must_use]
     pub fn is_binding(&self) -> bool {
         matches!(self, Self::Binding { .. })
+    }
+
+    /// Whether this is Wado source that binds its CM types through `#[cm]`, as a
+    /// dependency or Kiln-generated module does and the stdlib or a Wasm asset does not.
+    #[must_use]
+    pub fn is_program(&self) -> bool {
+        !self.is_core() && !self.is_binding() && !self.is_wasm_asset()
     }
 
     /// Whether the entry package owns this module: the entry point and the

@@ -1,11 +1,11 @@
 //! `Reflect` and its five kinds: the `Trait::<T>::method()` form
 //! `resolve_static_method_call` routes to `T`'s synthesized `T^Trait::method`.
 
-use crate::ast;
+use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -46,7 +46,6 @@ struct ReflectSubject {
 #[derive(Clone, Copy)]
 pub(super) struct ScalarReflectSpec {
     kind: ScalarReflectKind,
-    on_bound: OnBoundTrait,
     trait_item: CompilerItem,
     value_method_item: CompilerItem,
     from_method_item: CompilerItem,
@@ -62,7 +61,6 @@ pub(super) struct ScalarReflectSpec {
 impl ScalarReflectSpec {
     const ENUM: Self = Self {
         kind: ScalarReflectKind::Enum,
-        on_bound: OnBoundTrait::ReflectEnum,
         trait_item: CompilerItem::ReflectEnum,
         value_method_item: CompilerItem::ReflectEnumDiscriminant,
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
@@ -73,7 +71,6 @@ impl ScalarReflectSpec {
     };
     const FLAGS: Self = Self {
         kind: ScalarReflectKind::Flags,
-        on_bound: OnBoundTrait::ReflectFlags,
         trait_item: CompilerItem::ReflectFlags,
         value_method_item: CompilerItem::ReflectFlagsBits,
         from_method_item: CompilerItem::ReflectFlagsFromBits,
@@ -101,8 +98,7 @@ impl ScalarReflectSpec {
 }
 
 /// `ReflectStruct`'s member names, resolved once through the compiler-item
-/// registry so a stdlib rename flows through both the `is_*_trait_call`
-/// predicate and the resolver that dispatches on them.
+/// registry.
 struct StructMethods {
     members: String,
     from_fields: String,
@@ -336,7 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if method == methods.members {
             self.payload_members_ty(CompilerItem::ReflectStructField, self_ty, &field_types)
         } else {
-            unreachable!("is_reflect_trait_call admits only the trait's methods")
+            unreachable!("reflect_dispatch_of admits only the trait's methods")
         };
 
         let func_ref = self.tysys.reflect_func_ref(
@@ -357,7 +353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// self-in-args, so only the callee and the argument list vary.
     fn record_reflect_dispatch(
         &mut self,
-        call_id: ast::AstId,
+        call_id: AstId,
         function_ref: FunctionRef,
         param_is_mut: Vec<bool>,
     ) {
@@ -561,30 +557,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let func_ref = FunctionRef {
             module_source: self.current_module_source.clone(),
             name: method_info.to_mangled_name(),
+            template: None,
             monomorph_info: None,
             method_info: Some(method_info),
         };
         self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
     }
 
-    /// The `Assoc = [..F]` pack binding on `T`'s bound of the given trait
-    /// (`Fields` on `ReflectStruct`, `Cases` on `ReflectVariant`), resolved in the
-    /// current scope (where `F` is the projected pack). `None` when `T`
-    /// carries no such bound.
+    /// The `Assoc = [..F]` pack binding on `T`'s bound of the reflection trait
+    /// `trait_`, resolved in the current scope. `None` when `T` carries none.
     fn reflect_pack_bound_ty(
         &mut self,
         type_param_name: &str,
-        reflect_trait: CompilerItem,
+        trait_: CompilerItem,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        let trait_ = self.tysys.compiler_trait_def(reflect_trait)?;
+        let trait_def = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_def(trait_)?;
         let pack_ast = self
             .annotate_ctx
             .trait_ctx
             .type_param_bounds
             .get(type_param_name)?
             .iter()
-            .filter(|b| self.tysys.resolutions.declared(b.id) == Some(trait_))
+            .filter(|b| self.tysys.resolutions.bound_decl(b) == Some(trait_def))
             .flat_map(|b| &b.assoc_types)
             .filter(|assoc| assoc.name == assoc_name)
             .find_map(|assoc| match &assoc.ty {
@@ -614,32 +614,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .reflect_structure_head(self_ty);
-        let (base_name, module_source, type_args) =
-            match self.tysys.type_table.borrow().get(self_ty).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(self_ty)
-                        .expect("a nominal type names a declaration");
-                    (name, module_source, type_args)
-                }
-                ResolvedType::Struct { .. } => {
-                    let (name, module_source) = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .nominal_head(self_ty)
-                        .expect("a nominal type names a declaration");
-                    (name, module_source, Vec::new())
-                }
-                _ => {
-                    let name = self.tysys.type_table.borrow().type_name(self_ty);
-                    let module_source = self.declaring_module_of(&name);
-                    (name, module_source, Vec::new())
-                }
-            };
+        let (base_name, module_source, type_args) = {
+            let tt = self.tysys.type_table.borrow();
+            let (name, module_source) = tt.nominal_head(self_ty)?;
+            (
+                name,
+                module_source,
+                tt.nominal_type_args(self_ty).unwrap_or_default(),
+            )
+        };
         let info = self
             .tysys
             .type_def(self_ty)
@@ -782,63 +765,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// Whether `prefix::method` names a `ReflectStruct` trait-qualified static call
-    /// (`ReflectStruct::<T>::type_name` / `members`). `prefix` must resolve to the
-    /// compiler's `ReflectStruct` trait *in this scope* — `classify_on_bound_trait`
-    /// applies the same module check `on_bound` dispatch uses, so a user type or
-    /// trait that happens to be named `ReflectStruct` is not hijacked. `method` is
-    /// matched through the compiler-item registry so a stdlib rename flows through.
-    fn is_reflect_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
+    /// The resolver `Trait::method` routes to, the trait being what the head at
+    /// `site` names; `None` unless `method` is a member of a reflection trait.
+    pub(super) fn reflect_dispatch_of(&self, site: AstId, method: &str) -> Option<ReflectDispatch> {
+        let trait_ = self
             .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectStruct)
-        {
-            return false;
-        }
-        StructMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
-    }
-
-    /// The resolver `prefix::method` routes to, or `None` when the prefix names
-    /// no reflection trait in this scope.
-    pub(super) fn reflect_dispatch_of(
-        &self,
-        prefix: &str,
-        method: &str,
-    ) -> Option<ReflectDispatch> {
-        if self.is_reflect_root_trait_call(prefix, method) {
-            return Some(ReflectDispatch::Root);
-        }
-        if self.is_reflect_trait_call(prefix, method) {
-            return Some(ReflectDispatch::Struct);
-        }
-        if self.is_reflect_variant_trait_call(prefix, method) {
-            return Some(ReflectDispatch::Variant);
-        }
-        if self.is_reflect_template_trait_call(prefix, method) {
-            return Some(ReflectDispatch::Template);
-        }
-        [ScalarReflectSpec::ENUM, ScalarReflectSpec::FLAGS]
-            .into_iter()
-            .find(|spec| self.is_reflect_scalar_trait_call(*spec, prefix, method))
-            .map(ReflectDispatch::Scalar)
-    }
-
-    /// Whether `prefix::method` names one of `Reflect::<T>`'s members —
-    /// `type_name` or `wire_name_policy`. Same scope discipline as
-    /// [`Self::is_reflect_trait_call`].
-    fn is_reflect_root_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::Reflect)
-        {
-            return false;
-        }
+            .resolutions
+            .declared(site)
+            .and_then(|def| self.tysys.on_bound_of(def))?;
         let tt = self.tysys.type_table.borrow();
-        let items = tt.compiler_items();
-        method == items.method_name(CompilerItem::ReflectTypeName)
-            || method == items.method_name(CompilerItem::ReflectWireNamePolicy)
+        let (dispatch, declares) = match trait_ {
+            OnBoundTrait::Reflect => {
+                let items = tt.compiler_items();
+                let declares = method == items.method_name(CompilerItem::ReflectTypeName)
+                    || method == items.method_name(CompilerItem::ReflectWireNamePolicy);
+                (ReflectDispatch::Root, declares)
+            }
+            OnBoundTrait::ReflectStruct => (
+                ReflectDispatch::Struct,
+                StructMethods::resolve(&tt).declares(method),
+            ),
+            OnBoundTrait::ReflectVariant => (
+                ReflectDispatch::Variant,
+                VariantMethods::resolve(&tt).declares(method),
+            ),
+            OnBoundTrait::ReflectTemplate => (
+                ReflectDispatch::Template,
+                TemplateMethods::resolve(&tt).declares(method),
+            ),
+            OnBoundTrait::ReflectEnum => (
+                ReflectDispatch::Scalar(ScalarReflectSpec::ENUM),
+                ScalarReflectSpec::ENUM.methods(&tt).declares(method),
+            ),
+            OnBoundTrait::ReflectFlags => (
+                ReflectDispatch::Scalar(ScalarReflectSpec::FLAGS),
+                ScalarReflectSpec::FLAGS.methods(&tt).declares(method),
+            ),
+            OnBoundTrait::ReflectNewtype
+            | OnBoundTrait::Eq
+            | OnBoundTrait::Ord
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::WireNumbered
+            | OnBoundTrait::Default
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect => return None,
+        };
+        declares.then_some(dispatch)
     }
 
     /// Resolve a `Reflect::<T>` member to `T^Reflect::<method>`. The root states
@@ -904,32 +878,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.record_reflect_dispatch(static_call.id, func_ref, Vec::new());
 
         result
-    }
-
-    /// Whether `prefix::method` names a `ReflectVariant` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_variant_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectVariant)
-        {
-            return false;
-        }
-        VariantMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
-    }
-
-    /// Whether `prefix::method` names a `ReflectTemplate` trait-qualified static
-    /// call. Same scope discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_template_trait_call(&self, prefix: &str, method: &str) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(OnBoundTrait::ReflectTemplate)
-        {
-            return false;
-        }
-        TemplateMethods::resolve(&self.tysys.type_table.borrow()).declares(method)
     }
 
     /// Resolve a `ReflectTemplate::<T>::method()` trait-qualified static call to
@@ -1109,7 +1057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else if method == methods.cases {
             self.payload_members_ty(CompilerItem::ReflectVariantCase, self_ty, &payloads)
         } else {
-            unreachable!("is_reflect_variant_trait_call admits only the trait's methods")
+            unreachable!("reflect_dispatch_of admits only the trait's methods")
         };
 
         let func_ref = self.tysys.reflect_func_ref(
@@ -1170,7 +1118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             members_ty
         } else {
-            unreachable!("is_reflect_variant_trait_call admits only the trait's methods")
+            unreachable!("reflect_dispatch_of admits only the trait's methods")
         };
 
         let args_valid = if is_discriminant {
@@ -1199,11 +1147,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn map_bound_pack(
         &mut self,
         type_param_name: &str,
-        reflect_trait: CompilerItem,
+        trait_: CompilerItem,
         assoc_name: &str,
         elem: impl FnOnce(&mut TypeTable, &PackHead) -> TypeId,
     ) -> Option<TypeId> {
-        let pack_tuple = self.reflect_pack_bound_ty(type_param_name, reflect_trait, assoc_name)?;
+        let pack_tuple = self.reflect_pack_bound_ty(type_param_name, trait_, assoc_name)?;
         let mut tt = self.tysys.type_table.borrow_mut();
         let elems = tt.as_tuple(pack_tuple)?;
         let head = elems.iter().find_map(|&e| match tt.get(e) {
@@ -1232,11 +1180,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
-        reflect_trait: CompilerItem,
+        trait_: CompilerItem,
         assoc_name: &str,
         member_struct_item: CompilerItem,
     ) -> Option<TypeId> {
-        self.map_bound_pack(type_param_name, reflect_trait, assoc_name, |tt, head| {
+        self.map_bound_pack(type_param_name, trait_, assoc_name, |tt, head| {
             let def = tt.require_compiler_item_def(member_struct_item);
             let elem_param = tt.make_type_param(head.name.clone(), head.index);
             tt.make_generic_instance(def, vec![self_ty, elem_param])
@@ -1257,26 +1205,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // binds through the pack.
             |tt, head| tt.make_option(head.ty),
         )
-    }
-
-    /// Whether `prefix::method` names a member of the scalar-kind reflection
-    /// trait `spec` describes (`ReflectEnum` / `ReflectFlags`). Same scope
-    /// discipline as [`Self::is_reflect_trait_call`].
-    fn is_reflect_scalar_trait_call(
-        &self,
-        spec: ScalarReflectSpec,
-        prefix: &str,
-        method: &str,
-    ) -> bool {
-        if self
-            .tysys
-            .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(spec.on_bound)
-        {
-            return false;
-        }
-        spec.methods(&self.tysys.type_table.borrow())
-            .declares(method)
     }
 
     /// Resolve a `ReflectEnum` / `ReflectFlags` `::<T>::method()` static call to
@@ -1328,18 +1256,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // The subject is an enum or a flags type — `subject_matches` just said
-        // so — and its `ResolvedType` carries the declaration, so the module
-        // comes off that rather than off the spelling.
         let module_source = self
             .tysys
             .type_table
             .borrow()
-            .nominal_def(structure_ty)
-            .map_or_else(
-                || self.declaring_module_of(&self_name),
-                |def| self.tysys.resolutions.defs().module(def).clone(),
-            );
+            .nominal_head(structure_ty)
+            .expect("an enum or flags type names its declaration")
+            .1;
         let Some(return_type) =
             self.check_reflect_scalar_args(spec, self_ty, &self_name, &method, static_call, ctx)
         else {
@@ -1363,15 +1286,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .fq_base_type_name(structure_ty);
+        let method_info = LocalMethodName::new(receiver, Some(trait_name), method.clone());
         let func_ref = FunctionRef {
-            module_source,
-            name: MethodName::format_local(&receiver, Some(&trait_name), &method),
-            monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                receiver,
-                Some(trait_name.clone()),
-                method.clone(),
+            template: Some(tir::TemplateId::derived(
+                module_source.clone(),
+                &method_info,
             )),
+            module_source,
+            name: method_info.to_mangled_name(),
+            monomorph_info: None,
+            method_info: Some(method_info),
         };
         self.record_reflect_dispatch(static_call.id, func_ref, param_is_mut);
 
@@ -1473,7 +1397,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Some(self.tysys.type_table.borrow_mut().make_option(self_ty))
         } else {
-            unreachable!("is_reflect_scalar_trait_call admits only the trait's methods")
+            unreachable!("reflect_dispatch_of admits only the trait's methods")
         }
     }
 
@@ -1496,14 +1420,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !subject_is_type_param {
             return Some(self.scalar_concrete_members_ty(spec, self_ty));
         }
-        let trait_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_items()
-            .trait_name(spec.trait_item)
-            .to_string();
         let Some(members_ty) = self.scalar_members_bound_ty(spec, self_ty, self_name) else {
+            let trait_name = self
+                .tysys
+                .type_table
+                .borrow()
+                .compiler_items()
+                .trait_name(spec.trait_item)
+                .to_string();
             let method = &static_call.method;
             let assoc = spec.members_assoc;
             let _ = self.emit(TypeError::UnknownFunction {
@@ -1535,62 +1459,72 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return None;
         }
-        let kind = self.tysys.on_bound_of(trait_)?;
-        if kind == OnBoundTrait::ReflectTemplate {
-            let holes = self.tysys.reflect_template_holes(subject)?;
-            return match assoc_name {
-                REFLECT_HOLES_ASSOC => Some(self.tysys.type_table.borrow_mut().make_tuple(holes)),
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectTemplateHole,
-                    subject,
-                    &holes,
-                )),
-                _ => None,
-            };
-        }
-        if kind == OnBoundTrait::ReflectStruct {
-            let members = self.reflect_struct_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_FIELD_TYPES_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_FIELD_SLOTS_ASSOC => {
-                    let mut tt = self.tysys.type_table.borrow_mut();
-                    let slots: Vec<TypeId> = members.iter().map(|&m| tt.make_option(m)).collect();
-                    Some(tt.make_tuple(slots))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectStructField,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
-        if kind == OnBoundTrait::ReflectVariant {
-            let members = self.reflect_variant_subject(subject)?.member_types;
-            return match assoc_name {
-                REFLECT_CASE_PAYLOADS_ASSOC => {
-                    Some(self.tysys.type_table.borrow_mut().make_tuple(members))
-                }
-                REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
-                    CompilerItem::ReflectVariantCase,
-                    subject,
-                    &members,
-                )),
-                _ => None,
-            };
-        }
+        let spec = match self.tysys.on_bound_of(trait_)? {
+            OnBoundTrait::ReflectTemplate => {
+                let holes = self.tysys.reflect_template_holes(subject)?;
+                return match assoc_name {
+                    REFLECT_HOLES_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(holes))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectTemplateHole,
+                        subject,
+                        &holes,
+                    )),
+                    _ => None,
+                };
+            }
+            OnBoundTrait::ReflectStruct => {
+                let members = self.reflect_struct_subject(subject)?.member_types;
+                return match assoc_name {
+                    REFLECT_FIELD_TYPES_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                    }
+                    REFLECT_FIELD_SLOTS_ASSOC => {
+                        let mut tt = self.tysys.type_table.borrow_mut();
+                        let slots: Vec<TypeId> =
+                            members.iter().map(|&m| tt.make_option(m)).collect();
+                        Some(tt.make_tuple(slots))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectStructField,
+                        subject,
+                        &members,
+                    )),
+                    _ => None,
+                };
+            }
+            OnBoundTrait::ReflectVariant => {
+                let members = self.reflect_variant_subject(subject)?.member_types;
+                return match assoc_name {
+                    REFLECT_CASE_PAYLOADS_ASSOC => {
+                        Some(self.tysys.type_table.borrow_mut().make_tuple(members))
+                    }
+                    REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
+                        CompilerItem::ReflectVariantCase,
+                        subject,
+                        &members,
+                    )),
+                    _ => None,
+                };
+            }
+            OnBoundTrait::ReflectEnum => ScalarReflectSpec::ENUM,
+            OnBoundTrait::ReflectFlags => ScalarReflectSpec::FLAGS,
+            OnBoundTrait::Eq
+            | OnBoundTrait::Ord
+            | OnBoundTrait::Serialize
+            | OnBoundTrait::Deserialize
+            | OnBoundTrait::WireNumbered
+            | OnBoundTrait::Default
+            | OnBoundTrait::Reflect
+            | OnBoundTrait::ReflectNewtype
+            | OnBoundTrait::Ref
+            | OnBoundTrait::RefMut
+            | OnBoundTrait::Inspect => return None,
+        };
         if assoc_name != REFLECT_MEMBERS_ASSOC {
             return None;
         }
-        let spec = if kind == OnBoundTrait::ReflectEnum {
-            ScalarReflectSpec::ENUM
-        } else if kind == OnBoundTrait::ReflectFlags {
-            ScalarReflectSpec::FLAGS
-        } else {
-            return None;
-        };
         let subject_ty = self.tysys.type_table.borrow().get(subject).clone();
         if !spec.subject_matches(&subject_ty) {
             return None;
@@ -1645,11 +1579,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The mapped member pack `[..M<T>]` — the type of `members()` under a
-    /// `T: Trait<Members = [..C]>` bound. Unlike
-    /// [`Self::payload_member_pack_bound_ty`] the member carries no payload
-    /// param, so the mapped element is a constant `M<T>` and the bound pack
-    /// serves only to source the arity.
+    /// The mapped member pack `[..M<T>]`, the type of `members()` under a
+    /// `T: Trait<Members = [..C]>` bound; the bound pack sources only the arity.
     fn scalar_members_bound_ty(
         &mut self,
         spec: ScalarReflectSpec,
@@ -1685,6 +1616,7 @@ impl TypeSystem {
             Some(trait_name.clone()),
             method.to_string(),
         );
+        let template = tir::TemplateId::derived(module_source.clone(), &method_info);
         let monomorph_info = if type_args.is_empty() {
             None
         } else {
@@ -1703,6 +1635,7 @@ impl TypeSystem {
         FunctionRef {
             module_source,
             name: method_info.to_mangled_name(),
+            template: Some(template),
             monomorph_info,
             method_info: Some(method_info),
         }

@@ -411,14 +411,6 @@ struct SpanCollector {
 }
 
 impl SpanCollector {
-    /// An effect named in a `with` clause reads as its declaration does:
-    /// `effect E` is a type, and every mention of `E` is the same name.
-    fn mark_effect_names(&mut self, effects: &[(AstId, Span)]) {
-        for (_, span) in effects {
-            self.spans.insert(span.start, token_type::TYPE);
-        }
-    }
-
     /// Every key of an attribute object and of the objects nested in it, under
     /// an array element as much as under another key.
     fn mark_attr_keys(&mut self, object: &ast::AttrObject) {
@@ -468,7 +460,6 @@ impl AstVisitor for SpanCollector {
         for param in &func.params {
             self.spans.mark_param(param.id);
         }
-        self.mark_effect_names(&func.effect_ids);
         self.spans.mark_method_name(func.name_span.start);
         ast::walk_function(self, func);
     }
@@ -519,10 +510,6 @@ impl AstVisitor for SpanCollector {
             for assoc in &bound.assoc_types {
                 self.spans.insert(assoc.span.start, token_type::TYPE);
             }
-            // A closure bound's own `with` clause: `F: fn() with Stdout`.
-            if let Some(signature) = &bound.fn_signature {
-                self.mark_effect_names(&signature.effect_ids);
-            }
         }
         ast::walk_trait_bounds(self, bounds);
     }
@@ -540,14 +527,19 @@ impl AstVisitor for SpanCollector {
                 self.spans.insert(t.name_span.start, token_type::TYPE);
             }
             Type::TypePackSpread(_, span) => self.spans.insert(span.start, token_type::TYPE),
-            Type::Function(f) => self.mark_effect_names(&f.effect_ids),
-            Type::Tuple(_)
+            Type::Function(_)
+            | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::Infer(_)
             | Type::Error(_) => {}
         }
         ast::walk_type(self, ty);
+    }
+
+    /// An effect reads as its declaration does: `effect E` is a type.
+    fn visit_effect_name(&mut self, effect: &ast::EffectName) {
+        self.spans.insert(effect.span.start, token_type::TYPE);
     }
 }
 

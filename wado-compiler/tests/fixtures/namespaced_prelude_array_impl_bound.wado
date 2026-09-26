@@ -1,0 +1,25 @@
+// An impl on `prelude::Array<i32>` is the builtin array's, so a bound on it
+// holds for what `to_array` returns.
+use prelude from "core:prelude";
+
+trait First with () {
+    fn first(&self) -> i32;
+}
+
+impl First for prelude::Array<i32> {
+    fn first(&self) -> i32 {
+        return self.len();
+    }
+}
+
+fn first_of<T: First>(t: &T) -> i32 {
+    return t.first();
+}
+
+test "a namespaced Array impl satisfies a bound" {
+    let l: List<i32> = [7];
+    assert first_of(&l.to_array()) == 1;
+}
+
+__DATA__
+{"test": {}}

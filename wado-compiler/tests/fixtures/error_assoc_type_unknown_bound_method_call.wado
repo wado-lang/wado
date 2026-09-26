@@ -1,0 +1,17 @@
+// A method call through an associated type whose bound names no trait reports
+// the bound, rather than crashing on the bound rebuilt for the projection.
+trait Holder {
+    type Item: Nope;
+    fn get(&self) -> Self::Item;
+}
+
+fn use_it<T: Holder>(t: &T) -> i32 {
+    return t.get().size();
+}
+
+test {
+    assert true;
+}
+
+__DATA__
+{"compile_error": ":4:16: analysis error: 'Nope' is not a declared trait"}

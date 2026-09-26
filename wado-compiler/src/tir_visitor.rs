@@ -1,8 +1,5 @@
-//! Visitor traits for TIR traversal: `TirMutVisitor` for mutation (the
-//! monomorphizer, lowering), `TirRefVisitor` for analysis, and `TirOptVisitor`
-//! for mutation with change tracking (optimization and synthesis), which also
-//! covers the pre-lowering forms `TaskReturn`, `VariadicForOf`, `WithHandler`,
-//! `Resume` and `TemplateString`. Plus a few shared TIR queries.
+//! TIR traversal: `TirMutVisitor` to mutate, `TirRefVisitor` to analyse,
+//! `TirOptVisitor` to mutate with change tracking. Plus a few shared TIR queries.
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{
@@ -74,8 +71,8 @@ pub trait TirMutVisitor {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
             }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
+            TirStmtKind::TaskReturn { value } => {
+                self.visit_expr(value);
             }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
                 self.visit_expr(iterable);
@@ -357,8 +354,8 @@ pub trait TirRefVisitor {
                 self.visit_pattern(pattern);
                 self.visit_expr(value);
             }
-            TirStmtKind::TaskReturn { .. } => {
-                unreachable!("TaskReturn should be eliminated by synthesis before this phase");
+            TirStmtKind::TaskReturn { value } => {
+                self.visit_expr(value);
             }
             TirStmtKind::VariadicForOf { iterable, body, .. } => {
                 self.visit_expr(iterable);
@@ -803,7 +800,10 @@ pub fn stmt_has_break_to(label: &str, stmt: &TirStmt) -> bool {
             block_has_break_to(label, body)
         }
         TirStmtKind::Continue => false,
-        TirStmtKind::TaskReturn { .. } | TirStmtKind::VariadicForOf { .. } => false,
+        TirStmtKind::TaskReturn { value } => expr_has_break_to(label, value),
+        TirStmtKind::VariadicForOf { iterable, body, .. } => {
+            expr_has_break_to(label, iterable) || block_has_break_to(label, body)
+        }
     }
 }
 

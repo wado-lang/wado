@@ -1,0 +1,23 @@
+// A sync import taking a stream handle keeps that handle's i32 at the call
+// site, and only that: the u64 and f64 beside it reach the import whole.
+
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#send")]
+    #[cm_params("data", "offset", "scale")]
+    fn send(data: Stream<u8>, offset: u64, scale: f64);
+}
+
+export fn run() with Sink {
+    let [rx, tx] = Stream::<u8>::new();
+    Sink::send(rx, 0x1_0000_0002, 2.5);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"wasi:demo/sink@0.1.0\""], "count": 1 },
+    { "contains": ["i64.const 4294967298"] },
+    { "contains": ["f64.const 0x1.4p+1"] }
+  ]
+}

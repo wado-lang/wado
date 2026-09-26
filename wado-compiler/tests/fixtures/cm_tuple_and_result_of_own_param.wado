@@ -1,0 +1,37 @@
+// An `own<t>` held by a tuple and by a result, as import parameters: each
+// element is the resource's own handle, not an `own` of that handle.
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+    #[cm("wasi:demo/gfx@0.1.0#label")]
+    #[cm_params("entry")]
+    fn label(entry: [Device, u32]);
+    #[cm("wasi:demo/gfx@0.1.0#settle")]
+    #[cm_params("outcome")]
+    fn settle(outcome: Result<Device, u32>);
+}
+
+export fn run() with (Gfx, Device) {
+    Gfx::label([Gfx::get_device(), 7]);
+    Gfx::settle(Result::<Device, u32>::Ok(Gfx::get_device()));
+    Gfx::settle(Result::<Device, u32>::Err(1));
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(own "], "count": 1 },
+    { "contains": ["(own 0)"], "count": 1 },
+    { "contains": ["(tuple 1 u32)"], "count": 1 },
+    { "contains": ["(result 1 (error u32))"], "count": 1 }
+  ]
+}

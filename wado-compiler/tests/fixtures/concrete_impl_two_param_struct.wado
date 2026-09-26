@@ -1,0 +1,124 @@
+// Trait impls on concrete instantiations of a two-parameter struct: each
+// operator, a method call, and a bound find the impl for their instantiation.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl Add for Pair<i32, i64> {
+    type Output = Pair<i32, i64>;
+    fn add(&self, rhs: &Pair<i32, i64>) -> Pair<i32, i64> {
+        return Pair { a: self.a + rhs.a, b: self.b + rhs.b };
+    }
+}
+
+impl Add for Pair<i64, i32> {
+    type Output = Pair<i64, i32>;
+    fn add(&self, rhs: &Pair<i64, i32>) -> Pair<i64, i32> {
+        return Pair { a: self.a * rhs.a, b: self.b * rhs.b };
+    }
+}
+
+impl Neg for Pair<i32, i64> {
+    type Output = Pair<i32, i64>;
+    fn neg(&self) -> Pair<i32, i64> {
+        return Pair { a: -self.a, b: -self.b };
+    }
+}
+
+impl Shl for Pair<i32, i64> {
+    type Output = Pair<i32, i64>;
+    fn shl(&self, n: u32) -> Pair<i32, i64> {
+        return Pair { a: self.a << n as i32, b: self.b };
+    }
+}
+
+impl Eq for Pair<i32, i64> {
+    fn eq(&self, other: &Pair<i32, i64>) -> bool {
+        return self.a == other.a;
+    }
+}
+
+impl Ord for Pair<i32, i64> {
+    fn cmp(&self, other: &Pair<i32, i64>) -> Ordering {
+        return other.a.cmp(&self.a);
+    }
+}
+
+trait Tag with () {
+    fn tag(&self) -> i32;
+}
+
+impl Tag for Pair<i32, i64> {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Tag for Pair<i64, i32> {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn tag_of<T: Tag>(t: &T) -> i32 {
+    return t.tag();
+}
+
+fn sum<T: Add<Output = T>>(x: T, y: T) -> T {
+    return x + y;
+}
+
+test "operator" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let r = p + p;
+    assert r.a == 2;
+    assert r.b == 4;
+}
+
+test "operator picks the instantiation" {
+    let q: Pair<i64, i32> = Pair { a: 3, b: 4 };
+    let r = q + q;
+    assert r.a == 9;
+    assert r.b == 16;
+}
+
+test "compound assignment" {
+    let mut p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    p += p;
+    assert p.b == 4;
+}
+
+test "unary and shift" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    assert (-p).b == -2;
+    assert (p << 3).a == 8;
+}
+
+test "comparison" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let q: Pair<i32, i64> = Pair { a: 2, b: 2 };
+    assert p == Pair { a: 1, b: 5 };
+    assert p != q;
+    assert q < p;
+}
+
+test "method call" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let q: Pair<i64, i32> = Pair { a: 1, b: 2 };
+    assert p.tag() == 1;
+    assert q.tag() == 2;
+}
+
+test "bound" {
+    let p: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    let q: Pair<i64, i32> = Pair { a: 3, b: 4 };
+    assert tag_of(&p) == 1;
+    assert tag_of(&q) == 2;
+    assert sum(p, p).b == 4;
+    assert sum(q, q).a == 9;
+}
+
+__DATA__
+{"test": {}}

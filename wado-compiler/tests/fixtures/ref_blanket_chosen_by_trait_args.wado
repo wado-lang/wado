@@ -1,0 +1,24 @@
+// `Eq` has two `&T` blankets, `Eq for &T` and `Eq<String> for &T`; a generic
+// call reaching one through a reference picks by the trait's arguments, whether
+// the reference is shared, `mut`, or behind another reference.
+use { println, Stdout } from "core:cli";
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+fn not_unit<S: AsStrSlice>(s: S) -> bool {
+    return s != String::from("()");
+}
+
+export fn run() with Stdout {
+    let mut a: String = "()";
+    let mut x: List<i32> = [1, 2];
+    let mut z: List<i32> = [3];
+    let ra = &a;
+    println(`${same(&a, &a)} ${same(&x, &x)} ${same(&x, &z)} ${not_unit(&a)} ${not_unit(&"x")}`);
+    println(`${same(&mut x, &mut z)} ${not_unit(&mut a)} ${same(&ra, &ra)}`);
+}
+
+__DATA__
+{"stdout": "true true false false true\nfalse false true\n"}

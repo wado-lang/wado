@@ -39,6 +39,8 @@ _Fields are private._
 
 #### `pub fn new() -> TreeMap<K, V>`
 
+`#[compiler_item("tree_map_new")]`
+
 Creates a new empty TreeMap.
 
 #### `pub fn len(&self) -> i32`

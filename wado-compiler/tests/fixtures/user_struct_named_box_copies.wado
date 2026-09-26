@@ -1,0 +1,13 @@
+// A user struct named `Box` is a value like any other struct: assignment
+// copies it, where the compiler's own `Box<T>` shares.
+struct Box<T> {
+    v: T,
+}
+
+test "a user Box is copied on assignment" {
+    let a = Box::<i32> { v: 1 };
+    let mut b = a;
+    b.v = 2;
+    assert a.v == 1;
+    assert b.v == 2;
+}

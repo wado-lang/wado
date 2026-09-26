@@ -366,7 +366,9 @@ fn remap_locals_in_stmt(stmt: &mut TirStmt, remap: &IndexMap<u32, u32>) {
         TirStmtKind::Expr(expr) => remap_locals_in_expr(expr, remap),
         TirStmtKind::Return { value: Some(v) } => remap_locals_in_expr(v, remap),
         TirStmtKind::Return { value: None } => {}
-        TirStmtKind::TaskReturn { value } => remap_locals_in_expr(value, remap),
+        TirStmtKind::TaskReturn { .. } => {
+            unreachable!("TaskReturn should be eliminated by synthesis before this phase")
+        }
         TirStmtKind::If {
             condition,
             then_block,

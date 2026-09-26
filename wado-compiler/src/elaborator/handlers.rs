@@ -11,9 +11,9 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
-use crate::defs::{DefId, DefKind};
+use crate::defs::DefId;
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
-use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
+use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
 use crate::name::{DeclName, FqTraitName};
 
@@ -97,66 +97,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         effect_ty: &ast::Type,
         ctx: &mut FunctionContext,
     ) {
-        // Resolve the effect name. Use `resolve_effects` so that LSP
-        // jump-to-def edges are recorded just like in `with (E1, E2)`
-        // function signatures.
         let interface_name = self.get_type_name(effect_ty);
-        let effect_ids = effect_ty
-            .id()
-            .map(|id| vec![(id, effect_ty.span())])
-            .unwrap_or_default();
-        let mut resolved_effects = self.resolve_effects(&[interface_name], &effect_ids);
-        let effect = resolved_effects.pop();
-        // The `with` clause names the effect in this module, and the walk
-        // answered for that site — so the declaration comes from the site
-        // rather than from asking a module about a spelling.
-        let effect_decl = effect_ty
-            .id()
-            .and_then(|id| self.tysys.resolutions.declared(id));
+        let site = effect_ty.id();
+        let effect = self.effect_named_at(site, effect_ty.span(), &interface_name);
+        let effect_decl = self.tysys.resolutions.head_decl(effect_ty);
         // An effect declares its own parameter defaults, and a `with` clause
         // writes no argument for them.
         let effect_trait =
             effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
 
-        // The name must point at an actual effect or resource
-        // declaration, not a regular trait or arbitrary identifier. Both
-        // kinds are installable as handlers (see WEP 2026-04-11): the
-        // `with` clause keeps the same syntax, only the dispatch wrapper
-        // shape differs (resources don't declare themselves as effects on
-        // the wrapper). Param effects (generic `<effect E>`) are still
-        // rejected for installation: you cannot install a handler for a
-        // polymorphic effect parameter.
-        if let Some(eff) = &effect {
-            match eff {
-                EffectRef::Concrete { name, .. } => {
-                    // Ask the declaration what it is, rather than building a
-                    // key and probing two indexes to find out which it belongs
-                    // to.
-                    let handles = effect_decl.is_some_and(|def| {
-                        matches!(
-                            self.tysys.resolutions.defs().kind(def),
-                            DefKind::Effect | DefKind::Resource
-                        )
-                    });
-                    if !handles {
-                        let _ = self.emit(TypeError::NotAnEffect {
-                            name: name.clone(),
-                            span: effect_ty.span(),
-                        });
-                    }
-                }
-                EffectRef::Param { name } => {
-                    let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
-                        name: name.clone(),
-                        span: effect_ty.span(),
-                    });
-                }
-            }
+        // Both an effect and a resource are installable as handlers (see WEP
+        // 2026-04-11); a polymorphic effect parameter is not.
+        if let Some(EffectRef::Param { name }) = &effect {
+            let _ = self.emit(TypeError::GenericEffectParamNotInstallable {
+                name: name.clone(),
+                span: effect_ty.span(),
+            });
         }
 
         // Resolve the handler value expression in the outer scope.
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.tysys.handler_underlying_type(handler);
+        // A handler's `impl Effect for T` is indexed by `T`, not `&T`.
+        let handler_type = self.tysys.through_ref(handler);
 
         // Trait/resource type args at this `with E => h do` site (e.g.
         // `[u8]` for `with Stream<u8> => &mut s do`). Resolved from the
@@ -239,19 +201,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source: eff_module,
         }) = &effect
         {
-            // Name the effect by its declaration, so `use { Random as Rng }`
-            // records the entry a plain import would.
-            let declared =
-                effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
-            let name = declared
-                .as_ref()
-                .map(|fq| fq.base_name().to_string())
-                .unwrap_or_else(|| eff_name.clone());
-            let module_source = declared
-                .as_ref()
-                .and_then(|fq| fq.module())
-                .cloned()
-                .unwrap_or_else(|| eff_module.clone());
             self.record_handler_binding_facts(
                 binding.id,
                 HandlerBindingFacts {
@@ -259,8 +208,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         impl_def: effect_decl.and_then(|trait_| {
                             self.effect_impl_block(handler_type, trait_, &trait_type_args)
                         }),
-                        name,
-                        module_source,
+                        name: eff_name.clone(),
+                        module_source: eff_module.clone(),
                         trait_type_args,
                     }],
                     bundle_group: None,
@@ -283,7 +232,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         next_bundle_group: &mut u32,
     ) {
         let handler = self.resolve_expr(&binding.handler, ctx, None);
-        let handler_type = self.tysys.handler_underlying_type(handler);
+        let handler_type = self.tysys.through_ref(handler);
 
         let resolved = self.tysys.type_table.borrow().get(handler_type).clone();
         match resolved {
@@ -375,25 +324,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Everything the block says about itself it says in its own frame:
             // `impl Stream<u8> for Ctx` names `Stream` and resolves `u8` where
             // the block was written, which is not where it is installed.
-            let Some(trait_ref) = self
-                .tysys
-                .trait_env
-                .impl_headers
-                .get(&impl_def)
-                .and_then(ImplHeader::trait_def)
-            else {
+            let Some(trait_ref) = self.tysys.trait_env.impl_headers[&impl_def].trait_def() else {
                 continue;
             };
-            // The dispatch synthesis pass treats an effect and a resource alike.
-            if !self.tysys.is_effect_or_resource_decl(trait_ref) {
+            if !self.tysys.resolutions.defs().kind(trait_ref).is_effect() {
                 continue;
             }
             let type_args = self
                 .tysys
                 .signatures
                 .impl_sig(impl_def)
-                .map(|sig| sig.trait_type_args.clone())
-                .unwrap_or_default();
+                .trait_type_args
+                .clone();
             if seen.insert((trait_ref, type_args.clone())) {
                 out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
@@ -423,23 +365,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))?;
-        let implements = |key: &DefId| {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| header.trait_def() == Some(effect_decl))
-        };
+        let implements =
+            |key: &DefId| self.tysys.trait_env.impl_headers[key].trait_def() == Some(effect_decl);
         // A block's arguments answer for the clause's when they are the same,
         // or where the block left a slot for monomorphization to fill —
         // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
         // block written for other arguments answers for nothing.
         let fills = |key: &DefId| {
-            self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
-                sig.trait_type_args.len() == trait_type_args.len()
-                    && std::iter::zip(&sig.trait_type_args, trait_type_args)
-                        .all(|(slot, arg)| slot == arg || self.tysys.is_open_slot(*slot))
-            })
+            let written = &self.tysys.signatures.impl_sig(*key).trait_type_args;
+            written.len() == trait_type_args.len()
+                && std::iter::zip(written, trait_type_args)
+                    .all(|(slot, arg)| slot == arg || self.tysys.is_open_slot(*slot))
         };
         keys.iter()
             .find(|key| implements(key) && fills(key))
@@ -508,12 +444,25 @@ impl TypeSystem {
             _ => self.type_table.borrow().type_name(handler_type),
         }
     }
+<<<<<<< HEAD
 
     /// The type a handler value points at, under one `&` or `&mut`: the `T`
     /// that indexes its `impl Effect for T`.
     fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
         self.pointee_of(type_id).unwrap_or(type_id)
     }
+||||||| 2c9c5304996
+
+    /// The type a handler value points at, under one `&` or `&mut`: the `T`
+    /// that indexes its `impl Effect for T`.
+    fn handler_underlying_type(&self, type_id: TypeId) -> TypeId {
+        match self.type_table.borrow().get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => type_id,
+        }
+    }
+=======
+>>>>>>> origin/main
 }
 
 /// Short label for a [`ResolvedType`] variant, used in diagnostic

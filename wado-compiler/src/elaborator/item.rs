@@ -1,6 +1,7 @@
 //! Item-level resolution (structs, functions, methods, globals, variants, tests).
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
 use crate::attribute::{self, WIRE};
@@ -33,7 +34,6 @@ use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
 use crate::elaborator::trait_env::get_type_name_static;
 use crate::hashmap;
 use crate::name::{FqTraitName, test_function_name};
-use crate::resolve::head_site;
 use crate::tir::{ResolvedType, TirTypeParam};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
@@ -311,11 +311,11 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
                     bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
                 })
                 .collect();
-            let fq = type_table
-                .borrow()
-                .defs()
-                .of_ast_id(decl)
-                .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
+            let fq = {
+                let type_table = type_table.borrow();
+                let defs = type_table.defs();
+                Some(FqTraitName::declared(defs, defs.def_at(decl)))
+            };
             Resolved::Trait {
                 module_source: module_source.clone(),
                 name: name.to_string(),
@@ -335,6 +335,7 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
     name: &str,
+    def: DefId,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -349,6 +350,7 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
         || Resolved::Function {
             module_source: module_source.clone(),
             name: name.to_string(),
+            def: Some(def),
         },
     );
 }
@@ -358,6 +360,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
     attrs: &[Attribute],
     method_name: &str,
+    (def, block): (DefId, Option<DefId>),
     owner_type: &str,
     owner_head: &FqTypeName,
     module_source: &ModuleSource,
@@ -376,6 +379,8 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
             owner_type: owner_type.to_string(),
             owner_head: Some(owner_head.clone()),
             name: method_name.to_string(),
+            def: Some(def),
+            block,
         },
     );
 }
@@ -516,10 +521,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !self.tysys.is_impl_target_param(impl_declared_params, name) {
                 // A name the block does not declare has to be a type the module
                 // does; otherwise it names nothing at all.
-                if !self
-                    .tysys
-                    .is_known_type_name_in(&self.current_module_source, name)
-                {
+                if !self.names_type_at(Some(named.id), name) {
                     let _ = self.emit(TypeError::UndeclaredImplTypeParam {
                         name: name.clone(),
                         span: named.span,
@@ -758,6 +760,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             &impl_block.type_params,
         );
 
+        let target = scope.resolve_type(&impl_block.ty);
         let target_type_args = scope.resolve_written_type_args(&impl_block.ty);
         let trait_type_args = impl_block
             .trait_type
@@ -795,19 +798,24 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let trait_decl = impl_block
             .trait_type
             .as_ref()
-            .and_then(head_site)
-            .and_then(|site| scope.tysys.resolutions.declared(site));
+            .and_then(|t| scope.tysys.resolutions.head_decl(t));
         let impl_def = scope.tysys.def_at(impl_block.id);
-        scope.sem.decls.impl_sigs.insert(
-            impl_def,
-            ImplSig {
-                target_type_args,
-                trait_type_args,
-                associated_types,
-                target_fq,
-                trait_decl,
-            },
-        );
+        scope
+            .tysys
+            .type_table
+            .borrow_mut()
+            .record_impl_target(impl_def, target, target_type_args);
+        let sig = ImplSig {
+            def: impl_def,
+            trait_type_args,
+            associated_types,
+            target_fq,
+            trait_decl,
+        };
+        Rc::make_mut(&mut scope.tysys.signatures)
+            .impl_sigs
+            .insert(impl_def, sig.clone());
+        scope.sem.decls.impl_sigs.insert(impl_def, sig);
     }
 
     /// Require the impl's target and trait reference to name, between them, every
@@ -848,32 +856,22 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
     }
 
-    /// Require that the name an `impl` implements is declared — as a trait, an
-    /// effect, or a resource, the latter two installing handlers through the same
-    /// syntax. Nothing else resolves it: every downstream index keys off the
-    /// written string, so an `impl` of an undeclared name registers happily,
-    /// matches no query, and reaches the back end unmentioned.
-    ///
-    /// The header's own reference site answers, and only it. A global by-name
-    /// scan would let `impl Deserialize for T;` compile in a module that never
-    /// named `Deserialize`, and the header would carry no identity — leaving
-    /// dispatch comparing spellings two modules can share.
+    /// Require that an `impl` header's trait position names a trait, an
+    /// `interface` or a resource, at the header's own reference site.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let implementable = head_site(trait_type)
-            .and_then(|site| self.tysys.resolutions.declared(site))
-            .is_some_and(|def| {
-                matches!(
-                    self.tysys.resolutions.defs().kind(def),
-                    DefKind::Trait | DefKind::Effect | DefKind::Resource
-                )
-            });
-        if implementable {
+        if self.impl_trait_decl(trait_type).is_some() {
             return;
         }
         let _ = self.emit(TypeError::UnknownTraitImpl {
             name: get_type_name_static(trait_type),
             span: impl_block.span,
         });
+    }
+
+    fn reject_second_effect_param(&mut self, type_params: &[ast::GenericParam]) {
+        if let Some(second) = type_params.iter().filter(|p| p.is_effect).nth(1) {
+            let _ = self.emit(TypeError::SecondEffectParam { span: second.span });
+        }
     }
 
     /// The type arguments a head writes, resolved in the current frame — the
@@ -907,16 +905,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             impl_declared_params,
         );
 
-        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
-        if effect_params.len() > 1 {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: effect_params[1].span,
-            });
-        }
-        self.annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
+        self.reject_second_effect_param(&func.type_params);
 
         let offset = method_param_offset(&impl_type_params) as usize;
         let mut next_idx = offset as u32;
@@ -1121,22 +1110,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve and record the canonical signature of every method in
-    /// `impl_block`, in the impl's own frame.
-    ///
-    /// The decl pass runs this for every impl block so a dispatch query
-    /// instantiates a recorded signature instead of re-resolving the method
-    /// AST under the *caller's* perspective (WEP 2026-05-26).
+    /// Record `impl_block`'s own declaration facts, ahead of every other impl
+    /// question: whether an impl reaches a receiver reads its recorded target.
+    pub(super) fn record_impl_block_sig(&mut self, impl_block: &ast::ImplBlock) {
+        let mut block = self.enter_impl_params_scope(impl_block);
+        let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
+        block.record_impl_sig(impl_block, impl_is_concrete);
+    }
+
+    /// Record the canonical signature of every method in `impl_block`, in its own
+    /// frame, so dispatch never re-resolves one from the caller's (WEP 2026-05-26).
     pub(super) fn record_impl_decls(&mut self, impl_block: &ast::ImplBlock) {
         let impl_def = self.tysys.def_at(impl_block.id);
-        let mut block = self.enter_inherited_type_param_scope();
-        block.annotate_ctx.trait_ctx.type_params.clear();
-        block.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        block.register_impl_block_params(impl_block);
+        let mut block = self.enter_impl_params_scope(impl_block);
 
         let impl_is_concrete = block.tysys.impl_is_concrete_instantiation(&impl_block.ty);
 
-        block.record_impl_sig(impl_block, impl_is_concrete);
         if impl_block.is_synthesize_request {
             return;
         }
@@ -1520,10 +1509,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.sem.decls.clear_fn_local_items();
         for method in &trait_decl.methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
-            method_scope
-                .annotate_ctx
-                .trait_ctx
-                .install_effect_params(&method.type_params);
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Both frames are in scope for a default, so both supply the type
             // argument a caller gets by default, in declaration-slot order.
@@ -1559,14 +1544,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }))
             .collect();
 
+        // The effect check reads a requirement's `with` off its sites; these
+        // calls report and link them.
+        if let ast::TraitHead::Fixed { effects, .. } = &trait_decl.head {
+            scope.resolve_effects(effects);
+        }
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
             scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
-            method_scope
-                .annotate_ctx
-                .trait_ctx
-                .install_effect_params(&method.type_params);
+            // The head's names were resolved above, once for every method.
+            if !method.effects_inherited {
+                method_scope.resolve_effects(&method.effects);
+            }
             method_scope.register_generic_params(&method.type_params, next_slot);
             // Only slot-consuming parameters. A `fn`-bound one registers as
             // its bound's function type, so admitting it here put a
@@ -2086,10 +2076,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
         scope.register_generic_params(&func.type_params, 0);
         let type_param_ids: Vec<(String, TypeId)> = scope
             .annotate_ctx
@@ -2120,7 +2106,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The frame still holds this function's type parameters, so they are
         // not mistaken for unknown names.
         scope.reject_signature_annotations(&func.params, func.return_type.as_ref());
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
         drop(scope);
         self.sem
             .decls
@@ -2183,22 +2169,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         scope.sem.decls.clear_fn_local_items();
 
-        // Set effect params in scope before `register_generic_params`. Eager
-        // `<F: fn() with E>` bound resolution runs inside
-        // `register_generic_params` and consults `trait_ctx.effect_params`
-        // to recognise `E` as `EffectRef::Param` rather than re-resolving it
-        // to a phantom `EffectRef::Concrete`.
-        let effect_params: Vec<_> = func.type_params.iter().filter(|p| p.is_effect).collect();
-        if effect_params.len() > 1 {
-            let _ = scope.emit(TypeError::InvalidLiteral {
-                message: "multiple effect parameters are not allowed; use a single effect parameter instead".to_string(),
-                span: effect_params[1].span,
-            });
-        }
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .install_effect_params(&func.type_params);
+        scope.reject_second_effect_param(&func.type_params);
 
         scope.register_generic_params(&func.type_params, 0);
 
@@ -2296,12 +2267,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let type_params = scope.fn_type_params(&func.type_params);
 
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
 
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the function's `AstId`.
         scope.sem.types.function_effects.insert(func.id, effects);
 
         // Record what `task return` delivers, so reify can set
@@ -2360,16 +2327,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.sem.decls.clear_fn_local_items();
-
-        // Bare base trait name (e.g. `"Stream"` for an `impl Stream<u8>`).
-        // Distinct from `trait_name`, which is the full mangled form
-        // (`"Stream<u8>"`) used to make per-instantiation method names
-        // unique. Effect / resource / trait decl indices are keyed by the
-        // canonical `(decl_module, base name)` pair, so we also resolve
-        // the trait reference through the current module's import context
-        // so dispatch synthesis can tell two same-named effects /
-        // resources apart.
-        let base_trait_name: Option<String> = trait_type.map(|t| scope.get_type_name(t));
 
         let frame = scope.enter_impl_method_frame(
             func,
@@ -2435,39 +2392,24 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         );
 
         let mut ctx = FunctionContext::new(return_type, display_name);
-        // Mark this context as a handler method body when the surrounding
-        // impl block targets an effect or resource declaration. `resume`
-        // is only valid inside such bodies (see WEP 2026-04-11). Resources
-        // share the handler-method semantics with effects: an
-        // `impl Fields for CountingFields` method is a one-shot handler
-        // body just like `impl Counter for BaseCounter`.
-        if let Some(name) = base_trait_name.as_deref() {
-            let canonical_key = scope.decl_key_or_local(name);
-            let declares =
-                |index: &hashmap::IndexSet<DefId>| canonical_key.filter(|key| index.contains(key));
-            let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
-            let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
-            if effect_decl.is_some() || resource_decl.is_some() {
-                ctx.in_handler_method = true;
-            }
-            let (decl_ref, is_resource_effect) = match (effect_decl, resource_decl) {
-                (Some(d), _) => (Some(d), false),
-                (None, Some(d)) => (Some(d), true),
-                (None, None) => (None, false),
-            };
-            let async_op = decl_ref.and_then(|decl| {
-                scope
-                    .tysys
-                    .signatures
-                    .resource_method_sig(decl, &func.name)
-                    .filter(|op| op.is_async)
-                    .map(|op| op.cm_name.is_some())
-            });
+        // `resume` is valid only in a handler method body (WEP 2026-04-11).
+        if let Some(handled) = trait_name.and_then(FqTraitName::canonical)
+            && let kind = scope.tysys.resolutions.defs().kind(handled)
+            && kind.is_effect()
+        {
+            ctx.in_handler_method = true;
+            let is_resource_effect = kind == DefKind::Resource;
+            let async_op = scope
+                .tysys
+                .signatures
+                .resource_method_sig(handled, &func.name)
+                .filter(|op| op.is_async)
+                .map(|op| op.cm_name.is_some());
             if let Some(cm_backed) = async_op
                 && (is_resource_effect || !cm_backed)
             {
                 let _ = scope.emit(TypeError::AsyncUserEffectHandlerUnsupported {
-                    interface_name: name.to_string(),
+                    interface_name: scope.tysys.resolutions.defs().name(handled).to_string(),
                     op_name: func.name.clone(),
                     span: func.span,
                 });
@@ -2537,12 +2479,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .collect()
         };
 
-        let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
+        let effects = scope.resolve_effects(&func.effects);
 
-        // Stash the resolved `Vec<EffectRef>` for reify: reify
-        // cannot reconstruct effect-param canonicalisation without
-        // `trait_ctx.effect_params`, so the annotate phase records
-        // the already-resolved list here keyed by the method's `AstId`.
         scope.sem.types.function_effects.insert(func.id, effects);
 
         drop(scope);
@@ -2568,12 +2506,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
 impl TypeSystem {
     /// Whether `impl_ty` is a concrete instantiation (`impl List<u8>`, `impl Tag for
-    /// [i32, i32]`): every argument answers [`Self::impl_arg_pins_a_position`].
+    /// [i32, i32]`): every target argument pins a position (`arg_pins`).
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
         let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
-        !args.is_empty() && args.iter().all(|a| self.impl_arg_pins_a_position(a))
+        !args.is_empty() && args.iter().all(|a| self.arg_pins(a))
     }
 }
 

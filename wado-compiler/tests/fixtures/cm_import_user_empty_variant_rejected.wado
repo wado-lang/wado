@@ -1,0 +1,16 @@
+// A `#[cm]` import is held to what an export is: a Component Model `variant`
+// lists at least one case, however deep it sits in the signature.
+#[cm("wasi:demo/gfx@0.1.0#nothing")]
+variant Nothing {}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#configure")]
+    fn configure(x: u32) -> Option<Nothing>;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::configure(3);
+}
+
+__DATA__
+{"compile_error": "import function `configure`: `Nothing` declares no case, and an empty enum, flags or variant has no Component Model representation — add at least one"}

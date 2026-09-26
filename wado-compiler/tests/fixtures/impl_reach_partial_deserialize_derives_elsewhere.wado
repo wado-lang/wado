@@ -1,0 +1,27 @@
+// A written generic impl of Deserialize at some instantiations leaves the rest
+// to the derived body, whose field schema is still generated.
+
+use { from_string } from "core:json";
+use { Deserialize, Deserializer, DeserializeError } from "core:serde";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T: Default> Deserialize for Pair<T, i32> {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<Pair<T, i32>, DeserializeError> {
+        let b = d.deserialize_i32()?;
+        return Result::Ok(Pair { a: T::default(), b });
+    }
+}
+
+test "the written impl answers where it reaches, the derived body elsewhere" {
+    let p = from_string::<Pair<String, i32>>("7").unwrap();
+    assert p.b == 7;
+    let q = from_string::<Pair<i32, i64>>("{\"a\":1,\"b\":2}").unwrap();
+    assert q.a == 1 && q.b == 2;
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,26 @@
+// A written generic impl of Serialize at some instantiations leaves the rest to
+// the derived body, through a bound as well as directly.
+
+use { to_string } from "core:json";
+use { Serialize, Serializer, SerializeError } from "core:serde";
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> Serialize for Pair<T, i32> {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_i32(self.b);
+    }
+}
+
+test "the written impl answers where it reaches, the derived body elsewhere" {
+    let p: Pair<String, i32> = Pair { a: "x", b: 1 };
+    let q: Pair<i32, i64> = Pair { a: 1, b: 2 };
+    assert to_string(&p).unwrap() == "1";
+    assert to_string(&q).unwrap() == "{\"a\":1,\"b\":2}";
+}
+
+__DATA__
+{"test": {}}

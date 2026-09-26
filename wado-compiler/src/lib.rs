@@ -62,9 +62,14 @@ pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 use crate::ast::UseDecl;
+use std::convert::Infallible;
 use std::sync::Arc;
 
-use crate::component_model::wado_primitive_name_to_cm;
+use crate::component_model::{
+    CmInterfaceRegistry, bind_type_names, cm_bound_defs, try_for_each_operation_type,
+    try_for_each_signed_type, wado_primitive_name_to_cm,
+};
+use crate::defs::DefId;
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -206,7 +211,7 @@ pub struct CompileResult {
 
 /// Report a compilation error the pipeline has no span for — it names the
 /// offending declaration instead.
-fn report_without_span<H: compiler_host::CompilerHost>(
+pub(crate) fn report_without_span<H: compiler_host::CompilerHost>(
     logger: &Logger<'_, H>,
     code: compiler_host::Code,
     message: String,
@@ -681,7 +686,7 @@ fn lib_type_decl_name(item: &ast::Item) -> Option<String> {
 /// return types taken straight from the AST.
 fn synthesize_lib_world_info(
     fq: &str,
-    entry_module: Option<&ast::Module>,
+    entry_module: &ast::Module,
     reexports: &[world_registry::WorldExportInfo],
     force_interface_export: bool,
 ) -> world_registry::WorldInfo {
@@ -689,28 +694,24 @@ fn synthesize_lib_world_info(
     use crate::world_registry::{WorldExportInfo, WorldInfo};
 
     let mut exports: Vec<WorldExportInfo> = entry_module
-        .map(|module| {
-            module
-                .items
-                .iter()
-                .filter_map(|item| match item {
-                    Item::Function(func) if func.is_export => Some(WorldExportInfo {
-                        name: func.name.clone(),
-                        is_async: func.is_async,
-                        params: func
-                            .params
-                            .iter()
-                            .map(|p| (p.name.clone(), p.ty.clone()))
-                            .collect(),
-                        return_type: func.return_type.clone(),
-                        from_interface_fq: None,
-                        reexport_origin: None,
-                    }),
-                    _ => None,
-                })
-                .collect()
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Function(func) if func.is_export => Some(WorldExportInfo {
+                name: func.name.clone(),
+                is_async: func.is_async,
+                params: func
+                    .params
+                    .iter()
+                    .map(|p| (p.name.clone(), p.ty.clone()))
+                    .collect(),
+                return_type: func.return_type.clone(),
+                from_interface_fq: None,
+                reexport_origin: None,
+            }),
+            _ => None,
         })
-        .unwrap_or_default();
+        .collect();
     exports.extend(reexports.iter().cloned());
 
     // A/B grouping (mirrors the WIT producer, `wit_emit`): if any exported
@@ -736,92 +737,61 @@ fn synthesize_lib_world_info(
     }
 }
 
-/// Answer the interface each named type in `world`'s export signatures names,
-/// so the lift/lower machinery resolves them like WASI types.
-fn annotate_lib_export_sources(
-    registry: &component_model::CmInterfaceRegistry,
-    resolutions: &resolve::Resolutions,
-    world: &mut world_registry::WorldInfo,
-    lib_type_names: &hashmap::IndexSet<String>,
-) {
-    for export in &mut world.exports {
-        let types = export.params.iter_mut().map(|(_, ty)| ty);
-        for ty in types.chain(export.return_type.as_mut()) {
-            annotate_lib_type_sources(registry, resolutions, ty, &world.fq_name, lib_type_names);
-        }
-    }
+/// Names each type a synthesized world's surface writes by its declaration, and
+/// answers the site with the world's interface or the `#[cm(…)]` one it binds.
+struct LibTypeBinder<'a> {
+    resolutions: &'a resolve::Resolutions,
+    registry: &'a CmInterfaceRegistry,
+    interfaces: hashmap::IndexMap<DefId, String>,
 }
 
-/// Spell every user named type in `ty` by its declaration's name, which an
-/// aliased `use` renames locally, and answer the interface it names: `fq` for
-/// a library-local one, else the one its declaring module registers.
-///
-/// The registry's answer table is first-writer-wins, so an already-resolved
-/// reference — a shared `core:kiln/types` record — keeps its own interface,
-/// which the CM lift/lower needs to find its fields.
-fn annotate_lib_type_sources(
-    registry: &component_model::CmInterfaceRegistry,
-    resolutions: &resolve::Resolutions,
-    ty: &mut ast::Type,
-    fq: &str,
-    local_type_names: &hashmap::IndexSet<String>,
-) {
-    use crate::ast::Type;
-    match ty {
-        Type::Named(named) => {
-            let Some(def) = resolutions.declared(named.id) else {
-                return;
-            };
-            let defs = resolutions.defs();
-            named.name = defs.name(def).to_string();
-            if local_type_names.contains(&named.name) {
-                registry.set_source_interface(named.id, fq.to_string());
-            } else if let Some(source) = registry.interface_declaring(defs.module(def), &named.name)
-            {
-                registry.set_source_interface(named.id, source.to_string());
-            }
+impl<'a> LibTypeBinder<'a> {
+    fn new<'m>(
+        resolutions: &'a resolve::Resolutions,
+        registry: &'a CmInterfaceRegistry,
+        fq: &str,
+        modules: &'m hashmap::IndexMap<ModuleSource, ast::Module>,
+        published: impl Iterator<Item = &'m ast::Item>,
+    ) -> Self {
+        let defs = resolutions.defs();
+        let mut interfaces: hashmap::IndexMap<DefId, String> = published
+            .map(|item| (defs.def_at(item.id()), fq.to_string()))
+            .collect();
+        let items = modules.values().flat_map(|module| &module.items);
+        for (def, source) in cm_bound_defs(items, defs) {
+            interfaces.entry(def).or_insert(source);
         }
-        Type::Generic(g) => {
-            for arg in &mut g.args {
-                annotate_lib_type_sources(registry, resolutions, arg, fq, local_type_names);
-            }
+        Self {
+            resolutions,
+            registry,
+            interfaces,
         }
-        Type::Tuple(elems) => {
-            for elem in elems {
-                annotate_lib_type_sources(registry, resolutions, elem, fq, local_type_names);
-            }
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            annotate_lib_type_sources(registry, resolutions, inner, fq, local_type_names);
-        }
-        _ => {}
     }
-}
 
-/// [`annotate_lib_type_sources`] over the field / payload types of a lib-local
-/// type decl, so a nested user type (e.g. `HeadingInfo` inside
-/// `RenderResult.headings: List<HeadingInfo>`) resolves against the same
-/// registration as the fields the CM lift/lower reads.
-fn tag_lib_local_decl_fields(
-    registry: &component_model::CmInterfaceRegistry,
-    resolutions: &resolve::Resolutions,
-    item: &mut ast::Item,
-    fq: &str,
-    local_type_names: &hashmap::IndexSet<String>,
-) {
-    use crate::ast::Item;
-    let types: Vec<&mut ast::Type> = match item {
-        Item::Struct(d) => d.fields.iter_mut().map(|field| &mut field.ty).collect(),
-        Item::Variant(d) => d
-            .cases
+    fn bind_type(&self, ty: &mut ast::Type) -> Result<(), Infallible> {
+        bind_type_names(ty, self.resolutions, &mut |named, def| {
+            if let Some(source) = self.interfaces.get(&def) {
+                self.registry.set_source_interface(named.id, source.clone());
+            }
+            Ok(())
+        })
+    }
+
+    fn bind_export(&self, export: &mut world_registry::WorldExportInfo) {
+        let Ok(()) = export
+            .params
             .iter_mut()
-            .filter_map(|case| case.payload.as_mut())
-            .collect(),
-        Item::Newtype(d) => vec![&mut d.ty],
-        _ => Vec::new(),
-    };
-    for ty in types {
-        annotate_lib_type_sources(registry, resolutions, ty, fq, local_type_names);
+            .map(|(_, ty)| ty)
+            .chain(export.return_type.as_mut())
+            .try_for_each(|ty| self.bind_type(ty));
+    }
+
+    fn bind_item(&self, item: &mut ast::Item) {
+        let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| self.bind_type(ty));
+    }
+
+    fn bind_interface(&self, decl: &mut ast::InterfaceDecl) {
+        let Ok(()) = try_for_each_operation_type(decl, &mut |_, ty| self.bind_type(ty));
     }
 }
 
@@ -833,7 +803,7 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     use crate::ast::Type;
     ty.any(&mut |ty| {
         matches!(ty, Type::Named(named)
-            if named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none())
+            if !ty.is_unit() && wado_primitive_name_to_cm(&named.name).is_none())
     })
 }
 
@@ -1294,16 +1264,6 @@ fn compile_after_load<H: CompilerHost>(
         .get(&sem.entry_module_source)
         .map(|m| m.items.iter().filter_map(lib_type_decl_name).collect())
         .unwrap_or_default();
-    let lib_type_names: hashmap::IndexSet<String> = entry_type_names
-        .iter()
-        .cloned()
-        .chain(
-            lib_surface
-                .submodule_type_decls
-                .iter()
-                .filter_map(|(_, item)| lib_type_decl_name(item)),
-        )
-        .collect();
 
     // A data-model library exposes public types with no `export fn`; those types
     // are its component surface. `submodule_type_decls` answers a wider question
@@ -1359,38 +1319,57 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // The entry module's own named types are registered into the CM interface
-    // registry below, from this copy (`sem` is destructured before then). Its
-    // decls and the submodules' have their fields tagged here, so a type like
-    // `HeadingInfo` reached only through `RenderResult.headings` resolves
-    // against the same registration as the fields the lift/lower reads. A
-    // `--lib` compile has a CM registry because annotate completed.
-    let mut lib_entry_module = synth_world_fq
+    // The synthesized world's surface, with every type it writes named by its
+    // declaration; owned, so it outlives the `sem` destructure below.
+    let lib_analysis = synth_world_fq
         .as_ref()
-        .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
-    let cm_registry = sem.cm_interface_registry().zip(sem.resolutions());
-    if let (Some(fq), Some((registry, resolutions))) = (synth_world_fq.as_ref(), cm_registry) {
-        let entry_items = lib_entry_module.iter_mut().flat_map(|m| m.items.iter_mut());
-        let submodule_items = lib_surface.submodule_type_decls.iter_mut().map(|(_, d)| d);
-        for item in entry_items.chain(submodule_items) {
-            tag_lib_local_decl_fields(registry, resolutions, item, fq, &lib_type_names);
+        .zip(sem.cm_interface_registry())
+        .map(|(fq, registry)| {
+            let resolutions = sem
+                .resolutions()
+                .expect("an analysis with a CM registry has resolutions");
+            (fq, registry, resolutions)
+        });
+    let lib_entry_module = lib_analysis.and_then(|(fq, registry, resolutions)| {
+        let entry = sem.modules.get(&sem.entry_module_source);
+        let published = entry
+            .into_iter()
+            .flat_map(|module| &module.items)
+            .filter(|item| lib_type_decl_name(item).is_some())
+            .chain(
+                lib_surface
+                    .submodule_type_decls
+                    .iter()
+                    .map(|(_, item)| item),
+            );
+        let binder = LibTypeBinder::new(resolutions, registry, fq, &sem.modules, published);
+        let mut entry = entry.cloned();
+        for item in entry.iter_mut().flat_map(|module| &mut module.items) {
+            binder.bind_item(item);
         }
-    }
+        for (_, item) in &mut lib_surface.submodule_type_decls {
+            binder.bind_item(item);
+        }
+        for export in &mut lib_surface.submodule_exports {
+            binder.bind_export(export);
+        }
+        for decl in &mut lib_surface.submodule_interfaces {
+            binder.bind_interface(decl);
+        }
+        entry
+    });
 
     let mut lib_world_info =
         synth_world_fq
             .as_ref()
-            .zip(cm_registry)
-            .map(|(fq, (registry, resolutions))| {
-                let entry = sem.modules.get(&sem.entry_module_source);
-                let mut world = synthesize_lib_world_info(
+            .zip(lib_entry_module.as_ref())
+            .map(|(fq, entry)| {
+                synthesize_lib_world_info(
                     fq,
                     entry,
                     &lib_surface.submodule_exports,
                     options.lib_interface_export,
-                );
-                annotate_lib_export_sources(registry, resolutions, &mut world, &lib_type_names);
-                world
+                )
             });
 
     if options.lib_world.is_some()
@@ -1407,35 +1386,14 @@ fn compile_after_load<H: CompilerHost>(
         ));
     }
 
-    if is_kiln_generator
-        && let Some((kiln_registry, resolutions)) = cm_registry
-        && let Some(world) = lib_world_info.as_mut()
-    {
+    if is_kiln_generator && let Some(world) = lib_world_info.as_mut() {
         // `generate` and the optional `probe` are the generator world's
         // contract; a helper `export fn` beside them is not a world export and
         // must not be force-routed through the async binding below.
         world
             .exports
             .retain(|e| e.name == "generate" || e.name == "probe");
-        let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect();
         for export in &mut world.exports {
-            // `generate`'s shared `core:kiln/types` records reach analysis
-            // without a `source_interface`; stamp their real interface so the
-            // CM lift/lower resolves their fields instead of a same-named type
-            // elsewhere (`wasi:http`'s `Response`) or an i32 handle.
-            let types = export.params.iter_mut().map(|(_, ty)| ty);
-            for ty in types.chain(export.return_type.as_mut()) {
-                annotate_lib_type_sources(
-                    kiln_registry,
-                    resolutions,
-                    ty,
-                    kiln::import_check::KILN_TYPES_INTERFACE,
-                    &kiln_shared,
-                );
-            }
             // `generate` returns `Result<_, _>` and must lift via `task.return`
             // (the result binding handles nested records/lists); the canon's
             // async-ness follows `is_async` (`sync_lift = !is_async`), so force
@@ -1468,9 +1426,9 @@ fn compile_after_load<H: CompilerHost>(
     // missing entry and panics, so the refusal has to land here.
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
-        && let Some(registry) = sem.cm_interface_registry()
-        && let Some(resolutions) = sem.resolutions()
     {
+        let (_, registry, resolutions) =
+            lib_analysis.expect("a synthesized world comes from the library analysis");
         let declared: hashmap::IndexMap<ast::AstId, &ast::Item> = sem
             .modules
             .iter()
@@ -1918,11 +1876,6 @@ fn snapshot_tir_modules(
                 .functions
                 .iter()
                 .map(|f| Rc::new(RefCell::new(f.borrow().clone())))
-                .collect();
-            m.generic_functions = m
-                .generic_functions
-                .iter()
-                .map(|(key, f)| (key.clone(), Rc::new(RefCell::new(f.borrow().clone()))))
                 .collect();
             (k.clone(), m)
         })
@@ -2571,7 +2524,7 @@ fn helper(x: u32) -> u32 { return x; }
 export fn id_bool(v: bool) -> bool { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", Some(&module), &[], false);
+        let world = synthesize_lib_world_info("wado:mylib/mylib@0.1.0", &module, &[], false);
 
         assert_eq!(world.fq_name, "wado:mylib/mylib@0.1.0");
         assert!(world.imports.is_empty());
@@ -2588,12 +2541,6 @@ export fn id_bool(v: bool) -> bool { return v; }
     }
 
     #[test]
-    fn empty_when_no_entry_module() {
-        let world = synthesize_lib_world_info("wado:x/x@0.1.0", None, &[], false);
-        assert!(world.exports.is_empty());
-    }
-
-    #[test]
     fn groups_into_default_interface_when_named_type_referenced() {
         // A signature referencing a user named type (here `Point`, even nested
         // in `List`) forces all exports into the default interface (the B path).
@@ -2604,7 +2551,7 @@ export fn id_u32(v: u32) -> u32 { return v; }
 export fn id_points(v: List<Point>) -> List<Point> { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", Some(&module), &[], false);
+        let world = synthesize_lib_world_info("wado:geo/geo@0.1.0", &module, &[], false);
         assert!(
             world
                 .exports
@@ -2623,7 +2570,7 @@ export fn id_list(v: List<u8>) -> List<u8> { return v; }
 export fn id_opt(v: Option<String>) -> Option<String> { return v; }
 "#;
         let module = parse(src).ast;
-        let world = synthesize_lib_world_info("wado:c/c@0.1.0", Some(&module), &[], false);
+        let world = synthesize_lib_world_info("wado:c/c@0.1.0", &module, &[], false);
         assert!(
             world.exports.iter().all(|e| e.from_interface_fq.is_none()),
             "primitive containers do not force an interface",

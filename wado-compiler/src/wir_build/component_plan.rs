@@ -537,7 +537,7 @@ mod tests {
         }
 
         pub fn unit_named() -> Type {
-            Type::Named(NamedType::new(AstId::fresh(), "()".to_string(), span()))
+            Type::unit(AstId::fresh(), span())
         }
 
         pub fn named(name: &str) -> Type {

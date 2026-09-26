@@ -7,12 +7,12 @@ use crate::ast::{
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity,
     ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem,
-    ErrorStmt, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt,
-    FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralExpr,
-    LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
+    ContinueStmt, EFFECT_HOLE, EffectHandlerBinding, EffectName, EnumCase, EnumDecl, ErrorExpr,
+    ErrorItem, ErrorStmt, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt,
+    ForStmt, FormatSpec, Function, FunctionType, GenericParam, GenericType, GlobalDecl,
+    HandleClasses, IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
+    InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal,
+    LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType,
     NamespacedGenericType, Newtype, Param, PathSegment, Pattern, RangeExpr, RangeKind,
     ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt, SelfKind,
     StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr, StructLiteralField,
@@ -1897,7 +1897,7 @@ impl Parser {
 
         let return_type = self.parse_optional_return_type()?;
 
-        let (effects, effect_ids) = self.parse_with_clause()?;
+        let effects = self.parse_with_clause()?;
 
         // `with _` is sugar for `<effect E> with E`, so the signature carries
         // the parameter it stands for. One per function, as for a written one.
@@ -1951,7 +1951,6 @@ impl Parser {
             params_span,
             return_type,
             effects,
-            effect_ids,
             effects_inherited: false,
             body,
             span,
@@ -2142,18 +2141,20 @@ impl Parser {
     }
 
     /// Take one effect name of a `with` row, noting it if it is the hole.
-    fn consume_effect_name(
-        &mut self,
-        effects: &mut Vec<String>,
-        effect_ids: &mut Vec<(AstId, Span)>,
-    ) -> ParseResult<()> {
+    fn consume_effect_name(&mut self) -> ParseResult<EffectName> {
         let (name, span) = self.consume_ident_with_span()?;
         if name == EFFECT_HOLE {
             self.note_effect_hole(span)?;
         }
-        effects.push(name);
-        effect_ids.push((self.alloc_ast_id(), span));
-        Ok(())
+        Ok(self.effect_name(name, span))
+    }
+
+    fn effect_name(&mut self, name: String, span: Span) -> EffectName {
+        EffectName {
+            name,
+            id: self.alloc_ast_id(),
+            span,
+        }
     }
 
     /// The effect parameter a signature's `with _` minted, if it carries one.
@@ -2168,13 +2169,12 @@ impl Parser {
     /// Parse a `with (Effect1, Effect2)` row. Every member is an effect. The
     /// third result says the row was written bare, with no parentheses closing
     /// it.
-    fn parse_effect_row(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, bool)> {
+    fn parse_effect_row(&mut self) -> ParseResult<(Vec<EffectName>, bool)> {
         let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new(), false));
+            return Ok((Vec::new(), false));
         };
 
         let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
         if parenthesized && self.check(&TokenKind::RParen) {
             return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
         }
@@ -2182,7 +2182,7 @@ impl Parser {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
             }
-            self.consume_effect_name(&mut effects, &mut effect_ids)?;
+            effects.push(self.consume_effect_name()?);
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
@@ -2192,18 +2192,17 @@ impl Parser {
         if parenthesized {
             self.expect(&TokenKind::RParen)?;
         }
-        Ok((effects, effect_ids, !parenthesized))
+        Ok((effects, !parenthesized))
     }
 
-    /// Parse a declaration's `with` clause. Nothing follows the row but the
-    /// body or `;`, so a comma after a bare effect is a missing paren; in type
-    /// position that comma belongs to the enclosing list.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
-        let (effects, effect_ids, bare) = self.parse_effect_row()?;
+    /// Parse a declaration's `with` clause, where a comma after a bare effect is
+    /// a missing paren; in type position it belongs to the enclosing list.
+    fn parse_with_clause(&mut self) -> ParseResult<Vec<EffectName>> {
+        let (effects, bare) = self.parse_effect_row()?;
         if bare && self.check(&TokenKind::Comma) {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         }
-        Ok((effects, effect_ids))
+        Ok(effects)
     }
 
     /// Point a `type F = fn() with A, B;` at the parentheses it is missing.
@@ -5051,44 +5050,7 @@ impl Parser {
 
         // Function type: fn(T1, T2) -> R   or   fn mut(T1, T2) -> R
         if self.check(&TokenKind::Fn) {
-            self.advance();
-            let is_mut = if self.check(&TokenKind::Mut) {
-                self.advance();
-                true
-            } else {
-                false
-            };
-            self.expect(&TokenKind::LParen)?;
-
-            // Parse parameter types
-            let params = self.parse_comma_separated_recovering(
-                &TokenKind::RParen,
-                Self::parse_type,
-                |_, span| Type::Error(span),
-            );
-            self.expect(&TokenKind::RParen)?;
-
-            // Parse return type (optional)
-            let return_type = if self.check(&TokenKind::Arrow) {
-                self.advance();
-                self.parse_type()?
-            } else {
-                Type::Named(NamedType {
-                    id: self.alloc_ast_id(),
-                    name: "()".to_string(),
-                    span: start_span,
-                })
-            };
-
-            let (effects, effect_ids, _) = self.parse_effect_row()?;
-
-            return Ok(Type::Function(Box::new(FunctionType {
-                is_mut,
-                params,
-                return_type,
-                effects,
-                effect_ids,
-            })));
+            return Ok(Type::Function(self.parse_fn_type(start_span)?));
         }
 
         // Reference type: &T or &mut T
@@ -5114,13 +5076,7 @@ impl Parser {
             self.advance();
             if self.check(&TokenKind::RParen) {
                 self.advance();
-                // Unit type () - distinct from empty tuple []
-                let id = self.alloc_ast_id();
-                return Ok(Type::Named(NamedType {
-                    id,
-                    name: "()".to_string(),
-                    span: start_span,
-                }));
+                return Ok(Type::unit(self.alloc_ast_id(), start_span));
             }
             // Parenthesized type for grouping (not tuple in this case)
             let inner = self.parse_type()?;
@@ -5356,7 +5312,7 @@ impl Parser {
 
         // Closure-type bound: `fn(...)` or `fn mut(...)`.
         if self.check(&TokenKind::Fn) {
-            let fn_signature = self.parse_fn_type_for_bound(span)?;
+            let fn_signature = self.parse_fn_type(span)?;
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
             return Ok(TraitBound {
                 id: self.alloc_ast_id(),
@@ -5420,12 +5376,8 @@ impl Parser {
         })
     }
 
-    /// Parse a `fn(...)` / `fn mut(...)` closure-type bound.
-    ///
-    /// - `fn(...) -> R`                  — no effects
-    /// - `fn(...) -> R with E`            — single effect
-    /// - `fn(...) -> R with (E1, E2)`     — multiple effects (parens required)
-    fn parse_fn_type_for_bound(&mut self, start_span: Span) -> ParseResult<Box<FunctionType>> {
+    /// Parse a `fn(...) -> R with E` / `fn mut(...)` type; `-> R` defaults to `()`.
+    fn parse_fn_type(&mut self, start_span: Span) -> ParseResult<Box<FunctionType>> {
         self.expect(&TokenKind::Fn)?;
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
@@ -5445,21 +5397,16 @@ impl Parser {
             self.advance();
             self.parse_type()?
         } else {
-            Type::Named(NamedType {
-                id: self.alloc_ast_id(),
-                name: "()".to_string(),
-                span: start_span,
-            })
+            Type::unit(self.alloc_ast_id(), start_span)
         };
 
-        let (effects, effect_ids, _) = self.parse_effect_row()?;
+        let (effects, _) = self.parse_effect_row()?;
 
         Ok(Box::new(FunctionType {
             is_mut,
             params,
             return_type,
             effects,
-            effect_ids,
         }))
     }
 
@@ -6142,10 +6089,14 @@ impl Parser {
                 // the elaborator can register per-method compiler items.
                 let mut method =
                     self.parse_function(Visibility::Private, false, false, attrs, true)?;
-                // A method that declares nothing takes what the head says.
+                // A method that declares nothing takes what the head says, at
+                // sites of its own that the trait's scope answers.
                 if method.effects.is_empty() {
-                    method.effects = head.inherited_effects();
-                    method.effects_inherited = !method.effects.is_empty();
+                    let inherited = head.inherited_effects(name_span);
+                    method.effects_inherited = !inherited.is_empty();
+                    for (name, span) in inherited {
+                        method.effects.push(self.effect_name(name, span));
+                    }
                 }
                 methods.push(method);
             }
@@ -6181,11 +6132,9 @@ impl Parser {
         }
 
         let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
         loop {
             let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
+            effects.push(self.effect_name(name, span));
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
@@ -6196,11 +6145,11 @@ impl Parser {
         } else if self.check(&TokenKind::Comma) {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         } else {
-            effect_ids.last().map_or(start, |(_, s)| *s)
+            effects.last().map_or(start, |e| e.span)
         };
         let span = start.merge(&end);
 
-        if effects.iter().any(|e| e == EFFECT_HOLE) {
+        if effects.iter().any(|e| e.name == EFFECT_HOLE) {
             if effects.len() > 1 {
                 return Err(self.error_at_span(
                     span,
@@ -6209,11 +6158,7 @@ impl Parser {
             }
             return Ok(TraitHead::Open { span });
         }
-        Ok(TraitHead::Fixed {
-            effects,
-            effect_ids,
-            span,
-        })
+        Ok(TraitHead::Fixed { effects, span })
     }
 
     /// The effect parameter a `with _` stands for, named `_` so the clause that
@@ -6480,6 +6425,7 @@ impl Parser {
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
+        self.errors.append(&mut parser.errors);
         // An interpolation holds ordinary code, and its spans index the file,
         // so what it read as a keyword belongs to the enclosing module.
         self.contextual_keywords
@@ -6884,6 +6830,10 @@ mod tests {
         parser.parse_strict()
     }
 
+    fn effect_names(effects: &[EffectName]) -> Vec<&str> {
+        effects.iter().map(|e| e.name.as_str()).collect()
+    }
+
     /// Parse helper that exposes the full recovery result: the (always
     /// produced) module plus every recovered syntax error.
     fn parse_recovering(source: &str) -> (Module, Vec<ParseError>) {
@@ -7100,7 +7050,7 @@ mod tests {
         let module = parse("fn run() with Stdout { }").unwrap();
 
         if let Item::Function(func) = &module.items[0] {
-            assert_eq!(func.effects, vec!["Stdout"]);
+            assert_eq!(effect_names(&func.effects), ["Stdout"]);
         } else {
             panic!("expected function");
         }
@@ -7125,7 +7075,7 @@ mod tests {
             assert_eq!(func.params[0].name, "f");
             assert_eq!(func.params[1].name, "x");
             if let Type::Function(ft) = &func.params[0].ty {
-                assert_eq!(ft.effects, vec!["Stdout"]);
+                assert_eq!(effect_names(&ft.effects), ["Stdout"]);
             } else {
                 panic!("expected function type for param f");
             }
@@ -8898,7 +8848,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E"]);
     }
 
     #[test]
@@ -8907,7 +8857,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E"]);
     }
 
     #[test]
@@ -8916,7 +8866,7 @@ line 2
         let Item::Function(f) = &module.items[0] else {
             panic!("expected function");
         };
-        assert_eq!(f.effects, vec!["E".to_string(), "Stdout".to_string()]);
+        assert_eq!(effect_names(&f.effects), ["E", "Stdout"]);
     }
 
     #[test]
@@ -8991,7 +8941,7 @@ line 2
         let Type::Function(ft) = &f.params[0].ty else {
             panic!("expected a fn type");
         };
-        assert_eq!(ft.effects, vec!["E".to_string(), "Stdout".to_string()]);
+        assert_eq!(effect_names(&ft.effects), ["E", "Stdout"]);
     }
 
     #[test]
@@ -10013,6 +9963,6 @@ line 2
         let decl = parse_interface("interface Run { fn go<T>(v: T) -> T with Stdout; }");
         let method = &decl.methods[0];
         assert_eq!(method.type_params.len(), 1);
-        assert_eq!(method.effects, ["Stdout"]);
+        assert_eq!(effect_names(&method.effects), ["Stdout"]);
     }
 }

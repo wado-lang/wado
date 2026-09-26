@@ -244,6 +244,9 @@ impl Query<'_> {
         if !match_target(&def.target, ty, &mut bindings) {
             return None;
         }
+        if def.origin == ImplOrigin::Derived && declared_for(program, implemented, ty) {
+            return None;
+        }
         let bound_to = |ty: &SolverType| {
             ty.map_params(&|i| bindings.get(i as usize)?.as_ref().map(Binding::as_type))
         };
@@ -315,6 +318,17 @@ impl Query<'_> {
                 .collect(),
         })
     }
+}
+
+/// Whether the program declares `trait_` for `ty`'s own head, by an impl or a
+/// marker whose target reaches it. A declared impl always wins over a derived one.
+fn declared_for(program: &Program, trait_: TraitDeclId, ty: &SolverType) -> bool {
+    program.impls.values().any(|def| {
+        def.trait_ == Some(trait_)
+            && matches!(def.origin, ImplOrigin::Written | ImplOrigin::Marker)
+            && matches!(def.target, SolverType::Decl(..))
+            && match_target(&def.target, ty, &mut vec![None; def.params.len()])
+    })
 }
 
 /// One impl applying to one type. `holds` reads the bound it answers; selection
@@ -401,7 +415,7 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
 
 /// Whether the impl answers a bound writing `args`: at every position each side
 /// says its written argument, or the trait's default at `ty` where it wrote none.
-fn answers_args(
+pub(super) fn answers_args(
     program: &Program,
     def: &ImplDef,
     ty: &SolverType,

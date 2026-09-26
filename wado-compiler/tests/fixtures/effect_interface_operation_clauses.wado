@@ -1,6 +1,7 @@
-// An operation's effects reach no call site, so a `with` clause here would let
-// a default implementation perform a capability its caller never declared.
-// Rejected rather than dropped.
+// An operation's `with` clause is rejected: its effects reach no call site, so
+// a default implementation could perform what its caller never declared.
+use { Stdout } from "core:cli";
+
 interface Noisy {
     fn shout(message: String) with Stdout;
 }

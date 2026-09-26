@@ -1,0 +1,15 @@
+// A parse error inside a call argument within a template hole is reported as it
+// is outside a template.
+use { println, Stdout } from "core:cli";
+
+fn show(x: &i32) -> i32 {
+    return *x;
+}
+
+export fn run() with Stdout {
+    let x = 1;
+    println(`${show(&&x)}`);
+}
+
+__DATA__
+{"compile_error": ":11:21: parse error: expected expression, found `&&`", "compile_error_codes": ["INVALID_SYNTAX"]}

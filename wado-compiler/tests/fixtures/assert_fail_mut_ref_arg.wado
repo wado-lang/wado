@@ -1,17 +1,12 @@
-// Regression: `&mut <expr>` arguments must not have their operand extracted
-// into a fresh `let $v = <expr>;` intermediate. The reconstructed call would
-// then try `&mut $v` against an immutable binding, producing
-// `cannot take &mut of immutable variable '$v'`.
-//
-// Surfaced in `package-gale/src/lower.wado` after the power-assert step-1
-// recursion landed: `assert ctx.is_alt_scannable(&alts[*idx].elements, &mut visiting), ...`.
+// Power-assert keeps a `&mut <expr>` argument's operand in place: extracted
+// into an immutable `let $v`, the call could not take `&mut $v`.
 
 fn flip(b: &mut bool) -> bool {
     *b = !*b;
     return *b;
 }
 
-export fn run() with Stdout {
+export fn run() {
     let mut visiting = false;
     assert flip(&mut visiting);
 }

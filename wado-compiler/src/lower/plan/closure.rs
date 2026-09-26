@@ -775,6 +775,7 @@ impl ClosureLowerer {
                 is_export: false, // Closure method, not a world export
                 type_params: Vec::new(),
                 impl_type_params: Vec::new(),
+                impl_origin: None,
                 monomorph_info: None,
                 method_info: Some(method_info),
                 params,
@@ -800,7 +801,6 @@ impl ClosureLowerer {
                 is_dispatch_wrapper: false,
                 is_cm_export: false,
                 is_ambient: false,
-                benign_effects: Vec::new(),
                 inline_hint: InlineHint::Auto,
                 compiler_item: None,
                 export_name: None,
@@ -934,6 +934,7 @@ impl ClosureLowerer {
                         FunctionRef {
                             module_source: ModuleSource::format(),
                             name: format!("{}::{}", fmt.fq, fmt.write_literal),
+                            template: None,
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 fmt.fq.clone(),
@@ -1032,6 +1033,7 @@ impl ClosureLowerer {
                         Some(target_trait),
                         target_method,
                     ),
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         FqTypeName::shape(&self.module_source, struct_name),
@@ -1085,6 +1087,7 @@ impl ClosureLowerer {
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
+            impl_origin: None,
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
                 FqTypeName::shape(&self.module_source, struct_name),
@@ -1139,7 +1142,6 @@ impl ClosureLowerer {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: InlineHint::Auto,
             compiler_item: None,
             export_name: None,
@@ -1283,6 +1285,7 @@ impl ClosureLowerer {
             is_export: false,                // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),
+            impl_origin: callee.impl_origin,
             monomorph_info: callee.monomorph_info.clone(),
             method_info: specialized_method_info,
             params: new_params,
@@ -1303,7 +1306,6 @@ impl ClosureLowerer {
             is_dispatch_wrapper: false,
             is_cm_export: false,
             is_ambient: false,
-            benign_effects: Vec::new(),
             inline_hint: callee.inline_hint,
             compiler_item: callee.compiler_item,
             export_name: callee.export_name.clone(),
@@ -1403,6 +1405,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             name,
             module_source: func_module,
             type_args: _,
+            template: _,
         } = &expr.kind
         {
             let Some(sig) = self.func_sigs.get(name.as_str()) else {
@@ -1461,6 +1464,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
                     func: Box::new(FunctionRef {
                         module_source: func_module,
                         name: func_name,
+                        template: None,
                         monomorph_info: None,
                         method_info: None,
                     }),
@@ -1781,6 +1785,7 @@ impl ClosureCallSiteLowerer<'_> {
         *func = FunctionRef {
             module_source: self.module_source.clone(),
             name: specialized_name.clone(),
+            template: None,
             monomorph_info: orig_monomorph_info,
             method_info: specialized_method_info,
         };
@@ -1800,16 +1805,16 @@ impl ClosureCallSiteLowerer<'_> {
         if !is_fn_type_name(&info.base_struct_name()) {
             return;
         }
-        let Some(base_trait) = info.base_trait_name() else {
+        let Some(trait_) = info.trait_decl() else {
             return;
         };
-        let is_format_trait = {
-            let items = self.type_table.compiler_items();
-            CLOSURE_FORMAT_TRAITS
-                .iter()
-                .any(|(it, _)| items.trait_name(*it) == base_trait)
-        };
-        if !is_format_trait {
+        let format_traits = CLOSURE_FORMAT_TRAITS.map(|(item, _)| item);
+        if self
+            .type_table
+            .compiler_items()
+            .trait_among(trait_, &format_traits)
+            .is_none()
+        {
             return;
         }
 
@@ -1871,6 +1876,7 @@ impl ClosureCallSiteLowerer<'_> {
             // a different module, but the impl itself doesn't move.
             module_source: functor.module_source.clone(),
             name: new_name,
+            template: None,
             monomorph_info: None,
             method_info: Some(new_method_info),
         };

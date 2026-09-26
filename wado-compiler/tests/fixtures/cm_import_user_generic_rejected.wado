@@ -1,0 +1,16 @@
+// A `#[cm]` import is held to what an export is: a user generic has no
+// Component Model value representation, whatever its alias spells.
+use { Box2 as Option } from "./sub/alias_named_prelude_generic_dep.wado";
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-thing")]
+    fn get_thing() -> Option<i32>;
+}
+
+export fn run() with Gfx {
+    let t = Gfx::get_thing();
+    assert t.a == 1;
+}
+
+__DATA__
+{"compile_error": "import function `get_thing`: generic type `Box2<i32>` has no Component Model value representation"}
