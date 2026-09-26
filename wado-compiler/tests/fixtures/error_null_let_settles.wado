@@ -1,0 +1,11 @@
+// A `let` settles a null's type at once, as it does an integer literal's, so a
+// later assignment cannot widen it.
+
+test "unreachable: an Option<i32> into an Option<!>" {
+    let mut x = null;
+    x = Option::Some(1);
+    assert x matches { None };
+}
+
+__DATA__
+{"compile_error": ":6:9: analysis error: type mismatch: expected 'Option<!>', found 'Option<i32>'", "compile_error_count": 1}

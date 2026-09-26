@@ -3245,10 +3245,8 @@ pub struct IdentExpr {
     /// Call-site turbofish (`identity::<i32>(x)`) is recorded on `CallExpr.type_args`
     /// instead, so this is empty for identifiers used directly as a call callee.
     pub type_args: Vec<Type>,
-    /// Whether `type_args` were written on the path's *prefix* rather than on
-    /// the identifier itself — `Maybe::<i32>::Nothing` (a turbofish-qualified
-    /// case) as against `ns::f::<i32>` (a generic function reference). Only the
-    /// former admits a `_` slot, which the expected type fills.
+    /// Whether `type_args` were written on the path's prefix
+    /// (`Maybe::<i32>::Nothing`) rather than after its last segment.
     pub type_args_on_prefix: bool,
 }
 
@@ -3265,6 +3263,11 @@ impl IdentExpr {
     /// qualifies it — the `ns` of `ns::Color::Red`.
     pub fn owner_index(&self) -> Option<usize> {
         self.segments.len().checked_sub(2)
+    }
+
+    /// The path's last segment, or the bare name: `Red` in `Color::Red` and in `Red`.
+    pub fn case_name(&self) -> &str {
+        self.segments.last().map_or(&self.name, |seg| &seg.name)
     }
 }
 

@@ -23,7 +23,20 @@ assert missing == also_missing;
 
 Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
 
-A bare `null` — one no expected type has pinned — has the type `Option<!>`: a value of every `Option<T>` and of no other type. That is what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
+A `null` takes the `Option` its context expects. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any type but an `Option`, so `let x: i32 = null` is a type error.
+
+`Option<!>` is a value of every `Option<T>`. Like an integer literal, a `null` answers a type parameter last, so a sibling argument decides which `Option` it is. A `let` settles its type at once, as it does an integer literal's:
+
+```wado
+fn pair<T>(a: T, b: T) -> T { return a; }
+
+let p = pair(null, Option::Some(1));    // Option<i32>
+let x = null;                           // Option<!>
+// x = Option::Some(1);                 // Error: expected Option<!>
+// if let Some(v) = x { }               // Error: unreachable, no Option<!> is a Some
+```
+
+`Option<!>` is also what a type converts from to accept `null` where an `Option` is not expected, which is how `core:value::Value` takes JSON's `null` in a literal:
 
 ```wado
 impl From<Option<!>> for Value {

@@ -14,12 +14,12 @@ use crate::name::{
     FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
 };
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{DefaultTypeBinding, slot_type_bindings};
+use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
@@ -423,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_method_call(method_call, ctx, expected_type)
             }
             Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx)
+                self.resolve_static_method_call(static_call, ctx, expected_type)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => {
@@ -741,7 +741,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            match var_ref {
+            let ty = match var_ref {
                 VarRef::Local {
                     index: _,
                     type_id,
@@ -752,7 +752,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // record the place so `assign_to_target` can classify an
                     // ident l-value without the resolved `kind`.
                     self.record_assign_place(ident.id, AssignPlace::Local);
-                    return type_id;
+                    type_id
                 }
                 VarRef::Capture {
                     index: _,
@@ -762,7 +762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_reference_opt(ident.id, defining_ast_id);
                     // Reify rebuilds the `Capture`. A by-value
                     // capture is not an l-value, so no place is recorded.
-                    return type_id;
+                    type_id
                 }
                 VarRef::DerefCapture {
                     index: _,
@@ -784,9 +784,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ident.id,
                         AssignPlace::DerefCapture { through_mut_ref },
                     );
-                    return inner_type_id;
+                    inner_type_id
                 }
-            }
+            };
+            return self.value_without_turbofish(ident, ty);
         }
 
         if let Some((decl, _)) = self.tysys.dispatched_operation(ident) {
@@ -833,7 +834,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                 })
             });
-            return assoc.ty;
+            if !ident.type_args_on_prefix {
+                return self.value_without_turbofish(ident, assoc.ty);
+            }
+            let owner_type =
+                self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
+            return if owner_type == TypeTable::ERROR {
+                TypeTable::ERROR
+            } else {
+                assoc.ty
+            };
         }
 
         // A case name without parentheses: `Color::Red`, or a bare `Red`.
@@ -865,7 +875,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return ty;
+            return self.value_without_turbofish(ident, ty);
         }
 
         // Check for imported global variables
@@ -888,7 +898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return ty;
+            return self.value_without_turbofish(ident, ty);
         }
 
         // Check if it's a known function (function reference)
@@ -929,6 +939,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
+    /// `ty`, or ERROR once a turbofish on `ident` is reported: the value it
+    /// names has no type parameters to take one.
+    fn value_without_turbofish(&mut self, ident: &ast::IdentExpr, ty: TypeId) -> TypeId {
+        if self.reject_surplus_turbofish(&ident.name, 0, ident.type_args.len(), ident.span) {
+            return TypeTable::ERROR;
+        }
+        ty
+    }
+
     /// Look up an identifier in the global scope of the module that wrote it,
     /// which is what gives a travelled expression its author's module-private
     /// globals and functions. Supports globals and function refs.
@@ -941,7 +960,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // only. A travelled expression is never an assignment target, so no
         // place is recorded.
         if let Some(ty) = self.global_type_in(&ident.name, home) {
-            return Some(ty);
+            return Some(self.value_without_turbofish(ident, ty));
         }
         let sig = self.tysys.free_function_sig_at(ident.id)?.clone();
         Some(
@@ -983,27 +1002,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
-    /// the declaring type's parameters; an enum or a flags type declares none.
-    fn check_case_turbofish_arity(
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`, `Maybe::Just::<i32>`)
+    /// must name exactly the declaring type's parameters; an enum or a flags type declares none.
+    pub(super) fn check_case_turbofish_arity(
         &mut self,
-        ident: &ast::IdentExpr,
+        found: usize,
         type_name: &str,
         expected: usize,
-    ) {
-        if ident.type_args.is_empty() || ident.type_args.len() == expected {
-            return;
+        span: Span,
+    ) -> bool {
+        let fits = found == 0 || found == expected;
+        if !fits {
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: type_name.to_string(),
+                expected,
+                found,
+                span,
+            });
         }
-        let expected_text = match expected {
-            0 => "no type arguments".to_string(),
-            1 => "1 type argument".to_string(),
-            n => format!("{n} type arguments"),
-        };
-        let found = ident.type_args.len();
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
-            span: ident.span,
-        });
+        fits
     }
 
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
@@ -1015,102 +1032,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        // The segment before the case's own name is the type, and the resolve
-        // walk answered for it in the module that wrote it, so a reference
-        // inside a foreign default resolves in the declaring module. A bare
-        // case (`None`, `Leaf`) has no such segment: the expected type
-        // supplies it, or nothing does.
-        let (owner, spelled) = if let Some(seg) = ident.owner_segment() {
-            (self.tysys.resolutions.declared(seg.id), ident.name.clone())
+        // The prefix was answered for in the module that wrote it, so a
+        // reference inside a foreign default resolves in the declaring module.
+        // A bare case (`None`, `Leaf`) has none: the expected type supplies it.
+        let (owner, spelled) = if ident.owner_segment().is_some() {
+            (self.case_owner_of_path(ident)?, ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
-                BareCase::Of { owner, spelled } => (Some(owner), spelled),
+                BareCase::Of { owner, spelled } => (self.case_owner_of_decl(owner)?, spelled),
                 BareCase::NeedsContext => return Some(TypeTable::ERROR),
                 BareCase::None => return None,
             }
         };
-        // A newtype reaches its base's members and keeps its own identity, so
-        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
-        // the implicit form of `Color::Green as C`.
-        let through_newtype =
-            owner.and_then(|def| newtype_member_owner(&self.type_lookup(), &self.tysys, def));
-        let owner = through_newtype.map(|(base, _)| base).or(owner);
-        let pos = spelled.find("::")?;
-        let prefix = &spelled[..pos];
-        let suffix = &spelled[pos + 2..];
-        macro_rules! lookup_case {
-            ($of:ident) => {
-                owner.and_then(|def| self.type_lookup().$of(def)).cloned()
-            };
-        }
+        let (prefix, case_name) = spelled.rsplit_once("::")?;
+        let lookup = self.type_lookup();
+        let variant_info = lookup.variant_cases_of(owner.def).cloned();
+        let enum_info = lookup.enum_cases_of(owner.def).cloned();
+        let flags_info = lookup.flags_members_of(owner.def).cloned();
 
-        let variant_info = lookup_case!(variant_cases_of);
         if let Some(variant_info) = variant_info
-            && let Some((_, case_data)) = variant_info.case_named(suffix)
+            && let Some((_, case_data)) = variant_info.case_named(case_name)
         {
-            self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
-            // A payload-less case has no payload to infer from, so the
-            // turbofish is the only source besides the expected type.
-            let variant_type = self.construct_variant_case(
-                &variant_info,
-                case_data,
-                &[],
-                &ident.type_args,
-                prefix,
-                expected_type,
-                ident.id,
-                ident.span,
-            );
-            if variant_type == TypeTable::ERROR {
+            self.record_case_path(ident, owner.def, case_data.ast_id);
+            // A payload-less case has no payload to infer from, so what the
+            // path writes is the only source besides the expected type.
+            let Some(written) =
+                self.case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
+            else {
                 return Some(TypeTable::ERROR);
-            }
-            return Some(through_newtype.map_or(variant_type, |(_, named)| named));
+            };
+            let case = CaseSite {
+                variant: &variant_info,
+                case: case_data,
+                written: &written,
+                owner: prefix,
+                site: ident.id,
+                span: ident.span,
+            };
+            return Some(self.construct_through_case_owner(
+                &owner,
+                prefix,
+                ident.span,
+                expected_type,
+                |e, expected| e.construct_variant_case(&case, &[], &[], expected),
+            ));
         }
 
-        // Check for enum case: Color::Red (enums have no payload)
-        let enum_info = lookup_case!(enum_cases_of);
-        if let Some(enum_info) = enum_info
-            && let Some(case_data) = enum_info.find_case(suffix).cloned()
+        let (case_ast_id, case_type) = if let Some(enum_info) = enum_info
+            && let Some(case_data) = enum_info.find_case(case_name)
         {
-            self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
             let enum_type = self
                 .tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(enum_info.defined_at);
-
-            // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
-        }
-
-        // Check for flags member: PathFlags::SymlinkFollow
-        // Flags members are bitmask integers (1 << index) represented as IntLiteral
-        let flags_info = lookup_case!(flags_members_of);
-        if let Some(flags_info) = flags_info
-            && let Some(member) = flags_info
-                .members
-                .iter()
-                .find(|m| m.name == suffix)
-                .cloned()
+            (case_data.ast_id, enum_type)
+        } else if let Some(flags_info) = flags_info
+            && let Some(member) = flags_info.members.iter().find(|m| m.name == case_name)
         {
-            self.record_qualified_case(ident, prefix, member.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
+            (member.ast_id, flags_info.type_id)
+        } else {
+            return None;
+        };
+        self.record_case_path(ident, owner.def, case_ast_id);
+        let fits = self
+            .case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
+            .is_some_and(|written| {
+                self.check_case_turbofish_arity(written.len(), prefix, 0, ident.span)
+            });
+        if !fits {
+            return Some(TypeTable::ERROR);
         }
-        None
+        // Reify rebuilds the `EnumConstruct` or the flags constant. Not an l-value.
+        Some(owner.named.unwrap_or(case_type))
     }
 
     /// What the bare `ident` is as a case: a type name may be omitted only
-    /// where the expected type supplies it. A found case is recorded for reify.
+    /// where the expected type supplies it.
     pub(super) fn bare_case(
         &mut self,
         ident: &ast::IdentExpr,
         expected: Option<TypeId>,
     ) -> BareCase {
         if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
-            self.record_bare_case(ident.id, owner);
             return BareCase::Of { owner, spelled };
         }
         let Some(qualified) = self.tysys.bare_case_at(ident.id) else {
@@ -1202,10 +1206,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
-        // (a) Turbofish on the identifier: `name::<T, ...>`.
+        // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
+        // has no call to infer from, so a `_` slot is unanswerable.
         if !ident.type_args.is_empty() {
+            if let Some(span) = ident.type_args.iter().find_map(Self::first_infer_span) {
+                let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
+                return TypeTable::ERROR;
+            }
             if ident.type_args.len() != real_type_param_count {
-                let _ = self.emit(TypeError::GenericFunctionRefArgCountMismatch {
+                let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
                     expected: real_type_param_count,
                     found: ident.type_args.len(),
@@ -2736,6 +2745,61 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Each case's payload type of the variant `ty`, typed at this instance.
+    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let variant_info = self.tysys.variant_of_type(ty)?;
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(ty)
+            .unwrap_or_default();
+        Some(
+            variant_info
+                .cases
+                .iter()
+                .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
+                .collect(),
+        )
+    }
+
+    /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
+    pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
+        self.is_uninhabited_within(ty, &mut Vec::new())
+    }
+
+    /// `open` holds the types being asked about further out. One met again inside
+    /// itself has no finite value, so it answers `true`.
+    fn is_uninhabited_within(&self, ty: TypeId, open: &mut Vec<TypeKey>) -> bool {
+        let (head, key, elems) = {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(ty);
+            if tt.is_never(head) {
+                return true;
+            }
+            (head, tt.type_key(head), tt.as_tuple(head))
+        };
+        if open.contains(&key) {
+            return true;
+        }
+        open.push(key);
+        let answer = if let Some(elems) = elems {
+            elems.iter().any(|&t| self.is_uninhabited_within(t, open))
+        } else if let Some(fields) = self.struct_field_types(head) {
+            fields
+                .iter()
+                .any(|&(_, t)| self.is_uninhabited_within(t, open))
+        } else if let Some(payloads) = self.case_payload_types(head) {
+            payloads
+                .iter()
+                .all(|&t| self.is_uninhabited_within(t, open))
+        } else {
+            false
+        };
+        open.pop();
+        answer
+    }
+
     /// Report the arms no value reaches. Coverage reads no types, so a
     /// type-pattern arm an earlier narrowing already takes is found by type.
     fn check_unreachable_arms(
@@ -2847,6 +2911,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|c| Case {
                     name: c.name.clone(),
                     has_payload: false,
+                    inhabited: true,
                 })
                 .collect();
             let index = cases.iter().position(|c| c.name == name)?;
@@ -2857,27 +2922,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
-        let (index, case) = variant_info.case_named(name)?;
-        let cases: Rc<[Case]> = {
-            let tt = self.tysys.type_table.borrow();
-            variant_info
-                .cases
-                .iter()
-                .map(|c| Case {
+        let (index, _) = variant_info.case_named(name)?;
+        let payload_types = self.case_payload_types(scrutinee_type)?;
+        let cases: Rc<[Case]> = variant_info
+            .cases
+            .iter()
+            .zip(&payload_types)
+            .map(|(c, &payload_type)| {
+                let has_payload = c.has_payload(&self.tysys.type_table.borrow());
+                Case {
                     name: c.name.clone(),
-                    has_payload: c.has_payload(&tt),
-                })
-                .collect()
-        };
+                    has_payload,
+                    inhabited: !self.is_uninhabited(payload_type),
+                }
+            })
+            .collect();
+        // A case no value reaches was reported where its pattern was resolved.
+        if !cases[index].inhabited {
+            return None;
+        }
         let payload = match payload.filter(|_| cases[index].has_payload) {
-            Some(p) => {
-                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
-                Some(Box::new(self.exh_pattern(p, payload_type)?))
-            }
+            Some(p) => Some(Box::new(self.exh_pattern(p, payload_types[index])?)),
             None => None,
         };
         Some(Pat::Case {
@@ -3448,7 +3513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Record use→def reference for the struct type name.
         if let (Some(name_id), Some(written)) = (struct_lit.name_id, name.as_ref()) {
-            self.record_item_reference_by_name(name_id, written);
+            self.record_type_name_reference(name_id, written);
         }
 
         // Which declaration the written name means is the resolve pass's

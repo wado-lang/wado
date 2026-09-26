@@ -1,0 +1,14 @@
+// `Self` already names its type arguments, so a case reached through it takes no turbofish.
+
+variant Gb<T> { J(T), N }
+
+impl<T> Gb<T> {
+    fn mk(v: T) -> Gb<T> { return Self::J::<T>(v); }
+}
+
+test "unreachable: a turbofish on a case of Self" {
+    assert Gb::<i32>::mk(1) matches { J(1) };
+}
+
+__DATA__
+{"compile_error": "`Self` already names its type arguments; remove the turbofish from `J`", "compile_error_count": 1}
