@@ -1,0 +1,9 @@
+// A `matches` binding does not escape the pattern.
+
+test {
+    let opt: Option<i32> = Option::Some(1);
+    if opt matches { Some(x) } && x > 0 { }
+}
+
+__DATA__
+{"compile_error":"'x' is not in scope"}

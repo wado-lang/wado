@@ -2,40 +2,48 @@
 
 ## Conditional Statements
 
-```wado
-if condition {
-    // then block
-} else {
-    // else block
-}
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 
-// else-if chains
+```wado
+let x = 7;
+let mut sign = "";
 if x < 0 {
-    println("negative");
+    sign = "negative";
 } else if x == 0 {
-    println("zero");
+    sign = "zero";
 } else {
-    println("positive");
+    sign = "positive";
 }
+assert sign == "positive";
 ```
 
 ### If Expression
 
-```wado
-let abs = if x < 0 { -x } else { x };
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
 
+```wado
+let x = -3;
+let abs = if x < 0 { -x } else { x };
+assert abs == 3;
+
+let score = 85;
 let grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" };
+assert grade == "B";
 ```
 
 ### If Let Pattern Matching
 
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
+
 ```wado
 let opt: Option<i32> = Option::<i32>::Some(42);
+let mut got = 0;
 if let Some(x) = opt {
-    println(`Got: ${x}`);
+    got = x;
 } else {
-    println("None");
+    got = -1;
 }
+assert got == 42;
 ```
 
 ### Match Ergonomics
@@ -44,11 +52,13 @@ When the scrutinee of `if let`, `match`, or `matches` is a reference type (`&T` 
 
 A destructuring `let` or `for` binding follows the same rule, and so does a reference met below the top of a pattern: `for let [a, b] of &pairs` gives `a: &A`, and `[n, { x, .. }]` against `[i32, &Point]` gives `x: &i32`.
 
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
+
 ```wado
 let opt: Option<i32> = Option::<i32>::Some(42);
 let ro = &opt;
 if let Some(x) = ro {       // ro: &Option<i32>, x: &i32
-    println(`Got: ${*x}`);   // dereference to use the value
+    assert *x == 42;        // dereference to use the value
 }
 ```
 
@@ -59,12 +69,19 @@ escape into the enclosing scope. On a match they cover the rest of the block;
 otherwise the `else` block runs and must diverge (`return`, `break`,
 `continue`, `panic`, …). The `else` block does not see the bindings.
 
+<!-- {"fixture":"spec_control_flow_conditionals.wado"} -->
+
 ```wado
 fn parse_port(s: String) -> i32 {
     let Ok(port) = i32::from_str(&s) else {
         return -1;
     };
     return port;                // `port` is in scope here
+}
+
+test {
+    assert parse_port("8080") == 8080;
+    assert parse_port("http") == -1;
 }
 ```
 
@@ -73,25 +90,33 @@ An irrefutable pattern is rejected — its `else` could never run; use a plain
 
 ## While Loop
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let mut i = 0;
+let mut sum = 0;
 while i < 10 {
-    println(`i = ${i}`);
+    sum += i;
     i = i + 1;
 }
+assert sum == 45;
 ```
 
 ### While Let Pattern Matching
 
 `while let` allows iterating while a pattern matches:
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let items: List<i32> = [1, 2, 3];
 let mut iter = items.into_iter();
 
+let mut seen: List<i32> = [];
 while let Some(x) = iter.next() {
-    println(`${x}`);
+    seen.push(x);
 }
+assert seen == [1, 2, 3];
 ```
 
 The loop continues as long as the pattern matches. When the pattern fails to match (e.g., `iter.next()` returns `None`), the loop exits.
@@ -100,20 +125,28 @@ The loop continues as long as the pattern matches. When the pattern fails to mat
 
 C-style for loop with initialization, condition, and update. Parentheses are optional:
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
+let mut sum = 0;
 for let mut i = 0; i < 10; i = i + 1 {
-    println(`i = ${i}`);
+    sum += i;
 }
+assert sum == 45;
 
 // With parentheses (also valid)
 for (let mut i = 0; i < 10; i = i + 1) {
-    println(`i = ${i}`);
+    sum += i;
 }
+assert sum == 90;
 
 // All parts are optional
+let mut n = 0;
 for ;; {
-    // infinite loop
+    n += 1;
+    if n == 3 { break; }
 }
+assert n == 3;
 ```
 
 ### Semantics
@@ -128,31 +161,39 @@ created holding the current values, and `update` and the next `cond` act on
 them. So a closure or a reference taken in one iteration keeps that iteration's
 binding, and later iterations do not change it:
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let mut fs: List<fn() -> i32> = [];
 for let mut i = 0; i < 3; i += 1 {
     fs.push(|| i);
 }
-// the closures return 0, 1 and 2, not 3, 3 and 3
+assert fs[0]() == 0 && fs[1]() == 1 && fs[2]() == 2;   // not 3, 3 and 3
 ```
 
 ### For with Pattern Condition
 
 The condition part of a C-style for loop can use `let` pattern matching:
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let items: List<i32> = [10, 20, 30];
 let mut iter = items.into_iter();
 
+let mut sum = 0;
 for ; let Some(x) = iter.next(); {
-    println(`${x}`);
+    sum += x;
 }
+assert sum == 60;
 
 // With update expression
+let mut again = items.into_iter();
 let mut count = 0;
-for ; let Some(x) = iter.next(); count += 1 {
-    println(`item ${count}: ${x}`);
+for ; let Some(x) = again.next(); count += 1 {
+    assert x == items[count];
 }
+assert count == 3;
 ```
 
 The loop continues as long as the pattern matches. This is useful for iterating with additional state (like a counter) alongside pattern matching.
@@ -161,22 +202,30 @@ The loop continues as long as the pattern matches. This is useful for iterating 
 
 For iterating over any type that implements `IntoIterator`:
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let numbers: List<i32> = [1, 2, 3, 4, 5];
+let mut sum = 0;
 for let n of numbers {
-    println(`${n}`);
+    sum += n;
 }
+assert sum == 15;
 
 // With mutable binding
-for let mut item of items {
+for let mut item of numbers {
     item = item * 2;  // Can modify the local binding
-    println(`${item}`);
+    sum += item;
 }
+assert sum == 45 && numbers[0] == 1;
 
 // Custom types that implement IntoIterator also work
+let my_collection = Countdown { n: 3 };
+let mut order: List<i32> = [];
 for let x of my_collection {
-    println(`${x}`);
+    order.push(x);
 }
+assert order == [3, 2, 1];
 ```
 
 ### Semantics
@@ -199,11 +248,15 @@ Match on the element in the body instead.
 
 When the iterable is a tuple, the loop body is expanded once per element at compile time. Each expansion independently types the binding, enabling heterogeneous iteration with per-element trait dispatch.
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
 let t = [42, "hello", true];
+let mut out = "";
 for let v of t {
-    println(`${v}`);  // expanded to three blocks, each with the correct type
+    out.push_str(`${v} `);  // expanded to three blocks, each with the correct type
 }
+assert out == "42 hello true ";
 ```
 
 `break` and `continue` are not allowed inside a tuple for-of body because the loop is unrolled at compile time into sequential blocks and these have no natural target. `.enumerate()` is supported and provides a compile-time index.
@@ -212,11 +265,17 @@ for let v of t {
 
 Wrapping the same walk in `[...]` collects one result element per source element. The braces hold a single expression — the element's value — since every position of the result tuple has one.
 
+<!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
+
 ```wado
 impl<..T: Doubled> Doubled for [..T] {
     fn doubled(&self) -> [..T] {
         return [for let v of *self { v.doubled() }];
     }
+}
+
+test {
+    assert [1, "ab"].doubled() == [2, "abab"];
 }
 ```
 
@@ -226,18 +285,25 @@ The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable 
 
 ## Infinite Loop
 
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
+
 ```wado
+let mut n = 0;
 loop {
     // runs forever until break
-    if should_exit() {
+    n += 1;
+    if n == 5 {
         break;
     }
 }
+assert n == 5;
 ```
 
 ## Break and Continue
 
 `break` exits the innermost enclosing loop. `continue` skips to the next iteration.
+
+<!-- {"fixture":"spec_control_flow_loops.wado"} -->
 
 ```wado
 // break example
@@ -248,14 +314,17 @@ while i < 100 {
     }
     i = i + 1;
 }
+assert i == 10;
 
 // continue example
-for let mut i = 0; i < 10; i = i + 1 {
-    if i == 5 {
-        continue;  // skip printing 5
+let mut kept: List<i32> = [];
+for let mut j = 0; j < 10; j = j + 1 {
+    if j == 5 {
+        continue;  // skip 5
     }
-    println(`${i}`);
+    kept.push(j);
 }
+assert kept.len() == 9 && kept[5] == 6;
 ```
 
 Both `break` and `continue` work with `while`, `for`, and `loop`, and a loop
@@ -296,7 +365,12 @@ all of it at once, and its tail is the path no `break` took. Inside a block,
 one inside the next. A `break` may also leave an effect handler's `do` block
 (see [Handler Scope](./spec-effects.md#handler-scope)).
 
+<!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
+
 ```wado
+let grid: List<List<i32>> = [[1, 2], [3, 4]];
+let needle = 3;
+let mut hit = [0, 0];
 search: {
     for let r of 0..<grid.len() {
         for let c of 0..<grid[r].len() {
@@ -308,6 +382,7 @@ search: {
     }
     hit = [-1, -1];             // reached only when no break was taken
 }
+assert hit == [1, 0];
 ```
 
 ### As an Expression
@@ -319,7 +394,11 @@ expected where the block sits, so a literal coerces to that rather than to its
 own default. Any expression position takes one, not only the right-hand side of
 a `let`.
 
+<!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
+
 ```wado
+let items: List<Entry> = [{ key: "a", value: 1 }, { key: "b", value: 2 }];
+let key = "b";
 let found = search: {
     for let item of items {
         if item.key == key {
@@ -328,6 +407,7 @@ let found = search: {
     }
     -1  // the value when no break is taken
 };
+assert found == 2;
 ```
 
 A trailing statement that is not a value yields `()`. A block whose branches all
@@ -338,18 +418,24 @@ A path that cannot reach the end is no branch at all. When the trailing
 statement is a loop that only `break LABEL` leaves, nothing reaches the tail, so
 the breaks alone type the block. This is how a loop computes a value:
 
+<!-- {"fixture":"spec_control_flow_labeled_blocks.wado"} -->
+
 ```wado
+let mut n = 0;
 let found = scan: {
     loop {
-        let line = next();
-        if line.is_match() { break scan: line; }
+        n += 1;
+        if n * n > 50 { break scan: n; }
     }
 };
+assert found == 8;
 ```
 
 ## Match Expression
 
 Match expression provides exhaustive pattern matching on variants and other types.
+
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
 
 ```wado
 // Match expression (produces a value)
@@ -357,6 +443,7 @@ let result = match opt {
     Some(x) => x * 2,
     None => 0,
 };
+assert result == 42;
 
 // Match with custom variants
 let area = match shape {
@@ -364,12 +451,14 @@ let area = match shape {
     Rectangle([w, h]) => w * h,
     Point => 0.0,
 };
+assert area == 6.0;
 
 // Match statement (no value produced)
 match command {
     Start => engine.start(),
     Stop => engine.stop(),
 }
+assert engine.running;
 ```
 
 ### Pattern Syntax
@@ -399,11 +488,16 @@ any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
 since `AsStrSlice` requires `Eq<String>`.
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 fn kind<S: AsStrSlice>(s: S) -> i32 {
     return match s { "cntrl" => 1, "digit" => 2, _ => 0 };
 }
-kind("digit".as_str_slice());   // 2
+
+test {
+    assert kind("digit".as_str_slice()) == 2;
+}
 ```
 
 ### Patterns That Cannot Fail
@@ -413,11 +507,28 @@ A case pattern does so when no other case of the type holds a value, as defined
 under Exhaustiveness below. A literal, a range, a constant, an or-pattern, and a
 narrowing type pattern never do.
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 variant W { A(i32) }
-let A(x) = w;                     // OK: W has no other case
-let Ok(v) = r;                    // OK where r: Result<i32, !>
-let Some(y) = opt;                // Error: `Some` may not match
+
+test {
+    let w = W::A(1);
+    let r: Result<i32, !> = Ok(2);
+    let A(x) = w;                     // OK: W has no other case
+    let Ok(v) = r;                    // OK: r has no `Err`
+    assert x == 1 && v == 2;
+}
+```
+
+A case pattern of a type with another case is an error, since that case may be
+the value:
+
+<!-- {"fixture":"spec_control_flow_let_refutable.wado"} -->
+
+```wado
+let opt: Option<i32> = Option::Some(1);
+let Some(y) = opt;
 ```
 
 A bare name in such a pattern, at its root or below it, is a case pattern when
@@ -438,32 +549,40 @@ An uninitialized `let x: T;` declares a single name, or `_`.
 
 Match must cover all possible cases. Use `_` wildcard for catch-all:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
-match color {
+let name = match color {
     Red => "red",
     Green => "green",
     _ => "other",  // Required for exhaustiveness
-}
+};
+assert name == "other";
 ```
 
 The guardless arms must cover every value together. A guarded arm covers
-nothing, and a case is covered only as far as its payload patterns reach:
+nothing, and a case is covered only as far as its payload patterns reach. This
+match misses `Some(-2147483648..=0)`, among others:
+
+<!-- {"fixture":"spec_control_flow_non_exhaustive.wado"} -->
 
 ```wado
-match opt {
+let s = match opt {
     Some(1) => "one",
     None => "none",
-}   // Error: non-exhaustive match: missing case `Some(-2147483648..=0)`
+};
 ```
 
 An arm no value can reach is an error too: the guardless arms before it already
 take every value it matches.
 
+<!-- {"fixture":"spec_control_flow_unreachable_arm.wado"} -->
+
 ```wado
-match opt {
+let n = match opt {
     _ => 0,
-    Some(x) => x,   // Error: unreachable arm
-}
+    Some(x) => x,
+};
 ```
 
 A case whose payload type has no value needs no arm, since nothing constructs
@@ -471,23 +590,29 @@ it. An arm naming one is unreachable, and is the same error. A type has no value
 when it is `!`, when a tuple element or struct field of it has none, or when
 every case of a variant has a payload with none:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 let r: Result<i32, !> = Ok(1);
-match r {
+let n = match r {
     Ok(v) => v,     // exhaustive: no `Result<i32, !>` is an `Err`
-}
+};
+assert n == 1;
 ```
 
 ### Guard Expressions
 
 Guards use `&&` to reflect left-to-right evaluation (pattern first, then guard):
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
-match customer {
+let discount = match customer {
     Premium(years) && years > 5 => 0.3,
     Premium(_) => 0.2,
     _ => 0.1,
-}
+};
+assert discount == 0.3;
 ```
 
 ### Qualified Patterns
@@ -522,15 +647,24 @@ of that name.
 
 A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 global TK_FOO: i32 = 1;
 global TK_BAR: i32 = 2;
 
-let kind = match token {
-    TK_FOO | TK_BAR => "keyword",
-    i32::MAX        => "max",
-    _               => "other",
-};
+fn token_kind(token: i32) -> String {
+    return match token {
+        TK_FOO | TK_BAR => "keyword",
+        i32::MAX        => "max",
+        _               => "other",
+    };
+}
+
+test {
+    assert token_kind(2) == "keyword" && token_kind(i32::MAX) == "max";
+    assert token_kind(3) == "other";
+}
 ```
 
 The pattern matches where `scrutinee == CONSTANT` holds, so a constant of any
@@ -542,6 +676,8 @@ type with an `Eq` compares as `==` would: a `String`, a struct, a tuple or an
 A range pattern matches a value between its bounds. It stands wherever a
 refutable pattern may, nested ones included:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 let grade = match score {
     0..<60 => "F",
@@ -549,6 +685,7 @@ let grade = match score {
     _ => "invalid",
 };
 let lower = c matches { 'a'..='z' };
+assert grade == "P" && lower;
 ```
 
 - The scrutinee is an integer or `char`.
@@ -567,113 +704,145 @@ The range operators themselves are in [Ranges](./spec-lexical.md#ranges).
 
 Or patterns match if any alternative matches. All alternatives must bind the same names with the same types:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 // Enum or-patterns
-match color {
+let tone = match color {
     Red | Blue => "cool",
     Green => "warm",
-}
+};
+assert tone == "cool";
 
 // Variant or-patterns with bindings
-match expr {
-    Num(n) | Neg(n) => use(n),
+let value = match expr {
+    Num(n) | Neg(n) => n,
     Zero => 0,
-}
+};
+assert value == 7;
 
 // Literal or-patterns
-match n {
+let level = match count {
     1 | 2 | 3 => "low",
     _ => "high",
-}
+};
+assert level == "low";
 
 // Or patterns in matches operator
-if shape matches { Circle(_) | Square(_) } { ... }
+assert shape matches { Circle(_) | Square(_) };
 ```
 
 ### Nested Sub-Patterns in Tuple/Struct Destructuring
 
 Tuple and struct patterns support literal, variant, enum, or-pattern, and range sub-patterns:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 // Literal sub-patterns in tuples
-match [x, y] {
+let axis = match [dx, dy] {
     [0, 0] => "origin",
     [0, _] => "y-axis",
     [_, 0] => "x-axis",
     _ => "other",
-}
+};
+assert axis == "y-axis";
 
 // Variant sub-patterns in tuples
-match [a, b] {
-    [Some(x), Some(y)] => x + y,
-    [Some(x), None] => x,
+let sum = match [a, b] {
+    [Some(p), Some(q)] => p + q,
+    [Some(p), None] => p,
     [None, _] => 0,
-}
+};
+assert sum == 3;
 
 // Literal sub-patterns in structs
-if let { x: 0, y: 0 } = point { println("origin"); }
+let point = Pt { x: 0, y: 0 };
+let mut origin = false;
+if let { x: 0, y: 0 } = point { origin = true; }
+assert origin;
 
 // Enum sub-patterns in tuples
-match [color, size] {
+let label = match [color, size] {
     [Red, Large] => "big red",
     [Blue, _] => "blue",
     _ => "other",
-}
+};
+assert label == "big red";
 
 // Or-pattern and range sub-patterns
-match point {
+let p = Pt { x: 15, y: 4 };
+let v = match p {
     { x: 0 | 1, y } => y,
     { x: 10..=20, y } => -y,
     _ => 0,
-}
+};
+assert v == -4;
 ```
 
 ### Mutable Bindings in Patterns
 
 The `mut` keyword before a binding name makes it mutable inside the pattern body:
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 if let Some(mut x) = opt {
     x += 10;  // x is mutable
+    assert x == 11;
 }
 
-match result {
+let doubled = match result {
     Ok(mut value) => {
         value *= 2;
         value
     },
     Err(_) => 0,
-}
+};
+assert doubled == 42;
 ```
 
 ## Matches Operator
 
 The `matches` infix operator tests if a value matches a pattern, returning `bool`.
 
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
 ```wado
 // Basic usage
 let is_some = opt matches { Some(_) };
 let is_circle = shape matches { Circle(_) };
+assert is_some && is_circle;
 
 // With guard
 let is_large = shape matches { Circle(r) && r > 10.0 };
+assert !is_large;
 
 // In conditions
+let mut has_value = false;
 if opt matches { Some(_) } {
-    println("has value");
+    has_value = true;
 }
+assert has_value;
 ```
 
 ### Scope
 
-Pattern bindings are scoped to the guard only and do not escape:
+Pattern bindings are scoped to the guard only and do not escape, so `x` is not
+in scope after the pattern:
+
+<!-- {"fixture":"spec_control_flow_matches_scope.wado"} -->
 
 ```wado
-// Bindings don't escape
-if opt matches { Some(x) } && x > 0 { }  // ERROR: x not in scope
+if opt matches { Some(x) } && x > 0 { }
+```
 
-// Use guard inside the pattern instead
-if opt matches { Some(x) && x > 0 } { }  // OK
+Use a guard inside the pattern instead:
+
+<!-- {"fixture":"spec_control_flow_match.wado"} -->
+
+```wado
+assert opt matches { Some(x) && x > 0 };
 ```
 
 ## Branch Hints
@@ -687,36 +856,56 @@ Because it is a plain statement rather than a condition wrapper, `cold_path()`
 works anywhere a branch body does — including an `if let` or `match` arm, where
 no boolean condition is available:
 
+<!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
+
 ```wado
-// Error/abort guard: the taken branch is cold.
-fn get(&self, i: i32) -> i32 {
-    if i >= self.len {
-        builtin::cold_path();
-        panic("index out of bounds");
+impl Buffer {
+    // Error/abort guard: the taken branch is cold.
+    fn get(&self, i: i32) -> i32 {
+        if i >= self.len {
+            builtin::cold_path();
+            panic("index out of bounds");
+        }
+        return self.data[i];
     }
-    return self.data[i];
 }
 
 // `match` arm with no boolean condition.
-match command {
-    Command::Run => execute(),
-    Command::Crash => {
-        builtin::cold_path();
-        panic("crashed");
-    }
+fn run(command: Command) -> i32 {
+    return match command {
+        Command::Run => execute(),
+        Command::Crash => {
+            builtin::cold_path();
+            panic("crashed");
+        },
+    };
+}
+
+test {
+    let b = Buffer { data: [1, 2], len: 2 };
+    assert b.get(1) == 2 && run(Command::Run) == 1;
 }
 ```
 
 Placed on the fall-through after a guard whose taken branch diverges, it hints
 the guard as likely-taken — the guard-clause idiom:
 
+<!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
+
 ```wado
-fn lookup(&self, key: String) -> i32 {
-    if let Some(v) = self.fast_path(key) {
-        return v;
+impl Cache {
+    fn lookup(&self, key: String) -> i32 {
+        if let Some(v) = self.fast_path(key) {
+            return v;
+        }
+        builtin::cold_path(); // the slow path below is rarely reached
+        return self.slow_path(key);
     }
-    builtin::cold_path(); // the slow path below is rarely reached
-    return self.slow_path(key);
+}
+
+test {
+    let cache = Cache { hot: "a" };
+    assert cache.lookup("a") == 1 && cache.lookup("bc") == 3;
 }
 ```
 
@@ -726,6 +915,8 @@ fn lookup(&self, key: String) -> i32 {
 compile-time constant, so the compiler does not fold away a computation reading
 it. It emits no instruction. Use it to keep a test or benchmark measuring the
 work it names:
+
+<!-- {"fixture":"spec_control_flow_branch_hints.wado"} -->
 
 ```wado
 test "sign extension folds the redundant mask" {
@@ -757,28 +948,48 @@ for a caller building its own container. It has no run-time form, so its
 argument must be a literal, `T` must be a numeric primitive, and the byte count
 must be a whole number of `T`s. Each is a compile error otherwise.
 
+<!-- {"fixture":"spec_control_flow_embedded_data.wado"} -->
+
 ```wado
-let weights = List::<f32>::from_le_bytes(#include_bytes("./weights.bin"));
-let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");   // [1.0, 2.0]
+let weights = List::<f32>::from_le_bytes(#include_bytes("./sub/spec_control_flow_weights.bin"));
+let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");
+let want: List<bf16> = [1.0, 2.0];
+assert weights == [1.0, 2.0] && bias == want;
 ```
 
 ## Error Handling
 
 ### Unrecoverable Errors (Traps)
 
+<!-- {"fixture":"spec_control_flow_errors.wado"} -->
+
 ```wado
-panic("Fatal error");      // logs the message to stderr, then traps
-unreachable();             // traps
-assert condition;          // panics when the condition is false
+#[expect_trap]
+test "panic logs the message to stderr, then traps" {
+    panic("Fatal error");
+}
+
+#[expect_trap]
+test "unreachable traps" {
+    unreachable();
+}
+
+#[expect_trap]
+test "assert panics when the condition is false" {
+    let condition = false;
+    assert condition;
+}
 ```
 
 A trap cannot be caught in Wado. It ends the program.
 
 ### Recoverable Errors (Result Type)
 
+<!-- {"fixture":"spec_control_flow_errors.wado"} -->
+
 ```wado
-fn parse_int(s: String) -> Result<i32, ParseError> {
-    // ...
+fn parse_config(text: String) -> Result<Config, ParseIntError> {
+    return Ok(Config { port: i32::from_str(text.trim())? });
 }
 
 fn read_config(path: String) -> Result<Config, ConfigError> with Preopens {
@@ -788,9 +999,13 @@ fn read_config(path: String) -> Result<Config, ConfigError> with Preopens {
     return Ok(config);
 }
 
-// Handle with pattern matching
-match result {
-    Ok(value) => process(value),
-    Err(e) => handle_error(e),
+test {
+    // Handle with pattern matching
+    let message = match read_config("missing.toml") {
+        Ok(config) => `port ${config.port}`,
+        Err(Io(e)) => `cannot read: ${e}`,
+        Err(Parse(e)) => `bad port: ${e}`,
+    };
+    assert message.starts_with("cannot read");
 }
 ```
