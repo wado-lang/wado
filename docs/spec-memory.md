@@ -30,8 +30,7 @@ fn translate(p: &mut Point, dx: i32, dy: i32) {
 
 These semantics are as-if. A program may rely on the value each expression
 denotes; it may not rely on the number of copies performed to produce it.
-There is no `move` operator. Where a source is not read again, the compiler may
-move the value instead of copying it, and the program cannot tell.
+There is no `move` operator.
 
 A program never chooses where a value lives. There is no stack or heap to pick
 between. A value needs no annotation to outlive its scope, because the garbage
@@ -154,10 +153,10 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 struct, `List<T>`, `String`, a tuple, a variant) compare identity, not content.
 
 Identity is guaranteed in one direction only. Two references to one object
-always compare equal. Two references to distinct objects of identical content
-may also compare equal, because the optimizer may intern such objects into one.
-Whether it does can change with the optimization level and with the Wado
-version. An identity comparison that should be true is never false.
+always compare equal. Two references to objects of identical content that the
+program built separately may also compare equal: whether they are distinct
+objects is unspecified, and can change with the optimization level and with the
+Wado version. An identity comparison that should be true is never false.
 
 ```wado
 fn same(a: &List<i32>, b: &List<i32>) -> bool { return a == b; }

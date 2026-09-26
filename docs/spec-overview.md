@@ -9,6 +9,10 @@ normative: it says what the language is meant to be, and you read a program's
 meaning from here. It is not a record of what the compiler happens to
 do today. The [index](./README.md) lists the files.
 
+The specification states what a program can observe. How the compiler produces
+it, such as which copies it makes or what it inlines or folds, is not part of
+the language, so the specification does not say.
+
 So if the specification and the implementation disagree, something is wrong.
 Which of the two is wrong is not decided in advance: the specification can be
 the mistaken one. That gets settled when the disagreement is found.

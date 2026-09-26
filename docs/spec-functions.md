@@ -519,9 +519,7 @@ Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
 storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
 renders what `` `${a} ${bump(&mut a)}` `` renders. A tag may carry effects,
-which the caller declares as for any call, and return any type. Whether a call
-folds at compile time is the optimizer's decision, as for any other call; the
-meaning does not depend on it.
+which the caller declares as for any call, and return any type.
 
 An untagged template means what the prelude's `format` tag means: each hole
 rendered through its specifier into one buffer.
