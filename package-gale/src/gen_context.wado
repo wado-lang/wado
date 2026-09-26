@@ -798,6 +798,22 @@ impl GenContext {
         return null;
     }
 
+    /// Whether a `*` / `+` at decision `site` may exit on a token in `kinds`,
+    /// inside its rule or past its end. True where either is unknown.
+    pub fn loop_exit_admits_any(&self, site: i32, kinds: &List<String>) -> bool {
+        let exits = &self.recovery.decision_exit;
+        if site < 0 || site >= exits.len() {
+            return true;
+        }
+        let Some(exit) = &exits[site] else {
+            return true;
+        };
+        if sets_overlap(&self.token_kinds.names_of(&exit.kinds), kinds) {
+            return true;
+        }
+        return exit.reaches_end && self.at_end_conflict_routes(&self.parser_rules[exit.rule].name, kinds);
+    }
+
     /// Record the rule whose body is currently being emitted (its index in
     /// `parser_rules`). Set by `gen_parse_fn` before the body walk.
     pub fn set_current_rule_index(&mut self, idx: i32) {

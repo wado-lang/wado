@@ -1,8 +1,5 @@
 //! The lookahead decision over a set of alternatives, and the heuristics that
-//! order what it picks between. Every site goes through `alt_class` →
-//! `compute_overlap_groups_of` → `group_branch_admits` → `fallback_last`, so
-//! none can partition a group differently (soundness invariant 9); only the
-//! rendering belongs to the caller.
+//! order what it picks between: the one partition every group decision reads.
 
 use { Alternative, Element } from "./ir.wado";
 use { GenContext, is_nullable, sets_overlap } from "./gen_context.wado";
@@ -11,7 +8,9 @@ use {
     admits_everything,
     admits_is_untestable,
     admits_or_untestable,
+    admits_kinds_of,
     AltClass,
+    alt_class_is_nullable,
     DirectDispatch,
     MultiAltDispatch,
     ScanGroupElement,
@@ -87,14 +86,69 @@ pub fn group_branch_admits(group: &List<i32>, classes: &List<AltClass>) -> Admit
 /// caller's to add: the classification does not carry them.
 pub fn class_decision_branches(classes: &List<AltClass>) -> List<DecisionBranch> {
     let mut branches: List<DecisionBranch> = [];
-    for let group of &compute_overlap_groups_of(classes) {
-        branches.push(DecisionBranch {
-            test: group_branch_admits(group, classes),
-            gate: "",
-            alts: *group,
-        });
+    for let b of &decision_partition(classes) {
+        branches.push(DecisionBranch { test: b.admits, gate: "", alts: b.alts });
     }
     return fallback_last(&branches);
+}
+
+/// One branch of a decision: the alternatives its lookahead leaves standing.
+pub struct AltBranch {
+    pub alts: List<i32>,
+    pub admits: Admits,
+}
+
+/// The partition every group decision branches on (invariant 9): one branch per
+/// set of alternatives a lookahead token selects.
+pub fn decision_partition(classes: &List<AltClass>) -> List<AltBranch> {
+    let mut out: List<AltBranch> = [];
+    for let group of &compute_overlap_groups_of(classes) {
+        // Tokens outside its first set select an open-ended or unresolved empty
+        // alternative too, so no token split can leave it out.
+        let whole = group.len() == 1
+            || group.iter_ref().any(|slot: &i32| alt_class_is_open_ended(&classes[*slot])
+                || alt_class_is_nullable(&classes[*slot]));
+        if whole {
+            out.push(AltBranch { alts: *group, admits: group_branch_admits(group, classes) });
+            continue;
+        }
+        for let b of &split_by_token(group, classes) {
+            out.push(*b);
+        }
+    }
+    return out;
+}
+
+/// `group`'s tokens, each under the alternatives whose first set holds it, with
+/// the tokens selecting the same alternatives sharing a branch.
+fn split_by_token(group: &List<i32>, classes: &List<AltClass>) -> List<AltBranch> {
+    let mut alt_sets: List<List<i32>> = [];
+    let mut token_sets: List<List<String>> = [];
+    for let token of &group_first_union(group, classes) {
+        let mut selected: List<i32> = [];
+        for let slot of group {
+            if alt_class_first_set(&classes[*slot]).contains(token) {
+                selected.push(*slot);
+            }
+        }
+        let mut found = false;
+        for let mut i = 0; i < alt_sets.len(); i += 1 {
+            if alt_sets[i] == selected {
+                token_sets[i].push(*token);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            alt_sets.push(selected);
+            token_sets.push([*token]);
+        }
+    }
+    let mut out: List<AltBranch> = [];
+    for let mut i = 0; i < alt_sets.len(); i += 1 {
+        out.push(AltBranch { alts: alt_sets[i], admits: admits_kinds_of(&token_sets[i]) });
+    }
+    return out;
 }
 
 /// The branches a scan group takes, off the classification lower baked. Both

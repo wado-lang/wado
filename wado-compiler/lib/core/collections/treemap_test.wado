@@ -535,7 +535,7 @@ test "a losing try_insert keeps insertion order" {
     map.try_insert("a", 1);
     map.try_insert("b", 2);
     map.try_insert("a", 3);
-    let keys: List<String> = map.keys().collect();
+    let keys: List<String> = map.keys().iter_value().collect();
     assert keys.len() == 2;
     assert keys[0] == "a";
     assert keys[1] == "b";
@@ -547,7 +547,7 @@ test "try_insert after remove re-appends at the end" {
     map.try_insert("b", 2);
     assert map.remove("a");
     assert map.try_insert("a", 3);
-    let keys: List<String> = map.keys().collect();
+    let keys: List<String> = map.keys().iter_value().collect();
     assert keys[0] == "b";
     assert keys[1] == "a";
     assert map.get("a") matches { Some(v) && v == 3 };

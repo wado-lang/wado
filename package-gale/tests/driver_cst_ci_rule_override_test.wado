@@ -3,6 +3,10 @@ use ci from "./grammars/ci_rule_override.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ci_rule_override" },
     };
+use callee from "./grammars/ci_rule_callee.g4"
+    with {
+        generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ci_rule_callee" },
+    };
 fn ok<S: AsStrSlice>(input: S) {
     assert ci::parse(input).ok(), `unexpected diagnostics for ${input}`;
 }
@@ -11,4 +15,10 @@ test "ci-override: lowercase" {
 }
 test "ci-override: uppercase" {
     ok("IF foo");
+}
+test "ci-callee: an exact rule calling a folding one matches each case the callee does" {
+    let r = callee::parse("qRx");
+    assert r.ok(), "unexpected diagnostics for qRx";
+    let tree = callee::to_string_tree(&r);
+    assert tree == "(s qRx)", tree;
 }
