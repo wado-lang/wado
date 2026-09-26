@@ -1,6 +1,10 @@
 // A malformed `#[retain(...)]` is reported, never read as silence: silence
 // means the reference does not outlive the call, which is what elides a copy.
 
+// Compiled as a standard library module, the only place the attribute is
+// valid.
+#![stdlib("core:benchmark")]
+
 struct Item {
     v: i32,
 }

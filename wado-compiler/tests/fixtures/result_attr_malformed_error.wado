@@ -1,6 +1,10 @@
 // A malformed `#[result(...)]` is reported, never read as silence: silence
 // means the result is freshly allocated, which is what elides a copy.
 
+// Compiled as a standard library module, the only place the attribute is
+// valid.
+#![stdlib("core:benchmark")]
+
 #[result(part_of = nope)]
 fn first(xs: &List<i32>) -> i32 {
     return xs[0];
