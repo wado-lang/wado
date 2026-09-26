@@ -446,41 +446,67 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         Ok(())
     }
 
-    /// Bind an item (only functions have local scopes)
+    /// Bind the local names of every body and expression an item holds.
     fn bind_item(&mut self, item: &Item) -> Result<(), Bail> {
-        if let Item::Function(func) = item {
+        match item {
+            Item::Function(func) => self.bind_function(func),
+            Item::Impl(impl_block) => {
+                for constant in &impl_block.constants {
+                    self.bind_initializer(&constant.value)?;
+                }
+                self.bind_functions(&impl_block.methods)
+            }
+            Item::Trait(trait_decl) => self.bind_functions(&trait_decl.methods),
+            // An interface operation's default body is a body like any other; a
+            // `resource` method never has one, and `bind_function` returns
+            // immediately for a signature.
+            Item::Interface(interface_decl) => self.bind_functions(&interface_decl.methods),
+            Item::Resource(resource_decl) => self.bind_functions(&resource_decl.methods),
+            Item::Test(test) => {
+                self.possibly_uninit.clear();
+                self.bind_block(&test.body)
+            }
+            Item::Global(global) => self.bind_initializer(&global.initializer),
+            Item::Struct(struct_decl) => {
+                for default in struct_decl.fields.iter().filter_map(|f| f.default.as_ref()) {
+                    self.bind_initializer(default)?;
+                }
+                Ok(())
+            }
+            Item::Use(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Error(_) => Ok(()),
+        }
+    }
+
+    fn bind_functions(&mut self, functions: &[Function]) -> Result<(), Bail> {
+        for func in functions {
             self.bind_function(func)?;
         }
-        // Impl blocks contain functions
-        if let Item::Impl(impl_block) = item {
-            for method in &impl_block.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // Trait declarations contain method signatures (with optional bodies)
-        if let Item::Trait(trait_decl) = item {
-            for method in &trait_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        // An interface operation's default body is a body like any other, so it
-        // gets the same local-binding pass; a `resource` method never has one,
-        // and `bind_function` returns immediately for a signature.
-        if let Item::Interface(interface_decl) = item {
-            for method in &interface_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
-        if let Item::Resource(resource_decl) = item {
-            for method in &resource_decl.methods {
-                self.bind_function(method)?;
-            }
-        }
+        Ok(())
+    }
+
+    /// Bind an expression evaluated outside any body: a global's initializer or
+    /// a default. It binds nothing itself, but a closure or block inside it may.
+    fn bind_initializer(&mut self, expr: &Expr) -> Result<(), Bail> {
+        self.possibly_uninit.clear();
+        self.enter_scope();
+        self.bind_expr(expr)?;
+        self.exit_scope();
         Ok(())
     }
 
     /// Bind a function's local variables
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
+        for default in func.params.iter().filter_map(|p| p.default.as_ref()) {
+            self.bind_initializer(default)?;
+        }
         self.possibly_uninit.clear();
 
         self.enter_scope();
