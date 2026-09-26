@@ -163,12 +163,14 @@ does can change with the optimization level and with the Wado version, so a
 `ref_eq` that is true only by such sharing is unpredictable. Java's `==` on
 strings behaves the same way.
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let mut xs: List<i32> = [1, 2, 3];
 let ys: List<i32> = [1, 2, 3];
 let zs = xs;
-&xs == &ys;                     // true: equal values
-ref_eq(&xs, &xs);               // always true
+assert &xs == &ys;              // equal values
+assert ref_eq(&xs, &xs);        // always
 ref_eq(&xs, &ys);               // false or true: the two may be stored once
 ref_eq(&xs, &zs);               // false or true: the copy may be elided
 ```
@@ -178,20 +180,24 @@ A `&` to a `List` element or a struct field of a type that assignment replaces
 taken where the `&` is written. It does not see a later assignment to the
 element or field, and two such references are two places:
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let r = &xs[0];
 xs[0] = 9;
-*r;                             // 1
+assert *r == 1;
 ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
 ```
 
 A closure's identity stays unobservable. `ref_eq` takes references only, and a
 reference to a closure points to the place holding it, not to the closure:
 
+<!-- {"fixture": "spec_memory_ref_identity.wado"} -->
+
 ```wado
 let f = || 1;
 let g = f;
-ref_eq(&f, &f);                 // always true
+assert ref_eq(&f, &f);          // always
 ref_eq(&f, &g);                 // false or true: two places holding one closure
 ```
 

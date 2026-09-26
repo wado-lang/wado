@@ -1,0 +1,24 @@
+// Quoted by docs/spec-memory.md § Reference Identity. A `ref_eq` the
+// specification leaves unspecified is evaluated and not asserted.
+
+test "references compare values, and ref_eq compares places" {
+    let mut xs: List<i32> = [1, 2, 3];
+    let ys: List<i32> = [1, 2, 3];
+    let zs = xs;
+    assert &xs == &ys;              // equal values
+    assert ref_eq(&xs, &xs);        // always
+    ref_eq(&xs, &ys);               // false or true: the two may be stored once
+    ref_eq(&xs, &zs);               // false or true: the copy may be elided
+
+    let r = &xs[0];
+    xs[0] = 9;
+    assert *r == 1;
+    ref_eq(&xs[0], &xs[0]);         // false or true: each `&` takes its own copy
+}
+
+test "a reference to a closure points to the place holding it" {
+    let f = || 1;
+    let g = f;
+    assert ref_eq(&f, &f);          // always
+    ref_eq(&f, &g);                 // false or true: two places holding one closure
+}
