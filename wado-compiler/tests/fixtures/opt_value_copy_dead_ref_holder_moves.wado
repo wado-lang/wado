@@ -71,17 +71,42 @@ fn swap_indexed(n: i32) -> i32 {
     return total + a.len() * 100 + b.len() * 10;
 }
 
+struct P {
+    a: i32,
+    b: bool,
+}
+
+// The walk's element reference feeds a literal only its scalar fields, which
+// carry no storage, so the holder hands nothing on.
+fn swap_rebuilt(n: i32) -> i32 {
+    let mut cur: List<P> = [P { a: 1, b: true }];
+    let mut next: List<P> = [];
+    for let k of 0..<n {
+        next.clear();
+        for let p of &cur {
+            next.push(P { a: p.a + k, b: p.b });
+            next.push(P { a: p.a, b: !p.b });
+        }
+        let spent = cur;
+        cur = next;
+        next = spent;
+    }
+    return cur.len() * 10 + cur[cur.len() - 1].a;
+}
+
 export fn run() with Stdout {
-    println(`${ref_local()} ${call_result()} ${swap_buffers(3)} ${swap_indexed(3)}`);
+    println(`${ref_local()} ${call_result()} ${swap_buffers(3)} ${swap_indexed(3)} ${swap_rebuilt(3)}`);
 }
 
 __DATA__
 {
-    "stdout": "2 4 131 131\n",
+    "stdout": "2 4 131 131 81\n",
     "wir_not_expect:O0": [
-        "$value_copy$core:prelude/list.wado/List<i32>"
+        "$value_copy$core:prelude/list.wado/List<i32>",
+        "$value_copy$core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>"
     ],
     "wir_not_expect:O2": [
-        "$value_copy$core:prelude/list.wado/List<i32>"
+        "$value_copy$core:prelude/list.wado/List<i32>",
+        "$value_copy$core:prelude/list.wado/List<opt_value_copy_dead_ref_holder_moves.wado/P>"
     ]
 }

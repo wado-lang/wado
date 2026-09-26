@@ -2132,6 +2132,8 @@ fn yielded_values(expr: &TirExpr, type_table: &TypeTable, out: &mut Vec<Yielded>
             BreakValues { type_table, out }.visit_block(block);
         }
         TirExprKind::TupleSpread { expr: inner } => yielded_values(inner, type_table, out),
+        // A scalar read out of a local carries none of its storage.
+        _ if is_scalar_type(expr.type_id, type_table) => {}
         _ => out.push(Yielded {
             reference: reference_escape(expr, type_table),
             root: alias_root(expr),
