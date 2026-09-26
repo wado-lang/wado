@@ -1,0 +1,20 @@
+// An operation with a block has a default implementation, which answers when no
+// handler is installed. One without traps.
+use { log_stderr } from "core:cli";
+
+interface Log {
+    fn emit(message: String) {
+        log_stderr(message);          // no handler installed: degrade, don't trap
+    }
+
+    fn level() -> i32;                // no default: unhandled dispatch traps
+}
+
+test "a default answers with no handler installed" {
+    Log::emit("degraded to stderr");
+}
+
+#[expect_trap]
+test "an operation without one traps" {
+    assert Log::level() >= 0;
+}

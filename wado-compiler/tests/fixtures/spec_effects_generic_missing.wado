@@ -1,0 +1,18 @@
+// The caller of a generic function must hold what its effect parameter
+// resolves to.
+use { println, Stdout } from "core:cli";
+
+fn wrapper<effect E>(f: fn() with E) with E {
+    f();
+}
+
+fn bad() {
+    wrapper(|| { println("x"); });   // ERROR: E = Stdout, and `bad` does not hold it
+}
+
+test {
+    bad();
+}
+
+__DATA__
+{"compile_error":"missing effect 'Stdout' required by 'println'"}

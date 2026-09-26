@@ -1,0 +1,45 @@
+// An operation reaches the innermost handler installed for its effect; a
+// handler is a value, and one passed by reference keeps what it changed.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Fixed {
+    v: i32,
+}
+
+impl Counter for Fixed {
+    fn next(&self) -> i32 { resume self.v }
+}
+
+test "the innermost handler answers" {
+    let outer = Fixed { v: 1 };
+    let inner = Fixed { v: 2 };
+    with Counter => &outer do {
+        with Counter => &inner do {
+            assert Counter::next() == 2;     // inner
+        }
+        assert Counter::next() == 1;         // outer
+    }
+}
+
+struct CounterState {
+    value: i32,
+}
+
+impl Counter for CounterState {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+test "handler state" {
+    let mut c = CounterState { value: 0 };
+    with Counter => &mut c do {
+        Counter::next();
+        Counter::next();
+    }
+    assert c.value == 2;
+}

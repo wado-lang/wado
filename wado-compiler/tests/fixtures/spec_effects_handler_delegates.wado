@@ -1,0 +1,24 @@
+// A handler method runs with its own installation set aside, so the effect's
+// operations inside it reach the next handler out.
+
+use { Random } from "wasi:random";
+
+struct Counting {
+    calls: i32,
+}
+
+impl Random for Counting {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        self.calls += 1;
+        resume Random::get_random_bytes(max_len)   // the next handler out: the host
+    }
+    ..forward
+}
+
+test {
+    let mut counting = Counting { calls: 0 };
+    with Random => &mut counting do {
+        assert Random::get_random_bytes(4).len() == 4;
+    }
+    assert counting.calls == 1;
+}

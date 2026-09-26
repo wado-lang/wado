@@ -1,0 +1,28 @@
+// Renaming an imported operation resolves a name collision.
+
+// Example with name collision handling
+use {Stdout, Stdout::{write_via_stream}} from "wasi:cli";
+use {Stderr, Stderr::{write_via_stream as stderr_write}} from "wasi:cli";
+
+pub fn log(message: String) with (Stdout, Stderr) {
+    let [out, out_tx] = Stream::<u8>::new();
+    let [err, err_tx] = Stream::<u8>::new();
+    let out_done = write_via_stream(out);  // Calls Stdout::write_via_stream
+    let err_done = stderr_write(err);      // Calls Stderr::write_via_stream (renamed)
+    assert out_tx.write_all(`out: ${message}\n`.bytes().collect()) == CopyResult::Completed;
+    assert err_tx.write_all(`err: ${message}\n`.bytes().collect()) == CopyResult::Completed;
+    out_tx.drop();
+    err_tx.drop();
+    out_done.drop();
+    err_done.drop();
+}
+
+export fn run() with (Stdout, Stderr) {
+    log("hi");
+}
+
+__DATA__
+{
+    "stdout": "out: hi\n",
+    "stderr": "err: hi\n"
+}

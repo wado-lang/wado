@@ -1,0 +1,12 @@
+// An `#[ambient]` function performs effects without its callers declaring them.
+
+use { log_stderr } from "core:cli";
+
+fn compute(x: i32) -> i32 {
+    log_stderr(`computing ${x}`);   // no `with` needed
+    return x * 2;
+}
+
+test {
+    assert compute(21) == 42;
+}
