@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790383302220,
+  "lastUpdate": 1790387629319,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -59941,6 +59941,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1a62dbf31ea77dfbb0ebdbdf244d3947f694226a"
         },
         "date": 1790383301522,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19259,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "83a01d79ffd19139eddcca608269c70b93ab8f72",
+          "message": "Merge pull request #2168 from wado-lang/claude/elegant-tesla-esoxyy\n\nfeat: Rust's case turbofish and `Self::Case`, and `null` as an `Option<!>` that answers last",
+          "timestamp": "2026-09-26T10:24:04+09:00",
+          "tree_id": "3b036ea721f62da3ad5ffb2bb3d0e10078423d73",
+          "url": "https://github.com/wado-lang/wado/commit/83a01d79ffd19139eddcca608269c70b93ab8f72"
+        },
+        "date": 1790387628594,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
