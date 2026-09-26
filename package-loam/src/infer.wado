@@ -1,7 +1,7 @@
 //! Stage 0's pass over a graph: name every tensor's axes from the schema,
 //! then discharge each operator's extent conditions in order.
 
-use { TreeMap } from "core:collections";
+use { TreeMap, TreeSet } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use {
@@ -303,13 +303,18 @@ pub struct Condition {
 /// that is a negative number is no condition on the inputs but a graph wrong
 /// for every one of them.
 fn owe(node: &Node, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), InferError> {
+    return owe_at(`${node_name(node)} = ${node.op}`, owed, slack, condition).map_err(|reason| refusal(node, reason));
+}
+
+/// `owe` at `site`, whatever relies on the condition there.
+fn owe_at(site: String, owed: &mut List<Condition>, slack: Poly, condition: String) -> Result<(), String> {
     if slack.is_nonnegative() {
         return Result::Ok(());
     }
     if slack.as_constant() matches { Some(_) } {
-        return Result::Err(refusal(node, `${condition}, and it is not`));
+        return Result::Err(`${condition}, and it is not`);
     }
-    owed.push(Condition { slack, reason: `${node_name(node)} = ${node.op}: ${condition}` });
+    owed.push(Condition { slack, reason: `${site}: ${condition}` });
     return Result::Ok(());
 }
 
@@ -375,7 +380,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
-        shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced)?)?;
+        shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut owed)?)?;
         if let Some(element) = element_of(&vi.dtype) && let Some(computed) = primitives.get(vi.name) && element.computed != computed {
             builtin::cold_path();
             return Result::Err(InferError::DeclaredElement(DeclaredElementConflict {
@@ -392,8 +397,9 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
 /// same, under the first node that owed it.
 fn distinct(owed: List<Condition>) -> List<Condition> {
     let mut kept: List<Condition> = [];
+    let mut seen = TreeSet::<Poly>::new();
     for let c of owed {
-        if !kept.into_iter().any(|k| k.slack == c.slack) {
+        if seen.insert(c.slack) {
             kept.push(c);
         }
     }
@@ -512,8 +518,9 @@ fn materialize(
 }
 
 /// The graph's output declaration merged into what the nodes produced, as ONNX's
-/// `mergeInDimensionInfo` does: a declared static extent settles a symbolic one.
-fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError> {
+/// `mergeInDimensionInfo` does: a declared static extent settles a symbolic
+/// one, and the inputs owe that the two are equal.
+fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(*produced);
     };
@@ -546,8 +553,13 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError>
                 }
             },
             // The graph states a length the nodes only carried a name for, and
-            // a consumer of the shape table is owed the constant.
-            Symbolic(_) => {
+            // a consumer of the shape table is owed the constant. A symbol is
+            // left in either difference, so neither is a number to refuse.
+            Symbolic(p) => {
+                let stated = Poly::constant(declared as i64);
+                let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
+                owe_at(vi.name, owed, p.sub(&stated), condition).unwrap();
+                owe_at(vi.name, owed, stated.sub(&p), condition).unwrap();
                 merged.axes[i].extent = Extent::Static(declared);
             },
             Unstated => unreachable(),
@@ -904,10 +916,10 @@ pub fn slice_cuts(
         let dim = x.axes[a].extent.poly();
         let begin = within(node, &starts[i], &dim, owed)?;
         let end = within(node, &ends[i], &dim, owed)?;
-        let count = end.sub(&begin);
+        let count = difference(node, &end, &begin)?;
         owe(node, owed, count, `axis ${a} must not run backwards from ${begin} to ${end}`)?;
         if begin != Poly::constant(0) || count != dim {
-            cuts.push(Cut { axis: a, start: begin, extent: Extent::of(count).unwrap() });
+            cuts.push(Cut { axis: a, start: begin, extent: counted(node, count)? });
         }
     }
     return Result::Ok(cuts);
@@ -950,8 +962,20 @@ fn within(node: &Node, bound: &Poly, dim: &Poly, owed: &mut List<Condition>) -> 
         *bound;
     };
     owe(node, owed, resolved, `the bound ${resolved} must not be negative`)?;
-    owe(node, owed, dim.sub(&resolved), `the bound ${resolved} must be at most ${*dim}`)?;
+    owe(node, owed, difference(node, dim, &resolved)?, `the bound ${resolved} must be at most ${*dim}`)?;
     return Result::Ok(resolved);
+}
+
+/// `a - b`, of integers the graph computed, or the refusal where a coefficient
+/// leaves `i64`.
+fn difference(node: &Node, a: &Poly, b: &Poly) -> Result<Poly, InferError> {
+    return a.try_sub(b).ok_or(refusal(node, `${*a} - ${*b} leaves i64`));
+}
+
+/// `count` as the extent of what the run computes, or the refusal where no
+/// list holds that many.
+fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
+    return Extent::of(count).ok_or(refusal(node, `${count} elements are more than a list holds`));
 }
 
 /// How many elements a `Range` the run computes yields. Its operands are one
@@ -962,13 +986,13 @@ pub fn range_count(
     owed: &mut List<Condition>,
 ) -> Result<Extent, InferError> {
     let [start, limit, delta] = range_bounds(node, known)?;
-    let span = limit.sub(&start);
+    let span = difference(node, &limit, &start)?;
     let count = if delta.as_constant() matches { Some(d) && d > 0 } { span.divided_by(&delta) } else { null };
     let Some(c) = count else {
         return Result::Err(refusal(node, `${start} to ${limit} by ${delta} is not a count the build can show exact`));
     };
     owe(node, owed, c, `${start} to ${limit} must not run backwards`)?;
-    return Result::Ok(Extent::of(c).unwrap());
+    return counted(node, c);
 }
 
 /// A `Range`'s start, limit and delta, each one integer the build knows.

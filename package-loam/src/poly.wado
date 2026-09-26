@@ -69,36 +69,49 @@ impl Poly {
         return names;
     }
 
-    /// The sum.
+    /// The sum, of polynomials the caller knows keep every coefficient within
+    /// `i64`, as extents do.
     pub fn add(&self, other: &Poly) -> Poly {
+        return within_i64(self.try_add(other));
+    }
+
+    /// The difference, as `add` requires.
+    pub fn sub(&self, other: &Poly) -> Poly {
+        return within_i64(self.try_sub(other));
+    }
+
+    /// The product, as `add` requires.
+    pub fn mul(&self, other: &Poly) -> Poly {
+        return within_i64(self.try_mul(other));
+    }
+
+    /// The sum, or `None` where a coefficient leaves `i64`.
+    pub fn try_add(&self, other: &Poly) -> Option<Poly> {
         let mut terms = self.terms;
         terms.extend(&other.terms);
         return Poly::collected(terms);
     }
 
-    /// The difference.
-    pub fn sub(&self, other: &Poly) -> Poly {
-        return self.add(&other.scaled(-1));
+    /// The difference, or `None` where a coefficient leaves `i64`.
+    pub fn try_sub(&self, other: &Poly) -> Option<Poly> {
+        let mut negated: List<Term> = [];
+        for let t of &other.terms {
+            negated.push(Term { coefficient: narrowed(-(t.coefficient as i128))?, symbols: t.symbols });
+        }
+        return self.try_add(&Poly { terms: negated });
     }
 
-    /// The product.
-    pub fn mul(&self, other: &Poly) -> Poly {
+    /// The product, or `None` where a coefficient leaves `i64`.
+    pub fn try_mul(&self, other: &Poly) -> Option<Poly> {
         let mut terms: List<Term> = [];
         for let a of &self.terms {
             for let b of &other.terms {
                 let mut symbols = a.symbols;
                 symbols.extend(&b.symbols);
                 symbols.sort();
-                terms.push(Term { coefficient: a.coefficient * b.coefficient, symbols });
+                let coefficient = narrowed(a.coefficient as i128 * b.coefficient as i128)?;
+                terms.push(Term { coefficient, symbols });
             }
-        }
-        return Poly::collected(terms);
-    }
-
-    fn scaled(&self, factor: i64) -> Poly {
-        let mut terms: List<Term> = [];
-        for let t of &self.terms {
-            terms.push(Term { coefficient: t.coefficient * factor, symbols: t.symbols });
         }
         return Poly::collected(terms);
     }
@@ -116,15 +129,17 @@ impl Poly {
         let d = &divisor.terms[0];
         let mut terms: List<Term> = [];
         for let t of &self.terms {
-            if t.coefficient % d.coefficient != 0 {
+            // `i64::MIN / -1` is the one quotient past `i64`, so it is taken wide.
+            let [n, m] = [t.coefficient as i128, d.coefficient as i128];
+            if n % m != 0 {
                 return null;
             }
             let Some(rest) = without(&t.symbols, &d.symbols) else {
                 return null;
             };
-            terms.push(Term { coefficient: t.coefficient / d.coefficient, symbols: rest });
+            terms.push(Term { coefficient: narrowed(n / m)?, symbols: rest });
         }
-        return Option::Some(Poly::collected(terms));
+        return Poly::collected(terms);
     }
 
     /// Whether every value of the symbols makes this at least 0. A symbol is an
@@ -138,15 +153,15 @@ impl Poly {
         return true;
     }
 
-    /// `terms` summed into canonical form.
-    fn collected(terms: List<Term>) -> Poly {
+    /// `terms` summed into canonical form, or `None` where a sum leaves `i64`.
+    fn collected(terms: List<Term>) -> Option<Poly> {
         let mut sorted = terms;
         sorted.sort_by(|a, b| order(a, b));
         let mut out: List<Term> = [];
         for let t of sorted {
             let last = out.len() - 1;
             if last >= 0 && out[last].symbols == t.symbols {
-                out[last].coefficient += t.coefficient;
+                out[last].coefficient = narrowed(out[last].coefficient as i128 + t.coefficient as i128)?;
             } else {
                 out.push(t);
             }
@@ -157,8 +172,23 @@ impl Poly {
                 kept.push(t);
             }
         }
-        return Poly { terms: kept };
+        return Option::Some(Poly { terms: kept });
     }
+}
+
+/// `value`, where an `i64` holds it.
+fn narrowed(value: i128) -> Option<i64> {
+    if !(i64::MIN as i128 <= value <= i64::MAX as i128) {
+        return null;
+    }
+    return Option::Some(value as i64);
+}
+
+fn within_i64(p: Option<Poly>) -> Poly {
+    let Some(q) = p else {
+        panic("a polynomial over extents left i64");
+    };
+    return q;
 }
 
 /// Higher degree first, then by the symbols' names, so the constant is last.

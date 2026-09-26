@@ -880,6 +880,30 @@ test "Slice listing an axis twice stops the build rather than guessing" {
     assert e == "Y = Slice: axis 0 is listed twice";
 }
 
+test "an output declared static where the nodes left a symbol owes the two equal" {
+    let source = `g (float[N] X) => (float[8] Y) {
+        Y = Relu(X)
+    }`;
+    let graph = read(&source).unwrap();
+    let checked = infer(&graph, &Schema { layout: [rule("*", ["Seq"])] }).unwrap();
+    assert checked.shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    let owed: List<String> = checked.owed.into_iter().map(|c| `${c.reason} (${c.slack} >= 0)`).collect();
+    assert owed == [
+        "Y: axis Seq must be 8, as the graph declares (N - 8 >= 0)",
+        "Y: axis Seq must be 8, as the graph declares (-N + 8 >= 0)",
+    ] as List<String>;
+}
+
+test "a Range the run computes, longer than any list, stops the build" {
+    let source = `g (float[N] X) => (int64[?] Y) <int64[1] Far = {3000000000}, int64[1] One = {1}> {
+        S = Shape(X)
+        L = Add(S, Far)
+        Y = Range(S, L, One)
+    }`;
+    let e = y_axes(source, [rule("*", ["Seq"])]).unwrap_err();
+    assert e == "Y = Range: 3000000000 elements are more than a list holds";
+}
+
 test "a condition every layer repeats is owed once" {
     let source = `g (float[N] X, float[8] M) => (float[N] Y) <int64[1] Z = {0}> {
         S = Shape(X)

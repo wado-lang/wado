@@ -107,11 +107,21 @@ test "a quotient the build cannot show exact stops it" {
         ["T", ints([1], [2])],
     ]);
     assert fold(&node("Div", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "N / 2 is not a quotient the build can show exact";
+    // N may be 0, where ONNX divides by zero.
+    assert fold(&node("Div", ["S", "S"], []), &k, &runtime([])).unwrap_err() == "N / N is not a quotient the build can show exact";
 }
 
 test "an axis list naming one axis twice, once from the end, stops the build" {
     assert axis_indices(&[0, -1], 3).unwrap() == [0, 2];
     assert axis_indices(&[0, -2], 2).unwrap_err() == "axis -2 is listed twice";
+}
+
+test "integer arithmetic past i64 stops the build rather than wrapping" {
+    let k = knowns([
+        ["S", ints([1], [i64::MAX])],
+        ["T", ints([1], [2])],
+    ]);
+    assert fold(&node("Mul", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "9223372036854775807 Mul 2 leaves i64";
 }
 
 test "numbers beside a symbol divide as numbers do" {

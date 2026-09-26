@@ -2640,8 +2640,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
-                // A literal past `u64` reaches an i128/u128 target only as
-                // a constructor call over its two words.
+                // An integer literal cast to i128/u128 is a constructor call
+                // over its two words, which hold a value past `u64` too.
                 if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
                     return tir;
                 }

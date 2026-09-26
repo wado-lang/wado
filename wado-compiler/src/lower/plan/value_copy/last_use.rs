@@ -2154,6 +2154,7 @@ pub struct Moves<'a> {
 }
 
 impl<'a> Moves<'a> {
+    /// The moves of a body written in source.
     pub fn new(
         eligible: MoveEligible,
         source_spans: &'a IndexSet<Span>,

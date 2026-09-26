@@ -4492,6 +4492,9 @@ pub struct TirUnparser<'a> {
     /// rendering exposed to user-facing inspect output. Default
     /// `false` keeps the debug-friendly form for TIR dumps.
     source_form: bool,
+    /// Which locals of the function being printed are mutable, which a pattern
+    /// binding states only through its local.
+    mut_locals: Vec<bool>,
 }
 
 impl<'a> TirUnparser<'a> {
@@ -4501,7 +4504,14 @@ impl<'a> TirUnparser<'a> {
             output: String::new(),
             indent_level: 0,
             source_form: false,
+            mut_locals: Vec::new(),
         }
+    }
+
+    /// Whether a pattern binds `local_index` mutably. Outside a function, as a
+    /// closure rendered on its own, no local is.
+    fn binds_mut(&self, local_index: u32) -> bool {
+        self.mut_locals.get(local_index as usize).is_some_and(|m| *m)
     }
 
     /// Enable source-form rendering: suppresses internal annotations
@@ -4715,6 +4725,7 @@ impl<'a> TirUnparser<'a> {
     }
 
     fn unparse_function(&mut self, f: &TirFunction) {
+        self.mut_locals = f.locals.iter().map(|l| l.is_mut).collect();
         if let Some(attr) = inline_hint_attr(f.inline_hint) {
             self.write_indent();
             self.output.push_str(attr);
@@ -4936,7 +4947,14 @@ impl<'a> TirUnparser<'a> {
     fn unparse_tir_pattern(&mut self, pattern: &TirPattern) {
         match pattern {
             TirPattern::Wildcard => self.output.push('_'),
-            TirPattern::Binding { name, .. } => self.output.push_str(name),
+            TirPattern::Binding {
+                name, local_index, ..
+            } => {
+                if self.binds_mut(*local_index) {
+                    self.output.push_str("mut ");
+                }
+                self.output.push_str(name);
+            }
             TirPattern::Literal(lit) => emit_tir_literal_pattern(lit, &mut self.output),
             TirPattern::Tuple(patterns, has_rest) => {
                 self.output.push('[');
@@ -4964,7 +4982,8 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("{ ");
                 self.comma_sep(fields, |s, field| {
                     s.output.push_str(&field.field_name);
-                    if !matches!(&field.pattern, TirPattern::Binding { name, .. } if name == &field.field_name)
+                    if !matches!(&field.pattern, TirPattern::Binding { name, local_index, .. }
+                        if name == &field.field_name && !s.binds_mut(*local_index))
                     {
                         s.output.push_str(": ");
                         s.unparse_tir_pattern(&field.pattern);

@@ -510,13 +510,6 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
     let x = picked(&a.elements, &positions(&a.extents, &extents));
     let y = picked(&b.elements, &positions(&b.extents, &extents));
     let elements = match [&x, &y] {
-        [Ints(l), Ints(r)] => {
-            let mut out: List<i64> = [];
-            for let i of 0..<l.len() {
-                out.push(int_op(op, l[i], r[i])?);
-            }
-            Elements::Ints(out);
-        },
         [Floats(l), Floats(r)] => {
             let mut out: List<f32> = [];
             for let i of 0..<l.len() {
@@ -541,18 +534,26 @@ fn arithmetic(op: &String, a: &Known, b: &Known) -> Result<Known, String> {
     return Result::Ok(Known { extents, elements });
 }
 
-/// `int_op` where a symbol stands for an operand. A quotient is one the build
-/// can show exact for every value of the symbols, which needs no rounding.
+/// Integer arithmetic, where a symbol may stand for an operand. A quotient of
+/// numbers is one where every rounding agrees, since ONNX leaves the rounding
+/// of a negative one unstated. A quotient over a symbol is one the build can
+/// show exact for every value of the symbols, which needs no rounding, and a
+/// divisor that is a positive number, since a symbol may be 0.
 fn poly_op(op: &String, l: &Poly, r: &Poly) -> Result<Poly, String> {
-    if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
-        return int_op(op, a, b).map(|c| Poly::constant(c));
-    }
+    let overflow = `${*l} ${*op} ${*r} leaves i64`;
     return match op.as_str_slice() {
-        "Add" => Result::Ok(l.add(r)),
-        "Sub" => Result::Ok(l.sub(r)),
-        "Mul" => Result::Ok(l.mul(r)),
+        "Add" => l.try_add(r).ok_or(overflow),
+        "Sub" => l.try_sub(r).ok_or(overflow),
+        "Mul" => l.try_mul(r).ok_or(overflow),
         "Div" => {
-            let exact = if l.is_nonnegative() && r.is_nonnegative() { l.divided_by(r) } else { null };
+            if let Some(a) = l.as_constant() && let Some(b) = r.as_constant() {
+                if b == 0 || a < 0 || b < 0 {
+                    return Result::Err(`${a} / ${b} has no rounding every implementation shares`);
+                }
+                return Result::Ok(Poly::constant(a / b));
+            }
+            let positive = r.as_constant() matches { Some(d) && d > 0 };
+            let exact = if l.is_nonnegative() && positive { l.divided_by(r) } else { null };
             exact.ok_or(`${*l} / ${*r} is not a quotient the build can show exact`);
         },
         _ => Result::Err(`${*op} of integers is not evaluated`),
@@ -565,23 +566,6 @@ fn integer_polys(elements: &Elements) -> Option<List<Poly>> {
         Ints(v) => Option::Some(v.into_iter().map(|c| Poly::constant(*c)).collect()),
         Symbolic(v) => Option::Some(*v),
         _ => null,
-    };
-}
-
-/// ONNX leaves the rounding of a negative integer quotient unstated, so the
-/// build divides only where every rounding agrees.
-fn int_op(op: &String, l: i64, r: i64) -> Result<i64, String> {
-    return match op.as_str_slice() {
-        "Add" => Result::Ok(l + r),
-        "Sub" => Result::Ok(l - r),
-        "Mul" => Result::Ok(l * r),
-        "Div" => {
-            if r == 0 || l < 0 || r < 0 {
-                return Result::Err(`${l} / ${r} has no rounding every implementation shares`);
-            }
-            Result::Ok(l / r);
-        },
-        _ => Result::Err(`${op} of integers is not evaluated`),
     };
 }
 

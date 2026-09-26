@@ -133,9 +133,14 @@ use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
 
 global STEPS: i32 = 8;
 
+/// How many tokens the model reads at most: one position per row of `wpe`.
+fn positions(weights: &gpt2::Weights) -> i32 {
+    return weights.transformer_wpe_weight.extents[0];
+}
+
 /// `prompt` extended by `steps` tokens, each the one the model ranks first.
 fn greedy(prompt: &List<i32>, steps: i32, weights: &gpt2::Weights) -> List<i32> {
-    assert !prompt.is_empty();
+    assert !prompt.is_empty() && prompt.len() + steps <= positions(weights);
     let mut ids = *prompt;
     for let _ of 0..<steps {
         let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
@@ -165,11 +170,12 @@ export fn run() with (Stdout, Stderr, Environment) {
     }
     let tokenizer = tiny();
     let ids = tokenizer.encode(&prompt);
-    if ids.is_empty() {
-        eprintln("the prompt encodes to no token");
+    let weights = gpt2::Weights::embedded();
+    if ids.is_empty() || ids.len() + STEPS > positions(&weights) {
+        eprintln(`the prompt is ${ids.len()} tokens, and must be 1 to ${positions(&weights) - STEPS}`);
         return;
     }
-    println(tokenizer.decode(&greedy(&ids, STEPS, &gpt2::Weights::embedded())));
+    println(tokenizer.decode(&greedy(&ids, STEPS, &weights)));
 }
 
 struct Generated {

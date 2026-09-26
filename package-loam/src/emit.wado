@@ -566,9 +566,10 @@ struct Carrier {
 
 fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carrier> {
     let mut carriers: List<Carrier> = [];
+    let mut carried = TreeSet::<String>::new();
     for let vi of &graph.inputs {
         for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-            if let Some(symbol) = input_symbol(&a.extent) && !carriers.into_iter().any(|c| c.symbol == symbol) {
+            if let Some(symbol) = input_symbol(&a.extent) && carried.insert(symbol) {
                 carriers.push(Carrier { symbol, input: vi.name, axis });
             }
         }
