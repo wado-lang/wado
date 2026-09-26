@@ -14,8 +14,7 @@ use crate::name::{
     FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
 };
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey,
-    TypeTable,
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -2747,7 +2746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Each case's payload type of the variant `ty`, typed at this instance.
-    fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
         let variant_info = self.tysys.variant_of_type(ty)?;
         let type_args = self
             .tysys
@@ -2791,7 +2790,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .any(|&(_, t)| self.is_uninhabited_within(t, open))
         } else if let Some(payloads) = self.case_payload_types(head) {
-            payloads.iter().all(|&t| self.is_uninhabited_within(t, open))
+            payloads
+                .iter()
+                .all(|&t| self.is_uninhabited_within(t, open))
         } else {
             false
         };
