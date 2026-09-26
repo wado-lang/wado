@@ -1373,11 +1373,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let written_26: ref "core:prelude/types.wado//StreamWrite";
     let $sroa_written_count_29: i32;
     let $sroa_written_result_30: "core:prelude/types.wado//enum:CopyResult";
-    let data_32: ref Array<u8>;
-    let len_34: i32;
-    let ptr_35: i32;
+    let data_33: ref Array<u8>;
+    let len_35: i32;
+    let ptr_36: i32;
     let i: i32;
-    let self_42: i32;
+    let self_43: i32;
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1400,14 +1400,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                     global:effect_handler_resource_stream_self_delegation.wado::$effect_StreamWritable<u8> = $local_2;
                     break $inline__effect_dispatch__StreamWritable_u8___write_raw_6: $local_4;
                 } else {
-                    ptr_24 = builtin::i32_wrap_i64(local.tee packed(data_32 = data_13.repr; self_42 = local.tee $load_7(data_13.start); len_34 = data_13.end - $load_7; ptr_35 = "mem/realloc"(0, 0, 1, len_34); i = 0; b106: block {
+                    ptr_24 = builtin::i32_wrap_i64(local.tee packed(data_33 = data_13.repr; self_43 = local.tee $load_7(data_13.start); len_35 = data_13.end - $load_7; ptr_36 = "mem/realloc"(0, 0, 1, len_35); i = 0; b106: block {
                         l107: loop {
-                            break_if b106 i >= len_34;
-                            builtin::store_u8(ptr_35 + i, builtin::array_get_value_u8(data_32, self_42 + i));
+                            break_if b106 i >= len_35;
+                            builtin::store_u8(ptr_36 + i, builtin::array_get_value_u8(data_33, self_43 + i));
                             i = i + 1;
                             continue l107;
                         };
-                    }; builtin::i64_extend_i32_s(ptr_35) | (builtin::i64_extend_i32_s(len_34) << 32_i64)));
+                    }; builtin::i64_extend_i32_s(ptr_36) | (builtin::i64_extend_i32_s(len_35) << 32_i64)));
                     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
                     written_26 = "core:rt/cm_stream_write_once"(self, ptr_24, raw_len);
                     drop("mem/realloc"(ptr_24, raw_len, 1, 0));

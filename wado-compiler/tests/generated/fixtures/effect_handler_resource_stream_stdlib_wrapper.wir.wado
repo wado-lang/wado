@@ -1362,11 +1362,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let written_25: ref "core:prelude/types.wado//StreamWrite";
     let $sroa_written_count_28: i32;
     let $sroa_written_result_29: "core:prelude/types.wado//enum:CopyResult";
-    let data_31: ref Array<u8>;
-    let len_33: i32;
-    let ptr_34: i32;
+    let data_32: ref Array<u8>;
+    let len_34: i32;
+    let ptr_35: i32;
     let i: i32;
-    let self_41: i32;
+    let self_42: i32;
     if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
@@ -1388,14 +1388,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                     global:effect_handler_resource_stream_stdlib_wrapper.wado::$effect_StreamWritable<u8> = $local_2;
                     break $inline__effect_dispatch__StreamWritable_u8___write_raw_6: $local_4;
                 } else {
-                    ptr_23 = builtin::i32_wrap_i64(local.tee packed(data_31 = data_13.repr; self_41 = local.tee $load_5(data_13.start); len_33 = data_13.end - $load_5; ptr_34 = "mem/realloc"(0, 0, 1, len_33); i = 0; b111: block {
+                    ptr_23 = builtin::i32_wrap_i64(local.tee packed(data_32 = data_13.repr; self_42 = local.tee $load_5(data_13.start); len_34 = data_13.end - $load_5; ptr_35 = "mem/realloc"(0, 0, 1, len_34); i = 0; b111: block {
                         l112: loop {
-                            break_if b111 i >= len_33;
-                            builtin::store_u8(ptr_34 + i, builtin::array_get_value_u8(data_31, self_41 + i));
+                            break_if b111 i >= len_34;
+                            builtin::store_u8(ptr_35 + i, builtin::array_get_value_u8(data_32, self_42 + i));
                             i = i + 1;
                             continue l112;
                         };
-                    }; builtin::i64_extend_i32_s(ptr_34) | (builtin::i64_extend_i32_s(len_33) << 32_i64)));
+                    }; builtin::i64_extend_i32_s(ptr_35) | (builtin::i64_extend_i32_s(len_34) << 32_i64)));
                     raw_len = builtin::i32_wrap_i64(packed >> 32_i64);
                     written_25 = "core:rt/cm_stream_write_once"(self, ptr_23, raw_len);
                     drop("mem/realloc"(ptr_23, raw_len, 1, 0));
@@ -1820,9 +1820,9 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let e: i32;
     let $sroa_written_count_31: i32;
     let $sroa_written_result_32: "core:prelude/types.wado//enum:CopyResult";
-    let end_36: i32;
-    let a_43: i32;
-    let a_53: i32;
+    let end_37: i32;
+    let a_44: i32;
+    let a_54: i32;
     if data.used == 0 {
         return;
     }
@@ -1860,22 +1860,22 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             elements = array.new_fixed<u8>();
             remainder = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
             let $mv_arg_6: ref "core:prelude/slice.wado//Slice<u8>";
-            end_36 = local.tee $load_10(rest.used);
+            end_37 = local.tee $load_10(rest.used);
             end_27 = $load_10;
-            if @unlikely(0 > end_36) {
+            if @unlikely(0 > end_37) {
                 cold_path;
-                "core:prelude/primitive.wado/i32::clamp$cold0"(0, end_36);
+                "core:prelude/primitive.wado/i32::clamp$cold0"(0, end_37);
                 unreachable;
             }
-            a_43 = select i32($sroa_written_count_31 > 0, $sroa_written_count_31, 0);
-            s = select i32(a_43 < end_36, a_43, end_36);
-            if @unlikely(s > end_36) {
+            a_44 = select i32($sroa_written_count_31 > 0, $sroa_written_count_31, 0);
+            s = select i32(a_44 < end_37, a_44, end_37);
+            if @unlikely(s > end_37) {
                 cold_path;
-                "core:prelude/primitive.wado/i32::clamp$cold0"(s, end_36);
+                "core:prelude/primitive.wado/i32::clamp$cold0"(s, end_37);
                 unreachable;
             }
-            a_53 = select i32(end_27 > s, end_27, s);
-            e = select i32(a_53 < end_36, a_53, end_36);
+            a_54 = select i32(end_27 > s, end_27, s);
+            e = select i32(a_54 < end_37, a_54, end_37);
             $mv_arg_6 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: rest.repr, start: s, end: e };
             "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(remainder, $mv_arg_6.repr, s, e);
             rest = remainder;
