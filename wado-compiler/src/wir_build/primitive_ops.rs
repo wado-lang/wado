@@ -139,10 +139,7 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        // The reference-identity operators take operands with no scalar kind.
-        if let NirBinaryOp::RefEq = op {
-            return WirInstr::RefEq(left, right);
-        }
+        // The reference-identity operator takes operands with no scalar kind.
         if let NirBinaryOp::RefNotEq = op {
             return WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)));
         }
@@ -303,7 +300,7 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed => WirInstr::I32ShrS(left, right),
             },
             // Returned above, before the operand kind is classified.
-            NirBinaryOp::RefEq | NirBinaryOp::RefNotEq => unreachable!(),
+            NirBinaryOp::RefNotEq => unreachable!(),
         }
     }
 
