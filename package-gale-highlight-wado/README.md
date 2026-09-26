@@ -80,6 +80,7 @@ src/
 tools/
   corpus_check.wado     parse verdicts, for `mise run check-grammar`
   highlight_dump.wado   capture spans, for `mise run check-highlight`
+  spec_examples.wado    spec blocks quote fixtures, for `mise run check-spec-examples`
 example/
   standalone.wado       styled full-page demo / CSS-class reference
 ```

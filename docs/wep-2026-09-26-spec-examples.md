@@ -103,11 +103,16 @@ example names the test that holds it.
 
 ### The checker
 
-The checker is written in Wado. It reads Markdown with Marl and lexes Wado with
-the `Wado.g4` grammar, so it counts an `assert` keyword only where the lexer
-finds one, not in a comment or a string. It follows
-`package-gale/tools/rust_inline_paths.wado`: a script under `scripts/` drives
-`wado run`, and a baseline file records the blocks that do not comply yet.
+The checker is `package-gale-highlight-wado/tools/spec_examples.wado`, beside
+the `Wado.g4` grammar it lexes with, so it counts an `assert` keyword only where
+the lexer finds one, not in a comment or a string. It reads the Markdown with
+Marl. `scripts/check-spec-examples.sh` drives it with `wado run`, as
+`scripts/check-rust-paths.sh` drives `package-gale/tools/rust_inline_paths.wado`.
+
+A block that names no fixture is counted against the baseline. A block that
+names one is migrated, so any rule it breaks fails the check outright. The
+`#[TODO]` rule reads the fixture as a whole: one marked test anywhere in it
+asks for a WEP.
 
 Marl's `fenced_code_blocks` gives the checker what it reads of each fenced
 block: its info string, its text, its source line, and the HTML block directly
@@ -115,9 +120,9 @@ before it. Marl's document tree stays `internal`.
 
 ### Rollout
 
-The baseline lists every block that has no reference yet, by file and heading,
-and CI fails when it grows. It only shrinks, as `scripts/rust-inline-paths.json`
-does.
+The baseline, `scripts/spec-examples.json`, counts the blocks of each file that
+have no reference yet, and CI fails when a count grows. It only shrinks, as
+`scripts/rust-inline-paths.json` does.
 
 Migrating a block is triage. Each one is exactly one of:
 
@@ -135,10 +140,10 @@ The last two are what this WEP is for. The migration will find them.
        text, source line, and the HTML block directly preceding each. An HTML
        comment now ends at `-->`, not at the next blank line, as CommonMark
        says.
-2. [ ] Write the checker, TDD against small Markdown and fixture cases: the
+2. [x] Write the checker, TDD against small Markdown and fixture cases: the
        reference, the indented substring match, the `assert` rule, the `#[TODO]`
        rule and the baseline.
-3. [ ] Add `mise run check-spec-examples` and its CI job, and record the baseline
+3. [x] Add `mise run check-spec-examples` and its CI job, and record the baseline
        of all 353 blocks.
 4. [ ] Migrate one file first, `spec-types.md`, and decide the `assert` rule from
        it: keep it, or drop it and say why here.
