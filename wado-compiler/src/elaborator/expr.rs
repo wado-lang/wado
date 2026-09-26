@@ -377,18 +377,16 @@ fn fn_step_refusal(
             return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
         }
     }
-    if let Some(dropped) = from.effects.iter().find(|e| !to.effects.contains(e)) {
-        return Some(if widening {
-            format!("`as` cannot drop the effect `{}`", dropped.name())
-        } else {
-            format!("only one function type has the effect `{}`", dropped.name())
-        });
-    }
-    if !widening && let Some(added) = to.effects.iter().find(|e| !from.effects.contains(e)) {
-        return Some(format!(
-            "only one function type has the effect `{}`",
-            added.name()
-        ));
+    let missing = |a: &[EffectRef], b: &[EffectRef]| a.iter().find(|e| !b.contains(e)).cloned();
+    let unmatched = if widening {
+        missing(from.effects, to.effects).map(|dropped| (dropped, "`as` cannot drop the effect"))
+    } else {
+        missing(from.effects, to.effects)
+            .or_else(|| missing(to.effects, from.effects))
+            .map(|effect| (effect, "only one function type has the effect"))
+    };
+    if let Some((effect, reason)) = unmatched {
+        return Some(format!("{reason} `{}`", effect.name()));
     }
     from.params
         .iter()
@@ -420,11 +418,73 @@ fn representation_refusal(tt: &TypeTable, a: TypeId, b: TypeId) -> Option<String
         (ResolvedType::Ref(x), ResolvedType::Ref(y))
         | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => representation_refusal(tt, *x, *y),
         _ => Some(format!(
-            "`{}` and `{}` share no representation; `as` reinterprets only across a newtype \
-             boundary",
+            "`{}` and `{}` {SHARE_NO_REPRESENTATION}",
             tt.type_name(a),
             tt.type_name(b)
         )),
+    }
+}
+
+const SHARE_NO_REPRESENTATION: &str =
+    "share no representation; `as` reinterprets only across a newtype boundary";
+
+/// The reason a cast naming an aggregate is refused: `as` between aggregates
+/// is only ever a newtype step, which shares a base.
+fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    // `i128` / `u128` are stored as structs but are scalars to `as`; the
+    // wide-int rules judge them. A tuple is a `GenericInstance` of a tuple
+    // head, so no arm of its own.
+    let is_aggregate = |id| {
+        !tt.is_wide_int(id)
+            && matches!(
+                tt.get(tt.representation_head(id)),
+                ResolvedType::Struct { .. }
+                    | ResolvedType::GenericInstance { .. }
+                    | ResolvedType::Variant { .. }
+            )
+    };
+    // Only a settled scalar is known to share nothing with an aggregate: a
+    // parameter settles later.
+    let source_is_scalar = matches!(
+        tt.get(tt.representation_head(source)),
+        ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+    );
+    if !(is_aggregate(source) || (source_is_scalar && is_aggregate(target)))
+        || tt.share_common_base(source, target)
+    {
+        return None;
+    }
+    Some(match slice_list_conversion(tt, source, target) {
+        Some(method) => {
+            format!("a slice is a view and a `List` owns its elements; use `.{method}()` instead")
+        }
+        None => format!("the two types {SHARE_NO_REPRESENTATION}"),
+    })
+}
+
+/// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
+fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<&'static str> {
+    let slice_elem = |id| match tt.get(tt.representation_head(id)) {
+        ResolvedType::GenericInstance { def, type_args }
+            if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 =>
+        {
+            Some(type_args[0])
+        }
+        _ => None,
+    };
+    let list_elem = |id| tt.as_list(tt.representation_head(id));
+    let same = |a: Option<TypeId>, b: Option<TypeId>| {
+        a.zip(b).is_some_and(|(a, b)| tt.type_key(a) == tt.type_key(b))
+    };
+    if same(slice_elem(source), list_elem(target)) {
+        Some("to_list")
+    } else if same(slice_elem(target), list_elem(source)) {
+        Some("as_slice")
+    } else {
+        None
     }
 }
 
@@ -3252,35 +3312,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         collector.writes
     }
 
-    /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
-    fn slice_list_conversion(
-        tt: &TypeTable,
-        source_type: TypeId,
-        target_type: TypeId,
-    ) -> Option<&'static str> {
-        let source_base = tt.representation_head(source_type);
-        let target_base = tt.representation_head(target_type);
-        let slice_elem = |id| match tt.get(id) {
-            ResolvedType::GenericInstance { def, type_args }
-                if tt.is_compiler_item(*def, CompilerItem::Slice) && type_args.len() == 1 =>
-            {
-                Some(type_args[0])
-            }
-            _ => None,
-        };
-        if let Some(elem) = slice_elem(source_base)
-            && tt.as_list(target_base) == Some(elem)
-        {
-            return Some("to_list");
-        }
-        if let Some(elem) = slice_elem(target_base)
-            && tt.as_list(source_base) == Some(elem)
-        {
-            return Some("as_slice");
-        }
-        None
-    }
-
     pub(super) fn resolve_cast(
         &mut self,
         cast: &ast::CastExpr,
@@ -3456,6 +3487,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| half_cast_hint(&tt, source_type, target_type))
                 .or_else(|| ref_cast_hint(&tt, source_type, target_type))
                 .or_else(|| fn_cast_hint(&tt, source_type, target_type))
+                .or_else(|| aggregate_cast_hint(&tt, source_type, target_type))
                 .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
         };
         if let Some((from, to, hint)) = refused_cast {
@@ -3468,58 +3500,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return target_type;
         }
 
-        // Every coercion above declined, so nothing relates these two: `as`
-        // between aggregates is only ever a newtype step, which shares a base.
-        let unrelated_aggregate = {
-            let tt = self.tysys.type_table.borrow();
-            // `i128` / `u128` are stored as structs but are scalars to `as`;
-            // the wide-int rules below judge them.
-            // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
-            let is_aggregate = |id| {
-                !tt.is_wide_int(id)
-                    && matches!(
-                        tt.get(tt.representation_head(id)),
-                        ResolvedType::Struct { .. }
-                            | ResolvedType::GenericInstance { .. }
-                            | ResolvedType::Variant { .. }
-                    )
-            };
-            // Only a settled scalar is known to share nothing with an aggregate:
-            // a parameter settles later.
-            let source_is_scalar = matches!(
-                tt.get(tt.representation_head(source_type)),
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Unit
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Flags { .. }
-            );
-            (is_aggregate(source_type) || (source_is_scalar && is_aggregate(target_type)))
-                && !tt.share_common_base(source_type, target_type)
-        };
-        if unrelated_aggregate {
-            let tt = self.tysys.type_table.borrow();
-            let from_name = tt.type_name(source_type);
-            let to_name = tt.type_name(target_type);
-            let conversion = Self::slice_list_conversion(&tt, source_type, target_type);
-            drop(tt);
-            let hint = match conversion {
-                Some(method) => format!(
-                    "a slice is a view and a `List` owns its elements; use `.{method}()` instead"
-                ),
-                None => "the two types share no representation; `as` reinterprets only \
-                         across a newtype boundary"
-                    .to_string(),
-            };
-            let _ = self.emit(TypeError::InvalidCast {
-                from: from_name,
-                to: to_name,
-                hint,
-                span: cast.span,
-            });
-            // The target is the cast's answer, as the other invalid-cast arms
-            // leave it; `error` would bury this one under a cascade.
-            return target_type;
-        }
 
         // Casts *from* i128/u128 (including newtypes of them) support:
         // f64/f32 (correctly rounded), the integer widths (truncating),
