@@ -243,6 +243,19 @@ test "sorted_by returns new array" {
     assert d[4] == 50;
 }
 
+test "sort orders every length, including those a run does not divide" {
+    for let n of [2, 3, 5, 17, 100, 1000, 1025] as List<i32> {
+        let mut a: List<i32> = [];
+        for let i of 0..<n {
+            a.push(i * 7919 % n);
+        }
+        a.sort();
+        for let i of 0..<n {
+            assert a[i] == i;
+        }
+    }
+}
+
 test "sort empty array" {
     let mut empty: List<i32> = [];
     empty.sort();
@@ -573,6 +586,16 @@ test "windows" {
         assert s[2] == 5;
     }
     assert wins.next() matches { None };
+}
+
+test "a chunk or window size past the rest of a view does not wrap" {
+    let arr: List<i32> = [1, 2, 3, 4];
+    let view = arr.as_slice().slice(1, 3);
+    let chunks: List<List<i32>> = view.chunks(i32::MAX).map(|c| c.to_list()).collect();
+    assert chunks == [
+        [2, 3],
+    ] as List<List<i32>>;
+    assert view.windows(i32::MAX).count() == 0;
 }
 
 test "chunks" {

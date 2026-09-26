@@ -25,6 +25,7 @@ use {
     is_build_time,
     parameters,
     push_element,
+    rank_of,
     upgraded,
 } from "./graph.wado";
 
@@ -145,7 +146,7 @@ fn read_value_info(vi: &onnx::ValueInfoProto) -> Result<ValueInfo, String> {
             for let d of shape.dim {
                 dims.push(read_dim(&d, &name)?);
             }
-            Rank::Dims(dims);
+            rank_of(dims);
         },
         None => Rank::Unranked,
     };
@@ -172,7 +173,7 @@ fn read_initializer(t: &onnx::TensorProto, name: String, dtype: String) -> Resul
     return Result::Ok(ValueInfo {
         name,
         dtype,
-        rank: Rank::Dims(dims),
+        rank: rank_of(dims),
         data: payload(t, &name, &dtype, &extents)?,
     });
 }
@@ -193,11 +194,11 @@ fn payload(
     if bytes.is_empty() {
         if *dtype == "float" {
             for let v of t.float_data {
-                push_element(&mut bytes, v.to_bits(), width);
+                push_element(&mut bytes, v.to_bits() as u64, width);
             }
         } else {
             for let v of t.int32_data {
-                push_element(&mut bytes, bit_pattern(name, dtype, v, width)?, width);
+                push_element(&mut bytes, bit_pattern(name, dtype, v, width)? as u64, width);
             }
         }
     }
@@ -218,6 +219,7 @@ fn payload(
 fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
     let name = a.name.unwrap_or("");
     let mut values: List<String> = [];
+    let is_list = a.type matches { Some(onnx::AttributeProtoAttributeType::Floats | onnx::AttributeProtoAttributeType::Ints | onnx::AttributeProtoAttributeType::Strings) };
     match a.type {
         Some(onnx::AttributeProtoAttributeType::Float) => values.push(`${a.f.unwrap_or(0.0)}`),
         Some(onnx::AttributeProtoAttributeType::Int) => values.push(`${a.i.unwrap_or(0)}`),
@@ -240,7 +242,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         // A tensor has no text form, so it travels whole.
         Some(onnx::AttributeProtoAttributeType::Tensor) => {
             if let Some(t) = &a.t && let Some(known) = known_tensor(t)? {
-                return Result::Ok(Attr { name, values, tensor: Option::Some(known) });
+                return Result::Ok(Attr { name, values, is_list, tensor: Option::Some(known) });
             }
         },
         // A graph or a type has no text form, so the attribute is carried with
@@ -248,7 +250,7 @@ fn read_attr(a: &onnx::AttributeProto) -> Result<Attr, String> {
         _ => {
         },
     }
-    return Result::Ok(Attr { name, values });
+    return Result::Ok(Attr { name, values, is_list });
 }
 
 fn read_node(n: &onnx::NodeProto) -> Result<Node, String> {

@@ -1,0 +1,49 @@
+// Each link of a chain calls the operator a lone comparison of the same
+// operands would.
+
+struct Foo {
+    x: i32,
+}
+
+impl Ord for &Foo {
+    fn cmp(&self, other: &Self) -> Ordering {
+        return i32::cmp(&self.x, &other.x);
+    }
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+impl Eq for Color {
+    fn eq(&self, other: &Self) -> bool {
+        return true;
+    }
+}
+
+test "an impl written for a reference" {
+    let a = Foo { x: 1 };
+    let b = Foo { x: 2 };
+    let c = Foo { x: 3 };
+    assert &a < &b < &c;
+    assert !(&b < &a < &c);
+}
+
+test "tuples, by value and by reference" {
+    let a: [i32, i32] = [1, 2];
+    let b: [i32, i32] = [1, 2];
+    let c: [i32, i32] = [1, 3];
+    assert a == b == a;
+    assert !(a == b == c);
+    assert &a == &b == &a;
+    assert !(&a == &b == &c);
+}
+
+test "an enum's own Eq" {
+    let a = Color::Red;
+    let b = Color::Green;
+    assert a == b;
+    assert a == b == a;
+    assert &a == &b == &a;
+}

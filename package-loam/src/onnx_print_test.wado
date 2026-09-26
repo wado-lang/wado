@@ -1,0 +1,66 @@
+//! The textual form a graph prints as reads back as the same graph.
+
+use { Attr, Graph, Node } from "./graph.wado";
+use { print } from "./onnx_print.wado";
+use { read as read_proto } from "./onnx_proto.wado";
+use { read } from "./onnx_text.wado";
+
+fn round_trip(g: &Graph) -> Graph {
+    return read(&print(g).unwrap()).unwrap();
+}
+
+test "a graph carrying every form the reader takes prints as itself" {
+    let g = read(
+        `<ir_version: 8, opset_import: ["" : 14]>
+        "my graph" (float[batch, ?, 4] "input.1", int64 Scalar, float[] Open) => (float[batch, ?, 3] "/out")
+        <float[4, 3] W = {1.5, -2, 3e-8, 0, 1, 2, 3, 4, 5, 6, 7, 1e30}, float[3] B, int64[2] "onnx::Shape" = {1, -1}, bool[2] M = {1, 0}>
+        {
+            H = MatMul("input.1", W)
+            S = Constant <value = float {0.125}> ()
+            K = Constant <value = int64[2] {3, -4}> ()
+            C = com.microsoft.Gelu <alpha = 1.5, count = 3, mode = "SAME UPPER", sizes = [1, 2], axes = [3], names = ["a", "b"]> (H)
+            "/out" = Add(C, B)
+        }`,
+    ).unwrap();
+    assert round_trip(&g) == g;
+}
+
+test "a half initializer prints as its bit patterns" {
+    let g = read(`g (float16[2] X) => (float16[2] Y) <float16[2] W = {15360, 2049}> { Y = Add(X, W) }`).unwrap();
+    assert round_trip(&g) == g;
+}
+
+test "a graph read from protobuf prints as itself" {
+    let g = read_proto(#include_bytes("../tests/models/tiny-gpt2/model.onnx")).unwrap();
+    assert round_trip(&g) == g;
+}
+
+test "a float the grammar cannot spell stops the print, naming the tensor" {
+    let g = read(`g (float[1] X) => (float[1] Y) <float[1] W = {1.0}> { Y = Add(X, W) }`).unwrap();
+    let mut w = g.initializers[0];
+    w.data = Option::Some(b"\x00\x00\x80\x7f");
+    let broken = Graph {
+        ..g,
+        initializers: [w],
+    };
+    assert `${print(&broken).unwrap_err()}` == "W: inf has no text form";
+}
+
+test "an attribute with no text form stops the print, naming it" {
+    let g = read(`g (float[1] X) => (float[1] Y) { Y = Identity(X) }`).unwrap();
+    let node = Node {
+        ..g.nodes[0],
+        attrs: [
+            Attr {
+                name: "body",
+                values: [],
+                is_list: false,
+            },
+        ],
+    };
+    let broken = Graph {
+        ..g,
+        nodes: [node],
+    };
+    assert `${print(&broken).unwrap_err()}` == "Y = Identity: attribute body has no text form";
+}

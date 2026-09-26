@@ -5638,7 +5638,6 @@ pub enum TirBinaryOp {
     BitXor,
     Shl,
     Shr,
-    RefEq,
     RefNotEq,
 }
 

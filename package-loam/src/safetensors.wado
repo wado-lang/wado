@@ -1,0 +1,99 @@
+//! A safetensors file: a length-prefixed JSON header naming each tensor's
+//! element type, shape and byte range, then the payloads back to back.
+
+use { to_string } from "core:json";
+use { TreeMap } from "core:collections";
+use { Graph, ValueInfo, element_of, push_element, static_extents } from "./graph.wado";
+use { Checkpoint, Expected, HeaderEntry, LoadError, METADATA_KEY } from "./runtime/checkpoint.wado";
+use { element_count } from "./runtime/tensor.wado";
+use { Shape } from "./shape.wado";
+
+/// The initializer `vi`, whose axes stage 0 gave as `shape`, as a checkpoint
+/// must hold it.
+pub fn expected(vi: &ValueInfo, shape: &Shape) -> Expected {
+    let element = element_of(&vi.dtype).unwrap();
+    // ONNX states an initializer's extents as integers, and both readers hold to it.
+    let extents = static_extents(&vi.rank).unwrap();
+    return Expected {
+        tensor: vi.name,
+        dtype: element.stored,
+        axes: shape.axes.into_iter().map(|axis| axis.name).collect(),
+        elements: element_count(&extents),
+        extents,
+        width: element.width,
+    };
+}
+
+/// Whether `checkpoint` holds every initializer the graph carries no data for,
+/// as the build compiles it.
+pub fn check_checkpoint(
+    graph: &Graph,
+    shapes: &TreeMap<String, Shape>,
+    checkpoint: &Checkpoint,
+) -> Result<(), LoadError> {
+    for let vi of &graph.initializers {
+        if vi.data matches { Some(_) } {
+            continue;
+        }
+        checkpoint.range(&expected(vi, &shapes.get(vi.name).unwrap()))?;
+    }
+    return Result::Ok(());
+}
+
+/// One tensor to write, its elements already little-endian.
+pub struct StoredTensor {
+    pub name: String,
+    pub dtype: String,
+    pub shape: List<i64>,
+    pub data: ByteList,
+}
+
+/// `graph` with every weight it carries moved out, and those weights as a
+/// checkpoint holds them, under the graph's names. A weight named `METADATA_KEY`
+/// has no checkpoint entry, so it stays in the graph.
+pub fn split_weights(graph: Graph) -> [Graph, List<StoredTensor>] {
+    let mut kept: List<ValueInfo> = [];
+    let mut stored: List<StoredTensor> = [];
+    for let vi of graph.initializers {
+        if let Some(data) = vi.data && vi.name != METADATA_KEY {
+            let shape: List<i64> = static_extents(&vi.rank).unwrap().into_iter().map(|e| e as i64).collect();
+            stored.push(StoredTensor { name: vi.name, dtype: element_of(&vi.dtype).unwrap().stored, shape, data });
+            kept.push(ValueInfo { ..vi, data: null });
+        } else {
+            kept.push(vi);
+        }
+    }
+    return [
+        Graph { ..graph, initializers: kept },
+        stored,
+    ];
+}
+
+/// The file holding `tensors` in order. The header is padded with spaces to a
+/// multiple of 8 bytes, as the format recommends, so each payload is aligned.
+pub fn write_safetensors(tensors: &List<StoredTensor>) -> ByteList {
+    let mut header = TreeMap::<String, HeaderEntry>::new();
+    let mut offset: i64 = 0;
+    for let t of *tensors {
+        let end = offset + t.data.len() as i64;
+        header[t.name] = HeaderEntry {
+            dtype: t.dtype,
+            shape: t.shape,
+            data_offsets: [offset, end],
+        };
+        offset = end;
+    }
+    let mut text = to_string(&header).unwrap();
+    while text.len() % 8 != 0 {
+        text.push(' ');
+    }
+    let size = 8 + text.len() as i64 + offset;
+    assert size <= i32::MAX as i64;
+    let mut out = ByteList::with_capacity(size as i32);
+    push_element(&mut out, text.len() as u64, 8);
+    out.extend_from_slice(text.as_bytes() as Slice<u8>);
+    for let t of *tensors {
+        out.extend(&t.data);
+    }
+    return out;
+}

@@ -1,0 +1,26 @@
+// A chain compares each link as a lone `==` would: references by the values
+// they point to, through `Eq`.
+
+use { println, Stdout } from "core:cli";
+
+struct P { x: i32 }
+
+export fn run() with Stdout {
+    let a = P { x: 1 };
+    let b = P { x: 1 };
+    let c = P { x: 2 };
+    let ra = &a;
+    let rb = &b;
+    let rc = &c;
+    assert ra == ra == rb;
+    assert !(ra == rb == rc);
+    assert a == b == P { x: 1 };
+    let i = 3;
+    let j = 3;
+    assert &i == &j == &i;
+    assert !(&i == &j == &a.x);
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}
