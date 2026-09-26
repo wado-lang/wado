@@ -3586,6 +3586,44 @@ pub enum Pattern {
     Error(Span),
 }
 
+/// The one name a pattern binds: `x` or `mut x`.
+#[derive(Debug, Clone, Copy)]
+pub struct PatternName<'a> {
+    pub id: AstId,
+    pub name: &'a str,
+    pub span: Span,
+    pub is_mut: bool,
+}
+
+impl Pattern {
+    /// The name this pattern binds when it is one name, `x` or `mut x`.
+    pub fn as_name(&self) -> Option<PatternName<'_>> {
+        match self {
+            Pattern::Ident { id, name, span } => Some(PatternName {
+                id: *id,
+                name,
+                span: *span,
+                is_mut: false,
+            }),
+            Pattern::MutIdent { id, name, span } => Some(PatternName {
+                id: *id,
+                name,
+                span: *span,
+                is_mut: true,
+            }),
+            Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Tuple(..)
+            | Pattern::Variant { .. }
+            | Pattern::Struct { .. }
+            | Pattern::Or(_)
+            | Pattern::Range { .. }
+            | Pattern::Typed { .. }
+            | Pattern::Error(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StructPatternField {
     /// The node's own id, whose [`AstIdSpace`] names the module that wrote it.

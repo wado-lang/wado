@@ -828,7 +828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if !parts
             .iter()
-            .all(|p| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard))
+            .all(|p| p.as_name().is_some() || matches!(p, Pattern::Wildcard))
         {
             let _ = self.emit(TypeError::InvalidPattern {
                 message: "a walk over a type pack binds a name, `_`, or a tuple of them"
@@ -875,8 +875,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             binding => vec![(binding, binding_type)],
         };
         for (pattern, ty) in elems {
-            if let Pattern::Ident { id, name, span } = pattern {
-                self.bind_local(ctx, *id, name, *span, is_mut, ty);
+            if let Some(n) = pattern.as_name() {
+                self.bind_local(ctx, n.id, n.name, n.span, is_mut || n.is_mut, ty);
             }
         }
     }
@@ -2517,7 +2517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // and any destructured sub-bindings into `ctx` (recording their
         // symbols) and walks the body for its facts.
         let ctx = &mut ctx.enter_scope();
-        if !matches!(for_of.binding, Pattern::Ident { .. }) {
+        if for_of.binding.as_name().is_none() {
             ctx.add_local_at(
                 minted_name("pattern_temp", unique_id),
                 binding_type,
@@ -2535,14 +2535,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
     /// binding spells one.
-    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<String> {
+    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<&str> {
         let Pattern::Tuple(elems, _) = binding else {
             return None;
         };
-        match elems.first()? {
-            Pattern::Ident { name, .. } => Some(name.clone()),
-            _ => None,
-        }
+        elems.first()?.as_name().map(|n| n.name)
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per

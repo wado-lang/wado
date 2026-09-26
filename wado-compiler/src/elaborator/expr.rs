@@ -4581,7 +4581,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
     /// once the binding is in scope. `None` when the form is not an enumerate
-    /// or the index position is a wildcard.
+    /// or the index position is a wildcard, and when the index is `mut`: a
+    /// subscript must stay the element's own position.
     pub(super) fn enumerate_index_local(
         is_enumerate: bool,
         binding: &ast::Pattern,
@@ -4591,7 +4592,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         let name = Self::enumerate_index_binding_name(binding)?;
-        ctx.lookup(&name).map(|local| local.index)
+        ctx.lookup(name)
+            .filter(|local| !local.is_mut)
+            .map(|local| local.index)
     }
 
     /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving

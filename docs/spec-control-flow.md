@@ -203,7 +203,7 @@ impl<..T: Doubled> Doubled for [..T] {
 }
 ```
 
-The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike.
+The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike. A `mut` index can change, so it is not a subscript.
 
 The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable this way.
 

@@ -4233,10 +4233,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             bound_type
         };
 
-        if !matches!(
-            for_of.binding,
-            ast::Pattern::Ident { .. } | ast::Pattern::Tuple(..) | ast::Pattern::Wildcard
-        ) {
+        if for_of.binding.as_name().is_none()
+            && !matches!(
+                for_of.binding,
+                ast::Pattern::Tuple(..) | ast::Pattern::Wildcard
+            )
+        {
             return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
         }
 
@@ -4338,20 +4340,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> (String, u32, Vec<TirStmt>) {
-        let (binding_name, binding_id, binding_name_span) = match binding {
-            ast::Pattern::Ident { id, name, span } => (name.clone(), Some(*id), *span),
-            _ => (
-                minted_name("pattern_temp", unique_id),
-                None,
-                Span::default(),
-            ),
-        };
+        let root = binding.as_name();
+        let binding_name = root.map_or_else(
+            || minted_name("pattern_temp", unique_id),
+            |n| n.name.to_string(),
+        );
         let binding_local = ctx.add_local_at(
             binding_name.clone(),
             binding_type,
-            is_mut,
-            binding_id,
-            binding_name_span,
+            is_mut || root.is_some_and(|n| n.is_mut),
+            root.map(|n| n.id),
+            root.map_or_else(Span::default, |n| n.span),
         );
         let ast::Pattern::Tuple(elems, _) = binding else {
             return (binding_name, binding_local, Vec::new());
@@ -4363,16 +4362,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .elem_types_or_self(binding_type);
         let mut destructure = Vec::new();
         for (i, (elem, elem_type)) in elems.iter().zip(held).enumerate() {
-            let ast::Pattern::Ident {
-                id,
-                name,
-                span: elem_span,
-            } = elem
-            else {
+            let Some(elem_name) = elem.as_name() else {
                 continue;
             };
-            let local_index =
-                ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *elem_span);
+            let name = elem_name.name.to_string();
+            let is_mut = is_mut || elem_name.is_mut;
+            let local_index = ctx.add_local_at(
+                name.clone(),
+                elem_type,
+                is_mut,
+                Some(elem_name.id),
+                elem_name.span,
+            );
             let field_access = TirExpr::new(
                 TirExprKind::FieldAccess {
                     expr: Box::new(TirExpr::new(
