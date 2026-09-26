@@ -45,9 +45,9 @@ pub fn i32_eqz(a: i32) -> i32;
 #[trap(never)]
 pub fn select<T>(cond: bool, if_true: T, if_false: T) -> T;
 
-/// Whether `a` and `b` are the same closure, not merely equal ones.
+/// Whether `a` and `b` are the same object, not merely equal ones: `ref.eq`.
 #[trap(never)]
-internal fn ref_eq(a: fn(), b: fn()) -> bool;
+internal fn ref_eq<T: Ref>(a: T, b: T) -> bool;
 
 /// Deep-copies a value to preserve value semantics on assignment and
 /// parameter passing. Inserted at TIR build for value-semantic composite

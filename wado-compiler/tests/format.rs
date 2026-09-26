@@ -266,6 +266,16 @@ fn test_format_byte_string_literal_roundtrips() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A reference to a reference prints as `&&`, in a type and an expression, and
+/// parses back as two references.
+#[test]
+fn test_format_double_ampersand_roundtrips() {
+    let source = "fn f(r: &&i32, m: &&mut i32) {\n    let a = &&x;\n    let b = &&mut y;\n}\n";
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A `_` inference placeholder inside a turbofish must round-trip through the
 /// formatter as `_` (issue #1106), not get dropped or rewritten to a name.
 #[test]

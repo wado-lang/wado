@@ -886,10 +886,8 @@ impl SolverBridge {
             let id = lowering.trait_decl(inspect);
             program.traits.entry(id).or_default().holds_for_all = true;
         }
-        // A reference is itself the thing a `Ref` bound asks for, as it is
-        // its own `Eq`.
-        let holds_of_a_reference: Vec<DefId> =
-            [CompilerItem::Eq, CompilerItem::Ref, CompilerItem::RefMut]
+        // A reference is itself the thing a `Ref` bound asks for.
+        let holds_of_a_reference: Vec<DefId> = [CompilerItem::Ref, CompilerItem::RefMut]
                 .into_iter()
                 .filter_map(|item| tysys.compiler_trait_def(item))
                 .collect();

@@ -2062,13 +2062,10 @@ impl<'a> Unparser<'a> {
     fn unparse_unary(&mut self, u: &UnaryExpr) {
         self.output.push_str(unary_op_str(u.op));
 
-        // Space between consecutive same operators: "- -5" not "--5", "& &x" not "&&x"
+        // "- -5", not "--5". "&&x" needs no space: the parser splits `&&`.
         let needs_space = matches!(
             (&u.op, &u.expr),
             (UnaryOp::Neg, Expr::Unary(inner)) if inner.op == UnaryOp::Neg
-        ) || matches!(
-            (&u.op, &u.expr),
-            (UnaryOp::Ref, Expr::Unary(inner)) if inner.op == UnaryOp::Ref
         );
         if needs_space {
             self.output.push(' ');

@@ -3715,20 +3715,18 @@ impl Parser {
     }
 
     fn parse_unary_expr(&mut self) -> ParseResult<Expr> {
-        // Handle &mut as a special case (two-token operator)
-        if *self.peek_kind() == TokenKind::Ampersand {
-            let start_span = self.peek().span;
+        let start_span = self.peek().span;
+        if self.check(&TokenKind::Ampersand) {
             self.advance();
-            let op = if *self.peek_kind() == TokenKind::Mut {
-                self.advance();
-                UnaryOp::MutRef
-            } else {
-                UnaryOp::Ref
-            };
-            let expr = self.parse_unary_expr()?;
-            // Span covers from operator to end of inner expression
+            return self.parse_ref_expr_operand(start_span);
+        }
+        // `&&x` lexes as one `&&` token and means `&(&x)`.
+        if self.check(&TokenKind::And) {
+            self.advance();
+            let expr = self.parse_ref_expr_operand(start_span)?;
             let span = start_span.merge(&expr.span());
             let id = self.alloc_ast_id();
+            let op = UnaryOp::Ref;
             return Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })));
         }
 
@@ -3752,6 +3750,20 @@ impl Parser {
         }
 
         self.parse_postfix_expr()
+    }
+
+    /// What follows a prefix `&`: an optional `mut`, then the operand.
+    fn parse_ref_expr_operand(&mut self, start_span: Span) -> ParseResult<Expr> {
+        let op = if self.check(&TokenKind::Mut) {
+            self.advance();
+            UnaryOp::MutRef
+        } else {
+            UnaryOp::Ref
+        };
+        let expr = self.parse_unary_expr()?;
+        let span = start_span.merge(&expr.span());
+        let id = self.alloc_ast_id();
+        Ok(Expr::Unary(Box::new(UnaryExpr { id, op, expr, span })))
     }
 
     fn parse_postfix_expr(&mut self) -> ParseResult<Expr> {
@@ -5023,6 +5035,20 @@ impl Parser {
         })
     }
 
+    /// What follows a reference type's `&`: an optional `mut`, then the referent.
+    fn parse_ref_type_referent(&mut self) -> ParseResult<Type> {
+        let is_mut = self.check(&TokenKind::Mut);
+        if is_mut {
+            self.advance();
+        }
+        let inner = Box::new(self.parse_type()?);
+        Ok(if is_mut {
+            Type::MutReference(inner)
+        } else {
+            Type::Reference(inner)
+        })
+    }
+
     /// Parse a type or a type pack spread (`..T`) inside a tuple type.
     fn parse_type_or_pack(&mut self) -> ParseResult<Type> {
         if self.check_dot_dot_or_ellipsis() {
@@ -5053,22 +5079,14 @@ impl Parser {
             return Ok(Type::Function(self.parse_fn_type(start_span)?));
         }
 
-        // Reference type: &T or &mut T
         if self.check(&TokenKind::Ampersand) {
             self.advance();
-            // Check for mutable reference
-            let is_mut = if self.check(&TokenKind::Mut) {
-                self.advance();
-                true
-            } else {
-                false
-            };
-            let inner = self.parse_type()?;
-            return Ok(if is_mut {
-                Type::MutReference(Box::new(inner))
-            } else {
-                Type::Reference(Box::new(inner))
-            });
+            return self.parse_ref_type_referent();
+        }
+        // `&&T` lexes as one `&&` token and means `& &T`.
+        if self.check(&TokenKind::And) {
+            self.advance();
+            return Ok(Type::Reference(Box::new(self.parse_ref_type_referent()?)));
         }
 
         // Unit type: ()

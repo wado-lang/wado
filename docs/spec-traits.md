@@ -682,6 +682,13 @@ itself (`impl … for &T`), picked the same way. So a `&String` equals a `String
 through `impl<T: AsStrSlice> Eq<String> for &T`. Nothing dereferences the
 reference: no impl answers `&i32 == i32`, so that comparison is an error.
 
+Two references compare the values they point to, as in Rust. The prelude's
+`impl<T: Eq> Eq for &T` (and the same for `&mut T`) answers `&a == &b` with
+`a == b`, so `&T: Eq` holds exactly when `T: Eq` does. A `&mut` operand
+compared with a `&` one compares as two `&`. To ask whether two references
+point to the same value, call `ref_eq` (see
+[Reference Identity](./spec-memory.md#reference-identity)).
+
 ### Ordering Enum
 
 ```wado

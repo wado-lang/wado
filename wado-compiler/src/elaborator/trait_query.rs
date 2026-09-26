@@ -1477,42 +1477,21 @@ impl TypeSystem {
                 self.type_table.borrow().fq_base_type_name(type_id),
                 self.impl_position_args(type_id),
             ),
-            ResolvedType::Ref(inner) => {
-                // References always implement Eq via ref.eq (identity
-                // comparison), which is `Eq<Self>`. A bound writing an argument
-                // asks the pointee instead.
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                let inner_id = *inner;
+                // The prelude's `Eq for &T` compares the pointees, so `&T: Eq`
+                // is `T: Eq`. A bound writing an argument asks an impl.
                 if is_eq && wanted.is_empty() {
-                    return true;
+                    return self.type_implements_trait(ctx, scope, inner_id, trait_);
                 }
+                let kind = RefKind::from_resolved(&resolved)
+                    .expect("a reference type has a reference kind");
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
-                let inner_id = *inner;
                 if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
                     Some(type_id),
-                    &Receiver::Ref(RefKind::Shared),
-                    decl,
-                    self.impl_position_args(type_id).as_deref(),
-                    NewtypePeel::Follow,
-                    wanted,
-                ) {
-                    return true;
-                }
-                if self.ref_denies_bound(on_bound, decl) {
-                    return false;
-                }
-                return self.type_implements_trait(ctx, scope, inner_id, trait_);
-            }
-            ResolvedType::MutRef(inner) => {
-                if is_eq && wanted.is_empty() {
-                    return true;
-                }
-                let inner_id = *inner;
-                if self.find_trait_impl_for_type_with_args(
-                    ctx,
-                    scope,
-                    Some(type_id),
-                    &Receiver::Ref(RefKind::Mut),
+                    &Receiver::Ref(kind),
                     decl,
                     self.impl_position_args(type_id).as_deref(),
                     NewtypePeel::Follow,

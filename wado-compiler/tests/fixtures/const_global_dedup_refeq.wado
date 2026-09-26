@@ -1,6 +1,6 @@
 // Soundness guard for `wir_optimize::dedupe_const_globals`: two distinct const
 // globals with byte-identical inits must NOT be merged when their references
-// are compared by identity (`&A == &B` lowers to `ref.eq`). Merging them would
+// are compared by identity (`ref_eq` lowers to `ref.eq`). Merging them would
 // flip the comparison from `false` to `true`. The pass bails entirely when the
 // module contains any `ref.eq`, so both globals survive and the result stays
 // `false` ("diff").
@@ -13,7 +13,7 @@ global B: List<i32> = [10, 20, 30];
 export fn run() with Stdout {
     let ra = &A;
     let rb = &B;
-    if ra == rb {
+    if ref_eq(ra, rb) {
         println("same");
     } else {
         println("diff");

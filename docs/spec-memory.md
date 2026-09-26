@@ -115,23 +115,26 @@ let r2 = &mut x;  // OK in Wado (no borrow checker)
 
 ### Reference Identity
 
-`==` and `!=` on two references to a type whose value is a heap object (a
-struct, `List<T>`, `String`, a tuple, a variant) compare identity, not content.
+`==` and `!=` on two references compare the values they point to, as in Rust
+(see [Eq](./spec-traits.md#eq---equality)). The prelude function
+`ref_eq(a: &T, b: &T) -> bool` compares identity instead: whether the two
+references point to one object.
 
-Identity is guaranteed in one direction only. Two references to one object
-always compare equal. Two references to distinct objects of identical content
-may also compare equal, because the optimizer may intern such objects into one.
+Identity is guaranteed in one direction only. Two references to one object are
+always `ref_eq`. Two references to distinct objects of identical content may
+also be `ref_eq`, because the optimizer may intern such objects into one.
 Whether it does can change with the optimization level and with the Wado
 version. An identity comparison that should be true is never false.
 
 ```wado
-fn same(a: &List<i32>, b: &List<i32>) -> bool { return a == b; }
-
 let xs: List<i32> = [1, 2, 3];
-same(&xs, &xs);                 // always true
 let ys: List<i32> = [1, 2, 3];
-same(&xs, &ys);                 // false or true: the two may be one object
+&xs == &ys;                     // true: equal values
+ref_eq(&xs, &xs);               // always true
+ref_eq(&xs, &ys);               // false or true: the two may be one object
 ```
+
+`ref_eq` takes references only, so a closure's identity stays unobservable.
 
 ### Design Trade-offs
 

@@ -1,5 +1,5 @@
-// A chain compares each link as a lone `==` would: references by identity,
-// values through `Eq`.
+// A chain compares each link as a lone `==` would: references by the values
+// they point to, through `Eq`.
 
 use { println, Stdout } from "core:cli";
 
@@ -8,10 +8,12 @@ struct P { x: i32 }
 export fn run() with Stdout {
     let a = P { x: 1 };
     let b = P { x: 1 };
+    let c = P { x: 2 };
     let ra = &a;
     let rb = &b;
-    assert ra == ra == ra;
-    assert !(ra == ra == rb);
+    let rc = &c;
+    assert ra == ra == rb;
+    assert !(ra == rb == rc);
     assert a == b == P { x: 1 };
     println("ok");
 }

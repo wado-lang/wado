@@ -586,6 +586,12 @@ let val = **rr;       // double dereference
 // &mut to & coercion (automatic)
 fn read(r: &i32) { ... }
 read(&mut y);         // OK: &mut i32 coerced to &i32
+
+// == compares the values, as in Rust; ref_eq compares identity
+let a = 42;
+&x == &a;             // true
+ref_eq(&x, &a);       // false: two different values
+ref_eq(r, &x);        // true: r points to x
 ```
 
 Key differences from Rust:

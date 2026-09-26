@@ -1,0 +1,8 @@
+// `ref_eq` takes references, so a closure's identity stays unobservable.
+export fn run() {
+    let f = || {};
+    assert ref_eq(f, f);
+}
+
+__DATA__
+{"compile_error": ":4:19: type mismatch: expected '&T', found 'fn() -> ()'"}

@@ -31,16 +31,22 @@ pub trait Eq<Rhs = Self> with () {
     fn eq(&self, other: &Rhs) -> bool;
 }
 
-impl<T> Eq for &T {
+impl<T: Eq> Eq for &T {
     pub fn eq(&self, other: &Self) -> bool {
-        return *self == *other;
+        return **self == **other;
     }
 }
 
-impl<T> Eq for &mut T {
+impl<T: Eq> Eq for &mut T {
     pub fn eq(&self, other: &Self) -> bool {
-        return *self == *other;
+        return **self == **other;
     }
+}
+
+/// Whether `a` and `b` refer to the same value, not merely equal ones. `==`
+/// on references compares the values they refer to.
+pub fn ref_eq<T>(a: &T, b: &T) -> bool {
+    return builtin::ref_eq(a, b);
 }
 
 /// A total order over the type: what `sort`, `TreeMap` and a `T: Ord` bound

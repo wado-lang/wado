@@ -35,7 +35,7 @@ use super::coercion::{
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
-use super::tysys::{Identity, TypeSystem};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
@@ -4874,11 +4874,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (left, right)
         };
 
-        if let Some(identity) = self
+        if self
             .tysys
-            .identity_of(binary.op, left.type_id, right.type_id)
+            .compares_handles(binary.op, left.type_id, right.type_id)
         {
-            return self.identity_comparison(identity, binary.op, left, right, binary.span);
+            return handle_comparison(binary.op, left, right, binary.span);
         }
 
         if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
@@ -4912,11 +4912,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Native binary op — primitive path. The op mapping is 1:1 with the
-        // AST. Ref-equality (`RefEq` / `RefNotEq`) is synthesised by the
-        // elaborator after type analysis; until that decision is recorded,
-        // reify emits the source-level op verbatim. That affects only the
-        // `==` / `!=` path on ref types; other ops on refs are already
-        // diagnosed by annotate.
+        // AST.
         TirExpr::new(
             TirExprKind::Binary {
                 left: Box::new(left),
@@ -5909,48 +5905,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         right: TirExpr,
         span: Span,
     ) -> TirExpr {
-        if let Some(identity) = self.tysys.identity_of(op, left.type_id, right.type_id) {
-            return self.identity_comparison(identity, op, left, right, span);
+        if self
+            .tysys
+            .compares_handles(op, left.type_id, right.type_id)
+        {
+            return handle_comparison(op, left, right, span);
         }
         TirExpr::new(
             TirExprKind::Binary {
                 left: Box::new(left),
                 op: ast_binary_op_to_tir(op),
-                right: Box::new(right),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    }
-
-    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
-    /// resource handles.
-    fn identity_comparison(
-        &mut self,
-        identity: Identity,
-        op: ast::BinaryOp,
-        left: TirExpr,
-        right: TirExpr,
-        span: Span,
-    ) -> TirExpr {
-        let is_eq = op == ast::BinaryOp::Eq;
-        let (op, left, right) = match identity {
-            Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
-            Identity::Reference => (TirBinaryOp::RefNotEq, left, right),
-            Identity::Handle => (
-                if is_eq {
-                    TirBinaryOp::Eq
-                } else {
-                    TirBinaryOp::NotEq
-                },
-                handle_bits(left),
-                handle_bits(right),
-            ),
-        };
-        TirExpr::new(
-            TirExprKind::Binary {
-                op,
-                left: Box::new(left),
                 right: Box::new(right),
             },
             TypeTable::BOOL,
@@ -10426,6 +10390,25 @@ fn build_int128_from_intermediate(
             has_receiver: false,
         },
         target_type,
+        span,
+    )
+}
+
+/// `==` / `!=` on unrestricted resource handles: bit equality, since the host
+/// interns them.
+fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    let op = if op == ast::BinaryOp::Eq {
+        TirBinaryOp::Eq
+    } else {
+        TirBinaryOp::NotEq
+    };
+    TirExpr::new(
+        TirExprKind::Binary {
+            op,
+            left: Box::new(handle_bits(left)),
+            right: Box::new(handle_bits(right)),
+        },
+        TypeTable::BOOL,
         span,
     )
 }
