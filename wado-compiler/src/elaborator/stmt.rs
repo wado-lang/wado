@@ -653,7 +653,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (always binds), which would make its else block unreachable.
     /// Conservative: only the unambiguous top-level binding forms are flagged,
     /// so a refutable pattern is never wrongly rejected.
-    fn let_else_pattern_is_irrefutable(&mut self, pattern: &Pattern, scrutinee_type: TypeId) -> bool {
+    fn let_else_pattern_is_irrefutable(
+        &mut self,
+        pattern: &Pattern,
+        scrutinee_type: TypeId,
+    ) -> bool {
         match pattern {
             Pattern::Wildcard | Pattern::MutIdent { .. } => true,
             Pattern::Ident { id, .. } => self.pattern_name_bound(*id),

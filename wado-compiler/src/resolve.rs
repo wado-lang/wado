@@ -723,17 +723,15 @@ impl Resolver<'_> {
     /// otherwise unless the declaring `let` derives it from the binding it
     /// replaces.
     fn redeclares(&self, name: &str) -> bool {
-        let within_pattern = self.pattern_start.is_some_and(|start| {
-            self.bindings
-                .last()
-                .and_then(|frame| frame.get_index_of(name))
-                .is_some_and(|i| i >= start)
-        });
-        within_pattern
-            || !self
-                .pending_binder
-                .as_ref()
-                .is_some_and(|p| p.derived.iter().any(|derived| derived == name))
+        self.bound_by_pattern(name) || !self.binder_derives(name)
+    }
+
+    /// Whether the binder being walked derives `name` from the binding it
+    /// replaces.
+    fn binder_derives(&self, name: &str) -> bool {
+        self.pending_binder
+            .as_ref()
+            .is_some_and(|p| p.derived.iter().any(|derived| derived == name))
     }
 
     fn bind_pattern_name(&mut self, name: &str, span: Span) {
@@ -749,9 +747,7 @@ impl Resolver<'_> {
     /// Whether the binder being walked waives the lint for the name its pattern
     /// binds: by attribute, or by deriving the name from itself.
     fn binder_exempts(&self, name: &str) -> bool {
-        self.pending_binder
-            .as_ref()
-            .is_some_and(|p| p.allowed || p.derived.iter().any(|derived| derived == name))
+        self.pending_binder.as_ref().is_some_and(|p| p.allowed) || self.binder_derives(name)
     }
 
     /// The immutable `global` a bare `name` in the pattern being walked tests
@@ -777,9 +773,16 @@ impl Resolver<'_> {
         let Some((innermost, outer)) = self.bindings.split_last() else {
             return false;
         };
-        let start = self.pattern_start.expect("a pattern is being walked");
         outer.iter().any(|frame| frame.contains_key(name))
-            || innermost.get_index_of(name).is_some_and(|i| i < start)
+            || (innermost.contains_key(name) && !self.bound_by_pattern(name))
+    }
+
+    /// Whether the pattern being walked bound `name` itself.
+    fn bound_by_pattern(&self, name: &str) -> bool {
+        let (Some(start), Some(innermost)) = (self.pattern_start, self.bindings.last()) else {
+            return false;
+        };
+        innermost.get_index_of(name).is_some_and(|i| i >= start)
     }
 
     /// A condition's bindings reach the `then` block and stop there, so the
@@ -1130,7 +1133,9 @@ impl AstVisitor for Resolver<'_> {
                     }
                     if let ast::Expr::TupleComprehension(c) = expr {
                         s.visit_expr(&c.iterable);
-                        s.in_pattern_site(PatternSite::Declaration, |s| s.visit_pattern(&c.binding));
+                        s.in_pattern_site(PatternSite::Declaration, |s| {
+                            s.visit_pattern(&c.binding)
+                        });
                         s.visit_expr(&c.body);
                         return;
                     }

@@ -1,5 +1,5 @@
-//! Local name binding within bodies: duplicate and keyword-spelled
-//! bindings, reads before initialization, and assignments to immutable locals.
+//! Local name binding within bodies: keyword-spelled bindings, reads before
+//! initialization, and assignments to immutable locals.
 
 use crate::hashmap::IndexSet;
 
@@ -18,17 +18,10 @@ use crate::token::Span;
 
 /// Binding information for a local variable
 #[derive(Debug, Clone)]
-pub struct BindingInfo {
-    /// Variable name
-    pub name: String,
-    /// Whether the variable is mutable
-    pub is_mut: bool,
-    /// Whether the variable is reactive
-    pub is_reactive: bool,
-    /// Where the variable was defined
-    pub defined_at: Span,
+struct BindingInfo {
+    is_mut: bool,
     /// Scope depth where the variable was defined
-    pub scope_depth: u32,
+    scope_depth: u32,
 }
 
 /// A scope containing local variable bindings
@@ -63,9 +56,9 @@ pub enum BindError {
 enum BindingKind {
     /// A `let` with an initializer, a `for-of` binding, or a pattern that may
     /// not match: `if let`, `while let`, a `match` arm, `matches`.
-    Initialized { is_mut: bool, is_reactive: bool },
+    Initialized { is_mut: bool },
     /// A `let x: T;`, which every read before an assignment reports.
-    Uninitialized { is_mut: bool, is_reactive: bool },
+    Uninitialized { is_mut: bool },
 }
 
 impl From<BindError> for Diagnostic {
@@ -461,7 +454,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     fn bind_function(&mut self, func: &Function) -> Result<(), Bail> {
         self.in_body(|s| {
             for param in &func.params {
-                s.define(&param.name, param.is_mut, false, param.span)?;
+                s.define(&param.name, param.is_mut, param.span)?;
             }
             match &func.body {
                 Some(body) => s.bind_block_contents(body),
@@ -536,7 +529,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 &let_stmt.pattern,
                 BindingKind::Initialized {
                     is_mut: let_stmt.is_mut,
-                    is_reactive: let_stmt.is_reactive,
                 },
                 let_stmt.span,
             )
@@ -546,7 +538,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                 &let_stmt.pattern,
                 BindingKind::Uninitialized {
                     is_mut: let_stmt.is_mut,
-                    is_reactive: let_stmt.is_reactive,
                 },
                 let_stmt.span,
             )
@@ -609,14 +600,10 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match kind {
-            BindingKind::Initialized {
-                is_mut,
-                is_reactive,
-            } => self.define(name, is_mut || pattern_mut, is_reactive, span),
-            BindingKind::Uninitialized {
-                is_mut,
-                is_reactive,
-            } => self.define_uninit(name, is_mut || pattern_mut, is_reactive, span),
+            BindingKind::Initialized { is_mut } => self.define(name, is_mut || pattern_mut, span),
+            BindingKind::Uninitialized { is_mut } => {
+                self.define_uninit(name, is_mut || pattern_mut, span)
+            }
         }
     }
 
@@ -733,7 +720,6 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             &for_of_stmt.binding,
             BindingKind::Initialized {
                 is_mut: for_of_stmt.is_mut,
-                is_reactive: false,
             },
             for_of_stmt.span,
         )?;
@@ -1067,14 +1053,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Bind a refutable pattern's names.
     fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
-        self.bind_pattern_as(
-            pattern,
-            BindingKind::Initialized {
-                is_mut: false,
-                is_reactive: false,
-            },
-            span,
-        )
+        self.bind_pattern_as(pattern, BindingKind::Initialized { is_mut: false }, span)
     }
 
     /// Bind a closure
@@ -1083,7 +1062,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
         // Bind parameters
         for param in &closure.params {
-            self.define(&param.name, param.is_mut, false, closure.span)?;
+            self.define(&param.name, param.is_mut, closure.span)?;
         }
 
         // Bind body
@@ -1111,13 +1090,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     }
 
     /// Define a variable in the current scope
-    fn define(
-        &mut self,
-        name: &str,
-        is_mut: bool,
-        is_reactive: bool,
-        span: Span,
-    ) -> Result<(), Bail> {
+    fn define(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
         if is_expression_keyword(name) {
             return self.emit(BindError::KeywordName {
                 name: name.to_string(),
@@ -1132,10 +1105,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         scope.bindings.insert(
             name.to_string(),
             BindingInfo {
-                name: name.to_string(),
                 is_mut,
-                is_reactive,
-                defined_at: span,
                 scope_depth: self.current_depth,
             },
         );
@@ -1144,14 +1114,8 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 
     /// Like `define`, but also marks the variable as possibly uninitialized.
     /// Used for `let x: T;` declarations without an initializer.
-    fn define_uninit(
-        &mut self,
-        name: &str,
-        is_mut: bool,
-        is_reactive: bool,
-        span: Span,
-    ) -> Result<(), Bail> {
-        self.define(name, is_mut, is_reactive, span)?;
+    fn define_uninit(&mut self, name: &str, is_mut: bool, span: Span) -> Result<(), Bail> {
+        self.define(name, is_mut, span)?;
         self.possibly_uninit
             .insert((self.current_depth, name.to_string()));
         Ok(())
