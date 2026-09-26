@@ -2692,6 +2692,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     (false, true) => return handle_from_f64(inner, target_type),
                     _ => inner,
                 };
+                let inner = self.read_through_reference(inner, target_type);
                 TirExpr::new(
                     TirExprKind::Cast {
                         expr: Box::new(inner),
@@ -8502,6 +8503,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             target_type,
             expr.span(),
         ))
+    }
+
+    /// The operand a cast converts: a reference is read through to its
+    /// referent, unless the target is itself a reference (`&T as &U`, a newtype
+    /// step). A cast converts values, and a reference to a scalar is not one.
+    fn read_through_reference(&self, operand: TirExpr, target_type: TypeId) -> TirExpr {
+        let tt = self.tysys.type_table.borrow();
+        let referent = |id| match tt.get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+            _ => None,
+        };
+        let Some(referent_type) = referent(operand.type_id) else {
+            return operand;
+        };
+        if referent(target_type).is_some() {
+            return operand;
+        }
+        drop(tt);
+        let span = operand.span;
+        TirExpr::new(
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                expr: Box::new(operand),
+            },
+            referent_type,
+            span,
+        )
     }
 
     /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for

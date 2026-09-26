@@ -1,0 +1,27 @@
+// A cast reads a reference through to its referent, a scalar one included.
+// Regression: `&i32 as i64` type-checked and reached codegen as a cast of the
+// boxed `i32`, which panicked there.
+
+use { println, Stdout } from "core:cli";
+
+fn widened(x: &i32) -> i64 {
+    return x as i64;
+}
+
+fn truncated(x: &mut f64) -> i32 {
+    return x as i32;
+}
+
+fn all_widened(ids: &List<i32>) -> List<i64> {
+    return ids.into_iter().map(|id| id as i64).collect();
+}
+
+export fn run() with Stdout {
+    let x = 7;
+    let mut f = 2.5;
+    let ids: List<i32> = [1, 2];
+    println(`${widened(&x)} ${truncated(&mut f)} ${all_widened(&ids)[1]}`);
+}
+
+__DATA__
+{"stdout": "7 2 2\n"}
