@@ -4059,7 +4059,7 @@ impl TypeTable {
     /// - One is a newtype of the other
     /// - Both are newtypes with the same ultimate base type
     pub fn share_common_base(&self, a: TypeId, b: TypeId) -> bool {
-        self.representation_head(a) == self.representation_head(b)
+        self.type_key(self.representation_head(a)) == self.type_key(self.representation_head(b))
     }
 
     /// Whether `id` is `List<u8>` or a newtype chain over it (`ByteList`): what

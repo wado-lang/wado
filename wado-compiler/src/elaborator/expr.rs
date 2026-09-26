@@ -15,7 +15,8 @@ use crate::name::{
     split_local_method,
 };
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
+    EffectRef, FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId,
+    TypeKey, TypeTable,
 };
 use crate::token::Span;
 
@@ -288,19 +289,34 @@ fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
     })
 }
 
-/// The reason a cast naming a function type is refused, or `None` where it
-/// names none or is a newtype step: every parameter and the return type share
-/// a representation, `fn` may widen to `fn mut`, and effects may only grow.
-fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let function = |id| match tt.get(tt.representation_head(id)) {
+/// A function type's parts, borrowed from the table.
+struct FnParts<'a> {
+    is_mut: bool,
+    params: &'a [TypeId],
+    return_type: TypeId,
+    effects: &'a [EffectRef],
+}
+
+fn fn_parts(tt: &TypeTable, id: TypeId) -> Option<FnParts<'_>> {
+    match tt.get(tt.representation_head(id)) {
         ResolvedType::Function {
             is_mut,
             params,
             return_type,
             effects,
-        } => Some((*is_mut, params.clone(), *return_type, effects.clone())),
+        } => Some(FnParts {
+            is_mut: *is_mut,
+            params,
+            return_type: *return_type,
+            effects,
+        }),
         _ => None,
-    };
+    }
+}
+
+/// The reason a cast naming a function type is refused, or `None` where it
+/// names none or is a newtype step.
+fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
     // A reference reads through, and a parameter settles later.
     let unsettled = |id| {
         matches!(
@@ -313,33 +329,54 @@ fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String
                 | ResolvedType::AssocTypeProjection { .. }
         )
     };
-    let (from, to) = match (function(source), function(target)) {
-        (None, None) => return None,
-        (Some(from), Some(to)) => (from, to),
-        (Some(_), None) if unsettled(target) => return None,
-        (None, Some(_)) if unsettled(source) => return None,
-        _ => return Some("a function converts only to a function type".to_string()),
-    };
-    let (from_mut, from_params, from_return, from_effects) = from;
-    let (to_mut, to_params, to_return, to_effects) = to;
-    if from_params.len() != to_params.len() {
+    match (fn_parts(tt, source), fn_parts(tt, target)) {
+        (None, None) => None,
+        (Some(from), Some(to)) => fn_step_refusal(tt, &from, &to, true),
+        (Some(_), None) if unsettled(target) => None,
+        (None, Some(_)) if unsettled(source) => None,
+        _ => Some("a function converts only to a function type".to_string()),
+    }
+}
+
+/// Why a value of function type `from` is not one of `to`: every parameter
+/// and the return type must differ only by newtype steps. `widening` also
+/// admits `fn` to `fn mut` and added effects, which a cast may do but a
+/// function type nested in a signature may not.
+fn fn_step_refusal(
+    tt: &TypeTable,
+    from: &FnParts<'_>,
+    to: &FnParts<'_>,
+    widening: bool,
+) -> Option<String> {
+    if from.params.len() != to.params.len() {
         return Some("the function types take different numbers of parameters".to_string());
     }
-    if from_mut && !to_mut {
+    if from.is_mut != to.is_mut && !(widening && to.is_mut) {
         return Some("`as` widens `fn` to `fn mut`, never the reverse".to_string());
     }
-    if let Some(dropped) = from_effects.iter().find(|e| !to_effects.contains(e)) {
+    if let Some(dropped) = from.effects.iter().find(|e| !to.effects.contains(e)) {
         return Some(format!("`as` cannot drop the effect `{}`", dropped.name()));
     }
-    let unrelated = "no representation; `as` reinterprets only across a newtype boundary";
-    if let Some(index) = from_params
+    if let Some(added) = to
+        .effects
         .iter()
-        .zip(&to_params)
+        .find(|e| !widening && !from.effects.contains(e))
+    {
+        return Some(format!(
+            "the nested function types differ in `{}`",
+            added.name()
+        ));
+    }
+    let unrelated = "no representation; `as` reinterprets only across a newtype boundary";
+    if let Some(index) = from
+        .params
+        .iter()
+        .zip(to.params)
         .position(|(&a, &b)| !same_representation(tt, a, b))
     {
         return Some(format!("parameter {} shares {unrelated}", index + 1));
     }
-    (!same_representation(tt, from_return, to_return))
+    (!same_representation(tt, from.return_type, to.return_type))
         .then(|| format!("the return types share {unrelated}"))
 }
 
@@ -347,37 +384,18 @@ fn fn_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String
 /// by newtype steps, at the top, under a reference, or inside a function type
 /// that is otherwise identical.
 fn same_representation(tt: &TypeTable, a: TypeId, b: TypeId) -> bool {
-    let (a, b) = (tt.representation_head(a), tt.representation_head(b));
-    if tt.type_key(a) == tt.type_key(b) {
+    if tt.share_common_base(a, b) {
         return true;
     }
-    match (tt.get(a), tt.get(b)) {
+    if let (Some(from), Some(to)) = (fn_parts(tt, a), fn_parts(tt, b)) {
+        return fn_step_refusal(tt, &from, &to, false).is_none();
+    }
+    match (
+        tt.get(tt.representation_head(a)),
+        tt.get(tt.representation_head(b)),
+    ) {
         (ResolvedType::Ref(x), ResolvedType::Ref(y))
         | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => same_representation(tt, *x, *y),
-        (
-            ResolvedType::Function {
-                is_mut: a_mut,
-                params: a_params,
-                return_type: a_return,
-                effects: a_effects,
-            },
-            ResolvedType::Function {
-                is_mut: b_mut,
-                params: b_params,
-                return_type: b_return,
-                effects: b_effects,
-            },
-        ) => {
-            a_mut == b_mut
-                && a_params.len() == b_params.len()
-                && a_effects.iter().all(|e| b_effects.contains(e))
-                && b_effects.iter().all(|e| a_effects.contains(e))
-                && a_params
-                    .iter()
-                    .zip(b_params)
-                    .all(|(&x, &y)| same_representation(tt, x, y))
-                && same_representation(tt, *a_return, *b_return)
-        }
         _ => false,
     }
 }

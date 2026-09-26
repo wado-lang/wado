@@ -1,0 +1,16 @@
+// A function type nested in a signature must match exactly but for newtype
+// steps: `apply` calls `f` where no `Stdout` is held, so retyping its
+// parameter to take an effectful closure would launder the effect in.
+
+use { Stdout } from "core:cli";
+
+fn apply(f: fn(f64) -> f64, x: f64) -> f64 {
+    return f(x);
+}
+
+test "nested effect" {
+    let h = apply as fn(fn(f64) -> f64 with Stdout, f64) -> f64;
+}
+
+__DATA__
+{"compile_error": "parameter 1 shares no representation"}
