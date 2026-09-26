@@ -72,6 +72,30 @@ test "the forward pass is one kernel call per operator" {
     assert out.contains("return Y;");
 }
 
+test "the forward pass checks each input against the graph before any kernel" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    let body = emitted(&out);
+    let check = body.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    assert check < body.find("matmul(").unwrap();
+}
+
+test "inputs sharing an axis the graph leaves to the run are checked against each other" {
+    let source = `
+pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
+{
+    Y = Add(A, B)
+}
+`;
+    let out = generate(source, [
+        rule("A", ["Batch", "In"]),
+        rule("B", ["Batch", "In"]),
+    ]).unwrap();
+
+    assert out.contains("refuse(axis_mismatch(\"Batch\", \"B\", B.extents[0], \"A\", A.extents[0]));");
+    assert !out.contains("axis_mismatch(\"In\"");
+}
+
 test "the initializers become the weights struct" {
     let out = generate(MLP, mlp_layout()).unwrap();
 

@@ -2,9 +2,11 @@ use {
     Merged,
     Tensor,
     Window,
+    axis_mismatch,
     conv,
     conv_bias,
     gather_rows,
+    input_mismatch,
     lift,
     map,
     matmul,
@@ -37,6 +39,42 @@ struct Inner {
 
 fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
     return Tensor { data, extents };
+}
+
+test "an input the graph's extents describe passes" {
+    let t = tensor::<[Batch, Row]>([2, 3], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) matches { None };
+}
+
+test "an input's extent that disagrees with the graph names the axis" {
+    let t = tensor::<[Batch, Row]>([1, 2], [0.0, 0.0]);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some(
+        "X: axis Row is 2 in the tensor and 3 in the graph",
+    );
+}
+
+test "an input of another rank names the graph's axes" {
+    let t = tensor::<[Batch, Row]>([3], [0.0, 0.0, 0.0]);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some(
+        "X: the tensor gives 1 axes, and the graph [Batch, Row]",
+    );
+}
+
+test "an input whose data its extents do not hold says both" {
+    let t = tensor::<[Batch, Row]>([2, 3], [0.0]);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some(
+        "X: extents [2, 3] hold 6 elements, and the data 1",
+    );
+}
+
+test "a negative extent names the axis" {
+    let t = tensor::<[Batch, Row]>([-1, 3], []);
+    assert input_mismatch(&t, "X", ["Batch", "Row"], [-1, 3]) == Option::Some("X: axis Batch is -1 in the tensor");
+}
+
+test "two inputs that disagree on a shared axis name both" {
+    assert axis_mismatch("Batch", "B", 2, "A", 2) matches { None };
+    assert axis_mismatch("Batch", "B", 3, "A", 2) == Option::Some("B: axis Batch is 3 in the tensor and 2 in A");
 }
 
 test "gather_rows looks up one row per index, counting a negative one from the end" {

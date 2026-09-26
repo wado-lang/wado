@@ -490,6 +490,7 @@ fn emit_forward(
     w.blank();
     w.line("/// The graph's forward pass, one kernel call per operator.");
     forward.emit_begin(w);
+    emit_input_checks(w, graph, shapes, names);
     for let line of widened {
         w.line(&line);
     }
@@ -592,6 +593,38 @@ fn literal_tensor(checked: &Checked, tensor: &String) -> String {
 }
 
 /// The extents of a shape stage 0 has shown static.
+/// Checks at the top of `forward` that stop it naming the axis an input
+/// disagrees on, before any kernel reads the input.
+fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) {
+    let mut first_seen = TreeMap::<String, String>::new();
+    let mut agreements: List<String> = [];
+    for let vi of &graph.inputs {
+        let ident = names.get(&vi.name);
+        let shape = shapes.get(vi.name).unwrap();
+        let mut axes: List<String> = [];
+        let mut stated: List<i32> = [];
+        for let [i, axis] of shape.axes.into_iter().enumerate() {
+            axes.push(wado`"${axis.name}"`);
+            let here = `${wado`"${vi.name}"`}, ${ident}.extents[${i}]`;
+            match axis.extent {
+                Static(e) => stated.push(e),
+                Symbol(_) => {
+                    stated.push(-1);
+                    if let Some(first) = first_seen.get(axis.name) {
+                        agreements.push(wado`refuse(axis_mismatch("${axis.name}", ${here}, ${first}));`);
+                    } else {
+                        first_seen[axis.name] = here;
+                    }
+                },
+            }
+        }
+        w.line(wado`refuse(input_mismatch(${ident}, "${vi.name}", [${axes.join(", ")}], ${stated}));`);
+    }
+    for let line of agreements {
+        w.line(&line);
+    }
+}
+
 fn extents_of(shape: &Shape) -> List<i32> {
     return shape.axes.into_iter().map(|axis| axis.static_extent()).collect();
 }

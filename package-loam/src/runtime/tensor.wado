@@ -12,6 +12,48 @@ pub fn element_count(extents: &List<i32>) -> i32 {
     return count;
 }
 
+/// Why the input `tensor` disagrees with the graph. `stated` holds each axis's
+/// extent where the graph states one, and -1 where it leaves the axis to the run.
+pub fn input_mismatch<E, Axes>(
+    t: &Tensor<E, Axes>,
+    tensor: String,
+    axes: List<String>,
+    stated: List<i32>,
+) -> Option<String> {
+    if t.extents.len() != axes.len() {
+        return Option::Some(`${tensor}: the tensor gives ${t.extents.len()} axes, and the graph [${axes.join(", ")}]`);
+    }
+    for let [i, axis] of axes.into_iter().enumerate() {
+        let extent = t.extents[i];
+        if extent < 0 {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor`);
+        }
+        if stated[i] >= 0 && extent != stated[i] {
+            return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${stated[i]} in the graph`);
+        }
+    }
+    let count = element_count(&t.extents);
+    if count != t.data.len() {
+        return Option::Some(`${tensor}: extents ${t.extents} hold ${count} elements, and the data ${t.data.len()}`);
+    }
+    return null;
+}
+
+/// Why two inputs disagree on an axis the graph leaves to the run.
+pub fn axis_mismatch(axis: String, tensor: String, extent: i32, other: String, other_extent: i32) -> Option<String> {
+    if extent == other_extent {
+        return null;
+    }
+    return Option::Some(`${tensor}: axis ${axis} is ${extent} in the tensor and ${other_extent} in ${other}`);
+}
+
+/// Stops `forward` with the reason an input disagrees with the graph.
+pub fn refuse(reason: Option<String>) {
+    if let Some(r) = reason {
+        panic(r);
+    }
+}
+
 pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
     let ra = a.extents.len();
     let rb = b.extents.len();
