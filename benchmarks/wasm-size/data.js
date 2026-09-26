@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790435988416,
+  "lastUpdate": 1790459416877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60381,6 +60381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/61cd2700a52caf3701255bed73e02040cfbb130c"
         },
         "date": 1790435988123,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1871,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6724,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 20153,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 288925,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "00d510283ecdac0d3a4bc9997614058647c02759",
+          "message": "Merge pull request #2181 from wado-lang/claude/spec-docs-organization-1zipp2\n\ndocs(spec): every rule stated once in docs/spec-*.md, with examples checked against e2e fixtures",
+          "timestamp": "2026-09-27T06:21:18+09:00",
+          "tree_id": "e4cd759a9cc5bf9cf44f38d64c5bff2aac6e6538",
+          "url": "https://github.com/wado-lang/wado/commit/00d510283ecdac0d3a4bc9997614058647c02759"
+        },
+        "date": 1790459415899,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
