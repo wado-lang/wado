@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790407218184,
+  "lastUpdate": 1790409042770,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60161,6 +60161,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/feb6d2a9391fc86a639f6ff8ff7e83bb92112114"
         },
         "date": 1790407217143,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19655,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b77bfa87db8b777a054514affbd819c64c598e6c",
+          "message": "Merge pull request #2173 from wado-lang/claude/emi-outage-investigation-al2bbo\n\nfix(lower): each iteration of a C-style `for` gets its own header binding in closures",
+          "timestamp": "2026-09-26T15:53:34+09:00",
+          "tree_id": "f2c0aad218ac1d467596a2389bdcc6412743f430",
+          "url": "https://github.com/wado-lang/wado/commit/b77bfa87db8b777a054514affbd819c64c598e6c"
+        },
+        "date": 1790409041833,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
