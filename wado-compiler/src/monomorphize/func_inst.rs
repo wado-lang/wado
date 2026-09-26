@@ -2426,15 +2426,12 @@ impl Monomorphizer {
 
     /// The trait arguments the impl on `info`'s receiver answering its trait
     /// writes, its own parameters left standing.
-    fn impl_written_trait_args(&self, info: &LocalMethodName) -> Option<Vec<FqTypeName>> {
+    fn impl_written_trait_args(&self, info: &LocalMethodName) -> Option<&[FqTypeName]> {
         let trait_fq = info.trait_name.as_ref()?;
         let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
-        let written = self.functions.trait_env.impl_written_trait_args(
-            info.receiver(),
-            trait_,
-            trait_fq.args(),
-        )?;
-        Some(written.to_vec())
+        self.functions
+            .trait_env
+            .impl_written_trait_args(info.receiver(), trait_, trait_fq.args())
     }
 
     /// The impl written on the reference a type-param receiver binds
@@ -2453,7 +2450,7 @@ impl Monomorphizer {
         RefKind::from_resolved(type_table.get(bound))?;
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
         let written = self.impl_written_trait_args(&at_bound)?;
-        Some(at_bound.with_trait_type_args(&written))
+        Some(at_bound.with_trait_type_args(written))
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
