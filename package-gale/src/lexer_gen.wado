@@ -1198,9 +1198,9 @@ fn spliced_elements(elem: &LexerElement, rules: &List<LexerRule>) -> Option<List
     if body.len() == 1 && body[0].actions.is_empty() && seq_ends_contested(&body[0], rules) {
         return Option::Some(body[0].elements);
     }
-    // Read folded: a splice rewrites to an equal sequence, so reading wide only
+    // Read wide: a splice rewrites to an equal sequence, so a superset only
     // splices more.
-    if elem matches { RuleRef(_) } && lexer_alts_contested(&body, rules, /*ci=*/ true) {
+    if elem matches { RuleRef(_) } && lexer_alts_contested(&body, rules, Casing::Unknown) {
         return Option::Some([LexerElement::Group(body)]);
     }
     return null;
@@ -1211,17 +1211,17 @@ fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
         return false;
     }
     let last = &seq.elements[seq.elements.len() - 1];
-    if let Group(arms) = last && lexer_alts_contested(arms, rules, /*ci=*/ true) {
+    if let Group(arms) = last && lexer_alts_contested(arms, rules, Casing::Unknown) {
         return true;
     }
     return spliced_elements(last, rules) matches { Some(_) };
 }
 
 /// Whether an alternation takes the longest arm and two arms can match the same text.
-pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>, ci: bool) -> bool {
+pub fn lexer_alts_contested(arms: &List<LexerAlternative>, rules: &List<LexerRule>, casing: Casing) -> bool {
     return arms.len() >= 2
         && lexer_alts_scan(arms, rules) matches { Longest }
-        && lexer_alts_can_collide(arms, rules, ci);
+        && lexer_alts_can_collide(arms, rules, casing);
 }
 
 /// Whether a fragment references itself (directly or through another
@@ -2013,7 +2013,7 @@ pub fn lexer_alts_emit(
         return LexerAltsEmit::FirstMatchNotTail;
     }
     return match lexer_alts_lengths(alts, all_rules) {
-        Longest => if lexer_alts_can_collide(alts, all_rules, ci) {
+        Longest => if lexer_alts_can_collide(alts, all_rules, casing_of(ci)) {
             LexerAltsEmit::MaximalMunch;
         } else {
             LexerAltsEmit::FirstMatchArmsDisjoint;
@@ -2325,7 +2325,7 @@ pub fn lexer_group_emit(alt: &LexerAlternative, index: i32, all_rules: &List<Lex
         Longest => {
         },
     }
-    if !lexer_alts_can_collide(g_alts, all_rules, ci) {
+    if !lexer_alts_can_collide(g_alts, all_rules, casing_of(ci)) {
         return LexerGroupEmit::FirstMatchArmsDisjoint;
     }
     if lexer_alt_has_predicate_after(alt, index) {
@@ -2942,9 +2942,9 @@ fn lexer_repeat_can_eat_suffix(
     ci: bool,
 ) -> bool {
     let mut inner_visiting: List<String> = [];
-    let inner_chars = lexer_elem_leading_chars(inner, all_rules, ci, false, &mut inner_visiting);
+    let inner_chars = lexer_elem_leading_chars(inner, all_rules, casing_of(ci), false, &mut inner_visiting);
     let mut suffix_visiting: List<String> = [];
-    let suffix_chars = lexer_seq_leading_chars(suffix, all_rules, ci, true, &mut suffix_visiting);
+    let suffix_chars = lexer_seq_leading_chars(suffix, all_rules, casing_of(ci), true, &mut suffix_visiting);
     return match [inner_chars, suffix_chars] {
         [Some(a), Some(b)] => leading_chars_overlap(&a, &b),
         _ => true,
@@ -2967,12 +2967,13 @@ struct LeadingChars {
 /// where which arm wins is a decision at all. When no two can, the cheap
 /// first-match emit already gives ANTLR4's answer and the arms need not be
 /// scored against the suffix. An arm whose leading chars are unknown, or that
-/// can match empty, answers "yes".
-pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> bool {
+/// can match empty, answers "yes"; two sharing a first char answer "no" only
+/// where they part at the second.
+pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, casing: Casing) -> bool {
     let mut sets: List<LeadingChars> = [];
     for let alt of alts {
         let mut visiting: List<String> = [];
-        let leading = lexer_seq_leading_chars(&alt.elements, all_rules, ci, /*follow_refs=*/ true, &mut visiting);
+        let leading = lexer_seq_leading_chars(&alt.elements, all_rules, casing, /*follow_refs=*/ true, &mut visiting);
         match leading {
             Some(s) => {
                 if s.nullable {
@@ -2985,14 +2986,27 @@ pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<Le
             },
         }
     }
+    let mut seconds: List<Option<SecondChars>> = [];
+    for let alt of alts {
+        seconds.push(lexer_second_chars(&[*alt], all_rules, casing));
+    }
     for let mut i = 0; i < sets.len(); i += 1 {
         for let mut j = i + 1; j < sets.len(); j += 1 {
-            if leading_chars_overlap(&sets[i], &sets[j]) {
+            if leading_chars_overlap(&sets[i], &sets[j]) && !second_chars_apart(&seconds[i], &seconds[j]) {
                 return true;
             }
         }
     }
     return false;
+}
+
+/// Whether two arms sharing a first char part at the next: each reads a second
+/// char, and no char is second in both.
+fn second_chars_apart(a: &Option<SecondChars>, b: &Option<SecondChars>) -> bool {
+    return match [*a, *b] {
+        [Some(x), Some(y)] => !x.may_end && !y.may_end && ranges_intersect(&x.ranges, &y.ranges).is_empty(),
+        _ => false,
+    };
 }
 
 /// Walk a sequence, taking in each element's leading chars until one that
@@ -3001,14 +3015,14 @@ pub fn lexer_alts_can_collide(alts: &List<LexerAlternative>, all_rules: &List<Le
 fn lexer_seq_leading_chars(
     elements: &List<LexerElement>,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     follow_refs: bool,
     visiting: &mut List<String>,
 ) -> Option<LeadingChars> {
     // The empty positive set matches nothing — the identity this folds from.
     let mut acc = LeadingChars { ranges: [], negated: false, nullable: true };
     for let elem of elements {
-        let step = lexer_elem_leading_chars(elem, all_rules, ci, follow_refs, visiting);
+        let step = lexer_elem_leading_chars(elem, all_rules, casing, follow_refs, visiting);
         match step {
             Some(s) => {
                 acc = union_leading_chars(&acc, &s);
@@ -3029,7 +3043,7 @@ fn lexer_seq_leading_chars(
 fn lexer_alts_leading_chars(
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     follow_refs: bool,
     visiting: &mut List<String>,
 ) -> Option<LeadingChars> {
@@ -3038,7 +3052,7 @@ fn lexer_alts_leading_chars(
     }
     let mut acc = LeadingChars { ranges: [], negated: false, nullable: false };
     for let alt of alts {
-        let arm = lexer_seq_leading_chars(&alt.elements, all_rules, ci, follow_refs, visiting);
+        let arm = lexer_seq_leading_chars(&alt.elements, all_rules, casing, follow_refs, visiting);
         match arm {
             Some(s) => {
                 let nullable = acc.nullable || s.nullable;
@@ -3053,41 +3067,66 @@ fn lexer_alts_leading_chars(
     return Option::<LeadingChars>::Some(acc);
 }
 
+/// How a leading-chars read folds case. `Unknown` reads positive sets folded
+/// and complements not, a superset of either folding.
+pub enum Casing {
+    Sensitive,
+    Insensitive,
+    Unknown,
+}
+
+/// The casing a `ci` flag names.
+pub fn casing_of(ci: bool) -> Casing {
+    return if ci { Casing::Insensitive } else { Casing::Sensitive };
+}
+
+/// The casing `rule` is read in when referenced from `casing`. A non-recursive
+/// fragment is planned in its caller's folding; a rule with its own matcher
+/// folds as it resolves, which the read does not see.
+pub fn callee_casing(rule: &LexerRule, all_rules: &List<LexerRule>, casing: Casing) -> Casing {
+    return if rule.is_fragment && !fragment_is_recursive(rule, all_rules) { casing } else { Casing::Unknown };
+}
+
 fn lexer_elem_leading_chars(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     follow_refs: bool,
     visiting: &mut List<String>,
 ) -> Option<LeadingChars> {
+    let fold = !(casing matches { Sensitive });
     return match *elem {
         Literal(text) => match text.chars().next() {
-            Some(c) => plain_leading_chars(&folded_ranges(c, c, ci)),
+            Some(c) => plain_leading_chars(&folded_ranges(c, c, fold)),
             None => null,
         },
-        CharRange(pair) => plain_leading_chars(&folded_ranges(pair.0, pair.1, ci)),
+        CharRange(pair) => plain_leading_chars(&folded_ranges(pair.0, pair.1, fold)),
         CharClass(cc) => {
+            // The emitter lowers `~S` under `ci` as the complement of folded `S`.
+            let fold_set = if cc.negated { casing matches { Insensitive } } else { fold };
             let mut ranges: List<[i32, i32]> = [];
             for let r of &cc.ranges {
-                for let f of &folded_ranges(r.start, r.end, ci) {
+                for let f of &folded_ranges(r.start, r.end, fold_set) {
                     ranges.push(*f);
                 }
             }
-            if cc.negated {
-                return complement_leading_chars(&ranges, ci);
-            }
-            plain_leading_chars(&ranges);
+            Option::<LeadingChars>::Some(LeadingChars { ranges, negated: cc.negated, nullable: false });
         },
         AnyChar => any_leading_chars(),
-        Not(not_inner) => match lexer_elem_leading_chars(&not_inner.element, all_rules, ci, follow_refs, visiting) {
-            Some(inner) => if inner.negated || inner.nullable {
-                null;
-            } else {
-                complement_leading_chars(&inner.ranges, ci);
-            },
-            None => null,
+        Not(not_inner) => {
+            let inner_casing = if casing matches { Unknown } { Casing::Sensitive } else { casing };
+            match lexer_elem_leading_chars(&not_inner.element, all_rules, inner_casing, follow_refs, visiting) {
+                Some(inner) => if inner.negated || inner.nullable {
+                    null;
+                } else {
+                    Option::<LeadingChars>::Some(
+                        LeadingChars { ranges: inner.ranges, negated: true, nullable: false },
+                    );
+                },
+                None => null,
+            }
         },
-        Repeat(rep) => match lexer_elem_leading_chars(&rep.element, all_rules, ci, follow_refs, visiting) {
+        Repeat(rep) => match lexer_elem_leading_chars(&rep.element, all_rules, casing, follow_refs, visiting) {
             Some(inner) => Option::<LeadingChars>::Some(
                 LeadingChars {
                     ranges: inner.ranges,
@@ -3097,7 +3136,7 @@ fn lexer_elem_leading_chars(
             ),
             None => null,
         },
-        Group(alts) => lexer_alts_leading_chars(&alts, all_rules, ci, follow_refs, visiting),
+        Group(alts) => lexer_alts_leading_chars(&alts, all_rules, casing, follow_refs, visiting),
         RuleRef(name) => {
             if !follow_refs || name == "EOF" || visiting.contains(&name) {
                 return null;
@@ -3106,10 +3145,13 @@ fn lexer_elem_leading_chars(
             // independent reads, and only a cycle is unanswerable.
             visiting.push(name);
             let reached = match find_lexer_rule(all_rules, &name) {
-                // The callee resolves its own `caseInsensitive`, which is not
-                // visible from here, so the folded reading is the safe one: a
-                // wider set can lose a disjointness proof, never invent one.
-                Some(rule) => lexer_alts_leading_chars(&rule.body, all_rules, /*ci=*/ true, follow_refs, visiting),
+                Some(rule) => lexer_alts_leading_chars(
+                    &rule.body,
+                    all_rules,
+                    callee_casing(rule, all_rules, casing),
+                    follow_refs,
+                    visiting,
+                ),
                 None => null,
             };
             visiting.pop();
@@ -3120,21 +3162,6 @@ fn lexer_elem_leading_chars(
 
 fn plain_leading_chars(ranges: &List<[i32, i32]>) -> Option<LeadingChars> {
     return Option::<LeadingChars>::Some(LeadingChars { ranges: *ranges, negated: false, nullable: false });
-}
-
-/// The chars `fold_range_ci` moves.
-global ASCII_LETTERS: List<[i32, i32]> = [
-    [0x41, 0x5A],
-    [0x61, 0x7A],
-];
-
-/// Every char outside `excluded`. Under `ci` the complement of a folded set and
-/// the fold of a complement differ, but only on letters, so a complement that
-/// keeps every letter in is a superset of both: it can lose a disjointness
-/// proof, never invent one.
-fn complement_leading_chars(excluded: &List<[i32, i32]>, ci: bool) -> Option<LeadingChars> {
-    let ranges = if ci { ranges_minus(excluded, &ASCII_LETTERS) } else { *excluded };
-    return Option::<LeadingChars>::Some(LeadingChars { ranges, negated: true, nullable: false });
 }
 
 /// The set every char satisfies — `.`, and the reading a complement that
@@ -3225,11 +3252,15 @@ struct SecondChars {
 }
 
 /// `SecondChars` of a rule body, or null when some path is unknown.
-fn lexer_second_chars(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> Option<SecondChars> {
+fn lexer_second_chars(
+    alts: &List<LexerAlternative>,
+    all_rules: &List<LexerRule>,
+    casing: Casing,
+) -> Option<SecondChars> {
     let mut budget = SECOND_CHARS_BUDGET;
     let mut acc = SecondChars { ranges: [], may_end: false };
     for let alt of alts {
-        if !add_second_chars(&alt.elements, all_rules, ci, &mut budget, &mut acc) {
+        if !add_second_chars(&alt.elements, all_rules, casing, &mut budget, &mut acc) {
             return null;
         }
     }
@@ -3241,7 +3272,7 @@ fn lexer_second_chars(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>
 fn add_second_chars(
     elements: &List<LexerElement>,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     budget: &mut i32,
     acc: &mut SecondChars,
 ) -> bool {
@@ -3255,23 +3286,18 @@ fn add_second_chars(
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
             if chars.is_empty() {
-                return add_second_chars(&rest, all_rules, ci, budget, acc);
+                return add_second_chars(&rest, all_rules, casing, budget, acc);
             }
             if chars.len() == 1 {
-                return add_following_chars(&rest, all_rules, ci, acc);
+                return add_following_chars(&rest, all_rules, casing, acc);
             }
-            acc.ranges.extend(&folded_ranges(chars[1], chars[1], ci));
+            acc.ranges.extend(&folded_ranges(chars[1], chars[1], !(casing matches { Sensitive })));
             true;
         },
-        CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, ci, acc),
-        Group(alts) => add_alts_second_chars(&alts, &rest, all_rules, ci, budget, acc),
+        CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, casing, acc),
+        Group(alts) => add_alts_second_chars(&alts, &rest, all_rules, casing, budget, acc),
         RuleRef(name) => match find_lexer_rule(all_rules, &name) {
-            // A rule its own `try_` matches folds case its own way, so it is read
-            // folded, as `lexer_elem_leading_chars` reads it.
-            Some(r) => {
-                let folds_own_way = !r.is_fragment || fragment_is_recursive(r, all_rules);
-                add_alts_second_chars(&r.body, &rest, all_rules, ci || folds_own_way, budget, acc);
-            },
+            Some(r) => add_alts_second_chars(&r.body, &rest, all_rules, callee_casing(r, all_rules, casing), budget, acc),
             None => false,
         },
         Repeat(rep) => {
@@ -3280,8 +3306,8 @@ fn add_second_chars(
                 taken.push(LexerElement::Repeat(LexerRepeatElement { ..rep, kind: RepeatKind::Star }));
             }
             taken.extend(&rest);
-            let skipped = rep.kind matches { Plus } || add_second_chars(&rest, all_rules, ci, budget, acc);
-            skipped && add_second_chars(&taken, all_rules, ci, budget, acc);
+            let skipped = rep.kind matches { Plus } || add_second_chars(&rest, all_rules, casing, budget, acc);
+            skipped && add_second_chars(&taken, all_rules, casing, budget, acc);
         },
     };
 }
@@ -3290,14 +3316,14 @@ fn add_alts_second_chars(
     alts: &List<LexerAlternative>,
     rest: &List<LexerElement>,
     all_rules: &List<LexerRule>,
-    ci: bool,
+    casing: Casing,
     budget: &mut i32,
     acc: &mut SecondChars,
 ) -> bool {
     for let alt of alts {
         let mut seq = alt.elements;
         seq.extend(rest);
-        if !add_second_chars(&seq, all_rules, ci, budget, acc) {
+        if !add_second_chars(&seq, all_rules, casing, budget, acc) {
             return false;
         }
     }
@@ -3305,9 +3331,14 @@ fn add_alts_second_chars(
 }
 
 /// Adds to `acc` the chars `rest` can begin with, once one char is consumed.
-fn add_following_chars(rest: &List<LexerElement>, all_rules: &List<LexerRule>, ci: bool, acc: &mut SecondChars) -> bool {
+fn add_following_chars(
+    rest: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    casing: Casing,
+    acc: &mut SecondChars,
+) -> bool {
     let mut visiting: List<String> = [];
-    let Some(lead) = lexer_seq_leading_chars(rest, all_rules, ci, /*follow_refs=*/ true, &mut visiting) else {
+    let Some(lead) = lexer_seq_leading_chars(rest, all_rules, casing, /*follow_refs=*/ true, &mut visiting) else {
         return false;
     };
     if lead.nullable {
@@ -4402,7 +4433,7 @@ fn keyword_elem_ends(
                     && keyword_chars_admitted(kw, *p, reading, |c| folded_range_contains(pair.0, pair.1, ci, c)),
             ).map(|p| *p + 1).collect();
         },
-        CharClass(cc) && !(cc.negated && ci) => {
+        CharClass(cc) => {
             let admits = |c: char| cc.negated != cc.ranges.iter_ref().any(|r| folded_range_contains(
                 r.start,
                 r.end,
@@ -4413,17 +4444,9 @@ fn keyword_elem_ends(
                 |p| *p + 1,
             ).collect();
         },
-        // Under `ci` a complement's leading chars keep every letter in, a
-        // superset a proof cannot stand on.
-        CharClass(_) && ci => {
-            return unread_keyword_ends(kw, reading, starts);
-        },
-        Not(_) && ci => {
-            return unread_keyword_ends(kw, reading, starts);
-        },
-        CharClass(_) | AnyChar | Not(_) => {
+        AnyChar | Not(_) => {
             let mut no_refs: List<String> = [];
-            let Some(set) = lexer_elem_leading_chars(elem, all_rules, ci, false, &mut no_refs) else {
+            let Some(set) = lexer_elem_leading_chars(elem, all_rules, casing_of(ci), false, &mut no_refs) else {
                 return unread_keyword_ends(kw, reading, starts);
             };
             return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect(
@@ -5027,7 +5050,7 @@ fn build_rule_try_call(
         is_wildcard: is_wc,
         is_catch_all: catch_all,
         total_on_first_char: lexer_rule_total_on_first_char(rule, all_rules),
-        second_chars: lexer_second_chars(&rule.body, all_rules, ci),
+        second_chars: lexer_second_chars(&rule.body, all_rules, casing_of(ci)),
     };
 }
 

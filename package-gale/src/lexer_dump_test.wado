@@ -317,8 +317,7 @@ CMT : '/*' (CMT | .)+? '*/' ;");
 }
 
 test "lexer dump keeps a loop off the ATN when a negated fragment excludes the other arm's lead" {
-    // JSON's STRING. A fragment is read folded, and folding moves only letters,
-    // so `SAFE` still excludes the `\\` every `ESC` starts with.
+    // JSON's STRING: `SAFE` excludes the `\\` every `ESC` starts with.
     let report = lexer_dump("grammar T;
 r : STR ;
 STR : '\"' (ESC | SAFE)* '\"' ;
@@ -327,6 +326,46 @@ fragment SAFE : ~[\"\\\\] ;");
 
     assert report.contains("rule STR — matcher try_STR"), report;
     assert report.contains("ATN-class 0"), report;
+}
+
+test "lexer dump reads a fragment in its caller's case-sensitive folding" {
+    // Folded, `ESC` would lead with `U` too, which `SAFE` admits.
+    let report = lexer_dump("grammar T;
+r : STR ;
+STR : '\"' (ESC | SAFE)* '\"' ;
+fragment ESC : 'u' [0-9a-f] ;
+fragment SAFE : ~[\"u] ;");
+
+    assert report.contains("rule STR — matcher try_STR"), report;
+    assert report.contains("ATN-class 0"), report;
+}
+
+test "lexer dump keeps a loop off the ATN when arms sharing a lead differ at the next char" {
+    // Rust's STRING_LITERAL: every escape starts with `\\`, and none can stop there.
+    let report = lexer_dump("grammar T;
+r : STR ;
+STR : '\"' (~[\"\\\\] | QUOTE_ESC | ASCII_ESC | '\\\\u{' [0-9a-f]+ '}')* '\"' ;
+fragment QUOTE_ESC : '\\\\' ['\"] ;
+fragment ASCII_ESC : '\\\\x' [0-7] [0-9a-f] | '\\\\' [nrt] ;");
+
+    assert report.contains("rule STR — matcher try_STR"), report;
+    assert report.contains("ATN-class 0"), report;
+}
+
+test "lexer dump routes a loop whose arms sharing a lead also share the next char" {
+    let report = lexer_dump("grammar T;
+r : STR ;
+STR : '\"' (~[\"\\\\] | '\\\\' . | '\\\\x' [0-9a-f] [0-9a-f])* '\"' ;");
+
+    assert report.contains("rule STR — ATN-class"), report;
+}
+
+test "lexer dump routes a loop whose arm sharing a lead can stop after it" {
+    let report = lexer_dump("grammar T;
+r : STR ;
+STR : '\"' (~[\"\\\\] | '\\\\' | '\\\\x' [0-9a-f])* '\"' ;");
+
+    assert report.contains("rule STR — ATN-class"), report;
 }
 
 test "lexer dump keeps a caseInsensitive loop off the ATN when a negated class excludes the other arm's lead" {

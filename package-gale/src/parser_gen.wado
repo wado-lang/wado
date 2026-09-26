@@ -180,6 +180,7 @@ use {
 } from "./action_gen.wado";
 use {
     compute_fragment_entries,
+    emit_atn_claim_return,
     emit_atn_enter,
     gen_parse_entry,
     gen_parser_struct,
@@ -2890,6 +2891,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     f.set_return_type(result_type);
     f.emit_begin(w);
     let lit = wado`"${*rule_display}"`;
+    if needs_atn {
+        emit_atn_claim_return(w);
+    }
     // Already unwinding from a deeper failure: no-op so the descent collapses
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
@@ -3830,16 +3834,18 @@ fn gen_loop_back_sync(w: &mut CodeWriter, ctx: &mut GenContext, rep_op: &RepeatO
 
 /// The call-site stamps ahead of a `_parse_X` call that its entry wrapper pushes:
 /// `p.site` for recovery's resync, `p.atn_ret_pending` for full-context prediction.
-/// Both are written at every site, unknown as `-1`: an entry that returns early
-/// while recovering consumes neither, so a site that wrote nothing would hand
-/// its callee the stamp an earlier call left behind.
 fn gen_call_site_stamps(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     // `Atn.call_site_returns` is sparse: a site past its end has no follow.
     let known = call_site >= 0 && call_site < ctx.recovery_sets().call_follow.len();
     w.line(`p.site = ${if known { call_site } else { -1 }};`);
-    if ctx.needs_atn() {
-        w.line(`p.atn_ret_pending = ${ctx.atn_call_site_return(call_site)};`);
+    if !ctx.needs_atn() {
+        return;
     }
+    let ret = ctx.atn_call_site_return(call_site);
+    if ret < 0 {
+        return;
+    }
+    w.line(`p.atn_ret_pending = ${ret};`);
 }
 
 /// A binding exists only for a semantic action to read. A reference reaches it
@@ -8511,7 +8517,7 @@ fn emit_scan_side_tournament(w: &mut CodeWriter, indices: &List<i32>, ctx: &GenC
 /// at `skip`, and so whether the dispatch below reads one token further. Read by
 /// both the emitter and `collect_referenced_scan_alts`, whose `skip` bookkeeping
 /// has to match it.
-fn consume_advances_cursor(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
+fn consume_reads_past(c: &ConsumeNode, alts: &List<Alternative>, skip: i32) -> bool {
     let mut node_alts: List<i32> = [];
     prediction_collect_all_indices(&c.child, &mut node_alts);
     if node_alts.is_empty() {
@@ -8737,7 +8743,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // group need not contain alt 0; regression: ll_consume_group.g4). The
             // cursor stays put, so every exit — a pick or no viable alternative —
             // leaves from the decision's start.
-            let advances = consume_advances_cursor(c, alts, skip);
+            let reads_past = consume_reads_past(c, alts, skip);
             gen_prediction_code_inner(
                 w,
                 side,
@@ -8747,7 +8753,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 lowered_rule,
                 type_name,
                 ctx,
-                if advances { skip + 1 } else { skip },
+                if reads_past { skip + 1 } else { skip },
                 rule_display,
                 &EMPTY_SYNC,
                 read,
@@ -8912,7 +8918,7 @@ fn collect_referenced_scan_alts(
         Leaf(_) => {
         },
         Consume(c) => {
-            let next_skip = if consume_advances_cursor(&c, alts, skip) { skip + 1 } else { skip };
+            let next_skip = if consume_reads_past(&c, alts, skip) { skip + 1 } else { skip };
             collect_referenced_scan_alts(&c.child, alts, ctx, out, next_skip);
         },
         Dispatch(d) => {

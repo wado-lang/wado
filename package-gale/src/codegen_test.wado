@@ -1561,6 +1561,14 @@ test "wildcard caller suffix keeps the at-end conflict on the ATN" {
     assert !body.contains("_sd_best_i");
 }
 
+test "a rule entry claims its call site's return state before returning early" {
+    // Claimed after, a recovering entry would leave the stamp to the next
+    // call from a site that stamps none.
+    let output = gen_source(AT_END_CONFLICT_G4);
+    let body = extract_fn_body(&output, "fn _parse_x(");
+    assert body.find("p.atn_ret_pending = -1;").unwrap() < body.find("if p.recovering").unwrap(), body;
+}
+
 test "non-LR ATN grammar carries prediction without the LR tables" {
     let output = gen_source(AT_END_CONFLICT_G4);
     assert output.contains("global ATN_SIM: AtnSim = atn_decode(&b\"");
