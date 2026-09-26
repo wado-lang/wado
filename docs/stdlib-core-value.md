@@ -8,7 +8,9 @@ Dynamically-typed, format-agnostic value type.
 `Value` represents any value the serde data model can carry, shared by
 every self-describing format (`core:json`, `core:cbor`). It implements
 `Serialize` and `Deserialize`, so it round-trips through `from_bytes` /
-`to_bytes` with no per-type work.
+`to_bytes` with no per-type work. `to_value` and `from_value` convert
+between a typed value and a `Value` directly, and `merge` overlays one
+`Value` on another, as layered configuration does.
 
 It is a general dynamic value, so it deliberately contains no
 format-specific concepts (no CBOR `Tag`, no `Simple`): a single opaque
@@ -38,6 +40,21 @@ Direct: it drives a `Value`-building `Serializer` with no intermediate
 encoding, so it preserves the data model (`Int` vs `UInt` vs `Float`,
 object key order, variant shape) that a round-trip through a text format
 like JSON would flatten.
+
+### `pub fn from_value<T: Deserialize>(value: &Value) -> Result<T, DeserializeError>`
+
+Build a typed value from a `Value` — the serde `from_value` analog.
+
+It reads what `to_value` and every self-describing format produce: a whole
+`Float` reads as an integer, and a string as an integer or a byte string
+where `core:json` would write one that way. A `Value` carries no position,
+so an error's offset is `-1`.
+
+### `pub fn merge(base: Value, overlay: Value) -> Value`
+
+`overlay` laid over `base`: where both are objects, each key of `overlay`
+merges into `base`'s value for it, and a key `base` lacks is appended.
+Anywhere else `overlay` wins whole, a list and an explicit `Null` included.
 
 ## Structs
 
@@ -124,6 +141,104 @@ _Fields are private._
 ##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
 ##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct ValueDeserializer`
+
+Reads a typed value out of the `Value` it points at.
+
+_Fields are private._
+
+#### `impl Deserializer for ValueDeserializer`
+
+##### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn deserialize_i64(&mut self) -> Result<i64, DeserializeError>`
+
+##### `fn deserialize_u32(&mut self) -> Result<u32, DeserializeError>`
+
+##### `fn deserialize_u64(&mut self) -> Result<u64, DeserializeError>`
+
+##### `fn deserialize_i128(&mut self) -> Result<i128, DeserializeError>`
+
+##### `fn deserialize_u128(&mut self) -> Result<u128, DeserializeError>`
+
+##### `fn deserialize_f32(&mut self) -> Result<f32, DeserializeError>`
+
+##### `fn deserialize_f64(&mut self) -> Result<f64, DeserializeError>`
+
+##### `fn deserialize_f16(&mut self) -> Result<f16, DeserializeError>`
+
+##### `fn deserialize_bf16(&mut self) -> Result<bf16, DeserializeError>`
+
+##### `fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn deserialize_char(&mut self) -> Result<char, DeserializeError>`
+
+##### `fn deserialize_string(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError>`
+
+##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn begin_seq(&mut self) -> Result<ValueSeqAccess, DeserializeError>`
+
+##### `fn begin_map(&mut self) -> Result<ValueObjectAccess, DeserializeError>`
+
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ValueObjectAccess, DeserializeError>`
+
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<ValueVariantAccess, DeserializeError>`
+
+##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
+
+### `pub struct ValueSeqAccess`
+
+_Fields are private._
+
+#### `impl DeserializeSeq for ValueSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct ValueObjectAccess`
+
+Serves both a map and a struct: a `Value` spells them the same way.
+
+_Fields are private._
+
+#### `impl DeserializeMap for ValueObjectAccess`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+#### `impl DeserializeStruct for ValueObjectAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct ValueVariantAccess`
+
+_Fields are private._
+
+#### `impl DeserializeVariant for ValueVariantAccess`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
 ## Variants
 
