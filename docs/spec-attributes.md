@@ -25,7 +25,7 @@ fn error_handler() { panic("error"); }
 
 Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited.
 
-Each argument names an effect the way a `with` clause does: as the function's module spells it, an import alias included. A name that reaches no effect in that scope is an error. A same-named effect declared in another module is a different effect, and stays required.
+An argument names an effect the way a `with` clause does, by the name the function's module gives it, an import alias included. A name that reaches no effect there is an error. An effect of the same name declared in another module is a different effect, and stays required.
 
 ```wado
 pub struct HashIndex {
@@ -45,7 +45,7 @@ Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-e
 
 ### `#[ambient]`
 
-Exempts a function's body from effect checking. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule. `#[benign]` is the narrower form: it names the effects it suppresses.
+Exempts a function's body from effect checking. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule.
 
 ### `#[secret]`
 
@@ -65,7 +65,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#![allow(...)]` it waives the lint for every item in the file. There is no
 `#[deny(...)]`. The lints are:
 
-- `dead_code`: an unused or test-only free function or global (see below).
+- `dead_code`: an unused or test-only free function or global (see [The `dead_code` Lint](#the-dead_code-lint)).
 - `shadowed_name`: a binder that takes a name already reaching a known symbol.
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
@@ -79,7 +79,7 @@ fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
 #### The `dead_code` Lint
 
 The `dead_code` lint warns about a free function or a global that the program
-does not use. Use is reachability from these roots:
+does not use. An item is used when one of these roots reaches it:
 
 - A `pub` or `export` item. An `internal` item is not a root, because nothing
   outside the package can reach it.
@@ -90,12 +90,12 @@ does not use. Use is reachability from these roots:
   of an `interface` or `resource` operation.
 
 A trait's default body counts as reached only where a call lands on it, so a
-function that only an unreached default body calls is dead.
+function that only an unreached default body calls is unused.
 
 An item the roots do not reach is reported one of two ways:
 
-- Reached from a `test` block: "only used by tests". This warning is left out
-  when compiling for the test world, where the tests reaching it are the point.
+- Reached from a `test` block: "only used by tests". Compiling for the test
+  world omits this warning, since there those tests are what the item is for.
 - Reached from nothing: "never used".
 
 An item in the standard library or in a `#![generated]` module is never
@@ -137,8 +137,8 @@ Each parameter takes the first of these that supplies a value:
 1. `-D NAME=value` (alias `--define`) on the `wado` invocation.
 2. The `from_env` variable, where one is named and set.
 3. The tool's own default for the parameter, such as the log level `wado test`
-   sets for `core:log`. A tool default names no declaration the user wrote, so
-   one that matches nothing, or does not convert, is dropped silently.
+   sets for `core:log`. The user did not write a tool default, so one that
+   matches no parameter, or does not convert, is dropped silently.
 4. The initializer, type-checked as written.
 
 A supplied value is trimmed of surrounding whitespace, then converted to the
@@ -151,8 +151,9 @@ library prefixes its names.
 
 #### Resolution Failures
 
-Three failures each have a level the invocation sets: `error` fails the build,
-`warn` reports and falls back to the initializer, `ignore` falls back silently.
+The invocation sets a level for each of three failures. `error` fails the
+build, `warn` reports and falls back to the initializer, and `ignore` falls back
+silently.
 
 | Failure                                     | Flag              | Default  |
 | ------------------------------------------- | ----------------- | -------- |
@@ -184,7 +185,7 @@ static name is reserved, since those are two names on one type.
 A call that reaches the declaration is an error, and its arguments are never
 counted or checked against the parameters. A fault inside an argument is still
 reported. Naming the declaration without calling it is the same error. A
-declaration nobody names is no error.
+declaration that nothing names is not an error.
 
 The declaration takes part in name resolution and nothing else:
 
@@ -208,42 +209,19 @@ Rationale: [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 
 ### `#[expect_trap]`
 
-Test block attribute. Marks a test that is expected to trap. The test passes if the body traps, and fails if it completes normally.
-
-```wado
-#[expect_trap]
-test "panics on invalid input" {
-    panic("bad input");
-}
-```
+Test block attribute. Marks a test that passes only if its body traps. [`#[expect_trap]` Attribute](./spec-testing.md#expect_trap-attribute) states the rule.
 
 ### `#[TODO]`
 
-Test block attribute. Marks a test for an unimplemented feature. TODO tests are reported on a separate axis from regular pass/fail results:
+Test block attribute. Marks a test for an unimplemented feature, reported apart from pass/fail. [`#[TODO]` Attribute](./spec-testing.md#todo-attribute) states the rule.
 
-- If the body traps, the test is pending. That is expected while the feature is unimplemented.
-- If the body completes normally, the test is resolved. That is a hard failure: the `#[TODO]` attribute must be removed.
+### `#![TODO]`
 
-A pending TODO test never fails the run, and a resolved one always does. See [Test Outcome Model](./spec-testing.md#test-outcome-model).
-
-```wado
-#[TODO]
-test "not yet implemented" {
-    panic("TODO: implement this");
-}
-```
+Module-level inner attribute. Marks every test in the module as `#[TODO]`, and tolerates a module that fails to compile. The source must still parse, since otherwise the attribute cannot be recognized. [`#![TODO]` Modules](./spec-testing.md#todo-modules) states the outcomes.
 
 ### `#[timeout_ms(N)]`
 
-Test block attribute. Overrides the default test timeout (5000ms). `N` is an integer literal specifying the timeout in milliseconds.
-
-```wado
-#[timeout_ms(30000)]
-test "slow computation" {
-    let result = expensive_computation();
-    assert result == 42;
-}
-```
+Test block attribute. Overrides the default test timeout. [`#[timeout_ms(N)]` Attribute](./spec-testing.md#timeout_msn-attribute) states the rule.
 
 ### `#[synopsis]`
 
@@ -276,6 +254,8 @@ Controls how a declaration is serialized and deserialized. The framework it
 customizes is in [Serialization](./spec-serialization.md),
 and the library API in [`core:serde`](./stdlib-core-serde.md).
 
+Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+
 Each declaration reads its own keys:
 
 | Declaration                                   | Keys                                       |
@@ -291,7 +271,8 @@ attributes on one declaration, but each key is written once.
 
 #### Wire Names
 
-A field, case or member is written under its source name by default.
+A name is written as in the source unless one of these keys changes it (see
+[Serialization Names](./spec-serialization.md#serialization-names)).
 
 - `#[wire(name = "...")]` sets the wire name of one field or case, exactly as
   written.
@@ -325,7 +306,7 @@ numbered struct still serializes through `core:json` by name.
   require, so passing an unnumbered one is a bound error where the call is
   written.
 
-There is no policy that assigns numbers, so a number is always written.
+No policy assigns numbers, so each number is written out on its field.
 
 On an enum case, `N` is an `i32`, negative values included. It replaces the
 case's position as its discriminant on every wire, `core:json_nsd` included. An
@@ -352,21 +333,16 @@ Rationale: [WEP: Grog](./wep-2026-09-22-grog.md).
 
 `#[wire(positional)]` marks a struct field as ordinal: when deserializing, it is
 filled by position and never matched by name. A format that resolves fields by
-name, such as `core:json`, therefore never fills it, so it takes its default or
-is reported missing. A sequence-only format such as `core:json_nsd` reads it in
+name, such as `core:json`, never fills it, so the field takes its default or is
+reported missing. A sequence-only format such as `core:json_nsd` reads it in
 order like any other field. Serializing is unaffected. `core:args` fills
 positional fields from bare tokens (see [Command-Line Arguments](./spec-serialization.md#command-line-arguments-coreargs)).
 
 #### Optional Fields
 
-A field is optional on deserialization when it has a default value
-(`f: T = expr`), and it falls back to that expression when absent. This is the
-only mechanism for optional fields. An `Option<T>` field without a default is
-required: a format keyed by name needs its key present, though the value may be
-`null`. `#[wire(default)]` does not exist, and writing it is an error that asks
-for a field default instead.
-
-Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
+No `#[wire]` key makes a field optional: a field default does. [Missing,
+Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)
+states the rule, `#[wire(default)]` included.
 
 ## Standard Library Attributes
 
@@ -379,24 +355,6 @@ Module-level inner attribute. Prevents the automatic import of `core:prelude`. U
 ```wado
 #![no_prelude]
 // This module does not import core:prelude
-```
-
-### `#![TODO]`
-
-Module-level inner attribute. Marks the entire module as TODO for `wado test`. The source must parse successfully (otherwise the attribute cannot be recognized), but compilation errors are tolerated:
-
-- If compilation fails, the module is reported as a single pending TODO entry.
-- If compilation succeeds, all test blocks are implicitly treated as `#[TODO]` tests.
-- If the module compiles and all tests pass, it is reported as resolved. That is a hard failure: the `#![TODO]` attribute must be removed.
-
-See [Test Outcome Model](./spec-testing.md#test-outcome-model).
-
-```wado
-#![TODO]
-
-test "not yet implemented" {
-    panic("TODO");
-}
 ```
 
 ### `#![generated]`
@@ -476,12 +434,12 @@ Links Wado definitions (interfaces, worlds, resources, enums) to their Component
 
 ### `#[retain(...)]` / `#[result(...)]`
 
-What a call does with the reference parameters it is handed: whether its result
-aliases one, and whether it keeps one past the return. Neither is a safety
-condition, since every referent is GC-managed and cannot dangle. The compiler
-reads both from a function's body. These attributes are for a declaration that
-has none: a `core:builtin` primitive, a Component Model import, a `.wasm` /
-`.wat` asset import.
+These attributes state what a call does with the reference parameters it is
+handed: whether its result aliases one, and whether it keeps one past the
+return. They are for a declaration with no body, whose retention cannot be read
+from one: a `core:builtin` primitive, a Component Model import, a `.wasm` /
+`.wat` asset import. [Reference Retention](./spec-memory.md#reference-retention)
+states what retention is, and that no function type carries it.
 
 ```wado
 #[result(part_of = arr)]
@@ -495,12 +453,11 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 ```
 
 `#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
-says it is part of `p`. It takes exactly one of the two. Silence reads as
-`owned`, so a declaration with a reference parameter whose result can share
+says it is part of `p`. `#[result]` takes exactly one of the two. Silence reads
+as `owned`. So a declaration with a reference parameter whose result can share
 storage must state one, and leaving it out is an error. A Component Model import
-owes none, since the boundary copies and its result is always owned. Neither
-does an [`#[unavailable]`](#unavailablereason) declaration, which is never
-called.
+needs none, since the boundary copies and its result is always owned. Nor does
+an [`#[unavailable]`](#unavailablereason) declaration, which is never called.
 
 `#[retain(...)]` names one retained thing and repeats where there is more than
 one, so each carries its own destination. A bare name is the parameter itself
@@ -516,9 +473,6 @@ is never read as silence.
 Both are an error on a function with a body, which states these facts itself,
 and on a `trait` or `interface` method requirement: a call to one is statically
 dispatched to an impl that has a body, so the impl states it.
-
-Neither is part of the function's type. Two declarations that differ only in
-what they retain have one type.
 
 Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
