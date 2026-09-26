@@ -316,7 +316,6 @@ global CM_COPY_MAX: i32 = (1 << 28) - 1;
 /// The part of `count` elements one copy may move, since a longer copy traps.
 #[compiler_item("cm_copy_count")]
 internal fn cm_copy_count(count: i32) -> i32 {
-    assert count >= 0, "a copy moves a count of elements, never a negative one";
     return i32::min(count, CM_COPY_MAX);
 }
 
@@ -324,7 +323,12 @@ internal fn cm_copy_count(count: i32) -> i32 {
 /// `i32` must be able to count.
 #[compiler_item("cm_buffer_bytes")]
 internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
-    assert 0 <= count <= i32::MAX / elem_size, "the buffer is past what linear memory can address";
+    // A panic rather than an assert: every program reaches this, and an assert
+    // would pull the formatting of its operands into each one.
+    if count < 0 || count > i32::MAX / elem_size {
+        builtin::cold_path();
+        panic("a buffer's length is negative or past what linear memory can address");
+    }
     return count * elem_size;
 }
 
@@ -337,7 +341,7 @@ internal fn cm_packed_count(packed: i32) -> i32 {
 /// CM adapter for stream.read(max) on Stream<u8>, awaiting a BLOCKED copy.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32) -> StreamChunk<u8> {
-    let room = cm_copy_count(max);
+    let room = cm_buffer_bytes(cm_copy_count(max), 1);
     let ptr = builtin::realloc(0, 0, 1, room);
     let mut result = builtin::stream_read(handle, ptr, room);
     if result == -1 {
