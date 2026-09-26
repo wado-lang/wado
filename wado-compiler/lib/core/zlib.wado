@@ -812,7 +812,6 @@ fn inflate_raw_ex(
     assert max_output >= 0, "max_output must not be negative";
     let mut state = InflateState::new(true);
     let mut output: ByteList = [];
-    let mut exceeded = false;
 
     let mut inp = input_offset;
     let mut have = input_length;
@@ -908,8 +907,7 @@ fn inflate_raw_ex(
                 }
                 if copy > max_output - output.len() {
                     builtin::cold_path();
-                    exceeded = true;
-                    break;
+                    return Result::Err(ZlibError::OutputExceedsMax);
                 }
                 if copy > 0 {
                     output.extend_from_slice(input[inp..<inp + copy]);
@@ -1224,8 +1222,7 @@ fn inflate_raw_ex(
                     // the common symbol costs no extra dispatch round trip.
                     if output.len() == max_output {
                         builtin::cold_path();
-                        exceeded = true;
-                        break;
+                        return Result::Err(ZlibError::OutputExceedsMax);
                     }
                     output.push(state.length as u8);
                 } else if here_op & 32 != 0 {
@@ -1363,8 +1360,7 @@ fn inflate_raw_ex(
                     state.mode = InflateMode::Bad;
                 } else if state.length > max_output - out_pos {
                     builtin::cold_path();
-                    exceeded = true;
-                    break;
+                    return Result::Err(ZlibError::OutputExceedsMax);
                 } else {
                     let src_start = out_pos - state.offset;
                     output.copy_within_append(src_start, state.length);
@@ -1406,9 +1402,6 @@ fn inflate_raw_ex(
         }
     }
 
-    if exceeded {
-        return Result::Err(ZlibError::OutputExceedsMax);
-    }
     // The decode succeeded only if it ran to the end of the final block (RFC
     // 1951 section 3.2.3): a Bad mode or an input cut short both stop before Done.
     if !state.mode matches { Done } {
