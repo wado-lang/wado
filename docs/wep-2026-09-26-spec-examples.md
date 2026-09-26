@@ -152,8 +152,17 @@ The last two are what this WEP is for. The migration will find them.
        rule and the baseline.
 3. [x] Add `mise run check-spec-examples` and its CI job, and record the baseline
        of all 353 blocks.
-4. [ ] Migrate one file first, `spec-types.md`, and decide the `assert` rule from
-       it: keep it, or drop it and say why here.
+4. [x] Migrate one file first, `spec-types.md`, and decide the `assert` rule from
+       it: keep it, or drop it and say why here. Kept. Its 42 blocks became 55
+       quotations and one `` ```text ``, since a rejected example is now a
+       block of its own; 8 quote a `compile_error` fixture. In most of the rest
+       the assert replaced a comment that stated a value. A block made
+       only of declarations quotes the `test` that uses them, which closes the
+       first known gap for that block. The assert was artificial in three: a
+       type-level claim of inference, a field visibility, and a `#[cm]` name.
+       The migration found one block wrong in the specification: a float
+       vector's comparison mask is the integer vector of the same width, not
+       the float one.
 5. [ ] Migrate the other twelve spec files, one change per file.
 6. [ ] Delete the baseline once it is empty, so the rule holds with no
        exceptions.

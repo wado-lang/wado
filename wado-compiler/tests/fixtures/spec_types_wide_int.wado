@@ -1,0 +1,19 @@
+// `i128` and `u128` are prelude structs that read like primitives.
+
+test "operators" {
+    let a: u128 = 42;                      // literal coercion
+    let b = u128::from_u64(1_000_000);     // explicit construction
+    assert a + b == 1_000_042;             // via Add
+    assert a < b;                          // via Ord
+
+    // the low and high 64-bit halves
+    assert a.low() == 42;
+    assert a.high() == 0;
+}
+
+test "casts" {
+    let a = 42 as u128;                    // numeric → wide int
+    assert a as f64 == 42.0;               // wide int → float, rounded to nearest, ties to even
+    assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
+    assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
+}

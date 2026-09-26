@@ -1,0 +1,13 @@
+// A field with no default must be listed.
+
+struct ServerConfig {
+    host: String,
+    port: i32 = 8080,
+}
+
+test {
+    let c = ServerConfig { port: 3000 };
+}
+
+__DATA__
+{"compile_error":"missing field 'host' in struct literal 'ServerConfig'"}

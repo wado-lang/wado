@@ -1,0 +1,25 @@
+// Flags: a bitmask, one power-of-two bit per member.
+
+pub flags Perms {
+    Read,     // bit 0: 1
+    Write,    // bit 1: 2
+    Execute,  // bit 2: 4
+}
+
+test {
+    let rw = Perms::Read | Perms::Write;
+    assert rw as u32 == 3;
+    assert (rw & Perms::Read) as u32 == 1;   // masking
+    assert (rw ^ Perms::Read) as u32 == 2;   // toggling
+    assert Perms::none() as u32 == 0;
+    assert Perms::all() as u32 == 7;
+}
+
+pub flags PathFlags {
+    #[cm("symlink-follow")]
+    SymlinkFollow,
+}
+
+test {
+    assert PathFlags::SymlinkFollow as u32 == 1;
+}

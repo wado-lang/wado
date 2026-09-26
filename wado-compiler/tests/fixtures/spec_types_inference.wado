@@ -1,0 +1,69 @@
+// Type arguments inferred from values, from the expected type, or pinned by a
+// turbofish.
+
+struct Box<T> { value: T }
+
+test "forward" {
+    let b = Box { value: 42 };              // Box<i32>: T = i32 from the field
+    let opt = Option::Some("hello");        // Option<String>: T = String from the payload
+    let check: [Box<i32>, Option<String>] = [b, opt];
+    assert check.0.value == 42;
+}
+
+test "backward" {
+    let none: Option<i32> = Option::None;   // T = i32 from the annotation
+    let ok: Result<i32, String> = Result::Ok(42);
+    // T = i32 from the payload (forward), E = String from the annotation (backward)
+    assert none == null && ok.unwrap() == 42;
+}
+
+test "turbofish" {
+    struct Tagged<T> { tag: i32 }
+    let b = Box::<i64> { value: 1 };        // T = i64, not the i32 the literal infers
+    let t = Tagged::<String> { tag: 7 };    // T names no field
+    let wide: i64 = b.value;
+    assert wide == 1 && t.tag == 7;
+}
+
+test "turbofish on the case" {
+    let a = Option::Some::<i64>(1);         // Option::<i64>::Some(1)
+    let e = Result::Err::<i32, String>("x");
+    let n: Option<i32> = None::<i32>;       // a bare case, where its type is known
+    assert a.unwrap() == 1 && e.is_err() && n == null;
+}
+
+test "a newtype over a variant" {
+    type Opt<T> = Option<T>;
+    let a = Opt::Some(1);                   // Opt<i32>
+    let b: Opt<i64> = Opt::None;            // the annotation settles T
+    let c = Opt::<i64>::Some(1);
+    assert a.unwrap() == 1 && b matches { None } && c.unwrap() == 1;
+}
+
+fn identity<T>(x: T) -> T {
+    return x;
+}
+
+fn none_of<T>() -> Option<T> {
+    return null;
+}
+
+test "calls" {
+    let x = identity(42);                   // T = i32 from the argument
+    let s = identity("hi");                 // T = String from the argument
+    let n: Option<i64> = none_of();         // T = i64 from the annotation
+    assert x == 42 && s == "hi" && n == null;
+}
+
+fn pick<A, B>(a: A, b: B) -> A {
+    return a;
+}
+
+struct MyErr { code: i32 }
+
+test "a partial turbofish" {
+    let r = Result::<_, MyErr>::Ok(42);     // infers the Ok payload, pins the error type
+    let a = pick::<_, bool>(1, true);       // infers the first type argument
+    let b = pick::<i32>(1, true);           // stops short: infers the second
+    assert r.unwrap() == 42 && a == 1 && b == 1;
+}

@@ -1,0 +1,20 @@
+// An invariant the base type does not enforce needs a struct: a private field
+// and a checked constructor, which is the only way in.
+
+pub struct Percent {
+    value: i32,
+}
+
+impl Percent {
+    pub fn new(value: i32) -> Option<Percent> {
+        if value < 0 || value > 100 {
+            return null;
+        }
+        return Option::Some(Percent { value });
+    }
+}
+
+test {
+    assert Percent::new(50) matches { Some(_) };
+    assert Percent::new(150) matches { None };
+}
