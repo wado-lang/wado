@@ -256,11 +256,10 @@ struct BuildsClosure {
 
 impl TirRefVisitor for BuildsClosure {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Closure { .. } = &expr.kind {
-            self.found = true;
-            return;
+        self.found |= matches!(expr.kind, TirExprKind::Closure { .. });
+        if !self.found {
+            self.walk_expr(expr);
         }
-        self.walk_expr(expr);
     }
 }
 
