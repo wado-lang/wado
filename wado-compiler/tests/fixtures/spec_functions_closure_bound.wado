@@ -1,0 +1,14 @@
+// A type parameter bounded by a closure type.
+
+fn apply<F: fn(i32) -> i32>(f: F, x: i32) -> i32 { return f(x); }
+fn invoke<F: fn mut(i32)>(mut f: F) { f(1); f(2); }
+fn dup<F: fn(i32) -> i32>(f: F) -> [F, F] { return [f, f]; }
+
+test {
+    assert apply(|x| x + 1, 1) == 2;
+    let mut sum = 0;
+    invoke(|x| sum += x);
+    assert sum == 3;
+    let [f, g] = dup(|x| x * 10);
+    assert f(1) + g(2) == 30;
+}

@@ -1,0 +1,11 @@
+// A `fn mut` closure where a `fn` is expected is a compile error.
+
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
+
+test {
+    let mut count = 0;
+    apply(|x| { count += 1; return x; }, 5);    // ERROR: a `fn mut` where `fn` is expected
+}
+
+__DATA__
+{"compile_error":"type mismatch: expected 'fn(i32) -> i32', found 'fn mut(i32) -> i32'"}

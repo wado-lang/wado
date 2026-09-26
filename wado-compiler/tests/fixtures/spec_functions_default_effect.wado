@@ -1,0 +1,12 @@
+// A default that performs an effect is a compile error.
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout { println("noisy"); return 1; }
+fn bar(v: i32 = noisy()) { }  // ERROR: the default performs `Stdout`
+
+test {
+    bar(1);
+}
+
+__DATA__
+{"compile_error":"default value expression must be pure (no effects), but calls effectful function 'noisy'"}
