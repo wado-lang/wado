@@ -738,26 +738,11 @@ impl MethodName {
         }
     }
 
-    /// Format a base name with type arguments and optional trait.
-    /// Format: `Struct<TypeArgs>^Trait` or `Struct<TypeArgs>`.
-    ///
-    /// `ref_kind` carries the receiver's reference shape so a `&T` / `&mut T`
-    /// receiver mangles with a prefix; it comes from the typed receiver, never
-    /// from inspecting `base`.
-    pub fn format_struct_with_args(
-        base: &str,
-        ref_kind: Option<RefKind>,
-        type_args: &[String],
-        trait_name: Option<&FqTraitName>,
-    ) -> String {
-        let struct_part = if type_args.is_empty() {
-            base.to_string()
-        } else {
-            Receiver::mangle_with_ref(base, ref_kind, type_args)
-        };
+    /// A mangled receiver with its optional trait: `Struct<TypeArgs>^Trait`.
+    pub fn format_struct_with_trait(struct_part: &str, trait_name: Option<&FqTraitName>) -> String {
         match trait_name {
             Some(trait_n) => format!("{struct_part}^{trait_n}"),
-            None => struct_part,
+            None => struct_part.to_string(),
         }
     }
 
@@ -894,9 +879,30 @@ pub enum Receiver {
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
+    /// A reference to a named head (`&Item`, `&List`), which an `impl` for
+    /// `&X` registers under; its arguments ride in the type-arg list.
+    RefTo(RefKind, FqTypeName),
 }
 
 impl Receiver {
+    /// The receiver an `impl` written for the reference `target` registers
+    /// under: the referent's head, or the bare kind where a parameter stands.
+    #[must_use]
+    pub fn of_ref_impl(kind: RefKind, target: &FqTypeName) -> Self {
+        Self::ref_to(target).unwrap_or(Receiver::Ref(kind))
+    }
+
+    /// [`Receiver::RefTo`] the head `target` refers to; `None` unless `target`
+    /// is a reference to a named type.
+    #[must_use]
+    pub fn ref_to(target: &FqTypeName) -> Option<Self> {
+        let (kind, referent) = target.split_reference()?;
+        referent
+            .binder_name()
+            .is_none()
+            .then(|| Receiver::RefTo(kind, referent.head_only()))
+    }
+
     /// The canonical head string — identity key and mangle base. Module
     /// qualified, because that is what a mangled name embeds.
     #[must_use]
@@ -904,6 +910,7 @@ impl Receiver {
         match self {
             Receiver::Type(n) => MangledName::new(n.to_mangled()),
             Receiver::Ref(k) => MangledName::new(k.prefix()),
+            Receiver::RefTo(..) => MangledName::new(self.mangle(&[])),
         }
     }
 
@@ -913,7 +920,7 @@ impl Receiver {
     pub fn def(&self) -> Option<DefId> {
         match self {
             Receiver::Type(fq) => fq.head().def(),
-            Receiver::Ref(_) => None,
+            Receiver::Ref(_) | Receiver::RefTo(..) => None,
         }
     }
 
@@ -922,7 +929,10 @@ impl Receiver {
     /// its parts over that list instead.
     #[must_use]
     pub fn is_declared_type(&self) -> bool {
-        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_)))
+        matches!(
+            self,
+            Receiver::Type(fq) | Receiver::RefTo(_, fq) if matches!(fq.head(), TypeHead::Declared(_))
+        )
     }
 
     /// Whether this receiver is one of the binders `names` declares — how a
@@ -946,7 +956,7 @@ impl Receiver {
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
-            Receiver::Ref(_) => None,
+            Receiver::Ref(_) | Receiver::RefTo(..) => None,
         }
     }
 
@@ -976,7 +986,8 @@ impl Receiver {
     pub fn decl_key(&self) -> DeclName {
         match self {
             Receiver::Type(n) => n.decl_name(),
-            Receiver::Ref(k) => DeclName::new(k.prefix()),
+            // Header scans bucket every reference target by its kind.
+            Receiver::Ref(k) | Receiver::RefTo(k, _) => DeclName::new(k.prefix()),
         }
     }
 
@@ -984,34 +995,42 @@ impl Receiver {
     /// `S::SeqSerializer`).
     #[must_use]
     pub fn mangle(&self, type_args: &[String]) -> String {
-        Self::mangle_with_ref(self.head_key().as_mangled_str(), self.ref_kind(), type_args)
-    }
-
-    /// Mangle a base name, applying a `&` / `&mut` prefix when `ref_kind` marks
-    /// a single-pointee reference receiver. The sole place a receiver becomes a
-    /// `&`-prefixed string; `ref_kind` is typed metadata, never parsed from
-    /// `base`.
-    #[must_use]
-    pub fn mangle_with_ref(base: &str, ref_kind: Option<RefKind>, type_args: &[String]) -> String {
-        match ref_kind {
-            Some(RefKind::Shared) if type_args.len() == 1 => format!("&{}", type_args[0]),
-            Some(RefKind::Mut) if type_args.len() == 1 => format!("&mut {}", type_args[0]),
-            _ => mangle_generic_name(base, type_args),
+        let mut out = String::new();
+        match self {
+            Receiver::Type(_) => {
+                out.push_str(&mangle_generic_name(
+                    self.head_key().as_mangled_str(),
+                    type_args,
+                ));
+            }
+            // The single pointee is the argument a universal `&T` carries.
+            Receiver::Ref(k) => match type_args {
+                [pointee] => {
+                    push_ref_prefix(&mut out, *k);
+                    out.push_str(pointee);
+                }
+                _ => out.push_str(&mangle_generic_name(k.prefix(), type_args)),
+            },
+            Receiver::RefTo(k, referent) => {
+                push_ref_prefix(&mut out, *k);
+                out.push_str(&mangle_generic_name(&referent.to_mangled(), type_args));
+            }
         }
+        out
     }
 
     /// The receiver's reference kind, or `None` for a value receiver.
     #[must_use]
     pub fn ref_kind(&self) -> Option<RefKind> {
         match self {
-            Receiver::Ref(k) => Some(*k),
-            _ => None,
+            Receiver::Ref(k) | Receiver::RefTo(k, _) => Some(*k),
+            Receiver::Type(_) => None,
         }
     }
 }
 
 /// Write a receiver's reference prefix. `&` binds directly to the pointee;
-/// `&mut` is a word and needs the separator. [`Receiver::mangle_with_ref`] and
+/// `&mut` is a word and needs the separator. [`Receiver::mangle`] and
 /// `TypeTable::mangle_type_arg_for_generic` spell it the same way, and a
 /// definition's name is built by one while its call sites go through the other.
 fn push_ref_prefix(out: &mut String, kind: RefKind) {
@@ -1077,6 +1096,7 @@ impl LocalMethodName {
             Receiver::Type(fq) => fq.clone(),
             // A `&` / `&mut` head names no declaration, so no module qualifies it.
             Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
+            Receiver::RefTo(kind, referent) => referent.clone().with_reference(*kind),
         }
     }
 
@@ -1094,7 +1114,7 @@ impl LocalMethodName {
     pub fn fq_struct_name(&self) -> FqTypeName {
         // A single-pointee reference receiver spells as the pointee carrying a
         // `&` / `&mut`, not as a `&` head applied to arguments — the same rule
-        // `Receiver::mangle_with_ref` follows, so this and [`Self::struct_name`]
+        // `Receiver::mangle` follows, so this and [`Self::struct_name`]
         // render one spelling.
         if let Receiver::Ref(kind) = self.receiver
             && let [pointee] = self.struct_type_args.as_slice()
@@ -1275,6 +1295,21 @@ impl LocalMethodName {
             is_type_param_receiver: false,
             is_ref_impl: self.is_ref_impl,
             cm_name: self.cm_name.clone(),
+        }
+    }
+
+    /// This method named at the receiver one concrete `impl` block writes. A
+    /// `&X` owner is the reference to `X`'s head, carrying `X`'s arguments.
+    #[must_use]
+    pub fn at_owner(&self, owner: &FqTypeName) -> Self {
+        match owner.split_reference() {
+            Some((kind, pointee)) => Self {
+                receiver: Receiver::RefTo(kind, pointee.head_only()),
+                struct_type_args: pointee.args().to_vec(),
+                is_type_param_receiver: false,
+                ..self.clone()
+            },
+            None => self.with_substituted_struct_name(owner),
         }
     }
 
@@ -2681,6 +2716,46 @@ mod tests {
             Receiver::Type(FqTypeName::builtin("List")).mangle(&["i32".into()]),
             "List<i32>"
         );
+        // A reference to a named head keeps the head, its arguments applied.
+        let list = FqTypeName::builtin("List");
+        let shared_list = Receiver::RefTo(RefKind::Shared, list.clone());
+        assert_eq!(shared_list.mangle(&["i32".into()]), "&List<i32>");
+        assert_eq!(shared_list.head_key().as_mangled_str(), "&List");
+        let mut_list = Receiver::RefTo(RefKind::Mut, list);
+        assert_eq!(mut_list.mangle(&["i32".into()]), "&mut List<i32>");
+        assert_eq!(mut_list.mangle(&[]), "&mut List");
+    }
+
+    #[test]
+    fn test_ref_impl_receiver_names_its_referent() {
+        let item = FqTypeName::builtin("Item");
+        let template = LocalMethodName::of(
+            Receiver::of_ref_impl(
+                RefKind::Shared,
+                &item.clone().with_reference(RefKind::Shared),
+            ),
+            None,
+            "eq".into(),
+        );
+        assert_eq!(template.to_mangled_name(), "&Item::eq");
+        let instance = template.with_struct_type_args(&[FqTypeName::builtin("i32")]);
+        assert_eq!(instance.to_mangled_name(), "&Item<i32>::eq");
+        assert_eq!(instance.fq_struct_name().to_mangled(), "&Item<i32>");
+        // A type parameter behind the reference leaves the bare kind.
+        let blanket = Receiver::of_ref_impl(
+            RefKind::Mut,
+            &FqTypeName::binder("T").with_reference(RefKind::Mut),
+        );
+        assert_eq!(blanket, Receiver::Ref(RefKind::Mut));
+        let at_owner = template.at_owner(
+            &item
+                .with_args(vec![FqTypeName::builtin("bool")])
+                .with_reference(RefKind::Shared),
+        );
+        assert_eq!(
+            at_owner,
+            instance.with_struct_type_args(&[FqTypeName::builtin("bool")])
+        );
     }
 }
 
@@ -3143,7 +3218,8 @@ impl FqTypeName {
 
     /// The outermost `&` prefix and what it points at, `None` for a name
     /// carrying no prefix.
-    fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
+    #[must_use]
+    pub fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
         let (outer, inner) = self.reference.split_first()?;
         Some((
             *outer,

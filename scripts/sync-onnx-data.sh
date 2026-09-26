@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Copy the ONNX backend test data Loam's tests read out of the `vendor/onnx`
-# submodule.
+# Copy out of the `vendor/onnx` submodule the `onnx.proto` Loam's reader imports
+# through Grog, and the backend test data Loam's tests read.
 #
 # The tests say which files: every `../tests/onnx/...` path they name is
 # fetched, so naming a new model in a test and running this brings it in. A
@@ -10,8 +10,18 @@ set -euo pipefail
 #
 # Usage: mise run sync-onnx-data
 
-SRC=vendor/onnx/onnx/backend/test/data
+ONNX=vendor/onnx/onnx
+SRC=${ONNX}/backend/test/data
 DEST=package-loam/tests/onnx
+
+# Copy $1 over $2 where they differ, saying so; return 1 where they already agree.
+sync_file() {
+    if cmp -s "$1" "$2"; then
+        return 1
+    fi
+    cp "$1" "$2"
+    echo "updated $2"
+}
 
 if [ ! -d "$SRC" ]; then
     echo "ERROR: ${SRC} is missing." >&2
@@ -44,14 +54,14 @@ while IFS= read -r rel; do
         exit 1
     fi
     mkdir -p "${DEST}/$(dirname "$rel")"
-    if ! cmp -s "${SRC}/${rel}" "${DEST}/${rel}"; then
-        cp "${SRC}/${rel}" "${DEST}/${rel}"
-        echo "updated ${rel}"
+    if sync_file "${SRC}/${rel}" "${DEST}/${rel}"; then
         changed=$((changed + 1))
     fi
 done <<<"$wanted"
 
 echo "==> ${changed} changed of $(echo "$wanted" | wc -l | tr -d ' ') named by a test"
+
+sync_file "${ONNX}/onnx.proto" package-loam/src/onnx.proto || true
 
 while IFS= read -r have; do
     rel=${have#"${DEST}/"}

@@ -201,14 +201,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, p)| {
                 let type_id = self.closure_param_type(p, i, expected_fn.as_ref());
-                closure_ctx.add_local_at(
-                    p.name.clone(),
-                    type_id,
-                    p.is_mut,
-                    Some(p.id),
+                self.bind_local(
+                    &mut closure_ctx,
+                    p.id,
+                    &p.name,
                     p.name_span,
+                    p.is_mut,
+                    type_id,
                 );
-                self.record_local_symbol(p.id, &p.name, p.name_span, p.is_mut, type_id);
                 (p.name.clone(), type_id)
             })
             .collect();
@@ -332,8 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Vec::new(),
         );
 
-        // Placeholder — reify is the sole producer of the closure's TIR shape.
-        drop(closure_ctx);
+        ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type
     }
 }

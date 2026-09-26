@@ -80,12 +80,11 @@ test "every form CSS allows keeps its classes" {
     assert empty.contains(`<span class="type">a</span>`), empty;
 }
 
-test "a context capture needs its enclosing rule to have parsed" {
-    // What classifying from a parse costs, on input the language really does
-    // reject. `b` keeps no class because nothing placed it under `declaration`;
-    // the defaults and the text survive, so the file stays readable while typed.
+test "a half-written declaration keeps the classes its partial parse placed" {
+    // The loop commits on its first token, as ANTLR4's does, so `b` is parsed
+    // under `declaration` before the missing value is reported.
     let half_written = highlight_page("<style>a { b: }</style>");
-    assert !half_written.contains(`<span class="property">b</span>`), half_written;
+    assert half_written.contains(`<span class="property">b</span>`), half_written;
     assert half_written.contains(`<span class="punctuation delimiter">:</span>`), half_written;
     assert plain_text(&half_written) == "<style>a { b: }</style>", plain_text(&half_written);
 }

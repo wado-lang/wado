@@ -72,6 +72,75 @@ test "the forward pass is one kernel call per operator" {
     assert out.contains("return Y;");
 }
 
+test "the forward pass checks each input against the graph before any kernel" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    let body = emitted(&out);
+    let check = body.find("refuse(input_mismatch(X, \"X\", [\"Batch\", \"In\"], [-1, 4]));").unwrap();
+    assert check < body.find("matmul(").unwrap();
+}
+
+test "an axis the boundary fixes to one length carries it as a constant" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains("impl In {\n    pub const EXTENT: i32 = 4;\n}");
+    assert out.contains("impl Out {\n    pub const EXTENT: i32 = 2;\n}");
+    assert !out.contains("impl Batch {");
+    assert !out.contains("impl Hidden {");
+}
+
+test "an axis the boundary gives two lengths carries no constant" {
+    let source = `
+stretch (float[1, 2] A, float[3, 2] B) => (float[3, 2] Y)
+{
+    Y = Add(A, B)
+}
+`;
+    let out = generate(source, [
+        rule("A", ["Row", "Col"]),
+        rule("B", ["Row", "Col"]),
+    ]).unwrap();
+
+    assert !out.contains("impl Row {");
+    assert out.contains("impl Col {\n    pub const EXTENT: i32 = 2;\n}");
+}
+
+test "inputs sharing an axis the graph leaves to the run are checked against each other" {
+    let source = `
+pair (float[N, 2] A, float[N, 2] B) => (float[N, 2] Y)
+{
+    Y = Add(A, B)
+}
+`;
+    let out = generate(source, [
+        rule("A", ["Batch", "In"]),
+        rule("B", ["Batch", "In"]),
+    ]).unwrap();
+
+    assert out.contains("refuse(axis_mismatch(\"N\", \"B\", \"Batch\", B.extents[0], \"A\", A.extents[0]));");
+    assert !out.contains("axis_mismatch(\"2\"");
+}
+
+test "inputs are checked against each other by the symbol, not the axis name" {
+    let graph = |b_cols: String| `
+outer (float[S, 4] A, float[4, ${b_cols}] B) => (float[S, ${b_cols}] Y)
+{
+    Y = MatMul(A, B)
+}
+`;
+    let same_symbol = generate(graph("S"), [
+        rule("A", ["Row", "Inner"]),
+        rule("B", ["Inner", "Col"]),
+    ]).unwrap();
+    assert same_symbol.contains("refuse(axis_mismatch(\"S\", \"B\", \"Col\", B.extents[1], \"A\", A.extents[0]));");
+
+    let same_name = generate(graph("T"), [
+        rule("A", ["Row", "Inner"]),
+        rule("B", ["Inner", "Row"]),
+    ]).unwrap();
+    assert !emitted(&same_name).contains("axis_mismatch(");
+}
+
 test "the initializers become the weights struct" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
@@ -100,10 +169,68 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     assert out.contains("extents: [2],");
 }
 
-test "a graph missing any initializer's data leaves the weights to the caller" {
+test "weights the graph lacks are read from a checkpoint by Weights::load" {
     let out = generate(MLP, mlp_layout()).unwrap();
 
     assert !out.contains("fn embedded");
+    assert out.contains("pub fn load(checkpoint: &ByteList) -> Result<Weights, LoadError> {");
+    assert out.contains("let header = read_checkpoint(checkpoint)?;");
+    assert out.contains(
+        "data: List::<f32>::from_le_bytes(header.payload(checkpoint, &Expected { tensor: \"W1\", dtype: \"F32\", axes: [\"In\", \"Hidden\"], extents: [4, 3], elements: 12, width: 4 })?),",
+    );
+    assert out.contains("extents: [4, 3],");
+    assert out.contains("pub fn read_checkpoint");
+}
+
+test "a graph carrying some weights embeds those and loads the rest" {
+    let source = `
+bias (float[N, 2] X) => (float[N, 2] Y)
+<float[2, 2] W, float[2] B = {1.0, -2.5}>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "In"]),
+        rule("W", ["In", "In"]),
+        rule("B", ["In"]),
+    ]).unwrap();
+
+    assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"In\", \"In\"], extents: [2, 2], elements: 4, width: 4");
+    assert out.contains("data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"),");
+}
+
+test "a tensor name is escaped where the loader spells it" {
+    let source = `
+quoted (float[2] X) => (float[2] Y)
+<float[2] "a\\b">
+{
+    Y = Add(X, "a\\b")
+}
+`;
+    let out = generate(source, [
+        rule("X", ["In"]),
+        rule("a\\b", ["In"]),
+    ]).unwrap();
+
+    assert out.contains("tensor: \"a\\\\b\",");
+}
+
+test "a graph carrying every weight inlines no checkpoint reader" {
+    let source = `
+bias (float[N, 2] X) => (float[N, 2] Y)
+<float[2] B = {1.0, -2.5}>
+{
+    Y = Add(X, B)
+}
+`;
+    let out = generate(source, [
+        rule("X", ["Batch", "In"]),
+        rule("B", ["In"]),
+    ]).unwrap();
+
+    assert !out.contains("fn read_checkpoint");
 }
 
 test "every axis the graph mentions becomes a marker type" {
@@ -534,6 +661,13 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let t = generate(source, [rule("*", ["Batch", "Held"])]).unwrap_err();
 
     assert `${t}` == "Held: an axis cannot be named as the generated module names something";
+
+    // The checkpoint reader's names are reserved, the ones it imports included,
+    // whether or not this graph inlines it.
+    for let name of ["LoadError", "TreeMap", "json"] {
+        let r = generate(source, [rule("*", ["Batch", name])]).unwrap_err();
+        assert `${r}` == `${name}: an axis cannot be named as the generated module names something`;
+    }
 }
 
 test "a stretch between operands of one rank lowers to zip" {

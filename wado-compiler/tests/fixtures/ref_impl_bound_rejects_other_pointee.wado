@@ -1,0 +1,31 @@
+// An impl for `&Item` answers a bound for `&Item` alone: `&Other` is rejected
+// where the bound is checked, as a value type would be.
+struct Tag {
+    id: i32,
+}
+
+struct Item {
+    id: i32,
+}
+
+struct Other {
+    id: i32,
+}
+
+impl Eq<Tag> for &Item {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.id == other.id;
+    }
+}
+
+fn matches_op<S: Eq<Tag>>(s: S, t: Tag) -> bool {
+    return s == t;
+}
+
+test "unreachable" {
+    let other = Other { id: 3 };
+    assert matches_op(&other, Tag { id: 3 });
+}
+
+__DATA__
+{"test": {}, "compile_error": "type '&Other' does not implement trait 'Eq<Tag>' required by bound on 'S'", "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]}

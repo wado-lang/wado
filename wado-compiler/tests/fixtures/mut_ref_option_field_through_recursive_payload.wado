@@ -1,0 +1,67 @@
+// A plain value read out of an `Option` carries no reference, so passing
+// `&mut` to an `Option` field reached through a recursive payload is written back.
+
+trait Msg with () {
+    fn merge(&mut self, depth: i32);
+}
+
+fn optional<M: Msg + Default>(slot: &mut Option<M>, depth: i32) {
+    if *slot matches { None } {
+        *slot = Option::Some(M::default());
+    }
+    if let Some(m) = slot {
+        m.merge(depth);
+    }
+}
+
+fn message<M: Msg>(m: &mut M, depth: i32) {
+    m.merge(depth);
+}
+
+struct TypeProto {
+    value: Option<TypeProtoValue> = null,
+}
+
+variant TypeProtoValue {
+    Sequence(Seq),
+    Scalar(i32),
+}
+
+struct Seq {
+    elem: Option<TypeProto> = null,
+    n: i32 = 0,
+}
+
+impl Msg for TypeProto {
+    fn merge(&mut self, depth: i32) {
+        let mut v = match self.value {
+            Some(TypeProtoValue::Sequence(held)) => held,
+            _ => Seq {},
+        };
+        message(&mut v, depth);
+        self.value = Option::Some(TypeProtoValue::Sequence(v));
+    }
+}
+
+impl Msg for Seq {
+    fn merge(&mut self, depth: i32) {
+        self.n += 1;
+        if depth > 0 {
+            optional(&mut self.elem, depth - 1);
+        }
+    }
+}
+
+struct Attr {
+    tp: Option<TypeProto> = null,
+}
+
+test "a nested optional field is filled through the recursion" {
+    let mut a = Attr {};
+    optional(&mut a.tp, 1);
+    let Some(TypeProtoValue::Sequence(outer)) = a.tp.unwrap().value else { unreachable(); };
+    assert outer.n == 1;
+    let Some(TypeProtoValue::Sequence(inner)) = outer.elem.unwrap().value else { unreachable(); };
+    assert inner.n == 1;
+    assert inner.elem matches { None };
+}

@@ -231,12 +231,6 @@ pub enum Code {
     /// A `#[linear_memory(...)]` attribute is malformed, repeated, or sits on a
     /// declaration with a body.
     LinearMemoryAttr,
-    /// A `#[wire(number = N)]` is out of range, reserved, repeated within one
-    /// struct, or written on some of a struct's fields and not the rest.
-    WireNumber,
-    /// A `#[wire(encoding = "…")]` names no encoding, or one the field's
-    /// integer type cannot take.
-    WireEncoding,
     ResourceExtends,
     /// A resource's `#[cm(..., classes = ...)]` does not number its `extends`
     /// tree, or a type pattern narrows to a resource that declares none.
@@ -327,8 +321,6 @@ impl std::fmt::Display for Code {
             Code::ImmediateAttr => "IMMEDIATE_ATTR",
             Code::TrapAttr => "TRAP_ATTR",
             Code::LinearMemoryAttr => "LINEAR_MEMORY_ATTR",
-            Code::WireNumber => "WIRE_NUMBER",
-            Code::WireEncoding => "WIRE_ENCODING",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ResourceClasses => "RESOURCE_CLASSES",
             Code::ParamAttr => "PARAM_ATTR",
@@ -552,7 +544,7 @@ pub struct DependencyIndex {
 
 /// Request handed to a Kiln generator by the compiler.
 ///
-/// Carries the `generate(primary, inputs, options)` arguments in a
+/// Carries the `generate(primary, inputs, module, options)` arguments in a
 /// wasmtime-independent form; the host lifts/lowers at its own boundary.
 #[derive(Debug, Clone)]
 pub struct GeneratorRequest {
@@ -560,6 +552,8 @@ pub struct GeneratorRequest {
     pub primary: GeneratorInputFile,
     /// Supplementary schema files.
     pub inputs: Vec<GeneratorInputFile>,
+    /// How the use site named the generator: the invocation's `invoked_as`.
+    pub module: String,
     /// The validated, typed options for this invocation. The host builds a
     /// Component-Model value from it — shaped by the generator component's own
     /// introspected `generate` options parameter — and passes it as a typed
@@ -792,6 +786,7 @@ mod tests {
                         content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
+                    module: "ns:proto@1.0.0".to_string(),
                     options: CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;

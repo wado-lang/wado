@@ -292,23 +292,37 @@ fn match_result_is_fresh(
 /// Collect every local a pattern binds, so a fresh scrutinee's destructured
 /// parts can be treated as fresh in the arm body.
 pub(crate) fn collect_pattern_bindings(pattern: &TirPattern, out: &mut IndexSet<u32>) {
+    for_each_pattern_binding(pattern, &mut |local_index, _| {
+        out.insert(local_index);
+    });
+}
+
+/// Visit every local a pattern binds, with the type it is bound at.
+pub(crate) fn for_each_pattern_binding(pattern: &TirPattern, visit: &mut impl FnMut(u32, TypeId)) {
     match pattern {
-        TirPattern::Binding { local_index, .. } | TirPattern::Narrow { local_index, .. } => {
-            out.insert(*local_index);
+        TirPattern::Binding {
+            local_index,
+            type_id,
+            ..
         }
+        | TirPattern::Narrow {
+            local_index,
+            type_id,
+            ..
+        } => visit(*local_index, *type_id),
         TirPattern::Tuple(subs, _) | TirPattern::Variant { bindings: subs, .. } => {
             for sub in subs {
-                collect_pattern_bindings(sub, out);
+                for_each_pattern_binding(sub, visit);
             }
         }
         TirPattern::Struct { fields, .. } => {
             for field in fields {
-                collect_pattern_bindings(&field.pattern, out);
+                for_each_pattern_binding(&field.pattern, visit);
             }
         }
         TirPattern::Or(alts) => {
             for alt in alts {
-                collect_pattern_bindings(alt, out);
+                for_each_pattern_binding(alt, visit);
             }
         }
         TirPattern::Wildcard

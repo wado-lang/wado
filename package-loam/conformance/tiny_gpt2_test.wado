@@ -1,11 +1,14 @@
 //! A tiny GPT-2 decoder, compiled through Loam at a fixed batch and sequence
-//! length, checked against the logits onnxruntime computes for it.
+//! length from its graph split off its weights, and run from the checkpoint
+//! holding them against the logits onnxruntime computes for it.
 
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
-use gpt2 from "../tests/models/tiny-gpt2/model.onnx"
+use { StoredTensor, write_safetensors } from "../src/safetensors.wado";
+use gpt2 from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
+            inputs: ["../tests/models/tiny-gpt2/model.safetensors"],
             options: {
                 dims: { batch_size: 1, sequence_length: 4 },
                 outputs: ["logits"],
@@ -119,12 +122,26 @@ test "a tiny GPT-2 reproduces the logits onnxruntime computes" {
     let [mask, mask_extents] = ints_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"));
     let [want, want_extents] = tensor_of(#include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"));
 
+    let weights = gpt2::Weights::load(&#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let got = gpt2::forward(
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents: ids_extents },
         &gpt2::Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: mask, extents: mask_extents },
-        &gpt2::Weights::embedded(),
+        &weights,
     );
 
     assert got.extents == want_extents;
     assert_close(&got.data, &want);
+}
+
+test "a checkpoint of another model names the axis it disagrees on" {
+    let other = write_safetensors(&[
+        StoredTensor {
+            name: "transformer.wte.weight",
+            dtype: "F32",
+            shape: [1024, 64],
+            data: ByteList::filled(1024 * 64 * 4, 0),
+        },
+    ]);
+    let e = gpt2::Weights::load(&other).unwrap_err();
+    assert `${e}` == "transformer.wte.weight: axis Embed is 64 in the checkpoint and 32 in the graph";
 }

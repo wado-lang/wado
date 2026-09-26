@@ -1,0 +1,71 @@
+// A callee's projection, instantiated with the caller's parameter, is answered
+// by the caller's equality bound on that parameter.
+
+trait Codec with () {
+    type Value;
+    fn width(v: &Self::Value) -> i32;
+}
+
+struct Four {}
+
+impl Codec for Four {
+    type Value = i32;
+    fn width(v: &i32) -> i32 {
+        return 4 + *v;
+    }
+}
+
+fn width_of<T: Codec>(v: &T::Value) -> i32 {
+    return T::width(v);
+}
+
+fn value_of<T: Codec>(v: &T::Value) -> T::Value {
+    return *v;
+}
+
+fn measure<C: Codec<Value = K>, K>(k: &K) -> i32 {
+    return width_of::<C>(k);
+}
+
+fn echo<C: Codec<Value = K>, K>(k: &K) -> K {
+    let back: K = value_of::<C>(k);
+    return back;
+}
+
+fn width_by<T: Codec>(codec: &T, v: &T::Value) -> i32 {
+    return T::width(v);
+}
+
+fn measure_by<C: Codec<Value = K>, K>(codec: &C, k: &K) -> i32 {
+    return width_by(codec, k);
+}
+
+struct Meter {
+    total: i32,
+}
+
+impl Meter {
+    fn add<T: Codec>(&mut self, v: &T::Value) {
+        self.total += T::width(v);
+    }
+
+    fn add_all<C: Codec<Value = K>, K>(&mut self, ks: &List<K>) {
+        for let k of ks {
+            self.add::<C>(k);
+        }
+    }
+}
+
+test "an equality bound answers a projection another function names" {
+    assert measure::<Four, i32>(&7) == 11;
+    assert echo::<Four, i32>(&9) == 9;
+    assert measure_by(&Four {}, &1) == 5;
+    let mut m = Meter { total: 0 };
+    m.add_all::<Four, i32>(&[1, 2]);
+    assert m.total == 11;
+}
+
+__DATA__
+{
+    "test": {}
+}

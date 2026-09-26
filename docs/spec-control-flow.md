@@ -116,9 +116,25 @@ for ;; {
 }
 ```
 
-### Note
+### Semantics
 
-`continue` in a for loop executes the update expression before the next iteration, matching C semantics.
+`for init; cond; update { body }` runs `init` once. Each iteration then checks
+`cond`, runs `body` if it holds, and runs `update`. `continue` ends the body and
+still runs `update`, as in C.
+
+Each iteration has its own copy of the bindings `init` declares, as ECMA-262's
+`for (let …)` does. Before `update` runs, the next iteration's bindings are
+created holding the current values, and `update` and the next `cond` act on
+them. So a closure or a reference taken in one iteration keeps that iteration's
+binding, and later iterations do not change it:
+
+```wado
+let mut fs: List<fn() -> i32> = [];
+for let mut i = 0; i < 3; i += 1 {
+    fs.push(|| i);
+}
+// the closures return 0, 1 and 2, not 3, 3 and 3
+```
 
 ### For with Pattern Condition
 
@@ -171,9 +187,13 @@ binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
 The binding is a copy of each element (value semantics), so modifying it does
-not affect the original collection.
+not affect the original collection. Each iteration binds it anew, so a closure
+or a reference taken in one iteration keeps that iteration's element.
 
-The binding must match every element, as a `let` pattern must. A pattern that can fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error. Match on the element in the body instead.
+The binding must match every element, as a `let` pattern must (see
+[Patterns That Cannot Fail](#patterns-that-cannot-fail)). A pattern that can
+fail (`for let Some(x) of xs`, a narrowing type pattern) is a compile error.
+Match on the element in the body instead.
 
 ### Tuple for-of (compile-time expansion)
 
@@ -200,7 +220,7 @@ impl<..T: Doubled> Doubled for [..T] {
 }
 ```
 
-The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike.
+The `.enumerate()` form binds the index alongside the value (`[for let [i, v] of t.enumerate() { ... }]`). The index is a compile-time constant, so it is also the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and writes alike. A `mut` index can change, so it is not a subscript.
 
 The source must be a variadic tuple (`[..T]`); a concrete tuple is not walkable this way.
 
@@ -369,6 +389,10 @@ match command {
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
+A tuple pattern names every element of the tuple, or ends in `..` after at most
+that many. Over a tuple carrying a variadic pack, only the elements ahead of the
+pack have a fixed position, so the pattern names at most those and ends in `..`.
+
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
 newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
@@ -380,6 +404,34 @@ fn kind<S: AsStrSlice>(s: S) -> i32 {
 }
 kind("digit".as_str_slice());   // 2
 ```
+
+### Patterns That Cannot Fail
+
+A `let` or `for` binding takes a pattern that matches every value of its type.
+A case pattern does so when no other case of the type holds a value, as defined
+under Exhaustiveness below. A literal, a range, a constant, an or-pattern, and a
+narrowing type pattern never do.
+
+```wado
+variant W { A(i32) }
+let A(x) = w;                     // OK: W has no other case
+let Ok(v) = r;                    // OK where r: Result<i32, !>
+let Some(y) = opt;                // Error: `Some` may not match
+```
+
+A bare name in such a pattern, at its root or below it, is a case pattern when
+it names a case of the type it matches, and a binding otherwise. It never names
+a global: a constant pattern can always fail, so reading one here could only be
+rejected. So `let [None, n] = pair` tests its first element and is an error,
+since `None` may not match, while `let limit = 1` binds even where a
+`global limit` is in scope. The `shadowed_name` lint reports that global.
+
+A refutable pattern reads a bare name that names an immutable global as a
+constant pattern instead. The refutable positions are a `match` arm, `if let`,
+`while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
+block unless `v == limit`.
+
+An uninitialized `let x: T;` declares a single name, or `_`.
 
 ### Exhaustiveness
 

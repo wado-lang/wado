@@ -173,6 +173,17 @@ impl ImplTargetKey {
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
+
+    /// The reference kind of a `&T` / `&mut T` target; `None` for any other.
+    pub(crate) fn ref_kind(&self) -> Option<name::RefKind> {
+        match self {
+            ImplTargetKey::Ref(kind) => Some(*kind),
+            ImplTargetKey::Decl(_)
+            | ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Builtin(_) => None,
+        }
+    }
 }
 
 /// The spelling a declaration renders to in a mangled head: its declared name,
@@ -193,12 +204,23 @@ pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<DefId>>;
 
 type ReceiverImplIndex = IndexMap<name::Receiver, Vec<DefId>>;
 
-fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplIndex {
+/// Each entry under its target's receiver. A `&X` block is also under `&X`
+/// itself, beside the bucket of its kind every reference block shares.
+fn index_by_receiver(
+    index: &TraitImplIndex,
+    headers: &IndexMap<DefId, ImplHeader>,
+    defs: &DefTable,
+) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
     for (key, entries) in index {
         out.entry(key.receiver(defs))
             .or_default()
             .extend(entries.iter().copied());
+        for &entry in entries {
+            if let Some(referent) = headers.get(&entry).and_then(ImplHeader::ref_receiver) {
+                out.entry(referent).or_default().push(entry);
+            }
+        }
     }
     out
 }
@@ -295,6 +317,23 @@ impl ImplHeader {
 
     pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
         self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
+    }
+
+    /// The receiver a `&X` / `&mut X` block registers under, naming `X`'s head;
+    /// `None` for a `&T` blanket and any other target.
+    pub(super) fn ref_receiver(&self) -> Option<name::Receiver> {
+        name::Receiver::ref_to(&self.target_id)
+    }
+
+    /// What a `&X` / `&mut X` target refers to, keyed as a value target is;
+    /// `None` for any other target.
+    pub(super) fn referent_key(&self, resolutions: &Resolutions) -> Option<ImplTargetKey> {
+        match &self.ty {
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Some(impl_target_key_at(inner, &self.module, resolutions))
+            }
+            _ => None,
+        }
     }
 }
 
@@ -1139,8 +1178,8 @@ impl TraitEnv {
 
         (
             Arc::new(Self {
-                by_receiver: index_by_receiver(&impl_index, defs),
-                all_by_receiver: index_by_receiver(&all_impl_index, defs),
+                by_receiver: index_by_receiver(&impl_index, &impl_headers, defs),
+                all_by_receiver: index_by_receiver(&all_impl_index, &impl_headers, defs),
                 impl_index,
                 all_impl_index,
                 defs: resolutions.defs().clone(),
@@ -1329,23 +1368,24 @@ impl TraitEnv {
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
-    /// How many arguments the impl on `receiver` writes for `trait_`, among
-    /// those a bound writing `wanted` reaches.
-    pub(crate) fn impl_written_arg_count(
+    /// The trait arguments the impl on `receiver` answering a bound writing
+    /// `wanted` names itself by, as it spells them.
+    pub(crate) fn impl_written_trait_args(
         &self,
         receiver: &name::Receiver,
         trait_: DefId,
         wanted: &[name::FqTypeName],
-    ) -> Option<usize> {
+    ) -> Option<&[name::FqTypeName]> {
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = &self.impl_headers[&entry];
+            let args = header.trait_arg_ids();
             (header.trait_def() == Some(trait_) && self.block_answers(entry, trait_, wanted))
                 // The count the impl's own name spells, not every argument
                 // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
                 .then(|| {
-                    non_default_named_arg_count(header.trait_arg_ids(), &|i| {
+                    &args[..non_default_named_arg_count(args, &|i| {
                         self.default_arg_at(trait_, i, &header.target_id)
-                    })
+                    })]
                 })
         })
     }

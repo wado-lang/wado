@@ -4,7 +4,46 @@
 //! results. The reference `sort_group_by_mandatory_count_desc` already
 //! breaks full ties by source order; the others must too.
 
-use { sort_group_by_specificity } from "./alt_grouping.wado";
+use { sort_group_by_specificity, decision_partition, AltBranch } from "./alt_grouping.wado";
+use { AltClass, admits_kinds } from "./gir.wado";
+
+fn describe(branches: &List<AltBranch>) -> String {
+    let mut parts: List<String> = [];
+    for let b of branches {
+        parts.push(`${admits_kinds(&b.admits).join(",")}=>${b.alts:?}`);
+    }
+    return parts.join(" ");
+}
+
+test "decision_partition: a token only one alternative starts decides it alone" {
+    // `( A B | B C | D )`: B is contested, A, C and D each select one alternative,
+    // so only B's branch has anything for a scan to decide.
+    let classes: List<AltClass> = [
+        AltClass::Selects(["A", "B"]),
+        AltClass::Selects(["B", "C"]),
+        AltClass::Selects(["D"]),
+    ];
+    let got = describe(&decision_partition(&classes));
+    assert got == "A=>[0] B=>[0, 1] C=>[1] D=>[2]", got;
+}
+
+test "decision_partition: an open-ended alternative keeps the group whole" {
+    let classes: List<AltClass> = [
+        AltClass::Selects(["A"]),
+        AltClass::OpenEnded(["B"]),
+    ];
+    let branches = decision_partition(&classes);
+    assert branches.len() == 1 && branches[0].alts == [0, 1], describe(&branches);
+}
+
+test "decision_partition: an empty alternative no follow resolved keeps the group whole" {
+    let classes: List<AltClass> = [
+        AltClass::Selects(["A", "B"]),
+        AltClass::Nullable(["A"]),
+    ];
+    let branches = decision_partition(&classes);
+    assert branches.len() == 1 && branches[0].alts == [0, 1], describe(&branches);
+}
 
 test "sort_group_by_specificity: ties keep source order" {
     // First-set sizes [2, 2, 1]. Ascending by size puts alt 2 (size 1)

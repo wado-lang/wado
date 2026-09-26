@@ -255,9 +255,8 @@ const WIRE_TARGET: &[AttrTarget] = &[
 /// The `#[wire(…)]` keys a declaration reads.
 fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
     match target {
-        AttrTarget::StructField => &["name", "number", "encoding", "positional", "default"],
-        AttrTarget::EnumCase => &["name", "number"],
-        AttrTarget::VariantCase => &["name"],
+        AttrTarget::StructField => &["name", "positional", "default"],
+        AttrTarget::EnumCase | AttrTarget::VariantCase => &["name"],
         AttrTarget::Struct
         | AttrTarget::Enum
         | AttrTarget::Variant
@@ -287,7 +286,6 @@ fn wire_keys(target: AttrTarget) -> &'static [&'static str] {
 /// Whether a `#[wire(…)]` argument is written in the form its key takes.
 fn wire_form_fits(arg: &AttrArg) -> bool {
     match arg.name() {
-        "number" => matches!(arg, AttrArg::KeyNumber(..)),
         "positional" | "default" => matches!(arg, AttrArg::Ident(_)),
         _ => matches!(arg, AttrArg::KeyValue(..)),
     }
@@ -527,10 +525,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: WIRE,
         targets: WIRE_TARGET,
-        args: AttrArgs::Read(
-            "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `encoding = \"…\"`, \
-             `positional`, or `default`",
-        ),
+        args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
         summary: "how serialization spells this declaration",
         bodyless: None,
     },

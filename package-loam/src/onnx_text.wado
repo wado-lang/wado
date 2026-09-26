@@ -100,6 +100,9 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
         } else if kind == onnx::RK_INITIALIZERS {
             for let vi of children_of_kind(s, c, onnx::RK_VALUE_INFO) {
                 let info = read_value_info(s, toks, vi)?;
+                if static_extents(&info.rank) matches { None } {
+                    return Result::Err(`${info.name}: an initializer's extents are integers`);
+                }
                 if is_build_time(&info.dtype) {
                     constants[info.name] = read_known(s, toks, vi, &info)?;
                 } else {
@@ -140,7 +143,7 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    let [dtype, rank] = read_tensor_type(s, toks, tensor);
+    let [dtype, rank] = read_tensor_type(s, toks, tensor, &name)?;
     let data = read_constant_data(s, toks, vi, &name, &dtype, &rank)?;
     return Result::Ok(ValueInfo { name, dtype, rank, data });
 }
@@ -167,7 +170,7 @@ fn read_constant_data(
     let width = element.width;
     let mut bytes = ByteList::with_capacity(texts.len() * width);
     for let text of texts {
-        push_element(&mut bytes, element_bits(name, &text, dtype, width)?, width);
+        push_element(&mut bytes, element_bits(name, &text, dtype, width)? as u64, width);
     }
     return Result::Ok(Option::Some(bytes));
 }
@@ -189,6 +192,17 @@ fn inline_texts(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
+    return Result::Ok(Option::Some(element_texts(s, toks, values, name, rank)?));
+}
+
+/// A `tensorValues`'s elements as text, as many as `rank` says.
+fn element_texts(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    values: i32,
+    name: &String,
+    rank: &Rank,
+) -> Result<List<String>, String> {
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };
@@ -198,28 +212,64 @@ fn inline_texts(
     for let e of elements {
         texts.push(literal_text(toks, first_token(s, e)));
     }
-    return Result::Ok(Option::Some(texts));
+    return Result::Ok(texts);
 }
 
-/// An initializer the build reads, as its inline values spell it. ONNX writes
-/// a bool element as the integer `int32_data` holds.
+/// An initializer the build reads, as its inline values spell it.
 fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<Known, String> {
     let Some(texts) = inline_texts(s, toks, vi, &info.name, &info.rank)? else {
         return Result::Err(constant_without_values(&info.name));
     };
+    return Result::Ok(known_of(&info.name, &info.dtype, static_extents(&info.rank).unwrap(), texts)?.unwrap());
+}
+
+/// Elements written as text, in the type stage 0 computes `dtype` in, or `None`
+/// for a type it does not read. ONNX writes a bool as the integer `int32_data` holds.
+fn known_of(name: &String, dtype: &String, extents: List<i32>, texts: List<String>) -> Result<Option<Known>, String> {
+    if *dtype == "float" {
+        let mut values: List<f32> = [];
+        for let text of texts {
+            let Ok(v) = f32::from_str(&text) else {
+                return Result::Err(`${name}: ${text} is not a float`);
+            };
+            values.push(v);
+        }
+        return Result::Ok(Option::Some(Known { extents, elements: Elements::Floats(values) }));
+    }
+    if !is_build_time(dtype) {
+        return Result::Ok(null);
+    }
     let mut values: List<i64> = [];
     for let text of texts {
         let Ok(v) = i64::from_str(&text) else {
-            return Result::Err(`${info.name}: ${text} is not an integer`);
+            return Result::Err(`${name}: ${text} is not an integer`);
         };
         values.push(v);
     }
-    let elements = if info.dtype == "bool" {
+    let elements = if *dtype == "bool" {
         Elements::Bools(values.into_iter().map(|v| v != 0).collect());
     } else {
         Elements::Ints(values);
     };
-    return Result::Ok(Known { extents: static_extents(&info.rank).unwrap(), elements });
+    return Result::Ok(Option::Some(Known { extents, elements }));
+}
+
+/// A tensor attribute, which travels whole as the protobuf reader carries it.
+fn read_tensor_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32, name: String) -> Result<Attr, String> {
+    let type_node = first_child_of_kind(s, tensor, onnx::RK_TYPE).unwrap();
+    let Some(tensor_type) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
+        return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
+    };
+    let [dtype, rank] = read_tensor_type(s, toks, tensor_type, &name)?;
+    let values = first_child_of_kind(s, tensor, onnx::RK_TENSOR_VALUES).unwrap();
+    let texts = element_texts(s, toks, values, &name, &rank)?;
+    let known = known_of(&name, &dtype, static_extents(&rank).unwrap(), texts)?;
+    return Result::Ok(Attr {
+        name,
+        values: [],
+        is_list: false,
+        tensor: known,
+    });
 }
 
 /// An element's bits in `dtype`, `width` bytes wide. ONNX writes a half as the
@@ -265,7 +315,12 @@ fn digit_after_point(text: &String) -> String {
     return spelled;
 }
 
-fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {
+fn read_tensor_type(
+    s: &onnx::CstStore,
+    toks: &onnx::TokenStream,
+    tensor: i32,
+    name: &String,
+) -> Result<[String, Rank], String> {
     let mut dtype = "";
     let mut saw_bracket = false;
     let mut rank = Rank::Scalar;
@@ -278,36 +333,34 @@ fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -
                 dtype = text;
             }
         } else if s.is_node(c) {
-            rank = Rank::Dims(read_dims(s, toks, c));
+            let mut dims: List<Dim> = [];
+            for let d of children_of_kind(s, c, onnx::RK_DIM) {
+                dims.push(read_dim(s, toks, d, name)?);
+            }
+            rank = Rank::Dims(dims);
         }
     }
     if saw_bracket && rank matches { Scalar } {
         rank = Rank::Unranked;
     }
-    return [dtype, rank];
+    return Result::Ok([dtype, rank]);
 }
 
-fn read_dims(s: &onnx::CstStore, toks: &onnx::TokenStream, dims: i32) -> List<Dim> {
-    let mut out: List<Dim> = [];
-    for let c of children_of_kind(s, dims, onnx::RK_DIM) {
-        out.push(read_dim(s, toks, c));
-    }
-    return out;
-}
-
-fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32) -> Dim {
+fn read_dim(s: &onnx::CstStore, toks: &onnx::TokenStream, dim: i32, tensor: &String) -> Result<Dim, String> {
     for let c of children(s, dim) {
         if s.is_node(c) {
-            return Dim::Symbol(quotable_text(s, toks, c));
+            return Result::Ok(Dim::Symbol(quotable_text(s, toks, c)));
         }
         if s.is_token(c) {
-            let text = toks.token_text(s.token_index(c));
-            if text == "?" {
-                return Dim::Unknown;
+            // The grammar's only tokens here are `?` and `INT`: a name is a node.
+            let token = s.token_index(c);
+            if toks.kind_at(token) != onnx::TK_INT {
+                return Result::Ok(Dim::Unknown);
             }
+            let text = toks.token_text(token);
             return match i32::from_str(&text) {
-                Ok(n) => Dim::Static(n),
-                Err(_) => Dim::Symbol(text),
+                Ok(n) && n >= 0 => Result::Ok(Dim::Static(n)),
+                _ => Result::Err(`${tensor}: dimension ${text}`),
             };
         }
     }
@@ -376,6 +429,9 @@ fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<
     let Some(single) = first_child_of_kind(s, value, onnx::RK_SINGLE_ATTR_VALUE) else {
         return Result::Err(`${name}: an attribute without a value`);
     };
+    if let Some(tensor) = first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) {
+        return read_tensor_attr(s, toks, tensor, name);
+    }
     let text = single_attr_text(s, toks, single, &name)?;
     return Result::Ok(Attr {
         name,
@@ -395,7 +451,10 @@ fn single_attr_text(
             return Result::Ok(literal_text(toks, s.token_index(c)));
         }
         if s.is_node(c) {
-            return Result::Err(`${attr_name}: an inline tensor or subgraph attribute is not read`);
+            if first_child_of_kind(s, single, onnx::RK_TENSOR_CONSTANT) matches { Some(_) } {
+                return Result::Err(`${attr_name}: a list of tensors is not read`);
+            }
+            return Result::Err(`${attr_name}: a subgraph attribute is not read`);
         }
     }
     panic("singleAttrValue: no child");

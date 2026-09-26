@@ -199,7 +199,6 @@
 - [core:log](./stdlib-core-log.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)
-- [core:protobuf](./stdlib-core-protobuf.md)
 - [core:router](./stdlib-core-router.md)
 - [core:secure_random](./stdlib-core-secure_random.md)
 - [core:serde](./stdlib-core-serde.md)

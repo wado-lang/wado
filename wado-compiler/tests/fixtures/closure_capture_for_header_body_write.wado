@@ -1,0 +1,140 @@
+// A binding a `for` header declares is one per iteration, as in ECMA-262, so
+// what one iteration captures or borrows keeps that iteration's copy.
+
+fn called(fs: List<fn() -> i32>) -> List<i32> {
+    return fs.into_iter().map(|f| f()).collect();
+}
+
+export fn run() {
+    let mut untaken: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        if builtin::black_box(false) {
+            i = 5;
+        }
+        untaken.push(|| i);
+    }
+    assert called(untaken) == [0, 1];
+
+    let mut before: List<fn() -> i32> = [];
+    for let mut i = 0; i < 20; i += 1 {
+        i += 10;
+        before.push(|| i);
+    }
+    assert called(before) == [10, 21];
+
+    let mut after: List<fn() -> i32> = [];
+    for let mut i = 0; i < 20; i += 1 {
+        after.push(|| i);
+        i += 10;
+    }
+    assert called(after) == [10, 21];
+
+    let mut skipped: List<fn() -> i32> = [];
+    for let mut i = 0; i < 4; i += 1 {
+        skipped.push(|| i);
+        if i % 2 == 0 {
+            i += 1;
+            continue;
+        }
+    }
+    assert called(skipped) == [1, 3];
+
+    let mut chained: List<fn() -> i32> = [];
+    let items: List<i32> = [1, 2];
+    let mut at = 0;
+    for ; let Some(mut x) = items.get(at); at += 1 {
+        chained.push(|| x);
+        x *= 10;
+    }
+    assert called(chained) == [10, 20];
+
+    let mut lens: List<fn() -> i32> = [];
+    for let mut v: List<i32> = []; v.len() < 3; v.push(0) {
+        v.push(9);
+        lens.push(|| v.len());
+    }
+    assert called(lens) == [1, 3];
+
+    let mut texts: List<fn() -> i32> = [];
+    for let mut s = ""; s.len() < 3; s.push_str("x") {
+        s.push_str("y");
+        texts.push(|| s.len());
+    }
+    assert called(texts) == [1, 3];
+
+    let mut bumped: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        let mut raise = || i += 1;
+        raise();
+        bumped.push(|| i);
+    }
+    assert called(bumped) == [1, 3];
+
+    let mut held: List<Held> = [];
+    let mut aliased: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3 && hold(&mut held, &mut i); i += 1 {
+        *held[0].r += 100;
+        aliased.push(|| i);
+    }
+    assert called(aliased) == [100];
+
+    let mut copied: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        let p = &mut i;
+        let q = p;
+        copied.push(|| *q);
+    }
+    assert called(copied) == [0, 1];
+
+    let mut fielded: List<fn() -> i32> = [];
+    for let mut i = 0; i < 2; i += 1 {
+        let h = Held { r: &mut i };
+        fielded.push(|| *h.r);
+    }
+    assert called(fielded) == [0, 1];
+
+    let mut stored: List<Held> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        stored.push(Held { r: &mut i });
+    }
+    assert stored.into_iter().map(|h| *h.r).collect() == [0, 1, 2];
+
+    let mut elements: List<fn() -> i32> = [];
+    for let mut x of items {
+        elements.push(|| x);
+        x *= 10;
+    }
+    assert called(elements) == [10, 20];
+
+    let mut updated: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3; i += match builtin::black_box(1) {
+        mut step => {
+            bump(&mut step);
+            step
+        },
+    } {
+        updated.push(|| i);
+    }
+    assert called(updated) == [0, 2];
+
+    let mut conditioned: List<fn() -> i32> = [];
+    for let mut i = 0; c: { i += 1; i < 3 }; conditioned.push(|| i) {
+    }
+    assert called(conditioned) == [2, 3];
+}
+
+fn bump(r: &mut i32) {
+    *r += 1;
+}
+
+struct Held {
+    r: &mut i32,
+}
+
+fn hold(held: &mut List<Held>, r: &mut i32) -> bool {
+    held.push(Held { r });
+    return true;
+}
+
+__DATA__
+{}

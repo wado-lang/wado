@@ -12,7 +12,7 @@ use crate::tir_visitor::remap_local_reads;
 use crate::token::Span;
 
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
-use super::types::{BindingSite, FunctionContext, TypeError};
+use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
 use super::{Elaborator, ForwardDefaults};
@@ -592,27 +592,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let Some(name) = self.bind_let_ident(let_stmt, type_id, ctx) else {
-            match &let_stmt.pattern {
-                ast::Pattern::Tuple(_, _) | ast::Pattern::Struct { .. } => {
-                    self.resolve_let_pattern(
-                        &let_stmt.pattern,
-                        type_id,
-                        let_stmt.is_mut,
-                        let_stmt.span,
-                        BindingSite::Let,
-                        ctx,
-                    );
-                }
-                ast::Pattern::Wildcard => {}
-                _ => {
-                    self.check_irrefutable_pattern(
-                        &let_stmt.pattern,
-                        let_stmt.span,
-                        BindingSite::Let,
-                    );
-                }
-            }
+        self.resolve_let_pattern(
+            &let_stmt.pattern,
+            type_id,
+            let_stmt.is_mut,
+            let_stmt.span,
+            BindingSite::Let,
+            ctx,
+        );
+        let Some(binding) = let_stmt.pattern.as_name() else {
             return;
         };
         let mut closure_candidate = ast_value;
@@ -626,36 +614,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|p| (p.name.clone(), p.default.clone()))
                 .collect();
             if defaults.iter().any(|(_, d)| d.is_some()) {
-                ctx.closure_defaults.insert(name.clone(), defaults);
+                ctx.closure_defaults
+                    .insert(binding.name.to_string(), defaults);
             }
         }
-    }
-
-    /// Bind a `let`'s single-name pattern into `ctx`, answering the name; `None`
-    /// for any other pattern, which is left unbound.
-    fn bind_let_ident<'s>(
-        &mut self,
-        let_stmt: &'s LetStmt,
-        type_id: TypeId,
-        ctx: &mut FunctionContext,
-    ) -> Option<&'s String> {
-        let (ast::Pattern::Ident {
-            id,
-            name,
-            span: name_span,
-        }
-        | ast::Pattern::MutIdent {
-            id,
-            name,
-            span: name_span,
-        }) = &let_stmt.pattern
-        else {
-            return None;
-        };
-        let is_mut = let_stmt.is_mut || matches!(&let_stmt.pattern, ast::Pattern::MutIdent { .. });
-        ctx.add_local_at(name.clone(), type_id, is_mut, Some(*id), *name_span);
-        self.record_local_symbol(*id, name, *name_span, is_mut, type_id);
-        Some(name)
     }
 
     /// Resolve a `let PAT = EXPR else { ... }` statement. The else block is
@@ -723,11 +685,76 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Report a tuple pattern naming more elements than the tuple holds, or,
+    /// without `..`, fewer. Answers whether the arity fits.
+    fn check_tuple_pattern_arity(
+        &self,
+        written: usize,
+        has_rest: bool,
+        held: usize,
+        span: Span,
+    ) -> bool {
+        let [expected, found] = if has_rest && written > held {
+            [
+                format!("tuple with at least {written} elements"),
+                format!("tuple with {held} elements"),
+            ]
+        } else if !has_rest && written != held {
+            [
+                format!("tuple with {held} elements"),
+                format!("pattern with {written} elements"),
+            ]
+        } else {
+            return true;
+        };
+        let _ = self.emit(TypeError::PatternTypeMismatch {
+            expected,
+            found,
+            span,
+        });
+        false
+    }
+
+    /// The type each element of a tuple pattern matches against `held`,
+    /// reporting an arity that does not fit. Only the elements ahead of a
+    /// variadic pack have a fixed position, so a pattern over one stops there
+    /// with `..`.
+    fn tuple_pattern_element_types(
+        &self,
+        written: usize,
+        has_rest: bool,
+        held: &[TypeId],
+        span: Span,
+    ) -> Vec<TypeId> {
+        let pack_at = {
+            let table = self.tysys.type_table.borrow();
+            held.iter().position(|&t| table.is_type_pack(t))
+        };
+        let fixed = if let Some(pack_at) = pack_at {
+            if !has_rest || written > pack_at {
+                let _ = self.emit(TypeError::PatternTypeMismatch {
+                    expected: format!(
+                        "`..` after at most {pack_at} elements, since a variadic pack follows them"
+                    ),
+                    found: format!("pattern with {written} elements"),
+                    span,
+                });
+            }
+            &held[..pack_at]
+        } else {
+            self.check_tuple_pattern_arity(written, has_rest, held.len(), span);
+            held
+        };
+        (0..written)
+            .map(|i| fixed.get(i).copied().unwrap_or(TypeTable::UNKNOWN))
+            .collect()
+    }
+
     /// Report the fields a struct pattern without `..` leaves out.
     fn check_struct_pattern_complete(
         &self,
         head: StructDef,
-        fields: &[ast::StructPatternField],
+        fields: &[StructPatternField],
         span: Span,
     ) {
         let Some(struct_info) = self.lookup_struct_fields_of(head) else {
@@ -764,55 +791,98 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("parser ensures type annotation for uninit let");
         let type_id = self.resolve_type(annotated_type);
         self.reject_unresolved_annotation(annotated_type);
-        if self.bind_let_ident(let_stmt, type_id, ctx).is_none() {
-            self.check_irrefutable_pattern(&let_stmt.pattern, let_stmt.span, BindingSite::Let);
+        match (&let_stmt.pattern, let_stmt.pattern.as_name()) {
+            (_, Some(n)) => {
+                self.bind_local(
+                    ctx,
+                    n.id,
+                    n.name,
+                    n.span,
+                    let_stmt.is_mut || n.is_mut,
+                    type_id,
+                );
+            }
+            (Pattern::Wildcard, None) => {}
+            _ => {
+                let _ = self.emit(TypeError::InvalidPattern {
+                    message: "an uninitialized `let` declares a single name; \
+                              destructure where the value is given"
+                        .to_string(),
+                    span: let_stmt.name_span,
+                });
+            }
         }
     }
 
-    /// Check that a pattern is irrefutable (guaranteed to match).
-    ///
-    /// Irrefutable patterns bind variables unconditionally and are valid in `let` bindings
-    /// and `for` loops. Refutable patterns may fail to match and are only valid in `match`
-    /// arms, `if let`, and `while let`.
-    ///
-    /// Emits a compile error and returns `false` if the pattern is refutable.
-    fn check_irrefutable_pattern(
+    /// Check the binding of a walk over a type pack, a `for` or a tuple
+    /// comprehension: a name, `_`, or a tuple of them as long as the element.
+    pub(super) fn check_pack_binding(
         &mut self,
-        pattern: &ast::Pattern,
+        binding: &Pattern,
+        binding_type: TypeId,
         span: Span,
-        site: BindingSite,
     ) -> bool {
-        let reason = match pattern {
-            // `Pattern::Error` is a parser recovery placeholder; treat it as
-            // irrefutable so it does not cascade a second "refutable" error.
-            Pattern::Ident { .. }
-            | Pattern::MutIdent { .. }
-            | Pattern::Wildcard
-            | Pattern::Error(_) => return true,
-            Pattern::Tuple(patterns, _) => {
-                return patterns
-                    .iter()
-                    .all(|p| self.check_irrefutable_pattern(p, span, site));
-            }
-            Pattern::Struct { fields, .. } => {
-                return fields
-                    .iter()
-                    .all(|f| self.check_irrefutable_pattern(&f.pattern, span, site));
-            }
-            // Whether the ascription narrows is a question of types, which
-            // the pattern's resolution answers.
-            Pattern::Typed { pattern, .. } => {
-                return self.check_irrefutable_pattern(pattern, span, site);
-            }
-            Pattern::Literal(_)
-            | Pattern::Variant { .. }
-            | Pattern::Or(_)
-            | Pattern::Range { .. } => {
-                refutable_shape(pattern).expect("a testing pattern is refutable by its shape")
-            }
+        let parts = match binding {
+            Pattern::Tuple(elems, _) => elems.iter().collect(),
+            binding => vec![binding],
         };
-        self.reject_refutable(site, &reason, span);
-        false
+        if let Some(reason) = parts.iter().find_map(|p| refutable_shape(p)) {
+            self.reject_refutable(BindingSite::ForOf, &reason, span);
+            return false;
+        }
+        if !parts
+            .iter()
+            .all(|p| p.as_name().is_some() || matches!(p, Pattern::Wildcard))
+        {
+            let _ = self.emit(TypeError::InvalidPattern {
+                message: "a walk over a type pack binds a name, `_`, or a tuple of them"
+                    .to_string(),
+                span,
+            });
+            return false;
+        }
+        let Pattern::Tuple(elems, has_rest) = binding else {
+            return true;
+        };
+        let Some(held) = self.tysys.type_table.borrow().as_tuple(binding_type) else {
+            let _ = self.emit(TypeError::PatternTypeMismatch {
+                expected: "tuple type".to_string(),
+                found: self.tysys.type_table.borrow().type_name(binding_type),
+                span,
+            });
+            return false;
+        };
+        self.check_tuple_pattern_arity(elems.len(), *has_rest, held.len(), span)
+    }
+
+    /// Bind the names a type-pack walk's binding spells, an element past the
+    /// end with the error type.
+    pub(super) fn bind_pack_binding(
+        &mut self,
+        binding: &Pattern,
+        binding_type: TypeId,
+        is_mut: bool,
+        ctx: &mut FunctionContext,
+    ) {
+        let elems = match binding {
+            Pattern::Tuple(elems, _) => {
+                let held = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .elem_types_or_self(binding_type);
+                elems
+                    .iter()
+                    .zip(held.into_iter().chain(std::iter::repeat(TypeTable::ERROR)))
+                    .collect()
+            }
+            binding => vec![(binding, binding_type)],
+        };
+        for (pattern, ty) in elems {
+            if let Some(n) = pattern.as_name() {
+                self.bind_local(ctx, n.id, n.name, n.span, is_mut || n.is_mut, ty);
+            }
+        }
     }
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
@@ -823,9 +893,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !self.another_case_holds_a_value(scrutinee, variant_name) =>
             {
                 None
-            }
-            Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
-                Some(format!("`{name}` may not match"))
             }
             _ => refutable_shape(pattern),
         }
@@ -1066,7 +1133,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve an irrefutable destructuring pattern (`let`, the `for` of a tuple).
+    /// Resolve a pattern that must bind: a `let`'s, or a `for`'s. A bare name
+    /// there is a case of its type or a binding, never a global.
     pub(super) fn resolve_let_pattern(
         &mut self,
         pattern: &ast::Pattern,
@@ -1076,8 +1144,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: BindingSite,
         ctx: &mut FunctionContext,
     ) {
-        self.check_irrefutable_pattern(pattern, span, site);
-        self.resolve_let_pattern_inner(pattern, type_id, is_mut, span, site, ctx, RefBinding::None);
+        self.resolve_if_pattern_inner(
+            pattern,
+            type_id,
+            &mut ctx.replacing(|ctx| &mut ctx.must_bind, Some(MustBind { site, is_mut })),
+            span,
+            RefBinding::None,
+        );
     }
 
     /// The struct a pattern destructures (a newtype's base), and whether its
@@ -1152,173 +1225,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return plain();
         }
         (expected, qualified)
-    }
-
-    fn resolve_let_pattern_inner(
-        &mut self,
-        pattern: &ast::Pattern,
-        type_id: TypeId,
-        is_mut: bool,
-        span: Span,
-        site: BindingSite,
-        ctx: &mut FunctionContext,
-        ref_binding: RefBinding,
-    ) {
-        if type_id == TypeTable::ERROR
-            && let Some(subpatterns) = shape_checked_subpatterns(pattern)
-        {
-            for p in subpatterns {
-                let error = TypeTable::ERROR;
-                self.resolve_let_pattern_inner(p, error, is_mut, span, site, ctx, ref_binding);
-            }
-            return;
-        }
-        match pattern {
-            ast::Pattern::Ident {
-                id,
-                name,
-                span: name_span,
-            }
-            | ast::Pattern::MutIdent {
-                id,
-                name,
-                span: name_span,
-            } => {
-                let pat_mut = is_mut || matches!(pattern, ast::Pattern::MutIdent { .. });
-                let binding_type =
-                    self.pattern_binding_type(name, type_id, ref_binding, *name_span);
-                ctx.add_local_at(name.clone(), binding_type, pat_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, pat_mut, binding_type);
-            }
-            ast::Pattern::Tuple(patterns, has_rest) => {
-                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                let elem_types = {
-                    let type_table = self.tysys.type_table.borrow();
-                    if let Some(elem_types) = type_table.as_tuple(type_id) {
-                        elem_types
-                    } else {
-                        // Error: expected tuple type
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: "tuple type".to_string(),
-                            found: type_table.type_name(type_id),
-                            span,
-                        });
-                        vec![TypeTable::UNKNOWN; patterns.len()]
-                    }
-                };
-
-                // Check length
-                if *has_rest {
-                    if patterns.len() > elem_types.len() {
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: format!("tuple with at least {} elements", patterns.len()),
-                            found: format!("tuple with {} elements", elem_types.len()),
-                            span,
-                        });
-                    }
-                } else if patterns.len() != elem_types.len() {
-                    let _ = self.emit(TypeError::PatternTypeMismatch {
-                        expected: format!("tuple with {} elements", elem_types.len()),
-                        found: format!("pattern with {} elements", patterns.len()),
-                        span,
-                    });
-                }
-
-                // Resolve each sub-pattern with its corresponding element type
-                for (p, &elem_type) in patterns.iter().zip(
-                    elem_types
-                        .iter()
-                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                ) {
-                    self.resolve_let_pattern_inner(
-                        p,
-                        elem_type,
-                        is_mut,
-                        span,
-                        site,
-                        ctx,
-                        ref_binding,
-                    );
-                }
-            }
-            ast::Pattern::Struct {
-                type_name,
-                type_name_id,
-                fields,
-                has_rest,
-                span: pat_span,
-            } => {
-                let (type_id, ref_binding) = self.tysys.peel_scrutinee_refs(type_id, ref_binding);
-                let head = self.struct_pattern_head(
-                    type_name.as_deref(),
-                    *type_name_id,
-                    type_id,
-                    *pat_span,
-                );
-
-                for field in fields {
-                    let field_type = match head {
-                        Some(_) => {
-                            self.lookup_field_type(type_id, &field.field_name, field.span)
-                                .1
-                        }
-                        None => TypeTable::ERROR,
-                    };
-                    if head.is_some_and(|(_, type_name_matches)| type_name_matches) {
-                        self.check_field_visibility(
-                            type_id,
-                            &field.field_name,
-                            Some(field.id),
-                            field.span,
-                        );
-                    }
-                    self.resolve_let_pattern_inner(
-                        &field.pattern,
-                        field_type,
-                        is_mut,
-                        field.span,
-                        site,
-                        ctx,
-                        ref_binding,
-                    );
-                }
-
-                if let Some((head, _)) = head
-                    && !has_rest
-                {
-                    self.check_struct_pattern_complete(head, fields, *pat_span);
-                }
-            }
-            ast::Pattern::Typed {
-                id,
-                pattern: inner,
-                ty,
-                span: typed_span,
-            } => {
-                let target = self.resolve_ascription(*id, ty);
-                if self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .is_resource_narrowing(type_id, target)
-                {
-                    self.reject_refutable_narrowing(type_id, target, *typed_span, site);
-                } else {
-                    self.check_ascription(type_id, target, *typed_span);
-                }
-                self.resolve_let_pattern_inner(inner, target, is_mut, span, site, ctx, ref_binding);
-            }
-            // Wildcard binds nothing. Refutable patterns (literal / variant /
-            // or / range) in let position already had an error emitted by
-            // `check_irrefutable_pattern`; the parser error placeholder is
-            // inert. None of them introduce a binding here.
-            ast::Pattern::Wildcard
-            | ast::Pattern::Literal(_)
-            | ast::Pattern::Variant { .. }
-            | ast::Pattern::Or(_)
-            | ast::Pattern::Range { .. }
-            | ast::Pattern::Error(_) => {}
-        }
     }
 
     /// Resolve an expression statement
@@ -1570,7 +1476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect();
         }
-        if let Some(site) = ctx.irrefutable_site
+        if let Some(MustBind { site, .. }) = ctx.must_bind
             && let Some(reason) = self.refutation(pattern, scrutinee_type)
         {
             self.reject_refutable(site, &reason, span);
@@ -1614,18 +1520,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Immutable global constant: a constant-value pattern that
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
-                if !is_mut && let Some(constant) = self.immutable_global_type(name) {
+                // A pattern that must bind never reads one, since a constant
+                // pattern there could only be rejected as refutable.
+                if !is_mut
+                    && ctx.must_bind.is_none()
+                    && let Some(constant) = self.immutable_global_type(name)
+                {
                     self.record_item_reference_by_name(*id, name);
                     let (peeled, _) = self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                     self.typecheck(constant, peeled, *name_span);
                     self.resolve_constant_pattern(*id, scrutinee_type, constant, ctx, span);
                     return Vec::new();
                 }
+                let is_mut = is_mut || ctx.must_bind.is_some_and(|m| m.is_mut);
                 let binding_type =
                     self.pattern_binding_type(name, scrutinee_type, ref_binding, *name_span);
-                let index =
-                    ctx.add_local_at(name.clone(), binding_type, is_mut, Some(*id), *name_span);
-                self.record_local_symbol(*id, name, *name_span, is_mut, binding_type);
+                let index = self.bind_local(ctx, *id, name, *name_span, is_mut, binding_type);
                 vec![(name.clone(), index, binding_type)]
             }
             Pattern::Literal(lit) => {
@@ -1645,7 +1555,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Vec::new()
             }
-            Pattern::Tuple(patterns, _) => {
+            Pattern::Tuple(patterns, has_rest) => {
                 let (scrutinee_type, ref_binding) =
                     self.tysys.peel_scrutinee_refs(scrutinee_type, ref_binding);
                 let element_types =
@@ -1659,16 +1569,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
                     };
-
-                let mut bindings: PatBindings = Vec::new();
-                for (p, &ty) in patterns.iter().zip(
-                    element_types
-                        .iter()
-                        .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
-                ) {
-                    bindings.extend(self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding));
-                }
-                bindings
+                let element_types = self.tuple_pattern_element_types(
+                    patterns.len(),
+                    *has_rest,
+                    &element_types,
+                    span,
+                );
+                patterns
+                    .iter()
+                    .zip(element_types)
+                    .flat_map(|(p, ty)| {
+                        self.resolve_if_pattern_inner(p, ty, ctx, span, ref_binding)
+                    })
+                    .collect()
             }
             Pattern::Variant {
                 variant_name,
@@ -2092,8 +2005,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .is_resource_narrowing(scrutinee_type, target)
                 {
                     self.require_handle_classes(target, *typed_span);
-                    match ctx.irrefutable_site {
-                        Some(site) => self.reject_refutable_narrowing(
+                    match ctx.must_bind {
+                        Some(MustBind { site, .. }) => self.reject_refutable_narrowing(
                             scrutinee_type,
                             target,
                             *typed_span,
@@ -2407,7 +2320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some(payload) = payload_opt {
             // Substitute type parameters with concrete types
-            return self.tysys.substitute_type_params(payload, type_args);
+            return self.substitute_in_frame(payload, type_args);
         }
 
         // The declaration is a variant — it answered `variant_cases_of` or it
@@ -2598,41 +2511,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        if !self.check_irrefutable_pattern(&for_of.binding, for_of.span, BindingSite::ForOf) {
+        if !self.check_pack_binding(&for_of.binding, binding_type, for_of.span) {
             return;
-        }
-        let name_or_wildcard = |p: &Pattern| matches!(p, Pattern::Ident { .. } | Pattern::Wildcard);
-        let supported = match &for_of.binding {
-            Pattern::Tuple(elems, _) => elems.iter().all(name_or_wildcard),
-            binding => name_or_wildcard(binding),
-        };
-        if !supported {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: "a `for` over a type pack binds a name, `_`, or a tuple of them"
-                    .to_string(),
-                span: for_of.span,
-            });
-            return;
-        }
-
-        let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
-            Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            _ => (minted_name("pattern_temp", unique_id), None, None),
-        };
-
-        let is_mut = for_of.is_mut;
-        let is_destructured = matches!(&for_of.binding, Pattern::Tuple(..));
-
-        let ctx = &mut ctx.enter_scope();
-        ctx.add_local_at(
-            binding_name.clone(),
-            binding_type,
-            is_mut,
-            binding_id,
-            binding_name_span.unwrap_or_default(),
-        );
-        if let (Some(id), Some(name_span)) = (binding_id, binding_name_span) {
-            self.record_local_symbol(id, &binding_name, name_span, is_mut, binding_type);
         }
 
         // Reify rebuilds the `VariadicForOf` node
@@ -2640,26 +2520,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::ForOfVariadic` tag. This walk binds the loop variable
         // and any destructured sub-bindings into `ctx` (recording their
         // symbols) and walks the body for its facts.
-        if is_destructured && let Pattern::Tuple(tp, _) = &for_of.binding {
-            let inner_elems = self
-                .tysys
-                .type_table
-                .borrow()
-                .elem_types_or_self(binding_type);
-            for (i, pat_elem) in tp.iter().enumerate() {
-                if let Pattern::Ident {
-                    id,
-                    name,
-                    span: name_span,
-                } = pat_elem
-                {
-                    let elem_type: TypeId =
-                        inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
-                    ctx.add_local_at(name.clone(), elem_type, is_mut, Some(*id), *name_span);
-                    self.record_local_symbol(*id, name, *name_span, is_mut, elem_type);
-                }
-            }
+        let ctx = &mut ctx.enter_scope();
+        if for_of.binding.as_name().is_none() {
+            ctx.add_local_at(
+                minted_name("pattern_temp", unique_id),
+                binding_type,
+                for_of.is_mut,
+                None,
+                Span::default(),
+            );
         }
+        self.bind_pack_binding(&for_of.binding, binding_type, for_of.is_mut, ctx);
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
@@ -2668,14 +2539,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
     /// binding spells one.
-    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<String> {
+    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<&str> {
         let Pattern::Tuple(elems, _) = binding else {
             return None;
         };
-        match elems.first()? {
-            Pattern::Ident { name, .. } => Some(name.clone()),
-            _ => None,
-        }
+        elems.first()?.as_name().map(|n| n.name)
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per
@@ -2730,67 +2598,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
             // element's facts are captured.
-            if is_enumerate {
-                // For enumerate the binding is `[idx, val]`; resolve the pattern
-                // against the synthetic `[i32, elem_type]` tuple type.
-                let i32_type = TypeTable::I32;
-                let enum_tuple_type = self
-                    .tysys
+            // For enumerate the binding is `[idx, val]`, resolved against the
+            // synthetic `[i32, elem_type]` tuple type.
+            let binding_type = if is_enumerate {
+                self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_tuple(vec![i32_type, bind_elem_type]);
-                self.resolve_let_pattern(
-                    &for_of.binding,
-                    enum_tuple_type,
-                    for_of.is_mut,
-                    span,
-                    BindingSite::ForOf,
-                    ctx,
-                );
+                    .make_tuple(vec![TypeTable::I32, bind_elem_type])
             } else {
-                match &for_of.binding {
-                    Pattern::Ident {
-                        id,
-                        name,
-                        span: name_span,
-                    }
-                    | Pattern::MutIdent {
-                        id,
-                        name,
-                        span: name_span,
-                    } => {
-                        let is_mut =
-                            for_of.is_mut || matches!(&for_of.binding, Pattern::MutIdent { .. });
-                        ctx.add_local_at(
-                            name.clone(),
-                            bind_elem_type,
-                            is_mut,
-                            Some(*id),
-                            *name_span,
-                        );
-                        self.record_local_symbol(*id, name, *name_span, is_mut, bind_elem_type);
-                    }
-                    Pattern::Tuple(_, _) | Pattern::Struct { .. } => {
-                        self.resolve_let_pattern(
-                            &for_of.binding,
-                            bind_elem_type,
-                            for_of.is_mut,
-                            span,
-                            BindingSite::ForOf,
-                            ctx,
-                        );
-                    }
-                    Pattern::Wildcard => {
-                        // Discard the element; nothing to bind.
-                    }
-                    _ => {
-                        let _ = self.emit(TypeError::InvalidPattern {
-                            message: "invalid binding pattern in for-of loop".to_string(),
-                            span,
-                        });
-                    }
-                }
-            }
+                bind_elem_type
+            };
+            self.resolve_let_pattern(
+                &for_of.binding,
+                binding_type,
+                for_of.is_mut,
+                span,
+                BindingSite::ForOf,
+                ctx,
+            );
 
             // Resolve the body AST (each expansion gets its own resolution with
             // different element types) for its facts.
@@ -3002,20 +2827,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Reify rebuilds the
         // `$for_of_N: { let mut $iter = …; loop { match $iter.next() { … } } }`
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
-        // the loop variable (`resolve_if_pattern_inner`, preserving the
-        // binding's real `AstId`) and walks the body for its facts.
+        // the loop variable (preserving the binding's real `AstId`) and walks
+        // the body for its facts.
         let mut scope = ctx.enter_scope();
-        let binding = if for_of.is_mut {
-            mut_bindings_of(&for_of.binding)
-        } else {
-            for_of.binding.clone()
-        };
-        self.resolve_if_pattern_inner(
-            &binding,
+        self.resolve_let_pattern(
+            &for_of.binding,
             item_type,
-            &mut scope.replacing(|ctx| &mut ctx.irrefutable_site, Some(BindingSite::ForOf)),
+            for_of.is_mut,
             span,
-            RefBinding::None,
+            BindingSite::ForOf,
+            &mut scope,
         );
         self.resolve_block(&for_of.body, &mut scope, None);
     }
@@ -3321,73 +3142,6 @@ fn refutable_shape(pattern: &Pattern) -> Option<String> {
         | Pattern::Struct { .. }
         | Pattern::Typed { .. }
         | Pattern::Error(_) => None,
-    }
-}
-
-/// The pattern with every identifier leaf made mutable.
-///
-/// `for let mut …` carries the `mut` on the statement while the pattern walker
-/// reads it off a `MutIdent`, so a destructuring binding needs it pushed down
-/// to the names it introduces.
-fn mut_bindings_of(pattern: &Pattern) -> Pattern {
-    match pattern {
-        Pattern::Ident { id, name, span } => Pattern::MutIdent {
-            id: *id,
-            name: name.clone(),
-            span: *span,
-        },
-        Pattern::Tuple(elements, has_rest) => {
-            Pattern::Tuple(elements.iter().map(mut_bindings_of).collect(), *has_rest)
-        }
-        Pattern::Struct {
-            type_name,
-            type_name_id,
-            fields,
-            has_rest,
-            span,
-        } => Pattern::Struct {
-            type_name: type_name.clone(),
-            type_name_id: *type_name_id,
-            fields: fields
-                .iter()
-                .map(|f| StructPatternField {
-                    pattern: mut_bindings_of(&f.pattern),
-                    ..f.clone()
-                })
-                .collect(),
-            has_rest: *has_rest,
-            span: *span,
-        },
-        Pattern::Variant {
-            variant_name,
-            variant_qualifier,
-            name_id,
-            name_span,
-            bindings,
-            span,
-        } => Pattern::Variant {
-            variant_name: variant_name.clone(),
-            variant_qualifier: variant_qualifier.clone(),
-            name_id: *name_id,
-            name_span: *name_span,
-            bindings: bindings.iter().map(mut_bindings_of).collect(),
-            span: *span,
-        },
-        Pattern::Or(alternatives) => {
-            Pattern::Or(alternatives.iter().map(mut_bindings_of).collect())
-        }
-        Pattern::Typed {
-            id,
-            pattern,
-            ty,
-            span,
-        } => Pattern::Typed {
-            id: *id,
-            pattern: Box::new(mut_bindings_of(pattern)),
-            ty: ty.clone(),
-            span: *span,
-        },
-        other => other.clone(),
     }
 }
 

@@ -1,0 +1,44 @@
+// A walk over a type pack binds `mut x` inside its tuple binding, as any
+// irrefutable pattern does.
+
+trait Wide with () {
+    fn wide(&self) -> i64;
+}
+
+impl Wide for i32 {
+    fn wide(&self) -> i64 {
+        return *self as i64;
+    }
+}
+
+impl Wide for i64 {
+    fn wide(&self) -> i64 {
+        return *self;
+    }
+}
+
+fn weighted<..T: Wide>(t: [..T]) -> i64 {
+    let mut total: i64 = 0;
+    for let [i, mut v] of t.enumerate() {
+        let w = v.wide() * (i as i64 + 1);
+        v = t[i];
+        total += w + v.wide();
+    }
+    return total;
+}
+
+fn kept<..T>(t: [..T]) -> [..T] {
+    return [for let [_, mut v] of t.enumerate() { v }];
+}
+
+test "a for binds a mut element" {
+    assert weighted([1, 2 as i64]) == 1 + 4 + 1 + 2;
+}
+
+test "a comprehension binds a mut element" {
+    let k = kept([1, "a"]);
+    assert k.0 == 1 && k.1 == "a";
+}
+
+__DATA__
+{"test": {}}
