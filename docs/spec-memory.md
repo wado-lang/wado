@@ -215,7 +215,7 @@ impl Point {
 }
 ```
 
-A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). A value type has nothing to consume, so `self` by value on one is a compile error.
+A by-value `self` is passed as any parameter is. A receiver holding an affine resource moves into the method, so the caller's binding cannot be used afterward, which is how the resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). Any other receiver is copied, so `Option<i32>::unwrap` leaves its binding usable. A type that can never hold a resource has nothing to consume, so `self` by value on one is a compile error.
 
 ### `mut` Parameters
 
@@ -233,7 +233,7 @@ fn normalize(mut s: String) -> String {
 }
 ```
 
-The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation reaches the caller.
+The `mut` keyword grants write access to the local parameter binding inside the function. The parameter holds the callee's own copy ([Value Semantics](#value-semantics)), so neither reassignment (`p = new_value`) nor in-place mutation of that copy reaches the caller. A parameter of type `&mut T` holds a copy of the reference, so a write through it (`*p = v`) reaches the referent, as through any reference.
 
 ```wado
 fn countdown(mut n: i32) with Stdout {

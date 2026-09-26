@@ -1248,9 +1248,10 @@ widens the accepted spellings, never the accepted meanings: `"0x2A"` is `42`,
 and `"forty-two"` is still `Err`. An impl never panics, and an input it cannot
 read is `Err`.
 
-It never touches whitespace. Surrounding whitespace is `Err`, and trimming is
-the caller's choice. So a value whose whitespace is significant, a `char` `' '`
-or an indented `String`, survives.
+It never trims whitespace: trimming is the caller's choice. A type whose
+spellings admit no whitespace rejects it, so `" 1 "` is `Err` for an integer,
+and a value whose whitespace is significant, a `char` `' '` or an indented
+`String`, survives.
 
 The built-in impls accept:
 
