@@ -317,6 +317,20 @@ where it cannot prove move / share / fresh; no elision pass):
   pins the scrutinee exactly as `&op` itself would wherever it outlives the
   match — a retaining callee, an aggregate literal, a global, a write through a
   place, the result.
+
+  A borrow stored in a local lasts as long as that local's value can be read.
+  This covers `let r = &a`, a call result a callee hands the borrow back in
+  (`let it = (&a).into_iter()`), and a binding of a `&a` scrutinee. The
+  referent is pinned only at a move where one of those holders is still
+  readable. A holder is readable where it is live, where a copy read out of it
+  is live, or anywhere once its value has gone where no alias chain follows it,
+  such as a literal, a result, or a callee that keeps it. So a double buffer
+  that iterates `&a` and then swaps `a` and `b` moves both lists every step.
+
+  The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
+  `a` to `b`, but `b` is dead right after it, so `b` is rebound before it is
+  read again. When a storage-sharing check walks that edge, it does not count
+  `b` as holding the storage `a` took.
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
   as an opaque callee made every parameter handed to one escape. `a[i]` is a
