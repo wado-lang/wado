@@ -2,6 +2,7 @@ use json from "core:json";
 use { TreeMap } from "core:collections";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_key } from "core:serde";
 
+/// A checkpoint that disagrees with the graph, or is not a safetensors file.
 pub struct LoadError {
     pub reason: String,
 }
@@ -15,6 +16,8 @@ impl Display for LoadError {
 impl Error for LoadError {
 }
 
+/// One tensor as the header states it: its element type, its extents, and its
+/// byte range after the header.
 pub struct HeaderEntry {
     pub dtype: String,
     pub shape: List<i64>,
@@ -48,11 +51,13 @@ impl Deserialize for Header {
     }
 }
 
+/// A checkpoint's header, read, and where its payloads start.
 pub struct Checkpoint {
     entries: TreeMap<String, HeaderEntry>,
     data_start: i32,
 }
 
+/// Where the header ends, which the bytes must reach.
 pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
     let view = bytes.as_byte_slice();
     if view.len() < 8 {
@@ -77,6 +82,7 @@ pub fn declared_header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
     return Result::Ok(8 + length as i32);
 }
 
+/// The header of the checkpoint `bytes` begins with; the payloads may be absent.
 pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError> {
     let view = bytes.as_byte_slice();
     let data_start = header_end(view)?;
@@ -99,6 +105,7 @@ pub struct Expected {
 }
 
 impl Checkpoint {
+    /// The byte range holding `e`, once the header states it as the build compiled it.
     pub fn range(&self, e: &Expected) -> Result<[i32, i32], LoadError> {
         let fail = |reason: String| LoadError { reason: `${e.tensor}: ${reason}` };
         let Some(entry) = self.entries.get(e.tensor) else {
@@ -136,6 +143,7 @@ impl Checkpoint {
         return Result::Ok([self.data_start + offsets[0] as i32, self.data_start + offsets[1] as i32]);
     }
 
+    /// `e`'s bytes within `bytes`, the whole checkpoint this header was read from.
     pub fn payload<B: AsByteSlice>(&self, bytes: B, e: &Expected) -> Result<ByteSlice, LoadError> {
         let view = bytes.as_byte_slice();
         let [start, end] = self.range(e)?;

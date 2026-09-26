@@ -137,8 +137,8 @@ value-semantics copy `write` makes. It is a `#[cm]` member rather than Wado. A
 loop in Wado cannot hold a linear-memory pointer, so it would lower the view
 again on every copy. `core:rt` lowers it once and advances the pointer. A file
 write is the case that needs it: wasmtime's filesystem stream takes 8 KiB per
-copy. Being a primitive,
-it is also what a handler for `StreamWritable<u8>` claims to capture `println`.
+copy. Being a primitive, it is also what a handler for `StreamWritable<u8>`
+claims to capture `println`.
 
 A view has no single-copy write. A caller looping over one would lower the rest
 again on every copy, which is the quadratic write above. A single copy matters

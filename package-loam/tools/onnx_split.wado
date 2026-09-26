@@ -8,6 +8,17 @@ use { read as read_proto } from "../src/onnx_proto.wado";
 use { print } from "../src/onnx_print.wado";
 use { split_weights, write_safetensors } from "../src/safetensors.wado";
 
+/// The value, or the failure after `prefix` on stderr and exit status 1.
+fn or_exit<T, E: Display>(result: Result<T, E>, prefix: String) -> T with (Stderr, Exit) {
+    return match result {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln(`${prefix}${e}`);
+            exit(1);
+        },
+    };
+}
+
 export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
     let given = args();
     if given.len() != 2 {
@@ -15,35 +26,12 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         exit(2);
     }
     let [source, stem] = [given[0], given[1]];
-    let bytes = match fs::read(&source) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln(`${e}`);
-            exit(1);
-        },
-    };
-    let graph = match read_proto(bytes) {
-        Ok(g) => g,
-        Err(e) => {
-            eprintln(`${source}: ${e}`);
-            exit(1);
-        },
-    };
+    // A filesystem error names its path; a read or print error does not.
+    let bytes = or_exit(fs::read(&source), "");
+    let graph = or_exit(read_proto(bytes), `${source}: `);
     let [kept, stored] = split_weights(graph);
-    let text = match print(&kept) {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln(`${source}: ${e}`);
-            exit(1);
-        },
-    };
-    if let Err(e) = fs::write(`${stem}.onnxtext`, &text) {
-        eprintln(`${e}`);
-        exit(1);
-    }
-    if let Err(e) = fs::write(`${stem}.safetensors`, &write_safetensors(&stored)) {
-        eprintln(`${e}`);
-        exit(1);
-    }
+    let text = or_exit(print(&kept), `${source}: `);
+    or_exit(fs::write(`${stem}.onnxtext`, &text), "");
+    or_exit(fs::write(`${stem}.safetensors`, &write_safetensors(&stored)), "");
     println(`${stem}.onnxtext and ${stem}.safetensors: ${stored.len()} weights`);
 }

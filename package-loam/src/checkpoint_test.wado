@@ -20,6 +20,14 @@ fn floats(values: List<f32>) -> ByteList {
     return bytes;
 }
 
+/// A checkpoint of `header` alone, its length prefixed as the format lays out.
+fn with_header(header: String) -> ByteList {
+    let mut bytes: ByteList = [];
+    push_element(&mut bytes, header.len() as u64, 8);
+    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    return bytes;
+}
+
 fn two_tensors() -> ByteList {
     return write_safetensors(&[
         StoredTensor {
@@ -138,29 +146,24 @@ test "a header no module can address is refused from its length alone" {
 }
 
 test "a header that is not JSON is refused" {
-    let bytes: ByteList = b"\x03\x00\x00\x00\x00\x00\x00\x00{x}";
-    let e = read_checkpoint(&bytes).unwrap_err();
+    let e = read_checkpoint(&with_header("{x}")).unwrap_err();
     assert `${e}`.starts_with("the header is not JSON");
 }
 
 test "metadata keyed like a tensor entry's fields still reads" {
-    let header = "{\"__metadata__\":{\"shape\":\"NCHW\",\"data_offsets\":\"none\"}}";
-    let mut bytes: ByteList = [];
-    push_element(&mut bytes, header.len() as u64, 8);
-    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    let bytes = with_header("{\"__metadata__\":{\"shape\":\"NCHW\",\"data_offsets\":\"none\"}}");
     assert read_checkpoint(&bytes) matches { Ok(_) };
 }
 
 test "a tensor named twice in the header is refused" {
-    let header = "{\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[0,4]},\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[4,8]}}";
-    let mut bytes: ByteList = [];
-    push_element(&mut bytes, header.len() as u64, 8);
-    bytes.extend_from_slice(header.as_bytes() as Slice<u8>);
+    let bytes = with_header(
+        "{\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[0,4]},\"w\":{\"dtype\":\"F32\",\"shape\":[],\"data_offsets\":[4,8]}}",
+    );
     assert `${read_checkpoint(&bytes).unwrap_err()}`.starts_with("the header is not JSON");
 }
 
 test "the header's metadata is not a tensor" {
-    let bytes: ByteList = b"\x20\x00\x00\x00\x00\x00\x00\x00{\"__metadata__\":{\"format\":\"pt\"}}";
+    let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
     let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
     assert `${e}` == "__metadata__: the checkpoint has no such tensor";
 }
