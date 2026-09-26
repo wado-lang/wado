@@ -5,8 +5,7 @@ Wado uses an ESM-like import syntax with `use {...} from "module"`. This aligns 
 ## Visibility
 
 Visibility has two orthogonal axes: a Wado scope ladder (`internal` / `pub`)
-and a CM-surface flag (`export`). See [WEP: Visibility — `internal` / `pub` /
-`export`](./wep-2026-06-25-visibility-internal-pub-export.md).
+and a CM-surface flag (`export`).
 
 | Keyword    | Axis    | Reach                                             |
 | ---------- | ------- | ------------------------------------------------- |
@@ -18,7 +17,12 @@ and a CM-surface flag (`export`). See [WEP: Visibility — `internal` / `pub` /
 `pub` is the library boundary (Wado-native, so generics, closures, and traits
 may cross it). `export` is the Component Model boundary and is additive:
 `export ⟹ pub`, and an `export`ed signature must be CM-representable, checked at
-the definition site.
+the definition site. Every type it names needs a Component Model counterpart in
+[Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries),
+so a closure-typed parameter of an `export fn` is a compile error.
+
+`internal` combines with neither `pub` nor `export`; writing both is a compile
+error. `pub export` is accepted and means `export`.
 
 ```wado
 // Private to this file (default)
@@ -44,6 +48,10 @@ export fn run() { ... }
 A `pub`-only item reaches Wado consumers only (source dependency or
 provider-tagged `.wasm`); a non-Wado CM consumer sees `export` items only.
 
+`pub` is absolute. A module has no privacy of its own beyond its file, so there
+is no `pub(crate)` / `pub(super)` family, and no enclosing module can narrow a
+`pub` item.
+
 The ladder applies to top-level items, struct fields, and `impl` members
 (methods, associated constants); reaching one beyond its rung is a compile
 error. `export` on a member is an error — a method has no CM boundary. Only an
@@ -57,6 +65,19 @@ impl Config {
     pub fn get() { }           // other packages
 }
 ```
+
+### Packages
+
+`internal` reaches the files of one package. The packages are:
+
+- The entry module, every local module it reaches through `./` / `../`
+  imports, and the Wasm assets those modules import.
+- Each dependency. A relative import inside a dependency stays in that
+  dependency's package.
+- `core:*`, which is one package, and `wasi:*`, which is another.
+- A remote module and the modules it reaches relative to its URL.
+- A [generated module](#generated-imports-kiln) belongs to the package of the
+  module that imports it.
 
 ### Signature reach
 
@@ -130,19 +151,59 @@ pub use { compute } from "./impl.wado";   // reached as foo's `compute`
 
 You may also only re-export a name you can see: `x` must be importable here
 (`x` is `pub`, or `x` is `internal` and `M` is in this package). Re-exporting a
-file-private name is a visibility error, like any other import. See [Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
+file-private name is a visibility error, like any other import.
+
+A name reached through a chain of re-exports reaches as far as the narrowest
+hop in the chain.
+
+Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-visibility-internal-pub-export.md).
 
 ## Module Source Types
 
-| Source Type   | Syntax                        | Example                              |
-| ------------- | ----------------------------- | ------------------------------------ |
-| WASI standard | `"wasi:<package>"`            | `"wasi:cli"`, `"wasi:filesystem"`    |
-| Core library  | `"core:<module>"`             | `"core:cli"`, `"core:json"`          |
-| CM coordinate | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
-| Library alias | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
-| Local file    | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| Source Type   | Syntax                             | Example                                      |
+| ------------- | ---------------------------------- | -------------------------------------------- |
+| WASI standard | `"wasi:<package>"`                 | `"wasi:cli"`, `"wasi:filesystem"`            |
+| Core library  | `"core:<module>"`                  | `"core:cli"`, `"core:json"`                  |
+| CM coordinate | `"<ns>:<pkg>[@<ver>]"`             | `"docs:regex"`, `"docs:regex@1.0.0"`         |
+| Library alias | `"lib:<nick>"`                     | `"lib:router"`, `"lib:shared"`               |
+| Exported file | `"<coordinate or alias>/<path>"`   | `"lib:gale-highlight-wado/grammar/Wado.g4"`  |
+| Local file    | `"./<path>"` or `"../<path>"`      | `"./utils.wado"`, `"../config.wado"`         |
+| Remote        | `"http://<url>"`, `"https://<url>"` | `"https://example.com/lib.wado"`             |
 
-A specifier names a package only — no interface segment; interfaces and members are selected in the `use { ... }` list. `core:`/`wasi:` are bundled coordinates, not a separate scheme. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+A specifier names a package, optionally followed by one file that package
+exports. It never carries an interface segment: interfaces and their members
+are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
+`wasi:` are coordinates whose namespace is bundled with the compiler, not a
+separate scheme. Nested namespaces (`a:b:pkg`) follow WIT.
+
+### Exported files
+
+A package lists the files a consumer may name in `[package].exports` of its
+`wado.toml`. The list covers assets and `.wado` submodules alike, and a file it
+does not list does not exist to a consumer.
+
+```wado
+use { highlight } from "wado-lang:gale-highlight-wado/src/highlight.wado";
+let template = #include_str("wado-lang:my-pkg/templates/index.html");
+```
+
+- A specifier with no path segment names the package's `[package].lib` entry.
+  The path segment always carries an extension, which is what tells the two
+  forms apart.
+- The path is relative to the package root and `/`-separated. `..` and an
+  absolute path are errors.
+- A path is compared with the list after NFC normalization, and case must
+  match exactly.
+- Naming an unlisted file is an error that names the package, whether or not
+  the file exists.
+- The reference resolves against the consuming package's own
+  `[dependencies]` / `[build-dependencies]`. A dependency's dependency offers
+  no files.
+- `core:` and `wasi:` export no files.
+- A consumer that names an exported `.wado` submodule may use every `pub` item
+  in it, whether or not the `lib` entry re-exports that item.
+
+Rationale: [WEP: Package File Exports](./wep-2026-09-06-package-file-exports.md).
 
 ## Module Path Validation
 
@@ -160,14 +221,31 @@ Namespace Resolution (a namespace is reserved iff the compiler bundles it):
 
 4. Local modules (`./` or `../`): Resolved relative to importing module.
 
-5. Invalid paths: Paths not matching any pattern are rejected.
+5. Remote modules (`http://` / `https://`): loaded from the URL. A relative import inside one resolves against its URL.
+
+6. Invalid paths: Paths not matching any pattern are rejected.
    - Error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`
 
-Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning. See [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md) for resolution and version rules.
+`lib` is the only reserved namespace that is not bundled. It is the one place an
+alias lives: a `[dependencies]` key under any other namespace is the
+dependency's own coordinate, and a `lib:` key names the real coordinate it
+stands for with its `package` field. A `[dependencies]` key is byte-identical to
+the specifier that uses it.
+
+Bare names (`"router"`) are rejected. The one exception is a bare key in `[dependencies]`, which is deprecated and draws a warning.
+
+Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
 
 ## Symbol Notation
 
-A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim (quoted as in `use`; quotes may be dropped for a scheme or bare name with no whitespace). `SYMBOL` uses Wado's own operators, so its kind is visible from the separator: `::` for static scope, `.` for an instance method, `^` for a trait-impl member.
+A symbol is named `MODULE#SYMBOL` — the written form used by docs, `wado query`, and diagnostics. `MODULE` is the import specifier verbatim, so any module the loader accepts can be named. `SYMBOL` uses Wado's own operators, so its kind is visible from the separator:
+
+| Symbol kind                                    | Written          |
+| ---------------------------------------------- | ---------------- |
+| Free function or global                        | `name`           |
+| Associated constant, static function, nested item | `Type::name`  |
+| Instance method                                | `Type.name`      |
+| Trait-impl member                              | `Type^Trait::name` |
 
 ```
 core:json#to_string                        # free function / global
@@ -176,9 +254,15 @@ core:collections#TreeMap.get               # instance method
 core:collections#TreeMap<String, i32>.get  # generics use Wado angle brackets
 core:url#Url^Display::fmt                  # trait-impl member
 "./utils.wado"#Helper::new                 # relative path — must be quoted
+"https://x/lib.wado"#foo                   # URL — must be quoted
 ```
 
-See [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
+`MODULE` is quoted as in `use`. The canonical form, which `wado query` and doc
+anchors use, always quotes it. In prose the quotes may be dropped for a scheme or
+a bare name with no whitespace. A relative path or a URL is always quoted,
+because it can contain `#`, `/`, and `.`.
+
+Rationale: [WEP: Symbol Notation](./wep-2026-06-14-symbol-notation.md).
 
 ## Import Syntax
 
@@ -248,18 +332,26 @@ use {Parse}  from "lib:rx"     with { registry: "oci://ghcr.io/acme", package: "
 use {sin, cos} from "./libm.wasm" with { type: "wasm" };
 ```
 
-An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an exact version — a range there is an error.
+An inline source takes the same keys as a `[dependencies]` value: `git`, `ref`,
+`registry`, `package`, `path`, and an exact `version`. An inline `with` source and a `wado.toml` entry for the same specifier are mutually exclusive. Version ranges (`^`/`~`/`=`) are allowed only in `wado.toml`, where a lock file resolves them; the specifier `@ver` and a single-file `with` take an exact version — a range there is an error.
+
+Two other keys have sections of their own: `generator` makes the import a
+[generated import](#generated-imports-kiln), and `provider` satisfies a
+component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
 
 ### Type Attribute Requirement
 
-| Import Source      | `type` Attribute         | Notes                          |
-| ------------------ | ------------------------ | ------------------------------ |
-| `.wado` files      | Optional                 | Type inferred from Wado source |
-| `.wasm` files      | Required                 | `type: "wasm"`                 |
-| `.wat` files       | Required                 | `type: "wat"`                  |
-| `core:*`, `wasi:*` | Not applicable           | Bundled namespace handling     |
-| `https:` URLs      | Required for non-`.wado` | Must specify content type      |
-| CM / `lib:` deps   | Optional                 | Type inferred from package     |
+| Import Source      | `type` Attribute | Notes                          |
+| ------------------ | ---------------- | ------------------------------ |
+| `.wado` files      | Optional         | Type inferred from Wado source |
+| `.wasm` files      | Required         | `type: "wasm"`                 |
+| `.wat` files       | Required         | `type: "wat"`                  |
+| `core:*`, `wasi:*` | Not applicable   | Bundled namespace handling     |
+| CM / `lib:` deps   | Optional         | Type inferred from package     |
+
+`"wasm"` and `"wat"` are the only values that make an import a Wasm asset. A
+`.wasm` or `.wat` path without one is read as a schema, which needs a
+generator.
 
 ### Rationale
 
@@ -267,9 +359,10 @@ Explicit type annotations prevent ambiguity and make dependencies clear, alignin
 
 ## Generated Imports (Kiln)
 
-See [WEP: Kiln](./wep-2026-04-12-kiln.md) and [WEP: Gale](./wep-2026-03-02-gale.md).
+A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm` / `.wat`) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. `.g4`, `.proto`, `.graphql`, `.wit`, and a Wado dialect's own extension all take this path. The `with { generator: { ... } }` clause specifies which generator to invoke.
 
-A `use` clause whose source is neither a `.wado` module nor a Wasm asset (`.wasm` / `.wat`) is processed by Kiln — a code-generation pipeline that lowers the input to ordinary Wado source which the compiler then handles like any user-authored module. `.g4`, `.proto`, `.graphql`, `.wit`, and a Wado dialect's own extension all take this path. The `with { generator: { ... } }` clause specifies which generator to invoke:
+The examples use Gale, a generator that builds a parser from an ANTLR4 grammar
+([WEP: Gale](./wep-2026-03-02-gale.md)):
 
 ```wado
 // Gale generates a parser from an ANTLR4 grammar
@@ -288,14 +381,82 @@ use { RustParser } from "./Rust.g4" with {
 };
 ```
 
+The literal after `from` is the primary input. It is a `./` or `../` path
+resolved against the declaring file, like a local module import.
+
 ### `with { generator: { ... } }` fields
 
-| Field        | Required | Meaning                                                                                                                                  |
-| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `module`     | yes      | Generator module — either a `<namespace>:<name>[@<version>]` reference resolved against `[build-dependencies]`, or a relative `./` path. |
-| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. Omit when every field has a default.                   |
-| `inputs`     | no       | Supplementary input paths the generator cannot discover from the primary alone (e.g. a sibling lexer grammar).                           |
-| `output_dir` | no       | Override for the per-invocation generated-source directory (default `build/kiln/<synthesized-id>/`).                                     |
+Each field has one type, and any other key or type is an error at the use site.
+
+| Field        | Required | Meaning                                                                                                                                                                                                          |
+| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                      |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                            |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                           |
+| `options`    | no       | Record literal whose shape matches the generator's exported `pub struct Options`. See [Options](#options).                                                                                                      |
+| `inputs`     | no       | Supplementary input paths (`./` / `../`) the generator cannot discover from the primary alone, such as a sibling lexer grammar. A schema that refers to other files lists every one of them here.                |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                |
+
+Every file a generator sees is named literally at the use site. There is no
+glob and no directory listing, so the whole input set is known before any
+generator runs.
+
+### Binding the import
+
+A generator emits exactly one entry module and zero or more supplementary
+modules. The `use` binds against the entry module, under the ordinary
+visibility rules; supplementary modules are ordinary Wado files that the entry
+reaches with ordinary `use` statements. The entry module does not need to
+exist before the first compile: the generator runs first, and name resolution
+then finds its output.
+
+The redirect from the schema to the entry module belongs to the file that
+declared the clause. Another `use` of the same schema in that file, with no
+`with` of its own, binds against the same entry. A different file that imports
+the schema with no clause of its own gets the missing-clause error.
+
+Clauses are collected from every module the program reaches, so a module deep
+in the graph can import a generated module of its own. A generator is an
+ordinary Wado package, so its own source may import a generated module too. An
+invocation whose generator is built from its own output, directly or through
+other invocations, is a cycle, and the cycle is an error naming the invocations
+in it.
+
+Generated files go through the same parser and checker as hand-written source,
+so a generator that emits invalid Wado fails with an ordinary error against the
+generated file on disk. Only the diagnostics a generator reports itself point
+into its input files.
+
+### Errors
+
+- A `use` of a file that is neither `.wado` nor a Wasm asset, with no
+  `with { generator }` clause, is `KILN_MISSING_WITH`.
+- A `use` whose generator produced no module for that schema is
+  `KILN_NO_GENERATED_MODULE`. The compiler never falls back to parsing the
+  schema as Wado.
+- Two clauses that agree on `module`, the primary input, `inputs`, `options`,
+  and `output_dir` are one invocation, wherever in the program they appear.
+  Two clauses that share a primary input but disagree on any of those are an
+  error naming both.
+
+### Options
+
+A generator declares its options as `pub struct Options`, and every use site's
+`options` is checked against it before the generator runs, so a typo or type
+mismatch is reported on the offending key.
+
+- Omitting `options` means every field takes its default. A field with a
+  default may be omitted on its own.
+- A field of type `Option<T>`, `List<T>`, or `TreeMap<String, V>` may always
+  be omitted. It is then `None`, the empty list, or the empty map.
+- Any other field without a default must be supplied. An unknown key is an
+  error.
+- An `enum` option is written as its case name in a string.
+- A `TreeMap<String, V>` option is written as an object whose keys are the
+  author's own. The generator receives it sorted by key.
+- A generator resolved as a prebuilt component carries no field defaults, so
+  at its use sites every field is required unless its type is an `Option`, a
+  `List`, or a `TreeMap`.
 
 ### Manifest
 
@@ -305,10 +466,6 @@ Generators are declared in `[build-dependencies]` of `wado.toml` (a build-only g
 [build-dependencies]
 "wado-lang:gale" = { version = "^0.0.9" }
 ```
-
-A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`KILN_MISSING_WITH`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
-
-A file that is neither `.wado` nor a Wasm asset is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`KILN_NO_GENERATED_MODULE`); the compiler never falls back to parsing the schema as Wado.
 
 ### Authoring a generator
 
@@ -322,27 +479,70 @@ A generator is a normal Wado package whose `wado.toml` maps the `core:kiln/gener
 That module exports the world's `generate` function:
 
 ```wado
-use { Request, Response, Error } from "core:kiln";
+use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 pub struct Options {
     namespace: String,
+    emit_comments: bool = true,
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> {
-    // ... parse req.primary.content, emit Wado source ...
+    let Ok(schema) = read_text(req.primary.content) else {
+        return Result::Err(Error::InvalidSchema("not UTF-8"));
+    };
+    let source = emit(&schema, &req.options);   // the generator's own work
+    return Result::Ok(Response {
+        files: [OutputFile { path: `${req.options.namespace}.wado`, content: source, is_entry: true }],
+    });
 }
 ```
 
-Every use site's `options` is type-checked against the generator's `Options`. Generators run in a deterministic sandbox (no clocks, randomness, network, environment, or filesystem): every input they see arrives by value, listed at the use site. Outputs are persisted under `build/kiln/<synthesized-id>/` and stamped with a `#![generated(by = "...", sources = [...])]` header. A compile reruns a generator only when its inputs have changed.
+A generator with no configuration declares no `Options` and writes
+`fn generate(req: Request)`.
+
+What a generator receives and returns:
+
+- `req.primary` and `req.inputs` are `InputFile`s: the path as the use site
+  wrote it, and the content as a `Stream<u8>`. `read_all` and `read_text`
+  collect a whole file.
+- `req.options` is the use site's options, with defaults filled in.
+- It returns a `Response` whose `files` are `OutputFile`s: a path relative to
+  the output directory, the Wado source, and whether this file is the entry
+  module. Or it returns an `Error`: `InvalidSchema`, `Unsupported`, or
+  `Other`, each with a message.
+- It may report diagnostics through the `KilnHost` effect, each optionally
+  spanning a byte range of one of the files it received. They surface as
+  ordinary compile diagnostics.
+
+An `Options` field is one of `bool`, a fixed-width integer, `f32`, `f64`,
+`String`, a payload-less `enum`, a non-recursive `struct` of such fields,
+`Option<T>`, `List<T>`, or `TreeMap<String, V>`. A field default is a literal.
+Any other field fails the generator's own compile, since no use site could
+supply it.
+
+A generator runs in a deterministic sandbox: no clocks, randomness, network,
+environment, or filesystem. Every input arrives by value, listed at the use site,
+and every output is returned in the response. A generator that imports a
+`wasi:*` interface, directly or through a `core:*` module, is a compile error
+(`KILN_GENERATOR_FORBIDDEN_IMPORT`).
+
+Outputs are written to the invocation's output directory, each stamped with a
+`#![generated(by = "...", sources = [...])]` header naming the generator and
+its inputs. A file in that directory that carries the header belongs to the
+invocation, and a later run may overwrite or remove it. A file without it is
+left alone. A compile reruns a generator only when its generator, inputs, or
+options have changed.
+
+Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 
 ## Wasm Module and Component Imports
 
-A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler detects from the binary header whether the file is a core module or a Component Model component — both `.wasm` shapes use `type: "wasm"`; the distinction is detected, not declared. A single `use` may pull several names (functions from a core module, interfaces from a component).
+A `.wasm` / `.wat` asset is imported directly with `with { type: "wasm" | "wat" }`. The compiler detects from the binary whether the file is a core module or a Component Model component, and either shape may be written as `.wasm` or `.wat`; the distinction is detected, not declared. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
 
-| Imported file             | Exposes as                                     | Call style                                |
-| ------------------------- | ---------------------------------------------- | ----------------------------------------- |
-| Core wasm module / `.wat` | One free `pub fn` per export                   | `helper(x)` — plain function              |
-| CM component (`.wasm`)    | One Wado `interface` per exported CM interface | `Iface::method(x)` — effectful, like WASI |
+| Imported file  | Exposes as                                     | Call style                               |
+| -------------- | ---------------------------------------------- | ---------------------------------------- |
+| Core module    | One free `pub fn` per function export          | `helper(x)` — plain function             |
+| CM component   | One Wado `interface` per exported CM interface | `Iface::method(x)` — called like WASI    |
 
 ```wado
 // Core wasm / wat — exports become free functions.
@@ -350,16 +550,75 @@ use { sin, cos } from "./libm.wat" with { type: "wat" };
 use { helper }   from "./mod.wasm" with { type: "wasm" };
 
 // CM component — each exported interface becomes a Wado `interface`,
-// and its functions are called like WASI methods (effectful).
+// and its functions are called like WASI methods.
 use { Compress, Decompress } from "./brotli.wasm" with { type: "wasm" };
 
-export fn run() with (Compress, Decompress) {
+export fn run() {
     let packed = Compress::compress(bytes);
     let back = Decompress::decompress(packed);  // Result<List<u8>, String>
 }
 ```
 
-Values lower/lift across the CM boundary per [Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries). The dependency component is statically composed into the output, so the result runs standalone. See [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md) for the core-wasm path and [WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) for the component path.
+### Core modules
+
+Each function export becomes a free function of the same name. A call to it
+calls that export, whatever the name: an export named like a `core:builtin`
+intrinsic or like another asset's export is still its own asset's function. An
+export spelled like a Wado keyword is imported under an alias
+(`use { resume as seven } from ...`).
+
+An asset is embedded in the output and shares the component's memory. It is
+rejected at the import when it:
+
+- is not a valid module;
+- imports anything but `env.memory`;
+- has more than one memory, counting the imported one, or a memory that is
+  64-bit, shared, or has a custom page size;
+- has a `start` section;
+- exports a function that re-exports an imported one;
+- exports a function whose parameters are not `i32`, `i64`, `f32`, `f64`, or
+  `v128`, or that has more than one result, or a result of any other type.
+
+`use _ from "./x.wasm" with { type: "wasm" }` embeds an asset without binding
+any name.
+
+### Components
+
+A component is consumed through the type it carries. No Wado declaration file
+or side-car `.wit` is involved.
+
+- An exported interface becomes a Wado `interface`. Its named types become Wado
+  items of the corresponding kind: a record a `struct`, a variant a `variant`,
+  an enum an `enum`, flags a `flags`, and a type alias a newtype.
+- A function the component's world exports directly becomes a free function,
+  imported by bare name.
+- An `async func` becomes an `async fn` returning `AsyncCall<T>`
+  ([Async Imports](./spec-components.md#async-imports)).
+- Values lower and lift per
+  [Type Mapping at Component Boundaries](./spec-components.md#type-mapping-at-component-boundaries).
+  A `stream<T>` or `future<T>` value is the readable end; the writable end stays
+  with whoever created the pair.
+
+The dependency is statically composed into the output, so the result is one
+self-contained component that runs standalone.
+
+An imported interface is not an effect by construction. Calling into a
+component requires the effects its own host imports map to
+(`wasi:clocks/monotonic-clock` requires `MonotonicClock`), and a component that
+imports nothing from the host requires no effect. A component that imports an
+interface no host provides (a guest effect) makes that interface an effect its
+caller must handle. `with { provider: "./impl.wado" }` supplies it instead: the
+named Wado file is compiled into a component that exports the interface, bound
+by operation name, and composed in, so the caller needs no handler. A `provider`
+on a component that imports no guest effect is an error.
+
+```wado
+use { Hlc } from "./hlc.wasm" with { type: "wasm", provider: "./highlight.wado" };
+```
+
+Rationale: [WEP: Wasm Module Import](./wep-2026-01-10-wasm-import.md),
+[WEP: Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) and
+[WEP: Effect Reconstruction from CM Component Imports](./wep-2026-07-15-cm-import-effect-reconstruction.md).
 
 ## Namespace Import
 
@@ -389,6 +648,9 @@ impl geo::Show for Local { ... }
 impl Show for geo::Tag { ... }
 ```
 
+Only the members visible at the import site are reachable through a namespace:
+its `pub` items, and its `internal` items when it is in the same package.
+
 A qualified head names the namespace's declaration even where the importing
 module declares one of its own by that name.
 
@@ -404,6 +666,7 @@ Wado does not support `use * as name` or default imports.
 
 - Named imports use curly braces: `use {x, y} from "..."`
 - Namespace imports omit curly braces: `use name from "..."`
+- `use _ from "..."` loads a module and binds no name
 - Wildcards prohibited: `use {*} from "..."` is not allowed
 - All imports must be explicit (except the prelude)
 - Use `::` for effect operation access: `Effect::{op1, op2}`
@@ -473,16 +736,30 @@ use {sin, cos, sine} from "lib:math";
 
 Re-export rules:
 
-- `pub use` combines `pub` visibility with import syntax
+- `pub use` combines `pub` visibility with import syntax, and `internal use`
+  re-exports package-internal
+- A re-exported name is the item it names, not a copy: a re-exported type is the
+  same type, and a re-exported effect the same effect
 - A re-export reaches no further than the symbol it names (see [Re-export visibility](#re-export-visibility))
 - Re-export chains are resolved transparently (A re-exports from B, B re-exports from C)
 - Circular re-exports are prohibited
 - Only named items can be re-exported. A namespace (`pub use utils from "..."`) and a wildcard (`pub use _ from "..."`) are compile errors.
 - A re-export stays at module level, so `export use` is a compile error
 
+Rationale: [WEP: Re-export Syntax (`pub use`)](./wep-2026-01-25-pub-use-reexport.md).
+
 ## Exception: The Prelude
 
 The prelude is automatically imported into every module, making `String`, `List`, `Option`, `Result`, `Stream`, `Future`, and the prelude traits available without explicit imports.
+
+The prelude's names are what `core:prelude` exports: its own `pub`
+declarations and its `pub use` re-exports. A name that one of its
+implementation modules declares without `core:prelude` re-exporting it is not a
+prelude name and needs an import.
+
+A module may not declare a type with a prelude type's name (`struct Option` is
+an error). The builtin type names (`i32`, `bool`, ...) stay reserved under
+`#![no_prelude]` too.
 
 ## Standard Library
 
@@ -510,3 +787,39 @@ The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) li
 panic("error"); // traps with a message
 unreachable(); // traps  with no message
 ```
+
+## Known gaps
+
+- Exported files are not implemented. `[package].exports` is not read, and a
+  `<coordinate>/<path>` specifier does not resolve, as a module, an
+  `#include_str` path, or a Kiln `from` / `inputs` entry. A dependency's own
+  `with { generator }` clauses do not run in a consuming build either: clauses
+  are collected only from modules reached through `./` / `../` imports. This
+  admits no way to name a file inside a dependency.
+- Remote modules are not fetched. An `http://` / `https://` specifier passes
+  validation, but no host loads it, so the import fails as a missing file.
+- The standard library's implementation modules mark symbols `pub` that only
+  their sibling modules use. `core:prelude/fpfmt.wado`'s `UnpackResult`, for
+  one, is out of the prelude but importable by path from any package, so
+  `core:`'s published API is wider than its facade.
+- A generator response carrying more than one entry file is not rejected; the
+  first is bound. One carrying none surfaces only as `KILN_NO_GENERATED_MODULE`
+  at each `use` of the schema, not as an error against the response.
+- Two generator clauses are compared by their options as written. Two that mean
+  the same but are spelled apart (a default left out, `4` for `4.0`) are
+  distinct, so over one primary input they are reported as disagreeing.
+- A component exporting a `resource` is rejected when its type is decoded, as
+  is a resource handle inside a `stream` or `future` payload. This admits no
+  use of any dependency built around resources.
+- An `error-context` in a component's signature has no import mapping, so a
+  component carrying one is rejected at the import.
+- A component exporting a type directly from its world, rather than from an
+  interface, is rejected.
+- A function a component's world exports directly takes and returns only
+  primitives and `string`. A record, list or variant in that signature is
+  rejected. Functions in an interface have no such limit.
+- One `provider` file satisfies only one guest effect. A component importing
+  several is rejected when a `provider` is named.
+- A component's required effects are the union of all its host imports, not
+  those each export reaches. A component mixing pure and impure exports makes
+  every export require every effect.
