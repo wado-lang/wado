@@ -1765,12 +1765,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b147: block {
             l148: loop {
                 break_if b147 temp == 0_i64;
@@ -1781,7 +1783,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l148;
             };
         };
@@ -4141,7 +4143,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 }
 
 fn "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Amount::as_cents$scalar"(self) {
-    return builtin::i32_trunc_f64_s(self * 100);
+    return builtin::i32_trunc_sat_f64_s(self * 100);
 }
 
 fn "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::doubled$scalar"(self) {

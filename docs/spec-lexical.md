@@ -454,6 +454,11 @@ Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
 [char Casting and Conversion](./spec-literals.md#char-casting-and-conversion)).
 
+A float converts to an integer as Rust's `as` does. It truncates toward zero,
+and a value outside the target's range becomes the target's `MIN` or `MAX`.
+NaN becomes 0. The cast never traps, whatever the target's width, `i128` and
+`u128` included.
+
 `as` binds tighter than every binary operator and looser than a prefix unary
 operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
 
@@ -461,6 +466,7 @@ operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
 let i = 42;
 let f = i as f64;           // i32 to f64
 let truncated = 3.14 as i32; // f64 to i32 (truncates to 3)
+let clamped = 300.0 as u8;   // saturates to 255
 
 // Chained casts
 let x = 10 as f64 as i32 as f64;

@@ -815,14 +815,16 @@ fn "core:prelude/fpfmt.wado/big_mul_add"(n, factor, addend) {
     let used: i32;
     let $licm_used_32: i32;
     let $licm_repr_33: ref Array<u32>;
+    let $licm_arith_34: u64;
     carry = builtin::i64_extend_i32_u(addend);
     k = 0;
     $licm_used_32 = local.tee $load_0(n.used);
     $licm_repr_33 = local.tee $load_1(n.repr);
+    $licm_arith_34 = builtin::i64_extend_i32_u(factor);
     b42: block {
         l43: loop {
             break_if b42 k >= $licm_used_32;
-            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * builtin::i64_extend_i32_u(factor)) + carry;
+            v = (builtin::i64_extend_i32_u(builtin::array_get_value<u32>($licm_repr_33, k)) * $licm_arith_34) + carry;
             builtin::array_set<u32>($licm_repr_33, k, builtin::i32_wrap_i64(v));
             carry = v >>u 32_i64;
             k = k + 1;
@@ -2073,12 +2075,13 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let $licm_input_21: ref "core:prelude/slice.wado//Slice<u8>";
     let $licm_repr_22: ref Array<u8>;
     let $licm_start_23: i32;
-    let $av_26: i32;
+    let $licm_arith_24: i64;
+    let $av_29: i32;
     start = local.tee $load_0(self.pos);
-    $av_26 = $load_0;
-    if @unlikely(($av_26 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
+    $av_29 = $load_0;
+    if @unlikely(($av_29 + 4) > (local.tee $load_1(self.input).end - $load_1.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_26));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_29));
     }
     code = 0;
     i = 0;
@@ -2086,6 +2089,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     $licm_input_21 = $load_1;
     $licm_repr_22 = $licm_input_21.repr;
     $licm_start_23 = $licm_input_21.start;
+    $licm_arith_24 = builtin::i64_extend_i32_s(start);
     b201: block {
         l202: loop {
             break_if b201 i >= 4;
@@ -2100,7 +2104,7 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
                 (65 <=u c_4) & (c_4 <=u 70);
             }) == 0) {
                 cold_path;
-                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, builtin::i64_extend_i32_s(start));
+                return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, $licm_arith_24);
             }
             code = (code * 16) + $inline_char__hex_digit_value_scalar_3: block -> i32 {
                 if @likely((c_4 - 48) <u 10) {
@@ -2670,7 +2674,7 @@ fn "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self, lead) {
     } else {
         unreachable;
     });
-    return 0, builtin::i32_trunc_f64_s(v_10), ref.null none;
+    return 0, builtin::i32_trunc_sat_f64_s(v_10), ref.null none;
 }
 
 fn "core:json/core:json/JsonDeserializer::skip_string"(self) {

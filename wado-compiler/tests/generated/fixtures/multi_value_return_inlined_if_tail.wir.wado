@@ -422,12 +422,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b22: block {
             l23: loop {
                 break_if b22 temp == 0_i64;
@@ -438,7 +440,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l23;
             };
         };
@@ -4103,7 +4105,7 @@ fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:pr
     let used: i32;
     let $licm_used_64: i32;
     let $licm_repr_65: ref Array<i32>;
-    let $licm_repr_92: ref Array<u8>;
+    let $licm_repr_94: ref Array<u8>;
     len = s.used;
     start = 0;
     hyphenated = 1;
@@ -4136,12 +4138,12 @@ fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:pr
     g = 0;
     $licm_used_64 = groups.used;
     $licm_repr_65 = groups.repr;
-    $licm_repr_92 = s.repr;
+    $licm_repr_94 = s.repr;
     b337: block {
         l338: loop {
             break_if b337 g >= $licm_used_64;
             if g > 0 {
-                if builtin::array_get_value<u8>($licm_repr_92, pos) != 45 {
+                if builtin::array_get_value<u8>($licm_repr_94, pos) != 45 {
                     return 1, ref.null none, struct.new "core:uuid//ParseError" { 1 };
                 }
                 pos = pos + 1;
@@ -4150,8 +4152,8 @@ fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:pr
             b341: block {
                 l342: loop {
                     break_if b341 k >= builtin::array_get_value<i32>($licm_repr_65, g);
-                    hi = builtin::array_get_value<u8>($licm_repr_92, pos);
-                    lo = builtin::array_get_value<u8>($licm_repr_92, pos + 1);
+                    hi = builtin::array_get_value<u8>($licm_repr_94, pos);
+                    lo = builtin::array_get_value<u8>($licm_repr_94, pos + 1);
                     if (if (if (if (hi - 48) <u 10 -> i32 {
                         1;
                     } else {

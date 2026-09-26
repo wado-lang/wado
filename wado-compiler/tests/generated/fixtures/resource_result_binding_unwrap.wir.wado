@@ -737,13 +737,6 @@ fn "resource_result_binding_unwrap.wado/$cm_task_entry__handle"(request) {
     let $local_328: i64;
     let $local_329: i32;
     let $local_330: i32;
-    let $local_331: i32;
-    let $local_337: i32;
-    let $local_339: i32;
-    let $local_341: i32;
-    let $local_343: i32;
-    let $local_345: i32;
-    let $local_347: i32;
     let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let elements_351: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     let s_353: ref "core:prelude/string.wado//String";
@@ -1153,9 +1146,8 @@ fn "resource_result_binding_unwrap.wado/$cm_task_entry__handle"(request) {
         $match_scrut_2 = $local_182;
         if $match_scrut_2 == 1 {
             if $local_183 == 1 {
-                $local_331 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_331, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 14 {
@@ -1174,44 +1166,38 @@ fn "resource_result_binding_unwrap.wado/$cm_task_entry__handle"(request) {
             }
         } else if $match_scrut_2 == 24 {
             if $local_183 == 1 {
-                $local_337 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_337, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 27 {
             if $local_183 == 1 {
-                $local_339 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_339, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 30 {
             if $local_183 == 1 {
-                $local_341 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_341, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 31 {
             if $local_183 == 1 {
-                $local_343 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_343, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 32 {
             if $local_183 == 1 {
-                $local_345 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_345, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else if $match_scrut_2 == 38 {
             if $local_183 == 1 {
-                $local_347 = builtin::i32_wrap_i64($local_184);
                 if $local_185 > 0 {
-                    drop("mem/realloc"($local_347, $local_185, 1, 0));
+                    drop("mem/realloc"(builtin::i32_wrap_i64($local_184), $local_185, 1, 0));
                 }
             }
         } else {
@@ -1705,12 +1691,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b208: block {
             l209: loop {
                 break_if b208 temp == 0_i64;
@@ -1721,7 +1709,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l209;
             };
         };

@@ -1,0 +1,322 @@
+use { DeserializeError, DeserializeErrorKind } from "core:serde";
+use { TreeMap } from "core:collections";
+
+use { from_string, from_bytes, set, remove, EditError } from "core:jsonc";
+
+struct Server {
+    host: String,
+    port: i32,
+}
+
+// --- Comments ---
+
+test "line comment" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1, // one\n2]");
+    assert r matches { Ok(v) && v.len() == 2 && v[1] == 2 };
+}
+
+test "line comment at end of input" {
+    let r: Result<i32, DeserializeError> = from_string("42 // the answer");
+    assert r matches { Ok(42) };
+}
+
+test "block comment" {
+    let r: Result<List<i32>, DeserializeError> = from_string("/* head */[1, /* mid */ 2]/* tail */");
+    assert r matches { Ok(v) && v.len() == 2 };
+}
+
+test "block comment spanning lines" {
+    let r: Result<i32, DeserializeError> = from_string("/*\n * doc\n */ 7");
+    assert r matches { Ok(7) };
+}
+
+test "block comment does not nest" {
+    let r: Result<i32, DeserializeError> = from_string("/* a /* b */ 1");
+    assert r matches { Ok(1) };
+}
+
+test "comments around key, colon and value" {
+    let src = `{
+        // where to listen
+        "host" /* key */ : /* value */ "localhost",
+        "port": 8080 // default
+    }`;
+    let r: Result<Server, DeserializeError> = from_string(src);
+    assert r matches { Ok(s) && s.host == "localhost" && s.port == 8080 };
+}
+
+test "comment markers inside a string are text" {
+    let r: Result<String, DeserializeError> = from_string(`"http://a/*b*/"`);
+    assert r matches { Ok(s) && s == "http://a/*b*/" };
+}
+
+test "escaped quote does not end the string" {
+    let r: Result<String, DeserializeError> = from_string("\"a\\\"//b\" // c");
+    assert r matches { Ok(s) && s == "a\"//b" };
+}
+
+test "non-ASCII text in a comment" {
+    let r: Result<i32, DeserializeError> = from_string("// 日本語\n1");
+    assert r matches { Ok(1) };
+}
+
+// --- Trailing commas ---
+
+test "trailing comma in array" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1, 2,]");
+    assert r matches { Ok(v) && v.len() == 2 };
+}
+
+test "trailing comma in object" {
+    let r: Result<Server, DeserializeError> = from_string(`{"host": "h", "port": 1,}`);
+    assert r matches { Ok(s) && s.port == 1 };
+}
+
+test "trailing comma in map" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a": 1, "b": 2,}`);
+    assert r matches { Ok(m) && m.len() == 2 };
+}
+
+test "trailing comma before a comment and newline" {
+    let r: Result<List<List<i32>>, DeserializeError> = from_string("[[1,],\n[2, // two\n],\n]");
+    assert r matches { Ok(v) && v.len() == 2 && v[1][0] == 2 };
+}
+
+test "empty array with a comma is rejected" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[,]");
+    assert r matches { Err(_) };
+}
+
+test "empty object with a comma is rejected" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string("{,}");
+    assert r matches { Err(_) };
+}
+
+test "double comma is rejected" {
+    let r: Result<List<i32>, DeserializeError> = from_string("[1,,]");
+    assert r matches { Err(_) };
+}
+
+test "comma after a key's colon is rejected" {
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(`{"a":,}`);
+    assert r matches { Err(_) };
+}
+
+test "comma after a top-level value is rejected" {
+    let r: Result<i32, DeserializeError> = from_string("1,");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::TrailingData };
+}
+
+// --- Errors ---
+
+test "unterminated block comment" {
+    let r: Result<i32, DeserializeError> = from_string("1 /* open");
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::Eof && e.offset == 2 };
+}
+
+test "lone slash is rejected" {
+    let r: Result<i32, DeserializeError> = from_string("1 / 2");
+    assert r matches { Err(_) };
+}
+
+test "error offset points into the original input" {
+    // `x` sits at offset 13, past a comment that is blanked, not removed.
+    let r: Result<List<i32>, DeserializeError> = from_string("/* c */ [1, 2x]");
+    assert r matches { Err(e) && e.offset == 13 };
+}
+
+// --- Plain JSON ---
+
+test "plain JSON reads as JSON does" {
+    let r: Result<Server, DeserializeError> = from_string(`{"host":"h","port":2}`);
+    assert r matches { Ok(s) && s.host == "h" && s.port == 2 };
+}
+
+test "from_bytes" {
+    let bytes: ByteList = b"[1, /* two */ 2,]";
+    let r: Result<List<i32>, DeserializeError> = from_bytes(&bytes);
+    assert r matches { Ok(v) && v.len() == 2 };
+}
+
+// --- set ---
+
+test "set replaces a value and keeps the comments" {
+    let src = "{\n  // port\n  \"port\": 80, // default\n  \"host\": \"a\"\n}";
+    assert set(src, "/port", &8080).unwrap() == "{\n  // port\n  \"port\": 8080, // default\n  \"host\": \"a\"\n}";
+}
+
+test "set appends a member after a same-line comment" {
+    assert set("{\n  \"a\": 1 // one\n}", "/b", &2).unwrap() == "{\n  \"a\": 1, // one\n  \"b\": 2\n}";
+}
+
+test "set keeps the trailing comma style" {
+    assert set("{\n  \"a\": 1,\n}", "/b", &2).unwrap() == "{\n  \"a\": 1,\n  \"b\": 2,\n}";
+}
+
+test "set into a single-line object stays on the line" {
+    assert set("{\"a\": 1}", "/b", &2).unwrap() == "{\"a\": 1, \"b\": 2}";
+}
+
+test "set into an empty root object opens it" {
+    assert set("{}", "/a", &1).unwrap() == "{\n  \"a\": 1\n}";
+}
+
+test "set into an empty object keeps its comment" {
+    assert set("{\n  // nothing yet\n}", "/a", &1).unwrap() == "{\n  // nothing yet\n  \"a\": 1\n}";
+}
+
+test "set creates missing objects in the file's indentation" {
+    let src = "{\n    \"x\": 0\n}";
+    let want = "{\n    \"x\": 0,\n    \"editor\": {\n        \"font\": {\n            \"size\": 14\n        }\n    }\n}";
+    assert set(src, "/editor/font/size", &14).unwrap() == want;
+}
+
+test "set indents with tabs where the file does" {
+    let want = "{\n\t\"a\": 1,\n\t\"b\": {\n\t\t\"c\": 2\n\t}\n}";
+    assert set("{\n\t\"a\": 1\n}", "/b/c", &2).unwrap() == want;
+}
+
+test "set writes a composite value indented at its place" {
+    let src = "{\n  \"a\": {\n    \"b\": 1\n  }\n}";
+    let v: List<i32> = [1, 2];
+    let want = "{\n  \"a\": {\n    \"b\": 1,\n    \"c\": [\n      1,\n      2\n    ]\n  }\n}";
+    assert set(src, "/a/c", &v).unwrap() == want;
+}
+
+test "set opens an empty object in a multi-line document" {
+    assert set("{\n  \"a\": {}\n}", "/a/b", &1).unwrap() == "{\n  \"a\": {\n    \"b\": 1\n  }\n}";
+}
+
+test "set keeps an empty object compact in a single-line document" {
+    assert set("{\"a\": {}}", "/a/b", &1).unwrap() == "{\"a\": {\"b\": 1}}";
+}
+
+test "set replaces an array element" {
+    assert set("[1, 2, 3]", "/1", &20).unwrap() == "[1, 20, 3]";
+}
+
+test "set appends to an array with - or the length" {
+    assert set("[1, 2]", "/-", &3).unwrap() == "[1, 2, 3]";
+    assert set("[1, 2]", "/2", &3).unwrap() == "[1, 2, 3]";
+    assert set("[]", "/-", &1).unwrap() == "[\n  1\n]";
+}
+
+test "set replaces the root" {
+    assert set("// config\n{\"a\": 1}\n", "", &5).unwrap() == "// config\n5\n";
+}
+
+test "set writes CRLF where the file does" {
+    assert set("{\r\n  \"a\": 1\r\n}", "/b", &2).unwrap() == "{\r\n  \"a\": 1,\r\n  \"b\": 2\r\n}";
+}
+
+test "set places a composite value after a member that ends no line" {
+    let v: List<i32> = [1, 2];
+    let want = "{\r\n  \"a\": 1, \"b\": [\r\n    1,\r\n    2\r\n  ]}";
+    assert set("{\r\n  \"a\": 1}", "/b", &v).unwrap() == want;
+}
+
+test "set is not misled by brackets in strings and comments" {
+    let src = "{\"a\": /* c */ \"}//\", \"b\": [1, /* ] */ 2]}";
+    assert set(src, "/b/1", &3).unwrap() == "{\"a\": /* c */ \"}//\", \"b\": [1, /* ] */ 3]}";
+    assert set(src, "/a", &"y").unwrap() == "{\"a\": /* c */ \"y\", \"b\": [1, /* ] */ 2]}";
+}
+
+test "set targets the last of duplicate keys" {
+    assert set("{\"a\": 1, \"a\": 2}", "/a", &3).unwrap() == "{\"a\": 1, \"a\": 3}";
+}
+
+test "set matches keys by their decoded text" {
+    assert set("{\"a/b\": 1}", "/a~1b", &2).unwrap() == "{\"a/b\": 2}";
+    assert set("{\"\\u0061\": 1}", "/a", &2).unwrap() == "{\"\\u0061\": 2}";
+    assert set("{\"~\": 1}", "/~0", &2).unwrap() == "{\"~\": 2}";
+}
+
+test "set escapes a new key" {
+    assert set("{}", "/a\"b", &1).unwrap() == "{\n  \"a\\\"b\": 1\n}";
+}
+
+test "set result reads back" {
+    let src = "{\n  \"host\": \"h\", // host\n}";
+    let edited = set(src, "/port", &9).unwrap();
+    let r: Result<Server, DeserializeError> = from_string(&edited);
+    assert r matches { Ok(s) && s.host == "h" && s.port == 9 };
+}
+
+test "set through a scalar is not found" {
+    assert set("{\"a\": 1}", "/a/b", &2) matches { Err(NotFound(p)) && p == "/a/b" };
+}
+
+test "set past the end of an array is not found" {
+    assert set("[1]", "/5", &2) matches { Err(NotFound(_)) };
+    assert set("[1]", "/01", &2) matches { Err(NotFound(_)) };
+    assert set("[1]", "/x", &2) matches { Err(NotFound(_)) };
+    assert set("[1]", "/-/a", &2) matches { Err(NotFound(_)) };
+}
+
+test "set rejects a malformed pointer" {
+    assert set("{}", "a", &1) matches { Err(InvalidPointer(p)) && p == "a" };
+    assert set("{}", "/~2", &1) matches { Err(InvalidPointer(_)) };
+    assert set("{}", "/~", &1) matches { Err(InvalidPointer(_)) };
+}
+
+test "set rejects a source that is not JSONC" {
+    assert set("{\"a\": }", "/a", &1) matches { Err(Syntax(_)) };
+}
+
+// --- remove ---
+
+test "remove takes a member's line and its comment" {
+    let src = "{\n  \"a\": 1, // one\n  \"b\": 2\n}";
+    assert remove(src, "/a").unwrap() == "{\n  \"b\": 2\n}";
+}
+
+test "remove the last member drops the comma before it" {
+    let src = "{\n  \"a\": 1, // one\n  \"b\": 2 // two\n}";
+    assert remove(src, "/b").unwrap() == "{\n  \"a\": 1 // one\n}";
+}
+
+test "remove keeps the trailing comma style" {
+    assert remove("{\n  \"a\": 1,\n  \"b\": 2,\n}", "/b").unwrap() == "{\n  \"a\": 1,\n}";
+}
+
+test "remove leaves the comment above a member" {
+    let src = "{\n  \"a\": 1,\n  // about b\n  \"b\": 2\n}";
+    assert remove(src, "/b").unwrap() == "{\n  \"a\": 1\n  // about b\n}";
+}
+
+test "remove keeps the comment on the previous member's line" {
+    let src = "{\"a\": 1, // c\n  \"b\": 2}";
+    assert remove(src, "/b").unwrap() == "{\"a\": 1 // c\n}";
+}
+
+test "remove the only member empties the object" {
+    assert remove("{\n  \"a\": 1\n}", "/a").unwrap() == "{}";
+    assert remove("{\n  // keep\n  \"a\": 1\n}", "/a").unwrap() == "{\n  // keep\n}";
+}
+
+test "remove on a single line" {
+    let src = "{\"a\": 1, \"b\": 2, \"c\": 3}";
+    assert remove(src, "/a").unwrap() == "{\"b\": 2, \"c\": 3}";
+    assert remove(src, "/b").unwrap() == "{\"a\": 1, \"c\": 3}";
+    assert remove(src, "/c").unwrap() == "{\"a\": 1, \"b\": 2}";
+}
+
+test "remove an array element" {
+    assert remove("[1, 2, 3]", "/0").unwrap() == "[2, 3]";
+    assert remove("[\n  1,\n  2\n]", "/1").unwrap() == "[\n  1\n]";
+}
+
+test "remove a multi-line member" {
+    let src = "{\n  \"a\": {\n    \"x\": 1\n  },\n  \"b\": 2\n}";
+    assert remove(src, "/a").unwrap() == "{\n  \"b\": 2\n}";
+}
+
+test "remove a nested member" {
+    assert remove("{\"a\": {\"b\": 1, \"c\": 2}}", "/a/b").unwrap() == "{\"a\": {\"c\": 2}}";
+}
+
+test "remove what is not there" {
+    assert remove("{\"a\": 1}", "/zzz") matches { Err(NotFound(p)) && p == "/zzz" };
+    assert remove("[1]", "/-") matches { Err(NotFound(_)) };
+    assert remove("{}", "") matches { Err(NotFound(_)) };
+}

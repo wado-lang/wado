@@ -622,6 +622,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 
 // Type cast
 42 as f64
+300.7 as u8             // 255: float -> int truncates and saturates, NaN -> 0
 'A' as i32              // char -> i32: 65
 // 65 as char           // compile error: use char::from_u32()
 
@@ -1825,8 +1826,11 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 ### Other core modules
 
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
+- [`core:jsonc`](./stdlib-core-jsonc.md) — reads JSON with comments and
+  trailing commas, and edits it by JSON Pointer with the comments kept
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
-- [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value
+- [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value;
+  `from_value` decodes one into a type, `merge` layers one over another
 - [`core:base64`](./stdlib-core-base64.md) — base64 encoding and decoding
 - [`core:digest`](./stdlib-core-digest.md) — cryptographic hashes and HMAC (SHA-256)
 - [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)

@@ -1,6 +1,6 @@
-use { Value, to_value } from "core:value";
+use { Value, to_value, from_value, merge } from "core:value";
 use { to_string, from_string } from "core:json";
-use { Serialize, DeserializeError } from "core:serde";
+use { Serialize, DeserializeError, DeserializeErrorKind } from "core:serde";
 use { TreeMap } from "core:collections";
 
 fn obj(entries: List<[String, Value]>) -> TreeMap<String, Value> {
@@ -388,6 +388,216 @@ test "to_value on a unit variant yields its name" {
 
 test "to_value on a payload variant yields an object" {
     assert to_value(&ToValueShape::Circle(5)) matches { Ok(Object(_)) };
+}
+
+// --- from_value ---
+
+struct Endpoint {
+    host: String,
+    port: i32 = 80,
+    tags: List<String> = [],
+    timeout: Option<f64> = null,
+}
+
+struct Service {
+    name: String,
+    endpoint: Endpoint,
+    shape: ToValueShape = ToValueShape::Dot,
+}
+
+test "from_value reads a struct" {
+    let v: Value = {
+        host: "h",
+        port: 8080,
+        tags: ["a", "b"],
+        timeout: 1.5,
+    };
+    let r: Result<Endpoint, DeserializeError> = from_value(&v);
+    assert r matches { Ok(e) && e.host == "h"
+        && e.port == 8080
+        && e.tags.len() == 2
+        && e.timeout matches { Some(t) && t == 1.5 } };
+}
+
+test "from_value fills field defaults" {
+    let v: Value = { host: "h" };
+    let r: Result<Endpoint, DeserializeError> = from_value(&v);
+    assert r matches { Ok(e) && e.port == 80 && e.tags.is_empty() && e.timeout matches { None } };
+}
+
+test "from_value reports a missing field" {
+    let v: Value = { port: 1 };
+    let r: Result<Endpoint, DeserializeError> = from_value(&v);
+    assert r matches { Err(e) && e.kind == DeserializeErrorKind::MissingField };
+}
+
+test "from_value ignores unknown fields" {
+    let v: Value = {
+        host: "h",
+        extra: [1, 2],
+    };
+    let r: Result<Endpoint, DeserializeError> = from_value(&v);
+    assert r matches { Ok(e) && e.host == "h" };
+}
+
+test "from_value reads nested structs and variants" {
+    let v: Value = {
+        name: "svc",
+        endpoint: { host: "h" },
+        shape: { Circle: 3 },
+    };
+    let r: Result<Service, DeserializeError> = from_value(&v);
+    assert r matches { Ok(s) && s.endpoint.host == "h" && s.shape matches { Circle(3) } };
+}
+
+test "from_value reads a unit variant from its name" {
+    let v = Value::String("Dot");
+    let r: Result<ToValueShape, DeserializeError> = from_value(&v);
+    assert r matches { Ok(Dot) };
+}
+
+test "from_value reads what core:json produced" {
+    // JSON yields every number as a Float.
+    let v: Value = from_string(`{"host":"h","port":443}`).unwrap();
+    let r: Result<Endpoint, DeserializeError> = from_value(&v);
+    assert r matches { Ok(e) && e.port == 443 };
+}
+
+test "from_value round-trips to_value" {
+    let s = Service {
+        name: "n",
+        endpoint: Endpoint {
+            host: "h",
+            port: 1,
+            tags: ["t"],
+        },
+        shape: ToValueShape::Circle(2),
+    };
+    let r: Result<Service, DeserializeError> = from_value(&to_value(&s).unwrap());
+    assert r matches { Ok(back) && back.name == "n" && back.endpoint.tags[0] == "t" && back.shape matches { Circle(2) } };
+}
+
+test "from_value reads a map" {
+    let v: Value = { a: 1, b: 2 };
+    let r: Result<TreeMap<String, i64>, DeserializeError> = from_value(&v);
+    assert r matches { Ok(m) && m["b"] == 2 };
+}
+
+test "from_value reads Value itself" {
+    let v: Value = {
+        a: [1, null],
+    };
+    let r: Result<Value, DeserializeError> = from_value(&v);
+    assert r matches { Ok(back) && back == v };
+}
+
+test "from_value narrows integers with a range check" {
+    assert from_value::<u8>(&Value::Int(255)) matches { Ok(255) };
+    assert from_value::<u8>(&Value::Int(256)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert from_value::<u32>(&Value::Int(-1)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert from_value::<u64>(&Value::UInt(u64::MAX)) matches { Ok(v) && v == u64::MAX };
+    assert from_value::<i64>(&Value::UInt(u64::MAX)) matches { Err(e) && e.kind == DeserializeErrorKind::Overflow };
+    assert from_value::<i128>(&Value::Int128(-5)) matches { Ok(-5) };
+}
+
+test "from_value reads a whole float as an integer" {
+    assert from_value::<i32>(&Value::Float(42.0)) matches { Ok(42) };
+    assert from_value::<i32>(&Value::Float(4.5)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "from_value reads a whole float past 64 bits into a wide integer" {
+    assert from_value::<i128>(&Value::Float(1.0e20)) matches { Ok(n) && n == 100000000000000000000 };
+    let two_pow_127: u128 = 170141183460469231731687303715884105728;
+    assert from_value::<u128>(&Value::Float(1.7014118346046923e38)) matches { Ok(n) && n == two_pow_127 };
+}
+
+test "an out-of-range error names the target type" {
+    let for_u32 = |e: &DeserializeError| e.kind == DeserializeErrorKind::Overflow
+        && e.message == "value out of range for u32";
+    assert from_value::<u32>(&Value::UInt128(u128::MAX)) matches { Err(e) && for_u32(&e) };
+    assert from_value::<u32>(&Value::Float(1.0e30)) matches { Err(e) && for_u32(&e) };
+    assert from_value::<i128>(&Value::Float(1.0e40)) matches { Err(e) && e.message == "value out of range for i128" };
+    assert from_value::<u128>(&Value::Float(-1.0)) matches { Err(e) && e.message == "value out of range for u128" };
+}
+
+test "from_value reads a string-encoded integer, as core:json writes one" {
+    assert from_value::<i64>(&Value::String("9007199254740993")) matches { Ok(9007199254740993) };
+}
+
+test "from_value widens integers to floats" {
+    assert from_value::<f64>(&Value::Int(3)) matches { Ok(f) && f == 3.0 };
+}
+
+test "from_value rejects a type mismatch" {
+    assert from_value::<String>(&Value::Int(1)) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_value::<bool>(&Value::Null) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+    assert from_value::<List<i32>>(&Value::String("x")) matches { Err(e) && e.kind == DeserializeErrorKind::UnexpectedType };
+}
+
+test "from_value reads a char and bytes" {
+    assert from_value::<char>(&Value::String("x")) matches { Ok('x') };
+    assert from_value::<char>(&Value::String("xy")) matches { Err(_) };
+    let bytes: ByteList = [1, 2];
+    assert from_value::<ByteList>(&Value::Bytes(bytes)) matches { Ok(b) && b.len() == 2 };
+    // core:json writes bytes as base64.
+    assert from_value::<ByteList>(&Value::String("AQI=")) matches { Ok(b) && b.len() == 2 && b[1] == 2 };
+}
+
+// --- merge ---
+
+test "merge overlays objects key by key, recursively" {
+    let base: Value = {
+        server: { host: "localhost", port: 80 },
+        debug: false,
+    };
+    let overlay: Value = {
+        server: { port: 8080 },
+        debug: true,
+    };
+    let expected: Value = {
+        server: { host: "localhost", port: 8080 },
+        debug: true,
+    };
+    assert merge(base, overlay) == expected;
+}
+
+test "merge adds keys the base lacks, after its own" {
+    let base: Value = { a: 1 };
+    let overlay: Value = { b: 2 };
+    let merged = merge(base, overlay);
+    let expected: Value = { a: 1, b: 2 };
+    assert merged == expected;
+    assert to_string(&merged) matches { Ok(s) && s == "{\"a\":1,\"b\":2}" };
+}
+
+test "merge replaces a list rather than concatenating" {
+    let base: Value = {
+        tags: ["a", "b"],
+    };
+    let overlay: Value = {
+        tags: ["c"],
+    };
+    let expected: Value = {
+        tags: ["c"],
+    };
+    assert merge(base, overlay) == expected;
+}
+
+test "merge replaces when either side is not an object" {
+    let base: Value = {
+        a: { b: 1 },
+    };
+    let overlay: Value = { a: 5 };
+    let expected: Value = { a: 5 };
+    assert merge(base, overlay) == expected;
+    assert merge(Value::Int(1), Value::String("x")) == Value::String("x");
+}
+
+test "merge takes an explicit null from the overlay" {
+    let base: Value = { a: 1 };
+    let overlay: Value = { a: null };
+    let expected: Value = { a: null };
+    assert merge(base, overlay) == expected;
 }
 
 test "to_value preserves byte strings as Value::Bytes" {

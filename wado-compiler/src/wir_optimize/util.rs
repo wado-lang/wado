@@ -224,9 +224,8 @@ pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
 /// calls (potentially I/O), the explicit [`WirInstr::Unreachable`] trap,
 /// control-flow exits that bypass subsequent siblings, and the
 /// [`WirInstr::BlackBox`] barrier, which mutates nothing but must survive. Does
-/// **not** classify implicit-trap ops (integer divide / remainder, float→int
-/// trunc, OOB heap reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as
-/// observable.
+/// **not** classify implicit-trap ops (integer divide / remainder, OOB heap
+/// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable.
 ///
 /// Does not look at children; combine with recursion (see
 /// [`is_side_effect_free`]) for tree purity.
@@ -328,16 +327,6 @@ pub(super) fn may_trap_in(instr: &WirInstr, null: &Nullability) -> bool {
         | WirInstr::I64DivU(_, _)
         | WirInstr::I64RemS(_, _)
         | WirInstr::I64RemU(_, _)
-        // Non-saturating float-to-int truncation traps on out-of-range
-        // values (the saturating variants — `*TruncSatF*` — don't).
-        | WirInstr::I32TruncF32S(_)
-        | WirInstr::I32TruncF32U(_)
-        | WirInstr::I32TruncF64S(_)
-        | WirInstr::I32TruncF64U(_)
-        | WirInstr::I64TruncF32S(_)
-        | WirInstr::I64TruncF32U(_)
-        | WirInstr::I64TruncF64S(_)
-        | WirInstr::I64TruncF64U(_)
         // Linear-memory loads trap on out-of-bounds access.
         | WirInstr::I32Load { .. }
         | WirInstr::I32Load8U { .. }

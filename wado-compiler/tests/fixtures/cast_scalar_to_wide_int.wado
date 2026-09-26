@@ -1,0 +1,36 @@
+// Every scalar that casts to an integer casts to any integer, i128 / u128
+// included, as Rust's `as` allows: a bool, a char, an enum, flags, and a
+// newtype over an integer. Only numeric sources reached a wide-int constructor;
+// the rest fell through to a bare cast that WIR build could not lower, a char
+// was refused outright, and an enum crashed on its way to i64 / u64 as well.
+use { println, Stdout } from "core:cli";
+
+enum Color { Red, Green, Blue }
+
+flags Perms { Read, Write }
+
+flags Big { A, B, C, D, E, F, G, H, I }
+
+type Id = i64;
+
+export fn run() with Stdout {
+    let b = builtin::black_box(true);
+    let c = builtin::black_box('A');
+    let e = builtin::black_box(Color::Blue);
+    let p = builtin::black_box(Perms::Read | Perms::Write);
+    let id = builtin::black_box(-5 as Id);
+    println(`${b as i128} ${b as u128}`);
+    println(`${c as i128} ${c as u128}`);
+    println(`${e as i128} ${e as u128}`);
+    println(`${p as i128} ${p as u128}`);
+    println(`${id as i128}`);
+    println(`${true as i128} ${'z' as u128}`);
+    println(`${e as i64} ${e as u64} ${e as u8}`);
+    let big = builtin::black_box(Big::all());
+    println(`${big as u8} ${big as i8} ${big as u64}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1\n65 65\n2 2\n3 3\n-5\n1 122\n2 2 2\n255 -1 511\n"
+}

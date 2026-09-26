@@ -1,0 +1,25 @@
+// An integer cast to i128 / u128 extends by the source's signedness, as Rust's
+// `as` does: an unsigned source zero-extends and a signed one sign-extends,
+// whichever the target is. Extending by the target's signedness made
+// `u64::MAX as i128` -1 and `-1i64 as u128` 2^64 - 1.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let u = builtin::black_box(u64::MAX);
+    let w = builtin::black_box(u32::MAX);
+    let s = builtin::black_box(-1 as i64);
+    let t = builtin::black_box(-1);
+    println(`${u as i128}`);
+    println(`${w as i128}`);
+    println(`${u as u128}`);
+    println(`${s as u128}`);
+    println(`${t as u128}`);
+    println(`${s as i128}`);
+    println(`${u64::MAX as i128}`);
+    println(`${(-1 as i64) as u128}`);
+}
+
+__DATA__
+{
+    "stdout": "18446744073709551615\n4294967295\n18446744073709551615\n340282366920938463463374607431768211455\n340282366920938463463374607431768211455\n-1\n18446744073709551615\n340282366920938463463374607431768211455\n"
+}

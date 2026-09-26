@@ -375,6 +375,52 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// `instr`, a float of type `from`, clamped to the range of the i32-like
+    /// `target`, so the `trunc_sat` that follows saturates at `target`'s
+    /// bounds rather than i32's, as Rust's `as` does. A NaN passes through the
+    /// clamp, and `trunc_sat` makes it 0; so does a negative value on its way to
+    /// an unsigned target, which therefore needs no lower bound.
+    fn clamp_float_to(instr: WirInstr, from: PrimitiveType, target: &PrimitiveType) -> WirInstr {
+        let (min, max): (Option<f64>, f64) = match target {
+            PrimitiveType::I32 | PrimitiveType::U32 => return instr,
+            PrimitiveType::I8 => (Some(f64::from(i8::MIN)), f64::from(i8::MAX)),
+            PrimitiveType::U8 => (None, f64::from(u8::MAX)),
+            PrimitiveType::I16 => (Some(f64::from(i16::MIN)), f64::from(i16::MAX)),
+            PrimitiveType::U16 => (None, f64::from(u16::MAX)),
+            PrimitiveType::I64
+            | PrimitiveType::U64
+            | PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16
+            | PrimitiveType::V128
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => {
+                panic!("clamp_float_to: {target:?} is not an i32-like integer")
+            }
+        };
+        let clamp = |instr: WirInstr, bound: f64, upper: bool| match (from, upper) {
+            (PrimitiveType::F64, true) => {
+                WirInstr::F64Min(Box::new(instr), Box::new(WirInstr::F64Const(bound)))
+            }
+            (PrimitiveType::F64, false) => {
+                WirInstr::F64Max(Box::new(instr), Box::new(WirInstr::F64Const(bound)))
+            }
+            (PrimitiveType::F32, true) => {
+                WirInstr::F32Min(Box::new(instr), Box::new(WirInstr::F32Const(bound as f32)))
+            }
+            (PrimitiveType::F32, false) => {
+                WirInstr::F32Max(Box::new(instr), Box::new(WirInstr::F32Const(bound as f32)))
+            }
+            (other, _) => panic!("clamp_float_to: {other:?} is not f32 or f64"),
+        };
+        let below_max = clamp(instr, max, true);
+        match min {
+            Some(min) => clamp(below_max, min, false),
+            None => below_max,
+        }
+    }
+
     /// Translate a type cast.
     pub(super) fn translate_cast(
         &mut self,
@@ -395,7 +441,14 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let inner_instr = self.translate_operand(inner);
-        let from = self.type_table.get(from_type);
+        let from = match self.type_table.get(from_type) {
+            // A discriminant and a bitmask are unsigned i32s, so they convert
+            // as a `u32` does.
+            ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => {
+                &ResolvedType::Primitive(PrimitiveType::U32)
+            }
+            other => other,
+        };
         let to = self.type_table.get(to_type);
 
         // Numeric casts: extension/conversion mode is determined by the source
@@ -498,60 +551,64 @@ impl FunctionTranslator<'_, '_> {
                 ResolvedType::Primitive(
                     to_prim @ (PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8),
                 ),
-            ) => {
-                let truncated = WirInstr::I32TruncF64S(Box::new(inner_instr));
-                Self::truncate_to_sub_i32(truncated, to_prim)
-            }
+            ) => WirInstr::I32TruncSatF64S(Box::new(Self::clamp_float_to(
+                inner_instr,
+                PrimitiveType::F64,
+                to_prim,
+            ))),
             // f64 → unsigned i32-like
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(
                     to_prim @ (PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8),
                 ),
-            ) => {
-                let truncated = WirInstr::I32TruncF64U(Box::new(inner_instr));
-                Self::truncate_to_sub_i32(truncated, to_prim)
-            }
+            ) => WirInstr::I32TruncSatF64U(Box::new(Self::clamp_float_to(
+                inner_instr,
+                PrimitiveType::F64,
+                to_prim,
+            ))),
             // f64 → i64
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(PrimitiveType::I64),
-            ) => WirInstr::I64TruncF64S(Box::new(inner_instr)),
+            ) => WirInstr::I64TruncSatF64S(Box::new(inner_instr)),
             // f64 → u64
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
                 ResolvedType::Primitive(PrimitiveType::U64),
-            ) => WirInstr::I64TruncF64U(Box::new(inner_instr)),
+            ) => WirInstr::I64TruncSatF64U(Box::new(inner_instr)),
             // f32 → signed i32-like
             (
                 ResolvedType::Primitive(PrimitiveType::F32),
                 ResolvedType::Primitive(
                     to_prim @ (PrimitiveType::I32 | PrimitiveType::I16 | PrimitiveType::I8),
                 ),
-            ) => {
-                let truncated = WirInstr::I32TruncF32S(Box::new(inner_instr));
-                Self::truncate_to_sub_i32(truncated, to_prim)
-            }
+            ) => WirInstr::I32TruncSatF32S(Box::new(Self::clamp_float_to(
+                inner_instr,
+                PrimitiveType::F32,
+                to_prim,
+            ))),
             // f32 → unsigned i32-like
             (
                 ResolvedType::Primitive(PrimitiveType::F32),
                 ResolvedType::Primitive(
                     to_prim @ (PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8),
                 ),
-            ) => {
-                let truncated = WirInstr::I32TruncF32U(Box::new(inner_instr));
-                Self::truncate_to_sub_i32(truncated, to_prim)
-            }
+            ) => WirInstr::I32TruncSatF32U(Box::new(Self::clamp_float_to(
+                inner_instr,
+                PrimitiveType::F32,
+                to_prim,
+            ))),
             // f32 → i64
             (
                 ResolvedType::Primitive(PrimitiveType::F32),
                 ResolvedType::Primitive(PrimitiveType::I64),
-            ) => WirInstr::I64TruncF32S(Box::new(inner_instr)),
+            ) => WirInstr::I64TruncSatF32S(Box::new(inner_instr)),
             // f32 → u64
             (
                 ResolvedType::Primitive(PrimitiveType::F32),
                 ResolvedType::Primitive(PrimitiveType::U64),
-            ) => WirInstr::I64TruncF32U(Box::new(inner_instr)),
+            ) => WirInstr::I64TruncSatF32U(Box::new(inner_instr)),
             // f64 ↔ f32
             (
                 ResolvedType::Primitive(PrimitiveType::F64),
@@ -581,7 +638,7 @@ impl FunctionTranslator<'_, '_> {
                 ),
             ) => Self::truncate_to_sub_i32(inner_instr, to_prim),
             _ => {
-                // Other casts — newtype and SIMD reinterprets, enum→i32,
+                // Other casts — newtype and SIMD reinterprets, i32↔u32,
                 // struct→struct — are Wasm-level no-ops and pass through, which
                 // is valid only when both sides share a representation kind. A
                 // reference↔scalar cast here means an earlier phase failed to

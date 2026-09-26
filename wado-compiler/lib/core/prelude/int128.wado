@@ -72,6 +72,31 @@ impl u128 {
         return u128 { low: value, high: 0 };
     }
 
+    /// Create a u128 from an i64 value (sign-extended, as `value as u128`
+    /// is)
+    #[compiler_item("u128_from_i64")]
+    pub fn from_i64(value: i64) -> u128 {
+        let high: u64 = if value < 0 { u64::MAX } else { 0 };
+        return u128 { low: value as u64, high };
+    }
+
+    /// `value` truncated toward zero and saturated at `u128`'s bounds, NaN as
+    /// 0: what `value as u128` is.
+    #[compiler_item("u128_from_f64")]
+    pub fn from_f64(value: f64) -> u128 {
+        if !(value > 0.0) {
+            return u128::MIN;
+        }
+        if value >= 340282366920938463463374607431768211456.0 {
+            return u128::MAX;
+        }
+        // Both halves are exact: scaling by 2^64 moves only the exponent, and
+        // what the high half leaves are `value`'s own low bits.
+        let high = (value / 18446744073709551616.0) as u64;
+        let low = (value - high as f64 * 18446744073709551616.0) as u64;
+        return u128 { low, high };
+    }
+
     /// Create a u128 from low and high 64-bit parts
     /// Used by the compiler for efficient large literal construction
     #[compiler_item("u128_from_pair")]
@@ -836,6 +861,27 @@ impl i128 {
         // Sign extend: if value is negative, high bits are all 1s (-1)
         let high: i64 = if value < 0 { -1 } else { 0 };
         return i128 { low: value as u64, high };
+    }
+
+    /// Create an i128 from a u64 value (zero-extended)
+    #[compiler_item("i128_from_u64")]
+    pub fn from_u64(value: u64) -> i128 {
+        return i128 { low: value, high: 0 };
+    }
+
+    /// `value` truncated toward zero and saturated at `i128`'s bounds, NaN as
+    /// 0: what `value as i128` is.
+    #[compiler_item("i128_from_f64")]
+    pub fn from_f64(value: f64) -> i128 {
+        if value >= 170141183460469231731687303715884105728.0 {
+            return i128::MAX;
+        }
+        if value <= -170141183460469231731687303715884105728.0 {
+            return i128::MIN;
+        }
+        let magnitude = u128::from_f64(f64::abs(value));
+        let result = i128 { low: magnitude.low, high: magnitude.high as i64 };
+        return if value < 0.0 { -result } else { result };
     }
 
     /// Create an i128 from low and high 64-bit parts

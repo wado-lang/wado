@@ -1937,12 +1937,14 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
     let pos: i32;
     let temp: i64;
     let digit: i32;
+    let $licm_arith_13: u64;
     mask64 = builtin::i64_extend_i32_s(mask);
     pos = offset + digit_count;
     if val_i64 == 0_i64 {
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
+        $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
         b167: block {
             l168: loop {
                 break_if b167 temp == 0_i64;
@@ -1953,7 +1955,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
+                temp = temp >>u $licm_arith_13;
                 continue l168;
             };
         };
@@ -2269,7 +2271,7 @@ fn "core:rt/inspect_handle"(f, $mv$name$repr, $mv$name$used, handle, class, stri
         let $mv_arg_6: ref "core:prelude/string.wado//String";
         $mv_arg_6 = global:core:rt::$const_obj_35;
         "core:prelude/traits.wado/struct_field"(f, $mv_arg_6.repr, $mv_arg_6.used, 0);
-        "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(builtin::i64_trunc_f64_s(handle - (builtin::f64_convert_i32_s(class) * stride)), f);
+        "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(builtin::i64_trunc_sat_f64_s(handle - (builtin::f64_convert_i32_s(class) * stride)), f);
     }
     if f.alternate {
         self_120 = f.buf;
@@ -4064,7 +4066,7 @@ fn "inspect_unrestricted_handle.wado/inspect_unrestricted_handle.wado/Node^core:
         if select i32(select i32(sign_clear, $h < 9007199254740992, 0), builtin::f64_floor($h) == $h, 0) == 0 {
             break $inline_handle_class_0: -1;
         }
-        break $inline_handle_class_0: builtin::i32_trunc_f64_s(builtin::f64_floor($h / 137438953472));
+        break $inline_handle_class_0: builtin::i32_trunc_sat_f64_s(builtin::f64_floor($h / 137438953472));
     };
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = (if $class == 2 -> ref "core:prelude/string.wado//String" {
@@ -4089,7 +4091,7 @@ fn "inspect_unrestricted_handle.wado/inspect_unrestricted_handle.wado/Node^core:
         if select i32(select i32(sign_clear, $h < 9007199254740992, 0), builtin::f64_floor($h) == $h, 0) == 0 {
             break $inline_handle_class_0: -1;
         }
-        break $inline_handle_class_0: builtin::i32_trunc_f64_s(builtin::f64_floor($h / 137438953472));
+        break $inline_handle_class_0: builtin::i32_trunc_sat_f64_s(builtin::f64_floor($h / 137438953472));
     };
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = (if $class == 2 -> ref "core:prelude/string.wado//String" {
@@ -4114,7 +4116,7 @@ fn "inspect_unrestricted_handle.wado/inspect_unrestricted_handle.wado/Text^core:
         if select i32(select i32(sign_clear, $h < 9007199254740992, 0), builtin::f64_floor($h) == $h, 0) == 0 {
             break $inline_handle_class_0: -1;
         }
-        break $inline_handle_class_0: builtin::i32_trunc_f64_s(builtin::f64_floor($h / 137438953472));
+        break $inline_handle_class_0: builtin::i32_trunc_sat_f64_s(builtin::f64_floor($h / 137438953472));
     };
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = (if $class == 2 -> ref "core:prelude/string.wado//String" {
@@ -4139,7 +4141,7 @@ fn "inspect_unrestricted_handle.wado/inspect_unrestricted_handle.wado/Element^co
         if select i32(select i32(sign_clear, $h < 9007199254740992, 0), builtin::f64_floor($h) == $h, 0) == 0 {
             break $inline_handle_class_0: -1;
         }
-        break $inline_handle_class_0: builtin::i32_trunc_f64_s(builtin::f64_floor($h / 137438953472));
+        break $inline_handle_class_0: builtin::i32_trunc_sat_f64_s(builtin::f64_floor($h / 137438953472));
     };
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = (if $class == 2 -> ref "core:prelude/string.wado//String" {

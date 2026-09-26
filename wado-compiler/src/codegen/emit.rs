@@ -1057,18 +1057,18 @@ impl<'a> WirEmitter<'a> {
             WirInstr::I64Popcnt(o) => self.emit_unary(f, o, Instruction::I64Popcnt),
             WirInstr::I64ExtendI32S(o) => self.emit_unary(f, o, Instruction::I64ExtendI32S),
             WirInstr::I64ExtendI32U(o) => self.emit_unary(f, o, Instruction::I64ExtendI32U),
-            WirInstr::I64TruncF64S(o) => self.emit_unary(f, o, Instruction::I64TruncF64S),
-            WirInstr::I64TruncF64U(o) => self.emit_unary(f, o, Instruction::I64TruncF64U),
-            WirInstr::I64TruncF32S(o) => self.emit_unary(f, o, Instruction::I64TruncF32S),
-            WirInstr::I64TruncF32U(o) => self.emit_unary(f, o, Instruction::I64TruncF32U),
+            WirInstr::I64TruncSatF64S(o) => self.emit_unary(f, o, Instruction::I64TruncSatF64S),
+            WirInstr::I64TruncSatF64U(o) => self.emit_unary(f, o, Instruction::I64TruncSatF64U),
+            WirInstr::I64TruncSatF32S(o) => self.emit_unary(f, o, Instruction::I64TruncSatF32S),
+            WirInstr::I64TruncSatF32U(o) => self.emit_unary(f, o, Instruction::I64TruncSatF32U),
 
             // i32 extra
             WirInstr::I32Clz(o) => self.emit_unary(f, o, Instruction::I32Clz),
             WirInstr::I32Ctz(o) => self.emit_unary(f, o, Instruction::I32Ctz),
             WirInstr::I32Popcnt(o) => self.emit_unary(f, o, Instruction::I32Popcnt),
-            WirInstr::I32TruncF32S(o) => self.emit_unary(f, o, Instruction::I32TruncF32S),
-            WirInstr::I32TruncF32U(o) => self.emit_unary(f, o, Instruction::I32TruncF32U),
-            WirInstr::I32TruncF64U(o) => self.emit_unary(f, o, Instruction::I32TruncF64U),
+            WirInstr::I32TruncSatF32S(o) => self.emit_unary(f, o, Instruction::I32TruncSatF32S),
+            WirInstr::I32TruncSatF32U(o) => self.emit_unary(f, o, Instruction::I32TruncSatF32U),
+            WirInstr::I32TruncSatF64U(o) => self.emit_unary(f, o, Instruction::I32TruncSatF64U),
 
             // f32 arithmetic
             WirInstr::F32Add(l, r) => self.emit_binary(f, l, r, Instruction::F32Add),
@@ -1125,7 +1125,7 @@ impl<'a> WirEmitter<'a> {
             WirInstr::F64ConvertI64S(o) => self.emit_unary(f, o, Instruction::F64ConvertI64S),
             WirInstr::F64ConvertI64U(o) => self.emit_unary(f, o, Instruction::F64ConvertI64U),
             WirInstr::F64PromoteF32(o) => self.emit_unary(f, o, Instruction::F64PromoteF32),
-            WirInstr::I32TruncF64S(o) => self.emit_unary(f, o, Instruction::I32TruncF64S),
+            WirInstr::I32TruncSatF64S(o) => self.emit_unary(f, o, Instruction::I32TruncSatF64S),
             WirInstr::F64ReinterpretI64(o) => self.emit_unary(f, o, Instruction::F64ReinterpretI64),
             WirInstr::I64ReinterpretF64(o) => self.emit_unary(f, o, Instruction::I64ReinterpretF64),
 

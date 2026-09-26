@@ -616,9 +616,6 @@ pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
 /// Two callers, for the two ways a promoted value can lose a trap: extraction
 /// materialises it at a point that dominates the uses — above the guard each use
 /// sits behind — and the deletion predicates drop the statement holding it.
-///
-/// Conservative on `Cast`: classifying one needs the operand's source type, and
-/// nothing guarantees the type-erased tree recorded it.
 pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
     match pool.kind(v) {
         ValueKind::Binary { op, lhs, rhs, .. } => {
@@ -627,7 +624,7 @@ pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
         ValueKind::Unary { op, operand, .. } => {
             unary_op_may_trap(*op) || value_may_trap(pool, *operand)
         }
-        ValueKind::Cast { .. } => true,
+        ValueKind::Cast { operand, .. } => value_may_trap(pool, *operand),
         ValueKind::Select { cond, then, else_ } => {
             value_may_trap(pool, *cond)
                 || value_may_trap(pool, *then)
@@ -650,24 +647,6 @@ pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
 /// `mod_ref::ModRef::of_expr(..).may_trap`; this is the per-node contribution
 /// a walker consults while it recurses itself.
 ///
-/// The one trapping cast: `wir_build::translate_cast` lowers a float-to-integer
-/// conversion to the non-saturating `I*TruncF*`, which traps on NaN and on an
-/// out-of-range magnitude. Every other conversion it emits is total — integer to
-/// integer of any width or signedness, integer to float, float to float — and a
-/// cast between non-numeric types is a representation no-op, never a `ref.cast`.
-/// Provable only with a type table.
-pub(super) fn cast_truncates_a_float(
-    body: &Body,
-    types: Option<&TypeTable>,
-    inner: Operand,
-    target: TypeId,
-) -> bool {
-    let Some(types) = types else {
-        return true;
-    };
-    types.is_float(body.operand_type(inner)) && types.is_integer(target)
-}
-
 /// A `FieldAccess` traps only on a null receiver, and every type a field access
 /// can name is a non-null heap value in NIR — a struct, a reference, or a
 /// generic instance (tuple / `Box` / `List` / user generic). `Option` is the one
@@ -690,20 +669,16 @@ pub(super) fn field_receiver_nonnull(
     }
 }
 
-/// Without a type table `Cast` and `FieldAccess` are conservatively
-/// trap-capable.
+/// Without a type table `FieldAccess` is conservatively trap-capable.
 pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
     expr_node_may_trap_typed(body, id, None)
 }
 
-/// [`expr_node_may_trap`], with a type table to settle a cast or a field read.
+/// [`expr_node_may_trap`], with a type table to settle a field read.
 pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
         ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
-        ExprKind::Cast { expr, target_type } => {
-            cast_truncates_a_float(body, types, *expr, *target_type)
-        }
         ExprKind::FieldAccess { expr, .. } => !field_receiver_nonnull(body, types, *expr),
         // Heap projections on a possibly-null (or case-mismatched, or short)
         // receiver.
@@ -717,7 +692,10 @@ pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&T
         // is a child node that answers for itself.
         ExprKind::Assign { .. }
         // Pure value ops, constructors, constant leaves, global reads/writes,
-        // and control-flow (whose sub-trees carry their own traps).
+        // and control-flow (whose sub-trees carry their own traps). Every cast
+        // is total: a float saturates into an integer, and a cast between
+        // non-numeric types is a representation no-op, never a `ref.cast`.
+        | ExprKind::Cast { .. }
         | ExprKind::GlobalVarGet { .. }
         | ExprKind::GlobalVarSet { .. }
         | ExprKind::Local { .. }

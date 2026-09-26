@@ -1022,10 +1022,10 @@ pub enum WirInstr {
     I32Clz(Box<WirInstr>),
     I32Ctz(Box<WirInstr>),
     I32Popcnt(Box<WirInstr>),
-    I32TruncF64S(Box<WirInstr>),
-    I32TruncF64U(Box<WirInstr>),
-    I32TruncF32S(Box<WirInstr>),
-    I32TruncF32U(Box<WirInstr>),
+    I32TruncSatF64S(Box<WirInstr>),
+    I32TruncSatF64U(Box<WirInstr>),
+    I32TruncSatF32S(Box<WirInstr>),
+    I32TruncSatF32U(Box<WirInstr>),
     I32ReinterpretF32(Box<WirInstr>),
     I32Extend8S(Box<WirInstr>),
     I32Extend16S(Box<WirInstr>),
@@ -1062,10 +1062,10 @@ pub enum WirInstr {
     I64Clz(Box<WirInstr>),
     I64Ctz(Box<WirInstr>),
     I64Popcnt(Box<WirInstr>),
-    I64TruncF64S(Box<WirInstr>),
-    I64TruncF64U(Box<WirInstr>),
-    I64TruncF32S(Box<WirInstr>),
-    I64TruncF32U(Box<WirInstr>),
+    I64TruncSatF64S(Box<WirInstr>),
+    I64TruncSatF64U(Box<WirInstr>),
+    I64TruncSatF32S(Box<WirInstr>),
+    I64TruncSatF32U(Box<WirInstr>),
     I64ReinterpretF64(Box<WirInstr>),
 
     // === Arithmetic (i128 via i64 pairs, Wasm 3.0) ===
@@ -1921,14 +1921,14 @@ impl WirInstr {
             | Self::I64Clz(o)
             | Self::I64Ctz(o)
             | Self::I64Popcnt(o)
-            | Self::I32TruncF64S(o)
-            | Self::I32TruncF64U(o)
-            | Self::I32TruncF32S(o)
-            | Self::I32TruncF32U(o)
-            | Self::I64TruncF64S(o)
-            | Self::I64TruncF64U(o)
-            | Self::I64TruncF32S(o)
-            | Self::I64TruncF32U(o)
+            | Self::I32TruncSatF64S(o)
+            | Self::I32TruncSatF64U(o)
+            | Self::I32TruncSatF32S(o)
+            | Self::I32TruncSatF32U(o)
+            | Self::I64TruncSatF64S(o)
+            | Self::I64TruncSatF64U(o)
+            | Self::I64TruncSatF32S(o)
+            | Self::I64TruncSatF32U(o)
             | Self::I32ReinterpretF32(o)
             | Self::F32ReinterpretI32(o)
             | Self::I64ReinterpretF64(o)
@@ -2508,14 +2508,14 @@ impl WirInstr {
             | Self::I64Clz(o)
             | Self::I64Ctz(o)
             | Self::I64Popcnt(o)
-            | Self::I32TruncF64S(o)
-            | Self::I32TruncF64U(o)
-            | Self::I32TruncF32S(o)
-            | Self::I32TruncF32U(o)
-            | Self::I64TruncF64S(o)
-            | Self::I64TruncF64U(o)
-            | Self::I64TruncF32S(o)
-            | Self::I64TruncF32U(o)
+            | Self::I32TruncSatF64S(o)
+            | Self::I32TruncSatF64U(o)
+            | Self::I32TruncSatF32S(o)
+            | Self::I32TruncSatF32U(o)
+            | Self::I64TruncSatF64S(o)
+            | Self::I64TruncSatF64U(o)
+            | Self::I64TruncSatF32S(o)
+            | Self::I64TruncSatF32U(o)
             | Self::I32ReinterpretF32(o)
             | Self::F32ReinterpretI32(o)
             | Self::I64ReinterpretF64(o)
