@@ -482,21 +482,13 @@ Some primitive pairs refuse it. `f16` and `bf16` take no `as` in either
 direction, and an integer converts to `char` only from `u8` (see
 [char Casting and Conversion](./spec-literals.md#char-casting-and-conversion)).
 
-<<<<<<< HEAD
 A float converts to an integer as Rust's `as` does. It truncates toward zero,
 and a value outside the target's range becomes the target's `MIN` or `MAX`.
 NaN becomes 0. The cast never traps, whatever the target's width, `i128` and
 `u128` included.
 
-`as` binds tighter than every binary operator and looser than a prefix unary
-operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
-||||||| 61cd2700a
-`as` binds tighter than every binary operator and looser than a prefix unary
-operator: `-x as u32` is `(-x) as u32`, and `a / b as f64` is `a / (b as f64)`.
-=======
 By its [precedence](#precedence), `-x as u32` is `(-x) as u32`, and
 `a / b as f64` is `a / (b as f64)`.
->>>>>>> origin/main
 
 ```wado
 let i = 42;

@@ -7731,20 +7731,10 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
-<<<<<<< HEAD
         $licm_arith_13 = builtin::i64_extend_i32_s(bits_per_digit);
-        b823: block {
-            l824: loop {
-                break_if b823 temp == 0_i64;
-||||||| 61cd2700a
-        b823: block {
-            l824: loop {
-                break_if b823 temp == 0_i64;
-=======
         b822: block {
             l823: loop {
                 break_if b822 temp == 0_i64;
->>>>>>> origin/main
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(temp & mask64);
                 builtin::array_set_u8(arr, pos, (if digit < 10 -> i32 {
@@ -7752,16 +7742,8 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 } else {
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
-<<<<<<< HEAD
                 temp = temp >>u $licm_arith_13;
-                continue l824;
-||||||| 61cd2700a
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
-                continue l824;
-=======
-                temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
                 continue l823;
->>>>>>> origin/main
             };
         };
     }

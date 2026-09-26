@@ -2653,43 +2653,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let target_type = self
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
-<<<<<<< HEAD
-                // `i128/u128 as T` lowers to prelude calls rather than a
-                // bare cast, since the 128-bit types are prelude structs:
-                // floats go through the correctly rounded `as_f64` /
-                // `as_f32`, integer targets truncate via `low()`, and
-                // `i128 ↔ u128` reinterprets via `from_u128` / `from_i128`.
-                // Must run before the target-side `try_reify_int128_cast`
-                // so `i128 ↔ u128` is not mis-handled by its non-numeric
-                // bare-cast fallback.
-                if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
-                    return tir;
-                }
-                // `expr as i128/u128` lowers to a constructor call rather
-                // than a bare cast, since the 128-bit types are prelude
-                // structs.
-                if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
-||||||| 61cd2700a
-                // `i128/u128 as T` lowers to prelude calls rather than a
-                // bare cast, since the 128-bit types are prelude structs:
-                // floats go through the correctly rounded `as_f64` /
-                // `as_f32`, integer targets truncate via `low()`, and
-                // `i128 ↔ u128` reinterprets via `from_u128` / `from_i128`.
-                // Must run before the target-side `try_reify_int128_cast`
-                // so `i128 ↔ u128` is not mis-handled by its non-numeric
-                // bare-cast fallback.
-                if let Some(tir) = self.try_reify_int128_source_cast(cast, target_type, ctx) {
-                    return tir;
-                }
-                // `expr as i128/u128` lowers to a `from_u64` / `from_i64`
-                // / `from_pair` constructor call rather than a bare cast,
-                // since the 128-bit types are prelude structs. Mirrors
-                // `Elaborator::resolve_cast`'s int128 branch.
-                if let Some(tir) = self.try_reify_int128_cast(cast, target_type, ctx) {
-=======
                 // Mirrors `Elaborator::resolve_cast`'s int128 branch.
                 if let Some(tir) = self.try_reify_int128_literal_cast(cast, target_type) {
->>>>>>> origin/main
                     return tir;
                 }
                 // annotate types a direct literal operand as the target but not
@@ -8485,20 +8450,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-<<<<<<< HEAD
-    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
-    /// any other target; a wide-int operand, which only a newtype step brings
-    /// here, yields the bare cast.
-    fn try_reify_int128_cast(
-||||||| 61cd2700a
-    /// Replay an `expr as i128/u128` cast, modulo newtypes of one. `None` for
-    /// any other target; a non-numeric operand yields the bare cast.
-    fn try_reify_int128_cast(
-=======
     /// `LITERAL as i128/u128`: a `from_pair` constructor carries a literal past
     /// `u64`, which the numeric path's `from_u64` / `from_i64` cannot.
     fn try_reify_int128_literal_cast(
->>>>>>> origin/main
         &mut self,
         cast: &ast::CastExpr,
         target_type: TypeId,
@@ -8550,38 +8504,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
-<<<<<<< HEAD
-        let inner = self.reify_expr(&cast.expr, ctx, None);
-        let tt = self.tysys.type_table.borrow();
-        if tt.is_wide_int(inner.type_id) {
-            return Some(TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(inner),
-                    target_type,
-                },
-                target_type,
-                cast.span,
-            ));
-||||||| 61cd2700a
-        // General numeric operand: `x as u128` →
-        // `u128::from_u64(x as u64)`. `inner` is reified once here; a
-        // non-numeric operand (no valid construction) emits the bare cast
-        // directly rather than re-reifying through the caller's fallback.
-        let inner = self.reify_expr(&cast.expr, ctx, None);
-        let source_is_numeric = {
-            let tt = self.tysys.type_table.borrow();
-            tt.is_numeric(inner.type_id)
-        };
-        if !source_is_numeric {
-            return Some(TirExpr::new(
-                TirExprKind::Cast {
-                    expr: Box::new(inner),
-                    target_type,
-                },
-                target_type,
-                cast.span,
-            ));
-=======
     /// A cast with a wide integer on either side, `inner` already read through
     /// its references. The 128-bit types are prelude structs, so a bare `Cast`
     /// would leak the boxed struct ref into a slot expecting a Wasm scalar
@@ -8593,72 +8515,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         span: Span,
     ) -> ControlFlow<TirExpr, TirExpr> {
-        let (source_is_wide, source_is_numeric) = {
-            let tt = self.tysys.type_table.borrow();
-            let source_base = tt.representation_head(inner.type_id);
-            (tt.is_wide_int(source_base), tt.is_numeric(source_base))
-        };
-        if source_is_wide {
+        let tt = self.tysys.type_table.borrow();
+        if tt.is_wide_int(tt.representation_head(inner.type_id)) {
+            drop(tt);
             return self.lower_int128_source_cast(inner, target_type, span);
         }
-        let target_base = self
-            .tysys
-            .type_table
-            .borrow()
-            .representation_head(target_type);
-        let Some((item, name)) = self.tysys.wide_int_of(target_base) else {
+        let Some(item) = tt.wide_int_item(tt.representation_head(target_type)) else {
             return ControlFlow::Continue(inner);
         };
-        if !source_is_numeric {
-            return ControlFlow::Continue(inner);
->>>>>>> origin/main
-        }
-<<<<<<< HEAD
-        Some(create_conversion(item, inner, target_type, &tt, cast.span))
-||||||| 61cd2700a
-        let intermediate_type = if item == CompilerItem::U128 {
-            TypeTable::U64
-        } else {
-            TypeTable::I64
-        };
-        let casted = TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(inner),
-                target_type: intermediate_type,
-            },
-            intermediate_type,
-            cast.span,
-        );
-        Some(build_int128_from_intermediate(
-            item,
-            &name,
-            casted,
-            target_type,
-            cast.span,
-        ))
-=======
-        // `x as u128` → `u128::from_u64(x as u64)`.
-        let intermediate_type = if item == CompilerItem::U128 {
-            TypeTable::U64
-        } else {
-            TypeTable::I64
-        };
-        let casted = TirExpr::new(
-            TirExprKind::Cast {
-                expr: Box::new(inner),
-                target_type: intermediate_type,
-            },
-            intermediate_type,
-            span,
-        );
-        ControlFlow::Break(build_int128_from_intermediate(
-            item,
-            &name,
-            casted,
-            target_type,
-            span,
-        ))
->>>>>>> origin/main
+        ControlFlow::Break(create_conversion(item, inner, target_type, &tt, span))
     }
 
     /// `i128/u128 as T`: `f64`/`f32` through the correctly rounded

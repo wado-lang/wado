@@ -164,24 +164,12 @@ the equivalent `==` or range comparison holds.
 <!-- {"fixture":"spec_types_wide_int.wado"} -->
 
 ```wado
-<<<<<<< HEAD
-let a = 42 as u128;           // numeric → wide int
-let e = 1.0e40 as u128;       // float → wide int, saturates (u128::MAX)
-let t = 'A' as i128;          // bool, char, enum, flags → wide int, as to any integer (65)
-let b = a as f64;             // wide int → float, correctly rounded (ties to even)
-let c = a as i64;             // wide int → int, truncates to the low bits
-let d = (-1 as i128) as u128; // i128 ↔ u128 reinterprets the bits (u128::MAX)
-||||||| 61cd2700a
-let a = 42 as u128;           // numeric → wide int
-let b = a as f64;             // wide int → float, correctly rounded (ties to even)
-let c = a as i64;             // wide int → int, truncates to the low bits
-let d = (-1 as i128) as u128; // i128 ↔ u128 reinterprets the bits (u128::MAX)
-=======
 let a = 42 as u128;                    // numeric → wide int
+assert 1.0e40 as u128 == u128::MAX;    // float → wide int saturates
+assert 'A' as i128 == 65;              // bool, char, enum, flags → wide int, as to any integer
 assert a as f64 == 42.0;               // wide int → float, rounded to nearest, ties to even
 assert (a + 256) as u8 == 42;          // wide int → int keeps the low bits
 assert (-1 as i128) as u128 == u128::MAX;  // i128 ↔ u128 reinterprets the bits
->>>>>>> origin/main
 ```
 
 Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u128::try_from(n)`), returning `Err` when the value is out of range for the target type.
