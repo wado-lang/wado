@@ -381,18 +381,21 @@ test "an assert counts where the lexer finds the keyword" {
     assert assert_count(&"// assert x\nlet s = \"assert\";\n") == 0;
 }
 
+#[allow(dead_code)]
 fn fixture_map(name: String, source: String) -> TreeMap<String, String> {
     let mut map = TreeMap::<String, String>::new();
     map[name] = source;
     return map;
 }
 
+#[allow(dead_code)]
 fn verdict_of(markdown: String, fixtures: &TreeMap<String, String>, weps: String) -> Option<Verdict> {
     let findings = audit(&wado_blocks(&markdown), fixtures, &weps);
     assert findings.len() <= 1;
     return findings.into_iter().map(|f| f.verdict).next();
 }
 
+#[allow(dead_code)]
 fn quoting() -> String {
     return "<!-- {\"fixture\": \"a.wado\"} -->\n\n```wado\nassert f() == 1;\n```\n";
 }
