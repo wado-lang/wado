@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use sha2::{Digest, Sha256};
 use tokio::sync::OnceCell;
@@ -64,12 +64,22 @@ const LINKED_INTERFACES: &[&str] = &[
 /// What every outcome depends on beyond its own inputs: the running `wado`
 /// binary, which links the compiler and wasmtime, and the stdlib it compiles
 /// against, which a dev build reads from disk.
+///
+/// The binary is known by its size and modification time, as ccache knows a
+/// compiler by default. Hashing its contents costs seconds for a dev build,
+/// and every rebuild changes both anyway.
 static COMPILER_DIGEST: LazyLock<[u8; 32]> = LazyLock::new(|| {
     let exe = std::env::current_exe().expect("locating the running `wado` binary");
-    let binary = std::fs::read(&exe)
+    let stat = std::fs::metadata(&exe)
         .unwrap_or_else(|e| panic!("reading the running `wado` binary {}: {e}", exe.display()));
+    let modified = stat
+        .modified()
+        .expect("the platform reports a modification time")
+        .duration_since(UNIX_EPOCH)
+        .expect("the `wado` binary was modified after 1970");
     let mut hasher = Sha256::new();
-    hasher.update(Sha256::digest(&binary));
+    hasher.update(stat.len().to_le_bytes());
+    hasher.update(modified.as_nanos().to_le_bytes());
     hash_dev_stdlib(&mut hasher);
     hasher.finalize().into()
 });
