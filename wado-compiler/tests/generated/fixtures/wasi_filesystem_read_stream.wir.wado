@@ -736,51 +736,56 @@ fn "core:rt/panic"(message) {
 }
 
 fn "core:rt/cm_stream_read_u8"(handle, max) {
-    let room: i32;
     let ptr_3: i32;
     let result: i32;
     let count_5: i32;
+    let count_8: i32;
     let ws: i32;
     let evt_ptr: i32;
-    let status_15: i32;
-    let arr_21: ref Array<u8>;
+    let status_17: i32;
+    let arr_23: ref Array<u8>;
     let i: i32;
-    room = select i32(max < 268435455, max, 268435455);
-    ptr_3 = "mem/realloc"(0, 0, 1, room);
-    result = "wasi/stream-read"(handle, ptr_3, room);
+    count_8 = select i32(max < 268435455, max, 268435455);
+    if @unlikely((count_8 < 0) | (count_8 > 2147483647)) {
+        cold_path;
+        "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("a buffer's length is negative or past what linear memory can address"), used: 68 });
+        unreachable;
+    }
+    ptr_3 = "mem/realloc"(0, 0, 1, count_8);
+    result = "wasi/stream-read"(handle, ptr_3, count_8);
     if result == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);
         evt_ptr = "mem/realloc"(0, 0, 4, 8);
         drop("wasi/waitable-set-wait"(ws, evt_ptr));
-        status_15 = builtin::load_i32(evt_ptr + 4);
+        status_17 = builtin::load_i32(evt_ptr + 4);
         drop("mem/realloc"(evt_ptr, 8, 4, 0));
         "wasi/waitable-join"(handle, 0);
         "wasi/waitable-set-drop"(ws);
-        result = status_15;
+        result = status_17;
     }
     count_5 = result >>u 4;
-    arr_21 = builtin::array_new<u8>(count_5);
+    arr_23 = builtin::array_new<u8>(count_5);
     i = 0;
-    b111: block {
-        l112: loop {
-            break_if b111 i >= count_5;
-            builtin::array_set_u8(arr_21, i, builtin::load_u8(ptr_3 + i));
+    b112: block {
+        l113: loop {
+            break_if b112 i >= count_5;
+            builtin::array_set_u8(arr_23, i, builtin::load_u8(ptr_3 + i));
             i = i + 1;
-            continue l112;
+            continue l113;
         };
     };
-    drop("mem/realloc"(ptr_3, room, 1, 0));
-    return struct.new "core:prelude//List<u8>" { repr: arr_21, used: count_5 }, $inline_cm_copy_result_7: block -> "core:prelude/types.wado//enum:CopyResult" {
+    drop("mem/realloc"(ptr_3, count_8, 1, 0));
+    return struct.new "core:prelude//List<u8>" { repr: arr_23, used: count_5 }, $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
         let $match_scrut_0: i32;
         $match_scrut_0 = result & 15;
         if $match_scrut_0 == 0 {
-            break $inline_cm_copy_result_7: 0;
+            break $inline_cm_copy_result_8: 0;
         } else if $match_scrut_0 == 1 {
-            break $inline_cm_copy_result_7: 1;
+            break $inline_cm_copy_result_8: 1;
         } else {
         }
-        break $inline_cm_copy_result_7: 2;
+        break $inline_cm_copy_result_8: 2;
     };
 }
 
@@ -802,17 +807,17 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if len_2 == 0 {
         return 0;
     }
-    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b116: block {
-        l117: loop {
-            break_if b116 i >= len_2;
+    ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b117: block {
+        l118: loop {
+            break_if b117 i >= len_2;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l117;
+            continue l118;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
     taken = 0;
     block {
-        l119: loop {
+        l120: loop {
             ptr_15 = ptr_3 + taken;
             count_16 = len_2 - taken;
             result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
@@ -844,7 +849,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
                 return $sroa_written_result_40;
             }
-            continue l119;
+            continue l120;
         };
     };
 }
@@ -1015,19 +1020,19 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types
     if handle_1 != 0 {
         ws_3 = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle_1, ws_3);
-        b136: block {
-            l137: loop {
+        b137: block {
+            l138: loop {
                 out_ptr = "mem/realloc"(0, 0, 4, 8);
                 code = "wasi/waitable-set-wait"(ws_3, out_ptr);
                 drop(builtin::load_i32(out_ptr));
                 payload = builtin::load_i32(out_ptr + 4);
                 drop("mem/realloc"(out_ptr, 8, 4, 0));
-                break_if b136 if @unlikely(code != 1) {
+                break_if b137 if @unlikely(code != 1) {
                     cold_path;
                     "core:prelude/types.wado/cm_subtask_settled$cold0"(code);
                     unreachable;
                 }; payload >u 1;
-                continue l137;
+                continue l138;
             };
         };
         "wasi/subtask-drop"(handle_1);
@@ -1089,14 +1094,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     $licm_repr_86 = data.repr;
     $licm_arith_136 = 0 > $licm_used_85;
     block {
-        l142: loop {
+        l143: loop {
             written_4 = (if offset == 0 -> ref "core:prelude/types.wado//StreamWrite" {
-                ptr_9 = builtin::i32_wrap_i64(local.tee packed_8(ptr_20 = "mem/realloc"(0, 0, 1, $licm_used_85); i_92 = 0; b144: block {
-                    l145: loop {
-                        break_if b144 i_92 >= $licm_used_85;
+                ptr_9 = builtin::i32_wrap_i64(local.tee packed_8(ptr_20 = "mem/realloc"(0, 0, 1, $licm_used_85); i_92 = 0; b145: block {
+                    l146: loop {
+                        break_if b145 i_92 >= $licm_used_85;
                         builtin::store_u8(ptr_20 + i_92, builtin::array_get_value_u8($licm_repr_86, i_92));
                         i_92 = i_92 + 1;
-                        continue l145;
+                        continue l146;
                     };
                 }; builtin::i64_extend_i32_u(ptr_20) | (builtin::i64_extend_i32_s($licm_used_85) << 32_i64)));
                 len_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
@@ -1146,12 +1151,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
                 if len_57 > 0 {
                     builtin::array_copy<u8>(out, 0, $licm_repr_86, s, len_57);
                 }
-                ptr_41 = builtin::i32_wrap_i64(local.tee packed_40(ptr_68 = "mem/realloc"(0, 0, 1, len_46); i_127 = 0; b152: block {
-                    l153: loop {
-                        break_if b152 i_127 >= len_46;
+                ptr_41 = builtin::i32_wrap_i64(local.tee packed_40(ptr_68 = "mem/realloc"(0, 0, 1, len_46); i_127 = 0; b153: block {
+                    l154: loop {
+                        break_if b153 i_127 >= len_46;
                         builtin::store_u8(ptr_68 + i_127, builtin::array_get_value_u8(out, i_127));
                         i_127 = i_127 + 1;
-                        continue l153;
+                        continue l154;
                     };
                 }; builtin::i64_extend_i32_u(ptr_68) | (builtin::i64_extend_i32_s(len_46) << 32_i64)));
                 len_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
@@ -1185,7 +1190,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             if ((local.tee $load_3(written_4.result) != 0) | ($load_2 <= 0)) | (offset >= $licm_used_85) {
                 return $load_3;
             }
-            continue l142;
+            continue l143;
         };
     };
 }
@@ -1245,14 +1250,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b161: block {
-        l162: loop {
-            break_if b161 i >= digit_count_4;
+    b162: block {
+        l163: loop {
+            break_if b162 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l162;
+            continue l163;
         };
     };
 }
