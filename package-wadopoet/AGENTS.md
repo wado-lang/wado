@@ -53,12 +53,10 @@ wado`print(\`${hole}\`);`     // print(`\${x}`);
 wado`pos = ${name}(tokens);`  // pos = expr_list(tokens);
 ```
 
-A hole in code is written as it renders, since there it is code itself.
-
 The tag tracks what the template's own text has opened: code, a string, a char
 literal, a template, or a comment. A hole's value never changes that state. A
-format specifier applies as usual (`${bits:x}`). Printable non-ASCII stays
-verbatim.
+hole in code is written as it renders, since there it is code itself. A format
+specifier applies as usual (`${bits:x}`). Printable non-ASCII stays verbatim.
 
 Two helpers cover literals a hole cannot express:
 
@@ -113,10 +111,10 @@ The source is the whole program, in one module:
 - `Unavailable(name)`: the program imports an interface `eval` does not link.
 
 `Ok(out)` means it ran, however it ended. `out.stdout` and `out.stderr` hold what
-it wrote, even when it trapped, and a `panic` writes its message to stderr.
-`out.status` says how it ended:
+it wrote, even when it trapped. A `panic` writes its message to stderr before it
+traps. `out.status` says how it ended:
 
-- `Exited(code)`: `run` returned (code 0) or called `exit`.
+- `Exited(code)`: `run` returned (code 0) or called `exit(code)`.
 - `Trapped(kind)`: it trapped, and `kind` says which trap.
 - `OutOfFuel`: it used up its fuel.
 - `OutOfMemory`: a memory or a table grew past the runner's 1 GiB ceiling.
@@ -160,5 +158,5 @@ test "a hole in a string literal reads back as its value" {
 }
 ```
 
-Write the body of a generated program as a `"..."` literal when it holds a
-template. In a template of your own, `${...}` would interpolate in the test.
+When a body holds a template, write the body as a `"..."` literal. Written as a
+template of the test's own, its `${...}` would be filled in by the test.

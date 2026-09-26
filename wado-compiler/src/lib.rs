@@ -594,8 +594,7 @@ pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnosti
 // published component's WIT carries a package-specific identity.
 const KILN_GENERATOR_IMPL_FQ: &str = "kiln:generator/generator@0.1.0";
 
-/// The FQ prefix of every `core:eval` interface. Only the `wado test` host links
-/// them, so a program for any other world that imports one is rejected.
+/// The FQ prefix of every `core:eval` interface.
 const EVAL_PACKAGE_PREFIX: &str = "core:eval/";
 
 struct LibSurface {
