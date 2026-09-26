@@ -133,21 +133,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let result: i32;
     let ws: i32;
     let evt_ptr: i32;
-<<<<<<< HEAD
-    let status_41: i32;
-    let $sroa_data_start_49: i32;
-    let $sroa_written_count_51: i32;
-    let $sroa_written_result_52: "core:prelude/types.wado//enum:CopyResult";
-    if ($mv$data$end - $mv$data$start) == 0 {
-        return;
-||||||| c8b5409d1
-    let status_41: i32;
-    let $sroa_data_start_48: i32;
-    let $sroa_written_count_50: i32;
-    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
-    if ($mv$data$end - $mv$data$start) == 0 {
-        return;
-=======
     let status_23: i32;
     let i: i32;
     let $sroa_written_count_39: i32;
@@ -155,7 +140,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     len_2 = $mv$data$end - $mv$data$start;
     if len_2 == 0 {
         return 0;
->>>>>>> origin/main
     }
     ptr_3 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, len_2); i = 0; b2: block {
         l3: loop {
@@ -167,38 +151,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s(len_2) << 32_i64));
     taken = 0;
     block {
-<<<<<<< HEAD
-        l2: loop {
-            $sroa_data_start_49 = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_49; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b3: block {
-                l4: loop {
-                    break_if b3 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_49 + i));
-                    i = i + 1;
-                    continue l4;
-                };
-            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
-            raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
-            result = "wasi/stream-write"(self, ptr_14, raw_len);
-||||||| c8b5409d1
-        l2: loop {
-            $sroa_data_start_48 = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b3: block {
-                l4: loop {
-                    break_if b3 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
-                    i = i + 1;
-                    continue l4;
-                };
-            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
-            raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
-            result = "wasi/stream-write"(self, ptr_14, raw_len);
-=======
         l5: loop {
             ptr_15 = ptr_3 + taken;
             count_16 = len_2 - taken;
             result = "wasi/stream-write"(handle, ptr_15, select i32(count_16 < 268435455, count_16, 268435455));
->>>>>>> origin/main
             if result == -1 {
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -210,16 +166,8 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "wasi/waitable-set-drop"(ws);
                 result = status_23;
             }
-<<<<<<< HEAD
-            $sroa_written_count_51 = result >> 4;
-            $sroa_written_result_52 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-||||||| c8b5409d1
-            $sroa_written_count_50 = result >> 4;
-            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-=======
             $sroa_written_count_39 = result >>u 4;
             $sroa_written_result_40 = $inline_cm_copy_result_8: block -> "core:prelude/types.wado//enum:CopyResult" {
->>>>>>> origin/main
                 let $match_scrut_0: i32;
                 $match_scrut_0 = result & 15;
                 if $match_scrut_0 == 0 {
@@ -230,22 +178,10 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 }
                 break $inline_cm_copy_result_8: 2;
             };
-<<<<<<< HEAD
-            drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count_51;
-            if (($sroa_written_result_52 != 0) | ($sroa_written_count_51 <= 0)) | (offset >= end_3) {
-                return;
-||||||| c8b5409d1
-            drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count_50;
-            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
-                return;
-=======
             taken = taken + $sroa_written_count_39;
             if (($sroa_written_result_40 != 0) | ($sroa_written_count_39 <= 0)) | (taken >= len_2) {
                 drop("mem/realloc"(ptr_3, len_2, 1, 0));
                 return $sroa_written_result_40;
->>>>>>> origin/main
             }
             continue l5;
         };

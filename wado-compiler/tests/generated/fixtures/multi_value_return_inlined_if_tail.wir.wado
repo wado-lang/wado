@@ -3444,144 +3444,6 @@ fn "multi_value_return_inlined_if_tail.wado/multi_value_return_inlined_if_tail.w
     return 1, 0;
 }
 
-<<<<<<< HEAD
-fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let end_3: i32;
-    let offset: i32;
-    let packed_13: i64;
-    let ptr_14: i32;
-    let raw_len: i32;
-    let len_23: i32;
-    let ptr_24: i32;
-    let i: i32;
-    let result: i32;
-    let ws: i32;
-    let evt_ptr: i32;
-    let status_41: i32;
-    let $sroa_data_start_49: i32;
-    let $sroa_written_count_51: i32;
-    let $sroa_written_result_52: "core:prelude/types.wado//enum:CopyResult";
-    if ($mv$data$end - $mv$data$start) == 0 {
-        return;
-    }
-    end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
-    offset = $mv$data$start;
-    block {
-        l253: loop {
-            $sroa_data_start_49 = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_49; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b254: block {
-                l255: loop {
-                    break_if b254 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_49 + i));
-                    i = i + 1;
-                    continue l255;
-                };
-            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
-            raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
-            result = "wasi/stream-write"(self, ptr_14, raw_len);
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(self, ws);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status_41 = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                "wasi/waitable-join"(self, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_41;
-            }
-            $sroa_written_count_51 = result >> 4;
-            $sroa_written_result_52 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
-                    break $inline_cm_copy_result_14: 0;
-                } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_14: 1;
-                } else {
-                }
-                break $inline_cm_copy_result_14: 2;
-            };
-            drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count_51;
-            if (($sroa_written_result_52 != 0) | ($sroa_written_count_51 <= 0)) | (offset >= end_3) {
-                return;
-            }
-            continue l253;
-        };
-    };
-}
-
-||||||| c8b5409d1
-fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let end_3: i32;
-    let offset: i32;
-    let packed_13: i64;
-    let ptr_14: i32;
-    let raw_len: i32;
-    let len_23: i32;
-    let ptr_24: i32;
-    let i: i32;
-    let result: i32;
-    let ws: i32;
-    let evt_ptr: i32;
-    let status_41: i32;
-    let $sroa_data_start_48: i32;
-    let $sroa_written_count_50: i32;
-    let $sroa_written_result_51: "core:prelude/types.wado//enum:CopyResult";
-    if ($mv$data$end - $mv$data$start) == 0 {
-        return;
-    }
-    end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
-    offset = $mv$data$start;
-    block {
-        l253: loop {
-            $sroa_data_start_48 = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start_48; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b254: block {
-                l255: loop {
-                    break_if b254 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start_48 + i));
-                    i = i + 1;
-                    continue l255;
-                };
-            }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
-            raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
-            result = "wasi/stream-write"(self, ptr_14, raw_len);
-            if result == -1 {
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(self, ws);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status_41 = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
-                "wasi/waitable-join"(self, 0);
-                "wasi/waitable-set-drop"(ws);
-                result = status_41;
-            }
-            $sroa_written_count_50 = result >> 4;
-            $sroa_written_result_51 = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let $match_scrut_0: i32;
-                $match_scrut_0 = result & 15;
-                if $match_scrut_0 == 0 {
-                    break $inline_cm_copy_result_14: 0;
-                } else if $match_scrut_0 == 1 {
-                    break $inline_cm_copy_result_14: 1;
-                } else {
-                }
-                break $inline_cm_copy_result_14: 2;
-            };
-            drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + $sroa_written_count_50;
-            if (($sroa_written_result_51 != 0) | ($sroa_written_count_50 <= 0)) | (offset >= end_3) {
-                return;
-            }
-            continue l253;
-        };
-    };
-}
-
-=======
->>>>>>> origin/main
 fn "core:args/core:args/ArgvDeserializer::split_long<&core:prelude/string.wado/String>"(tok) {
     let $load_0: i32;
     let raw: ref "core:prelude/string.wado//String";
@@ -4276,22 +4138,10 @@ fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:pr
     g = 0;
     $licm_used_64 = groups.used;
     $licm_repr_65 = groups.repr;
-<<<<<<< HEAD
     $licm_repr_94 = s.repr;
-    b338: block {
-        l339: loop {
-            break_if b338 g >= $licm_used_64;
-||||||| c8b5409d1
-    $licm_repr_92 = s.repr;
-    b338: block {
-        l339: loop {
-            break_if b338 g >= $licm_used_64;
-=======
-    $licm_repr_92 = s.repr;
     b337: block {
         l338: loop {
             break_if b337 g >= $licm_used_64;
->>>>>>> origin/main
             if g > 0 {
                 if builtin::array_get_value<u8>($licm_repr_94, pos) != 45 {
                     return 1, ref.null none, struct.new "core:uuid//ParseError" { 1 };
@@ -4299,25 +4149,11 @@ fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:pr
                 pos = pos + 1;
             }
             k = 0;
-<<<<<<< HEAD
-            b342: block {
-                l343: loop {
-                    break_if b342 k >= builtin::array_get_value<i32>($licm_repr_65, g);
-                    hi = builtin::array_get_value<u8>($licm_repr_94, pos);
-                    lo = builtin::array_get_value<u8>($licm_repr_94, pos + 1);
-||||||| c8b5409d1
-            b342: block {
-                l343: loop {
-                    break_if b342 k >= builtin::array_get_value<i32>($licm_repr_65, g);
-                    hi = builtin::array_get_value<u8>($licm_repr_92, pos);
-                    lo = builtin::array_get_value<u8>($licm_repr_92, pos + 1);
-=======
             b341: block {
                 l342: loop {
                     break_if b341 k >= builtin::array_get_value<i32>($licm_repr_65, g);
-                    hi = builtin::array_get_value<u8>($licm_repr_92, pos);
-                    lo = builtin::array_get_value<u8>($licm_repr_92, pos + 1);
->>>>>>> origin/main
+                    hi = builtin::array_get_value<u8>($licm_repr_94, pos);
+                    lo = builtin::array_get_value<u8>($licm_repr_94, pos + 1);
                     if (if (if (if (hi - 48) <u 10 -> i32 {
                         1;
                     } else {
