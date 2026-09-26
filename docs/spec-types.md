@@ -939,7 +939,7 @@ type Opt<T> = Option<T>;
 let a = Opt::Some(1);                   // Opt<i32>
 let b: Opt<i64> = Opt::None;            // the annotation settles T
 let c = Opt::<i64>::Some(1);
-assert a.unwrap() == 1 && b matches { None } && c.unwrap() == 1;
+assert a.unwrap() == 1 && b == null && c.unwrap() == 1;
 ```
 
 ### Scope of inference

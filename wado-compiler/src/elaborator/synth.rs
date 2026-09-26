@@ -302,7 +302,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ArgClass::BytesLit => {
                 tt.is_byte_list_representation(param) || tt.is_list_of_open_element(param)
             }
-            ArgClass::NullLit => tt.as_option(param).is_some(),
+            ArgClass::NullLit => tt.as_option(tt.representation_head(param)).is_some(),
         }
     }
 

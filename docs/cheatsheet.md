@@ -131,7 +131,7 @@ true
 false
 
 // Null
-null // the None of the Option its context expects; Option<!> with none
+null // the None of the Option (or newtype over one) its context expects; Option<!> with none
 
 // Unit
 ()

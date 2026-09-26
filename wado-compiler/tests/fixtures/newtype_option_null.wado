@@ -1,0 +1,60 @@
+// `null` coerces to a newtype over `Option`, as any literal coerces to a
+// newtype whose base takes it.
+
+type Opt<T> = Option<T>;
+type MaybeInt = Option<i32>;
+
+fn none_of() -> Opt<i32> {
+    return null;
+}
+
+fn is_none(o: MaybeInt) -> bool {
+    return o == null;
+}
+
+test "an annotation" {
+    let a: Opt<i64> = null;
+    assert a == null;
+    let b: MaybeInt = null;
+    assert b == null;
+}
+
+test "a return and an argument" {
+    assert none_of() == null;
+    assert is_none(null);
+}
+
+test "a comparison with a present value" {
+    let c = Opt::Some(1);
+    assert c != null;
+}
+
+test "a pattern" {
+    let a: Opt<i32> = null;
+    let label = match a {
+        null => "none",
+        Some(_) => "some",
+    };
+    assert label == "none";
+}
+
+struct Slot {
+    value: MaybeInt = null,
+}
+
+impl Slot {
+    fn set(&mut self, v: MaybeInt) {
+        self.value = v;
+    }
+}
+
+test "a field default, a method argument, and an element" {
+    let mut s = Slot {};
+    assert s.value == null;
+    s.set(MaybeInt::Some(1));
+    assert s.value != null;
+    s.set(null);
+    assert s.value == null;
+    let xs: List<MaybeInt> = [null, MaybeInt::Some(2)];
+    assert xs[0] == null && xs[1] != null;
+}

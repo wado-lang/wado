@@ -23,7 +23,7 @@ assert missing == also_missing;
 
 Note: `null` is a language keyword, while `None` is a case of the prelude's `Option`. Bare `None` needs an expected type to say which `Option` it belongs to.
 
-A `null` takes the `Option` its context expects. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any type but an `Option`, so `let x: i32 = null` is a type error.
+A `null` takes the `Option` its context expects, or the newtype over an `Option` it expects, as any literal coerces to a newtype whose base takes it: with `type Opt<T> = Option<T>`, `let a: Opt<i64> = null` holds, and so does `a == null`. With no context it has the type `Option<!>`, the `Option` with no `Some`. A `null` is never any other type, so `let x: i32 = null` is a type error.
 
 `Option<!>` is a value of every `Option<T>`. Like an integer literal, a `null` answers a type parameter last, so a sibling argument decides which `Option` it is. A `let` settles its type at once, as it does an integer literal's:
 
