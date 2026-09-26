@@ -63,7 +63,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## General Rules
 
 - Write all documentation and comments in clear, simple English.
-  - Comments: write none. That is the default, not a target to approach. The one exception is what the code cannot say: why this way, a tradeoff, a constraint, a spec or bug reference. Such a comment takes the lines the why needs. If the code can say it, rename and decompose until the comment is redundant, then delete it.
+  - Comments: write none. That is the default, not a target to approach. The one exception is what the code cannot say: why this way, a tradeoff, a constraint, a spec or bug reference. If the code can say it, rename and decompose until the comment is redundant, then delete it.
   - Doc comments (`///`, `//!`): say what the item is, not how it works.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
 - Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
