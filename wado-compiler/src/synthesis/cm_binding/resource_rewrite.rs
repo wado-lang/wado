@@ -79,7 +79,11 @@ fn copy_result_of(packed: TirExpr, type_table: &RefCell<TypeTable>) -> TirExpr {
     let copy_result = type_table
         .borrow_mut()
         .make_compiler_enum(CompilerItem::CopyResult);
-    internal_call("cm_copy_result", vec![packed], copy_result)
+    internal_call(
+        CompilerItem::CmCopyResult.attr_name(),
+        vec![packed],
+        copy_result,
+    )
 }
 
 /// `StreamChunk { items, result }` / `StreamWrite { count, result }` — what a
@@ -446,7 +450,7 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
             .collect();
-        return if TypeTable::is_tuple_type(&name) {
+        return if tt.is_tuple_def(*def) {
             ast::Type::Tuple(args)
         } else {
             ast::Type::Generic(GenericType {
@@ -681,6 +685,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![
@@ -721,7 +726,6 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -741,7 +745,7 @@ fn await_if_blocked(status_idx: u32, status_name: &str, handle_idx: u32) -> TirS
             stmts: vec![expr_stmt(assign(
                 local_ref(status_idx, status_name, TypeTable::I32),
                 internal_call(
-                    "cm_await_blocked",
+                    CompilerItem::CmAwaitBlocked.attr_name(),
                     vec![local_ref(handle_idx, "handle", TypeTable::I32)],
                     TypeTable::I32,
                 ),
@@ -915,6 +919,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![
@@ -955,7 +960,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -1146,6 +1150,7 @@ fn synthesize_future_read_func(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![TirParam {
@@ -1176,7 +1181,6 @@ fn synthesize_future_read_func(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -1245,6 +1249,7 @@ fn synthesize_stream_read_func(
     // carries it rather than the spelling `List` happens to have.
     let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
     let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
+    let list_template = |item| type_table.borrow().compiler_items().require_template(item);
     // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
     let list_method = |method: &str| {
         LocalMethodName::new(list_fq.clone(), None, method.to_string())
@@ -1376,6 +1381,7 @@ fn synthesize_stream_read_func(
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::list(),
                 name: with_capacity.to_mangled_name(),
+                template: Some(list_template(CompilerItem::ListWithCapacity)),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::with_capacity"),
                     impl_type_args: vec![elem_type_id],
@@ -1475,6 +1481,7 @@ fn synthesize_stream_read_func(
             FunctionRef {
                 module_source: ModuleSource::list(),
                 name: push.to_mangled_name(),
+                template: Some(list_template(CompilerItem::ListPush)),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: format!("{list_fq}::push"),
                     impl_type_args: vec![elem_type_id],
@@ -1542,6 +1549,7 @@ fn synthesize_stream_read_func(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![
@@ -1582,7 +1590,6 @@ fn synthesize_stream_read_func(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -1722,9 +1729,6 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
                     *type_id = value.type_id;
                 }
             }
-            // `TaskReturn` is normally stripped before this pass; descend into
-            // its value defensively rather than tripping the walk's guard.
-            TirStmtKind::TaskReturn { value } => self.visit_expr(value),
             _ => self.walk_stmt(stmt),
         }
     }
@@ -1878,13 +1882,21 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
     else {
         return;
     };
-    let (canonical, helper) = if is_future {
+    let (canonical, item) = if is_future {
         let payload = classify_future_payload(tt, payload_tid);
-        (CanonicalIntrinsic::FutureNew(payload), "cm_future_pair")
+        (
+            CanonicalIntrinsic::FutureNew(payload),
+            CompilerItem::CmFuturePair,
+        )
     } else {
         let payload = classify_stream_payload(tt, payload_tid);
-        (CanonicalIntrinsic::StreamNew(payload), "cm_stream_pair")
+        (
+            CanonicalIntrinsic::StreamNew(payload),
+            CompilerItem::CmStreamPair,
+        )
     };
+    let helper = item.attr_name();
+    let template = tt.compiler_items().require_template(item);
     let result_type = expr.type_id;
     let packed = cm_canonical_call(canonical, vec![], TypeTable::I64);
     *expr = TirExpr::new(
@@ -1892,6 +1904,7 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::rt(),
                 name: helper.to_string(),
+                template: Some(template),
                 monomorph_info: Some(MonomorphInfo {
                     generic_name: helper.to_string(),
                     impl_type_args: vec![payload_tid],

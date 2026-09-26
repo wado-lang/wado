@@ -21,12 +21,22 @@ use crate::synthesis::common::{
     synth_span,
 };
 
+<<<<<<< HEAD
 use super::lift::{
     lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
 };
 use super::lower::{
     buffer_bytes, synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory,
 };
+||||||| 71580bd9659
+use super::lift::{
+    lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
+};
+use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
+=======
+use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
+use super::lower::{synthesize_flatten_value_to_flat_args, synthesize_lower_wasi_type_to_memory};
+>>>>>>> origin/main
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
     cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
@@ -48,132 +58,47 @@ pub(super) struct AdapterArtifacts {
     pub auxiliary: Vec<Rc<RefCell<TirFunction>>>,
 }
 
-/// Synthesize lifting of a flat Result discriminant into a GC variant struct.
-/// Only reached for a `Result<(), ()>`, which flattens to a bare discriminant;
-/// any payload-bearing Result takes >1 slot and lifts through the outptr path,
-/// so the non-unit Err branch is defensive. `result_type_id` is the resolved
-/// `Result<T, E>` id, used directly so no `TypeTable::I32` placeholder leaks.
+/// Lift the bare discriminant a flat `Result` returns as into `result_local`.
+/// A payload takes a flat slot of its own, so only `Result<(), ()>` is flat.
 fn synthesize_lift_flat_result(
     ty: &Type,
     disc_expr: TirExpr,
     result_local: u32,
     result_type_id: TypeId,
-    next_local: &mut u32,
     stmts: &mut Vec<TirStmt>,
-    locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    if let Type::Generic(g) = ty
-        && g.name == "Result"
-        && g.args.len() == 2
-    {
-        let ok_ty = &g.args[0];
-        let err_ty = &g.args[1];
-
-        let ok_is_unit = ok_ty.is_unit();
-        let err_is_unit = err_ty.is_unit();
-
-        let (ok_name, ok_index, err_name, err_index) = {
+    assert!(
+        matches!(ty, Type::Generic(g) if g.args.iter().all(Type::is_unit)),
+        "a flat `Result` carries no payload, got {ty:?}"
+    );
+    let assign_case = |item| {
+        let (case_name, case_index) = {
             let tt = ctx.type_table.borrow();
-            let items = tt.compiler_items();
-            let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
-            let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
-            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
+            let (_, _, name, index) = tt.compiler_items().require_variant_case(item);
+            (name.to_string(), index)
         };
-
-        // A flat (non-outptr) Result reaches here only when it flattens to a
-        // bare discriminant, i.e. the Ok payload carries no flat slots (the
-        // unit case). A non-unit Ok payload is routed through the outptr path
-        // instead, so it must not appear here — guard the invariant rather
-        // than silently dropping the payload.
-        debug_assert!(
-            ok_is_unit,
-            "flat Result lift reached with a non-unit Ok payload; \
-             expected the outptr return path to handle it"
-        );
-        let ok_construct = TirExpr::new(
+        let construct = TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
-                case_index: ok_index,
-                case_name: ok_name,
+                case_index,
+                case_name,
                 payload: None,
             },
             result_type_id,
             synth_span(),
         );
-
-        let err_construct = if err_is_unit {
-            TirExpr::new(
-                TirExprKind::VariantConstruct {
-                    variant_type: result_type_id,
-                    case_index: err_index,
-                    case_name: err_name,
-                    payload: None,
-                },
-                result_type_id,
-                synth_span(),
-            )
-        } else {
-            // Err with a flat payload — the remaining flat values encode the error.
-            // `try_lift_wasi_variant_or_enum` returns None for non-CM types, so
-            // we fall back to a bare Err.
-            let lifted_variant = if let Type::Named(n) = err_ty
-                && let Some(source) = ctx.cm_interface_registry.source_interface(n)
-            {
-                try_lift_wasi_variant_or_enum(
-                    n,
-                    &source,
-                    disc_expr.clone(),
-                    next_local,
-                    stmts,
-                    locals,
-                    ctx,
-                )
-            } else {
-                None
-            };
-            if let Some(lifted) = lifted_variant {
-                TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type: result_type_id,
-                        case_index: err_index,
-                        case_name: err_name,
-                        payload: Some(Box::new(lifted)),
-                    },
-                    result_type_id,
-                    synth_span(),
-                )
-            } else {
-                TirExpr::new(
-                    TirExprKind::VariantConstruct {
-                        variant_type: result_type_id,
-                        case_index: err_index,
-                        case_name: err_name,
-                        payload: None,
-                    },
-                    result_type_id,
-                    synth_span(),
-                )
-            }
-        };
-
-        stmts.push(if_stmt(
-            binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
-            block(vec![expr_stmt(assign(
-                local_ref(result_local, "$result_val", result_type_id),
-                ok_construct,
-            ))]),
-            Some(block(vec![expr_stmt(assign(
-                local_ref(result_local, "$result_val", result_type_id),
-                err_construct,
-            ))])),
-        ));
-
-        return local_ref(result_local, "$result_val", result_type_id);
-    }
-
-    // Fallback: just return the discriminant as-is
-    disc_expr
+        block(vec![expr_stmt(assign(
+            local_ref(result_local, "$result_val", result_type_id),
+            construct,
+        ))])
+    };
+    stmts.push(if_stmt(
+        binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
+        assign_case(CompilerItem::ResultOk),
+        Some(assign_case(CompilerItem::ResultErr)),
+    ));
+    local_ref(result_local, "$result_val", result_type_id)
 }
 
 /// Create a `TirFunction` with default metadata fields.
@@ -194,6 +119,7 @@ pub(super) fn make_binding_function(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params,
@@ -214,7 +140,6 @@ pub(super) fn make_binding_function(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -544,7 +469,7 @@ pub(super) fn synthesize_adapter(
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
     interner: &RefCell<ModuleSourceInterner>,
-    owner_module: &ModuleSource,
+    effect: Option<EffectRef>,
     entry_source: &ModuleSource,
 ) -> AdapterArtifacts {
     let lower_ctx = LowerContext {
@@ -614,17 +539,7 @@ pub(super) fn synthesize_adapter(
         builder.next_local,
         builder.locals,
     );
-    // Resources and effects are unified at the effect-system level: every
-    // operation on `<E>` (whether `<E>` is declared as `effect` or `resource`)
-    // requires the caller to hold `with <E>`. The binding for a CM-imported
-    // operation therefore carries its owning name as its single concrete
-    // effect. The propagation closure (built in `effect_check`) walks
-    // operation signatures separately, so additional resources reachable
-    // through `<E>`'s operations are admitted without listing them here.
-    binding.borrow_mut().effects.push(EffectRef::Concrete {
-        name: func_info.interface_name.clone(),
-        module_source: owner_module.clone(),
-    });
+    binding.borrow_mut().effects.extend(effect);
     AdapterArtifacts {
         adapter: binding,
         auxiliary: builder.auxiliary,
@@ -640,7 +555,7 @@ enum ParamLowering<'a> {
     Unit,
     /// String / List<u8>: a single placeholder param; the stdlib `helper`
     /// packs (ptr, len) into an i64 that is split into two flat args.
-    PackedPtrLen { helper: &'static str },
+    PackedPtrLen { helper: CompilerItem },
     /// General List<T>: single placeholder param; elements are lowered into a
     /// realloc'd linear-memory buffer passed as (ptr, len).
     ListBuffer { elem: &'a Type },
@@ -680,7 +595,7 @@ fn classify_param<'t>(
 ) -> ParamLowering<'t> {
     match param_type {
         Type::Named(n) if n.name == names.string => ParamLowering::PackedPtrLen {
-            helper: "cm_lower_string",
+            helper: CompilerItem::CmLowerString,
         },
         Type::Generic(g)
             if g.name == names.array
@@ -688,7 +603,7 @@ fn classify_param<'t>(
                 && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
         {
             ParamLowering::PackedPtrLen {
-                helper: "cm_lower_array_u8",
+                helper: CompilerItem::CmLowerArrayU8,
             }
         }
         Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
@@ -915,11 +830,11 @@ impl<'a> AdapterBuilder<'a> {
 
     /// String / List<u8>: call the packing helper (→ packed i64) and split it
     /// into (ptr, len) flat args.
-    fn emit_packed_ptr_len(&mut self, param_name: &str, param_local: u32, helper: &str) {
+    fn emit_packed_ptr_len(&mut self, param_name: &str, param_local: u32, helper: CompilerItem) {
         let packed_name = format!("${param_name}_packed");
         let packed_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I64);
         let packed = internal_call(
-            helper,
+            helper.attr_name(),
             vec![local_ref(param_local, param_name, TypeTable::I32)],
             TypeTable::I64,
         );
@@ -953,6 +868,7 @@ impl<'a> AdapterBuilder<'a> {
             &self.lower_ctx.names.array_fq,
             "len",
             ModuleSource::list(),
+            self.lower_ctx.names.list_len.clone(),
             vec![],
             TypeTable::I32,
         );
@@ -1046,6 +962,7 @@ impl<'a> AdapterBuilder<'a> {
                     FunctionRef {
                         module_source: ModuleSource::list(),
                         name: iv_mangled,
+                        template: Some(self.lower_ctx.names.list_index_value.clone()),
                         monomorph_info: None,
                         method_info: Some(iv_info),
                     },
@@ -1313,6 +1230,7 @@ impl<'a> AdapterBuilder<'a> {
                 module_source: self.entry_source.clone(),
                 name: lift_fn_name,
                 type_args: Vec::new(),
+                template: None,
             },
             lift_fn_type,
             synth_span(),
@@ -1457,18 +1375,9 @@ impl<'a> AdapterBuilder<'a> {
             return lifted_type_id;
         }
         if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
-            // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
-            // an i32 discriminant on the stack, but the binding needs to return a GC struct.
-            // Synthesize VariantConstruct from the discriminant.
             let disc_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
             self.body_stmts
                 .push(let_stmt("$disc", disc_local, TypeTable::I32, raw_call));
-
-            // Resolve the concrete `Result<T, E>` TypeId so the binding's
-            // intermediate local and `VariantConstruct` exprs match the
-            // declared return type. Without this, the local was declared as
-            // `TypeTable::I32` and back-patched later by `type_fixup`,
-            // which produced invalid TIR if any consumer ran first.
             let result_type_id = self.cm_type_id(&resolved);
             let result_local = alloc_local(&mut self.next_local, &mut self.locals, result_type_id);
             self.body_stmts.push(let_mut_stmt(
@@ -1477,16 +1386,13 @@ impl<'a> AdapterBuilder<'a> {
                 result_type_id,
                 null_expr(result_type_id),
             ));
-
             let lift_ctx = self.lift_ctx();
             let lifted = synthesize_lift_flat_result(
                 &resolved,
                 local_ref(disc_local, "$disc", TypeTable::I32),
                 result_local,
                 result_type_id,
-                &mut self.next_local,
                 &mut self.body_stmts,
-                &mut self.locals,
                 &lift_ctx,
             );
             let lifted_type_id = lifted.type_id;

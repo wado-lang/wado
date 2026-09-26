@@ -1,7 +1,7 @@
 # web-browser — One Program, Run in the Browser
 
-`src/main.wado` greets whoever the page's input names, through the `web:dom`
-API. In a browser, `package-web`'s glue answers those calls from the page's own
+`src/main.wado` greets whoever the page's input names, through the
+`wado-lang:web` DOM API. In a browser, `package-web`'s glue answers those calls from the page's own
 DOM. Under `wado test`, `SurfaceDom` answers them instead.
 
 ```sh

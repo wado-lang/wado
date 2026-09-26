@@ -1,0 +1,15 @@
+// A payload-less `result` arm on a consumed component imports as `()`, and
+// lifts and lowers as the bundled bindings' `Result<(), E>` does.
+use { CmCatalog } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+
+test "a result with a payload-less arm round-trips" {
+    assert CmCatalog::id_result_ok(Result::Ok(7)) == Result::Ok(7);
+    assert CmCatalog::id_result_ok(Result::Err(())) == Result::Err(());
+    assert CmCatalog::id_result_err(Result::Ok(())) == Result::Ok(());
+    assert CmCatalog::id_result_err(Result::Err("nope")) == Result::Err("nope");
+    assert CmCatalog::id_result_unit(Result::Ok(())) == Result::Ok(());
+    assert CmCatalog::id_result_unit(Result::Err(())) == Result::Err(());
+}
+
+__DATA__
+{"test": {}}

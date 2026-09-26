@@ -7,13 +7,13 @@ use crate::ast::{Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable, positional_substitution};
+use crate::tir::{TemplateId, TypeId, TypeTable, positional_substitution};
 
 use super::sem::decls::FunctionSig;
 use crate::ast;
 use crate::ast::{SelfKind, Visibility};
 use crate::name::FqTypeName;
-use crate::tir::{ResolvedType, SlotProjections};
+use crate::tir::SlotProjections;
 
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ pub(crate) struct AssocConstSig {
 /// it *says*, never anything computed from a use site. AST survives inside an
 /// entry only where the value is irreducibly AST — parameter defaults,
 /// associated-const values, `__DATA__`. Assembled from `ModuleDecls` digests.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Signatures {
     /// Canonical free-function signatures, keyed by the declaration. The
     /// entries are shared with the per-module digests they are assembled from
@@ -81,6 +81,13 @@ impl Signatures {
         self.method_sigs.get(&def)
     }
 
+    /// What a call of the written declaration `def` instantiates: a free
+    /// function stands alone, a method sits in the block declaring it.
+    pub(crate) fn declared_template(&self, def: DefId) -> TemplateId {
+        let block = self.method_sig(def).and_then(|sig| sig.declaring_impl);
+        TemplateId::Declared { def, block }
+    }
+
     /// Canonical signature of the operation `name` on the `interface` /
     /// `resource` declaration `decl`.
     pub(crate) fn resource_method_sig(&self, decl: DefId, name: &str) -> Option<&MethodSig> {
@@ -88,9 +95,12 @@ impl Signatures {
         self.method_sig(*method)
     }
 
-    /// Declaration facts of the `impl` block `def`.
-    pub(crate) fn impl_sig(&self, def: DefId) -> Option<&ImplSig> {
-        self.impl_sigs.get(&def)
+    /// Declaration facts of the `impl` block `def`, which the decl pass records
+    /// for every block.
+    pub(crate) fn impl_sig(&self, def: DefId) -> &ImplSig {
+        self.impl_sigs
+            .get(&def)
+            .unwrap_or_else(|| panic!("no declaration facts for the impl block {def:?}"))
     }
 
     /// Declaration facts of the `trait` `def` declares.
@@ -115,7 +125,7 @@ impl Signatures {
 
     /// Which trait this `impl` block implements, `None` for an inherent one.
     pub(crate) fn impl_trait(&self, impl_def: DefId) -> Option<DefId> {
-        self.impl_sig(impl_def)?.trait_decl
+        self.impl_sig(impl_def).trait_decl
     }
 
     /// Which trait declared `sig`'s method, where an `impl` block of one does.
@@ -365,10 +375,8 @@ impl MethodSig {
                 if arg == TypeTable::UNKNOWN {
                     continue;
                 }
-                if let ResolvedType::TypeParam { index, .. }
-                | ResolvedType::TypePack { index, .. } = table.get(*slot)
-                {
-                    substitution.insert(*index, arg);
+                if let Some(index) = table.param_slot(*slot) {
+                    substitution.insert(index, arg);
                 }
             }
         }
@@ -436,11 +444,8 @@ impl TraitSig {
 /// method it declares, and a use site reads them without naming a method.
 #[derive(Clone, Debug)]
 pub(crate) struct ImplSig {
-    /// The impl target's type arguments (`K`, `V` in `impl … for Map<K, V>`).
-    /// A slot appears as its own `TypeParam` / `TypePack`, so aligning a
-    /// receiver's arguments against this list says which slot each fills.
-    /// Empty when the target is not generic.
-    pub(crate) target_type_args: Vec<TypeId>,
+    /// The block, whose target the [`TypeTable`] records.
+    pub(crate) def: DefId,
     /// The trait reference's type arguments (`K` in `impl Index<K> for …`),
     /// resolved against the same slots. Empty for an inherent impl.
     pub(crate) trait_type_args: Vec<TypeId>,
@@ -493,42 +498,41 @@ impl ImplSig {
         }
     }
 
-    /// The slot substitution a receiver's type arguments imply — the one
-    /// alignment, shared by [`Self::instantiate`] and by the instantiation
-    /// of any [`MethodSig`] the block declares.
-    ///
-    /// Target position `i` binds a slot only where the impl wrote a type
-    /// parameter there; a concrete argument (`u8` in `impl List<u8>`) binds
-    /// nothing, which is what makes a partially-concrete target expressible.
+    /// The slots each target position's argument holds, at any depth, filled
+    /// from the receiver's: `T` in `Pair<List<T>, i32>` from `Pair<List<String>, i32>`.
     pub(crate) fn slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> IndexMap<u32, TypeId> {
         let table = type_table.borrow();
-        self.target_type_args
-            .iter()
-            .zip(receiver_args)
-            .filter_map(|(&declared, &concrete)| match table.get(declared) {
-                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
-                    Some((*index, concrete))
+        let mut slots = IndexMap::default();
+        for (&declared, &concrete) in table.impl_target_args(self.def).iter().zip(receiver_args) {
+            if let Some(bound) = table.bind_type_params(&[declared], &[concrete]) {
+                for (slot, ty) in bound {
+                    slots.entry(slot).or_insert(ty);
                 }
-                _ => None,
-            })
-            .collect()
+            }
+        }
+        slots
     }
 
-    /// [`Self::slots`] where `receiver_args` are a *spelled* argument list, as
-    /// a turbofish writes them; `None` where this block's target cannot align
-    /// with one — a blanket, `&`-target or variadic-tuple block writes no
-    /// `target_type_args` and binds its slots from the receiver differently.
+    /// [`Self::slots`] for a spelled list: the receiver's positions, then the
+    /// slots past them by index. `None` where the list cannot fill the positions.
     pub(crate) fn spelled_slots(
         &self,
         type_table: &RefCell<TypeTable>,
         receiver_args: &[TypeId],
     ) -> Option<IndexMap<u32, TypeId>> {
-        (!self.target_type_args.is_empty() && self.target_type_args.len() == receiver_args.len())
-            .then(|| self.slots(type_table, receiver_args))
+        let positions = type_table.borrow().impl_target_args(self.def).len();
+        if positions == 0 || receiver_args.len() < positions {
+            return None;
+        }
+        let mut slots = self.slots(type_table, &receiver_args[..positions]);
+        for (slot, &arg) in (positions as u32..).zip(&receiver_args[positions..]) {
+            slots.entry(slot).or_insert(arg);
+        }
+        Some(slots)
     }
 }
 
@@ -690,8 +694,12 @@ mod tests {
     /// concrete `u8` position binds nothing, so `V` keeps its own slot.
     fn partially_concrete_impl(table: &RefCell<TypeTable>) -> ImplSig {
         let v = table.borrow_mut().make_type_param("V".to_string(), 1);
+        let def = DefId::for_test(1);
+        table
+            .borrow_mut()
+            .record_impl_target(def, TypeTable::UNKNOWN, vec![TypeTable::U8, v]);
         ImplSig {
-            target_type_args: vec![TypeTable::U8, v],
+            def,
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),
             target_fq: FqTypeName::builtin("Map"),

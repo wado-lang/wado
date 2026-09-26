@@ -1,0 +1,28 @@
+#![TODO]
+// TODO: a `struct` binds no `Self` for its own parameters' bounds. See WEP
+// Declaration Identity, "a data declaration binds no `Self` for its own bounds".
+trait Uses<X> with () {}
+
+trait Item with () {
+    type Item;
+}
+
+struct Wrap<O: Uses<Self::Item>> {
+    o: O,
+}
+
+impl<O: Uses<Self::Item>> Item for Wrap<O> {
+    type Item = i32;
+}
+
+struct U {}
+
+impl Uses<i32> for U {}
+
+test "a data declaration's bound projects off its own Self" {
+    let w = Wrap { o: U {} };
+    assert w.o matches { U {} };
+}
+
+__DATA__
+{"test": {}}

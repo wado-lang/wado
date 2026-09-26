@@ -7,7 +7,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::primitive::PrimitiveType;
@@ -281,11 +280,7 @@ fn lower_type(
                 None
             }
         },
-        ResolvedType::Struct { def, .. }
-            if types.is_compiler_struct(*def, CompilerItem::String) =>
-        {
-            Some(OptionsType::String)
-        }
+        ResolvedType::Struct { .. } if types.is_string(type_id) => Some(OptionsType::String),
         ResolvedType::Struct { def, .. } => {
             let name = &types.struct_head_name(*def);
             let module_source = &types.struct_head_module(*def).clone();

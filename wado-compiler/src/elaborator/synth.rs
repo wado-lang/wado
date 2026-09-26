@@ -372,7 +372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::Index(idx) => self.synth_index(idx, scope),
             Expr::Range(range) => self.synth_range(range, scope),
             Expr::StructLiteral(sl) => match &sl.name {
-                Some(name) => self.synth_named_type(name),
+                Some(name) => self.synth_named_type(sl.name_id, name),
                 None => ArgClass::Opaque(OpaqueReason::CompoundLiteral),
             },
             Expr::Block(block) => self.synth_tail(&block.stmts, scope),
@@ -663,7 +663,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.lookup_function_type_params(&callee).is_empty() {
             return ArgClass::Opaque(OpaqueReason::Inference);
         }
-        let return_type = self.lookup_function_return_type(&callee);
+        let return_type = self.lookup_function_return_type(&callee, None);
         self.class_of_type(return_type)
     }
 
@@ -1017,13 +1017,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `Pair<i32, i64>`, and the declaration's own `TypeId` is not that type.
     /// A name that is not a known type resolves to nothing, so it claims no
     /// head either.
-    fn synth_named_type(&self, name: &str) -> ArgClass {
-        if let Some(primitive) = TypeTable::primitive_by_name(name) {
-            return ArgClass::Exact(primitive);
-        }
-        let Some(def) = self.decl_key_or_local(name) else {
+    fn synth_named_type(&self, site: Option<ast::AstId>, name: &str) -> ArgClass {
+        let Some(def) = self.decl_key_at(site, name) else {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
+        if let Some(primitive) = TypeTable::primitive_of_decl(self.tysys.resolutions.defs(), def) {
+            return ArgClass::Exact(primitive);
+        }
         let generic = self
             .lookup_struct_fields_of_decl(def)
             .is_some_and(|info| !info.type_param_type_ids.is_empty());
@@ -1038,10 +1038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }
-        if self
-            .tysys
-            .is_known_type_name(self.tysys.resolutions.defs().name(def))
-        {
+        if self.tysys.resolutions.defs().kind(def).is_type() {
             return ArgClass::Head(FqTypeName::of_head(self.tysys.resolutions.defs(), def));
         }
         ArgClass::Opaque(OpaqueReason::Unresolved)
@@ -1053,7 +1050,7 @@ impl TypeSystem {
     /// reference site. A variant constructor, a static path or an effect
     /// operation names no function there and is left to the expected type.
     fn synth_callee_ref(&self, ident: &ast::IdentExpr) -> Option<CalleeRef> {
-        if ident.name.contains("::") || self.dispatched_operation(ident).is_some() {
+        if ident.name.contains("::") {
             return None;
         }
         Some(self.callee_of(self.free_function_at(ident.id)?))
@@ -1070,11 +1067,7 @@ impl TypeSystem {
             let tt = self.type_table.borrow();
             bindings
                 .iter()
-                .filter_map(|(&slot, &filled)| match tt.get(slot) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => Some((*index, filled)),
-                    _ => None,
-                })
+                .filter_map(|(&slot, &filled)| Some((tt.param_slot(slot)?, filled)))
                 .collect()
         };
         let filled = self

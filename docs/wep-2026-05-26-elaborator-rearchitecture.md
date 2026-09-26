@@ -866,11 +866,10 @@ arguments.
 ### Reify still resolves names
 
 The completeness rule holds for the facts that exist; what is left is the
-facts that do not. Reify carries `symbols` and `loaded_modules` for 9 reads,
-runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
-effect name that is a parameter resolves — in a phase whose contract is that it
-resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
-global's declared type in that global's own module scope.
+facts that do not. Reify carries `symbols` and `loaded_modules` for 9 reads and
+runs `type_lookup()` at 14 sites, in a phase whose contract is that it resolves
+no names. Its one surviving resolution, `resolve_global_type`, reads a global's
+declared type in that global's own module scope.
 
 The reads that remain are also fail-safe where the contract is fail-loud: 66
 `unwrap_or*` defaults against 43 `.expect`s. Most are legitimately optional
@@ -880,10 +879,9 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 rejected the input, so the reify-side read is an `.expect`.
 
 Finishing it means one recorded fact per question reify re-asks: the callee's
-shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
-owner and case index on every case identifier and pattern, and the resolved
-effects on the written `fn(…) with E` node. The two borrowed AST inputs, the
-effect-param name list and `resolve_global_type` then have no caller left.
+shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, and
+the owner and case index on every case identifier and pattern. The two borrowed
+AST inputs and `resolve_global_type` then have no caller left.
 
 ### The same shape is written several times
 

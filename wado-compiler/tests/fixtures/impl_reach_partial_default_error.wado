@@ -1,0 +1,20 @@
+// A written `Default` for some instantiations of a head does not answer for
+// the others: a generic struct derives no `Default` (finding 6).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T: Default> Default for Pair<T, i32> {
+    fn default() -> Self {
+        return Pair { a: T::default(), b: 7 };
+    }
+}
+
+export fn run() {
+    let q: Pair<String, i64> = Pair::default();
+}
+
+__DATA__
+{"compile_error": "unknown function 'Pair::default'"}

@@ -1,10 +1,10 @@
 // A reference to an unrestricted handle crosses as the handle's `f64` at any
 // depth, inside an `Option` or a record field too.
 
-#[cm("web:demo/node", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/node", linearity = "unrestricted", classes = "0..=0")]
 resource Node {}
 
-#[cm("web:demo/global#pair")]
+#[cm("example:demo/global#pair")]
 struct Pair {
     #[cm("a")]
     a: &Node,
@@ -12,21 +12,21 @@ struct Pair {
     b: Option<&Node>,
 }
 
-#[cm("web:demo/global")]
+#[cm("example:demo/global")]
 interface Dom {
-    #[cm("web:demo/global#touch")]
+    #[cm("example:demo/global#touch")]
     fn touch(n: Option<&Node>) -> i32;
 
-    #[cm("web:demo/global#touch-pair")]
+    #[cm("example:demo/global#touch-pair")]
     fn touch_pair(p: Pair) -> i32;
 
-    #[cm("web:demo/global#make-pair")]
+    #[cm("example:demo/global#make-pair")]
     fn make_pair() -> Pair;
 
-    #[cm("web:demo/global#maybe")]
+    #[cm("example:demo/global#maybe")]
     fn maybe() -> Option<&Node>;
 
-    #[cm("web:demo/global#root")]
+    #[cm("example:demo/global#root")]
     fn root() -> Node;
 }
 

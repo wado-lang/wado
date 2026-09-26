@@ -12,9 +12,10 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::tir::{
-    CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
-    TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionKind, FunctionRef, InlineHint, InstanceKey, MonomorphInfo, ResolvedType,
+    StructDef, TirBlock, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -179,6 +180,7 @@ fn generate_copy_function(
         is_async: false,
         type_params: vec![],
         impl_type_params: vec![],
+        impl_origin: None,
         monomorph_info: None,
         method_info: None,
         params: vec![param],
@@ -199,7 +201,6 @@ fn generate_copy_function(
         is_dispatch_wrapper: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         inline_hint: InlineHint::Auto,
         compiler_item: None,
         export_name: None,
@@ -372,23 +373,17 @@ fn build_copy_return_expr(
     type_table: &Rc<RefCell<TypeTable>>,
     span: Span,
 ) -> Option<TirExpr> {
-    if !matches!(
-        resolved,
-        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
-    ) {
-        return None;
-    }
-    // The struct list keys on the bare declaration / instantiation name, so
-    // the lookup and the `StructLiteral` it feeds both use that name — a
-    // mangled one qualifies the head by its module and matches nothing.
-    // Two same-named structs from distinct modules share that key, so the
-    // copy body is built from *this* type's module, not the first match.
-    let module = type_table.borrow().nominal_head(type_id).map(|(_, m)| m);
+    let (def, type_args) = match resolved {
+        ResolvedType::Struct { def, type_args } => (*def, type_args),
+        ResolvedType::GenericInstance { def, type_args } => (StructDef::Decl(*def), type_args),
+        _ => return None,
+    };
     let mangled = type_table
         .borrow()
         .struct_list_name(type_id)
         .expect("struct-shaped type has a stored struct name");
-    if let Some(struct_def) = lookup_struct(project, &mangled, module.as_ref()) {
+    let listed = listed_struct(project, &type_table.borrow(), def, type_args);
+    if let Some(struct_def) = listed {
         let right_size_backing = type_table.borrow().is_seq_container(type_id);
         return Some(build_struct_copy(
             type_id,
@@ -400,15 +395,10 @@ fn build_copy_return_expr(
             right_size_backing,
         ));
     }
-    // A `GenericInstance` whose monomorphized struct never reached
-    // `project.structs` resolves to `AbstractRef(Struct)`, which the WIR-build
-    // `StructLiteral` arm rejects with a hard panic. Falling through to identity
-    // keeps a stray non-monomorphized template wrapper safe; the shapes that do
-    // need a real copy (`List<T>`, tuples) are recovered by the checks below.
-    if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && type_table
-            .borrow()
-            .is_compiler_item(*def, CompilerItem::List)
+    // An unlisted instance lowers to `AbstractRef(Struct)`, which WIR-build
+    // rejects in a `StructLiteral`; only `List<T>` and tuples copy without one.
+    if matches!(resolved, ResolvedType::GenericInstance { .. })
+        && type_table.borrow().is_list(type_id)
         && type_args.len() == 1
         && is_synth_safe_element(type_args[0], type_table, project)
     {
@@ -421,9 +411,7 @@ fn build_copy_return_expr(
             span,
         ));
     }
-    if let ResolvedType::GenericInstance { def, type_args } = resolved
-        && TypeTable::is_tuple_type(type_table.borrow().def_name(*def))
-    {
+    if type_table.borrow().is_tuple(type_id) {
         return Some(build_tuple_copy(
             type_id, &mangled, type_args, v_local, type_table, span,
         ));
@@ -441,26 +429,22 @@ fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
     )
 }
 
-/// Find the `TirStruct` for a mangled name. When several structs share the name
-/// (same-named types from distinct modules), `module` disambiguates; a unique
-/// name resolves without it, preserving behaviour for the common case.
-fn lookup_struct<'a>(
+/// The listed struct `def` instantiated with `type_args`, each argument compared
+/// by [`InstanceKey`] so an instance matches the struct it became.
+fn listed_struct<'a>(
     project: &'a FlatPackage,
-    mangled_name: &str,
-    module: Option<&ModuleSource>,
+    type_table: &TypeTable,
+    def: StructDef,
+    type_args: &[TypeId],
 ) -> Option<&'a TirStruct> {
-    let mut named = project.structs.iter().filter(|s| s.name == mangled_name);
-    let first = named.next()?;
-    if named.next().is_none() {
-        return Some(first);
-    }
-    match module {
-        Some(m) => project
-            .structs
-            .iter()
-            .find(|s| s.name == mangled_name && &s.module_source == m),
-        None => Some(first),
-    }
+    let keys = |args: &[TypeId]| -> Vec<InstanceKey> {
+        args.iter().map(|&a| type_table.instance_key(a)).collect()
+    };
+    let wanted = keys(type_args);
+    project
+        .structs
+        .iter()
+        .find(|s| s.def == def && keys(&s.type_args) == wanted)
 }
 
 /// `List<T>`'s deep-copy emits a `StructLiteral` typed `List<T>`, which resolves
@@ -481,34 +465,14 @@ fn is_synth_safe_element(
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
         ResolvedType::Variant { .. } => true,
-        ResolvedType::GenericInstance { def, .. } => {
-            let name = &type_table.borrow().def_name(def).to_string();
-            let module_source = &type_table.borrow().def_module(def).clone();
-            // Tuples / String / List<T> / known struct templates are
-            // safe; unknown generic-instance names whose template
-            // isn't a registered struct or variant are not.
-            if TypeTable::is_tuple_type(name) {
-                return true;
-            }
-            if [CompilerItem::List, CompilerItem::String, CompilerItem::Box]
-                .into_iter()
-                .any(|item| type_table.borrow().is_compiler_item(def, item))
-            {
-                return true;
-            }
-            // A concrete monomorphised struct entry is the strongest
-            // signal — without it WIR has no `Ref` to point at. The struct
-            // list keys on the bare instantiation name, the one
-            // `struct_list_name` derives; a module-qualified head matches
-            // nothing, which would call every generic-instance element
-            // unsafe and copy the enclosing `List<T>` by identity.
-            let listed = type_table.borrow().struct_list_name(elem_type);
-            if listed
-                .is_some_and(|name| lookup_struct(project, &name, Some(module_source)).is_some())
-            {
-                return true;
-            }
-            project.find_variant(module_source, name).is_some()
+        ResolvedType::GenericInstance { def, type_args } => {
+            let tt = type_table.borrow();
+            // Any other instance needs a monomorphized struct for WIR to point at.
+            tt.is_tuple(elem_type)
+                || tt.is_list(elem_type)
+                || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
+                || project.variants.iter().any(|v| v.def == def)
+                || listed_struct(project, &tt, StructDef::Decl(def), &type_args).is_some()
         }
         _ => true,
     }
@@ -686,6 +650,7 @@ fn wrap_copy_value(expr: TirExpr, type_id: TypeId, span: Span) -> TirExpr {
     let func = FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "copy_value".to_string(),
+        template: None,
         monomorph_info: Some(MonomorphInfo {
             generic_name: "copy_value".to_string(),
             impl_type_args: vec![type_id],
@@ -729,6 +694,7 @@ fn build_array_clone(
     let func = FunctionRef {
         module_source: ModuleSource::builtin(),
         name: name.to_string(),
+        template: None,
         monomorph_info: Some(MonomorphInfo {
             generic_name: name.to_string(),
             impl_type_args: vec![elem_type],

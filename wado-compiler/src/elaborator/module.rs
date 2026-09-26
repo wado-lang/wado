@@ -14,7 +14,7 @@ use crate::elaborator::item::{
     register_enum_compiler_items, register_function_compiler_item, register_method_compiler_item,
     register_trait_compiler_item, register_variant_compiler_items,
 };
-use crate::name::{FqTypeName, MethodName, RefKind};
+use crate::name::{FqTypeName, MethodName, RefKind, TUPLE_TYPE_NAME, UNIT_TYPE_NAME};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
@@ -129,6 +129,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &self.tysys.type_table,
                         &func.attrs,
                         &func.name,
+                        self.tysys.resolutions.defs().def_at(func.id),
                         &self.current_module_source,
                         func.span,
                         self.logger,
@@ -159,6 +160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &self.tysys.type_table,
                             &method.attrs,
                             &method.name,
+                            (self.tysys.def_at(method.id), None),
                             &trait_decl.name,
                             &owner_head,
                             &self.current_module_source,
@@ -175,6 +177,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Collect function signatures for call resolution
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
         self.register_module_assoc_types(module);
+        for item in &module.items {
+            if let Item::Impl(impl_block) = item {
+                self.record_impl_block_sig(impl_block);
+            }
+        }
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
                 let mut scope = self.enter_impl_scope(impl_block);
@@ -211,10 +218,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // where the method declaration AND its owner type are
                 // simultaneously in scope.
                 for method in &impl_block.methods {
+                    let defs = scope.tysys.resolutions.defs();
+                    let decl = (defs.def_at(method.id), Some(defs.def_at(impl_block.id)));
                     register_method_compiler_item(
                         &scope.tysys.type_table,
                         &method.attrs,
                         &method.name,
+                        decl,
                         &scope.get_type_name(&impl_block.ty),
                         &struct_name,
                         &scope.current_module_source,
@@ -293,9 +303,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .to_string(),
             Type::Tuple(elems) => {
                 if elems.is_empty() {
-                    TypeTable::UNIT_TYPE_NAME.to_string()
+                    UNIT_TYPE_NAME.to_string()
                 } else {
-                    TypeTable::TUPLE_TYPE_NAME.to_string()
+                    TUPLE_TYPE_NAME.to_string()
                 }
             }
             Type::Function(func_type) => {

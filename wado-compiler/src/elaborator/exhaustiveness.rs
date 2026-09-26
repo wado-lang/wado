@@ -37,6 +37,8 @@ pub(super) enum Pat {
 pub(super) struct Case {
     pub(super) name: String,
     pub(super) has_payload: bool,
+    /// False for a case whose payload type has no value, which no arm need cover.
+    pub(super) inhabited: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -289,6 +291,7 @@ fn signature<'p, R: MatrixRow<'p>>(rows: &[R]) -> Option<Vec<Ctor>> {
     match head {
         Pat::Case { cases, .. } => Some(
             (0..cases.len())
+                .filter(|&index| cases[index].inhabited)
                 .map(|index| Ctor::Case(Rc::clone(cases), index))
                 .collect(),
         ),

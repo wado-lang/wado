@@ -1,0 +1,31 @@
+// `IndexValue` is implemented for `Pair<T, Mark>` with this module's `Mark`.
+// A `Pair` of another module's `Mark` shares the spelling, not the impl.
+
+use { Mark as OtherMark } from "./sub/cross_module_same_name_impl_type_arg_dep.wado";
+
+struct Mark {
+    n: i32,
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T> IndexValue<i32> for Pair<T, Mark> {
+    type Output = i32;
+
+    fn index_value(&self, index: i32) -> i32 {
+        return self.b.n + index;
+    }
+}
+
+export fn run() {
+    let own = Pair { a: 0, b: Mark { n: 1 } };
+    let other = Pair { a: 0, b: OtherMark { n: 2 } };
+    let x = own[3];
+    let y = other[3];
+}
+
+__DATA__
+{"compile_error": ":27:13: analysis error: type 'Pair<i32, Mark>' does not implement Index or IndexValue"}

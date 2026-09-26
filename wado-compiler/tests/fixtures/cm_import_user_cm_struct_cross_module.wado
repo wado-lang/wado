@@ -1,0 +1,20 @@
+// A `#[cm]` record another module declares crosses an import this module
+// binds, as it would from the declaring module.
+use { Opts } from "./sub/cm_import_user_cm_struct_dep.wado";
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-count")]
+    fn get_count(x: Opts) -> i32;
+}
+
+export fn run() with Gfx {
+    let _ = Gfx::get_count(Opts { v: 1 });
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"opts\"", "(type (eq"], "count": 1 }
+  ]
+}

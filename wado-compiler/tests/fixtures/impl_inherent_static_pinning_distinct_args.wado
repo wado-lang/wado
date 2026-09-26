@@ -1,0 +1,29 @@
+// Two generic inherent impls on one head, each declaring a static `make`, differ
+// only in the argument each pins. A spelled receiver reaches its own (finding 5).
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<T: Default> Pair<T, i32> {
+    fn make() -> Pair<T, i32> {
+        return Pair { a: T::default(), b: 32 };
+    }
+}
+
+impl<T: Default> Pair<T, i64> {
+    fn make() -> Pair<T, i64> {
+        return Pair { a: T::default(), b: 64 };
+    }
+}
+
+test "each receiver reaches its own static" {
+    let p = Pair::<String, i32>::make();
+    let q = Pair::<bool, i64>::make();
+    assert p.a == "" && p.b == 32;
+    assert !q.a && q.b == 64;
+}
+
+__DATA__
+{"test": {}}

@@ -9,6 +9,7 @@ use crate::ast::{AstId, AstVisitor, ImplBlock, Item, Module, Stmt, Visibility, w
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::TUPLE_TYPE_NAME;
+use crate::primitive::PrimitiveType;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::token::Span;
 
@@ -161,6 +162,20 @@ impl DefKind {
         )
     }
 
+    /// Whether a declaration of this kind can stand in a `with` clause: an
+    /// `interface` or a resource.
+    #[must_use]
+    pub fn is_effect(self) -> bool {
+        matches!(self, Self::Effect | Self::Resource)
+    }
+
+    /// Whether a bound or an `impl` header can name a declaration of this kind:
+    /// a trait, an `interface` or a resource.
+    #[must_use]
+    pub fn is_trait_like(self) -> bool {
+        self == Self::Trait || self.is_effect()
+    }
+
     /// Whether a declaration of this kind is a case of a sum or bitmask type.
     ///
     /// A case is reachable unqualified wherever its type is in scope, and a
@@ -286,12 +301,8 @@ impl DefTable {
         id
     }
 
-    /// Identify each member a module's items declare, under its owner.
-    ///
-    /// A member the symbol table already collected — an effect or resource
-    /// method, registered there under its `Owner::method` name so it can be
-    /// imported — keeps that identity and is only linked to its owner here.
-    /// Nothing gets two.
+    /// Identify each member a module's items declare, under its owner. One the
+    /// symbol table collected as `Owner::op` keeps that identity, renamed `op`.
     fn declare_members(&mut self, module: &ModuleSource, ast: &Module) {
         for item in &ast.items {
             self.declare_item_members(module, item);
@@ -430,13 +441,17 @@ impl DefTable {
         };
         let owner_visibility = self.visibility(owner);
         for member in members {
-            // A seed already linked this member to this owner; linking again
-            // would list it twice under the owner.
-            if self.of_ast_id(member.ast_id).map(|id| self.get(id).parent) == Some(Some(owner)) {
-                continue;
-            }
-            let id = self.of_ast_id(member.ast_id).unwrap_or_else(|| {
-                self.declare(Def {
+            let id = match self.of_ast_id(member.ast_id) {
+                // A seed already linked it; linking again lists it twice.
+                Some(id) if self.get(id).parent == Some(owner) => continue,
+                Some(id) => {
+                    let def = &mut self.defs[id.0 as usize];
+                    def.parent = Some(owner);
+                    def.kind = member.kind;
+                    def.name = member.name;
+                    id
+                }
+                None => self.declare(Def {
                     ast_id: member.ast_id,
                     module: module.clone(),
                     name: member.name,
@@ -446,9 +461,8 @@ impl DefTable {
                     parent: Some(owner),
                     function_local: false,
                     members: Vec::new(),
-                })
-            });
-            self.defs[id.0 as usize].parent = Some(owner);
+                }),
+            };
             self.defs[owner.0 as usize].members.push(id);
         }
     }
@@ -491,6 +505,15 @@ impl DefTable {
         self.get(def).kind
     }
 
+    /// The primitive `def` declares, if it declares one.
+    #[must_use]
+    pub fn primitive(&self, def: DefId) -> Option<PrimitiveType> {
+        if self.kind(def) != DefKind::BuiltinType {
+            return None;
+        }
+        PrimitiveType::from_name(self.name(def))
+    }
+
     #[must_use]
     pub fn visibility(&self, def: DefId) -> Visibility {
         self.get(def).visibility
@@ -513,14 +536,8 @@ impl DefTable {
         &self.get(def).members
     }
 
-    /// The declaration a node declares, for the passes that hold a declaring
-    /// node rather than an identity — the symbol table, the compiler-item
-    /// registry, an LSP navigation edge. `None` for a node that declares
-    /// nothing.
-    ///
-    /// This is not a name lookup: the node is already the declaration.
-    /// [`Self::of_ast_id`] for a node the collect pass identified, so a miss is
-    /// a hole in that pass rather than a case to handle.
+    /// The declaration the declaring node `id` declares. Panics on a node
+    /// declaring nothing: the collect pass identified every one.
     #[must_use]
     pub fn def_at(&self, id: AstId) -> DefId {
         self.of_ast_id(id)
@@ -678,9 +695,8 @@ mod tests {
         assert_eq!(defs.module(defs.members(greet)[0]), &module);
     }
 
-    /// A method the symbol table already collected (registered as
-    /// `Owner::method` so it can be imported) keeps that one identity and is
-    /// only linked to its owner.
+    /// A method the symbol table already collected (as `Owner::method`, so it
+    /// can be imported) keeps that one identity, named as its owner's member.
     #[test]
     fn a_member_the_symbol_table_collected_gets_no_second_identity() {
         let source = r#"
@@ -693,8 +709,7 @@ mod tests {
             .unwrap();
         assert_eq!(defs.members(logger).len(), 1);
         let method = defs.members(logger)[0];
-        // Registered under its importable name, and reached only once.
-        assert_eq!(defs.name(method), "Logger::log");
+        assert_eq!(defs.name(method), "log");
         assert_eq!(
             defs.iter()
                 .filter(|d| defs.ast_id(*d) == defs.ast_id(method))

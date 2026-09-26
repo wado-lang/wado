@@ -173,8 +173,7 @@ impl TextEq {
             let implements_eq = func
                 .method_info
                 .as_ref()
-                .and_then(|m| m.trait_name.as_ref())
-                .and_then(FqTraitName::canonical)
+                .and_then(LocalMethodName::trait_decl)
                 == Some(eq_trait);
             if implements_eq {
                 eq_modules.insert(func.name.clone(), func.module_source.clone());
@@ -1567,6 +1566,7 @@ impl<'a> PatternLowerer<'a> {
                 FunctionRef {
                     module_source,
                     name: mangled_name,
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(method_info),
                 },

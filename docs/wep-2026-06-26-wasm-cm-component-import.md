@@ -107,39 +107,40 @@ on the stack, and engines elide that check only for fused guest-to-guest
 adapters — which is precisely what static composition produces. It also unions
 the two components' host imports without hand-written forwarding.
 
-## Not yet supported
+## Roadmap
 
-- [ ] Resources and handles. A component exporting a `resource` — with its
-      methods, static constructors, and `borrow<T>` parameters — is rejected
-      when its type is decoded. Wado has resources; what is missing is the
-      consuming direction of the mapping. It splits: a `dtor`-less exported
-      handle decodes to a copyable
-      [token](./wep-2026-05-21-resource-ownership.md) with no ownership analysis
-      to consume, where a `dtor`-bearing one needs the full affine mapping.
-      Nothing in a component's type distinguishes an interned referent from one
-      minted per call, so omitting the `dtor` is the exporter's assertion that
-      its referents have a backing, and the importer takes it at its word. The
-      compile-time-bounded half of a bundled ICU surface
-      ([`core:icu`](./wep-2026-08-09-core-icu.md)) rests on the token alone.
-- [ ] Resource handles inside an async value type's payload, which the
-      resource gap above covers.
-- [ ] World-level type exports. A component exporting a type directly from its
-      world, rather than from an interface, is rejected.
-- [ ] Component-defined named types in a world-level function signature. That
-      path carries the primitive and string surface; records, lists, and
-      variants in a world-level function remain future work. The interface path
-      has no such restriction.
+None. Every open item is a known gap below.
 
-## Consequences
+## Known gaps
 
-- A prebuilt component becomes usable from Wado with nothing to author or
-  maintain alongside it — no binding module, no WIT copy. The artifact is the
-  contract.
-- The compiled output stays standalone: dependencies are composed in, not left
-  as imports for a host to satisfy.
-- Language boundaries disappear at the consumption site. A dependency written in
-  any language that produces a component is called with ordinary Wado syntax and
-  ordinary Wado types.
-- A dependency's surface must stay within the supported value types. A component
-  built around resources is unusable until that gap closes, which bounds which
-  third-party components can be adopted today.
+### A component exporting a resource is rejected
+
+A component exporting a `resource`, with its methods, static constructors and
+`borrow<T>` parameters, is rejected when its type is decoded. So is a resource
+handle inside a `stream` or `future` payload. Wado has resources; what is
+missing is the consuming direction of the mapping.
+
+What it admits is a whole class of components Wado cannot use: any dependency
+built around resources. Nothing in a component's type tells an interned referent
+from one minted per call, and a `dtor`-less exported handle would be a copyable
+[token](./wep-2026-05-21-resource-ownership.md). The compile-time-bounded half
+of a bundled ICU surface ([`core:icu`](./wep-2026-08-09-core-icu.md)) needs that
+token.
+
+### `error-context` is rejected
+
+An `error-context` in a component's signature has no import mapping, not even to
+the prelude's `ErrorContext`. A component whose signature carries one is
+rejected where it is imported
+(`cm_component_import_error_context_rejected.wado`).
+
+### A world-level type export is rejected
+
+A component exporting a type directly from its world, rather than from an
+interface, is rejected.
+
+### A world-level function carries only primitives and strings
+
+A function a world exports directly takes and returns primitives and `string`.
+A record, list or variant in that signature is not supported. The interface
+path has no such limit.

@@ -20,11 +20,14 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::package::Package;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm,
     TirModule, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{
+    TirOptVisitor, TirRefVisitor, opt_walk_block, opt_walk_expr, opt_walk_stmt,
+};
 use crate::token::Span;
 
 use crate::synthesis::common::{
@@ -253,6 +256,28 @@ impl TirOptVisitor for TaskReturnReducer<'_> {
     }
 }
 
+/// Synthesis hands no `task return` on: every TIR walk after it, from
+/// monomorphize through lowering, relies on there being none.
+pub(super) fn assert_task_returns_eliminated(project: &Package) {
+    struct Survivor;
+    impl TirRefVisitor for Survivor {
+        fn visit_stmt(&mut self, stmt: &TirStmt) {
+            assert!(
+                !matches!(stmt.kind, TirStmtKind::TaskReturn { .. }),
+                "TaskReturn should be eliminated by synthesis before this phase"
+            );
+            self.walk_stmt(stmt);
+        }
+    }
+    for module in project.tir_modules.values() {
+        for func in &module.functions {
+            if let Some(body) = &func.borrow().body {
+                Survivor.visit_block(body);
+            }
+        }
+    }
+}
+
 /// A closure body is a function of its own: its `return` ends the closure, and
 /// `task return` cannot appear there at all. Neither rewrite crosses into one.
 fn walk_outside_closures(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bool {
@@ -342,6 +367,7 @@ fn unreachable_call(result_type: TypeId, span: Span) -> TirExpr {
             func: Box::new(FunctionRef {
                 module_source: ModuleSource::builtin(),
                 name: "unreachable".to_string(),
+                template: None,
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -393,7 +419,7 @@ fn generate_inline_task_return(
     let tt = type_table.borrow();
     let is_result = matches!(
         tt.get(value_type_id),
-        ResolvedType::GenericInstance { def, .. } if tt.is_compiler_item(*def, CompilerItem::Result)
+        ResolvedType::GenericInstance { .. } if tt.is_result(value_type_id)
     );
 
     if is_result && !flat_return_types.is_empty() {

@@ -8,7 +8,6 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
-use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::{StructName, wir_enum_type_key, wir_type_key};
 use crate::nir::{FuncId, NirFunction};
@@ -761,15 +760,17 @@ impl<'a> WirContext<'a> {
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
             ResolvedType::Struct { def, type_args } => {
-                // The WIR struct map is keyed on the rendered spelling: each
-                // instantiation is its own struct type.
-                let name = &type_table.struct_rendered_name(*def, type_args);
-                let lookup_module = if type_table.is_compiler_struct(*def, CompilerItem::String) {
+                let lookup_module = if type_table.is_string(type_id) {
                     ModuleSource::string()
                 } else {
                     type_table.struct_head_module(*def).clone()
                 };
-                let lookup_name = StructName::new(lookup_module, name.clone());
+                // The WIR struct map is keyed on the rendered spelling: each
+                // instantiation is its own struct type.
+                let lookup_name = StructName::new(
+                    lookup_module,
+                    type_table.struct_rendered_name(*def, type_args),
+                );
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "struct `{lookup_name}`"
@@ -777,9 +778,8 @@ impl<'a> WirContext<'a> {
                 };
                 Self::ref_to(type_id)
             }
-            ResolvedType::GenericInstance { def, type_args }
-                if type_table.is_compiler_item(*def, CompilerItem::List)
-                    && type_args.len() == 1 =>
+            ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && type_table.is_list(type_id) =>
             {
                 let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
@@ -790,9 +790,9 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(type_id)
             }
             ResolvedType::GenericInstance {
-                def,
                 type_args: elements,
-            } if TypeTable::is_tuple_type(type_table.def_name(*def)) => {
+                ..
+            } if type_table.is_tuple(type_id) => {
                 // CM binding synthesis interns its own `TypeId`s for the same
                 // elements, so a miss falls back to structural matching.
                 let found =

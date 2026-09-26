@@ -99,7 +99,7 @@
 - [Same-Scope Shadowing with Self-Reference](./wep-2026-03-25-same-scope-shadowing.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Redesign String and List APIs](./wep-2026-03-29-redesign-string-array-api.md)
-- [WebIDL Binding Generator (`wado-from-idl`)](./wep-2026-04-01-tide.md)
+- [The Web Interface for Wado](./wep-2026-04-01-web.md)
 - [Reactive Signals](./wep-2026-04-04-reactive-signals.md)
 - [URL Standard Library (`core:url`)](./wep-2026-04-10-url-stdlib.md)
 - [Default Arguments](./wep-2026-04-11-default-arguments.md)
@@ -214,6 +214,7 @@
 ## Research
 
 - [Research: Callbacks across the Component Model Boundary](./research-cm-boundary-callbacks.md)
+- [Research: Component Model Pain Points](./research-cm-pain-points.md)
 - [Research: Code Generation Approaches](./research-code-generation.md)
 - [Research: From/Into Conversion Trait Framework](./research-from-into-framework.md)
 - [HTTP Routing Benchmark Performance Analysis](./research-http-routing-performance.md)

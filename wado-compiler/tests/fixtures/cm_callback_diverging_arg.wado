@@ -3,16 +3,16 @@
 
 use { println, Stdout } from "core:cli";
 
-#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/target", linearity = "unrestricted", classes = "0..=0")]
 resource Target {
-    #[cm("web:demo/target#listen")]
+    #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
     fn listen(&self, listener: fn mut(i32));
 }
 
-#[cm("web:demo/global")]
+#[cm("example:demo/global")]
 interface Demo {
-    #[cm("web:demo/global#target")]
+    #[cm("example:demo/global#target")]
     fn target() -> Target;
 }
 

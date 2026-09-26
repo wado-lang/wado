@@ -29,15 +29,14 @@ use crate::component_model::{
 };
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
-use crate::module_source::{CmNamespace, ModuleSource};
+use crate::module_source::ModuleSource;
 use crate::name::{
     DeclPath, cm_export_func_name, cm_post_return_func_name, is_test_function, kebab_export_name,
     to_kebab,
 };
 use crate::package::{Package, test_selected};
 use crate::tir::{
-    ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
@@ -51,24 +50,19 @@ use import_adapter::synthesize_adapter;
 pub use lift::synthesize_lift;
 pub use lower::synthesize_lower;
 pub use resource_rewrite::rewrite_async_primitives_monomorphized;
-use task_return::{expand_task_returns_in_func, reduce_task_returns_in_func, split_task_entry};
-use type_fixup::{
-    collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
+use task_return::{
+    assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
+    split_task_entry,
 };
-use types::flat_types_from_type_id;
+use type_fixup::{collect_effect_calls_in_block, rewrite_calls_in_block};
+use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     flatten_param_type,
 };
 
-/// Build a `(module_source, name)` set for every effect/resource declared in
-/// the loaded TIR modules. The CM binding synthesizer uses this to attach the
-/// owning effect to each generated binding using the same `module_source` the
-/// elaborator assigns to user-written `with E` clauses.
-///
-/// Keying by `(module_source, name)` (rather than name alone) prevents
-/// collisions when two modules declare an effect or resource with the same
-/// name — `lookup_effect_owner` selects the canonical WASI module.
+/// Every effect and resource the TIR modules declare, as `(module, name)`: the
+/// candidates [`lookup_effect_owner`] picks a binding's owner from.
 fn effect_owner_module_sources(
     modules: &IndexMap<ModuleSource, TirModule>,
 ) -> IndexSet<(ModuleSource, String)> {
@@ -296,16 +290,6 @@ struct CalleeCollector {
 }
 
 impl TirRefVisitor for CalleeCollector {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        // This pass runs before `task return` is stripped; descend into its
-        // value rather than tripping the default walker's guard.
-        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
-            self.visit_expr(value);
-        } else {
-            self.walk_stmt(stmt);
-        }
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
         if let TirExprKind::Call { func, .. } = &expr.kind {
             self.callees
@@ -325,16 +309,6 @@ struct NamedPayloadFinder<'a> {
 }
 
 impl TirRefVisitor for NamedPayloadFinder<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        // This pass runs before `task return` is stripped; descend into its
-        // value rather than tripping the default walker's guard.
-        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
-            self.visit_expr(value);
-        } else {
-            self.walk_stmt(stmt);
-        }
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
         if self.found.is_none() {
             self.found = unresolvable_future_stream_payload(
@@ -441,8 +415,8 @@ fn unresolvable_record_in_payload(
             .iter()
             .find_map(|&e| unresolvable_record_in_payload(tt, registry, e));
     }
-    if let ResolvedType::GenericInstance { def, type_args } = tt.get(type_id)
-        && tt.is_compiler_item(*def, CompilerItem::Result)
+    if let ResolvedType::GenericInstance { type_args, .. } = tt.get(type_id)
+        && tt.is_result(type_id)
     {
         return type_args
             .clone()
@@ -475,6 +449,7 @@ fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &
 /// Adapter functions flow through monomorphize → lower → optimize → codegen
 /// like any other function.
 pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
+    validate_imports_representable(&project)?;
     let callbacks = generate_import_adapters(&mut project);
     synthesize_callback_exports(&mut project, &callbacks);
     synthesize_export_adapters(&mut project)?;
@@ -482,6 +457,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, String> {
     let validated = reject_unresolvable_record_payloads(&project)?;
     reduce_unexpanded_task_returns(&project);
     resource_rewrite::rewrite_async_primitives(&mut project, validated);
+    assert_task_returns_eliminated(&project);
     Ok(project)
 }
 
@@ -522,59 +498,38 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
     }
 
     let entry_type_table = entry_type_table(project);
-    // Map effect/resource name → defining module source. Used to attach the
-    // canonical owner as an effect on each generated binding so the
-    // checker's `(module_source, name)` identity matches user-written
-    // `with E` clauses (which the elaborator also canonicalises to the
-    // defining module).
     let owner_sources = effect_owner_module_sources(&project.tir_modules);
-    // Keyed by the qualified `interface::method` effect name — the same key
-    // call sites are rewritten against.
     let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
-    // Auxiliary functions returned alongside an adapter (e.g. the
-    // per-import `$cm_lift__*` for async imports). Not used for
-    // call-site rewriting, but added to the entry module so they
-    // participate in monomorphize / lower / DCE like normal functions.
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
     for qualified_name in &seen_effects {
-        if let Some(func_info) = project.cm_interface_registry.get_function(qualified_name) {
-            let func_info = func_info.clone();
-            let owner_module = lookup_effect_owner(
+        let registry = &project.cm_interface_registry;
+        let func_info = registry
+            .get_function(qualified_name)
+            .expect("the collector records only a registered CM function");
+        // An operation on `E`, effect or resource alike, requires `with E`; a
+        // world function belongs to no interface and requires nothing.
+        let effect = (!registry.is_world_import_function(qualified_name)).then(|| {
+            let module_source = lookup_effect_owner(
                 &owner_sources,
                 &func_info.interface_name,
                 &func_info.package,
             )
-            // No declaring module: a placeholder owner in the function's own
-            // namespace. A world-level import carries none, and falls back to
-            // `Wasi` as it did when that was the only bundled namespace.
-            .unwrap_or_else(|| {
-                let namespace =
-                    CmNamespace::from_prefix(&func_info.namespace).unwrap_or(CmNamespace::Wasi);
-                project
-                    .interner
-                    .borrow_mut()
-                    .binding(namespace, &func_info.package)
-            });
-            let produced = synthesize_adapter(
-                &func_info,
-                &project.cm_interface_registry,
-                &entry_type_table,
-                &project.interner,
-                &owner_module,
-                &entry_source,
-            );
-            // A world function (Phase 9) has no interface, so it needs no
-            // capability effect. The shared synthesizer pushed its empty
-            // interface name as one; drop it so the import stays pure.
-            if project
-                .cm_interface_registry
-                .is_world_import_function(qualified_name)
-            {
-                produced.adapter.borrow_mut().effects.clear();
+            .expect("an interface function's effect is declared");
+            EffectRef::Concrete {
+                name: func_info.interface_name.clone(),
+                module_source,
             }
-            auxiliary_functions.extend(produced.auxiliary);
-            adapters.insert(qualified_name.clone(), produced.adapter);
-        }
+        });
+        let produced = synthesize_adapter(
+            func_info,
+            registry,
+            &entry_type_table,
+            &project.interner,
+            effect,
+            &entry_source,
+        );
+        auxiliary_functions.extend(produced.auxiliary);
+        adapters.insert(qualified_name.clone(), produced.adapter);
     }
 
     let entry_module = project
@@ -588,10 +543,8 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
         entry_module.functions.push(aux);
     }
 
-    // Rewrite effect-like call nodes to target adapters. Call sites
-    // are keyed by qualified `interface::method` name, exactly how
-    // `adapters` is keyed. `applied_returns` spans all modules so call
-    // sites that disagree on a shared adapter's return type are caught.
+    // Spans all modules, so call sites disagreeing on a shared adapter's
+    // return type are caught.
     let mut applied_returns: IndexMap<usize, TypeId> = IndexMap::default();
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
@@ -606,17 +559,6 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
                     &mut applied_returns,
                     &mut callbacks,
                 );
-            }
-            // Sync locals with any Let stmts that were updated by the rewrite
-            // (e.g., streaming binding calls changing the let binding type to i32).
-            if !func.locals.is_empty() {
-                let mut updates = Vec::new();
-                if let Some(body) = &func.body {
-                    collect_local_type_updates(body, &func.locals, &mut updates);
-                }
-                for (idx, type_id) in updates {
-                    func.locals[idx].type_id = type_id;
-                }
             }
         }
     }
@@ -1010,7 +952,7 @@ fn validate_exports_representable(
 ) -> Result<(), String> {
     let tt = entry_type_table.borrow();
     for (source, module) in &project.tir_modules {
-        if source.is_core() || source.is_binding() {
+        if !source.is_program() {
             continue;
         }
         for func in &module.functions {
@@ -1023,24 +965,80 @@ fn validate_exports_representable(
     Ok(())
 }
 
-/// Reject a param or return type with no Component Model value representation
-/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
+/// A `#[cm]` operation a user module declares crosses the boundary in the
+/// other direction, so its signature needs a representation as an export's does.
+fn validate_imports_representable(project: &Package) -> Result<(), String> {
+    let tt = entry_type_table(project);
+    let tt = tt.borrow();
+    for (source, module) in &project.tir_modules {
+        if !source.is_program() {
+            continue;
+        }
+        let operations = module.effects.iter().flat_map(|e| &e.operations).chain(
+            module
+                .resources
+                .iter()
+                .filter(|r| !r.is_generic)
+                .flat_map(|r| &r.operations),
+        );
+        for op in operations.filter(|op| op.cm_name.is_some()) {
+            let result = if op.is_async {
+                tt.as_async_call(op.return_type)
+                    .expect("an async operation returns an `AsyncCall`")
+            } else {
+                op.return_type
+            };
+            // A closure crosses as its callback key; the elaborator checked its shape.
+            let values = op
+                .params
+                .iter()
+                .map(|p| p.type_id)
+                .filter(|&ty| !matches!(tt.get(ty), ResolvedType::Function { .. }));
+            signature_representable(values, result, Boundary::Import, &tt, &project.tir_modules)
+                .map_err(|reason| format!("import function `{}`: {reason}", op.name))?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_boundary_representable(
     user_func: &TirFunction,
     export_name: &str,
     tt: &TypeTable,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Result<(), String> {
-    let mut to_check: Vec<TypeId> = user_func.params.iter().map(|p| p.type_id).collect();
-    to_check.push(user_func.return_type);
-    for tid in to_check {
-        if let Err(reason) =
-            types::check_cm_boundary_representable(tid, tt, tir_modules, &mut Vec::new())
-        {
-            return Err(format!("export function `{export_name}`: {reason}"));
-        }
-    }
-    Ok(())
+    signature_representable(
+        user_func.params.iter().map(|p| p.type_id),
+        user_func.return_type,
+        Boundary::Export,
+        tt,
+        tir_modules,
+    )
+    .map_err(|reason| format!("export function `{export_name}`: {reason}"))
+}
+
+/// Reject a param or return type with no Component Model value representation
+/// in any world: an empty record, a `()` param, or a 128-bit, `v128` or half scalar.
+fn signature_representable(
+    params: impl Iterator<Item = TypeId>,
+    result: TypeId,
+    boundary: Boundary,
+    tt: &TypeTable,
+    tir_modules: &IndexMap<ModuleSource, TirModule>,
+) -> Result<(), String> {
+    params
+        .map(|tid| (tid, Slot::Value))
+        .chain(std::iter::once((result, Slot::Optional)))
+        .try_for_each(|(tid, slot)| {
+            types::check_cm_boundary_representable(
+                tid,
+                slot,
+                boundary,
+                tt,
+                tir_modules,
+                &mut Vec::new(),
+            )
+        })
 }
 
 /// The boundary carries what the world declares, so the export's signature has

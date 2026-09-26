@@ -170,15 +170,15 @@ array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut 
 
 array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(36)
 
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(37)
+struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value> {  // TypeId(37)
+    mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
+    mut index: i32,
+}
+
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(38)
     mut key: ref "core:prelude/string.wado//String",
     mut value: ref "core:value//Value",
     mut deleted: bool,
-}
-
-struct core:collections//TreeMapEntriesRefIter<core:prelude/string.wado/String,core:value/Value> {  // TypeId(38)
-    mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>",
-    mut index: i32,
 }
 
 struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(39)
@@ -3709,7 +3709,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     builtin::array_copy<u8>(self_31, offset_32, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_37 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(336, f_37);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(339, f_37);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -3810,7 +3810,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
     builtin::array_copy<u8>(self_31, offset_32, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_37 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(336, f_37);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(339, f_37);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4135,7 +4135,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     builtin::array_copy<u8>(self_31, offset_32, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_37 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(336, f_37);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(339, f_37);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4236,7 +4236,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     builtin::array_copy<u8>(self_32, offset_33, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_38 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(363, f_38);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(366, f_38);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4337,7 +4337,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     builtin::array_copy<u8>(self_32, offset_33, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_38 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(354, f_38);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(357, f_38);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4438,7 +4438,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     builtin::array_copy<u8>(self_32, offset_33, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_38 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(354, f_38);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(357, f_38);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4539,7 +4539,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     builtin::array_copy<u8>(self_32, offset_33, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_38 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(363, f_38);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(366, f_38);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -4640,7 +4640,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     builtin::array_copy<u8>(self_31, offset_32, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_37 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(336, f_37);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(339, f_37);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -5180,7 +5180,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     builtin::array_copy<u8>(self_30, offset_31, global:core:value::$const_obj_89, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
     f_36 = $local_5;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(336, f_36);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0"(339, f_36);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;

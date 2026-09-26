@@ -1,0 +1,16 @@
+// A bare call to an imported operation requires its interface, as the
+// qualified `Stdout::write_via_stream` does.
+
+use { Stdout::{write_via_stream} } from "wasi:cli/stdout.wado";
+
+fn bare() with Stream {
+    let [rx, _tx] = Stream::<u8>::new();
+    let _ = write_via_stream(rx);
+}
+
+export fn run() with Stream {
+    bare();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout'"}

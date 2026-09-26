@@ -1,0 +1,15 @@
+// A call to a non-generic function of another module infers no type arguments
+// from a generic function this module declares under the same name.
+
+use dep from "./sub/cross_module_same_name_generic_fn_dep.wado";
+
+fn pick<A, B>(a: A, b: B) -> i32 {
+    return dep::pick(1, 2);
+}
+
+test {
+    assert pick("x", true) == 3;
+}
+
+__DATA__
+{"test": {}}

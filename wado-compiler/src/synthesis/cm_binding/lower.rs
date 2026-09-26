@@ -27,7 +27,7 @@ use super::types::{
     flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::name::FqTypeName;
+use crate::name::{FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
 use crate::tir::TirUnaryOp;
@@ -75,7 +75,11 @@ pub fn synthesize_lower(
             let packed_local = *next_local;
             locals.push(TirLocal::synth(*next_local, TypeTable::I64, false));
             *next_local += 1;
-            let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
+            let packed = internal_call(
+                CompilerItem::CmLowerString.attr_name(),
+                vec![value],
+                TypeTable::I64,
+            );
             let mut stmts = vec![let_stmt("$packed", packed_local, TypeTable::I64, packed)];
 
             let (ptr, len) =
@@ -98,7 +102,7 @@ pub fn synthesize_lower(
         }
         Type::Named(named) => match named.name.as_str() {
             // Unit occupies no memory, so there is nothing to store.
-            TypeTable::UNIT_TYPE_NAME => vec![],
+            UNIT_TYPE_NAME => vec![],
             "i32" | "u32" => vec![expr_stmt(builtin_call(
                 "i32_store",
                 vec![addr, value],
@@ -683,6 +687,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
             &names.array_fq,
             "len",
             ModuleSource::list(),
+            names.list_len.clone(),
             vec![],
             TypeTable::I32,
         ),
@@ -766,6 +771,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
                 FunctionRef {
                     module_source: ModuleSource::list(),
                     name: iv_mangled,
+                    template: Some(names.list_index_value.clone()),
                     monomorph_info: None,
                     method_info: Some(iv_info),
                 },
@@ -900,20 +906,30 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 .method_name(CompilerItem::TreeMapEntriesIterNext)
                 .to_string(),
         );
-        let len_method = items.method_name(CompilerItem::TreeMapLen).to_string();
-        let entries_method = items.method_name(CompilerItem::TreeMapEntries).to_string();
+        let method = |item| {
+            (
+                items.method_name(item).to_string(),
+                items.require_template(item),
+            )
+        };
         (
             map_head,
             map_source,
             iter,
             iter_source,
-            next,
-            len_method,
-            entries_method,
+            (
+                next,
+                items.require_template(CompilerItem::TreeMapEntriesIterNext),
+            ),
+            method(CompilerItem::TreeMapLen),
+            method(CompilerItem::TreeMapEntries),
             ref_pair,
             opt,
         )
     };
+    let (next_method, next_template) = next_method;
+    let (len_method, len_template) = len_method;
+    let (entries_method, entries_template) = entries_method;
 
     let mut stmts = Vec::new();
 
@@ -931,6 +947,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             &map_head,
             &len_method,
             map_source.clone(),
+            len_template,
             vec![key_tid, value_tid],
             vec![],
             TypeTable::I32,
@@ -964,6 +981,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
             &map_head,
             &entries_method,
             map_source,
+            entries_template,
             vec![key_tid, value_tid],
             vec![],
             iter_tid,
@@ -997,6 +1015,7 @@ pub(super) fn synthesize_lower_map_to_buffer(
                 FunctionRef {
                     module_source: iter_source,
                     name: next_mangled,
+                    template: Some(next_template),
                     monomorph_info: None,
                     method_info: Some(next_method),
                 },
@@ -1165,7 +1184,11 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 &format!("{prefix}_packed"),
                 packed_local,
                 TypeTable::I64,
-                internal_call("cm_lower_string", vec![value], TypeTable::I64),
+                internal_call(
+                    CompilerItem::CmLowerString.attr_name(),
+                    vec![value],
+                    TypeTable::I64,
+                ),
             ));
             let (ptr, len) = split_packed_ptr_len(local_ref(
                 packed_local,

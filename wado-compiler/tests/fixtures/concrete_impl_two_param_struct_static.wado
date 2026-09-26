@@ -1,0 +1,69 @@
+// Static trait methods and `From` conversions on concrete instantiations of a
+// two-parameter struct: each call reaches the impl for its instantiation.
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+trait Make with () {
+    fn make() -> Self;
+}
+
+impl Make for Pair<i32, i64> {
+    fn make() -> Pair<i32, i64> {
+        return Pair { a: 1, b: 2 };
+    }
+}
+
+impl Make for Pair<i64, i32> {
+    fn make() -> Pair<i64, i32> {
+        return Pair { a: 3, b: 4 };
+    }
+}
+
+impl From<i32> for Pair<i32, i64> {
+    fn from(v: i32) -> Pair<i32, i64> {
+        return Pair { a: v, b: 0 };
+    }
+}
+
+impl From<i32> for Pair<i64, i32> {
+    fn from(v: i32) -> Pair<i64, i32> {
+        return Pair { a: 0, b: v };
+    }
+}
+
+fn made<T: Make>() -> T {
+    return T::make();
+}
+
+fn widen(r: Result<i32, i32>) -> Result<i32, Pair<i64, i32>> {
+    let v = r?;
+    return Ok(v);
+}
+
+test "static call" {
+    assert Pair::<i32, i64>::make().a == 1;
+    assert Pair::<i64, i32>::make().a == 3;
+}
+
+test "static call through a bound" {
+    let p: Pair<i32, i64> = made();
+    let q: Pair<i64, i32> = made();
+    assert p.b == 2;
+    assert q.b == 4;
+}
+
+test "from" {
+    assert Pair::<i32, i64>::from(5).a == 5;
+    assert Pair::<i64, i32>::from(5).b == 5;
+}
+
+test "question mark" {
+    let e = widen(Err(7));
+    assert e matches { Err(x) && x.b == 7 };
+}
+
+__DATA__
+{"test": {}}

@@ -220,12 +220,21 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     }
 }
 
+/// The trait methods a written impl declares for every instance of its head;
+/// one reaching only some leaves the rest to the derivation.
 fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
+    let tt = module.type_table.borrow();
     module
         .functions
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
+            if func
+                .impl_origin
+                .is_some_and(|block| !tt.impl_covers_every_instance(block))
+            {
+                return None;
+            }
             func.method_info.as_ref().and_then(|info| {
                 info.trait_name.as_ref().map(|trait_name| {
                     mangle_local_trait_method(
@@ -411,6 +420,7 @@ fn byte_slice_method_call(
             FunctionRef {
                 module_source,
                 name: method_info.to_mangled_name(),
+                template: Some(compiler_items.require_template(item)),
                 monomorph_info: Some(monomorph_info),
                 method_info: Some(method_info),
             },
@@ -473,10 +483,10 @@ fn field_schema_method_fn(
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
-        benign_effects: Vec::new(),
         is_async: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
+        impl_origin: None,
         monomorph_info: None,
         method_info: Some(LocalMethodName::new(
             type_name.clone(),

@@ -168,9 +168,7 @@ impl BuiltinRegistry {
             .insert(func.name.clone(), info);
     }
 
-    /// Resolve an AST Type to a `TypeId`
-    ///
-    /// Handles primitive types, type parameters, and `Array<T>`.
+    /// The `TypeId` a `core:builtin` signature type names.
     fn resolve_type(ty: &Type, type_params: &[String], type_table: &RefCell<TypeTable>) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -184,10 +182,8 @@ impl BuiltinRegistry {
                 if let Some(id) = TypeTable::primitive_by_name(&named.name) {
                     return id;
                 }
-                // `i128` / `u128` are prelude struct declarations, which
-                // `core:builtin` imports like any other module's type — these
-                // arms are what honour that import, since the name is matched
-                // before the import list is consulted.
+                // The prelude structs `core:builtin` imports; nothing here reads
+                // its import list.
                 match named.name.as_str() {
                     "i128" => type_table
                         .borrow_mut()
@@ -195,20 +191,23 @@ impl BuiltinRegistry {
                     "u128" => type_table
                         .borrow_mut()
                         .make_compiler_struct(CompilerItem::U128),
-                    _ => TypeTable::UNIT, // Unknown type defaults to UNIT
+                    "Formatter" => type_table
+                        .borrow_mut()
+                        .make_compiler_struct(CompilerItem::Formatter),
+                    "ByteList" => type_table.borrow_mut().make_byte_list(),
+                    other => panic!("core:builtin names unknown type `{other}`"),
                 }
             }
             // `Array<T>` is the user-facing spelling of the raw GC array
             // builtin; the builtin module's own signatures use it.
             Type::Generic(g) if g.name == TypeTable::ARRAY_TYPE_NAME => {
-                if let Some(first_arg) = g.args.first() {
-                    let element_type = Self::resolve_type(first_arg, type_params, type_table);
-                    type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::BuiltinArray(element_type))
-                } else {
-                    TypeTable::UNIT
-                }
+                let [element] = g.args.as_slice() else {
+                    panic!("core:builtin writes `Array` without one type argument");
+                };
+                let element_type = Self::resolve_type(element, type_params, type_table);
+                type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::BuiltinArray(element_type))
             }
             Type::Tuple(elements) => {
                 let element_types: Vec<TypeId> = elements
@@ -225,7 +224,25 @@ impl BuiltinRegistry {
                 let inner_id = Self::resolve_type(inner, type_params, type_table);
                 type_table.borrow_mut().make_mut_ref(inner_id)
             }
-            _ => TypeTable::UNIT, // Other types default to UNIT
+            Type::Function(f) => {
+                assert!(
+                    f.effects.is_empty(),
+                    "core:builtin writes an effectful fn type"
+                );
+                let params = f
+                    .params
+                    .iter()
+                    .map(|t| Self::resolve_type(t, type_params, type_table))
+                    .collect();
+                let return_type = Self::resolve_type(&f.return_type, type_params, type_table);
+                type_table.borrow_mut().make_function_with_mut(
+                    f.is_mut,
+                    params,
+                    return_type,
+                    Vec::new(),
+                )
+            }
+            other => panic!("core:builtin writes an unsupported type: {other:?}"),
         }
     }
 

@@ -49,10 +49,6 @@ and often a helper the codebase already had.
 - Efficiency: cut wasted work — recomputation, repeated I/O, independent work
   run in sequence. A stored closure pins everything it captured; prefer a struct
   holding only the fields it needs.
-- Naming and structure: a comment explaining _what_ the code does marks the code
-  to fix. Rename and decompose until it is redundant, then delete it.
-- Invariants: state them as an assertion — `assert!` in Rust, `assert` in Wado
-  — never as a comment.
 - Contracts, not defences: a function states what it requires and trusts its
   callers. Defensive programming is banned. A default or a fallback whose
   validity you cannot argue is the smell. It turns a broken call into a wrong
@@ -64,23 +60,14 @@ and often a helper the codebase already had.
 
 ### Comments
 
-- Delete outright what carries no information or repeats the code; trim only
-  what survives that.
-- Doc and module comments: 2 lines max. Say what it is, not how it works.
+Apply AGENTS.md § General Rules to every comment in scope. A comment saying
+what the code does is a rename or a decomposition to make. A comment stating an
+invariant is an assert to write. A comment that carries no information is
+deleted outright.
 
 ### Markdown
 
-The goal is prose a reader understands on the first pass. Everything below
-serves that.
-
-- Plain words. One idea per sentence. The plain statement first, the reason for
-  it after.
-- Three habits make a reader decode instead of read: a second clause hung off a
-  dash, an abstract noun standing where a verb would do, and the clever phrasing
-  of a point arriving before the obvious one. Undo each where you find it.
-- Correct and fresh. Keep the facts.
-- Cutting narration and redundancy is one way to get there. It is not the point.
-  A passage that came out shorter and harder to follow has failed.
+Apply the `markdown` skill to every Markdown file in scope.
 
 ## Sweep by shape
 

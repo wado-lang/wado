@@ -17,24 +17,24 @@ use crate::common::{
 const DECLARATIONS: &str = r#"
 use { MonotonicClock } from "wasi:clocks";
 
-#[cm("web:demo/target", linearity = "unrestricted", classes = "0..=0")]
+#[cm("example:demo/target", linearity = "unrestricted", classes = "0..=0")]
 resource Target {
-    #[cm("web:demo/target#listen")]
+    #[cm("example:demo/target#listen")]
     #[cm_params("self", "listener")]
     fn listen(&self, listener: fn mut(i32) with Demo);
-    #[cm("web:demo/target#listen-f64")]
+    #[cm("example:demo/target#listen-f64")]
     #[cm_params("self", "listener")]
     fn listen_f64(&self, listener: fn mut(f64) with Demo);
-    #[cm("web:demo/target#listen-target")]
+    #[cm("example:demo/target#listen-target")]
     #[cm_params("self", "listener")]
     fn listen_target(&self, listener: fn mut(Target) with Demo);
 }
 
-#[cm("web:demo/global")]
+#[cm("example:demo/global")]
 interface Demo {
-    #[cm("web:demo/global#target")]
+    #[cm("example:demo/global#target")]
     fn target() -> Target;
-    #[cm("web:demo/global#report")]
+    #[cm("example:demo/global#report")]
     fn report(total: i32);
 }
 
@@ -56,14 +56,14 @@ struct Host {
 type Shared = Arc<Mutex<Host>>;
 
 fn add_demo_to_linker(linker: &mut Linker<WasiState>, host: &Shared) -> anyhow::Result<()> {
-    let mut global = linker.instance("web:demo/global")?;
+    let mut global = linker.instance("example:demo/global")?;
     global.func_wrap("target", |_, (): ()| Ok((0.0_f64,)))?;
     let reports = Arc::clone(host);
     global.func_wrap("report", move |_, (total,): (i32,)| {
         reports.lock().unwrap().reports.push(total);
         Ok(())
     })?;
-    let mut target = linker.instance("web:demo/target")?;
+    let mut target = linker.instance("example:demo/target")?;
     for listen in ["listen", "listen-f64", "listen-target"] {
         let listeners = Arc::clone(host);
         target.func_wrap(listen, move |_, (_target, key): (f64, u32)| {

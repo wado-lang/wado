@@ -20,13 +20,17 @@ use crate::ast::{BinaryOp, RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::orchestration::first_infer_span;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::written_type_source;
+use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias,
 };
+use crate::resolve::Resolutions;
 use crate::symbol_notation::render;
 use crate::tir::StructDef;
 use crate::{escape, hashmap, tir};
@@ -46,16 +50,6 @@ pub(super) enum RefBinding {
 /// rebuilds the real pattern node independently, so the only thing the walk
 /// must surface is the binding set (used by or-pattern validation).
 type PatBindings = Vec<(String, u32, TypeId)>;
-
-/// Generic heads `resolve_generic_type` answers itself; none names a
-/// declaration a site could find.
-const BUILTIN_GENERIC_HEADS: &[&str] = &[
-    "Option",
-    "Stream",
-    "StreamWritable",
-    "Future",
-    "FutureWritable",
-];
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Walk a block: resolve each statement and manage the lexical scope.
@@ -387,20 +381,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                 return false;
             }
-            // A builtin head answers for itself; only a written one is looked up.
-            if has_args
-                && (BUILTIN_GENERIC_HEADS.contains(&name) || name == TypeTable::ARRAY_TYPE_NAME)
-            {
-                return false;
-            }
             if scope.reject_non_type_decl(id, name, span) {
                 return true;
             }
-            if scope.type_decl_at(Some(id), name).is_some() {
+            if scope.decl_key_at(Some(id), name).is_some() {
                 return false;
             }
-            // A bare name has tiers no declaration index covers, `Self` and the
-            // frame's parameters among them. A head carrying arguments has none.
+            // A bare name has tiers the module scope does not hold, `Self` and
+            // the frame's parameters among them. A head carrying arguments has none.
             if !has_args && scope.resolve_named_type(id, name, span, false) != TypeTable::UNKNOWN {
                 return false;
             }
@@ -421,8 +409,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A generic one names no single type: each instantiation resolves the
         // base AST with its arguments substituted, so what is recorded is the
         // declaration — the same entry a module-level generic newtype makes.
+        let def = self.tysys.def_at(newtype_decl.id);
         if !newtype_decl.type_params.is_empty() {
-            let def = self.tysys.def_at(newtype_decl.id);
             self.sem
                 .decls
                 .local
@@ -438,7 +426,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if base_type_id == TypeTable::UNKNOWN {
             return false;
         }
-        let def = self.tysys.def_at(newtype_decl.id);
         self.sem.decls.local.declare_newtype(
             &self.tysys.type_table,
             def,
@@ -493,7 +480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (value_type, type_id) = if let Some(annotated_type) = &let_stmt.ty {
             let resolved = self.resolve_type(annotated_type);
             self.reject_unresolved_annotation(annotated_type);
-            let target_type = if Self::first_infer_span(annotated_type).is_some() {
+            let target_type = if first_infer_span(annotated_type).is_some() {
                 TypeTable::ERROR
             } else {
                 resolved
@@ -829,10 +816,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
-    /// A case of a one-case type cannot.
+    /// A case cannot when no other case of its type holds a value.
     fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
         match pattern {
-            Pattern::Variant { .. } if self.case_count(scrutinee) == 1 => None,
+            Pattern::Variant { variant_name, .. }
+                if !self.another_case_holds_a_value(scrutinee, variant_name) =>
+            {
+                None
+            }
             Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
                 Some(format!("`{name}` may not match"))
             }
@@ -840,20 +831,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn case_count(&self, scrutinee: TypeId) -> usize {
+    /// Whether a value of `scrutinee` can be a case other than `name`. A type
+    /// with no cases to ask about answers `true`.
+    fn another_case_holds_a_value(&self, scrutinee: TypeId, name: &str) -> bool {
         let head = self
             .tysys
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee);
-        match (
-            self.tysys.variant_of_type(head),
-            self.tysys.enum_of_type(head),
-        ) {
-            (Some(variant), _) => variant.cases.len(),
-            (None, Some(enumeration)) => enumeration.cases.len(),
-            (None, None) => 0,
+        if let Some(enumeration) = self.tysys.enum_of_type(head) {
+            return enumeration.cases.len() > 1;
         }
+        let (Some(variant), Some(payloads)) = (
+            self.tysys.variant_of_type(head),
+            self.case_payload_types(head),
+        ) else {
+            return true;
+        };
+        let name = self.strip_ns_prefix(name).unwrap_or(name);
+        variant
+            .cases
+            .iter()
+            .zip(payloads)
+            .any(|(case, payload)| case.name != name && !self.is_uninhabited(payload))
     }
 
     fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
@@ -1330,10 +1330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // An `async fn` names its result with `task return`; a bare `return`
         // still ends the function, carrying whatever was already delivered.
         if ctx.is_async && ret_stmt.value.is_some() {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message:
-                    "cannot use `return expr` in `export async fn`; use `task return expr` instead"
-                        .to_string(),
+            let _ = self.emit(TypeError::ReturnValueInAsync {
                 span: ret_stmt.span,
             });
         }
@@ -1358,10 +1355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) {
         if !ctx.is_async {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "`task return` is only valid inside `export async fn`".to_string(),
-                span: tr_stmt.span,
-            });
+            let _ = self.emit(TypeError::TaskReturnOutsideAsync { span: tr_stmt.span });
         }
         let expected = ctx.task_return_type;
         let mut value_type = self.resolve_expr(&tr_stmt.value, ctx, expected);
@@ -1894,6 +1888,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     }
                 };
+                if self.is_uninhabited(payload_type) {
+                    let [scrutinee_name, payload_name] = [scrutinee_type, payload_type]
+                        .map(|t| self.tysys.type_table.borrow().type_name(t));
+                    let _ = self.emit(TypeError::InvalidPattern {
+                        message: format!(
+                            "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `{payload_name}` has no value"
+                        ),
+                        span: *span,
+                    });
+                }
 
                 // Single payload = single binding pattern.
                 // For backward compatibility, we still accept `Some(x)` as single binding.
@@ -2319,9 +2323,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     variant_qualifier: Some(qualifier),
                     bindings,
                     ..
-                } if bindings.is_empty() => const_qualifier_name(qualifier).and_then(|ty| {
-                    let value = primitive_int_bound(ty, variant_name)?;
-                    let shown = format!("{ty}::{variant_name}");
+                } if bindings.is_empty() => primitive_assoc_const_to_i128(
+                    Some(qualifier),
+                    variant_name,
+                    &self.tysys.resolutions,
+                )
+                .and_then(|value| {
+                    let shown = format!("{}::{variant_name}", written_type_source(qualifier));
                     util::int_value_range_error(value, &shown, scrutinee_type, &tt)
                 }),
                 _ => None,
@@ -2350,8 +2358,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .is_unsigned_int(scrutinee_type);
 
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned);
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned);
+        let resolutions = &self.tysys.resolutions;
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions);
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions);
 
         let (Some(start_val), Some(end_val)) = (start_val, end_val) else {
             let _ = self.emit(TypeError::InvalidPattern {
@@ -3538,38 +3547,15 @@ pub(super) fn remap_pattern_local(pattern: &mut TirPattern, from: u32, to: u32) 
     }
 }
 
-/// Resolve a primitive type's builtin associated constant (`i32::MIN`,
-/// `u8::MAX`, …) to its `i128` value. Pure and `self`-free so both the
-/// elaborator's pattern lowering and the reify pass share one source of
-/// truth for the range-endpoint / const-pattern paths. Returns `None`
-/// for non-primitive qualifiers or unknown const names.
+/// A primitive integer's `MIN` / `MAX` written as a pattern (`i32::MIN`), its
+/// qualifier resolved at its own site. `None` for anything else.
 pub(super) fn primitive_assoc_const_to_i128(
     qualifier: Option<&Type>,
     const_name: &str,
+    resolutions: &Resolutions,
 ) -> Option<i128> {
-    primitive_int_bound(const_qualifier_name(qualifier?)?, const_name)
-}
-
-/// The type name qualifying a constant path such as `u8::MAX`.
-fn const_qualifier_name(qualifier: &Type) -> Option<&str> {
-    match qualifier {
-        Type::Named(named) => Some(named.name.as_str()),
-        Type::Generic(generic) => Some(generic.name.as_str()),
-        Type::NamespacedGeneric(namespaced) => Some(namespaced.name.as_str()),
-        Type::Function(_)
-        | Type::Tuple(_)
-        | Type::Reference(_)
-        | Type::MutReference(_)
-        | Type::TypePackSpread(_, _)
-        | Type::Infer(_)
-        | Type::Error(_) => None,
-    }
-}
-
-/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
-/// are written with. `None` for every other pair.
-pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
-    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
+    let owner = assoc_const_owner(qualifier, resolutions)?;
+    let (min, max) = resolutions.defs().primitive(owner)?.int_range()?;
     match const_name {
         "MIN" => Some(min),
         "MAX" => Some(max),

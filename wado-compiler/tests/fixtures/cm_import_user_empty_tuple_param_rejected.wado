@@ -1,0 +1,13 @@
+// A `#[cm]` import is held to what an export is: the empty tuple has no
+// Component Model representation in any position.
+interface Sink {
+    #[cm("wasi:demo/sink@0.1.0#put")]
+    fn put(t: []);
+}
+
+export fn run() with Sink {
+    Sink::put([]);
+}
+
+__DATA__
+{"compile_error": "import function `put`: the empty tuple `[]` has no Component Model representation — a `tuple` carries at least one type, and `()` is the type that carries none"}

@@ -10,6 +10,7 @@
 //! through [`SeqField`] / [`FormatterField`].
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::compiler_item::{CompilerItem, FormatterField, SeqField};
 use crate::hashmap::IndexSet;
@@ -45,10 +46,9 @@ pub(super) struct TmplIdents {
     array_new: IndexSet<FuncId>,
     /// `builtin::ref.as_non_null`.
     ref_as_non_null: IndexSet<FuncId>,
-    /// The `String` struct literal the lowered template init takes the shape of.
-    string_struct: String,
-    /// The `Formatter` struct literal each interpolation builds.
-    formatter_struct: String,
+    /// Answers which compiler struct a literal builds: the lowered template
+    /// init's `String`, or each interpolation's `Formatter`.
+    type_table: Rc<RefCell<TypeTable>>,
 }
 
 impl TmplIdents {
@@ -75,19 +75,20 @@ impl TmplIdents {
                 _ => {}
             }
         }
-        let type_table = project.type_table.borrow();
-        let items = type_table.compiler_items();
         Self {
             with_capacity,
             array_new,
             ref_as_non_null,
-            string_struct: items.struct_name(CompilerItem::String).to_string(),
-            formatter_struct: items.struct_name(CompilerItem::Formatter).to_string(),
+            type_table: project.type_table.clone(),
         }
     }
 
     fn is(set: &IndexSet<FuncId>, func_id: FuncId) -> bool {
         set.contains(&func_id)
+    }
+
+    fn is_struct(&self, ty: TypeId, item: CompilerItem) -> bool {
+        self.type_table.borrow().is_compiler_item_type(ty, item)
     }
 }
 
@@ -851,12 +852,12 @@ fn extract_tmpl_candidate(
                 }
                 // Try post-lowered form: String { repr: array_new<u8>(N), used: 0 }
                 if let ExprKind::StructLiteral {
-                    struct_name,
+                    struct_type,
                     fields,
                     ..
                 } = &body.exprs[struct_view].kind
                 {
-                    if *struct_name == idents.string_struct {
+                    if idents.is_struct(*struct_type, CompilerItem::String) {
                         // Verify the repr field contains an array_new call
                         let repr_field = fields
                             .iter()
@@ -989,7 +990,7 @@ fn extract_fmt_candidates(
                 continue;
             };
 
-            if ff.struct_name != idents.formatter_struct {
+            if !idents.is_struct(ff.struct_type, CompilerItem::Formatter) {
                 continue;
             }
 

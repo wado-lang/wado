@@ -229,13 +229,13 @@ array Array<core:prelude/string.wado/String> (mut ref "core:prelude/string.wado/
 
 array Array<serde_json_roundtrip_complex.wado/Inner> (mut ref "serde_json_roundtrip_complex.wado//Inner");  // TypeId(49)
 
-array Array<serde_json_roundtrip_complex.wado/Direction> (mut "serde_json_roundtrip_complex.wado//enum:Direction");  // TypeId(50)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(50)
 
-array Array<core:prelude/types.wado/Option<i32>> (mut ref "core:prelude/types.wado//Option<i32>");  // TypeId(51)
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(51)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(52)
+array Array<serde_json_roundtrip_complex.wado/Direction> (mut "serde_json_roundtrip_complex.wado//enum:Direction");  // TypeId(52)
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,i32>");  // TypeId(53)
+array Array<core:prelude/types.wado/Option<i32>> (mut ref "core:prelude/types.wado//Option<i32>");  // TypeId(53)
 
 array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>");  // TypeId(54)
 
@@ -259,7 +259,19 @@ struct core:prelude/traits.wado//StructField<serde_json_roundtrip_complex.wado/I
     mut wire_encoding: "core:prelude/traits.wado//enum:WireEncoding",
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(57)
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(57)
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: i32,
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(58)
+    mut key: ref "core:prelude/string.wado//String",
+    mut value: ref "core:prelude/string.wado//String",
+    mut deleted: bool,
+}
+
+struct core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(59)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String>>",
@@ -267,7 +279,7 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,core:prelude/st
     mut deleted_count: i32,
 }
 
-struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(58)
+struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // TypeId(60)
     mut key: ref "core:prelude/string.wado//String",
     mut index: i32,
     mut level: i32,
@@ -275,7 +287,7 @@ struct core:collections//TreeMapNode<core:prelude/string.wado/String> {  // Type
     mut right: ref "core:prelude/types.wado//Option<i32>",
 }
 
-struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(59)
+struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // TypeId(61)
     mut root: ref "core:prelude/types.wado//Option<i32>",
     mut nodes: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>",
     mut entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
@@ -283,22 +295,10 @@ struct core:collections//TreeMap<core:prelude/string.wado/String,i32> {  // Type
     mut deleted_count: i32,
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(60)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(62)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
-}
-
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,i32> {  // TypeId(61)
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: i32,
-    mut deleted: bool,
-}
-
-struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:prelude/string.wado/String> {  // TypeId(62)
-    mut key: ref "core:prelude/string.wado//String",
-    mut value: ref "core:prelude/string.wado//String",
-    mut deleted: bool,
 }
 
 struct core:prelude/slice.wado//SliceValueIter<[core:prelude/string.wado/String,i32]> {  // TypeId(63)
@@ -408,13 +408,13 @@ struct core:prelude//List<serde_json_roundtrip_complex.wado/Inner> {  // TypeId(
     mut used: i32,
 }
 
-struct core:prelude//List<core:prelude/types.wado/Option<i32>> {  // TypeId(84)
-    mut repr: ref "Array<core:prelude/types.wado/Option<i32>>",
+struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(84)
+    mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
     mut used: i32,
 }
 
-struct core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>> {  // TypeId(85)
-    mut repr: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,i32>>",
+struct core:prelude//List<core:prelude/types.wado/Option<i32>> {  // TypeId(85)
+    mut repr: ref "Array<core:prelude/types.wado/Option<i32>>",
     mut used: i32,
 }
 
@@ -10702,7 +10702,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0"(low, high) {
     offset_31 = 0 + 61;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(980, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(971, $local_5.buf);
     new_used_41 = $local_4.used + 29;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -10791,7 +10791,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/O
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -10886,7 +10886,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -10999,7 +10999,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<serde_json_roundtrip_comp
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11094,7 +11094,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>^core:prelude/traits.
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11189,7 +11189,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11302,7 +11302,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11397,7 +11397,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11492,7 +11492,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_33 = 0 + 61;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(354, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(357, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11587,7 +11587,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_33 = 0 + 65;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(363, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(366, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11682,7 +11682,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_33 = 0 + 65;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(363, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(366, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11777,7 +11777,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapE
     offset_33 = 0 + 61;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(354, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(357, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11872,7 +11872,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     offset_33 = 0 + 61;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(354, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(357, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -11967,7 +11967,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     offset_33 = 0 + 65;
     builtin::array_copy<u8>(self_32, offset_33, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(363, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(366, $local_5.buf);
     new_used_43 = $local_4.used + 58;
     if @unlikely(new_used_43 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12062,7 +12062,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapN
     offset_32 = 0 + 63;
     builtin::array_copy<u8>(self_31, offset_32, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_42 = $local_4.used + 58;
     if @unlikely(new_used_42 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12153,7 +12153,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(high) {
     offset_30 = 0 + 61;
     builtin::array_copy<u8>(self_29, offset_30, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(980, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(971, $local_5.buf);
     new_used_40 = $local_4.used + 29;
     if @unlikely(new_used_40 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12242,7 +12242,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12438,7 +12438,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12533,7 +12533,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12676,7 +12676,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<serde_json_roundtrip_comp
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12771,7 +12771,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<serde_json_roundtrip_comp
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12866,7 +12866,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/O
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -12961,7 +12961,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/O
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:core:serde::$const_obj_217, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(336, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(339, $local_5.buf);
     new_used_41 = $local_4.used + 58;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;

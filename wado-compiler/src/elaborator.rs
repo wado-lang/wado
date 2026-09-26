@@ -54,24 +54,22 @@ use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
-use crate::elaborator::trait_query::SelfBinding;
+use crate::elaborator::trait_query::{OnBoundTrait, SelfBinding};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::loader::resolve_use_decl_source;
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
-use crate::name::{
-    DeclName, FqTraitName, FqTypeName, global_name, is_builtin_shape_name, namespace_member_alias,
-};
-use crate::resolve::{Resolution, head_site};
+use crate::name::{DeclName, FqTraitName, FqTypeName, global_name, namespace_member_alias};
+use crate::resolve::Resolution;
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
 use crate::tir::{ResolvedType, StructDef};
@@ -121,9 +119,7 @@ pub(crate) fn collect_unavailable(
             let Some(reason) = func.unavailable() else {
                 return;
             };
-            let Some(def) = defs.of_ast_id(func.id) else {
-                return;
-            };
+            let def = defs.def_at(func.id);
             let name = match site.owner() {
                 Some(owner) => format!("{owner}::{}", func.name),
                 None => func.name.clone(),
@@ -241,19 +237,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
-    /// is not at hand — a mangled name, a synthesis target. No scope is run.
+    /// is not at hand — a mangled name, a synthesis target.
     pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
-        // Three recorded facts, in the order the scope stores them and none of
-        // them a walk: what this module `use`d under the name, what it declares
-        // itself, and what the prelude puts in scope everywhere. No spelling
-        // another module happens to share can steer any of them.
-        if let Some(def) = self.tysys.resolutions.imported_as(module, name) {
-            return self.symbols.get(&self.tysys.resolutions.defs().ast_id(def));
-        }
-        if let Some(symbol) = self.symbols.lookup_in_module(module, name) {
-            return Some(symbol);
-        }
-        let def = self.tysys.resolutions.prelude_decl(name)?;
+        let def = self.tysys.resolutions.resolve_in(module, name)?;
         self.symbols.get(&self.tysys.resolutions.defs().ast_id(def))
     }
 
@@ -342,12 +328,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     pub(super) fn lookup_newtype_of_decl(&self, def: DefId) -> Option<TypeId> {
         self.type_lookup().newtype_of(def)
-    }
-
-    /// The declaration a *type* reference names; see
-    /// [`TypeLookup::declaration_at`].
-    pub(super) fn type_decl_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
-        self.type_lookup().declaration_at(site, name)
     }
 
     /// The module `node` was written in, which is the module it resolves in
@@ -482,7 +462,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn decl_in_module(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.symbols
             .lookup_in_module(module, name)
-            .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
+            .map(|sym| self.tysys.resolutions.defs().def_at(sym.defined_at))
     }
 
     /// [`Self::decl_in_module`] as a callee identity.
@@ -529,30 +509,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.insert_reference(use_id, def_id);
     }
 
-    /// Record use→def edges for a case path: the `Type` prefix by name, the
-    /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
-    pub(super) fn record_qualified_case(
-        &mut self,
-        ident: &IdentExpr,
-        type_name: &str,
-        case_ast_id: AstId,
-    ) {
+    /// Record a case path's `owner` for reify, and its use→def edges; a namespace
+    /// path's leading segments are the import's.
+    pub(super) fn record_case_path(&mut self, ident: &IdentExpr, owner: DefId, case_ast_id: AstId) {
+        self.record_case_owner(ident.id, owner);
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
-            [prefix, case, ..] => {
-                self.record_item_reference_by_name(prefix.id, type_name);
+            [prefix, case] => {
+                self.record_type_name_reference(prefix.id, &prefix.name);
                 self.record_reference_to_def(case.id, case_ast_id);
             }
-            [_] => unreachable!("a qualified path has two or more segments"),
-        }
-    }
-
-    /// Record the suffix (`Case`) segment of a `ns::Type::Case`
-    /// namespace-qualified case path. The leading `ns` and `Type`
-    /// segments are left to existing namespace-import edges.
-    pub(super) fn record_namespaced_case(&mut self, ident: &IdentExpr, case_ast_id: AstId) {
-        if let Some(seg) = ident.segments.get(2) {
-            self.record_reference_to_def(seg.id, case_ast_id);
+            [.., case] => self.record_reference_to_def(case.id, case_ast_id),
         }
     }
 
@@ -570,16 +537,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `fn f<T>(x: T)`) win over module-level items: jump-to-def lands on
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
-    /// otherwise.
+    /// otherwise. `Self` lands on the declaration of the type it stands for.
     pub(in crate::elaborator) fn record_type_name_reference(&mut self, use_id: AstId, name: &str) {
-        if let Some(decl_id) = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(name)
-            .and_then(|b| b.decl)
-        {
+        let trait_ctx = &self.annotate_ctx.trait_ctx;
+        if let Some(decl_id) = trait_ctx.type_params.get(name).and_then(|b| b.decl) {
             self.record_reference(use_id, decl_id);
+        } else if name == "Self" {
+            if let Some(def) = trait_ctx.self_type.and_then(|ty| self.tysys.type_def(ty)) {
+                let node = self.tysys.resolutions.defs().ast_id(def);
+                self.insert_reference(use_id, node);
+            }
         } else {
             self.record_item_reference_by_name(use_id, name);
         }
@@ -1045,15 +1012,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 None => self.binder_in_scope(written),
             };
         }
-        if is_builtin_shape_name(written) {
-            return FqTypeName::builtin(written);
-        }
-        self.decl_key_or_local(written).map_or_else(
+        match self.decl_key_or_local(written) {
+            Some(def) => FqTypeName::of_head(self.tysys.resolutions.defs(), def),
             // A name that reaches no declaration at all: it names a shape or
             // nothing, and the writing module is the only vantage left.
-            || FqTypeName::shape(&self.current_module_source, written),
-            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
-        )
+            None => FqTypeName::shape(&self.current_module_source, written),
+        }
     }
 
     /// The binder `written` names in the current type-param scope: owned by the
@@ -1075,7 +1039,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
         self.qualified_receiver_name_owned(
             &self.get_type_name(&impl_block.ty),
-            self.tysys.resolutions.defs().of_ast_id(impl_block.id),
+            Some(self.tysys.resolutions.defs().def_at(impl_block.id)),
         )
     }
 
@@ -1093,83 +1057,58 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The declared name of the trait `trait_name` refers to at `site`, past a
-    /// `use … as` or `ns$Trait` alias. No site falls back to the decl indexes.
+    /// `use … as` or `ns$Trait` alias.
     pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
-        site.map_or_else(
-            || self.decl_key_or_local(trait_name),
-            |site| self.decl_key_at(site, trait_name),
-        )
-        .map_or_else(
+        self.decl_key_at(site, trait_name).map_or_else(
             || trait_name.to_string(),
             |def| self.tysys.resolutions.defs().name(def).to_string(),
         )
     }
 
-    /// The declaration a written reference names, keyed on the site that wrote it,
-    /// so an alias, a namespace prefix and a function-local item each reach their
-    /// own. `name` is read only where the site reaches nothing.
-    pub(crate) fn decl_key_at(&self, site: AstId, name: &str) -> Option<DefId> {
+    /// The declaration `name` names where it is written: the walk's answer at
+    /// `site`, or the frame's for a node no walk reached.
+    pub(crate) fn decl_key_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         self.tysys
             .resolutions
-            .declared_if_walked(site)
-            .or_else(|| self.decl_key_in(&self.home_module(site), name))
+            .declared_or(site, || self.decl_key_or_local(name))
     }
 
-    /// The declaration indexes, for a caller holding a spelling whose reference
-    /// site is not at hand — a rendered head, a synthesis target. One that
-    /// holds a site should call [`Self::decl_key_at`] instead.
-    ///
-    /// The frame is where the AST being resolved was written: the walk's own
-    /// position, or the author's module while the walk is inside a travelled
-    /// expression. One frame and not a preference between two, so a name both
-    /// modules declare is not decided by which is tried first.
+    /// Whether `name` names a type declaration where it is written.
+    pub(crate) fn names_type_at(&self, site: Option<AstId>, name: &str) -> bool {
+        self.decl_key_at(site, name)
+            .is_some_and(|def| self.tysys.resolutions.defs().kind(def).is_type())
+    }
+
+    /// The declaration `name` reaches where the AST under resolution was written,
+    /// for a caller with no reference site; one holding a site calls [`Self::decl_key_at`].
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
-        let frame = self
-            .annotate_ctx
-            .resolving_home
-            .clone()
-            .unwrap_or_else(|| self.current_module_source.clone());
-        self.decl_key_in(&frame, name)
-    }
-
-    /// The declaration `name` refers to as written in `frame`; an unaccounted
-    /// name falls to the prelude. One frame is one module, so a hit is unique.
-    fn decl_key_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
-        // its own; the indexes cannot see binders and would answer `struct T`.
+        // its own; the module scope cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
-        let defs = self.tysys.resolutions.defs();
-        self.tysys
-            .resolutions
-            .imported_as(frame, name)
-            .or_else(|| {
-                self.tysys
-                    .trait_env
-                    .decls_named(name)
-                    .find(|def| defs.module(*def) == frame)
-            })
-            .or_else(|| self.tysys.resolutions.prelude_decl(name))
+        self.type_lookup().declaration(name)
     }
 
-    /// The trait a reference site names, as a mangled method name embeds it:
-    /// the declaration the writing module resolved it to, plus the written type arguments.
+    /// The trait `bound` names; one naming no declaration keeps its spelling,
+    /// which the mangle falls back to.
+    pub(super) fn fq_trait_name_of(&self, bound: &ast::TraitBound) -> FqTraitName {
+        let resolutions = &self.tysys.resolutions;
+        resolutions.bound_decl(bound).map_or_else(
+            || FqTraitName::binder(&bound.name),
+            |def| FqTraitName::declared(resolutions.defs(), def),
+        )
+    }
+
+    /// The trait a reference site names, with the type arguments it writes; one
+    /// naming no declaration keeps its spelling.
     pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
-        let written = self.get_type_name(ty);
-        let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
-        let head = head_site(ty)
-            .and_then(|site| {
-                let resolutions = &self.tysys.resolutions;
-                match resolutions.get(site) {
-                    Resolution::Binder(_) => Some(FqTraitName::binder(&written)),
-                    _ => resolutions
-                        .declared(site)
-                        .map(|def| FqTraitName::declared(resolutions.defs(), def)),
-                }
-            })
-            .unwrap_or_else(|| FqTraitName::binder(&written));
-        head.with_args(args)
+        let resolutions = &self.tysys.resolutions;
+        let head = resolutions.head_decl(ty).map_or_else(
+            || FqTraitName::binder(&self.get_type_name(ty)),
+            |def| FqTraitName::declared(resolutions.defs(), def),
+        );
+        head.with_args(trait_env::written_type_args(ty, resolutions))
     }
 
     /// Record the impl-block resolution facts keyed by the
@@ -1190,9 +1129,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.decls.pending_synthesis_requests.push(req);
     }
 
-    fn classify_from_marker(&mut self, trait_type: &ast::Type) -> Option<tir::SynthTrait> {
-        let base = trait_type.head_base_name()?;
-        if !self.tysys.is_from_trait(&self.type_lookup(), base) {
+    fn classify_from_marker(
+        &mut self,
+        trait_type: &ast::Type,
+        marked: Option<DefId>,
+    ) -> Option<tir::SynthTrait> {
+        let from = self.tysys.compiler_trait_def(CompilerItem::From);
+        if marked.is_none_or(|trait_| from != Some(trait_)) {
             return None;
         }
         if let ast::Type::Generic(generic) = trait_type
@@ -1205,17 +1148,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    fn classify_on_bound_marker(&self, trait_type: &ast::Type) -> Option<String> {
-        let base = trait_type.head_base_name()?;
-        self.tysys
-            .classify_on_bound_trait(&self.type_lookup(), base)
-            .map(|_| base.to_string())
-    }
-
     fn record_explicit_derive_request(
         &mut self,
         trait_type: &ast::Type,
-        trait_name: &str,
+        trait_: DefId,
+        on_bound: OnBoundTrait,
         target_type_id: TypeId,
         target_type_name: &str,
         span: Span,
@@ -1227,7 +1164,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
-            trait_name,
+            on_bound,
         ) {
             let module_source = self
                 .tysys
@@ -1238,38 +1175,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .unwrap_or_else(|| {
                     unreachable!("explicit derive marker validated for a non-nominal type")
                 });
-            // The marker's own site says which trait it names; the request is
-            // keyed by that declaration, not by the spelling.
-            if let Some(key) = self.fq_trait_name(trait_type).canonical() {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .record_bound_driven_synth_request_for(target_type_id, &module_source, &key);
-            }
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .record_bound_driven_synth_request_for(target_type_id, &module_source, &trait_);
             return;
         }
-        let receiver = Receiver::Type(self.tysys.fq_receiver_head(target_type_id));
-        // The marker's own site says which trait it names, so an already-present
-        // impl is recognised by declaration rather than by a spelling another
-        // module's trait can share.
-        let requested =
-            head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site));
-        if requested.is_some_and(|trait_| {
-            self.tysys.has_real_trait_impl_for_type(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                Some(target_type_id),
-                &receiver,
-                trait_,
-            )
-        }) {
+        if self.tysys.has_real_trait_impl_for_type(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            target_type_id,
+            trait_,
+        ) {
             return;
         }
         let reason = self.tysys.trait_unimpl_reason_chain(
             &self.annotate_ctx,
             &self.type_lookup(),
             target_type_id,
-            trait_name,
+            trait_,
+            self.tysys.resolutions.defs().name(trait_),
         );
         let _ = self.emit(types::TypeError::ExplicitDeriveNotEligible {
             trait_name: self.get_type_name_full(trait_type),
@@ -1287,16 +1212,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(trait_type) = &impl_block.trait_type else {
             return;
         };
-        if let Some(trait_name) = self.classify_on_bound_marker(trait_type) {
+        let marked = self.tysys.resolutions.head_decl(trait_type);
+        if let Some((trait_, on_bound)) =
+            marked.and_then(|trait_| Some((trait_, self.tysys.on_bound_of(trait_)?)))
+        {
             let target_type_id = self.resolve_type(&impl_block.ty);
             self.record_explicit_derive_request(
                 trait_type,
-                &trait_name,
+                trait_,
+                on_bound,
                 target_type_id,
                 struct_name,
                 impl_block.span,
             );
-        } else if let Some(trait_ref) = self.classify_from_marker(trait_type) {
+        } else if let Some(trait_ref) = self.classify_from_marker(trait_type, marked) {
             let target_type_id = self.resolve_type(&impl_block.ty);
             let type_params: Vec<_> = self
                 .annotate_ctx
@@ -1313,9 +1242,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: impl_block.span,
             });
         } else {
-            let is_display = trait_type
-                .head_base_name()
-                .is_some_and(|base| self.tysys.is_display_trait(&self.type_lookup(), base));
+            let is_display = marked.is_some_and(|trait_| self.tysys.is_display_trait_of(trait_));
             let _ = self.emit(types::TypeError::UnsupportedSynthesisTrait {
                 trait_name: self.get_type_name_full(trait_type),
                 type_name: struct_name.to_string(),
@@ -1355,10 +1282,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.assign_places.insert(key, place);
     }
 
-    /// Record that the bare case at `site` is a case of `owner`, the expected
-    /// type there.
-    pub(super) fn record_bare_case(&mut self, site: AstId, owner: DefId) {
-        self.sem.types.bare_cases.insert(site, owner);
+    /// Record that the case construction at `site` is a case of `owner`.
+    pub(super) fn record_case_owner(&mut self, site: AstId, owner: DefId) {
+        self.sem.types.case_owners.insert(site, owner);
     }
 
     /// Look up the recorded assignment-target place classification for the
@@ -1444,103 +1370,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.lookup_struct_fields_of_decl(def)
     }
 
-    /// Build effect name → declaring module map for a module.
-    ///
-    /// Three sources, applied in *increasing* precedence — each overwrites the
-    /// last, so the one written last here is the one that answers:
-    ///
-    /// 1. `use { Iface::{f} }`, which names an interface without importing it,
-    ///    so the `use` declaration is the only record of what `Iface` means;
-    /// 2. the module's explicit imports, read from the symbol table where the
-    ///    analyzer already resolved aliases and re-export chains;
-    /// 3. the module's own `interface` / `resource` declarations, which win
-    ///    over any import of the name.
-    ///
-    /// The order is what the third clause requires, and stating it as a list
-    /// of decreasing precedence read the other way round.
-    ///
-    /// An import earns an entry by *being* an effect or a resource, asked of
-    /// the declaration. Guessing from the spelling — the `PascalCase` test this
-    /// replaces — admitted every imported struct and let a same-named one
-    /// answer for an effect it has nothing to do with.
-    fn build_effect_sources(
-        interner: &mut ModuleSourceInterner,
-        module: &Module,
-        module_source: &ModuleSource,
-        entry: Option<&ModuleSource>,
-        invocations: &InvocationIndex,
-        symbols: &SymbolTable,
-    ) -> IndexMap<String, ModuleSource> {
-        let mut sources = IndexMap::default();
-        for item in &module.items {
-            let Item::Use(use_decl) = item else {
-                continue;
-            };
-            let mut interfaces = use_decl.items.iter().filter_map(|use_item| match use_item {
-                ast::UseItem::InterfaceFunctions { interface_name, .. } => Some(interface_name),
-                ast::UseItem::Simple { .. }
-                | ast::UseItem::Wildcard
-                | ast::UseItem::Namespace { .. } => None,
-            });
-            if let Some(first) = interfaces.next()
-                && let Some(source) =
-                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations)
-            {
-                for interface_name in std::iter::once(first).chain(interfaces) {
-                    sources.insert(interface_name.clone(), source.clone());
-                }
-            }
-        }
-        for (local_name, sym) in symbols.imports_in(module_source) {
-            if matches!(sym.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)) {
-                sources.insert(local_name.to_string(), sym.module_source().clone());
-            }
-        }
-        for item in &module.items {
-            match item {
-                Item::Interface(effect_decl) => {
-                    sources.insert(effect_decl.name.clone(), module_source.clone());
-                }
-                Item::Resource(resource_decl) => {
-                    sources.insert(resource_decl.name.clone(), module_source.clone());
-                }
-                _ => {}
-            }
-        }
-        sources
-    }
-
-    /// Canonical impl-target key for a type named at a use site, for the impl
-    /// indexes.
-    ///
-    /// Through [`Self::decl_key_or_local`], so an impl target and every other
-    /// name-only lookup answer from one chain. The table alone leaves out the
-    /// declaration indexes, and a receiver the module never imported — reached
-    /// only through a return type — would then key to the call site instead of
-    /// where it is declared.
+    /// The impl target a receiver spelling names in the current frame.
     pub(crate) fn impl_target(&self, type_name: &str) -> trait_env::ImplTargetKey {
         self.impl_target_at(None, type_name)
     }
 
-    /// [`Self::impl_target`] for a receiver written at a reference site, so
-    /// `Type::method` keys to what `Type` names *in the module that wrote it*.
-    /// A default taken in a module declaring the same name is where the two
-    /// come apart.
-    ///
-    /// A binder answers nothing, so `Self::` / `T::` falls through to the
-    /// spelling, by then the concrete name the rewrite produced.
+    /// [`Self::impl_target`] for a receiver written at `site`, keyed to what it
+    /// names in the module that wrote it.
     pub(crate) fn impl_target_at(
         &self,
         site: Option<AstId>,
         type_name: &str,
     ) -> trait_env::ImplTargetKey {
-        let defs = self.tysys.resolutions.defs();
-        site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
-            .or_else(|| self.decl_key_or_local(type_name))
-            .map_or_else(
-                || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
-                |def| trait_env::ImplTargetKey::of_decl(defs, def),
-            )
+        self.decl_key_at(site, type_name).map_or_else(
+            || trait_env::ImplTargetKey::of_undeclared(&self.current_module_source, type_name),
+            |def| trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
+        )
     }
 
     /// Impl-target key for a receiver whose `TypeId` is known. The type
@@ -1566,11 +1411,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
     pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
-        // A builtin's identity is its name, and the name path already knows
-        // which module declares it. A second table answering here would be a
-        // second derivation, free to disagree with that one.
+        // No vantage: an import aliasing a builtin's name never steers the type.
         if let Some(name) = self.tysys.builtin_type_name(type_id) {
-            return self.decl_key_or_local(&name);
+            return self.tysys.resolutions.prelude_decl(&name);
         }
         let tt = self.tysys.type_table.borrow();
         tt.nominal_def(tt.peel_refs(type_id))
@@ -1611,83 +1454,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Resolve AST effect names (strings) to TIR `EffectRefs` with module source information.
-    ///
-    /// `effect_ids` is a parallel slice with `(AstId, Span)` of each effect-name identifier
-    /// occurrence. When non-empty, use→def edges are recorded so LSP jump-to-definition
-    /// works on effect references in `with` clauses. An empty slice skips recording
-    /// (used by synthetic/internal effect lists with no source identifiers).
-    pub(crate) fn resolve_effects(
-        &mut self,
-        effects: &[String],
-        effect_ids: &[(AstId, Span)],
-    ) -> Vec<tir::EffectRef> {
+    /// Resolve a `with` clause's effect names to TIR `EffectRef`s.
+    pub(crate) fn resolve_effects(&mut self, effects: &[ast::EffectName]) -> Vec<tir::EffectRef> {
         effects
             .iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let use_id = effect_ids.get(i).map(|(id, _)| *id);
-                if let Some(&decl_id) = self.annotate_ctx.trait_ctx.effect_params.get(name) {
-                    if let Some(use_id) = use_id {
-                        self.record_reference(use_id, decl_id);
-                    }
-                    tir::EffectRef::Param { name: name.clone() }
-                } else if let Some(def) = self
-                    .decl_key_or_local(name)
-                    .filter(|&def| self.tysys.is_effect_or_resource_decl(def))
-                {
-                    if let Some(use_id) = use_id {
-                        let decl_ast = self.tysys.resolutions.defs().ast_id(def);
-                        self.record_reference_to_def(use_id, decl_ast);
-                    }
-                    let defs = self.tysys.resolutions.defs();
-                    tir::EffectRef::Concrete {
-                        name: defs.name(def).to_string(),
-                        module_source: defs.module(def).clone(),
-                    }
-                } else if let Some(source) = self.sem.imports.effect_sources.get(name).cloned() {
-                    // Identity is the declaration, so two `with Stdout` clauses
-                    // — one importing from `core:cli`, one from `wasi:cli` —
-                    // and a `with Out` aliasing either name one effect.
-                    let declared = self
-                        .symbols
-                        .lookup_in_module(&source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                } else {
-                    if let Some(use_id) = use_id {
-                        self.record_item_reference_by_name(use_id, name);
-                    }
-                    // Fallback: resolve via the import-aware symbol table so that
-                    // prelude-defined effects/resources (e.g. `Future`, `Stream`)
-                    // canonicalise to their defining module rather than the
-                    // current module. Falls through to `current_module_source`
-                    // only when no symbol exists (genuinely-local declaration).
-                    let declared = self
-                        .symbol_named(&self.current_module_source, name)
-                        .map(|sym| {
-                            if let Some(use_id) = use_id {
-                                self.record_reference_to_def(use_id, sym.defined_at);
-                            }
-                            (sym.name.clone(), sym.module_source().clone())
-                        })
-                        .unwrap_or_else(|| (name.clone(), self.current_module_source.clone()));
-                    tir::EffectRef::Concrete {
-                        name: declared.0,
-                        module_source: declared.1,
-                    }
-                }
+            .map(|effect| {
+                self.effect_named_at(Some(effect.id), effect.span, &effect.name)
+                    .unwrap_or_else(|| {
+                        tir::EffectRef::unresolved(&effect.name, &self.current_module_source)
+                    })
             })
             .collect()
+    }
+
+    /// The effect `name` names at `site`, its use recorded; one naming no
+    /// effect is reported.
+    pub(crate) fn effect_named_at(
+        &mut self,
+        site: Option<AstId>,
+        span: Span,
+        name: &str,
+    ) -> Option<tir::EffectRef> {
+        let effect = site.and_then(|site| {
+            match self.tysys.resolutions.get(site) {
+                Resolution::Binder(binder) => self.record_reference(site, binder),
+                Resolution::Def(def) => {
+                    self.record_reference_to_decl(site, def, span);
+                }
+                Resolution::Projection(_) | Resolution::Unresolved => {}
+            }
+            self.tysys.resolutions.effect_at(site, name)
+        });
+        if effect.is_none() {
+            let _ = self.emit(TypeError::UnknownEffect {
+                name: name.to_string(),
+                span,
+            });
+        }
+        effect
     }
 
     fn record_use_reference(&mut self, source: &ModuleSource, site: AstId, name: &str) {
@@ -1731,22 +1535,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Per-module declaration pass (`annotate_decls`): effect sources,
-    /// use-specifier use→def edges, type / signature collection, globals,
-    /// associated constants, and the generic-function inference caches.
-    /// Populates `ModuleSemantics.imports` / `.decls`; walks no bodies.
-    /// The driver runs this for every module before any body walk
-    /// ([`Self::annotate_module_bodies`]).
+    /// Per-module declaration pass: types, signatures, globals and associated
+    /// constants. Runs for every module before any [`Self::annotate_module_bodies`].
     pub fn annotate_module_decls(&mut self, module: &'a Module, module_source: ModuleSource) {
         self.current_module_source = module_source.clone();
-        self.sem.imports.effect_sources = Self::build_effect_sources(
-            &mut self.interner.borrow_mut(),
-            module,
-            &module_source,
-            Some(&self.entry_module_source),
-            &self.invocations,
-            self.symbols,
-        );
 
         // Record use→def edges for names that appear inside `use { ... }` specifiers.
         // These power LSP jump-to-definition when the cursor is on an imported
@@ -1876,12 +1668,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             })
             .collect();
         for (decl_id, type_params, methods, is_resource) in decl_ops {
-            let resource_self = is_resource
-                .then(|| self.tysys.resolutions.defs().of_ast_id(decl_id))
-                .flatten();
-            let ops = self.resolve_effect_ops(&type_params, &methods, resource_self);
             let defs = std::sync::Arc::clone(self.tysys.resolutions.defs());
             let owner = defs.def_at(decl_id);
+            let ops = self.resolve_effect_ops(&type_params, &methods, is_resource.then_some(owner));
             for method in &methods {
                 let op = defs.def_at(method.id);
                 self.sem
@@ -2102,7 +1891,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
         let struct_name = self.get_type_name(&impl_block.ty);
-        let impl_owner = self.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        let impl_owner = Some(self.tysys.resolutions.defs().def_at(impl_block.id));
         let mut scope = self.enter_impl_scope(impl_block);
         let trait_name = scope.impl_block_trait_name(impl_block);
         // The node the scope bound the receiver to, so a method parameter
@@ -2126,7 +1915,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let is_handler_method = trait_name
                 .as_ref()
                 .and_then(FqTraitName::canonical)
-                .is_some_and(|key| scope.tysys.is_effect_or_resource_decl(key));
+                .is_some_and(|key| scope.tysys.resolutions.defs().kind(key).is_effect());
             let is_ref_impl = matches!(
                 &impl_block.ty,
                 ast::Type::Reference(_) | ast::Type::MutReference(_),
@@ -2162,12 +1951,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
-                        ResolvedType::GenericInstance { .. } => true,
                         ResolvedType::Newtype { type_args, .. } => {
                             // A trait impl needs none: the trait index keys it.
                             !type_args.is_empty() && trait_name.is_none()
                         }
-                        _ => false,
+                        // The shapes a call site mangles with their arguments.
+                        _ => tt.nominal_type_args(peeled).is_some(),
                     };
                     is_instantiation.then(|| tt.fq_type_name(peeled))
                 } else {
@@ -2323,12 +2112,6 @@ impl TypeSystem {
         self.associated_constant_of(owner, name)
     }
 
-    /// The declaration a qualified path's owner segment names: `Color` in
-    /// `Color::Red` or `ns::Color::Red`.
-    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        self.resolutions.declared(ident.owner_segment()?.id)
-    }
-
     /// The canonical signature of the free function the site names.
     pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
         self.signatures.function_sig(self.free_function_at(site)?)
@@ -2399,22 +2182,6 @@ impl TypeSystem {
         trait_env::render_decl_name(self.resolutions.defs(), def)
     }
 
-    /// The trait a bound's reference site names, `written` its spelling. A site
-    /// naming no declaration gets no invented identity: the mangle uses `written`.
-    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
-        let resolutions = &self.resolutions;
-        let answer = resolutions.get(site);
-        if let Resolution::Binder(_) = answer {
-            return FqTraitName::binder(written);
-        }
-        // A bound is a bare name: the parser reads `<...>` after one as
-        // associated-type bindings, so `written` carries no type arguments.
-        resolutions.declared(site).map_or_else(
-            || FqTraitName::binder(written),
-            |def| FqTraitName::declared(resolutions.defs(), def),
-        )
-    }
-
     /// The variant `type_id` is an instance of, or `None` when it is not one. An
     /// instantiated `Option<i32>` answers with the `Option` it was spelled from.
     pub(super) fn variant_of_type(&self, type_id: TypeId) -> Option<&VariantInfo> {
@@ -2429,15 +2196,15 @@ impl TypeSystem {
         self.data.enum_cases.get(&def)
     }
 
-    /// Name of a type whose identity is the name itself — a primitive, `()`,
-    /// `!` or the raw `Array<T>`.
+    /// The name the prelude declares a primitive, `()`, `!` or the raw
+    /// `Array<T>` under.
     fn builtin_type_name(&self, type_id: tir::TypeId) -> Option<String> {
         use crate::tir::ResolvedType;
         let tt = self.type_table.borrow();
         match tt.get(tt.peel_refs(type_id)) {
             ResolvedType::Primitive(prim) => Some(prim.as_str().to_string()),
-            ResolvedType::Unit => Some(tir::TypeTable::UNIT_TYPE_NAME.to_string()),
-            ResolvedType::Never => Some("!".to_string()),
+            ResolvedType::Unit => Some(name::UNIT_TYPE_NAME.to_string()),
+            ResolvedType::Never => Some(name::NEVER_TYPE_NAME.to_string()),
             ResolvedType::BuiltinArray(_) => Some(tir::TypeTable::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }

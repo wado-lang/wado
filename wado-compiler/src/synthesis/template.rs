@@ -31,23 +31,21 @@ use crate::name::{
 use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateShape, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt, TirStmtKind, TirStructField,
-    TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TemplateShape,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt,
+    TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
 use crate::{format_spec, tir};
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once
-/// through the [`CompilerItem`] registry so a stdlib rename does not reach
-/// here.
+/// through the [`CompilerItem`] registry.
 #[derive(Clone, Debug)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
-    /// `formatter` prefixed by its declaring module — the form a function name
-    /// embeds. The bare `formatter` stays for type-table lookups, which key a
-    /// struct by its simple name plus module.
+    /// `formatter` qualified by its declaring module, as a function name
+    /// embeds it.
     pub formatter_fq: FqTypeName,
     /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
@@ -169,12 +167,8 @@ pub fn expand_templates(
     }
 }
 
-/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
-/// tagged template shape in `module`: `match index { k => <hole k rendered
-/// through its specifier into f's buffer> }`. `TemplateHole::fmt`'s body carries a
-/// `builtin::hole_fmt` marker that lowering rewrites to it (WEP 2026-01-10).
-/// Each arm is the interpolation the untagged template would emit for that
-/// hole, so the two forms cannot render differently.
+/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
+/// template shape in `module`, each arm the untagged interpolation of hole `index`.
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -381,11 +375,8 @@ impl FuncLocalAlloc {
     }
 }
 
-/// Rewrites every `TemplateString` in a body into its expanded block.
-///
-/// Traversal goes through [`TirOptVisitor`], whose walk is exhaustive over
-/// `TirExprKind`, so a node added later cannot silently skip a template — which
-/// reaches `lower::translate`'s `unreachable!`, not a diagnostic.
+/// Rewrites every `TemplateString` in a body into its expanded block, through
+/// the exhaustive [`TirOptVisitor`] walk so no node kind skips one.
 struct TemplateExpander<'a> {
     alloc: FuncLocalAlloc,
     ctx: &'a TemplateCtx<'a>,
@@ -686,11 +677,15 @@ fn string_call(
     span: Span,
     ctx: &TemplateCtx,
 ) -> TirExpr {
-    let (module_source, method_name) = {
+    let (module_source, method_name, template) = {
         let tt = ctx.tt.borrow();
         let items = tt.compiler_items();
         let (module_source, _, method_name) = items.require_method(item);
-        (module_source.clone(), method_name.to_string())
+        (
+            module_source.clone(),
+            method_name.to_string(),
+            items.require_template(item),
+        )
     };
     let owner = ctx
         .tt
@@ -700,6 +695,7 @@ fn string_call(
     let func = FunctionRef {
         module_source,
         name: MethodName::format_local(&owner, None, &method_name),
+        template: Some(template),
         monomorph_info: None,
         method_info: Some(method_info),
     };
@@ -731,6 +727,7 @@ fn build_formatter_expr(
                 func: Box::new(FunctionRef {
                     module_source: ModuleSource::format(),
                     name: format!("{}::new", names.formatter_fq),
+                    template: None,
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         names.formatter_fq.clone(),
@@ -930,6 +927,7 @@ fn trait_fmt_call(
         local_name,
         monomorph_info,
         impl_module,
+        template,
     } = method_call_info_for_type(type_id, trait_name, method_name, ctx);
     let mangled = local_name.to_mangled_name();
 
@@ -949,6 +947,7 @@ fn trait_fmt_call(
             FunctionRef {
                 module_source: impl_module,
                 name: mangled,
+                template,
                 monomorph_info,
                 method_info: Some(local_name),
             },
@@ -966,6 +965,7 @@ struct MethodCallInfo {
     local_name: LocalMethodName,
     monomorph_info: Option<MonomorphInfo>,
     impl_module: ModuleSource,
+    template: Option<TemplateId>,
 }
 
 /// Build `MethodCallInfo` for a trait method call on `type_id`.
@@ -983,16 +983,11 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // A `&T` / `&mut T` over a bare type parameter formats transparently as
-        // the pointee (`T^Inspect`), not through the `&`-prefixing ref blanket:
-        // in generic code `&T` is a borrow of a `T`, so `${v:?}` on a `&T`
-        // parameter renders the `T`. A reference over a *concrete* type keeps the
-        // ref blanket (`${&x:?}` → `&42`).
+        // In generic code `&T` and `&X::Item` borrow a value of the pointee, so
+        // they format as it. A reference over any other type keeps the ref
+        // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
-            if matches!(
-                tt.borrow().get(inner),
-                ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-            ) =>
+            if tt.borrow().receiver_head_awaits_substitution(inner) =>
         {
             let local_name = method_name_for_type(inner, trait_name, method_name, ctx.tt);
             let impl_module = trait_impl_module(&local_name, inner, ctx);
@@ -1000,33 +995,30 @@ fn method_call_info_for_type(
                 local_name,
                 monomorph_info: None,
                 impl_module,
+                template: None,
             }
         }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            let ref_kind =
-                RefKind::from_resolved(&tt.borrow().get(type_id).clone()).expect("ref classify");
-            let inner_name = tt.borrow().fq_type_name(inner);
-            let local_name = LocalMethodName::new_ref(
+            let ref_kind = RefKind::from_resolved(&resolved).expect("ref classify");
+            let (local_name, monomorph_info) = ref_blanket_call(
                 ref_kind,
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            )
-            .with_struct_type_args(&[inner_name]);
-            let generic_name = LocalMethodName::new_ref(
-                ref_kind,
-                Some(trait_name.clone()),
-                method_name.to_string(),
-            )
-            .to_mangled_name();
+                trait_name,
+                method_name,
+                inner,
+                vec![],
+                &tt.borrow(),
+            );
             MethodCallInfo {
                 local_name,
-                monomorph_info: Some(MonomorphInfo {
-                    generic_name,
-                    impl_type_args: vec![inner],
-                    method_type_args: vec![],
-                    is_blanket: true,
-                }),
+                monomorph_info: Some(monomorph_info),
                 impl_module: ModuleSource::format(),
+                template: trait_method_template(
+                    ctx.trait_env,
+                    trait_name,
+                    method_name,
+                    type_id,
+                    &tt.borrow(),
+                ),
             }
         }
         _ => {
@@ -1035,13 +1027,178 @@ fn method_call_info_for_type(
                 return info;
             }
             let impl_module = trait_impl_module(&local_name, type_id, ctx);
+            let template = trait_call_template(
+                ctx.trait_env,
+                &local_name,
+                type_id,
+                &impl_module,
+                &tt.borrow(),
+            );
             MethodCallInfo {
                 local_name,
                 monomorph_info: None,
                 impl_module,
+                template,
             }
         }
     }
+}
+
+/// The name and instance of a call through the universal `&T` blanket, keyed
+/// by its pointee.
+pub(crate) fn ref_blanket_call(
+    ref_kind: RefKind,
+    trait_name: &FqTraitName,
+    method_name: &str,
+    pointee: TypeId,
+    method_type_args: Vec<TypeId>,
+    tt: &TypeTable,
+) -> (LocalMethodName, MonomorphInfo) {
+    let generic =
+        LocalMethodName::new_ref(ref_kind, Some(trait_name.clone()), method_name.to_string());
+    let generic_name = generic.to_mangled_name();
+    let method_type_arg_names: Vec<FqTypeName> = method_type_args
+        .iter()
+        .map(|&arg| tt.fq_type_name(arg))
+        .collect();
+    let local_name = generic.with_type_args(&[tt.fq_type_name(pointee)], &method_type_arg_names);
+    let monomorph_info = MonomorphInfo {
+        generic_name,
+        impl_type_args: vec![pointee],
+        method_type_args,
+        is_blanket: true,
+    };
+    (local_name, monomorph_info)
+}
+
+/// The template `receiver.method()` of `trait_` instantiates: a written block,
+/// a blanket, else a newtype's base's; `None` where a derived body answers.
+pub(crate) fn trait_method_template(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    method: &str,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<TemplateId> {
+    let trait_ = trait_name.called_decl();
+    if let Some(template) = trait_env.answering_template(
+        &tt.impl_receiver_key(receiver),
+        Some(trait_),
+        trait_name.args(),
+        method,
+        |block| tt.impl_reaches_instance(block, receiver),
+    ) {
+        return Some(template);
+    }
+    let resolved = tt.get(receiver);
+    let blanket = match resolved {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(
+            trait_,
+            RefKind::from_resolved(resolved).expect("ref classify"),
+            trait_name.args(),
+        ),
+        // A newtype inherits its base's answer before any blanket but one
+        // keyed on its own reflected shape (WEP 2026-09-01).
+        ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
+            trait_,
+            type_module_hint_tt(receiver, tt).as_ref(),
+            &|bounds| {
+                blanket_is_reflect_keyed(bounds, tt)
+                    && receiver_satisfies_blanket_bounds(receiver, bounds, tt)
+            },
+        ),
+        _ => trait_env.value_blanket_for_receiver(
+            trait_,
+            type_module_hint_tt(receiver, tt).as_ref(),
+            &|bounds| receiver_satisfies_blanket_bounds(receiver, bounds, tt),
+        ),
+    };
+    if let Some(blanket) = blanket {
+        return trait_env.method_template(blanket.def, method);
+    }
+    match tt.get(receiver) {
+        ResolvedType::Newtype { base_type, .. } => {
+            trait_method_template(trait_env, trait_name, method, *base_type, tt)
+        }
+        _ => None,
+    }
+}
+
+/// The template a call of `info` on `receiver` instantiates, else the derived
+/// body in `home`; `None` while the receiver's head awaits substitution.
+pub(crate) fn trait_call_template(
+    trait_env: &TraitEnv,
+    info: &LocalMethodName,
+    receiver: TypeId,
+    home: &ModuleSource,
+    tt: &TypeTable,
+) -> Option<TemplateId> {
+    if tt.receiver_head_awaits_substitution(receiver) {
+        return None;
+    }
+    info.trait_name
+        .as_ref()
+        .and_then(|trait_name| {
+            trait_method_template(trait_env, trait_name, &info.method_name, receiver, tt)
+        })
+        .or_else(|| Some(TemplateId::derived(home.clone(), info)))
+}
+
+/// The template a call of `info` on the concrete `receiver` instantiates, or
+/// `None` where a derived body answers. Only a reference impl keeps the `&`.
+pub(crate) fn method_template_at(
+    trait_env: &TraitEnv,
+    info: &LocalMethodName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<TemplateId> {
+    let receiver = if info.ref_receiver().is_some() {
+        tt.innermost_ref(receiver)
+    } else {
+        tt.peel_refs(receiver)
+    };
+    match &info.trait_name {
+        Some(trait_name) => {
+            trait_method_template(trait_env, trait_name, &info.method_name, receiver, tt)
+        }
+        None => inherent_method_template(trait_env, &info.method_name, receiver, tt),
+    }
+}
+
+/// The inherent block answering `receiver.method()`, else the one a newtype
+/// inherits it from.
+fn inherent_method_template(
+    trait_env: &TraitEnv,
+    method: &str,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<TemplateId> {
+    trait_env
+        .answering_template(
+            &tt.impl_receiver_key(receiver),
+            None,
+            &[],
+            method,
+            |block| tt.impl_reaches_instance(block, receiver),
+        )
+        .or_else(|| match tt.get(receiver) {
+            ResolvedType::Newtype { base_type, .. } => {
+                inherent_method_template(trait_env, method, *base_type, tt)
+            }
+            _ => None,
+        })
+}
+
+/// Whether a written impl of `trait_` with methods reaches `receiver` itself.
+pub(crate) fn written_impl_reaches(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    trait_env
+        .methodful_impls_by_receiver(&tt.impl_receiver_key(receiver), trait_)
+        .any(|block| tt.impl_reaches_instance(block, receiver))
 }
 
 /// Whether `type_id` is one of the five reflection kinds, i.e. whether a
@@ -1050,13 +1207,8 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     tt.reflect_kind(type_id).is_some()
 }
 
-/// The value blanket serving `receiver`: the first whose bounds hold at the
-/// receiver, else one a link down its newtype chain (WEP 2026-09-01 rank 1).
-/// The walk stops at a link carrying an impl of its own, which the newtype
-/// inherits and which outranks any blanket (rank 2) — so `type Name = String`
-/// takes `String`'s `Deserialize`, not the `ReflectStruct` derive its shape
-/// would otherwise admit. Monomorphization ranks blankets only here, so its
-/// several lookups cannot disagree about which one a newtype takes.
+/// The value blanket serving `receiver`, else one down its newtype chain until
+/// a link with its own impl, which outranks any blanket (WEP 2026-09-01).
 pub(crate) fn ranked_value_blanket<'a>(
     trait_env: &'a TraitEnv,
     trait_: DefId,
@@ -1081,37 +1233,29 @@ pub(crate) fn ranked_value_blanket<'a>(
 
 /// The reflection trait `bound` names, or `None` for any other bound.
 fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerItem> {
-    let declared = bound.decl().map(|decl| tt.defs().ast_id(decl))?;
-    let items = tt.compiler_items();
-    [
-        CompilerItem::Reflect,
-        CompilerItem::ReflectStruct,
-        CompilerItem::ReflectVariant,
-        CompilerItem::ReflectEnum,
-        CompilerItem::ReflectFlags,
-        CompilerItem::ReflectNewtype,
-    ]
-    .into_iter()
-    .find(|item| items.trait_decl(*item) == Some(declared))
+    tt.compiler_items().trait_among(
+        bound.decl()?,
+        &[
+            CompilerItem::Reflect,
+            CompilerItem::ReflectStruct,
+            CompilerItem::ReflectVariant,
+            CompilerItem::ReflectEnum,
+            CompilerItem::ReflectFlags,
+            CompilerItem::ReflectNewtype,
+        ],
+    )
 }
 
-/// Whether a blanket derives *over reflection* — at least one of its
-/// receiver-param bounds is a `Reflect*` trait. Being a claimable kind is not
-/// the same question: a newtype satisfies every non-reflect bound its base
-/// does, so without this an `impl<I: Iterator> IntoIterator for I` would claim
-/// a newtype over a list and name a per-type impl nothing mints.
+/// Whether a blanket derives over reflection: one of its receiver-param bounds
+/// is a `Reflect*` trait.
 pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) -> bool {
     bounds
         .iter()
         .any(|bound| reflect_bound_item(bound, tt).is_some())
 }
 
-/// Whether `type_id` itself satisfies a blanket impl's receiver-param `bounds`
-/// — what a newtype's base satisfies is [`ranked_value_blanket`]'s question, one
-/// chain link at a time. A kind bound holds when the receiver is that kind, the
-/// identity root `Reflect` for any kind, and `ReflectNewtype` for a newtype.
-/// Any other bound is treated as satisfiable — deciding one needs the
-/// elaborator's trait query, which monomorphization has no access to.
+/// Whether `type_id` itself is the reflection kind a blanket's `bounds` ask for.
+/// Any other bound reads as held: only the elaborator's trait query decides one.
 pub(crate) fn receiver_satisfies_blanket_bounds(
     type_id: TypeId,
     bounds: &[BlanketBound],
@@ -1141,35 +1285,24 @@ fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> 
     tt.nominal_head(type_id).map(|(_, m)| m)
 }
 
-/// Resolve a `type_id.trait::method()` dispatch to a blanket impl when no
-/// per-type impl provides it but a blanket does and the receiver satisfies the
-/// blanket's receiver-param bound. Shared by template expansion and the
-/// auto-derive body synthesizer so both route blanket-derived calls (e.g. a
-/// newtype's `Inspect` delegating to a `ReflectStruct`-derived base struct)
-/// identically. Returns the blanket dispatch info and its home module.
+/// The blanket a `type_id.trait::method()` call dispatches to where no written
+/// impl reaches the receiver, with the blanket's module and method template.
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
     trait_name: &FqTraitName,
     method_name: &str,
     tt: &mut TypeTable,
-) -> Option<(MonomorphInfo, ModuleSource)> {
-    let type_key = tt.impl_receiver_key(type_id);
+) -> Option<(MonomorphInfo, ModuleSource, TemplateId)> {
     if trait_env
         .trait_def_of_fq(trait_name)
-        .is_some_and(|trait_| trait_env.has_any_methodful_impl_by_receiver(&type_key, trait_))
+        .is_some_and(|trait_| written_impl_reaches(trait_env, trait_, type_id, tt))
     {
         return None;
     }
     let type_module = type_module_hint_tt(type_id, tt);
-    // Param and pack projections must come from the same blanket, or the
-    // template name would name one kind and the args another.
-    // The receiver itself, no peel: this asks which blanket *owns* the
-    // receiver's method, and rank 2 answers at the receiver. Admitting the
-    // base's bound here would hand a newtype over a struct to the
-    // `ReflectStruct` derive, losing the ` as Name` tag its own
-    // `ReflectNewtype` derive writes. The peel belongs to the pack projection,
-    // where the question is what the base's structure is, not whose impl this is.
+    // The receiver unpeeled: a newtype's own `ReflectNewtype` derive owns its
+    // method, not the base's `ReflectStruct` one, which drops its ` as Name`.
     let blanket = trait_env.value_blanket_for_receiver(
         trait_name.canonical()?,
         type_module.as_ref(),
@@ -1183,6 +1316,9 @@ pub(crate) fn blanket_dispatch_for(
     )
     .to_mangled_name();
     let impl_type_args = blanket_impl_args(trait_env, blanket, type_id, tt)?;
+    let template = trait_env
+        .method_template(blanket.def, method_name)
+        .unwrap_or_else(|| panic!("a blanket of `{trait_name}` provides no `{method_name}`"));
     Some((
         MonomorphInfo {
             generic_name,
@@ -1191,18 +1327,12 @@ pub(crate) fn blanket_dispatch_for(
             is_blanket: true,
         },
         blanket_module,
+        template,
     ))
 }
 
-/// The type args a value blanket's instance keys on for `receiver`: its
-/// parameters in declaration order — the receiver at the slot the impl gave it,
-/// each other projected off the receiver through the bound that names it. Every
-/// projection is recorded on the receiver, since substituting a pack needs a
-/// mutable table and later readers hold a shared borrow.
-///
-/// `None` when a projection cannot be resolved: a blanket that projects a
-/// parameter the receiver cannot supply does not apply, and a partial list
-/// would key the instance under an argument shape the template never declared.
+/// The type args a value blanket's instance keys on for `receiver`, each projection
+/// recorded on it; `None` where one does not resolve, so the blanket does not apply.
 pub(crate) fn blanket_impl_args(
     trait_env: &TraitEnv,
     blanket: &BlanketImpl,
@@ -1231,10 +1361,8 @@ pub(crate) fn blanket_impl_args(
     Some(args)
 }
 
-/// When no concrete or synthesized impl provides `trait_name` for `type_id` but
-/// a blanket impl does (e.g. the `impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>
-/// Inspect for T` struct derive), route the call through the blanket — the same
-/// shape the `&T` / `&mut T` arms above build for the ref blankets.
+/// The call through the value blanket providing `local_name` where no written
+/// impl does, as the ref-blanket arms build theirs.
 fn blanket_method_call_info(
     local_name: &LocalMethodName,
     type_id: TypeId,
@@ -1242,10 +1370,7 @@ fn blanket_method_call_info(
     ctx: &TemplateCtx,
 ) -> Option<MethodCallInfo> {
     let trait_name = local_name.trait_name.as_ref()?;
-    // A bodyless conformance marker (`impl Inspect for Point;`) registers in
-    // the impl index but provides no method — under the blanket regime it means
-    // "derive via the blanket", so route unless a real methodful impl exists.
-    let (monomorph_info, blanket_module) = blanket_dispatch_for(
+    let (monomorph_info, blanket_module, template) = blanket_dispatch_for(
         ctx.trait_env,
         type_id,
         trait_name,
@@ -1256,6 +1381,7 @@ fn blanket_method_call_info(
         local_name: local_name.clone(),
         monomorph_info: Some(monomorph_info),
         impl_module: blanket_module,
+        template: Some(template),
     })
 }
 
@@ -1316,10 +1442,10 @@ fn trait_impl_module(
     // every user-written `impl Trait for Type` block lives. This handles
     // cross-module impls like `impl Display for String` (defined in
     // `core:prelude/format`, not the module that declares `String`).
-    if let Some(trait_name) = local_name.base_trait_name()
+    if let Some(trait_) = local_name.trait_decl()
         && let Some(loc) = ctx.trait_env.impl_module_for(
             ImplReceiver::Of(local_name.receiver()),
-            trait_name,
+            trait_,
             type_module.as_ref(),
         )
     {

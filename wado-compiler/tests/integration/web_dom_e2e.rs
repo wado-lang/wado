@@ -1,4 +1,4 @@
-//! A two-level `extends` program run against a host implementing the `web:dom`
+//! A two-level `extends` program run against a host implementing the `wado-lang:web`
 //! imports. See `docs/wep-2026-04-28-resource-inheritance.md`.
 
 use std::sync::{Arc, Mutex};
@@ -133,13 +133,13 @@ struct DomObjects {
     dispatched: Vec<(f64, String)>,
 }
 
-/// The `classes` numbers `web:dom` declares for the classes the stub mints.
+/// The `classes` numbers `wado-lang:web` declares for the classes the stub mints.
 const HTML_ELEMENT: u16 = 3;
 const HTML_INPUT_ELEMENT: u16 = 4;
 const DOCUMENT: u16 = 5;
 const EVENT: u16 = 7;
 
-/// Every field a `web:dom` method reads, on whichever object carries it.
+/// Every field a `wado-lang:web` method reads, on whichever object carries it.
 #[derive(Default)]
 struct Object {
     class: u16,
@@ -187,12 +187,12 @@ fn over_dom<Params, Return>(
     move |_, params| Ok(body(&mut dom.lock().unwrap(), params))
 }
 
-/// Bind every `web:dom` interface the program imports.
+/// Bind every `wado-lang:web` interface the program imports.
 fn add_dom_to_linker(
     linker: &mut Linker<WasiState>,
     dom: &Arc<Mutex<DomObjects>>,
 ) -> anyhow::Result<()> {
-    linker.instance("web:dom/global")?.func_wrap(
+    linker.instance("wado-lang:web/global")?.func_wrap(
         "document",
         over_dom(dom, |dom, ()| {
             (dom.insert(Object {
@@ -204,7 +204,7 @@ fn add_dom_to_linker(
 
     // A `div` is an `HTMLDivElement`, which the slice leaves out, so the host
     // tags it with its nearest ancestor the slice holds.
-    let mut document = linker.instance("web:dom/document")?;
+    let mut document = linker.instance("wado-lang:web/document")?;
     document.func_wrap(
         "create-element",
         over_dom(
@@ -231,7 +231,7 @@ fn add_dom_to_linker(
         }),
     )?;
 
-    let mut element = linker.instance("web:dom/element")?;
+    let mut element = linker.instance("wado-lang:web/element")?;
     element.func_wrap(
         "tag-name",
         over_dom(dom, |dom, (handle,): (f64,)| (dom.at(handle).tag.clone(),)),
@@ -247,7 +247,7 @@ fn add_dom_to_linker(
         }),
     )?;
 
-    let mut node = linker.instance("web:dom/node")?;
+    let mut node = linker.instance("wado-lang:web/node")?;
     node.func_wrap(
         "text-content",
         over_dom(dom, |dom, (handle,): (f64,)| {
@@ -267,7 +267,7 @@ fn add_dom_to_linker(
         Ok((other.is_some(),))
     })?;
 
-    linker.instance("web:dom/event")?.func_wrap(
+    linker.instance("wado-lang:web/event")?.func_wrap(
         "new",
         over_dom(dom, |dom, (event_type,): (String,)| {
             (dom.insert(Object {
@@ -278,7 +278,7 @@ fn add_dom_to_linker(
         }),
     )?;
 
-    linker.instance("web:dom/event-target")?.func_wrap(
+    linker.instance("wado-lang:web/event-target")?.func_wrap(
         "dispatch-event",
         over_dom(dom, |dom, (target, event): (f64, f64)| {
             let event_type = dom.at(event).event_type.clone();
@@ -288,7 +288,7 @@ fn add_dom_to_linker(
     )?;
 
     linker
-        .instance("web:dom/html-input-element")?
+        .instance("wado-lang:web/html-input-element")?
         .func_wrap("value", |_, (_handle,): (f64,)| Ok(("typed".to_string(),)))?;
     Ok(())
 }
@@ -298,7 +298,7 @@ fn run_against_stub(program: &str) -> DomObjects {
     common::install_rustls_provider_for_tests();
     let wasm = compile_against_web(program)
         .result
-        .unwrap_or_else(|e| panic!("the web:dom program should compile, got {e}"))
+        .unwrap_or_else(|e| panic!("the wado-lang:web program should compile, got {e}"))
         .wasm;
 
     let dom = Arc::new(Mutex::new(DomObjects::default()));

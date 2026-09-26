@@ -9,16 +9,22 @@ use super::program::{
 };
 use crate::hashmap::IndexSet;
 
-/// Add to `program` the impls of `trait_` that `declarations` derive, in
-/// declaration order. A declaration with an impl already derives nothing.
-pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declaration]) {
+/// Add to `program` the impls of `trait_` that `declarations` derive, in order:
+/// each but those an impl `covers` at every instance of their head.
+pub fn derive(
+    program: &mut Program,
+    trait_: TraitDeclId,
+    declarations: &[Declaration],
+    covers: impl Fn(ImplId, &ImplDef) -> bool,
+) {
     let has_impl: IndexSet<TypeDeclId> = program
         .impls
-        .values()
-        .filter(|def| def.trait_ == Some(trait_))
-        .filter_map(|def| match &def.target {
-            SolverType::Decl(head, _) => Some(*head),
-            SolverType::Param(_)
+        .iter()
+        .filter(|(_, def)| def.trait_ == Some(trait_))
+        .filter_map(|(&id, def)| match &def.target {
+            SolverType::Decl(head, _) if covers(id, def) => Some(*head),
+            SolverType::Decl(..)
+            | SolverType::Param(_)
             | SolverType::Pack(_)
             | SolverType::Ref { .. }
             | SolverType::Tuple(_)
@@ -118,10 +124,16 @@ mod tests {
         });
     }
 
+    /// An answer for the programs here, whose written impls all reach every
+    /// instance of their heads.
+    fn every_instance(_: ImplId, _: &ImplDef) -> bool {
+        true
+    }
+
     /// The impls `derive` added to `prelude()`, in order.
     fn derived(program: Program, declarations: &[Declaration]) -> Vec<ImplDef> {
         let mut p = program;
-        derive(&mut p, EQ, declarations);
+        derive(&mut p, EQ, declarations, every_instance);
         p.impls
             .values()
             .filter(|def| def.origin == ImplOrigin::Derived)
@@ -264,6 +276,27 @@ mod tests {
         p.push_impl(concrete(EQ, decl(POINT)));
         let d = derived(p, &[declaration(POINT, 0, vec![decl(I32)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// `impl Eq for Wrapper<i32>` covers one instance: the rest still derive,
+    /// and the derived impl yields where the written one reaches.
+    #[test]
+    fn a_written_impl_at_some_instances_leaves_the_rest_derived() {
+        let wrapper_of = |arg| SolverType::Decl(WRAPPER, vec![arg]);
+        let mut p = prelude();
+        let written = p.push_impl(concrete(EQ, wrapper_of(decl(I32))));
+        derive(
+            &mut p,
+            EQ,
+            &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
+            |id, _| id != written,
+        );
+        let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
+        assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
+        assert_eq!(
+            asked(wrapper_of(SolverType::Decl(LIST, vec![decl(I32)]))),
+            Some(1)
+        );
     }
 
     /// A marker demands the derivation and answers for it, so nothing is

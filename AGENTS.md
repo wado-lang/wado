@@ -63,9 +63,10 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## General Rules
 
 - Write all documentation and comments in clear, simple English.
-  - Comments: write none. That is the default, not a target to approach. The one exception is what the code cannot say: why this way, a tradeoff, a constraint, a spec or bug reference. Two lines max. If the code can say it, rename and decompose until the comment is redundant, then delete it.
-  - Doc comments (`///`, `//!`): say what the item is, not how it works. Two lines max.
+  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
+  - Doc comments (`///`, `//!`): write one on every `pub` item. Say what the item is, not how it works.
+  - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
 - Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
@@ -95,7 +96,7 @@ that proposed a feature at `docs/wep-*.md`.
 - `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack on a wasmtime other than the pin. The `test-webgpu` CI job is the only one that builds it.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
-- `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT, and `package-web`'s `web:dom` from WebIDL.
+- `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT, and `package-web`'s DOM bindings from WebIDL.
 - `wado-manifest/` — `wado.toml` / `wado.lock` parsing, validation, and dependency resolution.
 - `wado-wasm-embed/` — prepares a core wasm asset for embedding in a component: memory definition to import, then a prune to the used exports.
 - `wado-bundled-libm/` — deterministic math, bundled into the compiler as a Wasm module.
@@ -111,7 +112,7 @@ that proposed a feature at `docs/wep-*.md`.
 - `package-marl` - A CommonMark subset in Wado.
 - `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
 - `package-wadopoet` - Builders for generated Wado source, and the reserved vocabulary (generated from `wado syntax --format json`) a minted name must avoid.
-- `package-web/` - The `web:dom` bindings (`wado-lang:web`), their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
+- `package-web/` - `wado-lang:web`: the web platform bindings, their browser glue, and `SurfaceDom`, a DOM without a browser engine that serves them under `wado test`, `wado run` and `wado serve`.
 - `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.
 - `vendor/` — reference specs and runtimes, as git submodules.
 

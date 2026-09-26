@@ -64,7 +64,7 @@ fn print_usage() {
     eprintln!("Filter mode (default): Reads WIT from stdin, writes Wado to stdout.");
     eprintln!("Directory mode: Use --wit-dir and --output-dir to batch process files.");
     eprintln!(
-        "WebIDL mode: Use --webidl, --output-dir and --glue-dir to generate a web:* package."
+        "WebIDL mode: Use --webidl, --output-dir and --glue-dir to generate a WebIDL module."
     );
     eprintln!();
     eprintln!("Usage: wado-from-idl [options]");
@@ -333,8 +333,8 @@ fn run_directory_mode(
     Ok(())
 }
 
-/// Generate `<output-dir>/<package>.wado` and `<glue-dir>/<package>.js` from a
-/// `WebIDL` snapshot, one module per package.
+/// Generate `<output-dir>/<module>.wado` and `<glue-dir>/<module>.js` from a
+/// `WebIDL` snapshot.
 fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> Result<()> {
     let json = fs::read_to_string(snapshot_path)
         .with_context(|| format!("Failed to read {}", snapshot_path.display()))?;
@@ -350,7 +350,7 @@ fn run_webidl_mode(snapshot_path: &Path, output_dir: &Path, glue_dir: &Path) -> 
     for (dir, extension, code) in outputs {
         fs::create_dir_all(dir)
             .with_context(|| format!("Failed to create directory {}", dir.display()))?;
-        let path = dir.join(format!("{}.{extension}", snapshot.package));
+        let path = dir.join(format!("{}.{extension}", snapshot.module));
         fs::write(&path, code).with_context(|| format!("Failed to write {}", path.display()))?;
         eprintln!("Generated: {}", path.display());
     }

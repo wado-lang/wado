@@ -11,19 +11,21 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, LocalMethodName, MethodName, mangle_generic_name, split_local_method,
+    DeclName, FqTypeName, LocalMethodName, MethodName, UNIT_TYPE_NAME, mangle_generic_name,
+    split_local_method,
 };
 use crate::tir::{
-    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeKey, TypeTable,
 };
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{DefaultTypeBinding, slot_type_bindings};
+use super::call::{CaseSite, DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::exhaustiveness::{self, Case, IntDomain, Pat, Witness};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
+use super::orchestration::first_infer_span;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{CallableKind, FunctionContext, TypeError, VarRef};
 use super::tysys::TypeSystem;
@@ -31,7 +33,7 @@ use super::util;
 use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::const_eval::{Value, eval_cast, is_signed_int, prim_of};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::control_flow::{
     collect_unresolved_null_breaks, collect_unresolved_null_tails,
     collect_unresolved_null_tails_in_block,
@@ -42,7 +44,7 @@ use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
-use crate::elaborator::trait_env::written_type_arg;
+use crate::elaborator::trait_env::{ImplTargetKey, written_type_arg};
 use crate::elaborator::types::{
     ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
 };
@@ -423,7 +425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_method_call(method_call, ctx, expected_type)
             }
             Expr::StaticMethodCall(static_call) => {
-                self.resolve_static_method_call(static_call, ctx)
+                self.resolve_static_method_call(static_call, ctx, expected_type)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
             Expr::Index(index) => {
@@ -741,7 +743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Check local variables, including captures from outer scope
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            match var_ref {
+            let ty = match var_ref {
                 VarRef::Local {
                     index: _,
                     type_id,
@@ -752,7 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // record the place so `assign_to_target` can classify an
                     // ident l-value without the resolved `kind`.
                     self.record_assign_place(ident.id, AssignPlace::Local);
-                    return type_id;
+                    type_id
                 }
                 VarRef::Capture {
                     index: _,
@@ -762,7 +764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_reference_opt(ident.id, defining_ast_id);
                     // Reify rebuilds the `Capture`. A by-value
                     // capture is not an l-value, so no place is recorded.
-                    return type_id;
+                    type_id
                 }
                 VarRef::DerefCapture {
                     index: _,
@@ -784,13 +786,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         ident.id,
                         AssignPlace::DerefCapture { through_mut_ref },
                     );
-                    return inner_type_id;
+                    inner_type_id
                 }
-            }
+            };
+            return self.value_without_turbofish(ident, ty);
         }
 
-        if let Some((decl, _)) = self.tysys.dispatched_operation(ident) {
-            let callable = if self.tysys.trait_env.effect_decl_index.contains(&decl) {
+        if let Some(op) = self.effect_operation_of(ident) {
+            let callable = if self.tysys.resolutions.defs().kind(op.decl) == DefKind::Effect {
                 CallableKind::Operation
             } else {
                 CallableKind::StaticFunction
@@ -833,7 +836,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                 })
             });
-            return assoc.ty;
+            if !ident.type_args_on_prefix {
+                return self.value_without_turbofish(ident, assoc.ty);
+            }
+            let owner_type =
+                self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
+            return if owner_type == TypeTable::ERROR {
+                TypeTable::ERROR
+            } else {
+                assoc.ty
+            };
         }
 
         // A case name without parentheses: `Color::Red`, or a bare `Red`.
@@ -865,7 +877,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return ty;
+            return self.value_without_turbofish(ident, ty);
         }
 
         // Check for imported global variables
@@ -888,7 +900,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     mutable,
                 },
             );
-            return ty;
+            return self.value_without_turbofish(ident, ty);
         }
 
         // Check if it's a known function (function reference)
@@ -910,7 +922,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if ident.owner_segment().is_some()
             && self
-                .lookup_function_signature(&ident.name, Some(ident.id))
+                .lookup_function_signature(&ident.name, None, Some(ident.id))
                 .is_some()
         {
             let _ = self.emit(TypeError::CallableAsValue {
@@ -929,6 +941,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
+    /// `ty`, or ERROR once a turbofish on `ident` is reported: the value it
+    /// names has no type parameters to take one.
+    fn value_without_turbofish(&mut self, ident: &ast::IdentExpr, ty: TypeId) -> TypeId {
+        if self.reject_surplus_turbofish(&ident.name, 0, ident.type_args.len(), ident.span) {
+            return TypeTable::ERROR;
+        }
+        ty
+    }
+
     /// Look up an identifier in the global scope of the module that wrote it,
     /// which is what gives a travelled expression its author's module-private
     /// globals and functions. Supports globals and function refs.
@@ -941,7 +962,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // only. A travelled expression is never an assignment target, so no
         // place is recorded.
         if let Some(ty) = self.global_type_in(&ident.name, home) {
-            return Some(ty);
+            return Some(self.value_without_turbofish(ident, ty));
         }
         let sig = self.tysys.free_function_sig_at(ident.id)?.clone();
         Some(
@@ -983,27 +1004,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// A turbofish on a case path (`Maybe::<i32>::Nothing`) must name exactly
-    /// the declaring type's parameters; an enum or a flags type declares none.
-    fn check_case_turbofish_arity(
+    /// A turbofish on a case path (`Maybe::<i32>::Nothing`, `Maybe::Just::<i32>`)
+    /// must name exactly the declaring type's parameters; an enum or a flags type declares none.
+    pub(super) fn check_case_turbofish_arity(
         &mut self,
-        ident: &ast::IdentExpr,
+        found: usize,
         type_name: &str,
         expected: usize,
-    ) {
-        if ident.type_args.is_empty() || ident.type_args.len() == expected {
-            return;
+        span: Span,
+    ) -> bool {
+        let fits = found == 0 || found == expected;
+        if !fits {
+            let _ = self.emit(TypeError::TypeArgumentCount {
+                name: type_name.to_string(),
+                expected,
+                found,
+                span,
+            });
         }
-        let expected_text = match expected {
-            0 => "no type arguments".to_string(),
-            1 => "1 type argument".to_string(),
-            n => format!("{n} type arguments"),
-        };
-        let found = ident.type_args.len();
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: format!("`{type_name}` takes {expected_text}, the turbofish supplies {found}"),
-            span: ident.span,
-        });
+        fits
     }
 
     /// Resolve a qualified case reference `Type::Case` — a payload-less variant
@@ -1015,102 +1034,89 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ident: &ast::IdentExpr,
         expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
-        // The segment before the case's own name is the type, and the resolve
-        // walk answered for it in the module that wrote it, so a reference
-        // inside a foreign default resolves in the declaring module. A bare
-        // case (`None`, `Leaf`) has no such segment: the expected type
-        // supplies it, or nothing does.
-        let (owner, spelled) = if let Some(seg) = ident.owner_segment() {
-            (self.tysys.resolutions.declared(seg.id), ident.name.clone())
+        // The prefix was answered for in the module that wrote it, so a
+        // reference inside a foreign default resolves in the declaring module.
+        // A bare case (`None`, `Leaf`) has none: the expected type supplies it.
+        let (owner, spelled) = if ident.owner_segment().is_some() {
+            (self.case_owner_of_path(ident)?, ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
-                BareCase::Of { owner, spelled } => (Some(owner), spelled),
+                BareCase::Of { owner, spelled } => (self.case_owner_of_decl(owner)?, spelled),
                 BareCase::NeedsContext => return Some(TypeTable::ERROR),
                 BareCase::None => return None,
             }
         };
-        // A newtype reaches its base's members and keeps its own identity, so
-        // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
-        // the implicit form of `Color::Green as C`.
-        let through_newtype =
-            owner.and_then(|def| newtype_member_owner(&self.type_lookup(), &self.tysys, def));
-        let owner = through_newtype.map(|(base, _)| base).or(owner);
-        let pos = spelled.find("::")?;
-        let prefix = &spelled[..pos];
-        let suffix = &spelled[pos + 2..];
-        macro_rules! lookup_case {
-            ($of:ident) => {
-                owner.and_then(|def| self.type_lookup().$of(def)).cloned()
-            };
-        }
+        let (prefix, case_name) = spelled.rsplit_once("::")?;
+        let lookup = self.type_lookup();
+        let variant_info = lookup.variant_cases_of(owner.def).cloned();
+        let enum_info = lookup.enum_cases_of(owner.def).cloned();
+        let flags_info = lookup.flags_members_of(owner.def).cloned();
 
-        let variant_info = lookup_case!(variant_cases_of);
         if let Some(variant_info) = variant_info
-            && let Some((_, case_data)) = variant_info.case_named(suffix)
+            && let Some((_, case_data)) = variant_info.case_named(case_name)
         {
-            self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, variant_info.type_params.len());
-            // A payload-less case has no payload to infer from, so the
-            // turbofish is the only source besides the expected type.
-            let variant_type = self.construct_variant_case(
-                &variant_info,
-                case_data,
-                &[],
-                &ident.type_args,
-                prefix,
-                expected_type,
-                ident.id,
-                ident.span,
-            );
-            if variant_type == TypeTable::ERROR {
+            self.record_case_path(ident, owner.def, case_data.ast_id);
+            // A payload-less case has no payload to infer from, so what the
+            // path writes is the only source besides the expected type.
+            let Some(written) =
+                self.case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
+            else {
                 return Some(TypeTable::ERROR);
-            }
-            return Some(through_newtype.map_or(variant_type, |(_, named)| named));
+            };
+            let case = CaseSite {
+                variant: &variant_info,
+                case: case_data,
+                written: &written,
+                owner: prefix,
+                site: ident.id,
+                span: ident.span,
+            };
+            return Some(self.construct_through_case_owner(
+                &owner,
+                prefix,
+                ident.span,
+                expected_type,
+                |e, expected| e.construct_variant_case(&case, &[], &[], expected),
+            ));
         }
 
-        // Check for enum case: Color::Red (enums have no payload)
-        let enum_info = lookup_case!(enum_cases_of);
-        if let Some(enum_info) = enum_info
-            && let Some(case_data) = enum_info.find_case(suffix).cloned()
+        let (case_ast_id, case_type) = if let Some(enum_info) = enum_info
+            && let Some(case_data) = enum_info.find_case(case_name)
         {
-            self.record_qualified_case(ident, prefix, case_data.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
             let enum_type = self
                 .tysys
                 .type_table
                 .borrow()
                 .type_id_of_decl(enum_info.defined_at);
-
-            // Reify rebuilds the `EnumConstruct`. Not an l-value.
-            return Some(through_newtype.map_or(enum_type, |(_, named)| named));
-        }
-
-        // Check for flags member: PathFlags::SymlinkFollow
-        // Flags members are bitmask integers (1 << index) represented as IntLiteral
-        let flags_info = lookup_case!(flags_members_of);
-        if let Some(flags_info) = flags_info
-            && let Some(member) = flags_info
-                .members
-                .iter()
-                .find(|m| m.name == suffix)
-                .cloned()
+            (case_data.ast_id, enum_type)
+        } else if let Some(flags_info) = flags_info
+            && let Some(member) = flags_info.members.iter().find(|m| m.name == case_name)
         {
-            self.record_qualified_case(ident, prefix, member.ast_id);
-            self.check_case_turbofish_arity(ident, prefix, 0);
-            return Some(through_newtype.map_or(flags_info.type_id, |(_, named)| named));
+            (member.ast_id, flags_info.type_id)
+        } else {
+            return None;
+        };
+        self.record_case_path(ident, owner.def, case_ast_id);
+        let fits = self
+            .case_written(&owner, [prefix, case_name], &ident.type_args, ident.span)
+            .is_some_and(|written| {
+                self.check_case_turbofish_arity(written.len(), prefix, 0, ident.span)
+            });
+        if !fits {
+            return Some(TypeTable::ERROR);
         }
-        None
+        // Reify rebuilds the `EnumConstruct` or the flags constant. Not an l-value.
+        Some(owner.named.unwrap_or(case_type))
     }
 
     /// What the bare `ident` is as a case: a type name may be omitted only
-    /// where the expected type supplies it. A found case is recorded for reify.
+    /// where the expected type supplies it.
     pub(super) fn bare_case(
         &mut self,
         ident: &ast::IdentExpr,
         expected: Option<TypeId>,
     ) -> BareCase {
         if let Some((owner, spelled)) = self.bare_case_in(expected, &ident.name) {
-            self.record_bare_case(ident.id, owner);
             return BareCase::Of { owner, spelled };
         }
         let Some(qualified) = self.tysys.bare_case_at(ident.id) else {
@@ -1202,10 +1208,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let real_type_param_count = sig.decl.type_params.len();
 
-        // (a) Turbofish on the identifier: `name::<T, ...>`.
+        // (a) Turbofish on the identifier: `name::<T, ...>`. A function value
+        // has no call to infer from, so a `_` slot is unanswerable.
         if !ident.type_args.is_empty() {
+            if let Some(span) = ident.type_args.iter().find_map(first_infer_span) {
+                let _ = self.emit(TypeError::InferPlaceholderNotAllowed { span });
+                return TypeTable::ERROR;
+            }
             if ident.type_args.len() != real_type_param_count {
-                let _ = self.emit(TypeError::GenericFunctionRefArgCountMismatch {
+                let _ = self.emit(TypeError::TypeArgumentCount {
                     name: ident.name.clone(),
                     expected: real_type_param_count,
                     found: ident.type_args.len(),
@@ -1464,9 +1475,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("a generic instance names a declaration")
                     .0;
                 // Tuple field access (numeric field names: 0, 1, 2, ...)
-                if TypeTable::is_tuple_type(&name)
-                    && let Ok(index) = field_name.parse::<usize>()
-                {
+                let is_tuple = self.tysys.type_table.borrow().is_tuple(struct_type);
+                if is_tuple && let Ok(index) = field_name.parse::<usize>() {
                     match self.tysys.tuple_literal_index_type(&type_args, index) {
                         Ok(elem) => return (index as u32, elem),
                         Err(message) => {
@@ -1634,10 +1644,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let expr_type = self.resolve_expr(&index.expr, ctx, None);
 
-        let base_type_id = match self.tysys.type_table.borrow().get(expr_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => expr_type,
-        };
+        let base_type_id = self.tysys.through_ref(expr_type);
         let base_type = self.tysys.type_table.borrow().get(base_type_id).clone();
 
         // Handle tuple indexing: t[0] is equivalent to t.0
@@ -1645,7 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             def,
             type_args: ref elements,
         } = base_type
-            && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
+            && self.tysys.type_table.borrow().is_tuple_def(def)
         {
             // Tuple indexing requires a constant integer index
             if let ast::Expr::Literal(ast::LiteralExpr {
@@ -1711,11 +1718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let index_type = self.resolve_expr(&index.index, ctx, expected_key);
 
             // Reject &T/&mut T used as index expression (would ICE in codegen)
-            let derefed_index_type = match self.tysys.type_table.borrow().get(index_type) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-                _ => None,
-            };
-            if let Some(expected) = derefed_index_type {
+            if let Some(expected) = self.tysys.pointee_of(index_type) {
                 self.typecheck(index_type, expected, index.index.span());
             }
 
@@ -1786,6 +1789,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1838,6 +1846,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let func = FunctionRef {
                     module_source: trait_info.impl_module_source.clone(),
                     name: mangled_method_name,
+                    template: Some(
+                        self.tysys
+                            .signatures
+                            .declared_template(trait_info.method_def),
+                    ),
                     monomorph_info: None,
                     method_info: Some(LocalMethodName::new(
                         receiver,
@@ -1888,10 +1901,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let recv_type = self.resolve_expr(&index_expr.expr, ctx, None);
-        let base_type_id = match self.tysys.type_table.borrow().get(recv_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => recv_type,
-        };
+        let base_type_id = self.tysys.through_ref(recv_type);
         let struct_name = self.tysys.struct_name_for_type(base_type_id)?;
         let (lookup_name, lookup_type_id) =
             self.tysys.newtype_base_lookup(&struct_name, base_type_id);
@@ -1982,7 +1992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if then_type != TypeTable::UNIT {
                         let type_name = self.tysys.type_table.borrow().type_name(then_type);
                         let _ = self.emit(TypeError::TypeMismatch {
-                            expected: "()".to_string(),
+                            expected: UNIT_TYPE_NAME.to_string(),
                             found: type_name,
                             span: if_expr.then_block.span,
                         });
@@ -2736,6 +2746,61 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// Each case's payload type of the variant `ty`, typed at this instance.
+    pub(super) fn case_payload_types(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        let variant_info = self.tysys.variant_of_type(ty)?;
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(ty)
+            .unwrap_or_default();
+        Some(
+            variant_info
+                .cases
+                .iter()
+                .map(|c| self.tysys.substitute_type_params(c.payload, &type_args))
+                .collect(),
+        )
+    }
+
+    /// Whether `ty` has no value: `!`, or a type each of whose values would hold one.
+    pub(super) fn is_uninhabited(&self, ty: TypeId) -> bool {
+        self.is_uninhabited_within(ty, &mut Vec::new())
+    }
+
+    /// `open` holds the types being asked about further out. One met again inside
+    /// itself has no finite value, so it answers `true`.
+    fn is_uninhabited_within(&self, ty: TypeId, open: &mut Vec<TypeKey>) -> bool {
+        let (head, key, elems) = {
+            let tt = self.tysys.type_table.borrow();
+            let head = tt.representation_head(ty);
+            if tt.is_never(head) {
+                return true;
+            }
+            (head, tt.type_key(head), tt.as_tuple(head))
+        };
+        if open.contains(&key) {
+            return true;
+        }
+        open.push(key);
+        let answer = if let Some(elems) = elems {
+            elems.iter().any(|&t| self.is_uninhabited_within(t, open))
+        } else if let Some(fields) = self.struct_field_types(head) {
+            fields
+                .iter()
+                .any(|&(_, t)| self.is_uninhabited_within(t, open))
+        } else if let Some(payloads) = self.case_payload_types(head) {
+            payloads
+                .iter()
+                .all(|&t| self.is_uninhabited_within(t, open))
+        } else {
+            false
+        };
+        open.pop();
+        answer
+    }
+
     /// Report the arms no value reaches. Coverage reads no types, so a
     /// type-pattern arm an earlier narrowing already takes is found by type.
     fn check_unreachable_arms(
@@ -2847,6 +2912,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|c| Case {
                     name: c.name.clone(),
                     has_payload: false,
+                    inhabited: true,
                 })
                 .collect();
             let index = cases.iter().position(|c| c.name == name)?;
@@ -2857,27 +2923,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let variant_info = self.tysys.variant_of_type(scrutinee_type).cloned()?;
-        let (index, case) = variant_info.case_named(name)?;
-        let cases: Rc<[Case]> = {
-            let tt = self.tysys.type_table.borrow();
-            variant_info
-                .cases
-                .iter()
-                .map(|c| Case {
+        let (index, _) = variant_info.case_named(name)?;
+        let payload_types = self.case_payload_types(scrutinee_type)?;
+        let cases: Rc<[Case]> = variant_info
+            .cases
+            .iter()
+            .zip(&payload_types)
+            .map(|(c, &payload_type)| {
+                let has_payload = c.has_payload(&self.tysys.type_table.borrow());
+                Case {
                     name: c.name.clone(),
-                    has_payload: c.has_payload(&tt),
-                })
-                .collect()
-        };
+                    has_payload,
+                    inhabited: !self.is_uninhabited(payload_type),
+                }
+            })
+            .collect();
+        // A case no value reaches was reported where its pattern was resolved.
+        if !cases[index].inhabited {
+            return None;
+        }
         let payload = match payload.filter(|_| cases[index].has_payload) {
-            Some(p) => {
-                let type_args = match self.tysys.type_table.borrow().get(scrutinee_type) {
-                    ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                    _ => Vec::new(),
-                };
-                let payload_type = self.tysys.substitute_type_params(case.payload, &type_args);
-                Some(Box::new(self.exh_pattern(p, payload_type)?))
-            }
+            Some(p) => Some(Box::new(self.exh_pattern(p, payload_types[index])?)),
             None => None,
         };
         Some(Pat::Case {
@@ -2963,8 +3029,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .is_unsigned_int(scrutinee_type);
-        let start_val = util::range_endpoint_to_i128(start, is_unsigned)?;
-        let end_val = util::range_endpoint_to_i128(end, is_unsigned)?;
+        let resolutions = &self.tysys.resolutions;
+        let start_val = util::range_endpoint_to_i128(start, is_unsigned, resolutions)?;
+        let end_val = util::range_endpoint_to_i128(end, is_unsigned, resolutions)?;
         let inclusive = matches!(kind, ast::RangeKind::Inclusive);
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() || (!inclusive && order.is_ge()) {
@@ -3448,7 +3515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Record use→def reference for the struct type name.
         if let (Some(name_id), Some(written)) = (struct_lit.name_id, name.as_ref()) {
-            self.record_item_reference_by_name(name_id, written);
+            self.record_type_name_reference(name_id, written);
         }
 
         // Which declaration the written name means is the resolve pass's
@@ -3533,11 +3600,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let substitution: hashmap::IndexMap<u32, TypeId> = params
                     .iter()
                     .zip(args.iter())
-                    .filter_map(|(param, arg)| match tt.get(*param) {
-                        ResolvedType::TypeParam { index, .. }
-                        | ResolvedType::TypePack { index, .. } => Some((*index, *arg)),
-                        _ => None,
-                    })
+                    .filter_map(|(param, arg)| Some((tt.param_slot(*param)?, *arg)))
                     .collect();
                 fields
                     .into_iter()
@@ -4458,10 +4521,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
-                let index = match table.get(decl_param) {
-                    ResolvedType::TypeParam { index, .. }
-                    | ResolvedType::TypePack { index, .. } => *index,
-                    _ => continue,
+                let Some(index) = table.param_slot(decl_param) else {
+                    continue;
                 };
                 !decl_field_types
                     .iter()
@@ -4691,13 +4752,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // arity `|F|`, expanded at monomorphization.
                     elem_types.push(mapped);
                 } else {
-                    let spread_type = self.tysys.type_table.borrow().get(spread_type_id).clone();
-                    if let ResolvedType::GenericInstance {
-                        def,
-                        type_args: inner_elems,
-                    } = spread_type
-                        && TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def))
-                    {
+                    let spread_elems = self.tysys.type_table.borrow().as_tuple(spread_type_id);
+                    if let Some(inner_elems) = spread_elems {
                         // A concrete tuple spread expands inline to one element
                         // per field.
                         elem_types.extend(inner_elems);
@@ -4956,29 +5012,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             !tt.contains_infer_var(target_type) && !tt.contains_infer_var(from_type),
             "`From` conversion recorded over an unsolved type"
         );
-        let target_name = tt.type_name(target_type);
+        let target_name = DeclName::new(tt.type_name(target_type));
         let from_name = tt.fq_type_name(from_type);
         let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
 
-        // `From<SourceType>` as the trait segment disambiguates several `From`
-        // impls on one target type.
-        let from_trait = from_trait_name.clone().with_args(vec![from_name.clone()]);
-        // The receiver the method name is built from — the same value reify
-        // puts on the call's `method_info`, so the two cannot drift.
-        let target_receiver = self.qualified_receiver_name(&target_name);
-        let method_name = MethodName::format_local(&target_receiver, Some(&from_trait), "from");
+        let (impl_def, module_source) = self.find_from_impl(target_type, &target_name, &from_name);
+        let target_receiver = match impl_def {
+            Some(def) => self.impl_receiver(&self.tysys.trait_env.impl_headers[&def], target_type),
+            None => self.tysys.fq_receiver_head(target_type),
+        };
 
-        // The block that provides the `From` impl, and where its body lives.
-        let (impl_def, module_source) = self.find_from_impl(&target_name, &from_name);
-
-        let key = caller_id;
         self.sem.types.from_call_facts.insert(
-            key,
+            caller_id,
             FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
                 module_source,
-                mangled_name: method_name,
                 target_name: target_receiver,
                 from_name,
                 from_trait_name,
@@ -4988,52 +5037,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type
     }
 
-    /// The `impl From<from_name> for target_name` block and the module that
+    /// The `impl From<from_name> for target_type` block and the module that
     /// wrote it. No block where the synthesis pass mints the impl later.
     fn find_from_impl(
         &self,
-        target_name: &str,
+        target_type: TypeId,
+        target_name: &DeclName,
         from_name: &FqTypeName,
     ) -> (Option<DefId>, ModuleSource) {
-        let from_trait_name = self
+        let target_args = self
             .tysys
             .type_table
             .borrow()
-            .compiler_trait_name(CompilerItem::From)
-            .to_string();
-        // Read off the impl headers: a block's trait reference and its
-        // argument are header facts, so the impls are reached by the target's
-        // canonical key rather than by scanning every module for one whose
-        // written target name matches.
-        let declares_from = |key: &DefId| -> bool {
-            self.tysys
-                .trait_env
-                .impl_headers
-                .get(key)
-                .is_some_and(|header| {
-                    header.trait_head_name() == Some(from_trait_name.as_str())
-                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
-                        if g.args.first().is_some_and(|arg| {
-                            // The header's argument and the call's source type
-                            // are compared as the declarations they name, not
-                            // as the spellings each side wrote.
-                            written_type_arg(arg, &self.tysys.resolutions)
-                                == *from_name
-                        }))
-                })
-        };
-        let keys = self
-            .tysys
-            .trait_env
-            .all_impl_keys(&self.impl_target(target_name));
+            .nominal_type_args(target_type)
+            .unwrap_or_default();
+        let mut keys =
+            self.impl_keys_of_from(&self.impl_target_of(target_type, target_name), from_name);
+        keys.retain(|&key| !self.impl_at_other_instantiation(key, &target_args));
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()
-            .find(|key| *defs.module(**key) == self.current_module_source && declares_from(key))
-            .or_else(|| keys.iter().find(|key| declares_from(key)))
+            .find(|key| *defs.module(**key) == self.current_module_source)
+            .or_else(|| keys.first())
             .map(|key| (Some(*key), defs.module(*key).clone()))
             // The `From` impl may be synthesized later, so a miss is not an error.
             .unwrap_or_else(|| (None, self.current_module_source.clone()))
+    }
+
+    /// The `impl From<from> for …` blocks on `target`, a bodyless synthesis
+    /// request among them. The argument is compared by the declaration it names.
+    pub(super) fn impl_keys_of_from(
+        &self,
+        target: &ImplTargetKey,
+        from: &FqTypeName,
+    ) -> Vec<DefId> {
+        let Some(from_trait) = self.tysys.compiler_trait_def(CompilerItem::From) else {
+            return Vec::new();
+        };
+        let env = &self.tysys.trait_env;
+        env.all_impl_keys(target)
+            .into_iter()
+            .filter(|key| {
+                let header = &env.impl_headers[key];
+                header.trait_def() == Some(from_trait)
+                    && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
+                        if g.args.len() == 1
+                            && written_type_arg(&g.args[0], &self.tysys.resolutions) == *from)
+            })
+            .collect()
     }
 }
 

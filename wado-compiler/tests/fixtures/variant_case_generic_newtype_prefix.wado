@@ -1,0 +1,27 @@
+// A generic newtype over a variant names its cases, and the value takes the
+// newtype: from the turbofish, the payload, or the expected type.
+
+variant G<T> { J(T), N }
+type Wrap<T> = G<T>;
+
+fn show(w: Wrap<i32>) -> i32 {
+    return match w as G<i32> { J(v) => v, N => 0 };
+}
+
+test {
+    let tn = Wrap::<i32>::N;
+    let j = Wrap::J(2);
+    let n: Wrap<i32> = Wrap::N;
+    let tj = Wrap::<i32>::J(3);
+    let u = Wrap::<_>::J(4);
+    let cj = Wrap::J::<i32>(5);
+    assert show(tn) == 0;
+    assert show(j) == 2;
+    assert show(n) == 0;
+    assert show(tj) == 3;
+    assert show(u) == 4;
+    assert show(cj) == 5;
+}
+
+__DATA__
+{"test": {}}

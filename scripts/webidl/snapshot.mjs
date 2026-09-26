@@ -1,4 +1,4 @@
-// Write the webidl2 AST of the `web:dom` slice as JSON.
+// Write the webidl2 AST of `package-web`'s `dom` slice as JSON.
 //
 // Usage: node snapshot.mjs <output.json>
 //
@@ -11,7 +11,10 @@ import { parseAll } from "@webref/idl";
 import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 
-const PACKAGE = "dom";
+// The CM package is the Wado package's own name. WebIDL interface names are
+// unique across the web platform, so one CM package holds every module's.
+const PACKAGE = "wado-lang:web";
+const MODULE = "dom";
 const SLICE = [
   "EventTarget",
   "Event",
@@ -88,6 +91,7 @@ const webref = JSON.parse(
 const snapshot = {
   webref: webref.version,
   package: PACKAGE,
+  module: MODULE,
   slice: SLICE,
   interfaces,
   mixins,

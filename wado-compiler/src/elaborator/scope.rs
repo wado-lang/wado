@@ -20,9 +20,8 @@ use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
 use super::util;
-use crate::ast::AstId;
 use crate::defs::DefId;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::FqTypeName;
 use crate::token::Span;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
@@ -240,25 +239,6 @@ pub(super) struct TraitContext {
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
     pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
-    /// Effect parameters (`<effect E>`) in scope, name → declaration
-    /// `AstId`. `resolve_effects` consults this to classify a name as
-    /// `EffectRef::Param` and to record its use→def edge.
-    pub(super) effect_params: IndexMap<String, ast::AstId>,
-}
-
-impl TraitContext {
-    /// Install the effect parameters declared in `type_params`, replacing
-    /// the enclosing scope's set (restored by the caller's
-    /// [`TypeParamScope`]). Must run BEFORE
-    /// [`Elaborator::register_generic_params`]: eager `<F: fn() with E>`
-    /// bound resolution consults this channel.
-    pub(super) fn install_effect_params(&mut self, type_params: &[ast::GenericParam]) {
-        self.effect_params = type_params
-            .iter()
-            .filter(|p| p.is_effect)
-            .map(|p| (p.name.clone(), p.id))
-            .collect();
-    }
 }
 
 /// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
@@ -378,18 +358,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A scope answering `impl_block`'s own names and nothing the caller
-    /// brought: an impl block names its parameters in `impl<...>` and inherits
-    /// none, and its associated types and `Self` answer inside it.
-    pub(super) fn enter_impl_scope(
+    /// A scope binding `impl_block`'s parameters and `Self` and nothing the
+    /// caller brought: an impl block names its parameters in `impl<...>`.
+    pub(super) fn enter_impl_params_scope(
         &mut self,
         impl_block: &ast::ImplBlock,
     ) -> TypeParamScope<'_, 'a, H> {
         let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        let ctx = &mut scope.annotate_ctx.trait_ctx;
+        ctx.type_params.clear();
+        ctx.type_param_bounds.clear();
+        ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
+        scope
+    }
+
+    /// [`Self::enter_impl_params_scope`] with the block's associated types.
+    pub(super) fn enter_impl_scope(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_impl_params_scope(impl_block);
         if impl_block.trait_type.is_some() && !impl_block.is_synthesize_request {
             let trait_name = scope.impl_block_trait_name(impl_block);
             scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
@@ -553,16 +542,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn inherited_bounds_of(
         &self,
         bounds: &[ast::TraitBound],
-    ) -> Vec<(ast::TraitBound, DefId, Vec<ViaClause>)> {
-        let known = IndexMap::default();
+    ) -> Vec<(InheritedBound, DefId)> {
         bounds
             .iter()
             .filter(|bound| bound.names_a_trait())
-            .filter_map(|bound| Some((bound, self.bound_decl(bound, &known)?)))
-            .flat_map(|(bound, root)| {
-                self.supertraits_of_bound(bound, &known)
-                    .into_iter()
-                    .map(move |inherited| (inherited.bound, root, inherited.via))
+            .filter_map(|bound| self.trait_decl_of(bound))
+            .flat_map(|root| {
+                self.supertraits_of(root)
+                    .iter()
+                    .map(move |inherited| (inherited.clone(), root))
             })
             .collect()
     }
@@ -570,37 +558,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `bounds` expanded to include every bound's supertraits, so a declared
     /// `T: Ord` also demands `Eq`. One declaration stays one bound however
     /// spelled, so an alias never competes with its original.
-    ///
-    /// `known` maps a bound's id to the declaration it means, answered where the
-    /// bound was first read: a projection's bounds are rebuilt here with fresh
-    /// ids the table cannot answer for, and without `known` the dedup would fall
-    /// back to the spelling and collapse two same-named traits.
-    pub(super) fn elaborate_bounds_with(
-        &self,
-        bounds: &[ScopedBound],
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Vec<ElaboratedBound> {
+    pub(super) fn elaborate_bounds(&self, bounds: &[ScopedBound]) -> Vec<ElaboratedBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for scoped in bounds {
             let bound = &scoped.bound;
-            self.merge_bound(&mut out, bound, None, scoped.scope(), known);
+            self.merge_bound(&mut out, bound, None, scoped.scope());
             if !bound.names_a_trait() {
                 continue;
             }
-            let Some(root) = self.bound_decl(bound, known) else {
+            let Some(root) = self.trait_decl_of(bound) else {
                 continue;
             };
-            for inherited in self.supertraits_of_bound(bound, known) {
+            for inherited in self.supertraits_of(root) {
                 // A supertrait clause is written in the declaring trait's own
                 // space, not in the frame that wrote the bound reaching it.
                 self.merge_bound(
                     &mut out,
                     &inherited.bound,
-                    Some((root, inherited.via)),
+                    Some((root, inherited.via.clone())),
                     BoundSelf::Bounded,
-                    known,
                 );
             }
         }
@@ -620,7 +598,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         inherited: Option<(DefId, Vec<ViaClause>)>,
         self_type: BoundSelf,
-        known: &IndexMap<AstId, FqTraitName>,
     ) {
         let entry = || ElaboratedBound {
             bound: bound.clone(),
@@ -636,7 +613,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             return;
         }
-        let decl = self.bound_decl(bound, known);
+        let decl = self.trait_decl_of(bound);
         // A bound that names no declaration falls back to its spelling, so an
         // erroring program still reports one bound rather than one per mention.
         // Only bounds that both write nothing are one bound. A written argument
@@ -661,49 +638,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out.push((entry(), decl));
     }
 
-    /// The declaration a bound names: `known` first, then the bound's own site.
-    fn bound_decl(
-        &self,
-        bound: &ast::TraitBound,
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Option<DefId> {
-        known
-            .get(&bound.id)
-            .and_then(FqTraitName::canonical)
-            .or_else(|| self.trait_decl_at(bound.id, &bound.name))
-    }
-
-    /// The transitive supertraits of the trait `bound` names, as declared.
-    ///
-    /// Answered from the bound's own reference site: two modules may declare
-    /// the same name, and expanding by spelling picks whichever the by-name
-    /// index holds — for the loser, an empty closure, so a supertrait's methods
-    /// silently vanish.
-    ///
-    /// Each carries the declaration it names, since its spelling belongs to the
-    /// declaring module and its arguments to that trait's parameter space. A
-    /// caller reading those arguments walks `via` from what `bound` writes.
-    fn supertraits_of_bound(
-        &self,
-        bound: &ast::TraitBound,
-        known: &IndexMap<AstId, FqTraitName>,
-    ) -> Vec<InheritedBound> {
-        let Some(decl) = self.bound_decl(bound, known) else {
-            return Vec::new();
-        };
-        self.tysys
-            .trait_env
-            .supertrait_closure_declared(&decl)
-            .1
-            .iter()
-            .map(|inherited| InheritedBound {
-                bound: ast::TraitBound {
-                    resolved: Some(inherited.decl),
-                    ..inherited.bound.clone()
-                },
-                ..inherited.clone()
-            })
-            .collect()
+    /// The transitive supertraits of trait `decl`.
+    fn supertraits_of(&self, decl: DefId) -> &[InheritedBound] {
+        self.tysys.trait_env.supertrait_closure_declared(&decl).1
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to
@@ -797,10 +734,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> SelfBinding {
         SelfBinding {
             type_id: self.resolve_type(impl_type),
-            declaring_trait: trait_type.and_then(|t| {
-                let name = self.get_type_name(t);
-                self.trait_decl_at(t.id()?, &name)
-            }),
+            declaring_trait: trait_type.and_then(|t| self.impl_trait_decl(t)),
         }
     }
 
@@ -885,8 +819,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_type: &ast::Type,
         implementing: SelfBinding,
     ) {
-        let trait_name = self.get_type_name(trait_type);
-        let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
+        let Some(trait_decl_type_params) = implementing
+            .declaring_trait
+            .and_then(|trait_| self.tysys.trait_decl_type_params_of(&trait_))
+        else {
             return;
         };
         let trait_args: &[ast::Type] = match trait_type {

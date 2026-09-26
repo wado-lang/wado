@@ -26,6 +26,10 @@
 //! required, and `level` and `strategy` default to `Z_DEFAULT_COMPRESSION` and
 //! `Z_DEFAULT_STRATEGY` respectively.
 //!
+//! All decompression entry points take a non-negative `max_output`, default
+//! `i32::MAX`. Output that would pass it fails with `ZlibError::OutputExceedsMax`
+//! before it is written, so untrusted input cannot expand without bound.
+//!
 
 
 #[synopsis]
@@ -42,7 +46,7 @@ test {
     assert uncompress(&compressed) matches { Ok(round) && round == data };
     assert inflate_zlib(&smallest) matches { Ok(round) && round == data };
     assert inflate_gzip(&gz) matches { Ok(round) && round == data };
-    assert inflate_raw(&raw) == data;
+    assert inflate_raw(&raw) matches { Ok(round) && round == data };
 
     // A stream, for input arriving in pieces.
     let mut stream = DeflateStream::new(Z_DEFAULT_COMPRESSION);
@@ -797,13 +801,15 @@ impl InflateState {
     }
 }
 
-// Decompress raw deflate data from a slice of input (no zlib/gzip header).
-// Implements the DEFLATE decoding loop of RFC 1951 section 3.2.3.
-// Returns [output, input_bytes_consumed, ok], where `ok` is true only when the
-// stream reached the end of its final block cleanly (mode Done). It is false
-// when the stream is invalid (mode Bad) or truncated before the final block,
-// so the zlib/gzip wrappers can reject malformed DEFLATE data precisely.
-fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [ByteList, i32, bool] {
+/// Raw DEFLATE (RFC 1951 3.2.3) decoded from a slice of `input`, and the input bytes
+/// it consumed. The limit is checked before each write, so a bomb never materializes.
+fn inflate_raw_ex(
+    input: &ByteList,
+    input_offset: i32,
+    input_length: i32,
+    max_output: i32,
+) -> Result<[ByteList, i32], ZlibError> {
+    assert max_output >= 0, "max_output must not be negative";
     let mut state = InflateState::new(true);
     let mut output: ByteList = [];
 
@@ -896,10 +902,14 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
             },
             Copy => {
                 let mut copy = state.length;
+                if copy > have {
+                    copy = have;
+                }
+                if copy > max_output - output.len() {
+                    builtin::cold_path();
+                    return Result::Err(ZlibError::OutputExceedsMax);
+                }
                 if copy > 0 {
-                    if copy > have {
-                        copy = have;
-                    }
                     output.extend_from_slice(input[inp..<inp + copy]);
                     have -= copy;
                     inp += copy;
@@ -1210,6 +1220,10 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 if here_op == 0 {
                     // Literal: write it here rather than through a Lit mode, so
                     // the common symbol costs no extra dispatch round trip.
+                    if output.len() == max_output {
+                        builtin::cold_path();
+                        return Result::Err(ZlibError::OutputExceedsMax);
+                    }
                     output.push(state.length as u8);
                 } else if here_op & 32 != 0 {
                     // end of block
@@ -1344,6 +1358,9 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
                 let out_pos = output.len();
                 if state.offset > out_pos {
                     state.mode = InflateMode::Bad;
+                } else if state.length > max_output - out_pos {
+                    builtin::cold_path();
+                    return Result::Err(ZlibError::OutputExceedsMax);
                 } else {
                     let src_start = out_pos - state.offset;
                     output.copy_within_append(src_start, state.length);
@@ -1385,28 +1402,24 @@ fn inflate_raw_ex(input: &ByteList, input_offset: i32, input_length: i32) -> [By
         }
     }
 
-    // Return bytes consumed from input. The decode succeeded only if it ran to
-    // the end of the final block (RFC 1951 section 3.2.3): a Bad mode or an
-    // exhausted input mid-stream both leave `mode` short of Done.
-    let consumed = inp - input_offset;
-    let ok = state.mode matches { Done };
-    return [output, consumed, ok];
+    // The decode succeeded only if it ran to the end of the final block (RFC
+    // 1951 section 3.2.3): a Bad mode or an input cut short both stop before Done.
+    if !state.mode matches { Done } {
+        return Result::Err(ZlibError::InvalidDeflateData);
+    }
+    return Result::Ok([output, inp - input_offset]);
 }
 
-// Decompress raw deflate data from a slice of input (no zlib/gzip header)
-// Returns the decompressed output only
-fn inflate_raw_from(input: &ByteList, input_offset: i32, input_length: i32) -> ByteList {
-    let [result, ..] = inflate_raw_ex(input, input_offset, input_length);
-    return result;
+/// Decompresses raw DEFLATE data (no header/checksum), failing with
+/// `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
+pub fn inflate_raw(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
+    let [output, _consumed] = inflate_raw_ex(input, 0, input.len(), max_output)?;
+    return Result::Ok(output);
 }
 
-/// Decompresses raw DEFLATE data (no header/checksum).
-pub fn inflate_raw(input: &ByteList) -> ByteList {
-    return inflate_raw_from(input, 0, input.len());
-}
-
-/// Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32).
-pub fn inflate_zlib(input: &ByteList) -> Result<ByteList, ZlibError> {
+/// Decompresses zlib-wrapped data (RFC 1950: 2-byte header + DEFLATE + 4-byte Adler-32),
+/// failing with `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
+pub fn inflate_zlib(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
     // Skip 2-byte zlib header
     if input.len() < 6 {
         return Result::Err(ZlibError::DataTooShort);
@@ -1432,10 +1445,7 @@ pub fn inflate_zlib(input: &ByteList) -> Result<ByteList, ZlibError> {
 
     // Decompress directly from input, skipping the 2-byte header and the
     // trailing 4-byte Adler-32 (RFC 1950 section 2.2).
-    let [result, _consumed, ok] = inflate_raw_ex(input, 2, input.len() - 6);
-    if !ok {
-        return Result::Err(ZlibError::InvalidDeflateData);
-    }
+    let [result, _consumed] = inflate_raw_ex(input, 2, input.len() - 6, max_output)?;
 
     // Verify the ADLER32 trailer over the uncompressed data (RFC 1950 section
     // 2.2, ADLER32; the checksum stores s2 in the high 16 bits, big-endian).
@@ -2975,10 +2985,9 @@ fn gzip_parse_header(input: &ByteList, start: i32) -> Result<i32, ZlibError> {
     return Result::Ok(pos);
 }
 
-/// Decompresses gzip-wrapped data (RFC 1952).
-///
-/// Supports multi-member gzip streams; member outputs are concatenated.
-pub fn inflate_gzip(input: &ByteList) -> Result<ByteList, ZlibError> {
+/// Decompresses gzip-wrapped data (RFC 1952), concatenating its members and failing
+/// with `ZlibError::OutputExceedsMax` once their output would pass `max_output`.
+pub fn inflate_gzip(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
     let mut output: ByteList = [];
     let mut member_start = 0;
 
@@ -2994,17 +3003,13 @@ pub fn inflate_gzip(input: &ByteList) -> Result<ByteList, ZlibError> {
 
         let data_start = gzip_parse_header(input, member_start)?;
 
-        // Decompress using inflate_raw_ex to know how many bytes were consumed
-        let remaining = input.len() - data_start;
-        let result = inflate_raw_ex(input, data_start, remaining);
-        let member_output = result.0;
-        let consumed = result.1;
-        let ok = result.2;
-        // Reject a malformed DEFLATE member before trusting `consumed` to locate
-        // the trailer (RFC 1951 section 3.2.3).
-        if !ok {
-            return Result::Err(ZlibError::InvalidDeflateData);
-        }
+        // A malformed DEFLATE member fails here, before `consumed` locates the trailer.
+        let [member_output, consumed] = inflate_raw_ex(
+            input,
+            data_start,
+            input.len() - data_start,
+            max_output - output.len(),
+        )?;
 
         // The gzip trailer (RFC 1952 section 2.3.1) is CRC32 then ISIZE, each a
         // 4-byte little-endian value, immediately after the DEFLATE member.
@@ -3097,28 +3102,16 @@ pub fn gzip_compress(
     return output;
 }
 
-/// Auto-detects the wrapper format (zlib or gzip) and decompresses.
-///
-/// Returns `ZlibError::OutputExceedsMax` if the decompressed size exceeds
-/// `max_output` (default: `i32::MAX`).
+/// Auto-detects the wrapper format (zlib or gzip) and decompresses, failing with
+/// `ZlibError::OutputExceedsMax` once the output would pass `max_output`.
 pub fn uncompress(input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
     if input.len() < 2 {
         return Result::Err(ZlibError::DataTooShort);
     }
-    // Check for gzip magic
     if input[0] == GZIP_MAGIC1 && input[1] == GZIP_MAGIC2 {
-        let result = inflate_gzip(input)?;
-        if result.len() > max_output {
-            return Result::Err(ZlibError::OutputExceedsMax);
-        }
-        return Result::Ok(result);
+        return inflate_gzip(input, max_output);
     }
-    // Otherwise assume zlib format
-    let result = inflate_zlib(input)?;
-    if result.len() > max_output {
-        return Result::Err(ZlibError::OutputExceedsMax);
-    }
-    return Result::Ok(result);
+    return inflate_zlib(input, max_output);
 }
 
 
@@ -3720,28 +3713,28 @@ impl InflateStream {
         }
     }
 
-    /// Decompresses the buffered input and clears the buffer. The stream may
-    /// be reused for further input.
-    pub fn finish(&mut self) -> Result<ByteList, ZlibError> {
-        let result = self.decompress(&self.buffer)?;
+    /// Decompresses the buffered input into at most `max_output` bytes and
+    /// clears the buffer. The stream may be reused for further input.
+    pub fn finish(&mut self, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
+        let result = self.decompress(&self.buffer, max_output)?;
         self.total_in += self.buffer.len();
         self.total_out += result.len();
         self.buffer = [];
         return Result::Ok(result);
     }
 
-    /// Decompresses `input` in one shot using the stream's `format`. Does not
-    /// touch the internal buffer.
-    pub fn decompress(&self, input: &ByteList) -> Result<ByteList, ZlibError> {
+    /// Decompresses `input` in one shot into at most `max_output` bytes, using
+    /// the stream's `format`. Does not touch the internal buffer.
+    pub fn decompress(&self, input: &ByteList, max_output: i32 = i32::MAX) -> Result<ByteList, ZlibError> {
         if self.format == RAW_FORMAT {
-            return Result::Ok(inflate_raw(input));
+            return inflate_raw(input, max_output);
         } else if self.format == GZIP_FORMAT {
-            return inflate_gzip(input);
+            return inflate_gzip(input, max_output);
         } else if self.format == AUTO_FORMAT {
-            return uncompress(input);
+            return uncompress(input, max_output);
         }
         // ZLIB_FORMAT (default)
-        return inflate_zlib(input);
+        return inflate_zlib(input, max_output);
     }
 }
 
