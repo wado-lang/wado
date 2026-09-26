@@ -393,7 +393,8 @@ fn fn_step_refusal(
         .zip(to.params)
         .enumerate()
         .find_map(|(index, (&a, &b))| {
-            representation_refusal(tt, a, b).map(|reason| format!("parameter {}: {reason}", index + 1))
+            representation_refusal(tt, a, b)
+                .map(|reason| format!("parameter {}: {reason}", index + 1))
         })
         .or_else(|| {
             representation_refusal(tt, from.return_type, to.return_type)
@@ -477,7 +478,8 @@ fn slice_list_conversion(tt: &TypeTable, source: TypeId, target: TypeId) -> Opti
     };
     let list_elem = |id| tt.as_list(tt.representation_head(id));
     let same = |a: Option<TypeId>, b: Option<TypeId>| {
-        a.zip(b).is_some_and(|(a, b)| tt.type_key(a) == tt.type_key(b))
+        a.zip(b)
+            .is_some_and(|(a, b)| tt.type_key(a) == tt.type_key(b))
     };
     if same(slice_elem(source), list_elem(target)) {
         Some("to_list")
@@ -3499,7 +3501,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return target_type;
         }
-
 
         // Casts *from* i128/u128 (including newtypes of them) support:
         // f64/f32 (correctly rounded), the integer widths (truncating),

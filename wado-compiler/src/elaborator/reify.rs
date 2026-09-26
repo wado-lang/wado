@@ -2932,7 +2932,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     _ => self.reify_expr(&cast.expr, ctx, None),
                 };
-                let inner = read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
+                let inner =
+                    read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
                 let (from_handle, to_handle) = {
                     let tt = self.tysys.type_table.borrow();
                     (
