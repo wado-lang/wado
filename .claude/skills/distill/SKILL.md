@@ -66,7 +66,8 @@ and often a helper the codebase already had.
 
 - Delete outright what carries no information or repeats the code; trim only
   what survives that.
-- Doc and module comments: 2 lines max. Say what it is, not how it works.
+- What survives follows AGENTS.md § General Rules: a comment says why, a doc
+  comment says what the item is. Neither has a length limit.
 
 ### Markdown
 
