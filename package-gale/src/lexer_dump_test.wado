@@ -269,19 +269,28 @@ B : 'b' ;");
     assert report.contains("rule EITHER — matcher try_EITHER"), report;
 }
 
-test "lexer dump separates inlined from recursive fragments" {
-    // `NEST` references itself, so it keeps a matcher; `D` is inlined at the
-    // use site and its constructs are reported there, under the `D › ` prefix.
+test "lexer dump separates called, inlined and recursive fragments" {
+    // `NEST` references itself, so it keeps a matcher. `AB` gets a `frag_`
+    // matcher, and one in tail position too, since there its alternation takes
+    // maximal munch. `P` carries a predicate, so it is inlined and reported
+    // under the `P › ` prefix.
     let report = lexer_dump("grammar T;
 r : N ;
 N : NEST ;
 fragment NEST : '(' NEST* ')' ;
-fragment D : [0-9] ;
-NUM : D+ ;");
+fragment AB : 'a' | 'ab' ;
+X : AB ;
+Y : AB 'c' ;
+fragment P : {true}? 'p' | 'pq' ;
+PP : P ;");
 
     assert report.contains("rule NEST — recursive fragment: matcher try_NEST"), report;
-    assert report.contains("rule D — fragment: inlined at each use site"), report;
-    assert report.contains("recursive fragment 1"), report;
+    assert report.contains("rule AB — fragment: a frag_ matcher per use context"), report;
+    assert report.contains("fragment matcher frag_tail_AB\n  alternation ('a' | 'ab') — maximal munch"), report;
+    assert report.contains("fragment matcher frag_AB\n  alternation ('a' | 'ab') — first-match: not in tail"), report;
+    assert report.contains("rule P — fragment: inlined at each use site"), report;
+    assert report.contains("  P › alternation ('p' | 'pq')"), report;
+    assert report.contains("called fragment 1 (2 frag_ matchers), inlined fragment 1, recursive fragment 1"), report;
 }
 
 test "lexer dump reports a tokens-block entry as a virtual token" {
@@ -303,6 +312,23 @@ CMT : '/*' (CMT | .)+? '*/' ;");
 
     assert report.contains("rule CMT — ATN-class: latn_match (latn rule 0)"), report;
     assert report.contains("ATN-class 1"), report;
+}
+
+test "lexer dump gives no matcher to a rule only an ATN-class rule calls" {
+    // `RAW` and `CMT` are routed to `latn_match`, which simulates what they
+    // reference itself, so neither `CONTENT` nor `ANY_CMT` gets a `try_`
+    // matcher nothing would call.
+    let report = lexer_dump("grammar T;
+r : RAW | CMT ;
+RAW : 'r' CONTENT ;
+fragment CONTENT : '#' CONTENT '#' | '\"' .*? '\"' ;
+CMT : '/*' (ANY_CMT | .)*? '*/' ;
+ANY_CMT : CMT ;");
+
+    assert report.contains("rule RAW — ATN-class"), report;
+    assert report.contains("rule CONTENT — recursive fragment: only latn_match reaches it, no matcher"), report;
+    assert report.contains("rule CMT — ATN-class"), report;
+    assert report.contains("rule ANY_CMT — subsumed by CMT: never the longest match\n"), report;
 }
 
 test "lexer dump scores a predicate-carrying alternation by length" {

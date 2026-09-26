@@ -26,6 +26,7 @@ use {
     lexer_alt_suffix,
     find_fragment,
     lexer_rule_plan,
+    lexer_fragment_fns,
     LexerBodyPlan,
     LexerSeqPlan,
     LexerGroupPlan,
@@ -57,8 +58,11 @@ struct DumpOut {
     route_keyword: i32 = 0,
     route_literal: i32 = 0,
     route_subsumed: i32 = 0,
+    route_called_fragment: i32 = 0,
     route_inlined_fragment: i32 = 0,
     route_recursive_fragment: i32 = 0,
+    route_unreached: i32 = 0,
+    fragment_fns: i32 = 0,
     route_virtual: i32 = 0,
     route_atn: i32 = 0,
     repeat_plain: i32 = 0,
@@ -77,6 +81,7 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
     let mut grammar = *assembled;
     canonicalize_for_analysis(&mut grammar);
     let empty_opts: List<GrammarOption> = [];
+    let atn_class = latn_rule_indices(&grammar);
     let ctx = DumpCtx {
         rules: grammar.lexer_rules,
         grammar_opts: grammar.options,
@@ -86,8 +91,9 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
             &collect_literal_tokens(&grammar.parser_rules),
             &grammar.options,
             resolve_ci(&grammar.options, &empty_opts),
+            &atn_class,
         ),
-        atn_class: latn_rule_indices(&grammar),
+        atn_class,
     };
 
     let mut o = DumpOut {
@@ -96,6 +102,14 @@ pub fn render_lexer_dump(assembled: &Grammar) -> String {
     o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
     for let mut i = 0; i < ctx.rules.len(); i += 1 {
         render_rule(&mut o, &ctx, &ctx.rules[i], &ctx.routes[i]);
+    }
+    for let frag of &lexer_fragment_fns(&ctx.rules, &ctx.routes, &ctx.grammar_opts, &ctx.atn_class) {
+        let Some(rule) = find_fragment(&ctx.rules, &frag.key.name) else {
+            panic("a fragment matcher names no fragment");
+        };
+        o.fragment_fns += 1;
+        o.text.push_str(`fragment matcher ${frag.key.fn_name()}\n`);
+        render_body(&mut o, &ctx, &rule.body, &frag.plan, /*top=*/ true);
     }
     render_summary(&mut o);
     return o.text;
@@ -119,9 +133,9 @@ fn latn_rule_indices(grammar: &Grammar) -> TreeMap<String, i32> {
 
 fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule, route: &LexerRuleRoute) {
     o.text.push_str(`rule ${rule.name} — `);
-    // An ATN-class rule has a matcher, but its body is one `latn_match` call:
-    // the static strategies below never apply to it.
-    if let Some(idx) = ctx.atn_class.get(rule.name) {
+    // An ATN-class rule's matcher is one `latn_match` call: the static
+    // strategies below never apply to it.
+    if let Some(idx) = ctx.atn_class.get(rule.name) && route_emits_body(route) {
         o.route_atn += 1;
         o.text.push_str(`ATN-class: latn_match (latn rule ${idx})\n`);
         return;
@@ -139,6 +153,8 @@ fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
     match route {
         Matcher => o.route_matcher += 1,
         RecursiveFragment => o.route_recursive_fragment += 1,
+        Unreached => o.route_unreached += 1,
+        CalledFragment => o.route_called_fragment += 1,
         InlinedFragment => o.route_inlined_fragment += 1,
         Virtual => o.route_virtual += 1,
         Keyword(_) => o.route_keyword += 1,
@@ -152,6 +168,8 @@ fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
     return match route {
         Matcher => `matcher ${try_fn}`,
         RecursiveFragment => `recursive fragment: matcher ${try_fn}`,
+        Unreached => "recursive fragment: only latn_match reaches it, no matcher",
+        CalledFragment => "fragment: a frag_ matcher per use context",
         InlinedFragment => "fragment: inlined at each use site",
         Virtual => "virtual token: no text to match",
         Keyword(k) => `keyword classifier (carrier ${k.carrier})${also_matcher_suffix(k.also_matcher, &try_fn)}`,
@@ -172,11 +190,12 @@ fn also_matcher_suffix<S: AsStrSlice>(also: bool, try_fn: S) -> String {
 }
 
 /// Whether the rule's body is emitted somewhere, so its decisions belong under
-/// this entry. An inlined fragment's are reported at its use sites instead.
+/// this entry. An inlined fragment's are reported at its use sites instead, and
+/// a called one's under each `frag_` matcher.
 fn route_emits_body(route: &LexerRuleRoute) -> bool {
     return match route {
         Matcher | RecursiveFragment => true,
-        Virtual | InlinedFragment => false,
+        Virtual | CalledFragment | InlinedFragment | Unreached => false,
         Keyword(k) => k.also_matcher,
         SharedLiteral(l) => l.also_matcher,
         Subsumed(s) => s.also_matcher,
@@ -312,7 +331,7 @@ fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &Lexer
                 );
             }
         },
-        Leaf => {
+        Call(_) | Leaf => {
         },
     }
 }
@@ -387,7 +406,7 @@ fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
 // ==========================================================================
 
 fn render_summary(o: &mut DumpOut) {
-    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, subsumed ${o.route_subsumed}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
+    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, subsumed ${o.route_subsumed}, called fragment ${o.route_called_fragment} (${o.fragment_fns} frag_ matchers), inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, unreached ${o.route_unreached}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
     let repeats = `greedy repeat: plain ${o.repeat_plain}, lookahead-aware ${o.repeat_lookahead}; non-greedy repeat: ${o.repeat_non_greedy}`;
     let groups = `alternation + suffix: first-match ${o.group_first_match}, arm scoring ${o.group_arm_scoring}`;
     let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}; char set ${o.char_sets}`;

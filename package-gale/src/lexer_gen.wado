@@ -6,6 +6,7 @@ use {
     LexerElement,
     LexerRepeatElement,
     LexerNotElement,
+    RepeatKind,
     CharClass,
     CharRange,
     ParserRule,
@@ -340,7 +341,7 @@ pub fn gen_lexer<S: AsStrSlice>(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(&grammar.options, &empty_opts);
     let keywords = collect_keyword_rules(&grammar.lexer_rules, &grammar.options);
-    let routes = lexer_rule_routes(&grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, grammar_ci);
+    let routes = lexer_rule_routes(&grammar.lexer_rules, &keywords, lit_tokens, &grammar.options, grammar_ci, atn_class);
     // A superClass base is wired independently of the action language.
     let ea = lexer_grammar_executes_actions(grammar) || !sc_name.is_empty();
     let act_rule_names = executed_action_rule_names(grammar);
@@ -679,21 +680,62 @@ fn gen_lexer_match_fns<S: AsStrSlice>(
     hm: bool,
     sc_name: S,
 ) {
-    check_lexer_calls_resolve(lexer_rules, routes);
+    check_lexer_calls_resolve(lexer_rules, routes, atn_class);
     for let mut i = 0; i < lexer_rules.len(); i += 1 {
         if routes[i].has_match_fn() {
             gen_lexer_match_fn(w, &lexer_rules[i], lexer_rules, grammar_opts, atn_class, ea, hm, sc_name);
         }
     }
+    for let frag of &lexer_fragment_fns(lexer_rules, routes, grammar_opts, atn_class) {
+        gen_lexer_fragment_fn(w, frag, lexer_rules, ea, hm, sc_name);
+    }
+}
+
+fn gen_lexer_fragment_fn<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    frag: &LexerFragmentFn,
+    all_rules: &List<LexerRule>,
+    ea: bool,
+    hm: bool,
+    sc_name: S,
+) {
+    let Some(rule) = find_fragment(all_rules, &frag.key.name) else {
+        panic("a fragment matcher names no fragment");
+    };
+    let mut f = lexer_matcher_spec(&frag.key.fn_name(), hm);
+    if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
+        f.add_effect(sc_name);
+    }
+    f.emit_begin(w);
+    if hm {
+        w.line("let chars = &lx.chars;");
+    }
+    w.line("let mut pos = start;");
+    gen_lexer_body(w, &rule.body, &frag.plan, all_rules, "return -1", frag.key.ci, ea, hm, false);
+    w.line("return pos;");
+    w.end();
+    w.blank();
+}
+
+fn lexer_matcher_spec<S: AsStrSlice>(fn_name: S, hm: bool) -> FnSpec {
+    let mut f = FnSpec::new(fn_name);
+    if hm {
+        f.add_param("lx", "&Lexer");
+    } else {
+        f.add_param("chars", "&List<char>");
+    }
+    f.add_param("start", "i32");
+    f.set_return_type("i32");
+    return f;
 }
 
 /// Which matcher covers a lexer rule's text.
 ///
 /// Dispatch needs a `try_` matcher unless another one already covers the text — a
 /// keyword rides its carrier's reclassification, a fixed literal the shared
-/// literal matcher — and a virtual token has no text at all. A rule another
-/// lexer rule references is called by name and needs one whatever dispatch
-/// decided; a non-recursive fragment is inlined at each use site instead.
+/// literal matcher — and a virtual token has no text at all. A rule an emitted
+/// matcher references is called by name and needs one whatever dispatch
+/// decided; a non-recursive fragment gets a `frag_` matcher per use context.
 ///
 /// `has_match_fn` is this reduced to "does the rule get its own".
 pub variant LexerRuleRoute {
@@ -701,10 +743,16 @@ pub variant LexerRuleRoute {
     Matcher,
     /// A `tokens { }` entry: no text, so nothing to match.
     Virtual,
-    /// Non-recursive fragment: inlined into each rule that references it.
+    /// Non-recursive fragment: a `frag_` matcher per case folding and tail
+    /// position its references need (`lexer_fragment_fns`).
+    CalledFragment,
+    /// Non-recursive fragment carrying a predicate or an action, which read the
+    /// caller's state: inlined into each rule that references it.
     InlinedFragment,
     /// Recursive fragment: reached by call, so it keeps its own matcher.
     RecursiveFragment,
+    /// Recursive fragment only `latn_match` reaches, so no matcher calls it.
+    Unreached,
     /// Folded into the keyword classifier, which rewrites the carrier rule's
     /// match into this keyword.
     Keyword(LexerKeywordRoute),
@@ -718,20 +766,20 @@ pub variant LexerRuleRoute {
 pub struct LexerSubsumedRoute {
     pub by: List<String>,
     /// As `LexerKeywordRoute::also_matcher`.
-    pub also_matcher: bool,
+    pub also_matcher: bool = false,
 }
 
 pub struct LexerKeywordRoute {
     pub carrier: String,
-    /// A rule another lexer rule calls keeps a `try_` matcher on top of the
+    /// A rule an emitted matcher calls keeps a `try_` matcher on top of the
     /// classifier shortcut.
-    pub also_matcher: bool,
+    pub also_matcher: bool = false,
 }
 
 pub struct LexerLiteralRoute {
     pub const_name: String,
     /// As `LexerKeywordRoute::also_matcher`.
-    pub also_matcher: bool,
+    pub also_matcher: bool = false,
 }
 
 impl LexerRuleRoute {
@@ -744,7 +792,7 @@ impl LexerRuleRoute {
     pub fn has_match_fn(&self) -> bool {
         return match self {
             Matcher | RecursiveFragment => true,
-            Virtual | InlinedFragment => false,
+            Virtual | CalledFragment | InlinedFragment | Unreached => false,
             Keyword(k) => k.also_matcher,
             SharedLiteral(l) => l.also_matcher,
             Subsumed(s) => s.also_matcher,
@@ -752,20 +800,68 @@ impl LexerRuleRoute {
     }
 }
 
-/// Every lexer rule's route, by declaration index.
+/// Every lexer rule's route, by declaration index. `atn_class` names the rules
+/// matched by `latn_match`, whose bodies call no `try_` matcher.
 pub fn lexer_rule_routes(
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,
     lit_tokens: &List<LitToken>,
     grammar_opts: &List<GrammarOption>,
     grammar_ci: bool,
+    atn_class: &TreeMap<String, i32>,
 ) -> List<LexerRuleRoute> {
     let mut routes: List<LexerRuleRoute> = [];
     for let rule of lexer_rules {
         let route = lexer_rule_route(rule, &routes, lexer_rules, keywords, lit_tokens, grammar_opts, grammar_ci);
         routes.push(route);
     }
+    let called = statically_called_rules(lexer_rules, &routes, atn_class);
+    for let mut i = 0; i < routes.len(); i += 1 {
+        routes[i] = route_with_callers(routes[i], called.contains(&lexer_rules[i].name));
+    }
     return routes;
+}
+
+/// The rules whose `try_` matcher an emitted matcher calls: reached from the
+/// dispatched rules through every body emitted statically.
+fn statically_called_rules(
+    lexer_rules: &List<LexerRule>,
+    routes: &List<LexerRuleRoute>,
+    atn_class: &TreeMap<String, i32>,
+) -> List<String> {
+    let mut emitted: List<String> = [];
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let name = &lexer_rules[i].name;
+        if routes[i].is_dispatched() && atn_class.get(*name) matches { None } {
+            emitted.push(*name);
+        }
+    }
+    let mut called: List<String> = [];
+    for let mut k = 0; k < emitted.len(); k += 1 {
+        let Some(rule) = find_lexer_rule(lexer_rules, &emitted[k]) else {
+            panic("an emitted matcher names no rule");
+        };
+        for let name of &lexer_rule_calls(rule, lexer_rules) {
+            if called.contains(name) {
+                continue;
+            }
+            called.push(*name);
+            if atn_class.get(*name) matches { None } && !emitted.contains(name) {
+                emitted.push(*name);
+            }
+        }
+    }
+    return called;
+}
+
+fn route_with_callers(route: LexerRuleRoute, called: bool) -> LexerRuleRoute {
+    return match route {
+        RecursiveFragment => if called { route } else { LexerRuleRoute::Unreached },
+        Keyword(k) => LexerRuleRoute::Keyword(LexerKeywordRoute { ..k, also_matcher: called }),
+        SharedLiteral(l) => LexerRuleRoute::SharedLiteral(LexerLiteralRoute { ..l, also_matcher: called }),
+        Subsumed(s) => LexerRuleRoute::Subsumed(LexerSubsumedRoute { ..s, also_matcher: called }),
+        Matcher | Virtual | CalledFragment | InlinedFragment | Unreached => route,
+    };
 }
 
 /// `rule`'s route, given the routes of the rules declared before it.
@@ -784,22 +880,23 @@ fn lexer_rule_route(
     if rule.is_fragment {
         return if fragment_is_recursive(rule, lexer_rules) {
             LexerRuleRoute::RecursiveFragment;
+        } else if fragment_is_callable(rule, lexer_rules) {
+            LexerRuleRoute::CalledFragment;
         } else {
             LexerRuleRoute::InlinedFragment;
         };
     }
-    let called = lexer_rule_is_called(rule, lexer_rules);
     for let kw of keywords {
         if kw.rule_name == rule.name {
-            return LexerRuleRoute::Keyword(LexerKeywordRoute { carrier: kw.carrier, also_matcher: called });
+            return LexerRuleRoute::Keyword(LexerKeywordRoute { carrier: kw.carrier });
         }
     }
     if let Some(const_name) = literal_duplicate_const(rule, lexer_rules, lit_tokens, grammar_opts, grammar_ci) {
-        return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name, also_matcher: called });
+        return LexerRuleRoute::SharedLiteral(LexerLiteralRoute { const_name });
     }
     let by = lexer_rule_subsumers(rule, earlier, lexer_rules);
     if !by.is_empty() {
-        return LexerRuleRoute::Subsumed(LexerSubsumedRoute { by, also_matcher: called });
+        return LexerRuleRoute::Subsumed(LexerSubsumedRoute { by });
     }
     return LexerRuleRoute::Matcher;
 }
@@ -896,15 +993,17 @@ fn lexer_rule_outranks(name: &String, mode: i32, earlier: &List<LexerRuleRoute>,
 /// decided separately. A mismatch would otherwise reach the user as `unknown
 /// function 'try_X'` against generated source, with no way back to the rule that
 /// asked for it — so it is caught here, where the names are still in hand.
-fn check_lexer_calls_resolve(lexer_rules: &List<LexerRule>, routes: &List<LexerRuleRoute>) {
-    for let caller of lexer_rules {
-        let mut called: List<String> = [];
-        for let alt of &caller.body {
-            for let elem of &alt.elements {
-                collect_lexer_calls(elem, lexer_rules, &mut called);
-            }
+fn check_lexer_calls_resolve(
+    lexer_rules: &List<LexerRule>,
+    routes: &List<LexerRuleRoute>,
+    atn_class: &TreeMap<String, i32>,
+) {
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let caller = &lexer_rules[i];
+        if !routes[i].has_match_fn() || atn_class.get(caller.name) matches { Some(_) } {
+            continue;
         }
-        for let name of &called {
+        for let name of &lexer_rule_calls(caller, lexer_rules) {
             let target = lexer_rules.iter_ref().position(|r| r.name == *name);
             if !target matches { Some(t) && routes[t].has_match_fn() } {
                 panic(
@@ -915,21 +1014,39 @@ fn check_lexer_calls_resolve(lexer_rules: &List<LexerRule>, routes: &List<LexerR
     }
 }
 
-/// Names `elem` reaches through a generated call rather than inlining, matching
-/// the `RuleRef` arm of `gen_lexer_elem`.
+/// The rules `rule`'s emitted body calls by their `try_` matcher, reading
+/// through the non-recursive fragments emitted along with it.
+fn lexer_rule_calls(rule: &LexerRule, all_rules: &List<LexerRule>) -> List<String> {
+    let mut out: List<String> = [];
+    for let alt of &rule.body {
+        for let elem of &alt.elements {
+            collect_lexer_calls(elem, all_rules, &mut out);
+        }
+    }
+    return out;
+}
+
+/// Names `elem` reaches through a `try_` call, matching the `RuleRef` arm of
+/// `gen_lexer_leaf`.
 fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &mut List<String>) {
     match *elem {
         RuleRef(name) => {
             if name == "EOF" {
                 return;
             }
-            let frag = find_fragment(all_rules, &name);
-            if let Some(f) = frag {
+            if let Some(f) = find_fragment(all_rules, &name) {
                 if !fragment_is_recursive(f, all_rules) {
+                    for let alt of &f.body {
+                        for let e of &alt.elements {
+                            collect_lexer_calls(e, all_rules, out);
+                        }
+                    }
                     return;
                 }
             }
-            out.push(name);
+            if !out.contains(&name) {
+                out.push(name);
+            }
         },
         Group(alts) => {
             for let alt of &alts {
@@ -943,6 +1060,14 @@ fn collect_lexer_calls(elem: &LexerElement, all_rules: &List<LexerRule>, out: &m
         _ => {
         },
     }
+}
+
+/// Whether a non-recursive fragment can be reached through a `frag_` matcher:
+/// a predicate or an action reads the caller's `start`, so it must be inlined.
+fn fragment_is_callable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
+    return !rule.body.iter_ref().any(
+        |a| lexer_alt_has_predicate_below(a, all_rules) || lexer_alt_has_any_action(a, all_rules),
+    );
 }
 
 /// Whether a fragment references itself (directly or through another
@@ -1067,14 +1192,7 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
     gen_visibility_comment(w, &rule.visibility);
-    let mut f = FnSpec::new(&fn_name);
-    if hm {
-        f.add_param("lx", "&Lexer");
-    } else {
-        f.add_param("chars", "&List<char>");
-    }
-    f.add_param("start", "i32");
-    f.set_return_type("i32");
+    let mut f = lexer_matcher_spec(&fn_name, hm);
     // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
     // generated function carry `with Foo`.
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
@@ -2181,7 +2299,7 @@ pub struct LexerCutPlan {
 }
 
 pub variant LexerElemPlan {
-    /// A group, or a non-recursive fragment inlined at this reference.
+    /// A group, or a fragment inlined at this reference.
     Body(LexerBodyPlan),
     /// A repeat inside a `~` or another repeat: no alternative around it to
     /// strand, so no suffix decision.
@@ -2190,8 +2308,108 @@ pub variant LexerElemPlan {
     /// A group, `~` or inlined fragment that consumes one char out of a set:
     /// one class test (`lexer_elem_char_set`).
     CharSet(CharClass),
+    /// A non-recursive fragment reached through its `frag_` matcher.
+    Call(LexerFragmentKey),
     /// A literal, a char class or range, `.`, `EOF`, or a rule reached by call.
     Leaf,
+}
+
+/// One `frag_` matcher: the fragment, planned in its caller's case folding and
+/// tail position.
+pub struct LexerFragmentKey {
+    pub name: String,
+    pub ci: bool,
+    /// Set only where it changes the plan, so equal bodies share one matcher.
+    pub tail: bool,
+}
+
+impl LexerFragmentKey {
+    /// Lexer rule names start uppercase, so the lowercase markers cannot collide.
+    pub fn fn_name(&self) -> String {
+        let ci = if self.ci { "ci_" } else { "" };
+        let tail = if self.tail { "tail_" } else { "" };
+        return `frag_${ci}${tail}${self.name}`;
+    }
+}
+
+pub struct LexerFragmentFn {
+    pub key: LexerFragmentKey,
+    pub plan: LexerBodyPlan,
+}
+
+/// Every `frag_` matcher the emitted `try_` matchers reach, directly or through
+/// another `frag_` matcher, in first-reached order.
+pub fn lexer_fragment_fns(
+    lexer_rules: &List<LexerRule>,
+    routes: &List<LexerRuleRoute>,
+    grammar_opts: &List<GrammarOption>,
+    atn_class: &TreeMap<String, i32>,
+) -> List<LexerFragmentFn> {
+    let mut keys: List<LexerFragmentKey> = [];
+    for let mut i = 0; i < lexer_rules.len(); i += 1 {
+        let rule = &lexer_rules[i];
+        if routes[i].has_match_fn() && atn_class.get(rule.name) matches { None } {
+            collect_body_calls(&lexer_rule_plan(rule, lexer_rules, grammar_opts), &mut keys);
+        }
+    }
+    let mut out: List<LexerFragmentFn> = [];
+    for let mut i = 0; i < keys.len(); i += 1 {
+        let key = keys[i];
+        let Some(f) = find_fragment(lexer_rules, &key.name) else {
+            panic("a fragment call names no fragment");
+        };
+        let plan = plan_body(&f.body, lexer_rules, key.ci, key.tail);
+        collect_body_calls(&plan, &mut keys);
+        out.push(LexerFragmentFn { key, plan });
+    }
+    return out;
+}
+
+fn collect_body_calls(plan: &LexerBodyPlan, out: &mut List<LexerFragmentKey>) {
+    match plan {
+        Single(seq) => collect_seq_calls(seq, out),
+        Alts(ap) => {
+            for let arm of &ap.arms {
+                collect_seq_calls(arm, out);
+            }
+        },
+    }
+}
+
+fn collect_seq_calls(plan: &LexerSeqPlan, out: &mut List<LexerFragmentKey>) {
+    for let step of &plan.steps {
+        match step {
+            Repeat(rp) => {
+                collect_elem_calls(&rp.inner, out);
+                if let Some(cut) = &rp.rest {
+                    collect_seq_calls(&cut.plan, out);
+                }
+            },
+            Group(gp) => match &gp.shape {
+                Scored(arms) => {
+                    for let arm of arms {
+                        collect_seq_calls(arm, out);
+                    }
+                },
+                FirstMatch(body) => collect_body_calls(body, out),
+            },
+            Elem(ep) => collect_elem_calls(ep, out),
+        }
+    }
+}
+
+fn collect_elem_calls(plan: &LexerElemPlan, out: &mut List<LexerFragmentKey>) {
+    match plan {
+        Body(body) => collect_body_calls(body, out),
+        PlainRepeat(nested) | Not(nested) => collect_elem_calls(&nested.inner, out),
+        Call(key) => {
+            if !out.contains(key) {
+                out.push(*key);
+            }
+        },
+        CharSet(_) | Leaf => {
+        },
+    }
 }
 
 /// A variant cannot carry itself directly.
@@ -2290,12 +2508,16 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
             inner: plan_elem(&rep.element, all_rules, ci, false),
         }),
         Not(n) => LexerElemPlan::Not(LexerNestedPlan { inner: plan_elem(&n.element, all_rules, ci, false) }),
-        // A non-recursive fragment is inlined at the reference, carrying this
-        // site's tail position; a recursive one keeps its own matcher and is
-        // reached by call, as `EOF` and a non-fragment rule are.
+        // A non-recursive fragment is planned in this site's case folding and
+        // tail position; a recursive one keeps its own matcher and is reached by
+        // call, as `EOF` and a non-fragment rule are.
         RuleRef(name) => match find_fragment(all_rules, &name) {
             Some(f) => if fragment_is_recursive(f, all_rules) {
                 LexerElemPlan::Leaf;
+            } else if fragment_is_callable(f, all_rules) {
+                let tail_changes_plan = tail
+                    && plan_body(&f.body, all_rules, ci, true) != plan_body(&f.body, all_rules, ci, false);
+                LexerElemPlan::Call(LexerFragmentKey { name, ci, tail: tail_changes_plan });
             } else {
                 LexerElemPlan::Body(plan_body(&f.body, all_rules, ci, tail));
             },
@@ -2837,6 +3059,129 @@ fn ranges_minus(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i32]> 
     return out;
 }
 
+/// Expansion steps `lexer_second_chars` takes before it answers "unknown", which
+/// is what bounds a loop over a repeat whose body can match empty.
+global SECOND_CHARS_BUDGET: i32 = 64;
+
+/// What a token can hold after its first char: the code points its second
+/// position admits, and whether it can end after one char.
+struct SecondChars {
+    ranges: List<[i32, i32]>,
+    may_end: bool,
+}
+
+/// `SecondChars` of a rule body, or null when some path is unknown.
+fn lexer_second_chars(alts: &List<LexerAlternative>, all_rules: &List<LexerRule>, ci: bool) -> Option<SecondChars> {
+    let mut budget = SECOND_CHARS_BUDGET;
+    let mut acc = SecondChars { ranges: [], may_end: false };
+    for let alt of alts {
+        if !add_second_chars(&alt.elements, all_rules, ci, &mut budget, &mut acc) {
+            return null;
+        }
+    }
+    return Option::Some(acc);
+}
+
+/// Adds to `acc` what can follow the first char `elements` consume. False when
+/// that is unknown.
+fn add_second_chars(
+    elements: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    budget: &mut i32,
+    acc: &mut SecondChars,
+) -> bool {
+    *budget -= 1;
+    if *budget < 0 {
+        return false;
+    }
+    if elements.is_empty() {
+        return true;
+    }
+    let rest = lexer_seq_from(elements, 1);
+    return match elements[0] {
+        Literal(text) => {
+            let chars: List<char> = text.chars().collect();
+            if chars.is_empty() {
+                return add_second_chars(&rest, all_rules, ci, budget, acc);
+            }
+            if chars.len() == 1 {
+                return add_following_chars(&rest, all_rules, ci, acc);
+            }
+            for let r of &folded_ranges(chars[1], chars[1], ci) {
+                acc.ranges.push(*r);
+            }
+            true;
+        },
+        CharRange(_) | CharClass(_) | AnyChar | Not(_) => add_following_chars(&rest, all_rules, ci, acc),
+        Group(alts) => add_alts_second_chars(&alts, &rest, all_rules, ci, budget, acc),
+        RuleRef(name) => match find_lexer_rule(all_rules, &name) {
+            Some(r) => add_alts_second_chars(&r.body, &rest, all_rules, ci, budget, acc),
+            None => false,
+        },
+        Repeat(rep) => {
+            let mut taken: List<LexerElement> = [rep.element];
+            if !rep.kind matches { Optional } {
+                taken.push(LexerElement::Repeat(LexerRepeatElement { ..rep, kind: RepeatKind::Star }));
+            }
+            for let e of &rest {
+                taken.push(*e);
+            }
+            let skipped = rep.kind matches { Plus } || add_second_chars(&rest, all_rules, ci, budget, acc);
+            skipped && add_second_chars(&taken, all_rules, ci, budget, acc);
+        },
+    };
+}
+
+fn add_alts_second_chars(
+    alts: &List<LexerAlternative>,
+    rest: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    budget: &mut i32,
+    acc: &mut SecondChars,
+) -> bool {
+    for let alt of alts {
+        let mut seq = alt.elements;
+        for let e of rest {
+            seq.push(*e);
+        }
+        if !add_second_chars(&seq, all_rules, ci, budget, acc) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Adds to `acc` the chars `rest` can begin with, once one char is consumed.
+fn add_following_chars(
+    rest: &List<LexerElement>,
+    all_rules: &List<LexerRule>,
+    ci: bool,
+    acc: &mut SecondChars,
+) -> bool {
+    let mut visiting: List<String> = [];
+    let Some(lead) = lexer_seq_leading_chars(rest, all_rules, ci, /*follow_refs=*/ true, &mut visiting) else {
+        return false;
+    };
+    if lead.nullable {
+        acc.may_end = true;
+    }
+    let ranges = if lead.negated { ranges_minus(&[[0, 0x10FFFF]], &lead.ranges) } else { lead.ranges };
+    for let r of &ranges {
+        acc.ranges.push(*r);
+    }
+    return true;
+}
+
+fn lexer_seq_from(elements: &List<LexerElement>, from: i32) -> List<LexerElement> {
+    let mut out: List<LexerElement> = [];
+    for let mut i = from; i < elements.len(); i += 1 {
+        out.push(elements[i]);
+    }
+    return out;
+}
+
 fn ranges_intersect(a: &List<[i32, i32]>, b: &List<[i32, i32]>) -> List<[i32, i32]> {
     let mut out: List<[i32, i32]> = [];
     for let x of a {
@@ -3281,8 +3626,15 @@ fn gen_lexer_elem<S: AsStrSlice>(
             gen_lexer_not(w, not_elem, &nested.inner, all_rules, fail_action, ci, ea, hm);
         },
         CharSet(set) => gen_char_class(w, set, fail_action),
+        Call(key) => gen_lexer_call(w, &key.fn_name(), fail_action, hm),
         Leaf => gen_lexer_leaf(w, elem, fail_action, ci, hm),
     }
+}
+
+fn gen_lexer_call<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, fn_name: S, fail_action: S1, hm: bool) {
+    let call_ctx = if hm { "lx" } else { "chars" };
+    w.line(`pos = ${fn_name}(${call_ctx}, pos);`);
+    w.line(`if pos < 0 { ${fail_action}; }`);
 }
 
 /// The alternatives a `Body` plan covers: a group's own, or the body of the
@@ -3303,7 +3655,6 @@ fn elem_inlined_body(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<L
 /// An element the emit consumes without descending into it: a literal, a char
 /// class or range, `.`, `EOF`, or a rule reached by its own `try_*` fn.
 fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_action: S, ci: bool, hm: bool) {
-    let call_ctx = if hm { "lx" } else { "chars" };
     match *elem {
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
@@ -3334,9 +3685,7 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
             if name == "EOF" {
                 w.line(`if pos < chars.len() { ${fail_action}; }`);
             } else {
-                let fn_name = lexer_try_fn_name(&name);
-                w.line(`pos = ${fn_name}(${call_ctx}, pos);`);
-                w.line(`if pos < 0 { ${fail_action}; }`);
+                gen_lexer_call(w, &lexer_try_fn_name(&name), fail_action, hm);
             }
         },
         Group(_) | Repeat(_) | Not(_) => panic("a composite element planned as a leaf"),
@@ -4384,6 +4733,9 @@ struct TryCall {
     /// of these always produces a match, which is what lets the catch-all stay
     /// out of it.
     total_on_first_char: bool,
+    /// What the match can hold after its first char, for the second-char
+    /// dispatch. Null when unknown.
+    second_chars: Option<SecondChars>,
     /// Index of this rule's `apply_<rule>_actions` replay, or -1 when the rule
     /// runs no `{ ... }` action. When the rule wins the tournament, its winner
     /// block records `best_act = act_index` so the commit dispatches the replay.
@@ -4526,6 +4878,7 @@ fn build_rule_try_call(
         is_wildcard: is_wc,
         is_catch_all: catch_all,
         total_on_first_char: lexer_rule_total_on_first_char(rule, all_rules),
+        second_chars: lexer_second_chars(&rule.body, all_rules, ci),
     };
 }
 
@@ -4843,7 +5196,8 @@ fn build_mode_try_calls(
     if mode == 0 {
         for let lit of lit_tokens {
             let fn_name = lit_try_fn_name(&lit.const_name);
-            let c = lit.text.chars().next().unwrap();
+            let text: List<char> = lit.text.chars().collect();
+            let c = text[0];
             let mut fc: List<[char, char]> = [];
             let mut fc_seen = TreeSet::<i64>::new();
             // Parser literals inherit grammar-level caseInsensitive.
@@ -4865,7 +5219,12 @@ fn build_mode_try_calls(
                 first_chars: fc,
                 is_wildcard: false,
                 is_catch_all: false,
-                total_on_first_char: lit.text.chars().count() == 1,
+                total_on_first_char: text.len() == 1,
+                second_chars: Option::Some(if text.len() == 1 {
+                    SecondChars { ranges: [], may_end: true };
+                } else {
+                    SecondChars { ranges: folded_ranges(text[1], text[1], grammar_ci), may_end: false };
+                }),
             });
         }
     }
@@ -4905,7 +5264,7 @@ fn gen_dispatch_groups(
         w.begin("match first_char");
         for let g of groups {
             w.begin(`${g.pattern} =>`);
-            gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
+            gen_second_char_dispatch(w, calls, &g.calls, needs_extras, has_actions, has_members);
             w.end_with(",");
         }
         // `char` has no finite case list, so the arms alone never exhaust it.
@@ -4920,6 +5279,85 @@ fn gen_dispatch_groups(
         gen_group_calls(w, calls, &last_resort, needs_extras, has_actions, has_members);
         w.end();
     }
+}
+
+/// One first-char arm's calls, split again on the second char when that leaves
+/// some calls out: `/` need not try `/*` comments before `/=`.
+fn gen_second_char_dispatch(
+    w: &mut CodeWriter,
+    calls: &List<TryCall>,
+    members: &List<i32>,
+    needs_extras: bool,
+    has_actions: bool,
+    has_members: bool,
+) {
+    let arms = second_char_arms(calls, members);
+    if !arms.iter_ref().any(|a| a.calls.len() < members.len()) {
+        gen_group_calls(w, calls, members, needs_extras, has_actions, has_members);
+        return;
+    }
+    // Past the end, only a call that can end after one char matches, and the
+    // NUL a missing char reads as runs every such call whichever arm it lands in.
+    w.line("let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\\u{0}' };");
+    w.begin("match second_char");
+    for let arm of &arms {
+        w.begin(`${arm.pattern} =>`);
+        gen_group_calls(w, calls, &arm.calls, needs_extras, has_actions, has_members);
+        w.end_with(",");
+    }
+    w.end();
+}
+
+/// A partition of the second char among `members`, each arm keeping grammar
+/// order. A call whose second char is unknown, or that can end after the first,
+/// is in every arm; the `_` arm holds only those.
+fn second_char_arms(calls: &List<TryCall>, members: &List<i32>) -> List<DispatchGroup> {
+    let mut cuts = TreeSet::<i32>::new();
+    for let m of members {
+        if let Some(s) = &calls[*m].second_chars && !s.may_end {
+            for let r of &s.ranges {
+                cuts.insert(r.0);
+                cuts.insert(r.1 + 1);
+            }
+        }
+    }
+    let mut points: List<i32> = cuts.into_iter().collect();
+    points.sort();
+    let mut arms: List<DispatchGroup> = [];
+    let mut arm_by_calls = TreeMap::<List<i32>, i32>::new();
+    for let mut i = 0; i + 1 < points.len(); i += 1 {
+        let mut spans: List<CharRange> = [];
+        clip_to_scalars(&mut spans, points[i], points[i + 1] - 1);
+        if spans.is_empty() {
+            continue;
+        }
+        let at = points[i];
+        let arm_calls: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], at)).collect();
+        let pattern = spans.iter_ref().map(|s| char_pat(s.start, s.end)).collect().join(" | ");
+        if let Some(ai) = arm_by_calls.get(arm_calls) {
+            arms[ai].pattern.push_str(` | ${pattern}`);
+        } else {
+            arm_by_calls[arm_calls] = arms.len();
+            arms.push(DispatchGroup { pattern, calls: arm_calls });
+        }
+    }
+    let rest: List<i32> = members.iter_value().filter(|m| second_char_admits(&calls[m], -1)).collect();
+    let covers_every_char = !points.is_empty() && points[0] == 0 && points[points.len() - 1] == 0x110000;
+    if covers_every_char && !arms.iter_ref().any(|a| a.calls == rest) {
+        return arms;
+    }
+    let mut out: List<DispatchGroup> = arms.into_iter().filter(|a| a.calls != rest).collect();
+    out.push(DispatchGroup { pattern: String::from(FALLBACK_PATTERN), calls: rest });
+    return out;
+}
+
+/// Whether `call` can hold code point `at` second; -1 asks for a char no
+/// bounded set names.
+fn second_char_admits(call: &TryCall, at: i32) -> bool {
+    let Some(s) = &call.second_chars else {
+        return true;
+    };
+    return s.may_end || s.ranges.iter_ref().any(|r| r.0 <= at && at <= r.1);
 }
 
 fn gen_group_calls(
