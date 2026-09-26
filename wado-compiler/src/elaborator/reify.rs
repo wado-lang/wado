@@ -35,7 +35,7 @@ use super::coercion::{
 use super::expr::UnionSource;
 use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
-use super::tysys::{Identity, TypeSystem};
+use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
@@ -78,7 +78,7 @@ use crate::name::{
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::builtin_call;
-use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64};
+use crate::synthesis::common::{handle_bits, handle_from_f64, handle_to_f64, not_expr};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -329,14 +329,7 @@ fn bare_break(span: Span) -> TirStmt {
 
 /// `if !cond { break; }`, a loop's exit test.
 fn break_unless(cond: TirExpr, cond_span: Span, span: Span) -> TirStmt {
-    let neg_cond = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Not,
-            expr: Box::new(cond),
-        },
-        TypeTable::BOOL,
-        cond_span,
-    );
+    let neg_cond = not_expr(cond, cond_span);
     TirStmt::new(
         TirStmtKind::If {
             condition: neg_cond,
@@ -3419,14 +3412,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cond_type,
             span,
         );
-        let neg_cond = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Not,
-                expr: Box::new(cond_ref),
-            },
-            TypeTable::BOOL,
-            span,
-        );
+        let neg_cond = not_expr(cond_ref, span);
 
         // Header + `condition: <source>` + one `<label>: <text>` line per
         // emitted slot.
@@ -4748,15 +4734,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |expr, hint| self.reify_expr(expr, ctx, hint),
                 |expr| expr.type_id,
             )
-        } else if matches!(
-            binary.op,
-            ast::BinaryOp::Eq
-                | ast::BinaryOp::NotEq
-                | ast::BinaryOp::Lt
-                | ast::BinaryOp::LtEq
-                | ast::BinaryOp::Gt
-                | ast::BinaryOp::GtEq
-        ) && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
+        } else if binary.op.is_comparison()
+            && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
             && !Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
@@ -4767,27 +4746,37 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let right = self.reify_expr(&binary.right, ctx, None);
             (left, right)
         };
+        self.reify_binary_op(
+            binary.id,
+            binary.op,
+            left,
+            right,
+            recorded_type,
+            binary.span,
+        )
+    }
 
-        if let Some(identity) = self
-            .tysys
-            .identity_of(binary.op, left.type_id, right.type_id)
-        {
-            return self.identity_comparison(identity, binary.op, left, right, binary.span);
+    /// `left OP right` for the operator node `id`: the trait call the
+    /// elaborator recorded for it, else the native operation.
+    fn reify_binary_op(
+        &mut self,
+        id: ast::AstId,
+        op: ast::BinaryOp,
+        left: TirExpr,
+        right: TirExpr,
+        recorded_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        if self.tysys.compares_handles(op, left.type_id, right.type_id) {
+            return handle_comparison(op, left, right, span);
         }
 
-        if let Some(dispatch) = self.ann_operator_dispatch(binary.id) {
-            let call = self.binary_operator_call(dispatch, left, right, binary.span);
+        if let Some(dispatch) = self.ann_operator_dispatch(id) {
+            let call = self.binary_operator_call(dispatch, left, right, span);
             // `!=` negates `eq`, and an ordering operator reads `cmp`'s
             // `Ordering`; an `OperatorOrd` method already answers a `bool`.
-            return match binary.op {
-                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Not,
-                        expr: Box::new(call),
-                    },
-                    TypeTable::BOOL,
-                    binary.span,
-                ),
+            return match op {
+                ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => not_expr(call, span),
                 ast::BinaryOp::Lt
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
@@ -4799,26 +4788,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             .borrow_mut()
                             .make_compiler_enum(CompilerItem::Ordering) =>
                 {
-                    ord_bool_from_cmp(call, binary.op, binary.span, &self.tysys.type_table)
+                    ord_bool_from_cmp(call, op, span, &self.tysys.type_table)
                 }
                 _ => call,
             };
         }
 
-        // Native binary op — primitive path. The op mapping is 1:1 with the
-        // AST. Ref-equality (`RefEq` / `RefNotEq`) is synthesised by the
-        // elaborator after type analysis; until that decision is recorded,
-        // reify emits the source-level op verbatim. That affects only the
-        // `==` / `!=` path on ref types; other ops on refs are already
-        // diagnosed by annotate.
         TirExpr::new(
             TirExprKind::Binary {
                 left: Box::new(left),
-                op: ast_binary_op_to_tir(binary.op),
+                op: ast_binary_op_to_tir(op),
                 right: Box::new(right),
             },
             recorded_type,
-            binary.span,
+            span,
         )
     }
 
@@ -5794,64 +5777,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// One link of a comparison chain. A non-primitive operand stays a
-    /// `Binary`, which monomorphization turns into its `Eq` / `Ord` call.
-    fn chain_comparison(
-        &mut self,
-        op: ast::BinaryOp,
-        left: TirExpr,
-        right: TirExpr,
-        span: Span,
-    ) -> TirExpr {
-        if let Some(identity) = self.tysys.identity_of(op, left.type_id, right.type_id) {
-            return self.identity_comparison(identity, op, left, right, span);
-        }
-        TirExpr::new(
-            TirExprKind::Binary {
-                left: Box::new(left),
-                op: ast_binary_op_to_tir(op),
-                right: Box::new(right),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    }
-
-    /// `==` / `!=` by identity: `ref.eq` on references, bit equality on
-    /// resource handles.
-    fn identity_comparison(
-        &mut self,
-        identity: Identity,
-        op: ast::BinaryOp,
-        left: TirExpr,
-        right: TirExpr,
-        span: Span,
-    ) -> TirExpr {
-        let is_eq = op == ast::BinaryOp::Eq;
-        let (op, left, right) = match identity {
-            Identity::Reference if is_eq => (TirBinaryOp::RefEq, left, right),
-            Identity::Reference => (TirBinaryOp::RefNotEq, left, right),
-            Identity::Handle => (
-                if is_eq {
-                    TirBinaryOp::Eq
-                } else {
-                    TirBinaryOp::NotEq
-                },
-                handle_bits(left),
-                handle_bits(right),
-            ),
-        };
-        TirExpr::new(
-            TirExprKind::Binary {
-                op,
-                left: Box::new(left),
-                right: Box::new(right),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    }
-
     /// Reify a comparison chain `a < b < c …` into
     /// `let $m0 = a; let $m1 = b; ($m0 < $m1) & ($m1 < c) …`.
     fn reify_comparison_chain(
@@ -5872,8 +5797,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let first_ref = Self::bind_chain_operand(0, first_tir, &mut stmts, chain.span, ctx);
         let right0_ref = Self::bind_chain_operand(1, right0_tir, &mut stmts, chain.span, ctx);
 
-        let mut acc_tir =
-            self.chain_comparison(cmp0.op, first_ref, right0_ref.clone(), cmp0.op_span);
+        let mut acc_tir = self.reify_binary_op(
+            cmp0.id,
+            cmp0.op,
+            first_ref,
+            right0_ref.clone(),
+            TypeTable::BOOL,
+            cmp0.op_span,
+        );
         let mut prev_tir = right0_ref;
 
         let last_idx = chain.comparisons.len() - 1;
@@ -5886,7 +5817,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 Self::bind_chain_operand(idx + 1, raw_right, &mut stmts, chain.span, ctx)
             };
             let next_prev = right_tir.clone();
-            let cmp_tir = self.chain_comparison(cmp.op, prev_tir, right_tir, cmp.op_span);
+            let cmp_tir = self.reify_binary_op(
+                cmp.id,
+                cmp.op,
+                prev_tir,
+                right_tir,
+                TypeTable::BOOL,
+                cmp.op_span,
+            );
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),
@@ -10331,6 +10269,25 @@ fn build_int128_from_intermediate(
     )
 }
 
+/// `==` / `!=` on unrestricted resource handles: bit equality, since the host
+/// interns them.
+fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
+    let op = if op == ast::BinaryOp::Eq {
+        TirBinaryOp::Eq
+    } else {
+        TirBinaryOp::NotEq
+    };
+    TirExpr::new(
+        TirExprKind::Binary {
+            op,
+            left: Box::new(handle_bits(left)),
+            right: Box::new(handle_bits(right)),
+        },
+        TypeTable::BOOL,
+        span,
+    )
+}
+
 /// Wrap an `Ord::cmp` call into a `bool` by comparing the returned
 /// `Ordering` variant against the one that makes the operator true:
 /// `<` → `cmp == Less`, `>` → `cmp == Greater`,
@@ -10558,9 +10515,8 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
 }
 
 /// Map an AST [`ast::BinaryOp`] to its TIR counterpart. The mapping is
-/// 1:1 for the source-level ops; TIR adds `RefEq` / `RefNotEq` as
-/// internal variants that the elaborator only synthesises after
-/// coercion analysis, so reify never produces them from this helper.
+/// 1:1 for the source-level ops; TIR adds `RefNotEq` as an internal
+/// variant that lowering synthesises, so this helper never produces it.
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
     match op {
         ast::BinaryOp::Add => TirBinaryOp::Add,

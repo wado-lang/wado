@@ -16,7 +16,7 @@ use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
 use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::replace_on_assign_place;
 use super::types::{FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError};
-use super::tysys::{Identity, TypeSystem};
+use super::tysys::TypeSystem;
 use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
@@ -162,17 +162,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
         } else {
-            let is_comparison = matches!(
-                op,
-                BinaryOp::Eq
-                    | BinaryOp::NotEq
-                    | BinaryOp::Lt
-                    | BinaryOp::LtEq
-                    | BinaryOp::Gt
-                    | BinaryOp::GtEq
-            );
-            let left_lit = is_comparison && Self::takes_shape_from_expected_type(left_ast);
-            let right_lit = is_comparison && Self::takes_shape_from_expected_type(right_ast);
+            let left_lit = op.is_comparison() && Self::takes_shape_from_expected_type(left_ast);
+            let right_lit = op.is_comparison() && Self::takes_shape_from_expected_type(right_ast);
             if left_lit && !right_lit {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
@@ -184,7 +175,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (left, right)
             } else {
                 let left = self.resolve_expr(left_ast, ctx, expected_type);
-                let right_expected = if is_comparison && left != TypeTable::ERROR {
+                let right_expected = if op.is_comparison() && left != TypeTable::ERROR {
                     Some(left)
                 } else {
                     expected_type
@@ -309,7 +300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Shared between [`Self::resolve_binary`] (the user-AST entry point)
     /// and elaborator-internal callers like
     /// [`Self::desugar_comparison_chain`] / [`Self::resolve_compound_assign`]
-    /// that have already resolved both sides. Handles ref-equality,
+    /// that have already resolved both sides. Handles resource-handle equality,
     /// trait dispatch for non-primitive comparison / arithmetic / shift,
     /// flags-arith rejection, float-`%` rejection, and the trailing
     /// requires-trait diagnostic.
@@ -326,32 +317,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.tysys.type_table.borrow().get(left).clone();
 
-        // Reify rebuilds an identity `==` / `!=` from the AST; project only the type.
-        if let Some(identity) = self.tysys.identity_of(op, left, right) {
-            if matches!(identity, Identity::Reference)
-                && left != right
-                && left != TypeTable::ERROR
-                && right != TypeTable::ERROR
-            {
-                let type_table = self.tysys.type_table.borrow();
-                let (left_name, right_name) = type_table.type_names_for_mismatch(left, right);
-                if left_name != right_name {
-                    let _ = self.emit(TypeError::TypeMismatch {
-                        expected: left_name,
-                        found: right_name,
-                        span,
-                    });
-                }
-            }
+        // Reify rebuilds a handle `==` / `!=` from the AST; project only the type.
+        if self.tysys.compares_handles(op, left, right) {
             return TypeTable::BOOL;
         }
 
-        // A reference compares by identity alone, so every other operator on a
-        // pair of them is rejected. A mixed pair (`&i32 == i32`) falls through.
+        let is_comparison = op.is_comparison();
+
+        if is_comparison
+            && let Some((resolved, receiver)) = self.resolve_ref_comparison(left, op, right)
+        {
+            let call = self.dispatch_trait_op_method(
+                receiver,
+                vec![(right, right_span)],
+                &resolved,
+                origin,
+            );
+            // Reify rebuilds `!=` and an ordering from `eq` / `cmp`.
+            return if call == TypeTable::ERROR {
+                TypeTable::ERROR
+            } else {
+                TypeTable::BOOL
+            };
+        }
+
+        // A pair of references has only the operators an impl for the
+        // reference writes, as `Eq for &T` does. A mixed pair (`&i32 == i32`)
+        // falls through.
         let both_refs = matches!(
             (&left_type, self.tysys.type_table.borrow().get(right)),
-            (ResolvedType::Ref(_), ResolvedType::Ref(_))
-                | (ResolvedType::MutRef(_), ResolvedType::MutRef(_))
+            (
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            )
         );
         if both_refs {
             let type_name = self.tysys.type_table.borrow().type_name(left);
@@ -364,32 +362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        let is_comparison = matches!(
-            op,
-            BinaryOp::Eq
-                | BinaryOp::NotEq
-                | BinaryOp::Lt
-                | BinaryOp::LtEq
-                | BinaryOp::Gt
-                | BinaryOp::GtEq
-        );
-
         if is_comparison {
-            if let Some(resolved) = self.resolve_ref_comparison(left, op, right) {
-                let call = self.dispatch_trait_op_method(
-                    left,
-                    vec![(right, right_span)],
-                    &resolved,
-                    origin,
-                );
-                // Reify rebuilds `!=` and an ordering from `eq` / `cmp`.
-                return if call == TypeTable::ERROR {
-                    TypeTable::ERROR
-                } else {
-                    TypeTable::BOOL
-                };
-            }
-
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
@@ -1600,7 +1573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             right0_tir,
             cmp0.right.span(),
             cmp0.op_span,
-            None,
+            Some(cmp0.id),
         );
         let mut prev = right0_tir;
 
@@ -1614,8 +1587,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if idx != last_idx {
                 self.bind_chain_operand(idx + 1, right, ctx);
             }
-            let cmp_type =
-                self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
+            let cmp_type = self.resolve_binary_op(
+                prev,
+                cmp.op,
+                right,
+                cmp.right.span(),
+                cmp.op_span,
+                Some(cmp.id),
+            );
             // The `&` joining two comparisons is synthesised, so its right
             // operand is the comparison the chain just built, not written text.
             acc = self.resolve_binary_op(
@@ -1676,21 +1655,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_trait_method_for_op(struct_name, lookup_type_id, trait_, method, rhs)
     }
 
-    /// A comparison of a reference with a value, answered by an impl written
-    /// for the reference itself and chosen by the right operand, as a generic
-    /// body instantiated at `&T` dispatches. `None` leaves the pair to the
+    /// A comparison of a reference, answered by an impl written for the
+    /// reference itself and chosen by the right operand, as a generic body
+    /// instantiated at `&T` dispatches. A pair of references reaches the
+    /// prelude's `Eq for &T`, which compares the pointees. Answers the method
+    /// and the receiver it is dispatched on. `None` leaves the pair to the
     /// rules for values: nothing here dereferences the left operand.
     fn resolve_ref_comparison(
         &mut self,
         left: TypeId,
         op: BinaryOp,
         right: TypeId,
-    ) -> Option<ResolvedTraitMethod> {
+    ) -> Option<(ResolvedTraitMethod, TypeId)> {
         let kind = RefKind::from_resolved(self.tysys.type_table.borrow().get(left))?;
-        // A pair of references is identity's question, never an impl's.
-        if self.tysys.pointee_of(right).is_some() {
-            return None;
-        }
         let item = match op {
             BinaryOp::Eq | BinaryOp::NotEq => CompilerItem::Eq,
             BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => CompilerItem::Ord,
@@ -1699,9 +1676,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_ = self.tysys.compiler_trait_def(item)?;
         let method = self.tysys.operator_method_name(item);
         // `&mut X` coerces to `&X`, so a block for `&X` answers where none
-        // for `&mut X` does.
-        let shared = (kind == RefKind::Mut).then_some(RefKind::Shared);
-        let (kind, info) = std::iter::once(kind).chain(shared).find_map(|kind| {
+        // for `&mut X` does. A `&` right operand never coerces to `&mut`, so
+        // there the `&X` block goes first: `&mut a == &b` compares as `&a == &b`.
+        let right_is_shared = matches!(
+            self.tysys.type_table.borrow().get(right),
+            ResolvedType::Ref(_)
+        );
+        let kinds: &[RefKind] = match kind {
+            RefKind::Shared => &[RefKind::Shared],
+            RefKind::Mut if right_is_shared => &[RefKind::Shared, RefKind::Mut],
+            RefKind::Mut => &[RefKind::Mut, RefKind::Shared],
+        };
+        let (kind, info) = kinds.iter().find_map(|&kind| {
             let info = self.find_operator_impl_on(
                 &ImplTargetKey::Ref(kind),
                 left,
@@ -1711,14 +1697,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )?;
             Some((kind, info))
         })?;
+        // The block's `Self` is the reference it is written for, which a
+        // coerced `&mut` left operand is not.
+        let receiver = if kind == RefKind::Shared {
+            let pointee = self.tysys.pointee_of(left).expect("`left` is a reference");
+            self.tysys.type_table.borrow_mut().make_ref(pointee)
+        } else {
+            left
+        };
         let found = OperatorImpl {
             info,
             impl_name: kind.prefix().to_string(),
-            impl_type_id: left,
+            impl_type_id: receiver,
         };
         let mut resolved = ResolvedTraitMethod::of_operator_impl(&self.tysys, found, &method);
         resolved.return_type = self.tysys.auto_derive_return_type(item);
-        Some(resolved)
+        Some((resolved, receiver))
     }
 
     /// An operator on a type parameter, dispatched through its bounds. `None`
@@ -1910,9 +1904,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // When the operator-dispatch request carries a source AST id in
         // `origin`, record the dispatch decision so reify can re-emit the
         // same method-call TIR for the binary / index expression.
-        // Synthesised callers (e.g. `desugar_comparison_chain`'s inner
-        // comparisons) pass `None` and the record is skipped — they have
-        // no source-level `BinaryExpr` reify would key on.
+        // Synthesised callers (e.g. the `&` joining a comparison chain's
+        // links) pass `None` and the record is skipped — they have no
+        // source-level node reify would key on.
         if let Some(ast_id) = origin {
             self.record_operator_dispatch(
                 ast_id,

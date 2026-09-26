@@ -693,6 +693,19 @@ impl FunctionTranslator<'_, '_> {
                 })
             }
 
+            // A reference to a resource is its handle, not a GC reference
+            // (divergence D6 in the reference-representation WEP).
+            "ref_eq" => Some(
+                match self
+                    .ctx
+                    .type_id_to_wir_type(self.type_table, self.operand_type_id(args[0].expr))
+                {
+                    WirType::I32 => binary!(self, args, WirInstr::I32Eq),
+                    WirType::I64 => binary!(self, args, WirInstr::I64Eq),
+                    _ => binary!(self, args, WirInstr::RefEq),
+                },
+            ),
+
             _ if MULTIVALUE_I64_BUILTINS.contains(&builtin_name) => {
                 let instr = self.translate_multivalue_i64_builtin(builtin_name, args);
                 Some(self.wrap_multivalue_i64(instr, result_type_id))
@@ -762,7 +775,6 @@ impl FunctionTranslator<'_, '_> {
             "f32_min" => binary!(self, args, WirInstr::F32Min),
             "f32_max" => binary!(self, args, WirInstr::F32Max),
             "f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
-            "ref_eq" => binary!(self, args, WirInstr::RefEq),
             "black_box" => unary!(self, args, WirInstr::BlackBox),
             "is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);

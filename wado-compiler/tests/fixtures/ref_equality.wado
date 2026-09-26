@@ -1,42 +1,134 @@
-// Reference equality uses ref.eq (identity comparison)
+// `==` on references compares what they point to, as in Rust; `ref_eq`
+// compares identity.
+use { Fields } from "wasi:http";
+
 struct Point {
     x: i32,
     y: i32,
 }
 
-test "same reference is equal" {
-    let p = Point { x: 1, y: 2 };
-    let r1 = &p;
-    let r2 = &p;
-    assert r1 == r2;
-}
-
-test "different references are not equal" {
+test "references to equal values are equal" {
     let p1 = Point { x: 1, y: 2 };
     let p2 = Point { x: 1, y: 2 };
     let r1 = &p1;
     let r2 = &p2;
-    assert r1 != r2;
+    assert r1 == r2;
+    assert !ref_eq(r1, r2);
+}
+
+test "references to different values are not equal" {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 1, y: 3 };
+    assert &p1 != &p2;
+}
+
+test "same reference is identical" {
+    let p = Point { x: 1, y: 2 };
+    let r1 = &p;
+    let r2 = &p;
+    assert r1 == r2;
+    assert ref_eq(r1, r2);
 }
 
 test "mut ref equality" {
     let mut p = Point { x: 1, y: 2 };
+    let q = Point { x: 1, y: 2 };
     let r1 = &mut p;
     let r2 = &mut p;
     assert r1 == r2;
+    assert ref_eq(r1, r2);
+    assert r1 == &q;
+    assert !ref_eq(r1, &q);
+}
+
+test "a `&mut` operand compares with a `&` one either way round" {
+    let mut p = Point { x: 1, y: 2 };
+    let mut q = Point { x: 1, y: 2 };
+    let r = Point { x: 0, y: 2 };
+    assert &p == &mut q;
+    assert &mut p == &q;
+    assert &mut p == &mut q;
+    assert &r != &mut q;
+    assert &mut q != &r;
+    let mut i = 3;
+    let j = 3;
+    assert &j == &mut i;
+    assert &mut i == &j;
 }
 
 test "primitive ref equality" {
     let x = 42;
-    let r1 = &x;
-    let r2 = &x;
-    assert r1 == r2;
-}
-
-test "primitive ref inequality" {
-    let x = 42;
     let y = 42;
+    let z = 7;
     let r1 = &x;
     let r2 = &y;
-    assert r1 != r2;
+    assert r1 == r2;
+    assert r1 != &z;
+    assert ref_eq(r1, &x);
+    assert !ref_eq(r1, r2);
+}
+
+test "reference to reference" {
+    let a: String = "a";
+    let b: String = "a";
+    let ra = &a;
+    let rb = &b;
+    assert &ra == &rb;
+}
+
+test "a reference to a resource is identical only to its own resource" {
+    let a = Fields::new();
+    let b = Fields::new();
+    let ra = &a;
+    assert ref_eq(ra, &a);
+    assert !ref_eq(&a, &b);
+}
+
+test "a reference to a replace-on-assign element or field points to a copy" {
+    let mut xs: List<i32> = [1, 2, 3];
+    let mut p = Point { x: 1, y: 2 };
+    let rx = &xs[0];
+    let rp = &p.x;
+    xs[0] = 9;
+    p.x = 9;
+    assert *rx == 1;
+    assert *rp == 1;
+}
+
+test "a reference to a closure is identical only to its own place" {
+    let f = || 1;
+    let g = f;
+    assert ref_eq(&f, &f);
+    assert !ref_eq(&f, &g);
+}
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+test "a generic body compares references by value" {
+    let p1 = Point { x: 1, y: 2 };
+    let p2 = Point { x: 1, y: 2 };
+    assert same(&p1, &p2);
+    assert !same(&p1, &Point { x: 0, y: 2 });
+}
+
+struct Callback {
+    id: i32,
+    f: fn(),
+}
+
+impl Eq for &Callback {
+    fn eq(&self, other: &Self) -> bool {
+        return self.id == other.id;
+    }
+}
+
+test "an impl written for the reference answers where the pointee has no Eq" {
+    let a = Callback { id: 1, f: || {} };
+    let b = Callback { id: 1, f: || {} };
+    let c = Callback { id: 2, f: || {} };
+    assert &a == &b;
+    assert same(&a, &b);
+    assert !same(&a, &c);
 }

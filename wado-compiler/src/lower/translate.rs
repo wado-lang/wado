@@ -2714,7 +2714,6 @@ fn convert_binary_op(op: tir::TirBinaryOp) -> nir::NirBinaryOp {
         tir::TirBinaryOp::BitXor => nir::NirBinaryOp::BitXor,
         tir::TirBinaryOp::Shl => nir::NirBinaryOp::Shl,
         tir::TirBinaryOp::Shr => nir::NirBinaryOp::Shr,
-        tir::TirBinaryOp::RefEq => nir::NirBinaryOp::RefEq,
         tir::TirBinaryOp::RefNotEq => nir::NirBinaryOp::RefNotEq,
     }
 }

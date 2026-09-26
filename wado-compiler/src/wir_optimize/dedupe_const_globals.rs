@@ -1,8 +1,8 @@
 //! Deduplicate identical immutable constant globals, which `const_global`
-//! promotes one apiece however many share a value: such a global has no
-//! observable identity, so each group of byte-identical init and slot metadata
-//! collapses to one. Identity *is* observable through `ref.eq`, so the pass
-//! bails on a module containing any, and an exported global never merges away.
+//! promotes one apiece however many share a value: each group of
+//! byte-identical init and slot metadata collapses to one. A `ref_eq` between
+//! two of them turns true, which the specification allows: identity is
+//! guaranteed only where it holds. An exported global never merges away.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFuncId, WirInstr, WirPackage, WirType, WirTypeId};
@@ -57,13 +57,6 @@ fn const_keys(instrs: &[WirInstr]) -> Option<Vec<ConstKey>> {
 }
 
 pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
-    // Bail if any `ref.eq` exists: merging two equal-value references could flip
-    // a reference-identity comparison, and tracing reachability through locals
-    // is not worth it for an instruction ordinary programs never emit.
-    if module_has_ref_eq(module) {
-        return;
-    }
-
     // Globals named by an export must not be merged away.
     let exported: IndexSet<String> = module
         .exports
@@ -147,30 +140,6 @@ pub(super) fn dedupe_const_globals(module: &mut WirPackage) {
 
 fn is_reference_type(ty: &WirType) -> bool {
     matches!(ty, WirType::Ref { .. } | WirType::AbstractRef { .. })
-}
-
-/// True if any instruction anywhere in the module is a `RefEq`.
-fn module_has_ref_eq(module: &WirPackage) -> bool {
-    fn has(instr: &WirInstr) -> bool {
-        if matches!(instr, WirInstr::RefEq(..)) {
-            return true;
-        }
-        let mut found = false;
-        instr.for_each_child(&mut |child| found |= has(child));
-        found
-    }
-    module
-        .functions
-        .iter()
-        .filter_map(|f| f.body.as_ref())
-        .flatten()
-        .any(has)
-        || module.globals.iter().any(|g| has(&g.init))
-        || module
-            .data
-            .iter()
-            .any(|d| d.offset.as_ref().is_some_and(has))
-        || module.elements.iter().any(|e| has(&e.offset))
 }
 
 /// Rewrite `GlobalGet`/`GlobalSet` names per `rename`, recursively.
