@@ -23,7 +23,9 @@ fn error_handler() { panic("error"); }
 
 ### `#[benign(E, ...)]`
 
-Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited. See [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
+Lets a function perform the listed effects without declaring `with E`, and stops them from propagating to callers. It is meant for effects that are observationally pure, that is, unobservable through the function's interface. Only the named effects are suppressed. Others propagate normally, and the world import for each is still required. The compiler cannot verify observational purity, so this is an unchecked assertion that must be audited.
+
+Each argument names an effect the way a `with` clause does: as the function's module spells it, an import alias included. A name that reaches no effect in that scope is an error. A same-named effect declared in another module is a different effect, and stays required.
 
 ```wado
 pub struct HashIndex {
@@ -38,6 +40,8 @@ impl HashIndex {
     }
 }
 ```
+
+Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
 
 ### `#[secret]`
 
@@ -57,7 +61,7 @@ Waives a lint on the item carrying it. As the module inner attribute
 `#![allow(...)]` it waives the lint for every item in the file. There is no
 `#[deny(...)]`. The lints are:
 
-- `dead_code`: an unused or test-only item. See [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+- `dead_code`: an unused or test-only free function or global (see below).
 - `shadowed_name`: a binder that takes a name already reaching a known symbol.
 - `undecided_effects`: a trait head that writes no `with` clause (see [The Trait Head](./spec-effects.md#the-trait-head)).
 
@@ -68,9 +72,36 @@ fn scaffolding() -> i32 {  // no "function `scaffolding` is never used"
 }
 ```
 
+#### The `dead_code` Lint
+
+The `dead_code` lint warns about a free function or a global that the program
+does not use. Use is reachability from these roots:
+
+- A `pub` or `export` item. An `internal` item is not a root, because nothing
+  outside the package can reach it.
+- A function whose name a world export names.
+- A method. A method is not itself reported, and a free function that only a
+  method calls counts as used.
+- A struct field default, an associated constant's value, and the default body
+  of an `interface` or `resource` operation.
+
+A trait's default body counts as reached only where a call lands on it, so a
+function that only an unreached default body calls is dead.
+
+An item the roots do not reach is reported one of two ways:
+
+- Reached from a `test` block: "only used by tests". This warning is left out
+  when compiling for the test world, where the tests reaching it are the point.
+- Reached from nothing: "never used".
+
+An item in the standard library or in a `#![generated]` module is never
+reported.
+
+Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
 ### `#[param]` / `#[param(from_env = "...")]` / `#[param(name = "...")]`
 
-Marks a `global` as a compile-time build input. The type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references. Each parameter resolves highest-priority-first: `-D NAME=value` (alias `--define`) on the `wado` invocation, then `from_env`, then the initializer. Overrides are parsed into the declared scalar type with the `LenientFromStr` spellings. See [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+Marks a `global` as a compile-time build input. The type annotation gives the type, the initializer is the fallback, and read sites are ordinary global references.
 
 ```wado
 #[param]
@@ -83,9 +114,53 @@ global PORT: i32 = 8080;                        // read from an env var
 global BUILD_ID: String = "dev";                // -D build.id=...
 ```
 
+It takes two optional arguments:
+
+- `name = "..."` is the name `-D` sets. It defaults to the global's own name.
+- `from_env = "..."` names an environment variable read at compile time. It is
+  independent of `name`.
+
+Each is a non-empty string, and any other argument is an error. `#[param]` on a
+`global mut` is an error. The global may be `pub`.
+
+The declared type must be a built-in scalar: `String`, `char`, `bool`, `f32`,
+`f64`, or an integer type from `i8` to `u128`. Any other type is an error.
+
+#### Resolution
+
+Each parameter takes the first of these that supplies a value:
+
+1. `-D NAME=value` (alias `--define`) on the `wado` invocation.
+2. The `from_env` variable, where one is named and set.
+3. The tool's own default for the parameter, such as the log level `wado test`
+   sets for `core:log`. A tool default names no declaration the user wrote, so
+   one that matches nothing, or does not convert, is dropped silently.
+4. The initializer, type-checked as written.
+
+A supplied value is trimmed of surrounding whitespace, then converted to the
+declared type with the spellings `LenientFromStr` accepts. So a `String` or
+`char` parameter cannot carry surrounding whitespace.
+
+Parameter names share one namespace across the whole compilation, dependencies
+included. Same-named parameters in two packages answer to the same `-D`, so a
+library prefixes its names.
+
+#### Resolution Failures
+
+Three failures each have a level the invocation sets: `error` fails the build,
+`warn` reports and falls back to the initializer, `ignore` falls back silently.
+
+| Failure                                     | Flag              | Default  |
+| ------------------------------------------- | ----------------- | -------- |
+| A `-D` name that matches no `#[param]`      | `--param-unknown` | `error`  |
+| A value that does not convert to the type   | `--param-invalid` | `error`  |
+| No value supplied, so the initializer holds | `--param-missing` | `ignore` |
+
+Rationale: [WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md).
+
 ### `#[unavailable("reason")]`
 
-Declares a name that is deliberately not offered, on a declaration with no body. A call to it is an error that reports the reason. The reason is the only argument, and a removal writes its version into it. The declaration reserves a name rather than a signature, so its parameters are never checked against a call. It goes on a module function, an `impl` method, or a trait method. See [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+Declares a name that is deliberately not offered, on a declaration with no body. A call to it is an error that reports the reason. The reason is the only argument, and a removal writes its version into it. A missing or empty reason is an error.
 
 ```wado
 impl File {
@@ -96,6 +171,36 @@ impl File {
     pub fn open_timeout(&self);
 }
 ```
+
+The declaration reserves a name rather than a signature. Its parameters and
+return type are parsed but never resolved or type-checked, and may be left
+empty. `self` is the exception: it decides whether the instance name or the
+static name is reserved, since those are two names on one type.
+
+A call that reaches the declaration is an error, and its arguments are never
+counted or checked against the parameters. A fault inside an argument is still
+reported. Naming the declaration without calling it is the same error. A
+declaration nobody names is no error.
+
+The declaration takes part in name resolution and nothing else:
+
+- It never satisfies a trait requirement, so an `impl` whose method is
+  `#[unavailable]` has not implemented the trait's method.
+- On a trait it is not a requirement: no impl owes it. Every type implementing
+  the trait answers to the name, through the type or through a bound.
+- A reserved name answers only where no method of its kind (instance or static)
+  does. Where another trait of the type has such a method, the call reaches that
+  method. A method whose trait is not imported at the call site does not
+  displace the reservation.
+- Through a bound a call does not tell the kinds apart, so a reserved static
+  beside an instance method of the same name is ambiguous, as two methods are.
+- `wado doc` does not render it.
+
+It goes on a module function, an `impl` method, or a trait method. Anywhere else
+is an error. `export` is refused with it, since there is no function to lower at
+the component boundary.
+
+Rationale: [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 
 ### `#[expect_trap]`
 
@@ -138,7 +243,7 @@ test "slow computation" {
 
 ### `#[synopsis]`
 
-Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section, a usage example that is compiled and so stays current. See [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
+Test block attribute. The test runs like any other, and `wado doc` renders its body as the module's `## Synopsis` section, a usage example that is compiled and so stays current.
 
 ```wado
 #[synopsis]
@@ -148,17 +253,116 @@ test {
 }
 ```
 
-### `#[wire(name = "...")]` / `#[wire(name_policy = "...")]` / `#[wire(number = N)]` / `#[wire(encoding = "...")]` / `#[wire(positional)]`
+A synopsis documents the module that holds it, not one item. `wado test` counts
+it in the ordinary pass/fail total, and it combines with `#[expect_trap]`,
+`#[TODO]` and `#[timeout_ms]`. It is conventionally unnamed, since it is the
+example rather than one case among several.
 
-Controls serialization and deserialization of struct fields and enum cases. See [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md) and [`core:serde`](./stdlib-core-serde.md).
+`wado doc` places the `## Synopsis` section after the module's `//!` doc and
+before its items. The code is the test body exactly as written between the
+outer braces, with its indentation removed, so nothing hidden sets it up. Each
+`#[synopsis]` test in the module is one code block, in source order. A module
+with none has no section. `wado doc` runs nothing.
 
-- `#[wire(name = "...")]` overrides the wire key of one field, or the wire name of one enum case.
-- `#[wire(name_policy = "...")]` on a struct renames every field by a convention (`"camelCase"`, `"snake_case"`, `"kebab-case"`, ...).
-- `#[wire(number = N)]` gives a field the numeric key that number-keyed formats such as `core:protobuf` read. A struct carries it on every field or on none, and a numbered struct satisfies `WireNumbered`. On an enum case, `N` is an `i32` and is the case's discriminant on every wire, in place of its position; an enum numbers every case or none. See [WEP: Grog](./wep-2026-09-22-grog.md).
-- `#[wire(encoding = "zigzag")]` and `#[wire(encoding = "fixed")]` choose how a number-keyed format writes an integer field: `"zigzag"` on `i32` / `i64`, `"fixed"` on any 32- or 64-bit integer, and on an `Option` or `List` of one.
-- `#[wire(positional)]` marks a field as ordinal: it is resolved by position, never by name. Name-only and sequence-only formats ignore the hint. [`core:args`](./wep-2026-06-22-core-args.md) uses it to bind a bare token to the field.
+Rationale: [WEP: Synopsis Tests](./wep-2026-04-26-synopsis-tests.md).
 
-A field is optional on deserialization when it has a default value (`f: T = expr`), and it falls back to that expression when absent. This is the only mechanism for optional fields.
+### `#[wire(...)]`
+
+Controls how a declaration is serialized and deserialized. The framework it
+customizes is in [Serialization and Deserialization](./spec-traits.md#serialization-and-deserialization),
+and the library API in [`core:serde`](./stdlib-core-serde.md).
+
+Each declaration reads its own keys:
+
+| Declaration                                    | Keys                                             |
+| ---------------------------------------------- | ------------------------------------------------ |
+| `struct`, `enum`, `variant`, `flags`, newtype  | `name_policy`                                    |
+| Struct field                                   | `name`, `number`, `encoding`, `positional`       |
+| Enum case                                      | `name`, `number`                                 |
+| Variant case                                   | `name`                                           |
+
+A key the declaration does not read is an error, and so is `#[wire]` anywhere
+else, a flags member included. The keys may be split across several `#[wire]`
+attributes on one declaration, but each key is written once.
+
+#### Wire Names
+
+A field, case or member is written under its source name by default.
+
+- `#[wire(name = "...")]` sets the wire name of one field or case, exactly as
+  written.
+- `#[wire(name_policy = "...")]` on a type converts the source name of every
+  field, case or member that has no `name` of its own. On a newtype, which has
+  no members, it applies to the type's own name. The policies are
+  `"camelCase"`, `"snake_case"`, `"SCREAMING_SNAKE_CASE"`, `"PascalCase"`,
+  `"kebab-case"` and `"SCREAMING-KEBAB-CASE"`, and any other string is an error.
+  A policy reads any source casing, so a `PascalCase` case and a `snake_case`
+  field both convert.
+
+```wado
+#[wire(name_policy = "camelCase")]
+struct Event {
+    created_at: String,     // "createdAt"
+    #[wire(name = "type")]
+    event_type: String,     // "type"
+}
+```
+
+#### Numbers and Encodings
+
+`#[wire(number = N)]` gives a struct field the numeric key that a number-keyed
+format such as `core:protobuf` reads. A format keyed by name ignores it, so a
+numbered struct still serializes through `core:json` by name.
+
+- A struct numbers every field or none. A struct with no fields satisfies this.
+- `N` runs from 1 to 536870911, and 19000 to 19999 are reserved.
+- Two fields of one struct never share a number.
+- A numbered struct satisfies the `WireNumbered` bound that number-keyed formats
+  require, so passing an unnumbered one is a bound error where the call is
+  written.
+
+There is no policy that assigns numbers, so a number is always written.
+
+On an enum case, `N` is an `i32`, negative values included. It replaces the
+case's position as its discriminant on every wire, `core:json_nsd` included. An
+enum numbers every case or none, and two cases never share a number. A variant
+case takes no number.
+
+`#[wire(encoding = "...")]` chooses how a number-keyed format writes an integer
+field. `"zigzag"` accepts `i32` and `i64`. `"fixed"` accepts any 32- or 64-bit
+integer. Either also accepts an `Option` or `List` of such an integer, since the
+encoding is the element's. Anything else, including any other encoding name, is
+an error where the attribute is written. A format keyed by name ignores it.
+
+```wado
+struct Account {
+    #[wire(number = 1)] id: i32 = 0,
+    #[wire(number = 2)] #[wire(encoding = "zigzag")] delta: i64 = 0,  // sint64
+    #[wire(number = 3)] #[wire(encoding = "fixed")] hash: u32 = 0,    // fixed32
+}
+```
+
+Rationale: [WEP: Grog](./wep-2026-09-22-grog.md).
+
+#### Positional Fields
+
+`#[wire(positional)]` marks a struct field as ordinal: when deserializing, it is
+filled by position and never matched by name. A format that resolves fields by
+name, such as `core:json`, therefore never fills it, so it takes its default or
+is reported missing. A sequence-only format such as `core:json_nsd` reads it in
+order like any other field. Serializing is unaffected. `core:args` fills
+positional fields from bare tokens (see [Command-Line Arguments](./spec-traits.md#command-line-arguments-coreargs)).
+
+#### Optional Fields
+
+A field is optional on deserialization when it has a default value
+(`f: T = expr`), and it falls back to that expression when absent. This is the
+only mechanism for optional fields. An `Option<T>` field without a default is
+required: a format keyed by name needs its key present, though the value may be
+`null`. `#[wire(default)]` does not exist, and writing it is an error that asks
+for a field default instead.
+
+Rationale: [WEP: Serialization and Deserialization](./wep-2026-02-28-serde.md).
 
 ## Standard Library Attributes
 
@@ -273,8 +477,7 @@ aliases one, and whether it keeps one past the return. Neither is a safety
 condition, since every referent is GC-managed and cannot dangle. The compiler
 reads both from a function's body. These attributes are for a declaration that
 has none: a `core:builtin` primitive, a Component Model import, a `.wasm` /
-`.wat` asset import. See
-[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+`.wat` asset import.
 
 ```wado
 #[result(part_of = arr)]
@@ -288,7 +491,12 @@ pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_of
 ```
 
 `#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
-says it is part of `p`.
+says it is part of `p`. It takes exactly one of the two. Silence reads as
+`owned`, so a declaration with a reference parameter whose result can share
+storage must state one, and leaving it out is an error. A Component Model import
+owes none, since the boundary copies and its result is always owned. Neither
+does an [`#[unavailable]`](#unavailablereason) declaration, which is never
+called.
 
 `#[retain(...)]` names one retained thing and repeats where there is more than
 one, so each carries its own destination. A bare name is the parameter itself
@@ -296,9 +504,19 @@ and `elements_of = p` is that parameter's elements; `into = q` names the
 parameter it lands in, and without it the destination is unknown. Silence is the
 conservative reading.
 
+Every parameter is named bare, never quoted, and a name that is not a parameter
+of the declaration is an error. An argument the attribute does not take, or a
+second retained thing in one `#[retain]`, is an error too. A malformed attribute
+is never read as silence.
+
 Both are an error on a function with a body, which states these facts itself,
 and on a `trait` or `interface` method requirement: a call to one is statically
 dispatched to an impl that has a body, so the impl states it.
+
+Neither is part of the function's type. Two declarations that differ only in
+what they retain have one type.
+
+Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ### `#[immediate(...)]`
 
@@ -368,3 +586,16 @@ pub fn i32_store(addr: i32, value: i32);
 ```
 
 It is written once, and is an error where `#[trap]` is.
+
+## Known gaps
+
+- The `dead_code` lint sees only the `test` blocks of the modules the
+  compilation loads. A function whose only user is a test in a file the
+  compilation does not load, such as a test file that imports it, is reported
+  "never used" rather than "only used by tests".
+- `WireNumbered` holds only for the type a number-keyed format is handed. A
+  field holding a struct without numbers is not bound by it, so that struct is
+  reported when its bytes are produced rather than where the call is written.
+- A trait may declare a name `#[unavailable]` while an `impl` of the trait
+  supplies a body under that name. A call through the implementing type then
+  reaches the body, so the reservation does not hold there.
