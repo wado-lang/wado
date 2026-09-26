@@ -506,13 +506,3 @@ pub fn i32_store(addr: i32, value: i32);
 ```
 
 It is written once, and is an error where `#[trap]` is.
-
-## Known gaps
-
-- The `dead_code` lint sees only the `test` blocks of the modules the
-  compilation loads. A function whose only user is a test in a file the
-  compilation does not load, such as a test file that imports it, is reported
-  "never used" rather than "only used by tests".
-- A trait may declare a name `#[unavailable]` while an `impl` of the trait
-  supplies a body under that name. A call through the implementing type then
-  reaches the body, so the reservation does not hold there.

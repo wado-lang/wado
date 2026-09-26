@@ -469,37 +469,3 @@ A type match over resources always needs a final `_` arm, because the host may h
 A refutable ascription tests a handle, so it binds a name or `_` and nothing deeper, and its subject is the value rather than a reference to it. `T` must be a concrete type: a type parameter says nothing about whether it narrows.
 
 A type pattern narrows a value at runtime, unlike `match type`, which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
-
-## Known gaps
-
-### `AsyncCall<T>` Is Not Move-Only
-
-[Async Imports](#async-imports) says an `AsyncCall<T>` is used once. Nothing checks it: `AsyncCall<T>` is a copyable struct, and `wait`, `cancel` and `join` all borrow it. A second `wait` or `cancel`, on the value or on a copy of it, compiles and reads a result buffer the first one freed.
-
-### Some Resource Holders Are Not Move-Checked or Dropped
-
-[Resource Ownership](#resource-ownership) makes every value holding an affine resource move-only and dropped. Only a struct, a tuple and a `Result` are. An `Option`, a user variant or a `List` holding one can be moved twice with no diagnostic, and is not dropped at scope exit.
-
-### A Resource Field Moves Out of Its Holder
-
-`let c = h.c;` over a struct `h` holding a resource compiles, and `h` stays usable. Moving `h` afterwards leaves two owners of one handle.
-
-### A Borrow Moved Out Through a Generic Body
-
-[No Move Out of a Borrow](#no-move-out-of-a-borrow) is checked where the result type is a concrete resource type. A generic `fn get(&self) -> T { return self.v; }` instantiated with a resource type is accepted, and its result aliases the handle its receiver still owns.
-
-### An Integer Casts to an Affine Resource
-
-`5 as Counter` compiles for an affine `Counter` in any module. The result is a handle nothing minted, which the program then owns and drops.
-
-### `Stream` and `Future` Handles Are Not Dropped
-
-[Drop](#drop) drops an owned, unmoved resource at scope exit. `Stream<T>`, `StreamWritable<T>`, `Future<T>` and `FutureWritable<T>` are exempt: every path out of a scope holding one must call `drop` itself, and nothing reports a path that does not. A `?` or an early `return` in that scope leaks the handle.
-
-### A Generic User Resource Is Not Move-Checked
-
-A generic `resource Handle<T>` a user module declares is not move-checked: passing a `Handle<i32>` by value twice compiles. No program can obtain such a handle today, since a user-declared `#[cm]` resource has no import binding.
-
-### Unrestricted Handles Are Never Released
-
-Nothing frees an unrestricted handle. Each object the host hands out keeps a slot in its table, and the table keeps the object alive, for the lifetime of the instance. The host interns handles, so repeated calls naming one object cost one slot. Every distinct object costs one, such as each event a dispatch creates.

@@ -738,33 +738,3 @@ The [cheatsheet's Standard Library section](./cheatsheet.md#standard-library) li
 panic("error"); // traps with a message
 unreachable(); // traps with no message
 ```
-
-## Known gaps
-
-- An `http://` / `https://` specifier is not rejected as an invalid path.
-  It passes validation, and the import fails as a missing file.
-- The standard library's implementation modules mark symbols `pub` that only
-  their sibling modules use. Such a symbol is left out of its facade, but any
-  package can import it by path, so `core:`'s published API is wider than its
-  facades.
-- A generator response carrying more than one entry file is not rejected; the
-  first is bound. One carrying none surfaces only as `KILN_NO_GENERATED_MODULE`
-  at each `use` of the schema, not as an error against the response.
-- Two generator clauses are compared by their options as written. Two that mean
-  the same but are spelled apart (a default left out, `4` for `4.0`) are
-  distinct, so over one primary input they are reported as disagreeing.
-- A component exporting a `resource` is rejected when its type is decoded, as
-  is a resource handle inside a `stream` or `future` payload. This admits no
-  use of any dependency built around resources.
-- An `error-context` in a component's signature has no import mapping, so a
-  component carrying one is rejected at the import.
-- A component exporting a type directly from its world, rather than from an
-  interface, is rejected.
-- A function a component's world exports directly takes and returns only
-  primitives and `string`. A record, list or variant in that signature is
-  rejected. Functions in an interface have no such limit.
-- One `provider` file satisfies only one guest effect. A component importing
-  several is rejected when a `provider` is named.
-- A component's required effects are the union of all its host imports, not
-  those each export reaches. A component mixing pure and impure exports makes
-  every export require every effect.

@@ -337,8 +337,7 @@ fn wrap<T>(value: T) -> i32 {
 So do local newtypes: `type N<T> = List<T>;`.
 
 A function body may also declare `enum`, `variant` and `flags` items, and
-`impl`/`trait` blocks that give a local type methods (see
-[Known gaps](#known-gaps)).
+`impl`/`trait` blocks that give a local type methods.
 
 No other item is local. `fn`, `use`, `interface`, `global`, `world`, `test`
 and `resource` are module-level only, and one inside a function body is a parse
@@ -602,11 +601,3 @@ A `List<T>`, `Array<T>` or `Slice<T>` indexed by a range of `i32` gives a
 and `xs[3]`, as does `xs[1..=3]`.
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
-
-## Known gaps
-
-- A local `enum`, `variant` or `flags` parses, but its cases do not resolve:
-  `Color::Red` is an unknown identifier and `Shape::Circle(1)` an unknown
-  function.
-- A local `impl` or `trait` parses, but gives the local type no methods: a call
-  of one reports that no such method exists.

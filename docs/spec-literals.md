@@ -1083,24 +1083,3 @@ user.name
 map["key"]        // panics if key not found
 map.get("key")    // returns Option<V>
 ```
-
-## Known gaps
-
-### Template Strings
-
-- Width and precision are literal digits, so neither can be computed at run
-  time.
-- A spec part that means nothing for its value is dropped rather than rejected,
-  against the closed grammar: a precision on an integer, `+` on a `String`, `#`
-  under `e` or `E`.
-- The `0` flag and the default alignment do not tell a number from any other
-  value. `${true:08}` renders `0000true`, and text aligns right by default where
-  Rust aligns it left.
-- Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length, so
-  inspecting a deeply recursive value runs until the stack is exhausted.
-
-### Collection Literals
-
-- A key is always a field name. A computed key such as `{ [Color::Red]: 1 }`
-  cannot be written, so a map whose key type is not `String` has no key-value
-  literal.

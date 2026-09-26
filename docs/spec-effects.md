@@ -593,17 +593,3 @@ The world's imports thus act as the outermost handler. A `..forward` from the ou
 How a handler answers an async operation is in [Handling an Async Operation](./spec-components.md#handling-an-async-operation).
 
 Rationale: [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md).
-
-## Known gaps
-
-### More than one effect parameter
-
-A function may declare at most one `<effect E>`, and more is rejected. So one function cannot keep the effects of two closures apart: every closure it takes resolves into the same parameter. Since `with _` mints a parameter, a function cannot write `with _` and declare its own `<effect E>` either.
-
-### How deep an open head resolves
-
-An open head is resolved from the impl a call names: a free call reads its type arguments, a method call its receiver, and a receiver that wraps another type is followed through its type arguments to a bounded depth. Past that depth, or for a receiver whose impl is not found, the effect parameter survives and the caller forwards it with `with _`. That is sound, but it demands more than the impl would.
-
-### A resource used by a generic body
-
-A function with an effect parameter whose body uses a resource, `Stream::<u8>::new()` for instance, is rejected even where every effect it is called with would imply that resource. Inside the body `E` implies nothing.

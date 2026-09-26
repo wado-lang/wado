@@ -14,8 +14,9 @@ Which of the two is wrong is not decided in advance: the specification can be
 the mistaken one. That gets settled when the disagreement is found.
 
 What is not allowed is leaving the disagreement in place as an accepted
-difference. If it is not resolved, it becomes a Known gap in the `spec-*.md`
-file that owns the area, saying what the disagreement is and what it admits.
+difference. If it is not resolved, it becomes a Known gap in the WEP that
+proposed the rule, saying what the disagreement is and what it admits. The
+specification itself records no bugs.
 
 ## Overview
 

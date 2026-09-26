@@ -280,14 +280,7 @@ subcommand, so `prog --verbose add --all x` works. Nesting needs nothing more.
 
 Positionals bind greedily in declaration order, so a well-formed struct puts
 required positionals before optional ones, at most one variadic positional, and
-that one last, and never a variadic positional beside a subcommand. A violation
-is not diagnosed; see [Known gaps](#known-gaps).
+that one last, and never a variadic positional beside a subcommand. A struct
+that breaks this is an error where it is declared.
 
 Rationale: [WEP: Command-Line Argument Parsing](./wep-2026-06-22-core-args.md).
-
-## Known gaps
-
-- `core:args` does not check a struct's positional declarations. Required after
-  optional, a variadic before another positional, or a variadic beside a
-  subcommand parses by greedy binding into a confusing `MissingArgument` or a
-  swallowed tag, rather than failing where the struct is declared.

@@ -132,8 +132,8 @@ no method 'shout' on 'String' in scope: 'Loud' declares it and is not
 imported here; add `use { Loud } from "./lib_a.wado"`
 ```
 
-A supertrait's method called through a bound is not yet gated; see
-[Known gaps](#known-gaps).
+A supertrait's method called through a bound is gated the same way: `T: Sub`
+reaches `Base`'s methods only where `Base` is imported.
 
 #### Candidates
 
@@ -282,8 +282,7 @@ the same name when both take `self` or both do not. The trait's is reached as
 `Trait::method(recv, …)`.
 
 An associated function with no `self` has no receiver argument to bind `Self`
-from, so the trait-qualified form cannot name it (see
-[Known gaps](#known-gaps)).
+from, so the trait-qualified form cannot name it.
 
 Rationale: [WEP: Trait Resolution — One Order, Written Down](./wep-2026-09-01-trait-resolution.md).
 
@@ -750,9 +749,7 @@ An integer literal coerces to an integer newtype, so `From<i64>` beside
 primitive. An argument known only by its head does not preselect: several
 same-head impls answering it is the expected reading, and typing the argument
 settles it. An inherent static `from` beside `From` impls is the type's own
-function and answers without selection. A conversion reachable only through
-a blanket generic in its source type (`impl<T: Display> From<T> for W`) is
-rejected; see [Known gaps](#known-gaps).
+function and answers without selection.
 
 Argument selection never crosses trait lines, since impls of different traits
 share no contract. Two traits declaring one method name for one receiver are
@@ -1123,7 +1120,7 @@ float derives `Ord` and can key a `TreeMap`.
 
 Written at a concrete float type, the operators are IEEE. Written in a body
 generic over `T: Ord`, they read `Ord::cmp`, so the same expression answers
-differently at `T = f32`; see [Known gaps](#known-gaps).
+differently at `T = f32`.
 
 Rationale: [WEP: The Operator Order and the Total Order](./wep-2026-09-23-comparison-traits.md).
 
@@ -1566,38 +1563,3 @@ fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Disp
 ```
 
 Rationale: [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
-
-## Known gaps
-
-### Resolution
-
-- A supertrait's method called through a bound is not gated on scope. `T: Sub`
-  reaches `Base`'s methods with `Base` unimported, where the rule requires the
-  import. A module can therefore call a method whose trait it never named.
-- Only a method call follows [the order](#the-order). A static call
-  `Type::m(args)` prefers a trait impl written in the calling module, takes the
-  first impl that declares the method, and tries value blankets last. So a
-  static call can pick by where an impl was written, which the order never
-  reads.
-- A projection inside a function type in a bound's trait argument is never
-  answered. `U: Uses<fn(S::Item) -> i32>` is reported unsatisfied even where an
-  impl for the settled type exists, while `Uses<S::Item>` and
-  `Uses<List<S::Item>>` are answered. A valid program is rejected at that one
-  shape.
-- Two traits declaring one associated function name for one type (a function
-  with no `self`) are ambiguous at `Type::f(…)`, and no spelling selects one,
-  since a qualified call binds `Self` from its receiver argument.
-- A conversion reachable only through a blanket generic in its source type
-  (`impl<T: Display> From<T> for W`) is rejected at `W::from(x)`, since its
-  instantiation is not selected from the argument.
-
-### Comparison
-
-- One name covers both orders. A `T: Ord` bound does not say whether its body
-  means IEEE or the total order, so one expression answers a NaN or a signed
-  zero differently in a body generic over `T: Ord` than at a concrete float.
-- `min` and `max` take `T: Ord`, and which order each caller means is not
-  settled.
-- A float's total equality, `cmp` answering `Equal`, is not `==`: it separates
-  `-0.0` from `0.0` and calls a NaN equal to itself. A `TreeMap<f32, V>` orders
-  by the total order, and nothing states which equality a keyed lookup owes.
