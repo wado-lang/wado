@@ -1224,7 +1224,7 @@ Point { x: 1, y: 2 } == Point { x: 1, y: 2 };  // Eq derived here
 to_string(&Point { x: 1, y: 2 });              // Serialize derived here
 ```
 
-An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent and is the way to attach `#[wire(...)]` customization.
+An empty marker `impl Trait for T;` asserts conformance: the compiler checks `T` is eligible and errors if not. Optional for these traits, but it documents intent.
 
 ```wado
 struct Broken { retries: i32 = 3, name: String }
@@ -1749,8 +1749,8 @@ set.contains("foo");          // -> bool; set.insert(x) -> bool
 ### core:serde
 
 Format-agnostic `Serialize` / `Deserialize` framework.
-A plain struct derives with no marker; `impl Serialize for T;` attaches
-`#[wire(...)]` customization. Wire keys default to the field name; override
+A plain struct derives with no marker, and `#[wire(...)]` applies with or
+without one. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
 (per field). A format keyed by numbers rather than names reads
 `#[wire(number = N)]`, which a struct carries on every field or on none; such a

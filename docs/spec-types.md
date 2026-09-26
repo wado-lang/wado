@@ -53,7 +53,7 @@ arithmetic:
   [Type Cast](./spec-lexical.md#type-cast-as)). The error names the method to
   write instead.
 - A numeric literal coerces to either type and is rounded once (see
-  [Type coercion](./spec-literals.md#type-coercion-1)).
+  [Floating-Point Literals](./spec-literals.md#floating-point-literals)).
 - A comparison widens both operands to `f32` and compares those, so `<` is
   IEEE and `Ord` is the total order (see
   [Ord](./spec-traits.md#ord---ordering)).
@@ -77,8 +77,8 @@ let same = f16::try_from(wide);     // Ok: 1.0 survives the round trip
 - `TryFrom<f32>` and `TryFrom<f64>` answer `Ok` only where the value survives the
   round trip, a NaN included. Otherwise they answer `Err(ConvertError)`.
 - `from_str` rounds the decimal text once, as a literal is rounded. Text that
-  rounds past the largest finite value parses to an infinity. `from_str_lenient` takes the
-  spellings `LenientFromStr` accepts.
+  rounds past the largest finite value parses to an infinity.
+  `from_str_lenient` takes the spellings `LenientFromStr` accepts.
 - There is no conversion between `f16` and `bf16`, because each keeps something
   the other drops: `f16` has the shorter exponent range, `bf16` the shorter
   significand. Widen to `f32` and narrow again.
@@ -87,9 +87,11 @@ Both types carry `f32`'s associated constants under the same names (`MAX`,
 `MIN`, `MIN_POSITIVE`, `EPSILON`, `INFINITY`, `NAN`, `MANTISSA_DIGITS`, …) and
 `is_nan`.
 
-`${x}` prints the value widened to `f32`, so every format specifier applies.
-`${x:?}` prints it in exponent notation: `1e0`. `Serialize` writes the widened
-`f32`. `Deserialize` rounds the number it reads once, straight to the half.
+A template renders either type through its `f32` value, as
+[Display Output](./spec-literals.md#display-output) and
+[Inspect Output](./spec-literals.md#inspect-output) state.
+[Serialization](./spec-serialization.md) states how either type is written and
+read.
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
@@ -148,7 +150,7 @@ Checked conversions are available through `TryFrom` (e.g. `i64::try_from(a)`, `u
 
 ## SIMD Types (v128)
 
-Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive type `v128` represents a 128-bit vector, with 10 newtype aliases providing type-safe interpretations:
+Wado exposes WebAssembly SIMD via the `core:simd` module. A single primitive type `v128` represents a 128-bit vector, and 10 newtypes over it give it type-safe lane interpretations:
 
 | Category | Types                              |
 | -------- | ---------------------------------- |
@@ -175,17 +177,17 @@ let mask = v.lt(&w);              // per-lane comparison mask
 ```
 
 `v128` itself takes no arithmetic, bitwise or shift operator. The lane types
-carry those, and each works lane by lane. A shift takes one `u32` count and shifts every lane by
-it.
+carry those, and each works lane by lane. A shift takes one `u32` count and
+shifts every lane by it.
 
 The comparison methods (`eq`, `ne`, `lt`, `le`, `gt`, `ge`) answer a mask of
 the same lane type: each lane is all ones where the comparison holds and all
 zeros where it does not. `bitselect` takes such a mask.
 
-`==` and `!=` are not lane-wise. They compare all 128 bits and answer one
-`bool`, on `v128` and every lane type alike. Every lane type is the same `v128`,
-so there is no lane reading to defer to. A NaN lane therefore equals itself,
-and a `0.0` lane differs from a `-0.0` lane. Use `eq` for the IEEE reading.
+`==` and `!=` are not lane-wise. On `v128` and on every lane type, they compare
+all 128 bits and answer one `bool`, because every lane type is a newtype over
+the same `v128`. So a NaN lane equals itself, and a `0.0` lane differs from a
+`-0.0` lane. Use `eq` for the IEEE comparison.
 
 ```wado
 let nan = f32x4::splat(f32::NAN);
@@ -256,7 +258,7 @@ s.len() -> i32             // Length in bytes
 s.is_empty() -> bool       // Check if empty
 ```
 
-#### Note
+### Iterating Bytes and Characters
 
 `bytes()` and `chars()` return iterator objects (`StrUtf8ByteIter` and `StrCharIter`) that implement both `Iterator` and `IntoIterator`, so they work with `for-of` directly:
 
@@ -270,7 +272,7 @@ for let b of "hello".bytes() {
 }
 ```
 
-#### String Building
+### String Building
 
 `push_str` appends to a `String` in place:
 
@@ -280,9 +282,6 @@ builder.push_str("Hello");
 builder.push_str(", ");
 builder.push_str("World!");
 // builder is now "Hello, World!"
-
-// `+` operator for two-string concatenation
-let combined = "Hello, " + "World!";  // "Hello, World!"
 
 // `join` concatenates a list with a separator
 let parts: List<String> = ["a", "b", "c"];
@@ -446,7 +445,8 @@ struct Node {
 
 ### Field Visibility
 
-Struct fields follow the same visibility rules as other declarations (see [Visibility](./spec-modules.md#visibility)). A field without a modifier is private to the defining file; `internal` widens it to the package; `pub` exposes it to other Wado packages.
+A struct field takes the visibility modifiers other declarations take, and
+reaches as far as [Visibility](./spec-modules.md#visibility) states.
 
 ```wado
 pub struct Config {
@@ -456,7 +456,16 @@ pub struct Config {
 }
 ```
 
-Within the defining module, all fields (including private ones) are accessible for construction, reading, and mutation. From another file in the same package, `internal` (and `pub`) fields are accessible; from another package, only `pub` fields are. Reading, setting, or binding a field beyond its reach is a compile error, whether through field access (`c.secret`), a struct literal (`Config { secret: ... }`), or a destructuring pattern (`let Config { secret, .. } = c`, `match`). A non-reachable field may still be _omitted_ from a struct literal in another module when it has a default expression (`f: T = expr`): the default is evaluated in the defining module, so the field is never read or set across the boundary and encapsulation is preserved. A non-reachable field without a default cannot be satisfied from another module, so such a struct can only be constructed by a function within reach.
+Reading, setting, or binding a field beyond its reach is a compile error. This
+holds for field access (`c.secret`), a struct literal (`Config { secret: ... }`),
+and a destructuring pattern (`let Config { secret, .. } = c`, `match`).
+
+A literal in another module may still omit a field it cannot reach when the
+field has a default expression (`f: T = expr`). The default resolves in the
+defining module (see [Struct Field Defaults](#struct-field-defaults)), so the
+field is never read or set across the boundary. A field out of reach with no
+default cannot be filled from another module, so only a function within reach
+can construct such a struct.
 
 ### Struct Construction
 
@@ -530,12 +539,12 @@ only the fields reachable at the use site, as `a.f` would.
 
 ```wado
 let base = { user_id: 1, ip: "10.0.0.1" };
-let event = { ..base, level: "warn" };  // { user_id, ip, level } — auto-Serialize
+let event = { ..base, level: "warn" };  // { user_id, ip, level }
 ```
 
 Composition applies where no nominal type is expected. An expected struct type
 makes the literal a named one, with the named struct's rule
-([Struct Construction](./spec-types.md#struct-construction)), and an expected map
+([Struct Construction](#struct-construction)), and an expected map
 type makes it a key-value literal ([`..base` Spread](./spec-literals.md#base-spread)).
 A key-value spread with no map type expected is an error.
 
@@ -574,11 +583,13 @@ for let { x, y } of points {
 
 ### Auto-derived Traits
 
-Structs derive `Eq` (field-wise equality) and `Ord` (lexicographic comparison by field declaration order) when all fields implement those traits. They are derived where a use or bound needs them, not for every struct. See [Bound-Driven Eq / Ord](./spec-traits.md#bound-driven-eq--ord). A user-provided `impl Eq` or `impl Ord` takes precedence.
+A struct derives `Eq` field by field, and `Ord` lexicographically in field
+declaration order. A variant derives `Eq` only, not `Ord`: two values are equal
+when they are the same case and their payloads, if any, are equal.
 
-For generic structs, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Foo<T>`, `impl<T: Ord> Ord for Foo<T>`.
-
-Variants derive `Eq` only (not `Ord`) the same on-demand way, when all payload types implement `Eq`: both values must be the same case, and payloads (if any) are compared. A user-provided `impl Eq` takes precedence. For generic variants, the auto-derived impls have trait bounds on the type parameters: `impl<T: Eq> Eq for Maybe<T>`.
+When a derived impl exists, which instantiations of a generic type it covers,
+and how a written impl overrides it are stated in
+[Derivation Policy](./spec-traits.md#derivation-policy).
 
 ### Struct Field Defaults
 
@@ -601,7 +612,7 @@ let c = ServerConfig { host: "localhost", port: 3000 };
 ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 ```
 
-Default expressions are evaluated at the construction site. They must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults. A literal may omit every field that has a default, down to `ServerConfig {}` where all of them do.
+A default expression is evaluated each time a literal omits its field. It must be effect-free and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected: destructuring sees every field regardless of defaults. A literal may omit every field that has a default, down to `ServerConfig {}` where all of them do.
 
 A default resolves its names in the module that declares the struct, not where
 the literal is written. It may name that module's private items, its import
@@ -620,8 +631,8 @@ let h: Holder<String> = { a: "x" };   // b is ""
 let s = Holder { a: 5 };              // T = i32 from `a`, so b is 0
 ```
 
-A field with a default is optional in deserialization too: when the input
-leaves the field out, it takes its default.
+A field with a default is optional in deserialization too (see
+[Missing, Repeated, and Unknown Fields](./spec-serialization.md#missing-repeated-and-unknown-fields)).
 
 Whether a struct derives `Default` from its field defaults is stated in
 [Auto-Derivation](./spec-traits.md#auto-derivation).
