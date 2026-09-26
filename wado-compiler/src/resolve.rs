@@ -257,6 +257,7 @@ impl Resolutions {
                 effect_binders: &mut effect_binders,
                 pending_binder: None,
                 irrefutable_pattern: false,
+                pattern_start: None,
                 lint_shadowing: !module.has_generated()
                     && !ast::inner_attrs_allow(module.inner_attributes(), ast::lint::SHADOWED_NAME),
             };
@@ -515,8 +516,9 @@ struct Resolver<'a> {
     /// declaration.
     locals: Vec<IndexMap<String, DefId>>,
     /// Value bindings in scope — parameters and `let`s, innermost block last.
-    /// Held for the shadowing lint alone: a reference site resolves a local
-    /// through the elaborator, not here.
+    /// Held for the shadowing lint and for deciding what a bare name in a
+    /// pattern is: an expression's reference to a local resolves through the
+    /// elaborator, not here.
     bindings: Vec<hashmap::IndexSet<String>>,
     scopes: &'a Scopes,
     refs: &'a mut IndexMap<AstId, Resolution>,
@@ -529,6 +531,10 @@ struct Resolver<'a> {
     /// without `else`, a `for let … of`, a tuple comprehension. A bare
     /// identifier in it never names a `global`.
     irrefutable_pattern: bool,
+    /// While a pattern is walked, how many names the innermost frame held when
+    /// it started. The names past it are the pattern's own, which reach none of
+    /// its sites.
+    pattern_start: Option<usize>,
 }
 
 impl Resolver<'_> {
@@ -645,6 +651,11 @@ impl Resolver<'_> {
         }
     }
 
+    fn bind_pattern_name(&mut self, name: &str, span: Span) {
+        let exempt = self.binder_exempts(name);
+        self.bind_name(name, span, exempt);
+    }
+
     /// Whether the binder being walked waives the lint for the name its pattern
     /// binds: by attribute, or by deriving the name from itself.
     fn binder_exempts(&self, name: &str) -> bool {
@@ -653,35 +664,32 @@ impl Resolver<'_> {
             .is_some_and(|p| p.allowed || p.derived.iter().any(|derived| derived == name))
     }
 
-    /// Whether an identifier pattern binds rather than matches. `mut x` always
-    /// binds; a bare `x` binds unless a case answers the name, or, in a
-    /// refutable pattern, an immutable `global` does. Either matches by value
-    /// instead.
-    ///
-    /// A case answers here even where a type of the same name outranks it for a
-    /// reference, and even where the module does not import its type: only the
-    /// elaborator knows the scrutinee's type. `case_names` rather than the
-    /// module's own tier, since the lint this feeds had better miss a binder
-    /// than order a rename of a pattern that binds nothing.
-    fn pattern_binds(&self, pat: &ast::Pattern, name: &str) -> bool {
-        if matches!(pat, ast::Pattern::MutIdent { .. }) {
-            return true;
+    /// The immutable `global` a bare `name` in the pattern being walked tests
+    /// against: in a refutable pattern, where no binding in scope as the
+    /// pattern starts has taken the name.
+    fn pattern_constant(&self, name: &str) -> Option<DefId> {
+        if self.irrefutable_pattern || self.bound_before_pattern(name) {
+            return None;
         }
-        if self.scopes.case_names.contains(name) {
+        let Resolution::Def(def) = self.resolve_value_name(name) else {
+            return None;
+        };
+        matches!(
+            self.symbols
+                .get(&self.defs.ast_id(def))
+                .map(|sym| &sym.kind),
+            Some(SymbolKind::Global(GlobalSymbol { is_mut: false }))
+        )
+        .then_some(def)
+    }
+
+    fn bound_before_pattern(&self, name: &str) -> bool {
+        let Some((innermost, outer)) = self.bindings.split_last() else {
             return false;
-        }
-        if self.irrefutable_pattern {
-            return true;
-        }
-        match self.resolve_value_name(name) {
-            Resolution::Def(def) => !matches!(
-                self.symbols
-                    .get(&self.defs.ast_id(def))
-                    .map(|sym| &sym.kind),
-                Some(SymbolKind::Global(GlobalSymbol { is_mut: false }))
-            ),
-            _ => true,
-        }
+        };
+        let start = self.pattern_start.expect("a pattern is being walked");
+        outer.iter().any(|frame| frame.contains(name))
+            || innermost.get_index_of(name).is_some_and(|i| i < start)
     }
 
     /// A condition's bindings reach the `then` block and stop there, so the
@@ -921,6 +929,12 @@ impl AstVisitor for Resolver<'_> {
     /// through the `ns$Type` alias when it arrived through a namespace import,
     /// the same spelling a struct *literal*'s name uses.
     fn visit_pattern(&mut self, pat: &ast::Pattern) {
+        if self.pattern_start.is_none() {
+            self.pattern_start = Some(self.bindings.last().map_or(0, hashmap::IndexSet::len));
+            self.visit_pattern(pat);
+            self.pattern_start = None;
+            return;
+        }
         if let ast::Pattern::Struct {
             type_name: Some(name),
             type_name_id: Some(id),
@@ -950,12 +964,23 @@ impl AstVisitor for Resolver<'_> {
             }
             return;
         }
-        if let ast::Pattern::Ident { name, span, .. } | ast::Pattern::MutIdent { name, span, .. } =
-            pat
-            && self.pattern_binds(pat, name)
-        {
-            let exempt = self.binder_exempts(name);
-            self.bind_name(name, *span, exempt);
+        // A bare name that a case answers binds nothing, and neither does one
+        // the constant answers. A case answers here even where a type of the
+        // same name outranks it for a reference, and even where the module does
+        // not import its type: only the elaborator knows the scrutinee's type.
+        // `case_names` rather than the module's own tier, since the lint had
+        // better miss a binder than order a rename of a pattern that binds
+        // nothing.
+        match pat {
+            ast::Pattern::MutIdent { name, span, .. } => self.bind_pattern_name(name, *span),
+            ast::Pattern::Ident { id, name, span } => match self.pattern_constant(name) {
+                Some(def) => self.record(*id, Resolution::Def(def)),
+                None if !self.scopes.case_names.contains(name) => {
+                    self.bind_pattern_name(name, *span);
+                }
+                None => {}
+            },
+            _ => {}
         }
         ast::walk_pattern(self, pat);
     }

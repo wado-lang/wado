@@ -1,0 +1,20 @@
+// In an or-pattern, a bare name reaching an immutable global is the constant in
+// every alternative, whichever comes first: a name one alternative binds is not
+// in scope for another. So the second alternative here binds nothing, and the
+// pair is rejected in either order.
+
+global limit: i32 = 5;
+
+fn pick(p: [i32, i32]) -> i32 {
+    return match p {
+        [0, mut limit] | [limit, 1] => limit,
+        _ => -1,
+    };
+}
+
+test {
+    assert pick([0, 2]) == 2;
+}
+
+__DATA__
+{"compile_error": ":10:9: analysis error: invalid pattern: or-pattern alternatives must bind the same names with the same types: alternative 1 binds `limit: i32`, but alternative 2 binds nothing"}

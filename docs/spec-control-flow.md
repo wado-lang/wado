@@ -431,7 +431,9 @@ constant pattern instead. The refutable positions are a `match` arm, `if let`,
 `while let`, and `let ... else`, so `let limit = v else { … }` runs the `else`
 block unless `v == limit`. A local, a parameter, or a closure capture that takes
 the name puts the global out of reach, so the name binds there as it would
-anywhere else.
+anywhere else. What counts is what is in scope where the pattern starts. A name
+the pattern binds itself reaches none of its own sites, so `[mut limit, limit]`
+binds the first element and tests the second against the global.
 
 An uninitialized `let x: T;` declares a single name, or `_`.
 

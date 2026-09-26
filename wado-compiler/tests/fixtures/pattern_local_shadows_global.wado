@@ -1,6 +1,7 @@
 // A local that shadows a global takes the name, so a refutable pattern spelling
 // it binds as it would any other local's name, rather than testing against the
-// global it hides.
+// global it hides. What counts is what is in scope where the pattern starts: a
+// name the pattern itself binds earlier on does not hide the global.
 
 global limit: i32 = 5;
 
@@ -17,6 +18,25 @@ fn after_param(#[allow(shadowed_name)] limit: i32, o: Option<i32>) -> i32 {
         return limit;
     }
     return -limit;
+}
+
+fn let_else_after_local(o: Option<i32>) -> i32 {
+    #[allow(shadowed_name)]
+    let limit = 3;
+    inner: {
+        let Some(limit) = o else {
+            break inner;
+        };
+        return limit;
+    }
+    return limit;
+}
+
+fn earlier_in_pattern(p: [i32, i32]) -> i32 {
+    return match p {
+        [mut limit, limit] => limit,
+        _ => -1,
+    };
 }
 
 test "a match binds the name a local took" {
@@ -39,13 +59,13 @@ test "a closure binds the name its enclosing local took" {
 }
 
 test "a let else binds the name a local took" {
-    #[allow(shadowed_name)]
-    let limit = 3;
-    let o: Option<i32> = Some(4);
-    let Some(limit) = o else {
-        return;
-    };
-    assert limit == 4;
+    assert let_else_after_local(Some(4)) == 4;
+    assert let_else_after_local(null) == 3;
+}
+
+test "a name the pattern bound earlier still reads the global" {
+    assert earlier_in_pattern([3, 5]) == 3;
+    assert earlier_in_pattern([3, 4]) == -1;
 }
 
 test "an unshadowed name still reads the global" {
@@ -58,4 +78,4 @@ test "an unshadowed name still reads the global" {
 }
 
 __DATA__
-{"test": {}}
+{"test": {}, "warnings_contains": ["`limit` shadows a binding of the same name"]}

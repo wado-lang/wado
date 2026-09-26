@@ -1,0 +1,24 @@
+// A local that takes a global's name puts the global out of reach, so a
+// `let ... else` spelling that name binds it and can never fail.
+
+global limit: i32 = 5;
+
+fn first(v: i32) -> i32 {
+    #[allow(shadowed_name)]
+    let limit = 1;
+    inner: {
+        #[allow(shadowed_name)]
+        let limit = v else {
+            break inner;
+        };
+        return limit;
+    }
+    return limit;
+}
+
+test {
+    assert first(2) == 2;
+}
+
+__DATA__
+{"compile_error": ":11:13: analysis error: invalid pattern: irrefutable pattern in `let ... else`: the else block can never run; use a plain `let` instead"}

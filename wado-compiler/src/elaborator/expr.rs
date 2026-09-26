@@ -2638,9 +2638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Error(_) => return None,
             ast::Pattern::Wildcard => Pat::Wild,
             ast::Pattern::Ident { id, name, .. } | ast::Pattern::MutIdent { id, name, .. } => {
-                // Resolution decided what the name is: one it bound is a
-                // binding, and otherwise it is a case or a constant.
-                if self.sem.types.local_types.contains_key(id) {
+                if self.pattern_name_bound(*id) {
                     Pat::Wild
                 } else if self.is_known_case_of_type(scrutinee_type, name, None) {
                     return self.exh_case(scrutinee_type, name, None);
