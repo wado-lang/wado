@@ -43,6 +43,10 @@ impl HashIndex {
 
 Rationale: [WEP: Effect System and Randomness in Collections](./wep-2026-01-20-effect-system-randomness.md).
 
+### `#[ambient]`
+
+Exempts a function's body from effect checking. [Ambient Functions](./spec-effects.md#ambient-functions) states the rule. `#[benign]` is the narrower form: it names the effects it suppresses.
+
 ### `#[secret]`
 
 Hides a struct field from debug/inspect output (the `:?` format specifier).

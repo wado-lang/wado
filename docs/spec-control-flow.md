@@ -361,6 +361,7 @@ match command {
 | Mut variable  | `mut x`, `Some(mut x)`       | Binds as mutable                             |
 | Literal       | `0`, `"hello"`, `true`       | Matches exact value                          |
 | Constant      | `MAX_LEN`, `i32::MAX`        | Matches an immutable global / const by value |
+| Range         | `0..<60`, `'a'..='z'`        | Matches an integer or `char` in the range    |
 | Variant       | `Some(x)`, `None`            | Matches variant case                         |
 | Tuple         | `[a, b, c]`                  | Destructures tuple                           |
 | Nested tuple  | `[10, Some(x)]`              | Literal/variant sub-patterns in tuple        |
@@ -368,6 +369,8 @@ match command {
 | Nested struct | `{ x: 0, y }`                | Literal/variant sub-patterns in struct       |
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
+
+[Range Patterns](./spec-lexical.md#range-patterns) states what a range pattern's bounds may be.
 
 A string-literal pattern tests the scrutinee with `==` against a `String`, so
 any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a

@@ -32,7 +32,7 @@ assert i < list.len() && list[i] == 1;
 
 Each captured operand is rendered with `Inspect` (`:?`), so a long `String` or
 `List` operand is cut at `Inspect`'s default length and marked where it was cut
-(see [template strings](./spec-literals.md#string-literals)). This keeps a
+(see [Inspect Truncation](./spec-literals.md#inspect-truncation)). This keeps a
 failure readable. The optional message is an ordinary expression, formatted by
 whatever template specifiers it uses. `Display` is never cut, so formatting a
 value into the message yourself shows all of it.

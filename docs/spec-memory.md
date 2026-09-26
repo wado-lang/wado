@@ -8,7 +8,7 @@
 
 ## Value Semantics
 
-Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource linearity](./spec-components.md#resource-linearity)).
+Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. There are two exceptions. Reference types (`&T`, `&mut T`) alias the underlying value. An affine resource is move-only: assignment, parameter passing, and return move it, and the source is unusable afterwards (see [Resource Ownership](./spec-components.md#resource-ownership)).
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -178,7 +178,7 @@ same(&xs, &ys);                 // false or true: the two may be one object
 
 ### Method Receiver: `self` by Value
 
-A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, or on an aggregate that holds one:
+A method receiver is `&self` or `&mut self`. Bare `self` (by value) is allowed only on a resource, on an aggregate that holds one, or on a generic type, whose type arguments may be resources (`Option<T>::unwrap(self)`):
 
 ```wado
 impl Point {
@@ -188,7 +188,7 @@ impl Point {
 }
 ```
 
-A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource linearity](./spec-components.md#resource-linearity)). A value type has nothing to consume, so `self` by value on one is a compile error.
+A by-value `self` moves the receiver into the method, so the caller's binding cannot be used afterward. That is how an affine resource is consumed (see [Resource Ownership](./spec-components.md#resource-ownership)). A value type has nothing to consume, so `self` by value on one is a compile error.
 
 ### `mut` Parameters
 

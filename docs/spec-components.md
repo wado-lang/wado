@@ -28,8 +28,10 @@ The table below is the Wadoâ†”CM correspondence, read in both directions: Wadoâ†
 | `Stream<T>`               | `stream<T>`               | Component Model async stream                                                               |
 | `Future<T>`               | `future<T>`               | Component Model async future                                                               |
 
-`f16` and `bf16` have no Component Model type, so they do not cross a component
-boundary. An `export fn` whose signature names either one is a compile error.
+`f16`, `bf16` ([Half Precision](./spec-types.md#half-precision-f16-bf16)) and
+`v128` have no Component Model type, so they do not cross a component boundary.
+Neither does a SIMD lane type such as `f32x4`, since each is a newtype over
+`v128`. An `export fn` whose signature names any of them is a compile error.
 Every `export fn` is checked, not only a world's entry point, because each one
 lands on the component's surface. A component that carries half precision data
 exports its bits, as a `List<u16>`.
@@ -475,7 +477,7 @@ A refutable ascription tests a handle, so it binds a name or `_` and nothing dee
 
 A type pattern narrows a value at runtime, unlike `match type`, which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
 
-## Known Gaps
+## Known gaps
 
 ### `AsyncCall<T>` Is Not Move-Only
 

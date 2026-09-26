@@ -339,7 +339,7 @@ So do local newtypes: `type N<T> = List<T>;`.
 
 A function body may also declare `enum`, `variant` and `flags` items, and
 `impl`/`trait` blocks that give a local type methods (see
-[Known Gaps](#known-gaps)).
+[Known gaps](#known-gaps)).
 
 No other item is local. `fn`, `use`, `interface`, `global`, `world`, `test`
 and `resource` are module-level only, and one inside a function body is a parse
@@ -622,7 +622,7 @@ let lower = c matches { 'a'..='z' };
 
 Rationale: [WEP: Range Object](./wep-2026-03-03-range-object.md).
 
-## Known Gaps
+## Known gaps
 
 - `--` reads as two `-` operators, so `a--b` compiles as `a - (-b)` and `--x`
   as `-(-x)`.

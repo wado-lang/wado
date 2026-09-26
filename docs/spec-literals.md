@@ -687,19 +687,6 @@ let long = "a".repeat(300);
 `${long:?}`.len()    // 261: two quotes, 256 characters, and "..."
 ```
 
-#### Known Gaps
-
-- Width and precision are literal digits, so neither can be computed at run
-  time.
-- A spec part that means nothing for its value is dropped rather than rejected,
-  against the closed grammar: a precision on an integer, `+` on a `String`, `#`
-  under `e` or `E`.
-- The `0` flag and the default alignment do not tell a number from any other
-  value. `${true:08}` renders `0000true`, and text aligns right by default where
-  Rust aligns it left.
-- Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length, so
-  inspecting a deeply recursive value runs until the stack is exhausted.
-
 Rationale: [WEP: Template Format Specifiers](./wep-2026-01-17-template-format-specifiers.md),
 [WEP: Format Traits](./wep-2026-02-01-format-traits.md),
 [WEP: Inspect (Debug Output)](./wep-2026-02-21-inspect-debug-output.md).
@@ -991,12 +978,6 @@ A sequence literal cannot carry a spread: `[..xs, 4]` is a
 are in [Struct Construction](./spec-types.md#struct-construction) and
 [Serialization and Deserialization](./spec-traits.md#bound-driven-serialize--deserialize).
 
-#### Known Gaps
-
-- A key is always a field name. A computed key such as `{ [Color::Red]: 1 }`
-  cannot be written, so a map whose key type is not `String` has no key-value
-  literal.
-
 Rationale: [WEP: Literal Coercion as `From<Array<…>>`](./wep-2026-08-24-literal-from-array.md),
 [WEP: Literal Spread (`..base`)](./wep-2026-07-03-literal-spread.md).
 
@@ -1114,3 +1095,24 @@ user.name
 map["key"]        // panics if key not found
 map.get("key")    // returns Option<V>
 ```
+
+## Known gaps
+
+### Template Strings
+
+- Width and precision are literal digits, so neither can be computed at run
+  time.
+- A spec part that means nothing for its value is dropped rather than rejected,
+  against the closed grammar: a precision on an integer, `+` on a `String`, `#`
+  under `e` or `E`.
+- The `0` flag and the default alignment do not tell a number from any other
+  value. `${true:08}` renders `0000true`, and text aligns right by default where
+  Rust aligns it left.
+- Nothing caps nesting depth the way `DEFAULT_SEQ_LIMIT` caps length, so
+  inspecting a deeply recursive value runs until the stack is exhausted.
+
+### Collection Literals
+
+- A key is always a field name. A computed key such as `{ [Color::Red]: 1 }`
+  cannot be written, so a map whose key type is not `String` has no key-value
+  literal.

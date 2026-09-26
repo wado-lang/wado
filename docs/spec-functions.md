@@ -174,7 +174,7 @@ let f = || snapshot * 2;
 
 A closure capturing an outer binding is a separate matter from what a function
 does with its reference _parameters_; see
-[Value Semantics](./spec-memory.md#value-semantics).
+[Reference Retention](./spec-memory.md#reference-retention).
 
 ### Closures Are Values
 
