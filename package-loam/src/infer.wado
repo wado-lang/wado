@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { axes_of, axis_index, fold, regrouped_extents, resolve_index } from "./fold.wado";
+use { axes_of, axis_index, count_of, fits, fold, polys_at, regrouped_extents, resolve_index } from "./fold.wado";
 use {
     AttrError,
     Dim,
@@ -18,7 +18,8 @@ use {
     element_of,
     is_binary_elementwise,
 } from "./graph.wado";
-use { checked_element_count, element_count, spatial_extents } from "./runtime/tensor.wado";
+use { Poly } from "./poly.wado";
+use { spatial_extents } from "./runtime/tensor.wado";
 use { Schema } from "./schema.wado";
 use { Window, ints, window_over } from "./window.wado";
 
@@ -352,6 +353,12 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
 /// Whether operand `index` is one the operator reads when the build runs, as
 /// `Reshape` reads its target, rather than a tensor its kernel computes on.
 fn read_at_build_time(node: &Node, index: i32) -> bool {
+    if node.op == "Range" {
+        return true;
+    }
+    if node.op == "Slice" {
+        return index >= 1;
+    }
     return index == 1
         && (node.op == "Reshape"
             || node.op == "Unsqueeze"
@@ -369,7 +376,8 @@ fn is_layout(op: &String) -> bool {
         || *op == "Squeeze"
         || *op == "Identity"
         || *op == "Transpose"
-        || *op == "Split";
+        || *op == "Split"
+        || *op == "Slice";
 }
 
 /// The primitive a node's kernel produces: its operand's for a layout kernel,
@@ -383,6 +391,10 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
             9 => Result::Ok(Option::Some("bool")),
             to => Result::Err(refusal(node, `\`to\` is element type ${to}, which no kernel holds`)),
         };
+    }
+    if op == "Range" {
+        // A float range folds, so only an integer one reaches the run.
+        return Result::Ok(Option::Some("i64"));
     }
     if op == "Gather" {
         let indices = node.inputs[1];
@@ -420,7 +432,7 @@ fn produced_primitive(node: &Node, primitives: &TreeMap<String, String>) -> Resu
 /// The primitive a folded tensor is held in once a kernel reads it.
 fn known_primitive(k: &Known) -> String {
     return match k.elements {
-        Ints(_) => "i64",
+        Ints(_) | Symbolic(_) => "i64",
         Floats(_) => KERNEL_ELEMENT,
         Bools(_) => "bool",
     };
@@ -485,9 +497,10 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError>
             },
             // The graph states a length the nodes only carried a name for, and
             // a consumer of the shape table is owed the constant.
-            Symbol(_) => {
+            Symbolic(_) => {
                 merged.axes[i].extent = Extent::Static(declared);
             },
+            Unstated => unreachable(),
         }
     }
     return Result::Ok(merged);
@@ -532,16 +545,10 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
     return held(&vi.name, Shape { axes });
 }
 
-/// `shape`, which a list must be able to hold. A symbolic extent can only raise
-/// the product `checked_element_count` bounds, so the stated extents decide it.
+/// `shape`, which a list must be able to hold.
 fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
-    let mut stated: List<i32> = [];
-    for let axis of &shape.axes {
-        if let Static(e) = axis.extent {
-            stated.push(e);
-        }
-    }
-    if checked_element_count(&stated) matches { None } {
+    let extents: List<Extent> = shape.axes.into_iter().map(|axis| axis.extent).collect();
+    if !fits(&extents) {
         builtin::cold_path();
         return Result::Err(InferError::Oversized(*tensor));
     }
@@ -553,8 +560,8 @@ fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
 fn extent_of(dim: &Dim, axis: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
-        Symbol(s) => Extent::Symbol(*s),
-        Unknown => Extent::Symbol(*axis),
+        Symbol(s) => Extent::symbol(s),
+        Unknown => Extent::symbol(axis),
     };
 }
 
@@ -568,13 +575,22 @@ fn infer_node(
     let op = node.op;
     if op == "Reshape" || op == "Unsqueeze" || op == "Squeeze" {
         let operand = operand_at(node, shapes, 0);
-        return match regrouped_extents(node, known, &static_extents_of(node, &operand)?) {
+        return match regrouped_extents(node, known, &extents_of(node, &operand)?) {
             Ok(targets) => regrouped(node, &operand, &targets, schema),
             Err(reason) => Result::Err(refusal(node, reason)),
         };
     }
     if op == "Flatten" {
         return flatten(node, &operand_at(node, shapes, 0), schema);
+    }
+    if op == "Slice" {
+        return sliced(node, &operand_at(node, shapes, 0), known, schema);
+    }
+    if op == "Range" {
+        let count = range_count(node, known)?;
+        return Result::Ok(Shape {
+            axes: [output_layout_axis(node, &node.outputs[0], schema, 0, 1, count, "is a range")?],
+        });
     }
     if op == "Gather" {
         let data = operand_at(node, shapes, 0);
@@ -693,7 +709,7 @@ fn split(
                 schema,
                 axis,
                 x.rank(),
-                part,
+                Extent::Static(part),
                 "is a part of a split axis",
             )?;
         }
@@ -748,11 +764,22 @@ pub fn split_parts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Re
 /// `Flatten` regroups the axes ahead of `axis` into one and the rest into
 /// another, either of which may be empty and so extent 1.
 fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
-    let extents = static_extents_of(node, operand)?;
+    let extents = extents_of(node, operand)?;
     let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
-    let leading = element_count(&extents[0..<axis].to_list());
-    let trailing = element_count(&extents[axis..<extents.len()].to_list());
-    return regrouped(node, operand, &[leading, trailing], schema);
+    let mut targets: List<Extent> = [];
+    for let run of [
+        extents[0..<axis].to_list(),
+        extents[axis..<extents.len()].to_list(),
+    ] {
+        // `held` bounded the operand, so either run's product is an extent.
+        targets.push(Extent::of(count_of(&run)).unwrap());
+    }
+    return regrouped(node, operand, &targets, schema);
+}
+
+/// Every extent of an operand a regrouping reads.
+fn extents_of(node: &Node, operand: &Shape) -> Result<List<Extent>, InferError> {
+    return operand.extents(&node.op).map_err(|reason| refusal(node, reason));
 }
 
 /// Every extent of an operand the operator reads as static.
@@ -762,7 +789,7 @@ fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferErr
 
 /// The operand's axes regrouped onto `targets`. An axis no regrouping
 /// determines is the output layout's to name.
-fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema) -> Result<Shape, InferError> {
+fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Schema) -> Result<Shape, InferError> {
     let mut axes: List<Axis> = [];
     for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
         axes.push(match found {
@@ -773,15 +800,139 @@ fn regrouped(node: &Node, operand: &Shape, targets: &List<i32>, schema: &Schema)
     return Result::Ok(Shape { axes });
 }
 
+/// A `Slice` the run computes, since a bound or the data is only known then.
+/// An axis it narrows is new, for the output layout to name.
+fn sliced(node: &Node, x: &Shape, known: &TreeMap<String, Known>, schema: &Schema) -> Result<Shape, InferError> {
+    let cuts = slice_cuts(node, known, x)?;
+    let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
+    for let cut of cuts {
+        extents[cut.axis] = cut.extent;
+    }
+    let mut axes = x.axes;
+    for let cut of cuts {
+        let whole = cut.start.as_constant() == Option::Some(0 as i64) && cut.extent.agrees(&x.axes[cut.axis].extent);
+        if !whole {
+            axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
+        }
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// One axis a `Slice` narrows: where it starts, and the extent it keeps.
+pub struct Cut {
+    pub axis: i32,
+    pub start: Poly,
+    pub extent: Extent,
+}
+
+/// The axes a `Slice` over `x` narrows. A bound may be symbolic, and the build
+/// must then show it within the axis for every value of the symbols.
+pub fn slice_cuts(node: &Node, known: &TreeMap<String, Known>, x: &Shape) -> Result<List<Cut>, InferError> {
+    let starts = required_polys(node, known, 1, "starts")?;
+    let ends = required_polys(node, known, 2, "ends")?;
+    let mut axes: List<i64> = [];
+    for let i of 0..<starts.len() {
+        axes.push(i as i64);
+    }
+    if let Some(listed) = axes_of(node, known, 3, "axes").map_err(|reason| refusal(node, reason))? {
+        axes = listed;
+    }
+    let steps = axes_of(node, known, 4, "steps").map_err(|reason| refusal(node, reason))?;
+    if ends.len() != starts.len() || axes.len() != starts.len() {
+        return Result::Err(refusal(
+            node,
+            `${starts.len()} starts, ${ends.len()} ends and ${axes.len()} axes do not pair up`,
+        ));
+    }
+    if let Some(s) = steps && s.into_iter().any(|step| step != 1) {
+        return Result::Err(refusal(node, "a step is not 1, and the run slices by 1"));
+    }
+    let mut cuts: List<Cut> = [];
+    for let i of 0..<starts.len() {
+        let a = axis_index(axes[i], x.rank()).map_err(|reason| refusal(node, reason))?;
+        let dim = x.axes[a].extent.poly();
+        let begin = within(node, &starts[i], &dim)?;
+        let end = within(node, &ends[i], &dim)?;
+        let count = end.sub(&begin);
+        let extent = if count.is_nonnegative() { Extent::of(count) } else { null };
+        let Some(e) = extent else {
+            return Result::Err(refusal(node, `axis ${a} runs from ${begin} to ${end}, which may be backwards`));
+        };
+        cuts.push(Cut { axis: a, start: begin, extent: e });
+    }
+    return Result::Ok(cuts);
+}
+
+/// The integers operand `index` holds, symbolic or not, which the operator
+/// cannot do without.
+fn required_polys(
+    node: &Node,
+    known: &TreeMap<String, Known>,
+    index: i32,
+    attr: String,
+) -> Result<List<Poly>, InferError> {
+    let Some(values) = polys_at(node, known, index, attr).map_err(|reason| refusal(node, reason))? else {
+        return Result::Err(refusal(node, `${attr} is absent`));
+    };
+    return Result::Ok(values);
+}
+
+/// A `Slice` bound as ONNX clamps it into an axis of `dim`: counted from the
+/// end where negative, and held within `[0, dim]`.
+fn within(node: &Node, bound: &Poly, dim: &Poly) -> Result<Poly, InferError> {
+    let Some(c) = bound.as_constant() else {
+        if bound.is_nonnegative() && dim.sub(bound).is_nonnegative() {
+            return Result::Ok(*bound);
+        }
+        return Result::Err(refusal(node, `the bound ${*bound} may fall outside an axis of ${*dim}`));
+    };
+    if let Some(d) = dim.as_constant() {
+        return Result::Ok(Poly::constant(i64::clamp(resolve_index(c, d), 0, d)));
+    }
+    // Past any extent a list can hold, which is how an exporter writes "to the end".
+    if c >= i32::MAX as i64 {
+        return Result::Ok(*dim);
+    }
+    if c == 0 {
+        return Result::Ok(*bound);
+    }
+    return Result::Err(refusal(node, `the bound ${c} may fall outside an axis of ${*dim}`));
+}
+
+/// How many elements a `Range` the run computes yields. Its operands are one
+/// element each, and the build knows them, symbolic or not.
+pub fn range_count(node: &Node, known: &TreeMap<String, Known>) -> Result<Extent, InferError> {
+    let [start, limit, delta] = range_bounds(node, known)?;
+    let span = limit.sub(&start);
+    let forward = span.is_nonnegative() && delta.as_constant() matches { Some(d) && d > 0 };
+    let count = if forward { span.divided_by(&delta) } else { null };
+    if let Some(c) = count && let Some(extent) = Extent::of(c) {
+        return Result::Ok(extent);
+    }
+    return Result::Err(refusal(node, `${start} to ${limit} by ${delta} is not a count the build can show exact`));
+}
+
+/// A `Range`'s start, limit and delta, each one integer the build knows.
+pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly, Poly, Poly], InferError> {
+    let mut bounds: List<Poly> = [];
+    for let i of 0..<3 {
+        let values = required_polys(node, known, i, "")?;
+        if values.len() != 1 {
+            return Result::Err(refusal(node, `operand ${i} is not one integer`));
+        }
+        bounds.push(values[0]);
+    }
+    return Result::Ok([bounds[0], bounds[1], bounds[2]]);
+}
+
 /// A window's output: the two leading axes it carries through, and one axis
 /// per spatial position, which the output layout names.
 fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -> Result<Shape, InferError> {
     let [batch, channels] = lead;
-    let mut extents = [
-        batch.static_extent(),
-        channels.static_extent(),
-    ] as List<i32>;
-    extents.extend(&window.output);
+    let mut extents = [batch.extent, channels.extent] as List<Extent>;
+    for let e of window.output {
+        extents.push(Extent::Static(e));
+    }
     let mut axes = [batch, channels] as List<Axis>;
     for let i of 2..<extents.len() {
         axes.push(layout_axis(node, schema, i, &extents, "is a window's output")?);
@@ -791,7 +942,13 @@ fn windowed(node: &Node, lead: [Axis, Axis], window: &Window, schema: &Schema) -
 
 /// Axis `index` of the node's first output, which the operator left
 /// undetermined, under the name the output's layout gives it. `why` says what made it new.
-fn layout_axis(node: &Node, schema: &Schema, index: i32, extents: &List<i32>, why: String) -> Result<Axis, InferError> {
+fn layout_axis(
+    node: &Node,
+    schema: &Schema,
+    index: i32,
+    extents: &List<Extent>,
+    why: String,
+) -> Result<Axis, InferError> {
     return output_layout_axis(node, &node.outputs[0], schema, index, extents.len(), extents[index], why);
 }
 
@@ -802,7 +959,7 @@ fn output_layout_axis(
     schema: &Schema,
     index: i32,
     rank: i32,
-    extent: i32,
+    extent: Extent,
     why: String,
 ) -> Result<Axis, InferError> {
     let Some(names) = schema.axes_for(output) else {
@@ -816,7 +973,7 @@ fn output_layout_axis(
             dims: rank,
         }));
     }
-    return Result::Ok(Axis::named(&names[index], Extent::Static(extent)));
+    return Result::Ok(Axis::named(&names[index], extent));
 }
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`

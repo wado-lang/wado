@@ -90,9 +90,12 @@ fn initializer(vi: &ValueInfo) -> Result<String, PrintError> {
     return Result::Ok(`${declared} = {${elements.join(", ")}}`);
 }
 
+/// A graph constant's type. A reader never writes a symbolic integer; only
+/// stage 0's folding does, and it prints nothing.
 fn known_type(known: &Known) -> String {
     let dtype = match &known.elements {
         Ints(_) => "int64",
+        Symbolic(_) => unreachable(),
         Floats(_) => "float",
         Bools(_) => "bool",
     };
@@ -110,6 +113,7 @@ fn known_values(tensor: &String, known: &Known) -> Result<String, PrintError> {
                 elements.push(`${x}`);
             }
         },
+        Symbolic(_) => unreachable(),
         Floats(v) => {
             for let x of *v {
                 elements.push(float_text(tensor, x)?);

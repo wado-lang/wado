@@ -3,6 +3,8 @@
 
 use { TreeMap, TreeSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
+use { Extent } from "./extent.wado";
+use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, element_of, is_binary_elementwise } from "./graph.wado";
 use { Expected } from "./runtime/checkpoint.wado";
@@ -15,7 +17,10 @@ use {
     gemm_options,
     has_bias,
     is_reduction,
+    range_bounds,
+    range_count,
     reduced_axes,
+    slice_cuts,
     softmax_axis,
     split_axis,
     split_parts,
@@ -56,6 +61,8 @@ pub variant EmitError {
     Collision(NameCollision),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
+    /// A symbol the run needs the value of, which no input's axis carries.
+    Unbound(String),
 }
 
 impl Display for UnmappedDtype {
@@ -89,6 +96,7 @@ impl Display for EmitError {
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
+            Unbound(symbol) => f.write_str(`${symbol}: the run needs this length, and no input's axis gives it`),
         }
     }
 }
@@ -124,7 +132,7 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     let axes = axis_names(graph, shapes);
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
-    let names = Names::of(graph, checked, &literals, &axes)?;
+    let names = Names::of(graph, checked, &literals, &axes, &input_symbols(graph, shapes))?;
     let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
@@ -197,7 +205,13 @@ struct Names {
 }
 
 impl Names {
-    fn of(graph: &Graph, checked: &Checked, literals: &List<String>, axes: &List<String>) -> Result<Names, EmitError> {
+    fn of(
+        graph: &Graph,
+        checked: &Checked,
+        literals: &List<String>,
+        axes: &List<String>,
+        symbols: &List<String>,
+    ) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
             if is_bound(&reserved, &axis) {
@@ -226,6 +240,9 @@ impl Names {
         }
         for let tensor of *literals {
             names.take(&mut taken, &tensor)?;
+        }
+        for let symbol of *symbols {
+            names.take(&mut taken, &symbol_key(&symbol))?;
         }
         return Result::Ok(names);
     }
@@ -460,6 +477,94 @@ struct Operands {
     scalars: TreeMap<String, String>,
 }
 
+/// The lengths only the run knows, each bound in `forward` from the first input
+/// axis that carries it, once something spells it.
+struct Symbols {
+    idents: TreeMap<String, String>,
+    sources: TreeMap<String, String>,
+    used: TreeSet<String>,
+}
+
+impl Symbols {
+    fn of(graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) -> Symbols {
+        let mut symbols = Symbols {
+            idents: TreeMap::<String, String>::new(),
+            sources: TreeMap::<String, String>::new(),
+            used: TreeSet::<String>::new(),
+        };
+        for let vi of &graph.inputs {
+            for let [i, axis] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
+                let Some(symbol) = input_symbol(&axis.extent) else {
+                    continue;
+                };
+                if symbols.sources.try_insert(symbol, `${names.get(&vi.name)}.extents[${i}]`) {
+                    symbols.idents[symbol] = names.get(&symbol_key(&symbol));
+                }
+            }
+        }
+        return symbols;
+    }
+
+    /// A symbolic integer as the `i32` expression `forward` computes it by.
+    fn spell(&mut self, p: &Poly) -> Result<String, EmitError> {
+        for let symbol of p.symbols() {
+            if !self.idents.contains_key(symbol) {
+                builtin::cold_path();
+                return Result::Err(EmitError::Unbound(symbol));
+            }
+            self.used.insert(symbol);
+        }
+        return Result::Ok(p.spelled(&self.idents));
+    }
+
+    fn spell_all(&mut self, extents: &List<Extent>) -> Result<String, EmitError> {
+        let mut spelled: List<String> = [];
+        for let e of *extents {
+            spelled.push(self.spell(&e.poly())?);
+        }
+        return Result::Ok(`[${spelled.join(", ")}]`);
+    }
+
+    /// The bindings of every symbol something spelled.
+    fn bindings(&self) -> List<String> {
+        let mut lines: List<String> = [];
+        for let symbol of self.used {
+            lines.push(`let ${self.idents.get(symbol).unwrap()} = ${self.sources.get(symbol).unwrap()};`);
+        }
+        return lines;
+    }
+}
+
+/// The key a symbol takes among the names `forward` binds, apart from any
+/// tensor's, since both come out of the model file.
+fn symbol_key(symbol: &String) -> String {
+    return `dim ${*symbol}`;
+}
+
+/// The symbol an input axis's extent is, as a `dim_param` or `?` makes it.
+/// An input's extent is never an expression of symbols.
+fn input_symbol(extent: &Extent) -> Option<String> {
+    let Symbolic(p) = *extent else {
+        return null;
+    };
+    let read = p.symbols();
+    assert read.len() == 1 && p == Poly::symbol(&read[0]);
+    return Option::Some(read[0]);
+}
+
+/// Every symbol an input axis carries, in the order `Symbols` binds them.
+fn input_symbols(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
+    let mut symbols: List<String> = [];
+    for let vi of &graph.inputs {
+        for let axis of shapes.get(vi.name).unwrap().axes {
+            if let Some(symbol) = input_symbol(&axis.extent) && !symbols.contains_str(symbol.as_str_slice()) {
+                symbols.push(symbol);
+            }
+        }
+    }
+    return symbols;
+}
+
 impl Operands {
     fn reference(&self, tensor: &String) -> String {
         let value = self.values.get(*tensor).unwrap();
@@ -524,9 +629,12 @@ fn emit_forward(
     for let line of widened {
         w.line(&line);
     }
+    // A symbol is bound once something spells it, which the body decides.
+    let mut symbols = Symbols::of(graph, shapes, names);
+    let mut body: List<String> = [];
     for let tensor of *literals {
         let ident = names.get(&tensor);
-        w.line(`let ${ident} = ${literal_tensor(checked, &tensor)};`);
+        body.push(`let ${ident} = ${literal_tensor(checked, &tensor, &mut symbols)?};`);
         exprs.values[tensor] = ident;
     }
     for let node of &graph.nodes {
@@ -545,14 +653,20 @@ fn emit_forward(
         let calls = if node.op == "Split" {
             split_calls(node, checked, &exprs);
         } else {
-            [node_call(node, checked, &exprs, graph.opset)?] as List<String>;
+            [node_call(node, checked, &exprs, &mut symbols, graph.opset)?] as List<String>;
         };
         for let [i, call] of calls.into_iter().enumerate() {
             let output = node.outputs[i];
             let ident = names.get(&output);
-            w.line(`let ${ident} = ${call};`);
+            body.push(`let ${ident} = ${call};`);
             exprs.values[output] = ident;
         }
+    }
+    for let line of symbols.bindings() {
+        w.line(&line);
+    }
+    for let line of body {
+        w.line(&line);
     }
     let returned = if converted(checked, held, &result) {
         `narrow(${exprs.reference(&result)})`;
@@ -608,18 +722,35 @@ fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &TreeMap<String, St
 
 /// A folded tensor spelled out as a `Tensor` literal, under the shape stage 0
 /// gave it.
-fn literal_tensor(checked: &Checked, tensor: &String) -> String {
+fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shape = checked.shapes.get(*tensor).unwrap();
     let data = match checked.known.get(*tensor).unwrap().elements {
         Ints(v) => `${v}`,
+        Symbolic(v) => {
+            let mut spelled: List<String> = [];
+            for let p of v {
+                spelled.push(`(${symbols.spell(&p)?}) as i64`);
+            }
+            `[${spelled.join(", ")}]`;
+        },
         Floats(v) => {
             let spelled: List<String> = v.into_iter().map(|x| float_literal(x)).collect();
             `[${spelled.join(", ")}]`;
         },
-        Bools(v) => `${v}`,
+        // A mask is as large as the context it covers, so it is spelled as
+        // bytes, which the compiler folds into a data segment.
+        Bools(v) => {
+            let mut bytes = ByteList::with_capacity(v.len());
+            for let b of v {
+                bytes.push(if b { 1 } else { 0 });
+            }
+            `List::<u8>::from_le_bytes(${byte_string_literal(&bytes)}).into_iter().map(|b| b != 0).collect()`;
+        },
     };
     let element = checked.primitives.get(*tensor).unwrap();
-    return `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents_of(&shape)} }`;
+    return Result::Ok(
+        `Tensor::<${element}, [${axis_list(&shape)}]> { data: ${data}, extents: ${symbols.spell_all(&extents_of(&shape))?} }`,
+    );
 }
 
 /// Checks at the top of `forward` that stop it naming the axis an input
@@ -634,19 +765,18 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
         let mut stated: List<i32> = [];
         for let [i, axis] of shape.axes.into_iter().enumerate() {
             axes.push(wado`"${axis.name}"`);
-            match axis.extent {
-                Static(e) => stated.push(e),
-                Symbol(symbol) => {
-                    stated.push(-1);
-                    let extent = `${ident}.extents[${i}]`;
-                    if let Some(first) = first_seen.get(symbol) {
-                        agreements.push(
-                            wado`refuse(axis_mismatch("${symbol}", "${vi.name}", "${axis.name}", ${extent}, ${first}));`,
-                        );
-                    } else {
-                        first_seen[symbol] = `${wado`"${vi.name}"`}, ${extent}`;
-                    }
-                },
+            let Some(symbol) = input_symbol(&axis.extent) else {
+                stated.push(axis.static_extent());
+                continue;
+            };
+            stated.push(-1);
+            let extent = `${ident}.extents[${i}]`;
+            if let Some(first) = first_seen.get(symbol) {
+                agreements.push(
+                    wado`refuse(axis_mismatch("${symbol}", "${vi.name}", "${axis.name}", ${extent}, ${first}));`,
+                );
+            } else {
+                first_seen[symbol] = `${wado`"${vi.name}"`}, ${extent}`;
             }
         }
         w.line(wado`refuse(input_mismatch(${ident}, "${vi.name}", [${axes.join(", ")}], ${stated}));`);
@@ -656,9 +786,8 @@ fn emit_input_checks(w: &mut CodeWriter, graph: &Graph, shapes: &TreeMap<String,
     }
 }
 
-/// The extents of a shape stage 0 has shown static.
-fn extents_of(shape: &Shape) -> List<i32> {
-    return shape.axes.into_iter().map(|axis| axis.static_extent()).collect();
+fn extents_of(shape: &Shape) -> List<Extent> {
+    return shape.axes.into_iter().map(|axis| axis.extent).collect();
 }
 
 /// Whether a boundary tensor is held in something other than what the kernels
@@ -709,7 +838,13 @@ fn settled<T>(read: Result<T, InferError>) -> T {
 
 /// One node as the kernel call that computes it. The operand expressions are
 /// already in scope, since a graph's nodes are in topological order.
-fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64>) -> Result<String, EmitError> {
+fn node_call(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    opset: Option<i64>,
+) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let op = node.op;
     if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
@@ -718,7 +853,20 @@ fn node_call(node: &Node, checked: &Checked, exprs: &Operands, opset: Option<i64
         let operand = exprs.reference(&node.inputs[0]);
         let element = checked.primitives.get(node.inputs[0]).unwrap();
         return Result::Ok(
-            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents_of(&to)})`,
+            `reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${symbols.spell_all(
+                &extents_of(&to),
+            )?})`,
+        );
+    }
+    if op == "Slice" {
+        return slice_call(node, checked, exprs, symbols);
+    }
+    if op == "Range" {
+        let [start, _, delta] = settled(range_bounds(node, &checked.known));
+        let count = settled(range_count(node, &checked.known));
+        let axis = shapes.get(node.outputs[0]).unwrap().axes[0].name;
+        return Result::Ok(
+            `range_i64::<${axis}>(${symbols.spell(&start)?}, ${symbols.spell(&count.poly())?}, ${symbols.spell(&delta)?})`,
         );
     }
     if op == "Cast" {
@@ -808,6 +956,33 @@ fn split_calls(node: &Node, checked: &Checked, exprs: &Operands) -> List<String>
         start += part;
     }
     return calls;
+}
+
+/// A `Slice` as one `slice_axis` per axis it narrows, each call reading the
+/// last. The axes between are the output's where already cut, the input's where not.
+fn slice_call(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let x = checked.shapes.get(node.inputs[0]).unwrap();
+    let out = checked.shapes.get(node.outputs[0]).unwrap();
+    let element = checked.primitives.get(node.inputs[0]).unwrap();
+    let cuts = settled(slice_cuts(node, &checked.known, &x));
+    // A slice that narrows nothing is its operand, read as a value.
+    let mut call = exprs.value(&node.inputs[0]);
+    let mut operand = exprs.reference(&node.inputs[0]);
+    let mut current = x;
+    for let cut of cuts {
+        let a = cut.axis;
+        let turbofish = `::<${element}, [${axis_run(&current, 0, a)}], ${current.axes[a].name}, ${out.axes[a].name}, [${axis_run(
+            &current,
+            a + 1,
+            current.rank(),
+        )}]>`;
+        call = `slice_axis${turbofish}(${operand}, ${a}, ${symbols.spell(&cut.start)?}, ${symbols.spell(
+            &cut.extent.poly(),
+        )?})`;
+        operand = `&${call}`;
+        current.axes[a] = out.axes[a];
+    }
+    return Result::Ok(call);
 }
 
 /// An operand as a tensor of `out`'s rank, for a kernel whose operands share

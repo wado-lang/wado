@@ -1,0 +1,217 @@
+//! Integer arithmetic over a graph's dimension symbols, which is what stage 0
+//! computes when an exporter writes shape arithmetic over a length only the
+//! run knows. See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
+
+use { TreeMap } from "core:collections";
+
+/// One term of a `Poly`: the product of `symbols`, scaled by `coefficient`.
+pub struct Term {
+    pub coefficient: i64,
+    /// Sorted, a symbol repeated once per power; empty for the constant term.
+    pub symbols: List<String>,
+}
+
+/// A polynomial with integer coefficients over dimension symbols, held in one
+/// canonical form so that two equal polynomials are equal as values.
+pub struct Poly {
+    /// No two share `symbols` and none has coefficient 0, ordered by `order`.
+    terms: List<Term>,
+}
+
+impl Poly {
+    pub fn constant(c: i64) -> Poly {
+        if c == 0 {
+            return Poly { terms: [] };
+        }
+        return Poly {
+            terms: [
+                Term { coefficient: c, symbols: [] },
+            ],
+        };
+    }
+
+    pub fn symbol(name: &String) -> Poly {
+        return Poly {
+            terms: [
+                Term {
+                    coefficient: 1,
+                    symbols: [*name],
+                },
+            ],
+        };
+    }
+
+    /// The value, where no symbol remains.
+    pub fn as_constant(&self) -> Option<i64> {
+        if self.terms.is_empty() {
+            return Option::Some(0);
+        }
+        if self.terms.len() == 1 && self.terms[0].symbols.is_empty() {
+            return Option::Some(self.terms[0].coefficient);
+        }
+        return null;
+    }
+
+    /// Every symbol the polynomial reads, each once, in order.
+    pub fn symbols(&self) -> List<String> {
+        let mut names: List<String> = [];
+        for let t of &self.terms {
+            for let s of &t.symbols {
+                if !names.contains_str(s.as_str_slice()) {
+                    names.push(*s);
+                }
+            }
+        }
+        names.sort();
+        return names;
+    }
+
+    pub fn add(&self, other: &Poly) -> Poly {
+        let mut terms = self.terms;
+        terms.extend(&other.terms);
+        return Poly::collected(terms);
+    }
+
+    pub fn sub(&self, other: &Poly) -> Poly {
+        return self.add(&other.scaled(-1));
+    }
+
+    pub fn mul(&self, other: &Poly) -> Poly {
+        let mut terms: List<Term> = [];
+        for let a of &self.terms {
+            for let b of &other.terms {
+                let mut symbols = a.symbols;
+                symbols.extend(&b.symbols);
+                symbols.sort();
+                terms.push(Term { coefficient: a.coefficient * b.coefficient, symbols });
+            }
+        }
+        return Poly::collected(terms);
+    }
+
+    fn scaled(&self, factor: i64) -> Poly {
+        let mut terms: List<Term> = [];
+        for let t of &self.terms {
+            terms.push(Term { coefficient: t.coefficient * factor, symbols: t.symbols });
+        }
+        return Poly::collected(terms);
+    }
+
+    /// The quotient where `divisor` divides every term exactly, as a monomial
+    /// or the polynomial itself does. `None` is a division the build cannot
+    /// prove exact, which a symbol's value might still make exact at run time.
+    pub fn divided_by(&self, divisor: &Poly) -> Option<Poly> {
+        if *self == *divisor && !self.terms.is_empty() {
+            return Option::Some(Poly::constant(1));
+        }
+        if divisor.terms.len() != 1 {
+            return null;
+        }
+        let d = &divisor.terms[0];
+        let mut terms: List<Term> = [];
+        for let t of &self.terms {
+            if t.coefficient % d.coefficient != 0 {
+                return null;
+            }
+            let Some(rest) = without(&t.symbols, &d.symbols) else {
+                return null;
+            };
+            terms.push(Term { coefficient: t.coefficient / d.coefficient, symbols: rest });
+        }
+        return Option::Some(Poly::collected(terms));
+    }
+
+    /// Whether every value of the symbols makes this at least 0. A symbol is an
+    /// extent, so a polynomial of no negative coefficient is.
+    pub fn is_nonnegative(&self) -> bool {
+        for let t of &self.terms {
+            if t.coefficient < 0 {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// `terms` summed into canonical form.
+    fn collected(terms: List<Term>) -> Poly {
+        let mut sorted = terms;
+        sorted.sort_by(|a, b| order(a, b));
+        let mut out: List<Term> = [];
+        for let t of sorted {
+            let last = out.len() - 1;
+            if last >= 0 && out[last].symbols == t.symbols {
+                out[last].coefficient += t.coefficient;
+            } else {
+                out.push(t);
+            }
+        }
+        let mut kept: List<Term> = [];
+        for let t of out {
+            if t.coefficient != 0 {
+                kept.push(t);
+            }
+        }
+        return Poly { terms: kept };
+    }
+}
+
+/// Higher degree first, then by the symbols' names, so the constant is last.
+fn order(a: &Term, b: &Term) -> Ordering {
+    if a.symbols.len() != b.symbols.len() {
+        return b.symbols.len().cmp(&a.symbols.len());
+    }
+    return a.symbols.cmp(&b.symbols);
+}
+
+/// `whole` with each of `part` taken out once, or `None` where one is missing.
+fn without(whole: &List<String>, part: &List<String>) -> Option<List<String>> {
+    let mut rest = *whole;
+    for let s of *part {
+        let mut at = -1;
+        for let [i, r] of rest.into_iter().enumerate() {
+            if r == s {
+                at = i;
+                break;
+            }
+        }
+        if at < 0 {
+            return null;
+        }
+        rest.remove(at);
+    }
+    return Option::Some(rest);
+}
+
+impl Poly {
+    /// The polynomial as an arithmetic expression, each symbol spelled as
+    /// `names` maps it, or as itself where it maps none.
+    pub fn spelled(&self, names: &TreeMap<String, String>) -> String {
+        if self.terms.is_empty() {
+            return "0";
+        }
+        let mut out = String::with_capacity(16);
+        for let [i, t] of self.terms.into_iter().enumerate() {
+            if i == 0 {
+                out.push_str(if t.coefficient < 0 { "-" } else { "" });
+            } else {
+                out.push_str(if t.coefficient < 0 { " - " } else { " + " });
+            }
+            let magnitude = i64::abs(t.coefficient);
+            let mut factors: List<String> = [];
+            if magnitude != 1 || t.symbols.is_empty() {
+                factors.push(`${magnitude}`);
+            }
+            for let s of t.symbols {
+                factors.push(names.get(s).unwrap_or(s));
+            }
+            out.push_str(&factors.join(" * "));
+        }
+        return out;
+    }
+}
+
+impl Display for Poly {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(self.spelled(&TreeMap::<String, String>::new()));
+    }
+}

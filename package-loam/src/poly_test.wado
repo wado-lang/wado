@@ -1,0 +1,74 @@
+use { TreeMap } from "core:collections";
+use { Poly } from "./poly.wado";
+
+fn s(name: String) -> Poly {
+    return Poly::symbol(&name);
+}
+
+fn c(v: i64) -> Poly {
+    return Poly::constant(v);
+}
+
+test "a length taken from itself is zero, as a causal mask's offset is" {
+    let seq = s("sequence_length");
+    assert seq.sub(&seq) == c(0);
+    assert seq.sub(&seq).as_constant() == Option::Some(0 as i64);
+}
+
+test "equal polynomials are equal however they were built" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert a.add(&b) == b.add(&a);
+    assert a.mul(&b).add(&c(1)) == c(1).add(&b.mul(&a));
+    assert a.add(&c(2)).mul(&c(3)) == a.mul(&c(3)).add(&c(6));
+}
+
+test "a monomial divides out of every term" {
+    let [batch, seq] = [
+        s("batch"),
+        s("seq"),
+    ];
+    let total = batch.mul(&seq).mul(&c(6));
+    assert total.divided_by(&seq) == Option::Some(batch.mul(&c(6)));
+    assert total.divided_by(&c(4)) matches { None };
+    assert total.divided_by(&total) == Option::Some(c(1));
+    assert seq.divided_by(&batch) matches { None };
+}
+
+test "a polynomial of no negative coefficient is never negative" {
+    let seq = s("seq");
+    assert seq.add(&c(1)).is_nonnegative();
+    assert !seq.sub(&c(1)).is_nonnegative();
+}
+
+test "a polynomial renders highest degree first, the constant last" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert `${a}` == "a";
+    assert `${c(0)}` == "0";
+    assert `${c(-3)}` == "-3";
+    assert `${a.add(&c(1))}` == "a + 1";
+    assert `${c(1).sub(&a)}` == "-a + 1";
+    assert `${a.mul(&b).mul(&c(2)).sub(&a)}` == "2 * a * b - a";
+    assert `${a.mul(&a)}` == "a * a";
+}
+
+test "a polynomial spells each symbol as the generated module binds it" {
+    let mut names = TreeMap::<String, String>::new();
+    names["past + 1"] = "past_1";
+    let p = s("past + 1").mul(&c(2)).add(&s("seq"));
+    assert p.spelled(&names) == "2 * past_1 + seq";
+}
+
+test "the symbols a polynomial reads are listed once each" {
+    let [a, b] = [
+        s("a"),
+        s("b"),
+    ];
+    assert a.mul(&b).add(&b).symbols() == ["a", "b"] as List<String>;
+    assert c(4).symbols().is_empty();
+}

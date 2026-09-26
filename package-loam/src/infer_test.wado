@@ -97,8 +97,8 @@ test "an extent mismatch between the layers names both extents" {
 test "a symbolic batch axis flows through both layers" {
     let graph = read(&mlp(64)).unwrap();
     let shapes = infer(&graph, &mlp_schema()).unwrap().shapes;
-    assert shapes["H"].axes[0].extent.agrees(&Extent::Symbol("N"));
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["H"].axes[0].extent.agrees(&Extent::symbol(&"N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a bias broadcasts against the batch axis ahead of it" {
@@ -180,7 +180,7 @@ test "an unknown dimension takes its axis's name as its symbol" {
         ],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"Batch"));
 }
 
 test "an operator given too few operands stops the build rather than trapping" {
@@ -292,7 +292,7 @@ test "regrouping a merged axis the layout wrote stops the build, its parts havin
         Y = Reshape(W, S)
     }`;
     let e = y_axes(source, [rule("W", ["(Head Dim)", "Out"])]).unwrap_err();
-    assert e == "Y = Reshape: axis Head is ?, and Reshape reads static extents";
+    assert e == "Y = Reshape: axis Head has no stated extent, and Reshape reads it";
 }
 
 fn qkv() -> List<LayoutRule> {
@@ -383,7 +383,7 @@ test "a declared symbolic name need not be the one the schema gave the axis" {
         layout: [rule("*", ["Batch", "B"])],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"Batch"));
 }
 
 test "a declared static extent settles an axis the nodes left symbolic" {
@@ -398,7 +398,7 @@ test "a declared static extent settles an axis the nodes left symbolic" {
     let shapes = infer(&graph, &schema).unwrap().shapes;
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
     // Only the declared output is settled; the input keeps what it stated.
-    assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["X"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a declared `?` claims nothing about the produced extent" {
@@ -411,7 +411,7 @@ test "a declared `?` claims nothing about the produced extent" {
         layout: [rule("*", ["Batch", "B"])],
     };
     let shapes = infer(&graph, &schema).unwrap().shapes;
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::symbol(&"N"));
 }
 
 test "a graph output no node produces stops the build" {
@@ -721,12 +721,33 @@ test "an output declared as an element other than the one computed stops the bui
     assert y_axes(source, [rule("M", ["Key"])]).unwrap_err() == "Y: declared float and computed in i64";
 }
 
-test "Shape of a symbolic extent stops the build" {
+test "a Reshape to the Shape of a symbolic tensor keeps its axes" {
     let source = `g (float[N, 3] X) => (float[N, 3] Y) {
         S = Shape(X)
         Y = Reshape(X, S)
     }`;
-    assert y_axes(source, [rule("X", ["Batch", "Col"])]).unwrap_err() == "S = Shape: axis Batch is N, and Shape reads static extents";
+    assert y_axes(source, [rule("X", ["Batch", "Col"])]).unwrap() == "Batch=N,Col=3";
+}
+
+test "a Reshape's -1 takes what the symbolic rest leaves" {
+    // An exporter writes `x.view(-1, x.size(1))` as a Shape, a Gather and a
+    // Concat, so the target holds the symbol itself.
+    let source = `g (float[B, N, 4] X) => (float[B, N, 4] Y) <int64[1] Minus = {-1}, int64[1] Four = {4}, int64[1] Zero = {0}> {
+        One = Constant <value = int64 {1}> ()
+        S = Shape(X)
+        N = Gather <axis = 0> (S, One)
+        U = Unsqueeze(N, Zero)
+        T = Concat <axis = 0> (Minus, U, Four)
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Seq", "Dim"])]).unwrap() == "Batch=B,Seq=N,Dim=4";
+}
+
+test "a Reshape merging symbolic axes gives the merge their product" {
+    let source = `g (float[B, N, 4] X) => (float[?, 4] Y) <int64[2] T = {-1, 4}> {
+        Y = Reshape(X, T)
+    }`;
+    assert y_axes(source, [rule("X", ["Batch", "Seq", "Dim"])]).unwrap() == "Merged<[Batch, Seq]>=B * N,Dim=4";
 }
 
 test "Reshape splits a merged axis back into its parts" {
@@ -800,12 +821,23 @@ test "a Reshape target that changes the element count stops the build" {
     assert e == "Y = Reshape: 24 elements cannot take the shape [5, 5]";
 }
 
-test "a Reshape over a symbolic extent stops the build" {
+test "a Reshape carries a symbolic extent past the axes it splits" {
     let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[3] S = {0, 3, 4}> {
         Y = Reshape(X, S)
     }`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "Wide"]),
+        rule("Y", ["Batch", "Row", "Col"]),
+    ];
+    assert y_axes(source, layout).unwrap() == "Batch=N,Row=3,Col=4";
+}
+
+test "a Reshape whose target cannot hold the symbolic count stops the build" {
+    let source = `g (float[N, 12] X) => (float[N, 3, 4] Y) <int64[2] S = {3, 4}> {
+        Y = Reshape(X, S)
+    }`;
     let e = y_axes(source, [rule("X", ["Batch", "Wide"])]).unwrap_err();
-    assert e == "Y = Reshape: axis Batch is N, and Reshape reads static extents";
+    assert e == "Y = Reshape: 12 * N elements cannot take the shape [3, 4]";
 }
 
 fn pooled() -> List<LayoutRule> {

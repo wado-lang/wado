@@ -278,8 +278,20 @@ pub fn select<E, Axes>(cond: &Tensor<bool, Axes>, x: &Tensor<E, Axes>, y: &Tenso
     return Tensor { data: out, extents };
 }
 
-/// The `length` positions from `start` along `axis`, which `Split` cuts each of
-/// its outputs as. The caller spells both packs.
+/// ONNX's `Range` over integers: `count` values from `start`, `delta` apart.
+pub fn range_i64<A>(start: i32, count: i32, delta: i32) -> Tensor<i64, [A]> {
+    let mut data = List::<i64>::with_capacity(count);
+    for let i of 0..<count {
+        data.push(start as i64 + i as i64 * delta as i64);
+    }
+    return Tensor {
+        data,
+        extents: [count],
+    };
+}
+
+/// The `length` positions from `start` along `axis`, which `Split` and `Slice`
+/// cut. The caller spells both packs.
 pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     t: &Tensor<E, [..Pre, In, ..Post]>,
     axis: i32,
@@ -287,7 +299,7 @@ pub fn slice_axis<E, ..Pre, In, Out, ..Post>(
     length: i32,
 ) -> Tensor<E, [..Pre, Out, ..Post]> {
     let extent = t.extents[axis];
-    assert 0 <= start && start + length <= extent;
+    assert 0 <= start <= extent && 0 <= length <= extent - start;
     let outer = element_count(&t.extents[0..<axis].to_list());
     let inner = element_count(&t.extents[axis + 1..<t.extents.len()].to_list());
     let mut out = List::<E>::with_capacity(outer * length * inner);

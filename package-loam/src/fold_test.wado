@@ -4,6 +4,7 @@ use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { fold } from "./fold.wado";
 use { Attr, Elements, Known, Node } from "./graph.wado";
+use { Poly } from "./poly.wado";
 use { Axis, Shape } from "./shape.wado";
 
 fn ints(extents: List<i32>, values: List<i64>) -> Known {
@@ -39,7 +40,7 @@ fn knowns(entries: List<[String, Known]>) -> TreeMap<String, Known> {
 fn runtime(extents: List<i32>) -> TreeMap<String, Shape> {
     let mut axes: List<Axis> = [];
     for let [i, e] of extents.into_iter().enumerate() {
-        let extent = if e < 0 { Extent::Symbol("N") } else { Extent::Static(e) };
+        let extent = if e < 0 { Extent::symbol(&"N") } else { Extent::Static(e) };
         axes.push(Axis { name: `A${i}`, extent });
     }
     let mut shapes = TreeMap::<String, Shape>::new();
@@ -63,9 +64,71 @@ test "Shape takes start and end" {
     assert folded(n, knowns([])) == ints([2], [3, 4]);
 }
 
-test "Shape of a symbolic extent is refused" {
-    let e = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap_err();
-    assert e == "axis A0 is N, and Shape reads static extents";
+test "Shape of a symbolic extent holds the symbol" {
+    let k = fold(&node("Shape", ["X"], []), &knowns([]), &runtime([-1, 3])).unwrap().unwrap();
+    assert k == Known {
+        extents: [2],
+        elements: Elements::integers([
+            Poly::symbol(&"N"),
+            Poly::constant(3),
+        ]),
+    };
+}
+
+test "shape arithmetic over a symbol folds as a polynomial" {
+    let k = knowns([
+        [
+            "S",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["T", ints([1], [4])],
+    ]);
+    let product = folded(node("Mul", ["S", "T"], []), k);
+    assert product == Known {
+        extents: [1],
+        elements: Elements::integers([Poly::symbol(&"N").mul(&Poly::constant(4))]),
+    };
+    let gone = folded(node("Sub", ["S", "S"], []), k);
+    assert gone == ints([1], [0]);
+}
+
+test "a quotient the build cannot show exact stops it" {
+    let k = knowns([
+        [
+            "S",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["T", ints([1], [2])],
+    ]);
+    assert fold(&node("Div", ["S", "T"], []), &k, &runtime([])).unwrap_err() == "N / 2 is not a quotient the build can show exact";
+}
+
+test "a Range or Slice bound only the run knows leaves the node to the run" {
+    let k = knowns([
+        ["Zero", ints([], [0])],
+        [
+            "N",
+            Known { extents: [], elements: Elements::integers([Poly::symbol(&"N")]) },
+        ],
+        ["One", ints([], [1])],
+        [
+            "Ends",
+            Known {
+                extents: [1],
+                elements: Elements::integers([Poly::symbol(&"N")]),
+            },
+        ],
+        ["Starts", ints([1], [0])],
+        ["M", ints([4], [1, 2, 3, 4])],
+    ]);
+    assert fold(&node("Range", ["Zero", "N", "One"], []), &k, &runtime([])).unwrap() matches { None };
+    assert fold(&node("Slice", ["M", "Starts", "Ends"], []), &k, &runtime([])).unwrap() matches { None };
 }
 
 test "Gather with a scalar index drops the axis" {

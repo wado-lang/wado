@@ -2,6 +2,17 @@
 //! operation owes before it can emit anything.
 
 use { Extent } from "./extent.wado";
+use { Poly } from "./poly.wado";
+
+/// Whether a regrouping that has consumed `consumed` elements per step must
+/// take another part to reach `produced`: fewer, where both are numbers, and a
+/// proper divisor, where a symbol leaves no order to compare by.
+fn short_of(consumed: &Poly, produced: &Poly) -> bool {
+    if let Some(a) = consumed.as_constant() && let Some(b) = produced.as_constant() {
+        return a < b;
+    }
+    return *consumed != *produced && produced.divided_by(consumed) matches { Some(_) };
+}
 
 /// One axis: the identity the type layer carries, paired with the length it
 /// cannot. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
@@ -39,7 +50,7 @@ impl Axis {
         for let part of inner.split_whitespace() {
             parts.push(Axis {
                 name: part.to_string(),
-                extent: Extent::Symbol("?"),
+                extent: Extent::Unstated,
             });
         }
         if parts.len() == 1 {
@@ -91,15 +102,27 @@ impl Shape {
     pub fn static_extents(&self, reader: &String) -> Result<List<i32>, String> {
         let mut extents: List<i32> = [];
         for let axis of self.axes {
-            // A regrouping reads a merged axis's parts as well.
+            let Static(e) = axis.extent else {
+                return Result::Err(`axis ${axis.name} is ${axis.extent}, and ${*reader} reads static extents`);
+            };
+            extents.push(e);
+        }
+        return Result::Ok(extents);
+    }
+
+    /// Every extent, for a regrouping, which reads a merged axis's parts as
+    /// well. `Err` names the first one nothing states, and `reader`.
+    pub fn extents(&self, reader: &String) -> Result<List<Extent>, String> {
+        let mut extents: List<Extent> = [];
+        for let axis of self.axes {
             let mut read = [axis] as List<Axis>;
             read.extend(&axis.parts);
             for let a of read {
-                if a.extent matches { Symbol(_) } {
-                    return Result::Err(`axis ${a.name} is ${a.extent}, and ${*reader} reads static extents`);
+                if !a.extent.is_stated() {
+                    return Result::Err(`axis ${a.name} has no stated extent, and ${*reader} reads it`);
                 }
             }
-            extents.push(axis.static_extent());
+            extents.push(axis.extent);
         }
         return Result::Ok(extents);
     }
@@ -114,18 +137,19 @@ impl Shape {
         return Shape { axes };
     }
 
-    /// `Reshape` onto static `targets`: each output axis is the run of parts it
-    /// spans, merged where several, or `None` where no regrouping determines it.
-    pub fn regroup(&self, targets: &List<i32>) -> List<Option<Axis>> {
+    /// `Reshape` onto `targets`, whose extents `extents` read: each output axis
+    /// is the run of parts it spans, merged where several, or `None` where no
+    /// regrouping determines it.
+    pub fn regroup(&self, targets: &List<Extent>) -> List<Option<Axis>> {
         let parts = self.parts();
         let mut out: List<Option<Axis>> = [];
         let mut next = 0;
-        let mut consumed: i64 = 1;
-        let mut produced: i64 = 1;
+        let mut consumed = Poly::constant(1);
+        let mut produced = Poly::constant(1);
         for let target of *targets {
             let aligned = consumed == produced;
-            produced *= target as i64;
-            if target == 1 {
+            produced = produced.mul(&target.poly());
+            if target.is_one() {
                 let takes_unit = aligned && next < parts.len() && parts[next].extent.is_one();
                 out.push(if takes_unit { Option::Some(parts[next]) } else { null });
                 if takes_unit {
@@ -134,8 +158,8 @@ impl Shape {
                 continue;
             }
             let mut run: List<Axis> = [];
-            while next < parts.len() && consumed < produced {
-                consumed *= parts[next].static_extent() as i64;
+            while next < parts.len() && short_of(&consumed, &produced) {
+                consumed = consumed.mul(&parts[next].extent.poly());
                 if !parts[next].extent.is_one() {
                     run.push(parts[next]);
                 }
@@ -146,13 +170,14 @@ impl Shape {
             } else if run.len() == 1 {
                 out.push(Option::Some(run[0]));
             } else {
-                out.push(Option::Some(Axis::merged(run, Extent::Static(target))));
+                out.push(Option::Some(Axis::merged(run, target)));
             }
         }
         return out;
     }
 
     /// The axes with each merged one replaced by the parts it was made of.
+    /// `extents` has shown every part stated.
     fn parts(&self) -> List<Axis> {
         let mut parts: List<Axis> = [];
         for let axis of self.axes {

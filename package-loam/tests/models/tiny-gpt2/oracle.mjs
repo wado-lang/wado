@@ -1,5 +1,7 @@
-// Writes test_data_set_0/ beside model.onnx: the inputs below and the logits
-// onnxruntime computes from them, each as one bare TensorProto.
+// Writes test_data_set_<n>/ beside model.onnx, one per sequence below: the
+// inputs and the logits onnxruntime computes from them, each as one bare
+// TensorProto. The sequences differ in length, so one module compiled with the
+// length left symbolic must reproduce both.
 //
 //   npm install onnxruntime-node@1.30.0
 //   node oracle.mjs <this directory>
@@ -9,8 +11,10 @@ import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
 
 const here = process.argv[2] ?? dirname(fileURLToPath(import.meta.url));
-const ids = [1n, 5n, 42n, 7n];
-const mask = [1n, 1n, 1n, 1n];
+const sequences = [
+  [1n, 5n, 42n, 7n],
+  [3n, 14n, 15n, 92n, 65n, 35n, 89n],
+];
 
 function varint(n) {
   const out = [];
@@ -37,16 +41,19 @@ function tensorProto(name, dataType, dims, raw) {
 const INT64 = 7;
 const FLOAT = 1;
 const session = await ort.InferenceSession.create(join(here, 'model.onnx'));
-const inputs = {
-  input_ids: new ort.Tensor('int64', BigInt64Array.from(ids), [1, ids.length]),
-  attention_mask: new ort.Tensor('int64', BigInt64Array.from(mask), [1, mask.length]),
-};
-const { logits } = await session.run(inputs, ['logits']);
-
-const dir = join(here, 'test_data_set_0');
-mkdirSync(dir, { recursive: true });
 const raw = (typed) => new Uint8Array(typed.buffer, typed.byteOffset, typed.byteLength);
-writeFileSync(join(dir, 'input_0.pb'), tensorProto('input_ids', INT64, inputs.input_ids.dims, raw(inputs.input_ids.data)));
-writeFileSync(join(dir, 'input_1.pb'), tensorProto('attention_mask', INT64, inputs.attention_mask.dims, raw(inputs.attention_mask.data)));
-writeFileSync(join(dir, 'output_0.pb'), tensorProto('logits', FLOAT, logits.dims, raw(logits.data)));
-console.log(`logits ${logits.dims}, first ${Array.from(logits.data.slice(0, 3))}`);
+for (const [n, ids] of sequences.entries()) {
+  const mask = ids.map(() => 1n);
+  const inputs = {
+    input_ids: new ort.Tensor('int64', BigInt64Array.from(ids), [1, ids.length]),
+    attention_mask: new ort.Tensor('int64', BigInt64Array.from(mask), [1, mask.length]),
+  };
+  const { logits } = await session.run(inputs, ['logits']);
+
+  const dir = join(here, `test_data_set_${n}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'input_0.pb'), tensorProto('input_ids', INT64, inputs.input_ids.dims, raw(inputs.input_ids.data)));
+  writeFileSync(join(dir, 'input_1.pb'), tensorProto('attention_mask', INT64, inputs.attention_mask.dims, raw(inputs.attention_mask.data)));
+  writeFileSync(join(dir, 'output_0.pb'), tensorProto('logits', FLOAT, logits.dims, raw(logits.data)));
+  console.log(`${dir}: logits ${logits.dims}, first ${Array.from(logits.data.slice(0, 3))}`);
+}

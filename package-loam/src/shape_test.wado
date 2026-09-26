@@ -6,7 +6,7 @@ fn stat(name: String, n: i32) -> Axis {
 }
 
 fn sym(name: String, symbol: String) -> Axis {
-    return Axis { name, extent: Extent::Symbol(symbol) };
+    return Axis { name, extent: Extent::symbol(&symbol) };
 }
 
 fn shape(axes: List<Axis>) -> Shape {
@@ -57,7 +57,7 @@ test "a symbolic axis contracts against the same symbol" {
     ]);
 
     let y = x.matmul(&w, "MatMul").unwrap();
-    assert y.axes[0].extent.agrees(&Extent::Symbol("batch"));
+    assert y.axes[0].extent.agrees(&Extent::symbol(&"batch"));
 }
 
 test "a symbol meeting a number is a failure, not a deferred check" {
@@ -88,7 +88,7 @@ test "matmul batches over every axis ahead of the last two" {
 
     let y = a.matmul(&b, "MatMul").unwrap();
     assert y.rank() == 3;
-    assert y.axes[0].extent.agrees(&Extent::Symbol("b"));
+    assert y.axes[0].extent.agrees(&Extent::symbol(&"b"));
     assert y.axes[1].name == "M";
     assert y.axes[2].name == "N";
 }

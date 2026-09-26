@@ -1,21 +1,53 @@
 //! An axis's length as stage 0 knows it, and the one question stage 0 asks of
 //! two of them.
 
-/// A length the graph states, or a name standing for one only the run knows.
+use { Poly } from "./poly.wado";
+
+/// A length the graph states, one only the run knows, or none at all.
 /// See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
 pub variant Extent {
     Static(i32),
-    Symbol(String),
+    /// A polynomial over the graph's symbols. One with no symbol left is `Static`.
+    Symbolic(Poly),
+    /// A part of a merge the layout names, whose own length nothing states.
+    Unstated,
 }
 
 impl Extent {
-    /// Whether stage 0 can prove these are the same length. A symbol proves
-    /// nothing about a number, and nothing about another symbol's value.
-    pub fn agrees(&self, other: &Extent) -> bool {
-        return match self {
-            Static(a) => other matches { Static(b) && *b == *a },
-            Symbol(a) => other matches { Symbol(b) && *b == *a },
+    /// The length a `dim_param` names.
+    pub fn symbol(name: &String) -> Extent {
+        return Extent::Symbolic(Poly::symbol(name));
+    }
+
+    /// `p` as an extent, or `None` where it is a constant no list can be long.
+    pub fn of(p: Poly) -> Option<Extent> {
+        let Some(c) = p.as_constant() else {
+            return Option::Some(Extent::Symbolic(p));
         };
+        if !(0 <= c <= i32::MAX as i64) {
+            return null;
+        }
+        return Option::Some(Extent::Static(c as i32));
+    }
+
+    /// The length as a polynomial. The caller has shown it stated.
+    pub fn poly(&self) -> Poly {
+        return match self {
+            Static(n) => Poly::constant(*n as i64),
+            Symbolic(p) => *p,
+            Unstated => unreachable(),
+        };
+    }
+
+    pub fn is_stated(&self) -> bool {
+        return !self matches { Unstated };
+    }
+
+    /// Whether stage 0 can prove these are the same length: the same number, or
+    /// the same polynomial of the same symbols. A symbol proves nothing about a
+    /// number.
+    pub fn agrees(&self, other: &Extent) -> bool {
+        return self.is_stated() && other.is_stated() && self.poly() == other.poly();
     }
 
     /// Whether this is the extent ONNX's broadcasting stretches to any other.
@@ -28,7 +60,8 @@ impl Display for Extent {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             Static(n) => f.write_str(`${n}`),
-            Symbol(name) => f.write_str(name),
+            Symbolic(p) => p.fmt(f),
+            Unstated => f.write_str("?"),
         }
     }
 }

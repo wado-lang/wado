@@ -2,6 +2,7 @@
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use { TreeMap } from "core:collections";
+use { Poly } from "./poly.wado";
 use { checked_element_count } from "./runtime/tensor.wado";
 
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
@@ -131,14 +132,32 @@ pub struct Known {
 /// integer types all fit `i64`, as its shape arithmetic does.
 pub variant Elements {
     Ints(List<i64>),
+    /// Integers some of which only the run knows, as `Shape` reads from a
+    /// tensor with a symbolic extent. Where none is, they are `Ints`.
+    Symbolic(List<Poly>),
     Floats(List<f32>),
     Bools(List<bool>),
+}
+
+impl Elements {
+    /// `values` as the one case that holds them.
+    pub fn integers(values: List<Poly>) -> Elements {
+        let mut ints = List::<i64>::with_capacity(values.len());
+        for let v of &values {
+            let Some(c) = v.as_constant() else {
+                return Elements::Symbolic(values);
+            };
+            ints.push(c);
+        }
+        return Elements::Ints(ints);
+    }
 }
 
 impl Known {
     pub fn len(&self) -> i32 {
         return match &self.elements {
             Ints(v) => v.len(),
+            Symbolic(v) => v.len(),
             Floats(v) => v.len(),
             Bools(v) => v.len(),
         };
