@@ -242,7 +242,9 @@ is caller-side and single-phase (`lower::translate` emits `$value_copy$T` only
 where it cannot prove move / share / fresh; no elision pass):
 
 - Move — `last_use::compute_move_eligible` plus `elaborator::liveness`'s
-  `moved_local_spans`. This also covers a **place-level move**: at a struct /
+  `moved_local_spans`. The elaborator reads names only. It sees a `&x`, but a
+  method call borrows its receiver with no `&` written, so its final uses count
+  only for a local the TIR walk finds no kept borrow pinning. This also covers a **place-level move**: at a struct /
   tuple literal, a whole-value or clean-field materialization aliases out of a
   _dead_ aggregate (the root is dead after the literal, sibling reads neither
   mutate nor move it, and the materialized fields are disjoint owners) instead of
@@ -328,6 +330,10 @@ where it cannot prove move / share / fresh; no elision pass):
   holder carries none of its storage, so `P { a: r.a }` hands nothing on. So a
   double buffer that iterates `&a` and then swaps `a` and `b` moves both lists
   every step.
+
+  A call result that is not stored is kept by whatever takes it. Passed straight
+  to another call, or borrowed for one, it lasts as long as that call keeps it,
+  so `view.chars().count()` pins nothing past the count.
 
   The swap also needs flow-sensitive alias chains. `a = b` is an alias edge from
   `a` to `b`, but `b` is dead right after it, so `b` is rebound before it is

@@ -39,14 +39,19 @@ struct LatnVisited {
     more: TreeSet<i64>,
 }
 
+global mut LATN_VISITED: LatnVisited = LatnVisited {
+    step: 0,
+    step_of: [],
+    stack_of: [],
+    more: TreeSet::<i64>::new(),
+};
+
 impl LatnVisited {
-    fn new(nstates: i32) -> LatnVisited {
-        return LatnVisited {
-            step: 0,
-            step_of: List::filled(nstates, -1),
-            stack_of: List::filled(nstates, -1),
-            more: TreeSet::<i64>::new(),
-        };
+    fn cover(&mut self, nstates: i32) {
+        while self.step_of.len() < nstates {
+            self.step_of.push(-1);
+            self.stack_of.push(-1);
+        }
     }
 
     fn first_visit(&mut self, state: i32, stack: i32) -> bool {
@@ -62,6 +67,10 @@ impl LatnVisited {
     }
 
     fn next_step(&mut self) {
+        if self.step == i32::MAX {
+            self.step_of = List::filled(self.step_of.len(), -1);
+            self.step = -1;
+        }
         self.step += 1;
         if !self.more.is_empty() {
             self.more.clear();
@@ -125,9 +134,11 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
     let mut best = -1;
     let mut stacks = LatnStacks { parent: [], ret: [], ids: TreeMap::<i64, i32>::new() };
     let mut open: List<i32> = [];
-    let mut visited = LatnVisited::new(sim.state_kind.len());
+    let visited = &mut LATN_VISITED;
+    visited.cover(sim.state_kind.len());
+    visited.next_step();
     let mut clist: List<LThread> = [];
-    latn_closure(sim, &mut stacks, &mut clist, &mut visited, sim.rule_start[start_rule], -1, &mut open);
+    latn_closure(sim, &mut stacks, &mut clist, visited, sim.rule_start[start_rule], -1, &mut open);
 
     let mut nlist: List<LThread> = [];
     let mut pos = start;
@@ -162,7 +173,7 @@ pub fn latn_match(sim: &AtnSim, start_rule: i32, chars: &List<char>, start: i32,
                             sim,
                             &mut stacks,
                             &mut nlist,
-                            &mut visited,
+                            visited,
                             sim.tr_target[idx],
                             th.stack,
                             &mut open,

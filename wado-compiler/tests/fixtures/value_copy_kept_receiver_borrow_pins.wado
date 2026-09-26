@@ -1,0 +1,55 @@
+// A `&self` receiver is a borrow of the place it names. Where the method hands
+// that borrow back, a later whole-value read of the place must copy while the
+// result is still readable, bound or pushed somewhere.
+
+use { println, Stdout } from "core:cli";
+
+struct W {
+    xs: List<i32>,
+}
+
+impl W {
+    fn items(&self) -> &List<i32> {
+        return &self.xs;
+    }
+}
+
+fn bound() -> i32 {
+    let a = W { xs: [1] };
+    let mut b = W { xs: [] };
+    let r = a.items();
+    let s = a;
+    b = s;
+    b.xs.push(9);
+    return r.len();
+}
+
+fn slice() -> i32 {
+    let a: List<i32> = [1];
+    let mut b: List<i32> = [];
+    let r = a.as_slice();
+    let s = a;
+    b = s;
+    b[0] = 7;
+    return r[0];
+}
+
+fn pushed() -> i32 {
+    let a = W { xs: [1] };
+    let mut b = W { xs: [] };
+    let mut keep: List<&List<i32>> = [];
+    keep.push(a.items());
+    let s = a;
+    b = s;
+    b.xs.push(9);
+    return keep[0].len();
+}
+
+export fn run() with Stdout {
+    println(`${bound()} ${slice()} ${pushed()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 1 1\n"
+}

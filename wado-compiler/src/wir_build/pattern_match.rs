@@ -96,12 +96,14 @@ impl IntCompare {
 /// Whether the scrutinee lies in one of `intervals` (sorted and disjoint), by
 /// binary search down to a leaf tested without a branch.
 fn interval_search(cmp: &IntCompare, intervals: &[(i128, i128)]) -> WirInstr {
+    let Some((first, others)) = intervals.split_first() else {
+        // Only empty ranges: nothing matches.
+        return WirInstr::I32Const(0);
+    };
     if intervals.len() <= OR_SEARCH_LEAF {
-        return intervals
-            .iter()
-            .map(|interval| cmp.within(*interval))
-            .reduce(|acc, test| WirInstr::I32Or(Box::new(acc), Box::new(test)))
-            .unwrap_or(WirInstr::I32Const(0));
+        return others.iter().fold(cmp.within(*first), |acc, interval| {
+            WirInstr::I32Or(Box::new(acc), Box::new(cmp.within(*interval)))
+        });
     }
     let (below, rest) = intervals.split_at(intervals.len() / 2);
     WirInstr::If {
@@ -877,7 +879,6 @@ impl FunctionTranslator<'_, '_> {
             PatKind::Or(alternatives) => {
                 if let Some(cmp) = self.int_compare(scrut_local, scrut_type)
                     && let Some(intervals) = self.or_pattern_intervals(pattern)
-                    && intervals.len() > OR_SEARCH_LEAF
                 {
                     return interval_search(&cmp, &intervals);
                 }
@@ -927,7 +928,12 @@ impl FunctionTranslator<'_, '_> {
             | PrimitiveType::U32
             | PrimitiveType::U64
             | PrimitiveType::Char => true,
-            _ => return None,
+            PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16
+            | PrimitiveType::Bool
+            | PrimitiveType::V128 => return None,
         };
         Some(IntCompare {
             scrut: self.scrut_get(scrut_local, scrut_type),
@@ -980,7 +986,16 @@ impl FunctionTranslator<'_, '_> {
                     self.collect_pattern_intervals(*alternative, out)?;
                 }
             }
-            _ => return None,
+            PatKind::Literal(
+                NirLiteralPattern::Bool(_) | NirLiteralPattern::String(_) | NirLiteralPattern::Null,
+            )
+            | PatKind::Wildcard
+            | PatKind::Binding { .. }
+            | PatKind::Tuple(..)
+            | PatKind::Variant { .. }
+            | PatKind::Enum { .. }
+            | PatKind::Struct { .. }
+            | PatKind::ConstantValue { .. } => return None,
         }
         Some(())
     }

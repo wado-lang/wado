@@ -124,6 +124,9 @@ pub struct MoveEligible {
     /// Field and whole-value materializations that alias a dead aggregate out
     /// at a literal, keyed by the materialized expression's span.
     pub place_spans: IndexSet<Span>,
+    /// Whole-local reads the elaborator found final (`moved_local_spans`), of
+    /// locals no kept borrow pins, keyed by the read's span.
+    pub read_spans: IndexSet<Span>,
 }
 
 /// What one backward walk over a body decides: which locals a move can retire,
@@ -137,13 +140,16 @@ pub struct Ownership {
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
-/// liveness this walk computes.
+/// liveness this walk computes. `final_reads` are the elaborator's final-use
+/// spans, which read names only: a borrow a call takes of its receiver without
+/// a `&` is out of their sight, so this walk's pins veto them.
 pub fn analyze_ownership(
     func: &TirFunction,
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
     plan: &ValueCopyPlan,
+    final_reads: &IndexSet<Span>,
 ) -> Ownership {
     let Some(body) = &func.body else {
         return Ownership::default();
@@ -169,7 +175,7 @@ pub fn analyze_ownership(
         pending_bounded: Vec::new(),
         value_holds: Vec::new(),
         handed_away: IndexSet::default(),
-        binds_result: None,
+        result_kept: None,
         functor_rows: &plan.functor_rows,
         mut_receiver_methods,
         ref_receiver_methods: &plan.ref_receiver_methods,
@@ -200,11 +206,12 @@ pub fn analyze_ownership(
     a.resolve_alias_chains(&paths, &released);
     a.resolve_pending_mut_aliases(&paths, &released);
     let reference_copies = a.reference_copies(func, type_table);
+    let move_reach = a.move_reach(&paths);
     // Each step either settles a bounded retention against a destination the
     // other has just marked, or there is nothing left for either to learn.
     loop {
         a.propagate_escapes_to_referents(func, type_table);
-        if !a.resolve_pending_bounded(&paths, &reference_copies) {
+        if !a.resolve_pending_bounded(&paths, &reference_copies, &move_reach) {
             break;
         }
     }
@@ -229,11 +236,16 @@ pub fn analyze_ownership(
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
+    let read_spans = local_reads(body)
+        .filter(|(local, span)| final_reads.contains(span) && !a.place_escaped(*local, None))
+        .map(|(_, span)| span)
+        .collect();
 
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
             place_spans,
+            read_spans,
         },
         share_eligible: a.share_eligible(body, &paths, &place_move_bases),
     }
@@ -799,6 +811,24 @@ fn has_unsupported_form(body: &TirBlock) -> bool {
     s.found
 }
 
+/// Every whole-local read in `body`, as the local and the read's span.
+fn local_reads(body: &TirBlock) -> impl Iterator<Item = (u32, Span)> {
+    struct Scan {
+        reads: Vec<(u32, Span)>,
+    }
+    impl TirRefVisitor for Scan {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Local { index, .. } = &expr.kind {
+                self.reads.push((*index, expr.span));
+            }
+            self.walk_expr(expr);
+        }
+    }
+    let mut s = Scan { reads: Vec::new() };
+    s.visit_block(body);
+    s.reads.into_iter()
+}
+
 struct MaxLocal {
     max: u32,
 }
@@ -848,9 +878,9 @@ struct Analyzer<'a> {
     /// result, a callee keeping it out of sight — so whatever it holds is
     /// readable anywhere.
     handed_away: IndexSet<u32>,
-    /// The local the value being walked is stored in, taken by the call that
-    /// produces it: where that call hands a borrow back, the local holds it.
-    binds_result: Option<u32>,
+    /// What keeps the value being walked, taken by the call that produces it:
+    /// where that call hands a borrow back, the borrow is kept the same way.
+    result_kept: Option<Kept>,
     /// What a call through a function value of each functor type keeps — the
     /// answer an indirect call reads, where no callee name is available.
     functor_rows: &'a FunctorRows,
@@ -899,6 +929,7 @@ struct Analyzer<'a> {
 }
 
 /// What a call does with a reference handed at one argument position.
+#[derive(Clone)]
 enum Kept {
     /// Nothing: the borrow ends with the call.
     Transient,
@@ -1025,8 +1056,8 @@ impl Analyzer<'_> {
     }
 
     /// What a named call keeps at each argument position, resolved against the
-    /// arguments it is given and the local its result is stored in.
-    fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr], result: Option<u32>) -> Vec<Kept> {
+    /// arguments it is given and what keeps its result.
+    fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr], result: &Kept) -> Vec<Kept> {
         (0..args.len())
             .map(|pos| {
                 if !self.callee_retains(callee, pos) {
@@ -1039,12 +1070,7 @@ impl Analyzer<'_> {
 
     /// The same for a call through a function value, off the row the site
     /// resolved rather than a name.
-    fn kept_through(
-        &self,
-        retained: &Retained,
-        args: &[&TirExpr],
-        result: Option<u32>,
-    ) -> Vec<Kept> {
+    fn kept_through(&self, retained: &Retained, args: &[&TirExpr], result: &Kept) -> Vec<Kept> {
         (0..args.len())
             .map(|pos| {
                 let position = u32::try_from(pos).unwrap();
@@ -1057,40 +1083,42 @@ impl Analyzer<'_> {
     }
 
     /// A kept position read as a pin: where the destinations are all locals of
-    /// this body it lasts only as long as they do, and otherwise the frame.
+    /// this body, or a result kept no longer, it lasts only as long as they do,
+    /// and otherwise the frame.
     fn landing(
         &self,
         args: &[&TirExpr],
-        result: Option<u32>,
+        result: &Kept,
         destinations: Option<&IndexSet<u32>>,
     ) -> Kept {
-        match destinations {
-            Some(destinations) if !destinations.is_empty() => self
-                .landing_locals(args, result, destinations)
-                .map_or(Kept::Frame, Kept::Into),
-            _ => Kept::Frame,
+        let Some(destinations) = destinations.filter(|d| !d.is_empty()) else {
+            return Kept::Frame;
+        };
+        let mut locals = Vec::new();
+        for &position in destinations {
+            if position == RESULT {
+                match result {
+                    Kept::Transient => {}
+                    Kept::Frame => return Kept::Frame,
+                    Kept::Into(holders) => locals.extend(holders.iter().copied()),
+                }
+                continue;
+            }
+            let root = usize::try_from(position)
+                .ok()
+                .and_then(|pos| args.get(pos))
+                .and_then(|arg| alias_root(arg))
+                .and_then(|root| self.frame_local(root));
+            let Some(root) = root else {
+                return Kept::Frame;
+            };
+            locals.push(root);
         }
-    }
-
-    /// The locals the callee's destination positions name, or `None` where one
-    /// of them is a place this body cannot see the end of.
-    fn landing_locals(
-        &self,
-        args: &[&TirExpr],
-        result: Option<u32>,
-        destinations: &IndexSet<u32>,
-    ) -> Option<Vec<u32>> {
-        destinations
-            .iter()
-            .map(|&position| {
-                let root = if position == RESULT {
-                    result?
-                } else {
-                    alias_root(args.get(usize::try_from(position).ok()?)?)?
-                };
-                self.frame_local(root)
-            })
-            .collect()
+        if locals.is_empty() {
+            Kept::Transient
+        } else {
+            Kept::Into(locals)
+        }
     }
 
     /// `root`, where a value landing in it stays in this frame. A landing in a
@@ -1132,6 +1160,7 @@ impl Analyzer<'_> {
         &mut self,
         paths: &IndexMap<u32, Vec<AccessPath>>,
         reference_copies: &[(u32, u32)],
+        move_reach: &IndexMap<u32, Vec<IndexSet<u32>>>,
     ) -> bool {
         let holds: Vec<(u32, u32)> = self
             .pending_bounded
@@ -1154,7 +1183,12 @@ impl Analyzer<'_> {
         let mut unsettled = Vec::new();
         for (root, field, destinations) in std::mem::take(&mut self.pending_bounded) {
             let holders = holders_of(&destinations, &holds);
-            if self.held_past_a_move(root, &holders, paths, &readable_anywhere) {
+            let reaches = |storage: &IndexSet<u32>| holders.iter().any(|h| storage.contains(h));
+            let held = reaches(&readable_anywhere)
+                || move_reach
+                    .get(&root)
+                    .is_some_and(|sites| sites.iter().any(reaches));
+            if held {
                 self.mark_escaped(root, field);
                 marked = true;
             } else {
@@ -1165,25 +1199,35 @@ impl Analyzer<'_> {
         marked
     }
 
-    /// Whether one of `holders` is still readable where `root` would be moved
-    /// out of, or anywhere at all.
-    fn held_past_a_move(
+    /// For each root a bounded retention pins, the storage still readable at
+    /// each place it would be moved out of.
+    fn move_reach(
         &self,
-        root: u32,
-        holders: &IndexSet<u32>,
         paths: &IndexMap<u32, Vec<AccessPath>>,
-        readable_anywhere: &IndexSet<u32>,
-    ) -> bool {
-        let reaches = |storage: &IndexSet<u32>| holders.iter().any(|h| storage.contains(h));
-        reaches(readable_anywhere)
-            || self
-                .consumed
-                .get(&root)
-                .is_some_and(|live| reaches(&readable_storage(paths, live)))
-            || self
-                .place_cands
-                .iter()
-                .any(|site| site.base == root && reaches(&readable_storage(paths, &site.live)))
+    ) -> IndexMap<u32, Vec<IndexSet<u32>>> {
+        let roots: IndexSet<u32> = self
+            .pending_bounded
+            .iter()
+            .map(|(root, ..)| *root)
+            .collect();
+        roots
+            .into_iter()
+            .map(|root| {
+                let sites = self
+                    .consumed
+                    .get(&root)
+                    .into_iter()
+                    .chain(
+                        self.place_cands
+                            .iter()
+                            .filter(|site| site.base == root)
+                            .map(|site| &site.live),
+                    )
+                    .map(|live| readable_storage(paths, live))
+                    .collect();
+                (root, sites)
+            })
+            .collect()
     }
 
     /// `(source, copy)` for each reference local bound out of a place rooted at
@@ -1217,10 +1261,7 @@ impl Analyzer<'_> {
         {
             self.walk_borrow(*op, place, kept, live, record);
         } else {
-            if record {
-                self.hand_on(arg, kept);
-            }
-            self.walk_expr(arg, live, record);
+            self.walk_kept(arg, kept, false, live, record);
         }
     }
 
@@ -1237,63 +1278,74 @@ impl Analyzer<'_> {
         if record && op == TirUnaryOp::MutRef {
             self.record_mutation(place, live);
         }
+        self.hold_borrow(op, place, kept, live, record);
+    }
+
+    /// [`Self::walk_borrow`] for a caller that records the write itself. A
+    /// borrow of a call's result keeps that temporary as `kept` says.
+    fn hold_borrow(
+        &mut self,
+        op: TirUnaryOp,
+        place: &TirExpr,
+        kept: &Kept,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if record && is_call(place) {
+            self.result_kept = Some(kept.clone());
+        }
         if let Some(r) = self.borrow_read(place, live, record)
             && record
         {
             self.pin_borrow(op, r, place, kept);
         }
+        assert!(
+            self.result_kept.is_none(),
+            "the call producing a borrowed temporary takes what keeps it"
+        );
     }
 
     /// One call argument. A `&`/`&mut` is transient unless the callee stores
-    /// that position; `borrowing_receiver` marks the one it reads through.
+    /// that position. `receiver` is the borrow a `&self` / `&mut self` method
+    /// takes of the place its receiver names, whose writes the call records.
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
         callee: Option<(&FunctionRef, u32)>,
         kept: &Kept,
-        borrowing_receiver: bool,
+        receiver: Option<TirUnaryOp>,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        if let TirExprKind::Unary {
-            op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
-            expr: place,
-        } = &arg.kind
-        {
-            // Which fields a `&mut` argument is written through is the callee's
-            // own answer. Only one this walk cannot name writes the whole place.
-            if record && matches!(op, TirUnaryOp::MutRef) && !borrowing_receiver {
-                match callee {
-                    Some((c, position)) => self.record_call_mutation(c, place, position, live),
-                    None => self.record_mutation(place, live),
-                }
-            }
-            let referent = self.borrow_read(place, live, record);
-            if record && let Some(r) = referent {
-                // A call handing its receiver back as its result keeps the
-                // borrow in that result, which the walk follows as a place.
-                let handed_back = callee.is_some_and(|(c, position)| {
-                    position == 0
-                        && self
-                            .returns_receiver_alias
-                            .contains(&c.module_source, &c.name)
-                });
-                if handed_back {
-                    self.pin(r, top_field_of(place), kept);
-                } else {
-                    self.pin_borrow(*op, r, place, kept);
-                }
-            }
-        } else {
-            if record {
-                self.hand_on(arg, kept);
-            }
-            if borrowing_receiver {
-                self.walk_place_base(arg, live, record);
-            } else {
-                self.walk_expr(arg, live, record);
-            }
+        let borrow = match &arg.kind {
+            TirExprKind::Unary {
+                op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
+                expr: place,
+            } => Some((*op, &**place)),
+            _ if !is_reference_type(arg.type_id, self.type_table) => receiver.map(|op| (op, arg)),
+            _ => None,
+        };
+        let Some((op, place)) = borrow else {
+            self.walk_kept(arg, kept, receiver.is_some(), live, record);
+            return;
+        };
+        // Which fields a `&mut` argument is written through is the callee's
+        // own answer. Only one this walk cannot name writes the whole place.
+        let Some((c, position)) = callee else {
+            self.walk_borrow(op, place, kept, live, record);
+            return;
+        };
+        if record && receiver.is_none() && op == TirUnaryOp::MutRef {
+            self.record_call_mutation(c, place, position, live);
         }
+        // A call handing its receiver back as its result keeps the borrow in
+        // that result, which the walk follows as a place.
+        let handed_back = position == 0
+            && self
+                .returns_receiver_alias
+                .contains(&c.module_source, &c.name);
+        let op = if handed_back { TirUnaryOp::Ref } else { op };
+        self.hold_borrow(op, place, kept, live, record);
     }
 
     /// A value handed to a position that keeps it as `kept` says. A reference
@@ -1319,14 +1371,39 @@ impl Analyzer<'_> {
         }
     }
 
+    /// Walk `value`, handed to a position that keeps it as `kept` says. A call
+    /// producing it keeps what it hands back in its result the same way.
+    /// `place_base` walks a receiver read through rather than taken.
+    fn walk_kept(
+        &mut self,
+        value: &TirExpr,
+        kept: &Kept,
+        place_base: bool,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        if record {
+            self.hand_on(value, kept);
+            if is_call(value) {
+                self.result_kept = Some(kept.clone());
+            }
+        }
+        if place_base {
+            self.walk_place_base(value, live, record);
+        } else {
+            self.walk_expr(value, live, record);
+        }
+        assert!(
+            self.result_kept.is_none(),
+            "the call producing a kept value takes what keeps it"
+        );
+    }
+
     /// Walk `expr` where what it yields outlives it, so a reference there pins
     /// its referent as `&place` would, and any other value hands on what it
     /// holds, through whichever arm yields it.
     fn walk_persisting(&mut self, expr: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
-        if record {
-            self.hand_on(expr, &Kept::Frame);
-        }
-        self.walk_expr(expr, live, record);
+        self.walk_kept(expr, &Kept::Frame, false, live, record);
     }
 
     /// Walk the value a `let` or a whole-local assignment stores in `local`.
@@ -1350,21 +1427,11 @@ impl Analyzer<'_> {
                 self.walk_borrow(*op, place, &kept, live, record);
             }
             _ if alias_root(stripped).is_some() => self.walk_expr(value, live, record),
-            _ => {
-                if record
-                    && matches!(
-                        stripped.kind,
-                        TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. }
-                    )
-                {
-                    self.binds_result = self.frame_local(local);
-                }
-                self.walk_persisting(value, live, record);
-                assert!(
-                    self.binds_result.is_none(),
-                    "the call producing a stored value takes the local it is stored in"
-                );
+            _ if is_call(value) => {
+                let kept = self.held_in(local);
+                self.walk_kept(value, &kept, false, live, record);
             }
+            _ => self.walk_persisting(value, live, record),
         }
     }
 
@@ -1823,12 +1890,16 @@ impl Analyzer<'_> {
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        if is_borrowed_place(scrut) {
+        if let Some((op, place)) = borrowed_place(scrut) {
+            if record && op == TirUnaryOp::MutRef {
+                self.record_mutation(place, live);
+            }
+            // The walk goes through the projections over the borrow as well.
             if let Some(r) = self.borrow_read(scrut, live, record)
                 && record
                 && !binds.is_empty()
             {
-                self.pin(r, None, &Kept::Into(binds.to_vec()));
+                self.pin_borrow(op, r, place, &Kept::Into(binds.to_vec()));
             }
         } else if alias_root(scrut).is_some() {
             // A `match` projects its scrutinee rather than taking it: the arm
@@ -1927,7 +1998,7 @@ impl Analyzer<'_> {
                 has_receiver,
                 ..
             } => {
-                let result = self.binds_result.take();
+                let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let (receiver, siblings) = match has_receiver.then(|| args.split_first()).flatten()
                 {
                     Some((receiver, rest)) => (Some(&receiver.expr), rest),
@@ -1955,16 +2026,21 @@ impl Analyzer<'_> {
                         .contains(&func.module_source, &func.name);
                 let kept = if record {
                     let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
-                    self.kept_at(func, &exprs, result)
+                    self.kept_at(func, &exprs, &result)
                 } else {
                     Vec::new()
                 };
+                let receiver_borrow = borrowing_receiver.then_some(if mutated_receiver.is_some() {
+                    TirUnaryOp::MutRef
+                } else {
+                    TirUnaryOp::Ref
+                });
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(
                         &arg.expr,
                         Some((func, pos as u32)),
                         kept.get(pos).unwrap_or(&Kept::Transient),
-                        borrowing_receiver && pos == 0,
+                        receiver_borrow.filter(|_| pos == 0),
                         live,
                         record,
                     );
@@ -1972,16 +2048,16 @@ impl Analyzer<'_> {
             }
             TirExprKind::CmRawCall { args, .. } => {
                 for arg in args.iter().rev() {
-                    self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
+                    self.walk_call_arg(arg, None, &Kept::Transient, None, live, record);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let result = self.binds_result.take();
+                let result = self.result_kept.take().unwrap_or(Kept::Frame);
                 let kept = if record {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                     let retained = self.functor_rows.retained(callee, args.len());
-                    self.kept_through(&retained, &exprs, result)
+                    self.kept_through(&retained, &exprs, &result)
                 } else {
                     Vec::new()
                 };
@@ -2164,14 +2240,14 @@ impl TirRefVisitor for BreakValues<'_> {
     }
 }
 
-/// Whether `expr` is a place chain bottoming out in a `&` / `&mut`, the shape a
-/// match takes on a borrowed scrutinee.
-fn is_borrowed_place(expr: &TirExpr) -> bool {
+/// The borrow a place chain bottoms out in, the shape a match takes on a
+/// borrowed scrutinee: its op and the place it takes.
+fn borrowed_place(expr: &TirExpr) -> Option<(TirUnaryOp, &TirExpr)> {
     match &expr.kind {
         TirExprKind::Unary {
-            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            ..
-        } => true,
+            op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
+            expr: place,
+        } => Some((*op, place)),
         TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
@@ -2179,8 +2255,8 @@ fn is_borrowed_place(expr: &TirExpr) -> bool {
         | TirExprKind::Unary {
             op: TirUnaryOp::Deref,
             expr: inner,
-        } => is_borrowed_place(inner),
-        _ => false,
+        } => borrowed_place(inner),
+        _ => None,
     }
 }
 
@@ -2274,6 +2350,14 @@ pub fn strip_casts(mut expr: &TirExpr) -> &TirExpr {
     expr
 }
 
+/// Whether `expr` is a call, past the casts that hand its result on unchanged.
+fn is_call(expr: &TirExpr) -> bool {
+    matches!(
+        strip_casts(expr).kind,
+        TirExprKind::Call { .. } | TirExprKind::IndirectCall { .. }
+    )
+}
+
 /// The immediate operand sub-expressions of `expr`, in evaluation order. The
 /// control forms are the walker's own and never routed here.
 fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
@@ -2348,8 +2432,6 @@ fn is_scalar_type(type_id: tir::TypeId, type_table: &TypeTable) -> bool {
         )
 }
 
-/// A `&T` / `&mut T` parameter borrows the caller's storage, so it is never a
-/// movable owned value. Everything else a function takes by value it owns.
 fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
     let mut out = a.clone();
     for &id in b {
@@ -2360,17 +2442,12 @@ fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
 
 /// Locals whose storage a move hands to a new owner. An immutable-source share
 /// rooted at one of them keeps its copy: the new owner may be mutable.
-pub fn compute_moved_roots(
-    func: &TirFunction,
-    move_eligible: &MoveEligible,
-    func_moved_spans: Option<&IndexSet<Span>>,
-) -> IndexSet<u32> {
+pub fn compute_moved_roots(func: &TirFunction, move_eligible: &MoveEligible) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
     };
     let mut walker = MovedRoots {
         move_eligible,
-        func_moved_spans,
         roots: IndexSet::default(),
     };
     walker.visit_block(body);
@@ -2379,7 +2456,6 @@ pub fn compute_moved_roots(
 
 struct MovedRoots<'a> {
     move_eligible: &'a MoveEligible,
-    func_moved_spans: Option<&'a IndexSet<Span>>,
     roots: IndexSet<u32>,
 }
 
@@ -2390,9 +2466,7 @@ impl TirRefVisitor for MovedRoots<'_> {
         let moved_local = match &stripped.kind {
             TirExprKind::Local { index, .. } => {
                 self.move_eligible.locals.contains(index)
-                    || self
-                        .func_moved_spans
-                        .is_some_and(|spans| spans.contains(&stripped.span))
+                    || self.move_eligible.read_spans.contains(&stripped.span)
             }
             _ => false,
         };

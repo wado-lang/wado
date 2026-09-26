@@ -3,7 +3,8 @@
 // property class of a thousand ranges cost a thousand compares per character.
 // The pivot compare (`<u 910`) is the search's first step. The edges of every
 // interval are probed, and a signed and an unsigned scrutinee order their
-// values the way their type does.
+// values the way their type does. Alternatives that merge into a few intervals
+// test those intervals, not each alternative.
 
 use { println, Stdout } from "core:cli";
 
@@ -35,6 +36,10 @@ fn is_high(v: u32) -> bool {
         1 | 10..=20 | 1000 | 70000..=80000 | 0x7FFF_FFFF | 0x8000_0000 | 0x9000_0000..=0x9000_00FF | 0xC000_0000
             | 0xFFFF_FFF0..=0xFFFF_FFFF
     };
+}
+
+fn is_run(v: i32) -> bool {
+    return v matches { 4041 | 4042 | 4043 | 4044 | 4045 | 4046 | 4047 | 4048 };
 }
 
 export fn run() with Stdout {
@@ -72,11 +77,21 @@ export fn run() with Stdout {
         }
     }
     println(`${high}`);
+
+    let mut run = 0;
+    for let v of 4030..=4060 {
+        if is_run(builtin::black_box(v)) {
+            run += 1;
+        }
+    }
+    println(`${run}`);
 }
 
 __DATA__
 {
-    "stdout": "85 50\n334\n13\n",
+    "stdout": "85 50\n334\n13\n8\n",
     "wir_expect:O0": ["<u 910"],
-    "wir_expect:O2": ["<u 910"]
+    "wir_expect:O2": ["<u 910"],
+    "wir_not_expect:O0": ["== 4048"],
+    "wir_not_expect:O2": ["== 4048"]
 }

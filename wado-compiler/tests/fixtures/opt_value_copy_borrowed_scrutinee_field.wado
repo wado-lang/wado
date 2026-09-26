@@ -1,0 +1,36 @@
+// A match on `&p.a` borrows the field `a`, not the whole of `p`, so the bound
+// reference outliving the match leaves `p.b` free to move.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    a: Option<List<i32>>,
+    b: List<i32>,
+}
+
+struct R {
+    x: List<i32>,
+}
+
+fn field() -> i32 {
+    let p = P { a: Some([1]), b: [2, 3] };
+    let other: List<i32> = [];
+    let mut keep: &List<i32> = &other;
+    if let Some(v) = &p.a {
+        keep = v;
+    }
+    let out = R { x: p.b };
+    return keep.len() * 10 + out.x.len();
+}
+
+export fn run() with Stdout {
+    println(`${field()}`);
+}
+
+__DATA__
+{
+    "stdout": "12\n",
+    "wir_not_expect:O0": [
+        "$value_copy$core:prelude/list.wado/List<i32>"
+    ]
+}
