@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790409042770,
+  "lastUpdate": 1790414047567,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -60205,6 +60205,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b77bfa87db8b777a054514affbd819c64c598e6c"
         },
         "date": 1790409041833,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1860,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6702,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19655,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 287203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4782d08fdd94d1bba526671710462800e7ae9d1c",
+          "message": "Merge pull request #2177 from wado-lang/claude/elegant-tesla-esoxyy\n\nfix(elaborator): an irrefutable pattern binds or names a case, never a global",
+          "timestamp": "2026-09-26T17:51:19+09:00",
+          "tree_id": "5698beb17d247156576db8c67838dff2b5f2b564",
+          "url": "https://github.com/wado-lang/wado/commit/4782d08fdd94d1bba526671710462800e7ae9d1c"
+        },
+        "date": 1790414046841,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
