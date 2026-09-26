@@ -15,10 +15,9 @@ use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
 use crate::tir::{
     BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
-    TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
+    TirFunction, TirPattern, TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -28,12 +27,26 @@ pub struct ConfinedParams {
 }
 
 impl ConfinedParams {
-    pub fn is_confined(&self, module: &ModuleSource, name: &str, param_index: usize) -> bool {
+    pub fn is_confined(&self, func: &FunctionRef, param_index: usize) -> bool {
         self.map
-            .get(module, name)
+            .get(&func.module_source, &func.name)
             .and_then(|bits| bits.get(param_index))
             .copied()
             .unwrap_or(false)
+    }
+
+    /// The locals of `func`'s confined parameters, which its callers pass
+    /// uncopied and it therefore holds borrowed.
+    pub fn borrowed_locals(&self, func: &TirFunction) -> IndexSet<u32> {
+        let Some(bits) = self.map.get(&func.module_source, &func.name) else {
+            return IndexSet::default();
+        };
+        func.params
+            .iter()
+            .zip(bits)
+            .filter(|(_, confined)| **confined)
+            .map(|(p, _)| p.local_index)
+            .collect()
     }
 }
 

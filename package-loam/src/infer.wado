@@ -850,17 +850,14 @@ fn sliced(
     schema: &Schema,
     owed: &mut List<Condition>,
 ) -> Result<Shape, InferError> {
-    let cuts = slice_cuts(node, known, x, owed)?;
     let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
-    for let cut of cuts {
-        extents[cut.axis] = cut.extent;
-    }
     let mut axes = x.axes;
-    for let cut of cuts {
-        let whole = cut.start.as_constant() == Option::Some(0 as i64) && cut.extent.agrees(&x.axes[cut.axis].extent);
-        if !whole {
-            axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
+    for let cut of slice_cuts(node, known, x, owed)? {
+        if cut.start == Poly::constant(0) && cut.extent.agrees(&x.axes[cut.axis].extent) {
+            continue;
         }
+        extents[cut.axis] = cut.extent;
+        axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
     }
     return Result::Ok(Shape { axes });
 }
@@ -969,10 +966,11 @@ pub fn range_count(
 /// A `Range`'s start, limit and delta, each one integer the build knows.
 pub fn range_bounds(node: &Node, known: &TreeMap<String, Known>) -> Result<[Poly, Poly, Poly], InferError> {
     let mut bounds: List<Poly> = [];
-    for let i of 0..<3 {
-        let values = required_polys(node, known, i, "")?;
+    let operands: List<String> = ["start", "limit", "delta"];
+    for let [i, operand] of operands.into_iter().enumerate() {
+        let values = required_polys(node, known, i, operand)?;
         if values.len() != 1 {
-            return Result::Err(refusal(node, `operand ${i} is not one integer`));
+            return Result::Err(refusal(node, `${operand} is not one integer`));
         }
         bounds.push(values[0]);
     }

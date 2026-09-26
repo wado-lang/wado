@@ -92,13 +92,12 @@ fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool)
     let mut extents: List<Extent> = [];
     let mut inferred = -1;
     for let [i, w] of written.into_iter().enumerate() {
-        let value = w.as_constant();
-        if value == Option::Some(-1 as i64) && inferred < 0 {
+        if *w == Poly::constant(-1) && inferred < 0 {
             inferred = i;
             extents.push(Extent::Static(1));
             continue;
         }
-        if value == Option::Some(0 as i64) && !allow_zero && i < input.len() {
+        if *w == Poly::constant(0) && !allow_zero && i < input.len() {
             extents.push(input[i]);
             continue;
         }
@@ -112,7 +111,7 @@ fn reshape_extents(written: &List<Poly>, input: &List<Extent>, allow_zero: bool)
         return Result::Err(`the target shape ${spelled(written)} multiplies past what a list can hold`);
     }
     let stated = count_of(&extents);
-    if inferred >= 0 && stated.as_constant() != Option::Some(0 as i64) {
+    if inferred >= 0 && stated != Poly::constant(0) {
         if let Some(rest) = total.divided_by(&stated) && let Some(e) = Extent::of(rest) {
             extents[inferred] = e;
         }
@@ -652,12 +651,13 @@ fn joined_elements(parts: &List<Known>) -> Result<Elements, String> {
     return Result::Ok(joined);
 }
 
+fn polys_of(k: &Known) -> Result<List<Poly>, String> {
+    return integer_polys(&k.elements).ok_or("an operand read as integers is not an integer tensor");
+}
+
 fn ints_of(k: &Known) -> Result<List<i64>, String> {
-    return match k.elements {
-        Ints(v) => Result::Ok(v),
-        Symbolic(v) => Result::Err(`an operand read as numbers holds ${spelled(&v)}, which only the run knows`),
-        _ => Result::Err("an operand read as integers is not an integer tensor"),
-    };
+    let values = polys_of(k)?;
+    return numbers(&values).ok_or(`an operand read as numbers holds ${spelled(&values)}, which only the run knows`);
 }
 
 /// The numbers `values` holds, or `None` where a symbol stands for one.
@@ -695,12 +695,7 @@ pub fn polys_at(
     attr: String,
 ) -> Result<Option<List<Poly>>, String> {
     if index < node.inputs.len() && node.inputs[index] != "" {
-        let k = operand_known(node, known, index)?;
-        return integer_polys(&k.elements).ok_or("an operand read as integers is not an integer tensor").map(
-            |v| Option::Some(
-                v,
-            ),
-        );
+        return polys_of(&operand_known(node, known, index)?).map(|v| Option::Some(v));
     }
     return axes_of(node, known, index, attr).map(
         |read| read.map(|v| v.into_iter().map(|c| Poly::constant(c)).collect()),

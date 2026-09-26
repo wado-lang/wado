@@ -132,7 +132,8 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     let axes = axis_names(graph, shapes);
     let scalars = scalar_literals(checked);
     let literals = literal_tensors(graph, checked, &scalars);
-    let names = Names::of(graph, checked, &literals.spelled, &axes, &input_symbols(graph, shapes))?;
+    let carriers = symbol_carriers(graph, shapes);
+    let names = Names::of(graph, checked, &literals.spelled, &axes, &carriers)?;
     let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
@@ -150,7 +151,8 @@ pub fn emit(graph: &Graph, checked: &Checked) -> Result<String, EmitError> {
     w.raw(&GRAPH_BANNER);
 
     emit_weights(&mut w, graph, checked, &names, &held);
-    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals)?;
+    let symbols = Symbols::of(&carriers, &names);
+    emit_forward(&mut w, graph, checked, &names, &held, scalars, &literals, symbols)?;
     return Result::Ok(w.to_string());
 }
 
@@ -210,7 +212,7 @@ impl Names {
         checked: &Checked,
         literals: &List<String>,
         axes: &List<String>,
-        symbols: &List<String>,
+        carriers: &List<Carrier>,
     ) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
@@ -241,8 +243,8 @@ impl Names {
         for let tensor of *literals {
             names.take(&mut taken, &tensor)?;
         }
-        for let symbol of *symbols {
-            names.take(&mut taken, &symbol_key(&symbol))?;
+        for let c of carriers {
+            names.take(&mut taken, &symbol_key(&c.symbol))?;
         }
         return Result::Ok(names);
     }
@@ -486,21 +488,15 @@ struct Symbols {
 }
 
 impl Symbols {
-    fn of(graph: &Graph, shapes: &TreeMap<String, Shape>, names: &Names) -> Symbols {
+    fn of(carriers: &List<Carrier>, names: &Names) -> Symbols {
         let mut symbols = Symbols {
             idents: TreeMap::<String, String>::new(),
             sources: TreeMap::<String, String>::new(),
             used: TreeSet::<String>::new(),
         };
-        for let vi of &graph.inputs {
-            for let [i, axis] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
-                let Some(symbol) = input_symbol(&axis.extent) else {
-                    continue;
-                };
-                if symbols.sources.try_insert(symbol, `${names.get(&vi.name)}.extents[${i}]`) {
-                    symbols.idents[symbol] = names.get(&symbol_key(&symbol));
-                }
-            }
+        for let c of carriers {
+            symbols.sources[c.symbol] = `${names.get(&c.input)}.extents[${c.axis}]`;
+            symbols.idents[c.symbol] = names.get(&symbol_key(&c.symbol));
         }
         return symbols;
     }
@@ -552,17 +548,23 @@ fn input_symbol(extent: &Extent) -> Option<String> {
     return Option::Some(read[0]);
 }
 
-/// Every symbol an input axis carries, in the order `Symbols` binds them.
-fn input_symbols(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
-    let mut symbols: List<String> = [];
+/// A symbol an input axis carries, and the first input axis that does.
+struct Carrier {
+    symbol: String,
+    input: String,
+    axis: i32,
+}
+
+fn symbol_carriers(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<Carrier> {
+    let mut carriers: List<Carrier> = [];
     for let vi of &graph.inputs {
-        for let axis of shapes.get(vi.name).unwrap().axes {
-            if let Some(symbol) = input_symbol(&axis.extent) && !symbols.contains_str(symbol.as_str_slice()) {
-                symbols.push(symbol);
+        for let [axis, a] of shapes.get(vi.name).unwrap().axes.into_iter().enumerate() {
+            if let Some(symbol) = input_symbol(&a.extent) && !carriers.into_iter().any(|c| c.symbol == symbol) {
+                carriers.push(Carrier { symbol, input: vi.name, axis });
             }
         }
     }
-    return symbols;
+    return carriers;
 }
 
 impl Operands {
@@ -592,6 +594,7 @@ fn emit_forward(
     held: &TreeMap<String, String>,
     scalars: TreeMap<String, String>,
     literals: &Literals,
+    mut symbols: Symbols,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let mut exprs = Operands {
@@ -630,7 +633,6 @@ fn emit_forward(
         w.line(&line);
     }
     // A symbol is bound once something spells it, which the body decides.
-    let mut symbols = Symbols::of(graph, shapes, names);
     let mut body: List<String> = [];
     for let tensor of literals.spelled {
         let ident = names.get(&tensor);

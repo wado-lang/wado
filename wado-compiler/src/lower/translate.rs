@@ -353,9 +353,9 @@ struct FunctionTranslator<'a, 'p> {
     /// bodies the AST-keyed `func_moved_spans` cannot see (serde de/serialize,
     /// derives). Unioned with the span check.
     move_eligible_locals: IndexSet<u32>,
-    /// The locals of this function's by-value parameters its callers pass
-    /// uncopied ([`value_copy::confine`]), which it holds borrowed.
-    confined_params: IndexSet<u32>,
+    /// The by-value parameter locals this function's callers pass uncopied
+    /// ([`value_copy::confine`]).
+    borrowed_params: IndexSet<u32>,
     /// Spans of field / whole-value materializations that alias out of a *dead*
     /// aggregate at a struct/tuple literal (place-level move): the copy is elided
     /// exactly as for a whole-local final-use move, but for a projection.
@@ -462,17 +462,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible_locals = move_eligible.locals;
         let move_eligible_place_spans = move_eligible.place_spans;
-        let confined_params = func
-            .params
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| {
-                base.value_copy
-                    .confined_params
-                    .is_confined(&func.module_source, &func.name, *i)
-            })
-            .map(|(_, p)| p.local_index)
-            .collect();
+        let borrowed_params = base.value_copy.confined_params.borrowed_locals(func);
         let alias_components = if needs_copy_analysis {
             value_copy::last_use::AliasComponents::build(func)
         } else {
@@ -495,7 +485,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken,
             func_moved_spans,
             move_eligible_locals,
-            confined_params,
+            borrowed_params,
             move_eligible_place_spans,
             hands_out_payload,
             share_eligible_locals,
@@ -522,7 +512,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             address_taken: IndexSet::default(),
             func_moved_spans: None,
             move_eligible_locals: IndexSet::default(),
-            confined_params: IndexSet::default(),
+            borrowed_params: IndexSet::default(),
             move_eligible_place_spans: IndexSet::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
@@ -821,10 +811,10 @@ impl FunctionTranslator<'_, '_> {
         let TirExprKind::Local { index, .. } = &value.kind else {
             return false;
         };
-        // The span check names no confined parameter: its callers pass it
-        // uncopied, which the source-level pass cannot see.
+        // The source-level pass cannot see which parameters callers pass
+        // uncopied, so its moves of those do not hold.
         self.move_eligible_locals.contains(index)
-            || (!self.confined_params.contains(index)
+            || (!self.borrowed_params.contains(index)
                 && self
                     .func_moved_spans
                     .is_some_and(|spans| spans.contains(&value.span)))
@@ -1955,6 +1945,9 @@ impl FunctionTranslator<'_, '_> {
                 .iter()
                 .enumerate()
                 .map(|(i, (e, is_mut))| {
+                    // A receiver the call does not write through is an ordinary
+                    // argument: a by-value `self` is the callee's to return or
+                    // keep.
                     if has_receiver && i == 0 && *is_mut {
                         self.convert_mut_receiver_arg(e)
                     } else if self.passes_through(func, i) {
@@ -2453,10 +2446,6 @@ impl FunctionTranslator<'_, '_> {
     /// storage the caller can reach again, so the call must not write through it
     /// to whatever it was read out of — there it takes the copy every by-value
     /// argument takes.
-    ///
-    /// Any other receiver is an ordinary argument: a by-value `self` is the
-    /// callee's to return or keep, so it is copied in unless confined, as every
-    /// by-value argument is.
     fn convert_mut_receiver_arg(&self, receiver: &TirExpr) -> ArenaCallArg {
         let value = receiver_value(receiver);
         let names_a_place =
@@ -2559,7 +2548,7 @@ impl FunctionTranslator<'_, '_> {
             self.base
                 .value_copy
                 .confined_params
-                .is_confined(&c.module_source, &c.name, param_index)
+                .is_confined(c, param_index)
         });
         if !confined {
             return false;

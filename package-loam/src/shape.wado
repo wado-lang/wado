@@ -137,9 +137,9 @@ impl Shape {
         return Shape { axes };
     }
 
-    /// `Reshape` onto `targets`, whose extents `extents` read: each output axis
-    /// is the run of parts it spans, merged where several, or `None` where no
-    /// regrouping determines it.
+    /// `Reshape` onto `targets`, once `extents` has shown every part stated:
+    /// each output axis is the run of parts it spans, merged where several, or
+    /// `None` where no regrouping determines it.
     pub fn regroup(&self, targets: &List<Extent>) -> List<Option<Axis>> {
         let parts = self.parts();
         let mut out: List<Option<Axis>> = [];

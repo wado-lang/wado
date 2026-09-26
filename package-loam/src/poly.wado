@@ -1,14 +1,15 @@
 //! Integer arithmetic over a graph's dimension symbols, which is what stage 0
 //! computes when an exporter writes shape arithmetic over a length only the
-//! run knows. See WEP 2026-09-20 § "A Regrouped Axis Is Named by Its Parts".
+//! run knows. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are
+//! Values".
 
 use { TreeMap } from "core:collections";
 
 /// One term of a `Poly`: the product of `symbols`, scaled by `coefficient`.
-pub struct Term {
-    pub coefficient: i64,
+struct Term {
+    coefficient: i64,
     /// Sorted, a symbol repeated once per power; empty for the constant term.
-    pub symbols: List<String>,
+    symbols: List<String>,
 }
 
 /// A polynomial with integer coefficients over dimension symbols, held in one
@@ -19,6 +20,7 @@ pub struct Poly {
 }
 
 impl Poly {
+    /// The number `c`.
     pub fn constant(c: i64) -> Poly {
         if c == 0 {
             return Poly { terms: [] };
@@ -30,6 +32,7 @@ impl Poly {
         };
     }
 
+    /// The length the symbol `name` stands for.
     pub fn symbol(name: &String) -> Poly {
         return Poly {
             terms: [
@@ -66,16 +69,19 @@ impl Poly {
         return names;
     }
 
+    /// The sum.
     pub fn add(&self, other: &Poly) -> Poly {
         let mut terms = self.terms;
         terms.extend(&other.terms);
         return Poly::collected(terms);
     }
 
+    /// The difference.
     pub fn sub(&self, other: &Poly) -> Poly {
         return self.add(&other.scaled(-1));
     }
 
+    /// The product.
     pub fn mul(&self, other: &Poly) -> Poly {
         let mut terms: List<Term> = [];
         for let a of &self.terms {
