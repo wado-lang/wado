@@ -1223,16 +1223,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     // A callee's parameter the substitution left behind may
                     // share a name with one of this frame's binders.
-                    (binders.get(name)?.type_id == *param_id).then(|| {
-                        (*index, name.clone(), *owning_trait, assoc_name.clone())
-                    })
+                    (binders.get(name)?.type_id == *param_id)
+                        .then(|| (*index, name.clone(), *owning_trait, assoc_name.clone()))
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
         for (slot, base_name, trait_, assoc) in asked {
             if let Some(answer) = self.frame_projection_of_trait(&base_name, trait_, &assoc) {
-                answers.entry(slot).or_default().push((trait_, assoc, answer));
+                answers
+                    .entry(slot)
+                    .or_default()
+                    .push((trait_, assoc, answer));
             }
         }
         if answers.is_empty() {

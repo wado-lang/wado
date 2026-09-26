@@ -3747,6 +3747,15 @@ impl Type {
         Some(name.split('<').next().unwrap_or(name))
     }
 
+    /// What one outer `&` / `&mut` refers to; the type itself where none.
+    #[must_use]
+    pub fn referent(&self) -> &Type {
+        match self {
+            Type::Reference(inner) | Type::MutReference(inner) => inner,
+            other => other,
+        }
+    }
+
     /// Returns the source [`Span`] covering this type expression.
     ///
     /// `Function` and empty `Tuple` types have no top-level span field;

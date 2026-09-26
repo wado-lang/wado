@@ -2673,18 +2673,14 @@ impl TypeSystem {
             };
             return self.bounds_hold(ctx, scope, pointee, bounds);
         }
-        // `&Container<T>` reads the pointee's arguments, as its positions do.
-        let impl_ty = match impl_ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-
         let Some(type_args) = type_args else {
             // An existence or bounds check that threaded no positions has
             // nothing to compare against.
             return true;
         };
 
+        // `&Container<T>` reads the pointee's arguments, as its positions do.
+        let impl_ty = impl_ty.referent();
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
                 if let ast::Type::Named(named) = arg

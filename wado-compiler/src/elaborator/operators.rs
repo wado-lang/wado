@@ -1979,13 +1979,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `&mut X` target, with that reference's kind.
     fn ref_impl_of(&self, resolved: &ResolvedTraitMethod) -> Option<(RefKind, &ImplHeader)> {
         let header = self.tysys.trait_env.impl_headers.get(&resolved.impl_def?)?;
-        match header.target {
-            ImplTargetKey::Ref(kind) => Some((kind, header)),
-            ImplTargetKey::Decl(_)
-            | ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
-        }
+        Some((header.target.ref_kind()?, header))
     }
 
     /// The function a `&X` / `&mut X` block's method is at `receiver`: the

@@ -1708,14 +1708,10 @@ impl StoresWalker<'_> {
         if carried.is_empty() {
             return;
         }
-        let mut binds: Vec<(u32, TypeId)> = Vec::new();
         analyze::for_each_pattern_binding(pattern, &mut |local_index, type_id| {
-            binds.push((local_index, type_id));
-        });
-        for (local_index, type_id) in binds {
             let placed = self.placed(type_id, carried.clone());
             self.rebind(local_index, &placed);
-        }
+        });
     }
 
     /// A pattern names a part of its scrutinee, which this walk does not follow

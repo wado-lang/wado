@@ -2258,13 +2258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A reference receiver arrives peeled, its `&` carried by `type_key`.
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
-        let through_ref = match type_key {
-            ImplTargetKey::Ref(kind) => Some(*kind == RefKind::Mut),
-            ImplTargetKey::Decl(_)
-            | ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
-        };
+        let through_ref = type_key.ref_kind().map(|kind| kind == RefKind::Mut);
         bridge.select(
             &self.tysys,
             &self.annotate_ctx,
@@ -2697,17 +2691,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
-        let pointee = match target {
-            ImplTargetKey::Ref(_) => Some(
-                self.tysys
-                    .pointee_of(receiver)
-                    .expect("a reference key is asked of a reference receiver"),
-            ),
-            ImplTargetKey::Decl(_)
-            | ImplTargetKey::Undeclared(..)
-            | ImplTargetKey::TypeParam(..)
-            | ImplTargetKey::Builtin(_) => None,
-        };
+        let pointee = target.ref_kind().map(|_| {
+            self.tysys
+                .pointee_of(receiver)
+                .expect("a reference key is asked of a reference receiver")
+        });
         let pointee_key = pointee.map(|pointee| {
             let name = self.tysys.fq_receiver_head(pointee).into_string();
             self.impl_target_of(pointee, &DeclName::new(&name))
@@ -2759,17 +2747,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                     }
                 }
-                let written_target = match &header.ty {
-                    Type::Reference(inner) | Type::MutReference(inner) => inner.as_ref(),
-                    other => other,
-                };
                 // A concrete type argument in the impl target is a constraint,
                 // not a free parameter: `impl … for TreeMap<String, V>` does
                 // not answer for a `TreeMap<i32, String>` receiver. Without
                 // this the method signature instantiates against the wrong
                 // arguments and the mismatch only surfaces at WIR build.
                 if !s.tysys.verify_impl_type_compatibility(
-                    written_target,
+                    header.ty.referent(),
                     &concrete_type_args,
                     declared,
                 ) {

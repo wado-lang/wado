@@ -3640,7 +3640,9 @@ impl TypeTable {
                     && let Some(answer) = projections.get(&slot).and_then(|answers| {
                         answers
                             .iter()
-                            .find(|(trait_, name, _)| *trait_ == owning_trait && *name == assoc_name)
+                            .find(|(trait_, name, _)| {
+                                *trait_ == owning_trait && *name == assoc_name
+                            })
                             .map(|(_, _, type_id)| *type_id)
                     })
                 {

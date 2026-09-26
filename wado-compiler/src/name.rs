@@ -1132,12 +1132,6 @@ impl LocalMethodName {
         self.fq_base_struct_name().decl_name()
     }
 
-    /// The receiver's reference kind, or `None` for a value receiver.
-    #[must_use]
-    pub fn ref_receiver(&self) -> Option<RefKind> {
-        self.receiver.ref_kind()
-    }
-
     /// Create a new `LocalMethodName` directly from components.
     ///
     /// IMPORTANT: `struct_name` must be the base struct name WITHOUT type parameters.

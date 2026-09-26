@@ -675,13 +675,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<TirTypeParam> {
         let slots = ImplParamSlots::of(impl_type, impl_declared_params);
-        let impl_type_inner = match impl_type {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
         // However the head is spelled: `Cell<T>` and `ns::Cell<T>` write one
         // target a namespace apart.
-        let head_args = impl_target_head_args(impl_type_inner);
+        let head_args = impl_target_head_args(impl_type.referent());
         let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {

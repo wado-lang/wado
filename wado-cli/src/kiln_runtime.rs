@@ -430,13 +430,13 @@ pub async fn run_generator(
         for (name, ty) in &params {
             args.push(match name.as_str() {
                 "primary" => input_file_val(&mut store, &request.primary)?,
-                "inputs" => {
-                    let mut inputs = Vec::with_capacity(request.inputs.len());
-                    for f in &request.inputs {
-                        inputs.push(input_file_val(&mut store, f)?);
-                    }
-                    Val::List(inputs)
-                }
+                "inputs" => Val::List(
+                    request
+                        .inputs
+                        .iter()
+                        .map(|f| input_file_val(&mut store, f))
+                        .collect::<Result<_, _>>()?,
+                ),
                 "module" => Val::String(request.module.clone()),
                 "options" => options_to_val(&request.options, ty)
                     .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?,

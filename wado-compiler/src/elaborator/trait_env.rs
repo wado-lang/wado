@@ -183,6 +183,17 @@ impl ImplTargetKey {
             ImplTargetKey::Ref(kind) => kind.prefix(),
         }
     }
+
+    /// The reference kind of a `&T` / `&mut T` target; `None` for any other.
+    pub(crate) fn ref_kind(&self) -> Option<name::RefKind> {
+        match self {
+            ImplTargetKey::Ref(kind) => Some(*kind),
+            ImplTargetKey::Decl(_)
+            | ImplTargetKey::Undeclared(..)
+            | ImplTargetKey::TypeParam(..)
+            | ImplTargetKey::Builtin(_) => None,
+        }
+    }
 }
 
 /// The spelling a declaration renders to in a mangled head: its declared name,
@@ -2821,11 +2832,7 @@ fn check_inherent_impl_collisions(
     // different question and discard the pointee of a reference target.
     let mut minted: IndexSet<(String, &str)> = IndexSet::default();
     for header in &instantiations {
-        let peeled = match &header.ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        let receiver = written_type_arg(peeled, resolutions);
+        let receiver = written_type_arg(header.ty.referent(), resolutions);
         for method in &header.methods {
             if !minted.insert((receiver.to_mangled(), method.name.as_str())) {
                 violations.push((
