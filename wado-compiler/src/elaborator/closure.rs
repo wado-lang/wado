@@ -332,8 +332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Vec::new(),
         );
 
-        // Placeholder — reify is the sole producer of the closure's TIR shape.
-        drop(closure_ctx);
+        ctx.source_bindings.extend(closure_ctx.source_bindings);
         func_type
     }
 }

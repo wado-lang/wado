@@ -558,6 +558,12 @@ pub enum TypeError {
         name: String,
         span: Span,
     },
+    /// A name resolving to nothing that a source binding of the frame took,
+    /// read outside the scope it had.
+    OutOfScope {
+        name: String,
+        span: Span,
+    },
     /// A path naming something only a call can use, read as a value.
     CallableAsValue {
         name: String,
@@ -1653,6 +1659,11 @@ impl TypeError {
             TypeError::Unavailable { message, span } => {
                 (Code::Unavailable, message.clone(), *span)
             }
+            TypeError::OutOfScope { name, span } => (
+                Code::UndefinedVariable,
+                format!("'{name}' is not in scope"),
+                *span,
+            ),
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{}'", unalias_namespace_member(name)),
@@ -2987,6 +2998,9 @@ pub(super) struct FunctionContext {
     /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
     /// at the point of emission.
     pub(super) locals: Vec<TirLocal>,
+    /// Every name a binding written in source has taken in this frame, an
+    /// enclosing one, or a closure it built, in scope or not.
+    pub(super) source_bindings: IndexSet<String>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
@@ -3271,6 +3285,7 @@ impl FunctionContext {
             is_async: false,
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: IndexSet::default(),
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
@@ -3353,6 +3368,7 @@ impl FunctionContext {
             is_async: false, // Closures are never async
             task_return_type: None,
             locals: Vec::new(),
+            source_bindings: outer_ctx.source_bindings.clone(),
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
@@ -3427,6 +3443,9 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
+        if defining_ast_id.is_some() {
+            self.source_bindings.insert(name.clone());
+        }
         self.locals.push(TirLocal {
             name: name.clone(),
             type_id,
@@ -3463,6 +3482,12 @@ impl FunctionContext {
                 defining_ast_id: None,
             },
         );
+    }
+
+    /// Whether a binding written in source took `name`, so a lookup of it that
+    /// fails reads it outside the scope it had.
+    pub(super) fn declared(&self, name: &str) -> bool {
+        self.source_bindings.contains(name)
     }
 
     /// Look up a variable by name (searches from innermost to outermost scope)
@@ -3502,7 +3527,8 @@ impl FunctionContext {
         let mut outer = scopes.replacing(|ctx| &mut ctx.outer_locals, IndexMap::default());
         let mut derefs = outer.replacing(|ctx| &mut ctx.deref_overrides, IndexMap::default());
         let mut boxes = derefs.replacing(|ctx| &mut ctx.outer_box_types, IndexMap::default());
-        body(&mut boxes)
+        let mut sources = boxes.replacing(|ctx| &mut ctx.source_bindings, IndexSet::default());
+        body(&mut sources)
     }
 
     /// Look up a variable, checking outer context for captures if in a closure.

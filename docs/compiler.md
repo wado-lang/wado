@@ -47,8 +47,10 @@ Codegen reads NIR and WIR only, and knows nothing of the phases before them.
 ## Frontend
 
 The parser builds a faithful AST: compound assignments, comparison chains,
-struct shorthand and comments survive as written. Bind resolves local names and
-checks scopes, mutability and use-before-define.
+struct shorthand and comments survive as written. Bind checks local bindings:
+duplicates in one scope, reads before initialization, and assignments to
+immutable locals. Whether a name is in scope is answered where it is resolved,
+in the elaborator.
 
 The loader reads the entry module and everything it imports: the embedded
 standard library, WASI and Web bindings, local files, package dependencies,
