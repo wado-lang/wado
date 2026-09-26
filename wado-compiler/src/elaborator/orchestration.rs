@@ -2569,15 +2569,11 @@ impl<H: CompilerHost> AstVisitor for TypeNameCheck<'_, '_, '_, H> {
 
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            // A bare turbofish value (`pair::<_, bool>`) has no call to infer
-            // from; one on the path's prefix (`Maybe::<_>::Nothing`) does.
+            // Whether a `_` slot is answerable depends on what the path names,
+            // so the function-value path rejects it where it resolves.
             Expr::Ident(ident) => {
                 for ty in &ident.type_args {
-                    if ident.type_args_on_prefix {
-                        self.visit_turbofish_arg(ty);
-                    } else {
-                        self.visit_type(ty);
-                    }
+                    self.visit_turbofish_arg(ty);
                 }
             }
             Expr::Call(call) => {
