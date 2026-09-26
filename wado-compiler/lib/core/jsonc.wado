@@ -12,6 +12,7 @@
 
 use { Deserialize, DeserializeError, DEFAULT_MAX_DEPTH } from "core:serde";
 use json from "core:json";
+use { json_ws_end } from "core:json";
 
 #[synopsis]
 test {
@@ -61,14 +62,15 @@ struct Blanker {
 impl Blanker {
     fn run(&mut self) -> Result<(), DeserializeError> {
         let len = self.input.len();
-        // The last byte that is neither whitespace nor comment, and the comma
-        // it was when a value precedes that comma: blanked if `]` or `}` follows.
+        // `last` is the previous byte outside whitespace and comments.
+        // `pending_comma` is a comma following a value, blanked when `]` or
+        // `}` comes next.
         let mut last = -1;
         let mut pending_comma = -1;
         let mut i = 0;
         while i < len {
             let b = self.input.get_unchecked(i) as i32;
-            if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+            if !json_ws_end(b) {
                 i += 1;
                 continue;
             }
