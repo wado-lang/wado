@@ -56,3 +56,21 @@ test "greedy repeat yields the last char to a repeat-bearing suffix" {
 test "greedy repeat stops where the optional suffix element also matches" {
     assert_tokens("dded", "[@0,0:3='dded',<4>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
 }
+
+// An alternation ending a fragment is decided by the caller's suffix.
+test "fragment-ending alternation: the caller's suffix picks the long arm" {
+    assert_tokens("xyzh", "[@0,0:3='xyzh',<6>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}
+
+test "fragment-ending alternation: short arm kept when the caller's suffix follows it" {
+    assert_tokens("xyh", "[@0,0:2='xyh',<6>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}
+
+// An alternation ending a nested group is decided by the enclosing sequence.
+test "group-ending alternation: the enclosing suffix picks the long arm" {
+    assert_tokens("gikl", "[@0,0:3='gikl',<7>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n");
+}
+
+test "group-ending alternation: short arm kept when the enclosing suffix follows it" {
+    assert_tokens("gil", "[@0,0:2='gil',<7>,1:0]\n[@1,3:2='<EOF>',<-1>,1:3]\n");
+}

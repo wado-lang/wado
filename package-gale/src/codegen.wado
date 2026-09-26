@@ -29,6 +29,7 @@ use {
     vocab_display_names,
     lexer_grammar_run_action_ids,
     lexer_mode_attr_use,
+    splice_suffixed_alternations,
 } from "./lexer_gen.wado";
 use { gen_parser, grammar_scans_through_atn } from "./parser_gen.wado";
 use { collect_members, translate_gate_bodies } from "./action_gen.wado";
@@ -129,6 +130,7 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
+    splice_suffixed_alternations(grammar);
     // Canonicalization is done; everything downstream may assume its shape.
     assert_canonical_shape(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s

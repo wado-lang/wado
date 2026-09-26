@@ -1070,6 +1070,97 @@ fn fragment_is_callable(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
     );
 }
 
+/// Splice into its sequence each single-alternative group or fragment reference
+/// that ends in a contested alternation and has something after it. Sequence is
+/// associative, so the alternation then sees that suffix and scores its arms
+/// against it rather than taking the first one (`lexer_group_emit`).
+pub fn splice_suffixed_alternations(grammar: &mut Grammar) {
+    let rules = grammar.lexer_rules;
+    for let rule of &mut grammar.lexer_rules {
+        for let alt of &mut rule.body {
+            splice_alt(alt, &rules);
+        }
+    }
+}
+
+fn splice_alt(alt: &mut LexerAlternative, rules: &List<LexerRule>) {
+    // Re-reading `i` after a splice reaches what the splice exposed, which a
+    // nested group's own last element may now be followed by.
+    for let mut i = 0; i < alt.elements.len(); i += 1 {
+        splice_within(&mut alt.elements[i], rules);
+        if i + 1 == alt.elements.len() {
+            continue;
+        }
+        let Some(inner) = spliceable_seq(&alt.elements[i], rules) else {
+            continue;
+        };
+        let added = inner.elements.len() - 1;
+        for let a of &mut alt.actions {
+            if a.before_index > i {
+                a.before_index += added;
+            }
+        }
+        let mut spliced: List<LexerElement> = [];
+        for let mut j = 0; j < alt.elements.len(); j += 1 {
+            if j == i {
+                spliced.extend(&inner.elements);
+            } else {
+                spliced.push(alt.elements[j]);
+            }
+        }
+        alt.elements = spliced;
+        i -= 1;
+    }
+}
+
+fn splice_within(elem: &mut LexerElement, rules: &List<LexerRule>) {
+    match elem {
+        Group(arms) => {
+            for let arm of arms {
+                splice_alt(arm, rules);
+            }
+        },
+        Repeat(rep) => splice_within(&mut rep.element, rules),
+        _ => {
+        },
+    }
+}
+
+/// The one action-free alternative `elem` stands for, when it ends in a
+/// contested alternation.
+fn spliceable_seq(elem: &LexerElement, rules: &List<LexerRule>) -> Option<LexerAlternative> {
+    let body = match elem {
+        Group(arms) => *arms,
+        RuleRef(name) => match find_fragment(rules, name) {
+            Some(f) && !fragment_is_recursive(f, rules) => f.body,
+            _ => {
+                return null;
+            },
+        },
+        _ => {
+            return null;
+        },
+    };
+    if body.len() != 1 || !body[0].actions.is_empty() {
+        return null;
+    }
+    let seq = body[0];
+    return if seq_ends_contested(&seq, rules) { Option::Some(seq) } else { null };
+}
+
+fn seq_ends_contested(seq: &LexerAlternative, rules: &List<LexerRule>) -> bool {
+    if seq.elements.is_empty() {
+        return false;
+    }
+    let last = &seq.elements[seq.elements.len() - 1];
+    if let Group(arms) = last && arms.len() >= 2 {
+        // Folded as the widest case folding would, since a splice is only ever
+        // a rewrite to an equal sequence.
+        return lexer_alts_scan(arms, rules) matches { Longest } && lexer_alts_can_collide(arms, rules, true);
+    }
+    return spliceable_seq(last, rules) matches { Some(_) };
+}
+
 /// Whether a fragment references itself (directly or through another
 /// fragment), which is what keeps it from being inlined at its use sites.
 pub fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> bool {
@@ -3092,11 +3183,9 @@ fn add_second_chars(
     acc: &mut SecondChars,
 ) -> bool {
     *budget -= 1;
-    if *budget < 0 {
+    // A path that ends here consumed no first char, so no second char tests it.
+    if *budget < 0 || elements.is_empty() {
         return false;
-    }
-    if elements.is_empty() {
-        return true;
     }
     let rest = lexer_seq_from(elements, 1);
     return match elements[0] {
@@ -5296,16 +5385,32 @@ fn gen_second_char_dispatch(
         gen_group_calls(w, calls, members, needs_extras, has_actions, has_members);
         return;
     }
+    // A call every arm runs is emitted once where grammar order allows it: the
+    // run before the first filtered call, and the run after the last.
+    let admitted_everywhere = |m: i32| second_char_admits(&calls[m], -1);
+    let mut lead = 0;
+    while admitted_everywhere(members[lead]) {
+        lead += 1;
+    }
+    let mut trail = members.len();
+    while admitted_everywhere(members[trail - 1]) {
+        trail -= 1;
+    }
+    let leading: List<i32> = members.iter_value().take(lead).collect();
+    let trailing: List<i32> = members.iter_value().skip(trail).collect();
+    gen_group_calls(w, calls, &leading, needs_extras, has_actions, has_members);
     // Past the end, only a call that can end after one char matches, and the
     // NUL a missing char reads as runs every such call whichever arm it lands in.
     w.line("let second_char = if start + 1 < lexer.chars.len() { lexer.chars[start + 1] } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
+        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect();
         w.begin(`${arm.pattern} =>`);
-        gen_group_calls(w, calls, &arm.calls, needs_extras, has_actions, has_members);
+        gen_group_calls(w, calls, &middle, needs_extras, has_actions, has_members);
         w.end_with(",");
     }
     w.end();
+    gen_group_calls(w, calls, &trailing, needs_extras, has_actions, has_members);
 }
 
 /// A partition of the second char among `members`, each arm keeping grammar
