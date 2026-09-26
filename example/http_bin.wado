@@ -15,7 +15,11 @@
 //   GET  /user-agent    — returns User-Agent as JSON
 //   GET  /status/:code  — returns the given HTTP status code
 //   GET  /base64/:val   — decodes base64-encoded value
+//   GET  /gzip          — returns request info as gzip-coded JSON
 //   *    /anything      — returns request info for any method (incl. custom)
+//
+// Any other text reply goes out gzip-coded to a client whose Accept-Encoding
+// admits it.
 
 use {
     Request,
@@ -38,6 +42,8 @@ use { log_stderr } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { Router, PathParams } from "core:router";
 use json from "core:json";
+use { gzip_compress } from "core:zlib";
+use { request_accepts_gzip, worth_gzip } from "./http_gzip.wado";
 
 struct RequestInfo {
     method: String,
@@ -65,6 +71,14 @@ struct IpResponse {
 }
 impl Serialize for IpResponse;
 
+struct GzipResponse {
+    gzipped: bool,
+    method: String,
+    headers: TreeMap<String, String>,
+    origin: String,
+}
+impl Serialize for GzipResponse;
+
 #[wire(name_policy = "kebab-case")]
 struct UserAgentResponse {
     user_agent: Option<String>,
@@ -86,6 +100,7 @@ struct RouteResponse {
     content_type: String,
     body: ByteList,
     allow: Option<String>,
+    gzip: bool = false,
 }
 
 type Handler = fn(Request, PathParams) -> RouteResponse;
@@ -273,6 +288,17 @@ fn respond_base64(encoded: String) -> RouteResponse {
     return json_response(400, json_error("Invalid base64"));
 }
 
+fn respond_gzip(request: Request) -> RouteResponse {
+    let h = request.get_headers();
+    let body = json_line(&GzipResponse {
+        gzipped: true,
+        method: method_name(request.get_method()),
+        headers: headers_to_map(&h),
+        origin: get_header(&h, "x-forwarded-for").unwrap_or(""),
+    });
+    return RouteResponse { ..json_response(200, body), gzip: true };
+}
+
 fn respond_anything(request: Request) -> RouteResponse {
     let url = parse_url(&request);
     let method = request.get_method();
@@ -299,6 +325,7 @@ fn build_router() -> Router<Handler> {
     r.get("/user-agent", |req, _p| respond_user_agent(req));
     r.get("/status/:code", |_req, p| respond_status(p["code"]));
     r.get("/base64/:val", |_req, p| respond_base64(p["val"]));
+    r.get("/gzip", |req, _p| respond_gzip(req));
     r.any("/anything", |req, _p| respond_anything(req));
     r.any("/anything/*rest", |req, _p| respond_anything(req));
     return r;
@@ -313,6 +340,7 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     let method = request.get_method();
     let h = request.get_headers();
     let user_agent = get_header(&h, "user-agent");
+    let accepts_gzip = request_accepts_gzip(&h);
 
     let resp = if let Some(m) = ROUTER.match_request(&request) {
         (m.handler)(request, m.params);
@@ -345,12 +373,21 @@ export async fn handle(request: Request) -> Result<Response, ErrorCode> with Mon
     if let Some(a) = resp.allow {
         resp_headers.append("allow", a.bytes().collect() as FieldValue);
     }
+    let codable = worth_gzip(&resp.content_type, resp.body.len() as u64);
+    let gzip = resp.gzip || codable && accepts_gzip;
+    if codable {
+        resp_headers.append("vary", "accept-encoding".bytes().collect() as FieldValue);
+    }
+    if gzip {
+        resp_headers.append("content-encoding", "gzip".bytes().collect() as FieldValue);
+    }
     let [response, _response_tx] = Response::new(resp_headers, Option::Some(body_rx), trailers_future);
     response.set_status_code(resp.status);
 
     task return Result::Ok(response);
 
-    body_tx.write_raw_all(resp.body.as_slice());
+    let body = if gzip { gzip_compress(&resp.body) } else { resp.body };
+    body_tx.write_raw_all(body.as_slice());
     body_tx.drop();
 
     // Server-Timing trailer carries the handler's wall-clock time so curious

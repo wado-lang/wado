@@ -1,0 +1,91 @@
+//! gzip response coding shared by the HTTP server examples: whether the client
+//! accepts it (RFC 9110 §12.5.3), and whether a response is worth coding.
+
+use { Headers } from "wasi:http";
+
+/// Below this, the gzip header and trailer outweigh what coding saves.
+global MIN_GZIP_SIZE: u64 = 256;
+
+/// Whether the request's `Accept-Encoding` fields admit a gzip-coded response.
+pub fn request_accepts_gzip(headers: &Headers) -> bool {
+    let values: List<String> = headers.get("accept-encoding").iter_value().map(|v| String::from_utf8_lossy(v)).collect();
+    return accepts_gzip(&values.join(","));
+}
+
+/// Whether an `Accept-Encoding` value admits gzip: named with a nonzero weight,
+/// or left to a `*` with one.
+pub fn accepts_gzip(accept_encoding: &String) -> bool {
+    let mut gzip: Option<f64> = null;
+    let mut any: Option<f64> = null;
+    for let element of accept_encoding.split(",") {
+        let [coding, q] = coding_weight(element);
+        if coding.eq_ignore_ascii_case("gzip") || coding.eq_ignore_ascii_case("x-gzip") {
+            gzip = Option::Some(q);
+        } else if coding == "*" {
+            any = Option::Some(q);
+        }
+    }
+    return gzip.unwrap_or(any.unwrap_or(0.0)) > 0.0;
+}
+
+/// Whether a body of `content_type` and `size` bytes is worth gzip-coding, and
+/// so whether the response varies by `Accept-Encoding`.
+pub fn worth_gzip(content_type: &String, size: u64) -> bool {
+    if size < MIN_GZIP_SIZE {
+        return false;
+    }
+    let media = match content_type.split_once(";") {
+        Some([media, _]) => media.trim_ascii().to_ascii_lowercase(),
+        None => content_type.trim_ascii().to_ascii_lowercase(),
+    };
+    return media.starts_with("text/")
+        || media matches { "application/json" | "application/javascript" | "application/wasm" | "image/svg+xml" };
+}
+
+/// One `Accept-Encoding` element's coding and its `q` weight, 1 when absent.
+fn coding_weight(element: String) -> [StrSlice, f64] {
+    let Some([coding, params]) = element.split_once(";") else {
+        return [element.trim_ascii(), 1.0];
+    };
+    let mut q = 1.0;
+    for let param of params.split(";") {
+        if let Some([name, value]) = param.split_once("=") && name.trim_ascii().eq_ignore_ascii_case("q") {
+            q = f64::from_str(value.trim_ascii()).unwrap_or(0.0);
+        }
+    }
+    return [coding.trim_ascii(), q];
+}
+
+test "gzip is accepted when named with a nonzero weight" {
+    assert accepts_gzip(&"gzip");
+    assert accepts_gzip(&"gzip, deflate, br");
+    assert accepts_gzip(&"br;q=1.0, GZIP;q=0.5");
+    assert accepts_gzip(&"x-gzip");
+    assert accepts_gzip(&"deflate , gzip ; q = 0.1");
+}
+
+test "gzip is refused when absent or weighted zero" {
+    assert !accepts_gzip(&"");
+    assert !accepts_gzip(&"identity");
+    assert !accepts_gzip(&"br, deflate");
+    assert !accepts_gzip(&"gzip;q=0");
+    assert !accepts_gzip(&"gzip;q=0.000");
+    assert !accepts_gzip(&"gzip;q=bogus");
+}
+
+test "a wildcard covers gzip unless gzip is named" {
+    assert accepts_gzip(&"*");
+    assert accepts_gzip(&"br, *;q=0.1");
+    assert !accepts_gzip(&"*;q=0");
+    assert !accepts_gzip(&"gzip;q=0, *");
+    assert accepts_gzip(&"gzip, *;q=0");
+}
+
+test "text is worth coding once it outweighs the gzip framing" {
+    assert worth_gzip(&"text/html; charset=utf-8", 1024);
+    assert worth_gzip(&"Application/JSON", 256);
+    assert worth_gzip(&"application/wasm", 4096);
+    assert !worth_gzip(&"text/plain", 255);
+    assert !worth_gzip(&"image/png", 4096);
+    assert !worth_gzip(&"application/octet-stream", 4096);
+}

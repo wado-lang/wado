@@ -116,9 +116,12 @@ export default {
       })(),
     );
 
+    // The guest codes its own body (gzip under `content-encoding`), so the
+    // runtime must not code it again.
     return new Response(NULL_BODY.has(status) || !bytes?.length ? null : bytes, {
       status,
       headers: out,
+      encodeBody: "manual",
     });
   },
 };
